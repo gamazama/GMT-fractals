@@ -1,0 +1,1 @@
+// Deprecated. Logic moved to VideoExporter.ts using Mediabunny.

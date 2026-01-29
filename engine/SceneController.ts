@@ -1,0 +1,64 @@
+
+import * as THREE from 'three';
+import { MaterialController } from './MaterialController';
+
+export class SceneController {
+    public mainScene: THREE.Scene;
+    public mainCamera: THREE.OrthographicCamera;
+    public mainMesh: THREE.Mesh;
+
+    public physicsRenderTarget: THREE.WebGLRenderTarget;
+    public physicsScene: THREE.Scene;
+    public physicsCamera: THREE.OrthographicCamera;
+    public physicsMesh: THREE.Mesh;
+    
+    public activeCamera: THREE.Camera | null = null;
+    public fallbackCamera: THREE.PerspectiveCamera;
+    
+    constructor(materials: MaterialController) {
+        // Main Scene
+        this.mainScene = new THREE.Scene();
+        this.mainCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        
+        // Use getter to grab the default material
+        this.mainMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), materials.mainMaterial);
+        this.mainMesh.frustumCulled = false;
+        this.mainScene.add(this.mainMesh);
+
+        // Physics Scene
+        this.physicsRenderTarget = new THREE.WebGLRenderTarget(4, 4, {
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+            format: THREE.RGBAFormat,
+            type: THREE.FloatType, 
+        });
+        this.physicsScene = new THREE.Scene();
+        this.physicsCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this.physicsMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), materials.physicsMaterial);
+        this.physicsMesh.frustumCulled = false;
+        this.physicsScene.add(this.physicsMesh);
+        
+        this.fallbackCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+        this.fallbackCamera.position.set(0, 0, 0);
+    }
+    
+    public setMaterial(material: THREE.ShaderMaterial) {
+        this.mainMesh.material = material;
+    }
+    
+    public registerCamera(camera: THREE.Camera) {
+        this.activeCamera = camera;
+    }
+    
+    public getCamera(): THREE.Camera {
+        return this.activeCamera || this.fallbackCamera;
+    }
+    
+    public updateFallback(pos: THREE.Vector3, quat: THREE.Quaternion, fov: number, aspect: number) {
+        this.fallbackCamera.position.copy(pos);
+        this.fallbackCamera.quaternion.copy(quat);
+        this.fallbackCamera.fov = fov;
+        this.fallbackCamera.aspect = aspect;
+        this.fallbackCamera.updateMatrixWorld();
+    }
+}

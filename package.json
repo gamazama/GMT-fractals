@@ -1,0 +1,43 @@
+{
+  "name": "gmt-fractal",
+  "version": "0.8.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server/server.js",
+    "build": "tsc && vite build",
+    "preview": "cross-env NODE_ENV=production node server/server.js",
+    "start": "npm run build && cross-env NODE_ENV=production node server/server.js",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.102.6",
+    "@react-three/fiber": "^8.16.1",
+    "cross-env": "^7.0.3",
+    "express": "^4.19.2",
+    "nanoid": "^5.0.6",
+    "pako": "^2.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "reactflow": "^11.10.1",
+    "three": "^0.162.0",
+    "three-stdlib": "^2.29.4",
+    "webm-muxer": "^5.0.2",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.2.69",
+    "@types/react-dom": "^18.2.22",
+    "@types/three": "^0.162.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.19",
+    "gh-pages": "^6.1.1",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.4.3",
+    "vite": "^5.2.6"
+  }
+}
