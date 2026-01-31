@@ -60,7 +60,7 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
         mat3 rot = mat3(r, u, -f);
         rd = r * localRd.x + u * localRd.y + f * -localRd.z;
         ro = vec3(0.0);
-        return;
+        // Fallthrough to DOF logic allowed
     } else if (uCamType > 0.5) {
         // ORTHOGRAPHIC
         rd = normalize(forward);
@@ -87,12 +87,13 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
         offset.y *= 1.3; 
         vec3 lensOffset = normalize(right) * offset.x + normalize(up) * offset.y; 
         ro += lensOffset;
-        if (uCamType < 0.5) {
-             rd = normalize(focalPoint - ro);
-        }
+        
+        // Recalculate ray direction to converge at focal point
+        // Works for both Perspective and Orthographic (Tilt-Shift effect)
+        rd = normalize(focalPoint - ro);
     }
 }
 `;
 };
 
-export const RAY = getRayGLSL('Direct'); 
+export const RAY = getRayGLSL('Direct');

@@ -1,5 +1,5 @@
 
-import React from 'react';
+import type React from 'react';
 
 export * from './types/common';
 export * from './types/graphics';
@@ -9,9 +9,6 @@ export * from './types/fractal';
 export * from './types/store';
 
 // Explicitly extend the JSX namespace to include React Three Fiber elements.
-// Placing this in an imported file ensures the compiler picks it up even if
-// separate .d.ts files are excluded from the build config.
-
 declare global {
   namespace JSX {
     interface IntrinsicElements {

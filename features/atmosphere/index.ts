@@ -77,7 +77,7 @@ export const AtmosphereFeature: FeatureDefinition = {
         },
         glowSharpness: {
             type: 'float', default: 50.0, label: 'Tightness', shortId: 'gs', uniform: 'uGlowSharpness',
-            min: 1, max: 1000, step: 1, group: 'glow', parentId: 'glowIntensity', condition: [{ gt: 0.0 }, { param: 'glowEnabled', bool: true }]
+            min: 1, max: 1000, step: 1, scale: 'log', group: 'glow', parentId: 'glowIntensity', condition: [{ gt: 0.0 }, { param: 'glowEnabled', bool: true }]
         },
         glowMode: {
             type: 'boolean', default: true, label: 'Glow Source', shortId: 'gm', uniform: 'uGlowMode',

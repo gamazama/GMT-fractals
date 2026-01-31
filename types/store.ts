@@ -9,6 +9,8 @@ import { LightParams } from './graphics';
 
 export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shading' | 'Gradients' | 'Quality' | 'Audio' | 'Drawing' | 'Engine';
 
+export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region';
+
 // Export helper types for components
 export { DrawnShape, ModulationRule }; 
 
@@ -38,6 +40,11 @@ export interface FractalStoreState extends FeatureStateMap {
   previewMode: boolean;
   renderMode: 'Direct' | 'PathTracing';
   
+  isPaused: boolean; // Manual pause
+  sampleCap: number; // Stop accumulation after N samples
+  
+  isUserInteracting: boolean; // Global flag for slider/gizmo interaction
+
   cameraPos: { x: number, y: number, z: number };
   cameraRot: { x: number, y: number, z: number, w: number };
   targetDistance: number;
@@ -69,9 +76,8 @@ export interface FractalStoreState extends FeatureStateMap {
   isGizmoDragging: boolean;
   draggedLightIndex: number | null;
   
-  isPickingFocus: boolean;
-  isSelectingRegion: boolean;
-  isPickingJulia: boolean;
+  // Consolidated Interaction State
+  interactionMode: InteractionMode;
   
   cameraMode: CameraMode; 
   sceneOffset: PreciseVector3;
@@ -100,6 +106,8 @@ export interface FractalStoreState extends FeatureStateMap {
   autoCompile: boolean;
   
   isTimelineHovered: boolean;
+  
+  tabSwitchCount: number;
 
   activeTab: PanelId;
   floatingTabs: PanelId[];
@@ -126,6 +134,9 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setAccumulation: (v: boolean) => void;
     setPreviewMode: (v: boolean) => void;
     setRenderMode: (v: 'Direct' | 'PathTracing') => void;
+    
+    setIsPaused: (v: boolean) => void;
+    setSampleCap: (v: number) => void;
     
     setIsBucketRendering: (v: boolean) => void;
     setBucketSize: (v: number) => void;
@@ -154,9 +165,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setGizmoDragging: (v: boolean) => void;
     setDraggedLight: (index: number | null) => void;
     
-    setIsPickingFocus: (v: boolean) => void;
-    setIsSelectingRegion: (v: boolean) => void;
-    setIsPickingJulia: (v: boolean) => void;
+    setInteractionMode: (mode: InteractionMode) => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;
@@ -181,6 +190,8 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     refreshSceneHistogram: () => void;
     
     setIsTimelineHovered: (v: boolean) => void;
+    
+    incrementTabSwitchCount: () => void;
 
     setActiveTab: (tab: PanelId) => void;
     floatTab: (tab: PanelId) => void;

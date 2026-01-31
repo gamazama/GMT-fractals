@@ -16,49 +16,49 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
     const handleSnapshot = async () => {
         if (!engine.renderer) return;
         try {
-            const canvas = engine.renderer.domElement;
+            // Use the new Engine method to get a high-quality, tone-mapped blob
+            const blob = await engine.captureSnapshot();
             
+            if (!blob) {
+                console.error("Snapshot generation returned null.");
+                return;
+            }
+
             // Get Preset Data
             const preset = state.getPreset({ includeScene: true });
             const presetString = JSON.stringify(preset);
             
             // Calculate smart version
             const currentVersion = state.prepareExport();
-
-            // Convert Canvas to Blob
-            canvas.toBlob(async (blob) => {
-                if (!blob) return;
-
-                const filename = getExportFileName(
-                    state.projectSettings.name,
-                    currentVersion,
-                    'png'
-                );
-
-                try {
-                    // Inject Metadata
-                    const taggedBlob = await injectMetadata(blob, "FractalData", presetString);
-                    const url = URL.createObjectURL(taggedBlob);
-                    
-                    const link = document.createElement('a');
-                    link.download = filename;
-                    link.href = url;
-                    link.click();
-                    
-                    URL.revokeObjectURL(url);
-                    vibrate(50);
-                } catch (e) {
-                    console.error("Metadata injection failed, saving raw image", e);
-                    // Fallback
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.download = filename;
-                    link.href = url;
-                    link.click();
-                    URL.revokeObjectURL(url);
-                }
-            }, 'image/png');
             
+            const filename = getExportFileName(
+                state.projectSettings.name,
+                currentVersion,
+                'png'
+            );
+
+            try {
+                // Inject Metadata
+                const taggedBlob = await injectMetadata(blob, "FractalData", presetString);
+                const url = URL.createObjectURL(taggedBlob);
+                
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = url;
+                link.click();
+                
+                URL.revokeObjectURL(url);
+                vibrate(50);
+            } catch (e) {
+                console.error("Metadata injection failed, saving raw image", e);
+                // Fallback
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = filename;
+                link.href = url;
+                link.click();
+                URL.revokeObjectURL(url);
+            }
         } catch (e) { 
             console.error("Snapshot failed", e); 
         }

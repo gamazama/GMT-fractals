@@ -12,13 +12,13 @@ import { getLightFromSlice } from './index';
 import { PlusIcon, TrashIcon } from '../../components/Icons';
 import { MAX_LIGHTS } from '../../data/constants';
 import * as THREE from 'three';
+import { engine } from '../../engine/FractalEngine'; // Can safely import engine in UI
 
 const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
   const [activeLight, setActiveLight] = useState(0);
   const lighting = state.lighting;
   const liveModulations = state.liveModulations;
   
-  // Safe bounds check
   useEffect(() => {
       if (activeLight >= lighting.lights.length && lighting.lights.length > 0) {
           setActiveLight(lighting.lights.length - 1);
@@ -40,7 +40,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
   const handleAddLight = () => {
       if (lighting.lights.length < MAX_LIGHTS) {
           actions.addLight();
-          setActiveLight(lighting.lights.length); // Select new
+          setActiveLight(lighting.lights.length);
       }
   };
   
@@ -52,18 +52,23 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
       }
   };
 
+  const handleToggleFixed = () => {
+     if (!engine.activeCamera) return;
+     const current = getLightFromSlice(state.lighting, activeLight);
+     const wasFixed = current.fixed;
+     const newPos = engine.virtualSpace.resolveRealWorldPosition(current.position, wasFixed, engine.activeCamera);
+     
+     actions.updateLight({ index: activeLight, params: { fixed: !wasFixed, position: newPos } });
+  };
+
   if (!currentLight) return null;
 
-  // Dynamic range for sliders
   const isFixed = currentLight.fixed;
   const range = isFixed ? 10 : 10;
-  
-  // DDFS IDs for keyframing
   const prefix = `lighting.light${activeLight}`;
 
   return (
  <div className="animate-fade-in">
-   {/* Light Selector */}
    <div className="mb-4">
       <div className="flex flex-wrap gap-1 bg-black/40 p-1 rounded border border-white/5">
           {lighting.lights.map((l, i) => (
@@ -116,7 +121,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
               <ToggleSwitch 
                   label="Attachment Mode"
                   value={currentLight.fixed}
-                  onChange={() => actions.toggleLightFixed(activeLight)}
+                  onChange={handleToggleFixed}
                   options={[
                       { label: 'Headlamp', value: true },
                       { label: 'World', value: false }
@@ -177,8 +182,6 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
              onChange={(v) => actions.updateLight({ index: activeLight, params: { falloff: v } })} 
              customMapping={{
                  min: 0, max: 100,
-                 // Much smoother log mapping (approx log10 scale)
-                 // Input 0..500 -> Slider 0..100
                  toSlider: (val) => (Math.log10(val + 1) / Math.log10(501)) * 100,
                  fromSlider: (val) => Math.pow(501, val / 100) - 1
              }}
@@ -189,19 +192,32 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
            />
            <p className="text-[9px] text-gray-500 mb-2 -mt-2">0 = No decay (Sun). Higher = shorter range.</p>
 
-           <div className="mt-4 pt-3 border-t border-white/10">
+           <div className="mt-4 pt-3 border-t border-white/10 space-y-2">
                <label className="text-xs text-gray-400 font-bold mb-2 block">Color</label>
                <EmbeddedColorPicker 
                    color={currentLight.color} 
                    onColorChange={(c) => actions.updateLight({ index: activeLight, params: { color: c } })} 
                />
+
+               <div className="flex items-center justify-between pt-1">
+                   <label className="text-xs text-gray-400 font-medium">Cast Shadows</label>
+                   <input 
+                       type="checkbox" 
+                       checked={currentLight.castShadow}
+                       onChange={(e) => {
+                           actions.handleInteractionStart('param');
+                           actions.updateLight({ index: activeLight, params: { castShadow: e.target.checked } });
+                           actions.handleInteractionEnd();
+                       }}
+                       className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded cursor-pointer"
+                   />
+               </div>
            </div>
        </div>
    </div>
    
    <div className="h-px bg-gray-800 my-4" />
    
-   {/* Global Settings */}
    <div className="flex items-center justify-between mb-4 p-3 bg-gray-800/50 rounded-lg">
       <ToggleSwitch 
           label="Show 3d helpers"

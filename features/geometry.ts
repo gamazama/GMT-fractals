@@ -55,9 +55,16 @@ export const GeometryFeature: FeatureDefinition = {
     category: 'Formulas',
     customUI: [
         {
-            componentId: 'julia-picker',
+            componentId: 'interaction-picker',
             group: 'julia',
-            condition: { param: 'juliaMode', bool: true }
+            condition: { param: 'juliaMode', bool: true },
+            props: {
+                targetMode: 'picking_julia',
+                label: 'Pick Coordinate',
+                activeLabel: 'Cancel Picking',
+                helpText: 'Click any point on the fractal surface to set Julia coordinates.',
+                variant: 'primary'
+            }
         }
     ],
     engineConfig: {

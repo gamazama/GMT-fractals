@@ -27,7 +27,8 @@ import FlowEditor from '../components/panels/flow/FlowEditor';
 // --- 3. Import Widget Components ---
 import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogram';
 import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
-import { JuliaPicker } from '../components/panels/JuliaPicker';
+// Replaced JuliaPicker with InteractionPicker
+import { InteractionPicker } from '../components/InteractionPicker';
 import { ColorGradingHistogram, OpticsControls, NavigationControls } from '../components/panels/scene_widgets';
 
 // --- 4. Define Connectors (Wrappers that need Store access) ---
@@ -82,7 +83,7 @@ export const registerUI = () => {
     // Widgets
     componentRegistry.register('coloring-histogram', ConnectedColoringHistogram);
     componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock);
-    componentRegistry.register('julia-picker', JuliaPicker);
+    componentRegistry.register('interaction-picker', InteractionPicker);
     componentRegistry.register('audio-spectrum', AudioSpectrum);
     componentRegistry.register('audio-link-controls', AudioLinkControls);
     

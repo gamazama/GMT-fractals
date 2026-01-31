@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useFractalStore } from '../store/fractalStore';
-import { DraggableNumber } from './Slider';
+import { RawDraggableNumber } from './Slider';
 
 interface KnobProps {
     label?: string;
@@ -14,14 +14,17 @@ interface KnobProps {
     color?: string;
     tooltip?: string;
     unconstrained?: boolean; // Allow value to exceed min/max
-    defaultValue?: number; // New prop for reset
+    defaultValue?: number;
+    // New props for pure operation
+    onDragStart?: () => void;
+    onDragEnd?: () => void;
 }
 
-export const Knob: React.FC<KnobProps> = ({ 
+export const RawKnob: React.FC<KnobProps> = ({ 
     label, value, min, max, step = 0.01, onChange, 
-    size = 40, color = "#22d3ee", tooltip, unconstrained = false, defaultValue
+    size = 40, color = "#22d3ee", tooltip, unconstrained = false, defaultValue,
+    onDragStart, onDragEnd
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
     const [isDragging, setIsDragging] = useState(false);
     const startY = useRef(0);
     const startVal = useRef(0);
@@ -32,14 +35,12 @@ export const Knob: React.FC<KnobProps> = ({
     const pct = Math.max(0, Math.min(1, (clampedValue - min) / range));
     const angle = -135 + (pct * 270);
     
-    // SVG Math
-    const r = size / 2 - 4; // Radius
+    const r = size / 2 - 4; 
     const cx = size / 2;
     const cy = size / 2;
-    // Arc length for 270 degrees
     const circumference = 2 * Math.PI * r;
     const dashArray = circumference;
-    const dashOffset = circumference * (1 - (pct * 0.75)); // 0.75 because 270deg is 3/4 circle
+    const dashOffset = circumference * (1 - (pct * 0.75));
 
     const handlePointerDown = (e: React.PointerEvent) => {
         e.preventDefault();
@@ -49,7 +50,7 @@ export const Knob: React.FC<KnobProps> = ({
         startY.current = e.clientY;
         startVal.current = value;
         
-        handleInteractionStart('param');
+        if (onDragStart) onDragStart();
         (e.target as Element).setPointerCapture(e.pointerId);
     };
 
@@ -72,7 +73,6 @@ export const Knob: React.FC<KnobProps> = ({
             nextVal = Math.max(min, Math.min(max, nextVal));
         }
         
-        // Snap to step
         if (step) {
             nextVal = Math.round(nextVal / step) * step;
         }
@@ -82,18 +82,17 @@ export const Knob: React.FC<KnobProps> = ({
 
     const handlePointerUp = (e: React.PointerEvent) => {
         setIsDragging(false);
-        handleInteractionEnd();
+        if (onDragEnd) onDragEnd();
         (e.target as Element).releasePointerCapture(e.pointerId);
     };
     
     const handleReset = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        // Double click reset
         if (defaultValue !== undefined) {
-             handleInteractionStart('param');
+             if (onDragStart) onDragStart();
              onChange(defaultValue);
-             handleInteractionEnd();
+             if (onDragEnd) onDragEnd();
         }
     };
 
@@ -111,7 +110,6 @@ export const Knob: React.FC<KnobProps> = ({
                 onPointerUp={handlePointerUp}
             >
                 <svg width={size} height={size} className="overflow-visible transform rotate-90">
-                    {/* Track Background */}
                     <circle 
                         cx={cx} cy={cy} r={r} 
                         fill="none" 
@@ -121,8 +119,6 @@ export const Knob: React.FC<KnobProps> = ({
                         strokeDashoffset={circumference * 0.25} 
                         strokeLinecap="round"
                     />
-                    
-                    {/* Value Arc */}
                     <circle 
                         cx={cx} cy={cy} r={r} 
                         fill="none" 
@@ -134,8 +130,6 @@ export const Knob: React.FC<KnobProps> = ({
                         className="transition-colors duration-200"
                     />
                 </svg>
-                
-                {/* Pointer Dot */}
                 <div 
                     className="absolute w-1.5 h-1.5 bg-white rounded-full shadow-sm pointer-events-none"
                     style={{
@@ -148,14 +142,15 @@ export const Knob: React.FC<KnobProps> = ({
                 />
             </div>
 
-            {/* Draggable Value Text */}
             <div className="h-3 min-w-[30px] flex items-center justify-center bg-black/40 rounded px-1 border border-white/5 hover:border-white/20 transition-colors">
-                <DraggableNumber 
+                <RawDraggableNumber 
                     value={value} 
                     onChange={onChange}
                     min={!unconstrained ? min : undefined}
                     max={!unconstrained ? max : undefined}
                     step={step}
+                    onDragStart={onDragStart}
+                    onDragEnd={onDragEnd}
                 />
             </div>
             
@@ -165,5 +160,24 @@ export const Knob: React.FC<KnobProps> = ({
                 </span>
             )}
         </div>
+    );
+};
+
+// Connected Wrapper
+export const Knob: React.FC<KnobProps> = (props) => {
+    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+
+    return (
+        <RawKnob
+            {...props}
+            onDragStart={() => {
+                handleInteractionStart('param');
+                if (props.onDragStart) props.onDragStart();
+            }}
+            onDragEnd={() => {
+                handleInteractionEnd();
+                if (props.onDragEnd) props.onDragEnd();
+            }}
+        />
     );
 };

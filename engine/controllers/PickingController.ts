@@ -15,26 +15,54 @@ export class PickingController {
         this.virtualSpace = virtualSpace;
     }
 
+    private getRay(x: number, y: number, camera: THREE.Camera): THREE.Ray {
+        const camType = this.materials.mainUniforms.uCamType.value;
+        const cam = camera as THREE.PerspectiveCamera;
+        
+        if (camType > 1.5) {
+            // Equirectangular (Skybox)
+            // x, y are NDC [-1, 1]
+            const lambda = x * Math.PI; 
+            const phi = y * (Math.PI / 2);
+            const cPhi = Math.cos(phi);
+            
+            // Match shader logic:
+            // vec3 localRd = vec3(sin(lambda) * cPhi, sin(phi), -cos(lambda) * cPhi);
+            const localDir = new THREE.Vector3(
+                Math.sin(lambda) * cPhi,
+                Math.sin(phi),
+                -Math.cos(lambda) * cPhi
+            );
+            
+            // Rotate by camera orientation
+            localDir.applyQuaternion(cam.quaternion);
+            
+            return new THREE.Ray(cam.position.clone(), localDir.normalize());
+        } else {
+            // Perspective / Orthographic (Handled by Raycaster)
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(x, y), cam);
+            return raycaster.ray;
+        }
+    }
+
     /**
      * Renders a 1x1 pixel using the physics shader to measure distance at a specific screen coordinate.
      */
     public measureDistance(x: number, y: number, renderer: THREE.WebGLRenderer, camera: THREE.Camera): number {
         const phys = this.materials.physicsUniforms;
-        const cam = camera as THREE.PerspectiveCamera;
         
-        // Setup Raycaster for NDC calculation
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(x, y), cam);
-        const dir = raycaster.ray.direction;
+        // Get Ray (Supports Perspective, Ortho, and Skybox)
+        const ray = this.getRay(x, y, camera);
         
         // Update Physics Uniforms
-        phys.uCamForward.value.copy(dir);
+        phys.uCamForward.value.copy(ray.direction);
         phys.uCamBasisX.value.set(0, 0, 0);
         phys.uCamBasisY.value.set(0, 0, 0);
         
         // Sync precision offset
         this.virtualSpace.updateShaderUniforms(
-            cam.position, 
+            ray.origin, 
             phys.uSceneOffsetHigh.value, 
             phys.uSceneOffsetLow.value
         );
@@ -65,14 +93,13 @@ export class PickingController {
         
         if (dist <= 0 || dist >= 1000.0) return null;
         
-        const cam = activeCamera as THREE.PerspectiveCamera;
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(x, y), cam);
+        // Reconstruct ray to find hit point relative to camera
+        const ray = this.getRay(x, y, activeCamera);
         
         // Calculate Local Position relative to camera
         const localPos = new THREE.Vector3()
-            .copy(raycaster.ray.origin)
-            .add(raycaster.ray.direction.multiplyScalar(dist));
+            .copy(ray.origin)
+            .add(ray.direction.multiplyScalar(dist));
             
         // Convert to Unified Space (World Offset + Local)
         const offset = this.virtualSpace.state;

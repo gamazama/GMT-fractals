@@ -44,7 +44,7 @@ const App: React.FC = () => {
   }), []);
 
   // --- Logic Hooks ---
-  const { startupMode, queuePresetLoad } = useAppStartup(isSceneReady);
+  const { startupMode, queuePresetLoad, bootEngine } = useAppStartup(isSceneReady);
   const { isMobile, isPortrait } = useMobileLayout();
   useKeyboardShortcuts(showTimeline, setShowTimeline);
   useGlobalContextMenu();
@@ -60,6 +60,9 @@ const App: React.FC = () => {
   
   const isFlyMobile = isCurrentlyMobile && state.cameraMode === 'Fly';
   const isBroadcast = state.isBroadcastMode;
+
+  // Determine cursor based on interaction mode
+  const showCrosshair = state.interactionMode !== 'none';
 
   const handleTimelineContextMenu = (e: React.MouseEvent) => {
       e.preventDefault(); e.stopPropagation();
@@ -78,6 +81,21 @@ const App: React.FC = () => {
       if (applyPreset) {
           applyPreset({ mode, actions: state });
       }
+  };
+  
+  const handleLoadingFinished = () => {
+      setIsLoadingVisible(false);
+      
+      // Fix for stale camera state on first load:
+      // Re-broadcast the camera state to ensure Navigation/OrbitControls are synced
+      // with the Engine's VirtualSpace after the heavy compilation/boot process.
+      // We use the current store state which was set by useAppStartup -> loadPreset
+      FractalEvents.emit('camera_teleport', {
+          position: state.cameraPos,
+          rotation: state.cameraRot,
+          sceneOffset: state.sceneOffset,
+          targetDistance: state.targetDistance
+      });
   };
 
   const rootClass = isCurrentlyMobile && !isBroadcast
@@ -106,7 +124,7 @@ const App: React.FC = () => {
                             <span className="text-green-500/80 block">✓ EnvMap Reflections (No Marching)</span>
                             <span className="text-green-500/80 block">✓ Low-Step AO (2) & Shadows (16)</span>
                             <span className="text-green-500/80 block">✓ Reduced Precision (1e-5) & Lights (3)</span>
-                            <span className="text-red-500/60 block mt-1.5 pt-1 border-t border-white/5">✕ Hybrid Cage & Local Rotation Disabled</span>
+                            <span className="text-red-500/60 block mt-1.5 pt-1 border-t border-white/5">✕ Hybrid Cage & Path Tracer Disabled</span>
                         </span>
                     </p>
                 </>
@@ -139,14 +157,15 @@ const App: React.FC = () => {
 
       <div 
           ref={mainWrapperRef}
-          className={`relative bg-black select-none ${state.isPickingFocus ? 'cursor-crosshair' : ''} flex flex-col ${isCurrentlyMobile && !isBroadcast ? 'h-[100vh] sticky top-0 overflow-hidden shadow-2xl' : 'w-full h-full'}`} 
+          className={`relative bg-black select-none ${showCrosshair ? 'cursor-crosshair' : ''} flex flex-col ${isCurrentlyMobile && !isBroadcast ? 'h-[100vh] sticky top-0 overflow-hidden shadow-2xl' : 'w-full h-full'}`} 
           onContextMenu={(e) => e.preventDefault()}
       >
         <LoadingScreen 
             isReady={isSceneReady} 
-            onFinished={() => setIsLoadingVisible(false)} 
+            onFinished={handleLoadingFinished} 
             startupMode={startupMode} 
             onPresetLoaded={queuePresetLoad}
+            bootEngine={bootEngine}
         />
         
         {isCurrentlyMobile && isPortrait && !isLoadingVisible && !isBroadcast && (

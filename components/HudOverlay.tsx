@@ -2,6 +2,7 @@
 import React, { useRef, useEffect } from 'react';
 import { FractalState, FractalActions } from '../types';
 import { useAnimationStore } from '../store/animationStore';
+import { useFractalStore } from '../store/fractalStore';
 
 interface HudOverlayProps {
     state: FractalState;
@@ -19,6 +20,9 @@ interface HudOverlayProps {
 const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRefs }) => {
     const hudSpeedSliderRef = useRef<HTMLDivElement>(null);
     const fadeTimeout = useRef<number | null>(null);
+    
+    const tabSwitchCount = state.tabSwitchCount;
+    const incrementTabSwitchCount = actions.incrementTabSwitchCount;
 
     // --- VISIBILITY LOGIC ---
     // Subscribe to AnimationStore for camera activity.
@@ -54,6 +58,16 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
             if (fadeTimeout.current) clearTimeout(fadeTimeout.current);
         };
     }, []);
+    
+    // --- TAB HINT LOGIC ---
+    useEffect(() => {
+        // Subscribe to cameraMode changes to increment hint counter
+        const unsub = useFractalStore.subscribe(
+            (s) => s.cameraMode,
+            () => incrementTabSwitchCount()
+        );
+        return unsub;
+    }, [incrementTabSwitchCount]);
 
     const handleHudSpeedInteraction = (e: React.PointerEvent) => {
         if (!hudSpeedSliderRef.current || state.cameraMode === 'Orbit') return;
@@ -160,6 +174,23 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
                             </span>
                         </div>
                     </div>
+
+                    {/* Navigation Hints */}
+                    {state.showHints && !isMobile && (
+                        <div className="mt-3 text-[9px] font-medium text-white/40 tracking-widest uppercase text-center animate-fade-in text-shadow-sm whitespace-nowrap">
+                            <span className="text-cyan-400/60 font-bold mr-2">[{state.cameraMode.toUpperCase()}]</span>
+                            {state.cameraMode === 'Fly' 
+                                ? "WASD Move • Space/C Vert • Shift Boost" 
+                                : "L-Drag Rotate • R-Drag Pan • Scroll Zoom"}
+                        </div>
+                    )}
+                    
+                    {/* Persistent Mode Switch Hint */}
+                    {tabSwitchCount < 2 && !isMobile && (
+                         <div className="mt-2 text-[10px] font-bold text-cyan-300 animate-pulse bg-cyan-950/40 px-3 py-1 rounded border border-cyan-500/30 shadow-lg tracking-wider">
+                             PRESS <span className="text-white border border-white/20 rounded px-1 bg-white/10 mx-0.5">TAB</span> TO TOGGLE FLY MODE
+                         </div>
+                    )}
                 </div>
             </div>
         </div>

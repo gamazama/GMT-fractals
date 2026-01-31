@@ -27,12 +27,13 @@ export const AOFeature: FeatureDefinition = {
         // --- SHADING PARAMETERS (Runtime, in Shading Panel) ---
         aoIntensity: {
             type: 'float', default: 0.2, label: 'Ambient Occlusion', shortId: 'ai', uniform: 'uAOIntensity',
-            scale: 'log', min: 0, max: 5, step: 0.01, group: 'shading',
+            min: 0.001, max: 5, step: 0.001, scale: 'log', group: 'shading',
             condition: { param: 'aoEnabled', bool: true }
         },
         aoSpread: {
             type: 'float', default: 0.5, label: 'Spread', shortId: 'as', uniform: 'uAOSpread',
             scale: 'log', min: 0.01, max: 2, step: 0.01, group: 'shading',
+            parentId: 'aoIntensity',
             condition: [{ param: 'aoEnabled', bool: true }, { param: 'aoIntensity', gt: 0.0 }]
         },
         aoSamples: {
@@ -41,12 +42,14 @@ export const AOFeature: FeatureDefinition = {
             group: 'shading',
             uniform: 'uAOSamples', 
             ui: 'numeric',
+            parentId: 'aoIntensity',
             description: "Iterations per pixel. Runtime controlled.",
             condition: [{ param: 'aoEnabled', bool: true }, { param: 'aoIntensity', gt: 0.0 }]
         },
         aoMode: {
             type: 'boolean', default: true, label: 'Stochastic Mode', shortId: 'am', uniform: 'uAOMode',
             group: 'shading', 
+            parentId: 'aoIntensity',
             condition: [
                 { param: 'aoEnabled', bool: true }, 
                 { param: 'aoIntensity', gt: 0.0 },
@@ -57,13 +60,14 @@ export const AOFeature: FeatureDefinition = {
 
         // --- ENGINE PARAMETERS (Engine Panel) ---
         aoMaxSamples: {
-             type: 'int', default: 32, label: 'Max AO Samples', shortId: 'amx',
-             min: 16, max: 128, step: 16,
+             type: 'int', default: 32, label: 'Max Samples (Hard Cap)', shortId: 'amx',
+             min: 16, max: 256, step: 16,
              group: 'engine_settings',
              ui: 'numeric',
-             description: "Hard limit for AO loop (Compile Time).",
+             description: "Compile-time limit. Increasing this allows higher runtime samples but compiles slower.",
              onUpdate: 'compile',
-             noReset: true
+             noReset: true,
+             condition: [{ param: 'aoEnabled', bool: true }]
         },
         aoStochasticCp: {
             type: 'boolean', default: true, label: 'Load Stochastic Sampling', shortId: 'sc', 

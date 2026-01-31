@@ -69,7 +69,7 @@ export const Mandelbulb: FractalDefinition = {
             coreMath: { iterations: 16, paramA: 8, paramB: 0, paramC: 0, paramD: 0, paramE: 0, paramF: 0.5 },
             geometry: { hybridMode: false, hybridIter: 0, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1, hybridSkip: 1, hybridSwap: false, juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0 },
             coloring: {
-                mode: 0, repeats: 40, phase: 0, scale: 40, offset: 0, bias: 1, twist: 0, escape: 1.2,
+                mode: 0, repeats: 2, phase: 0, scale: 1, offset: 0, bias: 1, twist: 0, escape: 1.2,
                 mode2: 4, repeats2: 7, phase2: 0, blendMode: 0, blendOpacity: 0, twist2: 0,
                 layer3Color: "#ffffff", layer3Scale: 20, layer3Strength: 0, layer3Bump: 0, layer3Turbulence: 0,
                 gradient: [ { id: "2", position: 1, color: "#FFFFFF", bias: 0.5, interpolation: "linear" } ],

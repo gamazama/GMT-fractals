@@ -198,9 +198,11 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
             <div className="flex items-center gap-2">
                 <div className="relative" ref={shadowMenuRef}>
                     <button 
+                        // UPDATED: Simply toggle menu, do not toggle state directly
                         onClick={(e) => { e.stopPropagation(); vibrate(5); setShowShadowMenu(!showShadowMenu); }}
                         onContextMenu={(e) => handleContextMenu(e, ['shadows'])}
                         className={`shadow-toggle-btn p-2 rounded-full border transition-all duration-300 ${lighting?.shadows ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.1)]' : 'bg-transparent border-transparent text-gray-600 hover:text-gray-300 hover:bg-white/5'}`}
+                        title="Shadow Settings"
                     >
                         <ShadowIcon />
                     </button>

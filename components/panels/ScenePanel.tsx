@@ -5,6 +5,7 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { useFractalStore } from '../../store/fractalStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { FeatureSection } from '../FeatureSection';
+import { WaterPlaneState } from '../../features/water_plane';
 
 const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
   const openGlobalMenu = useFractalStore(s => s.openContextMenu);
@@ -13,6 +14,7 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
   const droste = state.droste; 
   const grading = state.colorGrading;
   const optics = state.optics; 
+  const waterPlane = state.waterPlane as WaterPlaneState;
   
   const handleHeaderContextMenu = (e: React.MouseEvent) => {
       const ids = collectHelpIds(e.currentTarget);
@@ -47,24 +49,28 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
      </div>
 
      {/* --- SECTION 3: WATER PLANE --- */}
-     <div className="flex flex-col border-t border-white/5 pt-2" data-help-id="water.settings">
-        <FeatureSection label="Water Plane" featureId="waterPlane" description="Infinite ocean plane at height Y.">
-            <div className="mb-2">
-                <AutoFeaturePanel featureId="waterPlane" groupFilter="main" />
-            </div>
-            
-            <div className="bg-black/20 p-2 rounded border border-white/5 mb-2">
-                 <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2">Surface</div>
-                 <AutoFeaturePanel featureId="waterPlane" groupFilter="geometry" />
-                 <AutoFeaturePanel featureId="waterPlane" groupFilter="material" />
-            </div>
-            
-            <div className="bg-black/20 p-2 rounded border border-white/5">
-                 <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2">Waves</div>
-                 <AutoFeaturePanel featureId="waterPlane" groupFilter="waves" />
-            </div>
-        </FeatureSection>
-     </div>
+     {/* Only show if the engine feature is enabled (compiled) */}
+     {waterPlane && waterPlane.waterEnabled && (
+         <div className="flex flex-col border-t border-white/5 pt-2" data-help-id="water.settings">
+            <FeatureSection label="Water Plane" featureId="waterPlane" description="Infinite ocean plane at height Y.">
+                {/* Simplified Layout: AutoPanel handles everything */}
+                <div className="mb-2">
+                    <AutoFeaturePanel featureId="waterPlane" groupFilter="main" />
+                </div>
+                
+                {/* Grouped Properties */}
+                <div className="bg-black/20 p-2 rounded border border-white/5 mb-2">
+                     <AutoFeaturePanel featureId="waterPlane" groupFilter="geometry" />
+                     <AutoFeaturePanel featureId="waterPlane" groupFilter="material" />
+                </div>
+                
+                <div className="bg-black/20 p-2 rounded border border-white/5">
+                     <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2">Waves</div>
+                     <AutoFeaturePanel featureId="waterPlane" groupFilter="waves" />
+                </div>
+            </FeatureSection>
+         </div>
+     )}
 
      {/* --- SECTION 4: OPTICS (DOF & LENS) --- */}
      <div className="flex flex-col bg-gray-900/40 border-t border-white/5" data-help-id="dof.settings">

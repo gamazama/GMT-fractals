@@ -24,6 +24,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     useEffect(() => {
         const handlePointerDown = (e: PointerEvent) => {
             const state = useFractalStore.getState();
+            const mode = state.interactionMode;
 
             if (canvasRef.current) {
                 const rect = canvasRef.current.getBoundingClientRect();
@@ -34,7 +35,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 mousePosRef.current = { x, y };
                 
                 // Case 1: Focus Picking
-                if (state.isPickingFocus) {
+                if (mode === 'picking_focus') {
                     isDraggingFocusRef.current = true;
                     
                     const loop = () => {
@@ -69,7 +70,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 }
                 
                 // Case 2: Julia Picking (Continuous Drag Mode)
-                if (state.isPickingJulia) {
+                if (mode === 'picking_julia') {
                     isDraggingJuliaRef.current = true;
                     
                     // Sync start position from store to prevent jumping
@@ -223,7 +224,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 if (rafRef.current) cancelAnimationFrame(rafRef.current);
                 
                 // Exit picking mode on release
-                state.setIsPickingJulia(false);
+                state.setInteractionMode('none');
                 if (navigator.vibrate) navigator.vibrate(20);
             }
             
@@ -233,7 +234,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 if (rafRef.current) cancelAnimationFrame(rafRef.current);
                 
                 // Exit picking mode on release
-                state.setIsPickingFocus(false);
+                state.setInteractionMode('none');
                 if (navigator.vibrate) navigator.vibrate(20);
             }
         };

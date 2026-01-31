@@ -57,15 +57,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
         await new Promise(resolve => setTimeout(resolve, 50));
         
         actions.setRenderMode(mode);
-
-        // Cleanup: If the engine decided NOT to recompile (because it had the shader cached),
-        // we need to hide the spinner. 
-        // The engine has a 150ms debounce for compilation, so we check after that window.
-        setTimeout(() => {
-            if (!engine.isCompiling) {
-                FractalEvents.emit('is_compiling', false);
-            }
-        }, 200);
+        // Removed manual spinner cleanup. The Engine now handles this centrally.
     };
 
     // Helper to snap resolution to multiples of 8 (GPU friendly)

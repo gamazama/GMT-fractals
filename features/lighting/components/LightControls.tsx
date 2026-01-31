@@ -3,6 +3,7 @@ import React from 'react';
 import { useFractalStore } from '../../../store/fractalStore';
 import { useAnimationStore } from '../../../store/animationStore';
 import { getLightFromSlice } from '../index';
+import { engine } from '../../../engine/FractalEngine';
 import Slider from '../../../components/Slider';
 import EmbeddedColorPicker from '../../../components/EmbeddedColorPicker';
 import { KeyIcon, TrashIcon, KeyStatus } from '../../../components/Icons';
@@ -56,13 +57,20 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
     const light = useFractalStore(s => getLightFromSlice(s.lighting, index));
     const updateLight = useFractalStore(s => s.updateLight);
     const removeLight = useFractalStore(s => s.removeLight);
-    const toggleFixed = useFractalStore(s => s.toggleLightFixed);
     const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
     
     // Animation Store for Keyframing
     const { addTrack, addKeyframe, currentFrame, sequence, isPlaying } = useAnimationStore();
 
     if (!light.visible) return null;
+
+    const handleToggleFixed = () => {
+         if (!engine.activeCamera) return;
+         const wasFixed = light.fixed;
+         // Calculate new position to keep light visually in same place when switching space
+         const newPos = engine.virtualSpace.resolveRealWorldPosition(light.position, wasFixed, engine.activeCamera);
+         updateLight({ index, params: { fixed: !wasFixed, position: newPos } });
+    };
 
     const handlePositionKey = () => {
         const axes = ['X', 'Y', 'Z'];
@@ -121,6 +129,15 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
     const safeIntensity = Math.max(0.01, light.intensity);
     const currentFalloffFactor = light.falloff / safeIntensity;
     const prefix = `lighting.light${index}`;
+    
+    // Smart 5-digit formatter for UI
+    const formatValue = (val: number) => {
+        if (val === 0) return "0";
+        if (Math.abs(val) < 1.0) return val.toFixed(3);
+        // Use precision 5, then strip trailing zeros if it has a decimal point
+        const s = val.toPrecision(5);
+        return s.includes('.') ? s.replace(/\.?0+$/, "") : s;
+    };
 
     return (
         <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 w-52 bg-black border border-white/20 rounded-xl p-3 shadow-2xl z-[70] animate-fade-in origin-top" onClick={e => e.stopPropagation()}>
@@ -148,7 +165,7 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                         <button 
                             onClick={() => {
                                 handleInteractionStart('param');
-                                toggleFixed(index);
+                                handleToggleFixed();
                                 handleInteractionEnd();
                             }}
                             className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${light.fixed ? 'bg-orange-500/20 text-orange-300 border-orange-500/50' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'}`}
@@ -170,11 +187,12 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                             toSlider: (val) => Math.sqrt(val / 100) * 100,
                             fromSlider: (val) => (val * val) / 100
                         }}
+                        overrideInputText={formatValue(light.intensity)}
                         trackId={`${prefix}_intensity`}
                     />
                     
                     <Slider 
-                        label="Falloff (Decay)" 
+                        label="Falloff" 
                         value={currentFalloffFactor} 
                         min={0} max={10.0} step={0.01} 
                         onChange={(factor) => {
@@ -188,11 +206,18 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                             toSlider: (val) => Math.pow(val / 10, 1/1.5) * 100,
                             fromSlider: (val) => Math.pow(val / 100, 1.5) * 10
                         }}
-                        overrideInputText={currentFalloffFactor < 0.01 ? "Infinite" : currentFalloffFactor.toFixed(2)}
-                        // We track the raw falloff for automation
+                        // Updated threshold for visibility
+                        overrideInputText={currentFalloffFactor < 0.0001 ? "Infinite" : formatValue(currentFalloffFactor)}
                         trackId={`${prefix}_falloff`}
                     />
+                </div>
 
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                    <EmbeddedColorPicker 
+                        color={light.color} 
+                        onColorChange={(c) => updateLight({ index, params: { color: c } })}
+                    />
+                    
                     <div className="flex items-center justify-between pt-1">
                         <label className="text-xs text-gray-400 font-medium">Cast Shadows</label>
                         <input 
@@ -206,13 +231,6 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                             className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded cursor-pointer"
                         />
                     </div>
-                </div>
-
-                <div className="pt-2 border-t border-white/10">
-                    <EmbeddedColorPicker 
-                        color={light.color} 
-                        onColorChange={(c) => updateLight({ index, params: { color: c } })}
-                    />
                 </div>
             </div>
         </div>

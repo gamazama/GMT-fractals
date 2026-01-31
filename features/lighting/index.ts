@@ -3,7 +3,10 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { LightParams } from '../../types';
 import { MAX_LIGHTS } from '../../data/constants';
 import { getShadowsGLSL } from '../../shaders/chunks/lighting/shadows';
-import { engine } from '../../engine/FractalEngine';
+import { LIGHTING_PBR } from '../../shaders/chunks/lighting/pbr';
+import { getShadingGLSL } from '../../shaders/chunks/lighting/shading';
+import { getPathTracerGLSL } from '../../shaders/chunks/pathtracer';
+import { QualityState } from '../quality';
 
 export interface LightingState {
     advancedLighting: boolean;
@@ -26,7 +29,7 @@ export interface LightingActions {
     updateLight: (payload: { index: number, params: Partial<LightParams> }) => void;
     addLight: () => void;
     removeLight: (index: number) => void;
-    toggleLightFixed: (index: number) => void;
+    // toggleLightFixed removed to break circular dependency. Logic moved to UI.
 }
 
 export const getLightFromSlice = (slice: LightingState | undefined, i: number): LightParams => {
@@ -56,7 +59,8 @@ export const LightingFeature: FeatureDefinition = {
         order: 30,
         condition: { param: '$advancedMode', bool: true }
     },
-    viewportConfig: { componentId: 'overlay-lighting', renderOrder: 50 },
+    // Explicitly mark as scene (R3F) component
+    viewportConfig: { componentId: 'overlay-lighting', renderOrder: 50, type: 'scene' },
     engineConfig: {
         toggleParam: 'advancedLighting',
         mode: 'compile',
@@ -130,37 +134,42 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Treats lights as physical spheres. Creates realistic penumbras. Requires Accumulation.'
         },
 
-        // --- RUNTIME CONTROL (Light Panel / Quality Panel) ---
+        // --- RUNTIME CONTROL (Light Panel / Quality Panel / Shadow Popup) ---
+        
+        // Changed group to 'main' so it doesn't appear in the 'shadows' AutoPanel group
         shadows: {
-            type: 'boolean', default: true, label: 'Enable Shadows', shortId: 'sh', 
-            group: 'shadows', 
+            type: 'boolean', default: true, label: 'Enable', shortId: 'sh', 
+            group: 'main', 
             uniform: 'uShadows', 
             ui: 'checkbox',
             condition: { param: 'shadowsCompile', bool: true }
         },
-        shadowSteps: {
-            type: 'int', default: 128, label: 'Shadow Steps', shortId: 'st', 
-            min: 16, max: 256, step: 16, 
-            group: 'shadow_quality',
-            parentId: 'shadowsCompile',
-            uniform: 'uShadowSteps', 
-            ui: 'numeric',
-            description: 'Max iterations for shadow ray.'
+        
+        // REORDERED SLIDERS: Intensity -> Softness -> Steps -> Bias
+        shadowIntensity: {
+            type: 'float', default: 1.0, label: 'Opacity', shortId: 'si', uniform: 'uShadowIntensity',
+            min: 0.0, max: 1.0, step: 0.01, group: 'shadows',
+            condition: { bool: true }
         },
         shadowSoftness: {
-            type: 'float', default: 16.0, label: 'Shadow Softness', shortId: 'ss', uniform: 'uShadowSoftness',
+            type: 'float', default: 16.0, label: 'Softness', shortId: 'ss', uniform: 'uShadowSoftness',
             min: 2.0, max: 2000.0, step: 1.0, group: 'shadows', scale: 'log',
-            description: 'Controls the penumbra size. Higher values = Softer shadows but may require more samples.'
+            condition: { bool: true }
         },
-        shadowIntensity: {
-            type: 'float', default: 1.0, label: 'Shadow Intensity', shortId: 'si', uniform: 'uShadowIntensity',
-            min: 0.0, max: 1.0, step: 0.01, group: 'shadows',
-            condition: { param: 'shadows', bool: true }
+        shadowSteps: {
+            type: 'int', default: 128, label: 'Steps', shortId: 'st', 
+            min: 16, max: 512, step: 16, 
+            group: 'shadows', 
+            condition: { bool: true },
+            uniform: 'uShadowSteps', 
+            ui: 'numeric',
+            description: 'Quality vs Performance.'
         },
         shadowBias: {
-            type: 'float', default: 0.002, label: 'Shadow Bias', shortId: 'sb', uniform: 'uShadowBias',
+            type: 'float', default: 0.002, label: 'Bias', shortId: 'sb', uniform: 'uShadowBias',
             min: 0.0, max: 1.0, step: 0.000001, group: 'shadows', scale: 'log',
-            condition: { param: 'shadows', bool: true }
+            condition: { bool: true },
+            description: 'Prevents surface acne.'
         },
         
         lights: { type: 'complex', default: DEFAULT_LIGHTS, label: 'Light List', shortId: 'll', group: 'data', hidden: true, noReset: true }
@@ -168,22 +177,23 @@ export const LightingFeature: FeatureDefinition = {
     inject: (builder, config, variant) => {
         const state = config.lighting as LightingState;
         
-        // --- CRITICAL OPTIMIZATION ---
-        // Only inject lighting logic for the MAIN render.
-        // Physics (Distance Measurement) and Histogram (Data Analysis) do not need shadows or PBR.
+        // OPTIMIZATION: Only inject lighting logic for the MAIN render.
         if (variant !== 'Main') {
-             // Inject fast stubs to satisfy linker if other chunks call these
              builder.addPostDEFunction(`
              float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist) { return 1.0; }
              float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
              `);
              return;
         }
+        
+        builder.addDefine('MAX_LIGHTS', MAX_LIGHTS.toString());
 
         if (state && state.advancedLighting === false) {
              builder.addPostDEFunction(`
              float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist) { return 1.0; }
              float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
+             vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) { return vec3(0.0); }
+             vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) { return vec3(0.0); }
              `);
              return;
         }
@@ -193,7 +203,6 @@ export const LightingFeature: FeatureDefinition = {
 
         builder.addPostDEFunction(getShadowsGLSL(shadowsCompiled, shadowQuality));
         
-        // Inject defines used by the main loop
         if (!shadowsCompiled && !state?.shadows) {
             builder.addDefine('DISABLE_SHADOWS', '1');
         } else {
@@ -204,11 +213,18 @@ export const LightingFeature: FeatureDefinition = {
             builder.addDefine('PT_ENABLED', '1');
         }
         
-        if (config.renderMode === 'PathTracing' || state?.renderMode === 1.0) {
+        const isPathTracing = config.renderMode === 'PathTracing' || state?.renderMode === 1.0;
+        const quality = config.quality as QualityState;
+        const isLite = quality?.precisionMode === 1.0;
+
+        if (isPathTracing) {
             builder.setRenderMode('PathTracing');
             builder.addDefine('RENDER_MODE_PATHTRACING', '1');
+            builder.addIntegrator(getPathTracerGLSL(isLite));
         } else {
             builder.setRenderMode('Direct');
+            builder.addIntegrator(LIGHTING_PBR);
+            builder.addIntegrator(getShadingGLSL(isLite));
         }
     },
     actions: {
@@ -231,14 +247,6 @@ export const LightingFeature: FeatureDefinition = {
             const newLights = [...state.lights];
             newLights.splice(index, 1);
             return { lights: newLights };
-        },
-        toggleLightFixed: (state: LightingState, index: number) => {
-             const current = getLightFromSlice(state, index);
-             const wasFixed = current.fixed;
-             const newPos = engine.virtualSpace.resolveRealWorldPosition(current.position, wasFixed, engine.activeCamera!);
-             const newLights = [...state.lights];
-             newLights[index] = { ...current, fixed: !wasFixed, position: newPos };
-             return { lights: newLights };
         }
     }
 };

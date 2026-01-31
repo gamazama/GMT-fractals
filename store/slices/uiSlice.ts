@@ -14,30 +14,33 @@ export interface UIActionsLocal {
 }
 
 export type UISlice = Pick<FractalStoreState,
-    'showLightGizmo' | 'isGizmoDragging' | 'isPickingFocus' | 
+    'showLightGizmo' | 'isGizmoDragging' | 
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' |
     'sceneHistogramData' | 'sceneHistogramTrigger' |
     'draggedLightIndex' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'isControlsMinimized' | 'invertY' |
     'resolutionMode' | 'fixedResolution' | 'isControlsDocked' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
-    'isTimelineHovered' | 'isSelectingRegion' |
-    'isPickingJulia' |
+    'isTimelineHovered' | 
+    'interactionMode' | // Consolidated Mode
     'isBroadcastMode' |
     'activeTab' |
-    'floatingTabs'
+    'floatingTabs' |
+    'isUserInteracting' |
+    'tabSwitchCount'
 > & Pick<FractalActions,
-    'setShowLightGizmo' | 'setGizmoDragging' | 'setIsPickingFocus' | 
+    'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' |
     'setSceneHistogramData' | 'refreshSceneHistogram' |
     'setDraggedLight' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setIsControlsMinimized' | 'setInvertY' |
     'setResolutionMode' | 'setFixedResolution' | 'setIsControlsDocked' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
-    'setIsTimelineHovered' | 'setIsSelectingRegion' |
-    'setIsPickingJulia' |
+    'setIsTimelineHovered' | 
+    'setInteractionMode' | // Consolidated Setter
     'setIsBroadcastMode' |
     'openHelp' | 'closeHelp' | 'openContextMenu' | 'closeContextMenu' |
-    'setActiveTab' | 'floatTab' | 'dockTab'
+    'setActiveTab' | 'floatTab' | 'dockTab' |
+    'incrementTabSwitchCount'
 >;
 
 const getUrlParam = (key: string) => {
@@ -49,12 +52,16 @@ const getUrlParam = (key: string) => {
 export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
     // FIX: Default showLightGizmo to TRUE so users see lights immediately
     showLightGizmo: true, 
-    isGizmoDragging: false, isPickingFocus: false,
+    isGizmoDragging: false, 
+    interactionMode: 'none',
+
     histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0,
     sceneHistogramData: null, sceneHistogramTrigger: 0,
     draggedLightIndex: null,
     autoCompile: false,
     
+    isUserInteracting: false,
+
     advancedMode: false,
     showHints: true,
     debugMobileLayout: false, // Default to desktop layout
@@ -70,8 +77,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     exportIncludeScene: false,
     
     isTimelineHovered: false,
-    isSelectingRegion: false,
-    isPickingJulia: false,
+    
+    tabSwitchCount: 0,
     
     activeTab: 'Formula',
     floatingTabs: [],
@@ -81,7 +88,10 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
 
     setShowLightGizmo: (v) => set({ showLightGizmo: v }),
     setGizmoDragging: (v) => set({ isGizmoDragging: v }),
-    setIsPickingFocus: (v) => set({ isPickingFocus: v }),
+    
+    // Consolidated Setter
+    setInteractionMode: (mode) => set({ interactionMode: mode }),
+
     setHistogramData: (d) => set({ histogramData: d }),
     setHistogramAutoUpdate: (v) => set({ histogramAutoUpdate: v }),
     refreshHistogram: () => set((state) => ({ histogramTrigger: state.histogramTrigger + 1 })),
@@ -112,9 +122,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setExportIncludeScene: (v) => set({ exportIncludeScene: v }),
     
     setIsTimelineHovered: (v) => set({ isTimelineHovered: v }),
-    setIsSelectingRegion: (v) => set({ isSelectingRegion: v }),
     
-    setIsPickingJulia: (v) => set({ isPickingJulia: v }),
+    incrementTabSwitchCount: () => set(s => ({ tabSwitchCount: s.tabSwitchCount + 1 })),
     
     setIsBroadcastMode: (v) => set({ isBroadcastMode: v }),
     

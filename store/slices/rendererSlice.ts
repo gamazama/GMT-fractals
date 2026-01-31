@@ -7,20 +7,23 @@ import { UNIFORM_DEFAULTS } from '../../engine/UniformSchema';
 import * as THREE from 'three';
 
 const isMobile = () => {
-    return (window.matchMedia("(pointer: coarse)").matches) || (window.innerWidth < 768);
+    if (typeof window === 'undefined') return false;
+    return (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || (window.innerWidth < 768);
 };
 
 export type RendererSlice = Pick<FractalStoreState,
     'dpr' | 'aaLevel' | 'msaaSamples' | 'aaMode' | 'accumulation' | 'previewMode' | 'renderMode' |
-    'isExporting' | 'renderRegion' | 'isBucketRendering' | 'bucketSize' | 'bucketUpscale' | 'convergenceThreshold'
+    'isExporting' | 'renderRegion' | 'isBucketRendering' | 'bucketSize' | 'bucketUpscale' | 'convergenceThreshold' |
+    'isPaused' | 'sampleCap'
 > & Pick<FractalActions,
     'setDpr' | 'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
-    'setIsExporting' | 'setRenderRegion' | 'setIsBucketRendering' | 'setBucketSize' | 'setBucketUpscale' | 'setConvergenceThreshold'
+    'setIsExporting' | 'setRenderRegion' | 'setIsBucketRendering' | 'setBucketSize' | 'setBucketUpscale' | 'setConvergenceThreshold' |
+    'setIsPaused' | 'setSampleCap'
 >;
 
 export const createRendererSlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], RendererSlice> = (set, get) => ({
     
-    dpr: isMobile() ? 1.0 : Math.min(window.devicePixelRatio || 1.0, 2.0),
+    dpr: isMobile() ? 1.0 : Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1.0) : 1.0, 2.0),
     aaLevel: 1.0, 
     msaaSamples: 1, 
     aaMode: 'Always', 
@@ -30,6 +33,9 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     // Fixed: Converted from getter to simple value to prevent init crash.
     // Syncing is handled via subscriptions in fractalStore.ts
     renderMode: 'Direct',
+    
+    isPaused: false,
+    sampleCap: 256, // Default stop after 256 samples
 
     isExporting: false,
     renderRegion: null,
@@ -78,6 +84,9 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
         }
     },
     
+    setIsPaused: (v) => set({ isPaused: v }),
+    setSampleCap: (v) => set({ sampleCap: v }),
+
     setRenderRegion: (r) => {
         set({ renderRegion: r });
         // Use default (0,0) to (1,1) if region is null

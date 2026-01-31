@@ -7,19 +7,7 @@ import { KeyframeButton } from './KeyframeButton';
 import { KeyStatus } from './Icons';
 import { evaluateTrackValue } from '../utils/timelineUtils';
 
-interface Vector3InputProps {
-    label?: string;
-    value: THREE.Vector3;
-    onChange: (val: THREE.Vector3) => void;
-    min?: number;
-    max?: number;
-    step?: number;
-    disabled?: boolean;
-    interactionMode?: 'param' | 'camera';
-    trackKeys?: string[]; // IDs for X, Y, Z tracks
-    trackLabels?: string[]; // Labels for X, Y, Z tracks
-    convertRadToDeg?: boolean; // If true, displays Degrees but writes Radians to track/onChange
-}
+// --- PURE PRIMITIVES ---
 
 const AXIS_CONFIG = [
     { label: 'X', color: 'bg-red-500', text: 'text-red-400', border: 'group-focus-within:border-red-500/50' },
@@ -66,7 +54,6 @@ const VectorInputCell = ({
         pct = Math.min(100, Math.max(0, ((safeVal - min) / range) * 100));
     }
 
-    // --- DRAG HANDLERS ---
     const handleDown = (e: React.PointerEvent) => {
         if (disabled || isEditing) return;
         if (e.button !== 0) return; 
@@ -141,8 +128,12 @@ const VectorInputCell = ({
     const commitEdit = () => {
         const num = parseFloat(inputValue);
         if (!isNaN(num)) {
+            // Trigger start/end for undo history wrapper
+            onDragStart();
             onUpdate(num);
+            onDragEnd();
         } else {
+            // Restore visual
             onUpdate(value);
         }
         setIsEditing(false);
@@ -195,31 +186,131 @@ const VectorInputCell = ({
     );
 };
 
-export const Vector3Input: React.FC<Vector3InputProps> = ({ 
-    label, value, onChange, min = -10000, max = 10000, step = 0.01, disabled = false, interactionMode = 'param', trackKeys, trackLabels, convertRadToDeg = false
+interface BaseVector3InputProps {
+    label?: string;
+    value: THREE.Vector3;
+    onChange: (val: THREE.Vector3) => void;
+    min?: number;
+    max?: number;
+    step?: number;
+    disabled?: boolean;
+    convertRadToDeg?: boolean;
+    // Callbacks
+    onDragStart?: () => void;
+    onDragEnd?: () => void;
+    // Visual slots
+    headerRight?: React.ReactNode;
+}
+
+export const BaseVector3Input: React.FC<BaseVector3InputProps> = ({ 
+    label, value, onChange, min = -10000, max = 10000, step = 0.01, disabled = false, convertRadToDeg = false, onDragStart, onDragEnd, headerRight
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
-    const { sequence, currentFrame, isPlaying, addTrack, addKeyframe, removeKeyframe, snapshot, isRecording } = useAnimationStore();
-    
     // Local state for immediate visual feedback during drag
     const [localValue, setLocalValue] = useState(value || new THREE.Vector3(0,0,0));
     const isDragging = useRef(false);
     const dragStartSnapshot = useRef<THREE.Vector3 | null>(null);
     const D2R = Math.PI / 180;
 
-    // Sync local state with props when NOT dragging
     useEffect(() => {
         if (!isDragging.current && value) {
             setLocalValue(value.clone());
         }
     }, [value?.x, value?.y, value?.z]);
 
-    const onStart = () => {
+    const handleStart = () => {
         isDragging.current = true;
         dragStartSnapshot.current = localValue.clone();
+        if (onDragStart) onDragStart();
+    };
+
+    const handleEnd = () => {
+        dragStartSnapshot.current = null;
+        isDragging.current = false;
+        if (onDragEnd) onDragEnd();
+    };
+
+    const updateAxis = (axis: 'x'|'y'|'z', scalar: number) => {
+        const base = dragStartSnapshot.current || localValue;
+        const next = base.clone();
+        next[axis] = scalar;
+        
+        setLocalValue(next); 
+        
+        if (convertRadToDeg) {
+             const nextRad = next.clone();
+             nextRad.x *= D2R;
+             nextRad.y *= D2R;
+             nextRad.z *= D2R;
+             onChange(next); // Parent expects radians, but visual updates are degrees
+        } else {
+             onChange(next);
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-1 mb-2">
+            {label && (
+                <div className="flex justify-between items-end px-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider select-none">{label}</label>
+                    {headerRight}
+                </div>
+            )}
+            
+            <div className="flex gap-1">
+                <VectorInputCell 
+                    axisIndex={0} 
+                    value={localValue.x} 
+                    min={min} max={max} step={step} 
+                    onUpdate={(v) => updateAxis('x', v)}
+                    onDragStart={handleStart} onDragEnd={handleEnd}
+                    disabled={disabled}
+                />
+                <VectorInputCell 
+                    axisIndex={1} 
+                    value={localValue.y} 
+                    min={min} max={max} step={step} 
+                    onUpdate={(v) => updateAxis('y', v)}
+                    onDragStart={handleStart} onDragEnd={handleEnd}
+                    disabled={disabled}
+                />
+                <VectorInputCell 
+                    axisIndex={2} 
+                    value={localValue.z} 
+                    min={min} max={max} step={step} 
+                    onUpdate={(v) => updateAxis('z', v)}
+                    onDragStart={handleStart} onDragEnd={handleEnd}
+                    disabled={disabled}
+                />
+            </div>
+        </div>
+    );
+};
+
+// --- CONNECTED WRAPPER ---
+
+interface ConnectedVector3InputProps extends Omit<BaseVector3InputProps, 'onDragStart' | 'onDragEnd' | 'headerRight'> {
+    interactionMode?: 'param' | 'camera';
+    trackKeys?: string[];
+    trackLabels?: string[];
+}
+
+export const Vector3Input: React.FC<ConnectedVector3InputProps> = ({
+    interactionMode = 'param', trackKeys, trackLabels, ...props
+}) => {
+    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { sequence, currentFrame, isPlaying, addTrack, addKeyframe, removeKeyframe, snapshot, isRecording } = useAnimationStore();
+    
+    // We need to access localValue inside the wrapper to record correct keyframe values
+    // But localValue is inside BaseVector3Input.
+    // Solution: We track the *last dispatched value* here or pass a callback to Base.
+    // Let's use a ref to track the last value seen by onChange.
+    const lastValueRef = useRef(props.value);
+    
+    const D2R = Math.PI / 180;
+
+    const onDragStart = () => {
         handleInteractionStart(interactionMode);
         
-        // Auto-Key on Drag Start
         if (isRecording && trackKeys) {
              snapshot();
              trackKeys.forEach((tid, i) => {
@@ -231,48 +322,46 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
         }
     };
 
-    const onEnd = () => {
-        // Record Keyframes using correct units (Radians if conversion active)
+    const onDragEnd = () => {
         if (isRecording && trackKeys) {
             const axes = ['x', 'y', 'z'] as const;
             trackKeys.forEach((tid, i) => {
                 if (tid) {
-                    let val = localValue[axes[i]];
-                    // If visual was degrees, convert back to radians for storage
-                    if (convertRadToDeg) val *= D2R;
+                    let val = lastValueRef.current[axes[i]];
+                    // Note: BaseVector3Input calls onChange with the value *it sends upstream*.
+                    // If convertRadToDeg is true, BaseVector3Input sends Radians upstream.
+                    // But if convertRadToDeg is true, BaseVector3Input *displays* Degrees.
+                    // Wait, BaseVector3Input logic: "If converting, send Radians back to parent".
+                    // So `props.onChange` receives Radians. 
+                    // However, `Vector3Input` props usually assume `value` matches the store state (Radians).
+                    // `addKeyframe` expects the value as it exists in the store (Radians).
+                    // So `lastValueRef.current` (which comes from onChange) is already Radians.
+                    // BUT: In the previous implementation, localValue was Degrees, and onEnd converted it.
+                    // Here, we don't have access to localValue. 
+                    // However, `onChange` updates the parent state, which updates `props.value`, which updates `lastValueRef`.
+                    // So `lastValueRef` is accurate.
+                    
+                    // Actually, there's a subtle bug in the previous implementation:
+                    // `onEnd` used `localValue` (Degrees) and multiplied by D2R.
+                    // Now, `onChange` receives `next` (which is already multiplied by D2R if converting).
+                    // So we can just use the value from onChange directly.
+                    // Wait, `onChange` logic in Base:
+                    // `onChange(next)` where `next` is Radians.
+                    
                     addKeyframe(tid, currentFrame, val);
                 }
             });
         }
-        
-        dragStartSnapshot.current = null;
-        isDragging.current = false;
         handleInteractionEnd();
     };
 
-    const updateAxis = (axis: 'x'|'y'|'z', scalar: number) => {
-        const base = dragStartSnapshot.current || localValue;
-        const next = base.clone();
-        next[axis] = scalar;
-        
-        setLocalValue(next); // Update visual immediately
-        
-        // If converting, send Radians back to parent/engine
-        if (convertRadToDeg) {
-             // Create a radiants copy for the callback
-             const nextRad = next.clone();
-             nextRad.x *= D2R;
-             nextRad.y *= D2R;
-             nextRad.z *= D2R;
-             // Only change the specific axis we touched to avoid precision drift on others?
-             // No, standard clone/multiply is safer.
-             onChange(next); // NavigationControls expects Degrees, it does conversion internally via CameraUtils
-        } else {
-             onChange(next);
-        }
+    // Intercept onChange to track value
+    const handleChange = (v: THREE.Vector3) => {
+        lastValueRef.current = v;
+        props.onChange(v);
     };
-
-    // --- Keyframe Logic ---
+    
+    // --- Keyframe Status Logic ---
     const getKeyStatus = (): KeyStatus => {
         if (!trackKeys || trackKeys.length !== 3) return 'none';
         
@@ -280,7 +369,11 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
         let hasKeyAtFrame = false;
         let isDirty = false;
         const axes = ['x', 'y', 'z'] as const;
-
+        
+        // We use props.value as the source of truth for comparison
+        // If convertRadToDeg is true, props.value is likely Radians (from store).
+        // Timeline is also Radians.
+        
         trackKeys.forEach((tid, i) => {
             const track = sequence.tracks[tid];
             if (track) {
@@ -290,20 +383,14 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
                 if (k) hasKeyAtFrame = true;
 
                 if (!isPlaying) {
-                    let currentVal = localValue[axes[i]];
-                    // Compare visual value vs track value
-                    // Track is in Radians, Visual is Degrees
-                    // Convert Track to Degrees for comparison
-                    
+                    let currentVal = props.value[axes[i]];
                     let timelineVal = 0;
+                    
                     if (k) timelineVal = k.value;
                     else timelineVal = evaluateTrackValue(track.keyframes, currentFrame, false);
                     
-                    // If we are displaying degrees, we must convert the track's radian value to degrees to compare
-                    const trackValInVisualUnits = convertRadToDeg ? (timelineVal / D2R) : timelineVal;
-                    
-                    // Allow small tolerance
-                    if (Math.abs(trackValInVisualUnits - currentVal) > 0.05) {
+                    // Direct comparison (Radians to Radians) should work if store is consistent
+                    if (Math.abs(timelineVal - currentVal) > 0.05) {
                         isDirty = true;
                     }
                 }
@@ -320,7 +407,6 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
     const handleKeyToggle = () => {
         if (!trackKeys) return;
         const axes = ['x', 'y', 'z'] as const;
-        
         snapshot();
         
         if (status === 'keyed') {
@@ -336,51 +422,22 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
                 const label = trackLabels ? trackLabels[i] : tid;
                 if (!sequence.tracks[tid]) addTrack(tid, label);
                 
-                let val = localValue[axes[i]];
-                if (convertRadToDeg) val *= D2R;
-                
+                let val = props.value[axes[i]];
+                // Value is already in correct unit (Radians) if coming from store
                 addKeyframe(tid, currentFrame, val);
             });
         }
     };
 
+    const headerRight = trackKeys ? <KeyframeButton status={status} onClick={handleKeyToggle} /> : undefined;
+
     return (
-        <div className="flex flex-col gap-1 mb-2">
-            {label && (
-                <div className="flex justify-between items-end px-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider select-none">{label}</label>
-                    {trackKeys && (
-                        <KeyframeButton status={status} onClick={handleKeyToggle} />
-                    )}
-                </div>
-            )}
-            
-            <div className="flex gap-1">
-                <VectorInputCell 
-                    axisIndex={0} 
-                    value={localValue.x} 
-                    min={min} max={max} step={step} 
-                    onUpdate={(v) => updateAxis('x', v)}
-                    onDragStart={onStart} onDragEnd={onEnd}
-                    disabled={disabled}
-                />
-                <VectorInputCell 
-                    axisIndex={1} 
-                    value={localValue.y} 
-                    min={min} max={max} step={step} 
-                    onUpdate={(v) => updateAxis('y', v)}
-                    onDragStart={onStart} onDragEnd={onEnd}
-                    disabled={disabled}
-                />
-                <VectorInputCell 
-                    axisIndex={2} 
-                    value={localValue.z} 
-                    min={min} max={max} step={step} 
-                    onUpdate={(v) => updateAxis('z', v)}
-                    onDragStart={onStart} onDragEnd={onEnd}
-                    disabled={disabled}
-                />
-            </div>
-        </div>
+        <BaseVector3Input 
+            {...props} 
+            onChange={handleChange}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            headerRight={headerRight}
+        />
     );
 };

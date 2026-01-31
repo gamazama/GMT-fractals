@@ -159,7 +159,7 @@ export const ColoringHistogram: React.FC<ColoringHistogramProps> = ({
             <Slider 
                 label="Phase" 
                 value={phase} 
-                min={0.0} max={5.0} step={0.01} 
+                min={-1.0} max={1.0} step={0.01} 
                 onChange={(v) => onChange({ [kPhase]: v })}
                 trackId={`coloring.${kPhase}`}
                 liveValue={liveModulations?.[`coloring.${kPhase}`]}

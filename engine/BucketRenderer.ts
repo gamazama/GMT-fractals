@@ -3,9 +3,9 @@ import * as THREE from 'three';
 import { engine } from './FractalEngine';
 import { Uniforms } from './UniformNames';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
-import { useFractalStore } from '../store/fractalStore';
 import { injectMetadata } from '../utils/pngMetadata';
 import { getExportFileName } from '../utils/fileUtils';
+import { Preset } from '../types';
 
 export interface BucketRenderConfig {
     bucketSize: number;
@@ -36,12 +36,24 @@ export class BucketRenderer {
         accumulation: true 
     };
 
-    public start(exportImage: boolean, config: BucketRenderConfig) {
+    // Preset for metadata injection (Optional, only used if exporting to disk)
+    private exportPreset: Preset | null = null;
+    private projectName: string = "Fractal";
+    private projectVersion: number = 0;
+
+    // Updated Start Signature: Explicitly pass export data if needed
+    public start(exportImage: boolean, config: BucketRenderConfig, exportData?: { preset: Preset, name: string, version: number }) {
         if (!engine.renderer || this.isRunning) return;
         
         this.isExporting = exportImage;
         this.config = { ...config };
         this.activeUpscale = config.bucketUpscale || 1.0;
+        
+        if (exportData) {
+            this.exportPreset = exportData.preset;
+            this.projectName = exportData.name;
+            this.projectVersion = exportData.version;
+        }
         
         const gl = engine.renderer;
         
@@ -91,6 +103,7 @@ export class BucketRenderer {
     private cleanup() {
         this.isRunning = false;
         this.isExporting = false;
+        this.exportPreset = null;
         
         const min = new THREE.Vector2(0, 0);
         const max = new THREE.Vector2(1, 1);
@@ -137,6 +150,14 @@ export class BucketRenderer {
         const tex = engine.pipeline.getOutputTexture();
         if (!tex || !engine.renderer) return;
         
+        // --- WORKER GUARD ---
+        // If we are in a worker (no document), we can't save the image via DOM.
+        // We simply abort. In the future, we could postMessage the buffer back to main thread.
+        if (typeof document === 'undefined') {
+            console.warn("BucketRenderer: Cannot save image in Worker context (DOM missing).");
+            return;
+        }
+
         const w = this.targetResolution.x;
         const h = this.targetResolution.y;
         
@@ -197,18 +218,12 @@ export class BucketRenderer {
             const imageData = new ImageData(flipped, w, h);
             ctx.putImageData(imageData, 0, 0);
             
-            // Get preset data from store
-            const store = useFractalStore.getState();
-            const preset = store.getPreset({ includeScene: true });
-            const presetStr = JSON.stringify(preset);
+            const presetStr = this.exportPreset ? JSON.stringify(this.exportPreset) : "{}";
             
-            // Increment PNG Counter
-            const currentVersion = store.prepareExport();
-
             // Construct Filename
             const filename = getExportFileName(
-                store.projectSettings.name,
-                currentVersion,
+                this.projectName,
+                this.projectVersion,
                 'png',
                 `${w}x${h}`
             );

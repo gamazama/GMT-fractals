@@ -1,8 +1,6 @@
 
-import { StateCreator } from 'zustand';
-import * as THREE from 'three';
-import React from 'react';
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
+import * as THREE from 'three';
 
 export type ParamType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'boolean' | 'gradient' | 'image' | 'complex';
 export type ScaleType = 'linear' | 'log' | 'square' | 'root' | 'pi';

@@ -139,7 +139,7 @@ const App: React.FC = () => {
 
       <div 
           ref={mainWrapperRef}
-          className={`relative bg-black select-none ${state.isPickingFocus ? 'cursor-crosshair' : ''} flex flex-col ${isCurrentlyMobile && !isBroadcast ? 'h-[100vh] sticky top-0 overflow-hidden shadow-2xl' : 'w-full h-full'}`} 
+          className={`relative bg-black select-none ${state.interactionMode === 'picking_focus' ? 'cursor-crosshair' : ''} flex flex-col ${isCurrentlyMobile && !isBroadcast ? 'h-[100vh] sticky top-0 overflow-hidden shadow-2xl' : 'w-full h-full'}`} 
           onContextMenu={(e) => e.preventDefault()}
       >
         <LoadingScreen 

@@ -5,8 +5,9 @@ import { useAnimationStore } from '../store/animationStore';
 import { useFractalStore } from '../store/fractalStore';
 import { Track } from '../types';
 import { solveBezierY } from './BezierMath';
-import { FractalEvents } from './FractalEvents';
+import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
+import { VirtualSpace } from './PrecisionMath';
 
 // Pending State Buffer to prevent partial updates per frame
 interface PendingCameraState {
@@ -271,32 +272,33 @@ export class AnimationEngine {
     }
 
     private commitState() {
-        // Only Camera requires special commit logic due to Virtual Space
+        // Camera Requires Special Commit: Emit Teleport Event
+        // This ensures R3F controls (Navigation.tsx) stay in sync with the engine
         if (this.pendingCam.unifiedDirty || this.pendingCam.rotDirty) {
             engine.shouldSnapCamera = true;
             
-            if (this.pendingCam.unifiedDirty) {
-                let lx = 0, ly = 0, lz = 0;
-                if (engine.activeCamera) {
-                    lx = engine.activeCamera.position.x;
-                    ly = engine.activeCamera.position.y;
-                    lz = engine.activeCamera.position.z;
-                }
-
-                engine.virtualSpace.setFromUnified(
-                    this.pendingCam.unified.x - lx,
-                    this.pendingCam.unified.y - ly,
-                    this.pendingCam.unified.z - lz
-                );
-            }
-
-            if (this.pendingCam.rotDirty && engine.activeCamera) {
-                engine.activeCamera.quaternion.setFromEuler(this.pendingCam.rot);
-                engine.activeCamera.updateMatrixWorld();
-            }
+            const q = new THREE.Quaternion().setFromEuler(this.pendingCam.rot);
+            const rot = { x: q.x, y: q.y, z: q.z, w: q.w };
             
-            useFractalStore.setState({ sceneOffset: engine.virtualSpace.state });
-            FractalEvents.emit('reset_accum', undefined);
+            // Calculate new Offset for Treadmill (Local Position becomes 0,0,0)
+            const sX = VirtualSpace.split(this.pendingCam.unified.x);
+            const sY = VirtualSpace.split(this.pendingCam.unified.y);
+            const sZ = VirtualSpace.split(this.pendingCam.unified.z);
+            
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
+                position: { x: 0, y: 0, z: 0 },
+                rotation: rot,
+                sceneOffset: {
+                    x: sX.high, y: sY.high, z: sZ.high,
+                    xL: sX.low, yL: sY.low, zL: sZ.low
+                }
+            });
+
+            // Update Store for persistence (but Teleport handles the immediate Engine sync)
+            useFractalStore.setState({ 
+                cameraRot: rot,
+                // We update sceneOffset via teleport, so this is handled by listener or implicitly
+            });
         }
     }
 }

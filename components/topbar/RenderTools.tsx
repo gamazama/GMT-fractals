@@ -1,13 +1,13 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useFractalStore, selectIsGlobalInteraction } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
-import { LayersIcon, PathTraceIcon, CropIcon, CloseRegionIcon, RenderGridIcon, CheckIcon } from '../Icons';
+import { LayersIcon, PathTraceIcon, CropIcon, CloseRegionIcon, RenderGridIcon, CheckIcon, PlayIcon, PauseIcon } from '../Icons';
 import FpsCounter from './FpsCounter';
 import BucketRenderSettingsPopup from './BucketRenderControls';
 import { engine } from '../../engine/FractalEngine';
 import { FractalEvents } from '../../engine/FractalEvents';
-import { DraggableNumber } from '../Slider';
+import Slider, { DraggableNumber } from '../Slider';
 import { LightingState } from '../../features/lighting';
 
 export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void }> = ({ isMobileMode, vibrate }) => {
@@ -15,17 +15,26 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
     const isPlaying = useAnimationStore(s => s.isPlaying);
     const { handleInteractionStart, handleInteractionEnd, openContextMenu } = useFractalStore();
     
+    // Subscribe to Interaction States for UI feedback
+    const isGlobalInteraction = useFractalStore(selectIsGlobalInteraction);
+    const isCameraInteracting = useAnimationStore(s => s.isCameraInteracting);
+    const isScrubbing = useAnimationStore(s => s.isScrubbing);
+    
+    // Effectively paused if paused AND not doing anything
+    const isEffectivePaused = state.isPaused && !isCameraInteracting && !isGlobalInteraction && !isScrubbing;
+    
     const [showBucketMenu, setShowBucketMenu] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
+    const [showPauseMenu, setShowPauseMenu] = useState(false);
     
     const bucketMenuRef = useRef<HTMLDivElement>(null);
+    const pauseMenuRef = useRef<HTMLDivElement>(null);
     const renameRef = useRef<HTMLDivElement>(null);
+    const pauseHoverTimeout = useRef<number | null>(null);
     
-    // Project Settings State (Local for editing)
     const [tempName, setTempName] = useState(state.projectSettings.name);
     const [tempVersion, setTempVersion] = useState(state.projectSettings.version);
 
-    // Sync when popup opens
     useEffect(() => {
         if (isRenaming) {
             setTempName(state.projectSettings.name);
@@ -33,7 +42,6 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
         }
     }, [isRenaming, state.projectSettings]);
 
-    // Close bucket menu on outside click
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (bucketMenuRef.current && !bucketMenuRef.current.contains(e.target as Node)) {
@@ -58,51 +66,56 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
             state.setRenderRegion(null);
             return;
         }
-        if (state.isSelectingRegion) {
-            state.setIsSelectingRegion(false);
-            return;
+        
+        // Toggle selection mode logic
+        if (state.interactionMode === 'selecting_region') {
+            state.setInteractionMode('none');
+        } else {
+            state.setInteractionMode('selecting_region');
         }
-        state.setIsSelectingRegion(true);
     };
 
-    // Check PT Status
     const lighting = state.lighting as LightingState;
     const ptEnabled = lighting?.ptEnabled !== false;
 
     const toggleRenderMode = async () => {
         if (!ptEnabled) return;
-        
-        // ALLOW ON MOBILE NOW
         vibrate(5);
         handleInteractionStart('param');
-        // Show loading indicator
         FractalEvents.emit('is_compiling', "Loading Material...");
-        
-        // Defer actual switch to allow UI update. 
-        // Using Promise/setTimeout ensures React has time to render the loading spinner.
         await new Promise(resolve => setTimeout(resolve, 50));
-
         state.setRenderMode(state.renderMode === 'PathTracing' ? 'Direct' : 'PathTracing');
         handleInteractionEnd();
-        
-        // Only clear spinner if engine didn't start a recompile (synchronous check)
-        if (!engine.isCompiling) {
-            FractalEvents.emit('is_compiling', false);
-        }
     };
     
     const saveProjectSettings = () => {
         state.setProjectSettings({ name: tempName, version: tempVersion });
         setIsRenaming(false);
     };
+    
+    const togglePause = () => {
+        vibrate(5);
+        const currentPaused = useFractalStore.getState().isPaused;
+        state.setIsPaused(!currentPaused);
+        engine.markInteraction();
+    };
+    
+    const handlePauseMouseEnter = () => {
+        if (pauseHoverTimeout.current) clearTimeout(pauseHoverTimeout.current);
+        setShowPauseMenu(true);
+    };
+    
+    const handlePauseMouseLeave = () => {
+        pauseHoverTimeout.current = window.setTimeout(() => {
+            setShowPauseMenu(false);
+        }, 300);
+    };
 
     return (
         <div className="flex items-center gap-6">
-            {/* Logo and Project Name Area */}
             <div className="flex flex-col leading-none relative">
                 <span className="text-xl font-black tracking-tighter text-white">G<span className="text-cyan-400">M</span>T</span>
                 
-                {/* Clickable Subtext for Project Name */}
                 <button 
                     onClick={() => setIsRenaming(true)}
                     className="text-[8px] font-mono text-gray-500 uppercase tracking-[0.2em] hover:text-cyan-300 transition-colors text-left truncate max-w-[120px]"
@@ -111,7 +124,6 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                     {state.projectSettings.name}
                 </button>
                 
-                {/* Rename Popup */}
                 {isRenaming && (
                     <div 
                         ref={renameRef}
@@ -168,6 +180,47 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                         <span>Playing</span>
                     </div>
                 )}
+                
+                {!isMobileMode && (
+                    <div 
+                        className="relative"
+                        onMouseEnter={handlePauseMouseEnter}
+                        onMouseLeave={handlePauseMouseLeave}
+                        ref={pauseMenuRef}
+                    >
+                        <button
+                            onClick={togglePause}
+                            className={`p-0.5 rounded transition-colors ${
+                                isEffectivePaused 
+                                ? 'text-amber-400 bg-amber-900/30 border border-amber-500/30' 
+                                : 'text-gray-600 hover:text-gray-400'
+                            }`}
+                            title={state.isPaused ? "Resume Rendering" : "Pause Rendering (Battery Saver)"}
+                        >
+                            {isEffectivePaused ? <PlayIcon /> : <PauseIcon />}
+                        </button>
+                        
+                        {showPauseMenu && (
+                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-40 bg-black border border-white/20 rounded-xl p-2 shadow-2xl z-[70] animate-fade-in origin-top">
+                                <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-black border-t border-l border-white/20 transform rotate-45" />
+                                <div className="mb-1">
+                                    <Slider 
+                                        label="Auto-Stop (Samples)"
+                                        value={state.sampleCap}
+                                        min={0} max={4096} step={32}
+                                        onChange={state.setSampleCap}
+                                        overrideInputText={state.sampleCap === 0 ? "Infinite" : state.sampleCap.toFixed(0)}
+                                    />
+                                    <div className="text-[8px] text-gray-500 text-center mt-1">
+                                        0 = Never Stop
+                                    </div>
+                                </div>
+                             </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="w-px h-3 bg-white/10 mx-1" />
 
                 <button 
                     onClick={() => { 
@@ -205,11 +258,11 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                         <button
                             onClick={handleRegionClick}
                             className={`p-0.5 rounded transition-colors ${
-                                state.isSelectingRegion 
+                                state.interactionMode === 'selecting_region'
                                     ? 'text-cyan-400 bg-cyan-900/30 border border-cyan-500/30' 
                                     : (state.renderRegion ? 'text-green-400 bg-green-900/30 border border-green-500/30' : 'text-gray-600 hover:text-gray-400')
                             }`}
-                            title={state.renderRegion ? "Clear Region" : (state.isSelectingRegion ? "Cancel Selection" : "Select Region")}
+                            title={state.renderRegion ? "Clear Region" : (state.interactionMode === 'selecting_region' ? "Cancel Selection" : "Select Region")}
                         >
                             {state.renderRegion ? <CloseRegionIcon /> : <CropIcon />}
                         </button>

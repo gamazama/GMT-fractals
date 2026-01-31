@@ -2,9 +2,10 @@
 import { StateCreator } from 'zustand';
 import * as THREE from 'three';
 import { FractalStoreState, FractalActions, PreciseVector3, CameraState } from '../../types';
-import { FractalEvents } from '../../engine/FractalEvents';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { engine } from '../../engine/FractalEngine';
 import { registry } from '../../engine/FractalRegistry';
+import { VirtualSpace } from '../../engine/PrecisionMath';
 
 export type CameraSlice = Pick<FractalStoreState,
     'cameraMode' | 'sceneOffset' | 'undoStack' | 'redoStack' | 'cameraPos' | 'cameraRot' | 'targetDistance'
@@ -40,20 +41,52 @@ export const createCameraSlice: StateCreator<FractalStoreState & FractalActions,
         const def = registry.get(activeFormula);
         const preset = def?.defaultPreset;
         
+        // Robust Defaults
         const defOffset = preset?.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
-        get().setSceneOffset(defOffset); 
+        const defPos = preset?.cameraPos || { x: 0, y: 0, z: 3.5 }; 
+        const defRot = preset?.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
+        const defDist = preset?.targetDistance || 3.5;
+
+        // Calculate Unified Position (Total World Coordinate)
+        const totalX = defOffset.x + defOffset.xL + defPos.x;
+        const totalY = defOffset.y + defOffset.yL + defPos.y;
+        const totalZ = defOffset.z + defOffset.zL + defPos.z;
         
+        // Perform Clean Split: Put everything into Offset, Zero the Camera
+        const sX = VirtualSpace.split(totalX);
+        const sY = VirtualSpace.split(totalY);
+        const sZ = VirtualSpace.split(totalZ);
+        
+        const newOffset = { 
+            x: sX.high, y: sY.high, z: sZ.high, 
+            xL: sX.low, yL: sY.low, zL: sZ.low 
+        };
+
+        // 1. Update Store
+        // We set cameraPos to 0,0,0 because we moved all value into sceneOffset
+        get().setSceneOffset(newOffset); 
+        set({ 
+            cameraPos: { x: 0, y: 0, z: 0 }, 
+            cameraRot: defRot, 
+            targetDistance: defDist 
+        });
+
+        // 2. Update Engine & Navigation
         if (engine.activeCamera) { 
-            const defPos = preset?.cameraPos || { x: 0, y: 0, z: 0 }; 
-            const defRot = preset?.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
-            const defDist = preset?.targetDistance || 3.5;
-
-            set({ cameraPos: defPos, cameraRot: defRot, targetDistance: defDist });
-
-            engine.activeCamera.position.set(defPos.x, defPos.y, defPos.z); 
+            engine.activeCamera.position.set(0, 0, 0); 
             engine.activeCamera.quaternion.set(defRot.x, defRot.y, defRot.z, defRot.w);
+            engine.activeCamera.updateMatrixWorld();
             
-            const resetState = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera);
+            // Force Virtual Space sync
+            engine.virtualSpace.state = newOffset;
+            
+            const resetState: CameraState = {
+                position: { x: 0, y: 0, z: 0 },
+                rotation: defRot,
+                sceneOffset: newOffset,
+                targetDistance: defDist
+            };
+            
             FractalEvents.emit('reset_accum', undefined); 
             FractalEvents.emit('camera_teleport', resetState);
         } 
@@ -66,7 +99,7 @@ export const createCameraSlice: StateCreator<FractalStoreState & FractalActions,
         const prev = undoStack[undoStack.length - 1]; 
         
         if (engine.activeCamera) { 
-            const current = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera);
+            const current = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera, get().targetDistance);
             engine.virtualSpace.applyCameraState(engine.activeCamera, prev);
             
             if (prev.sceneOffset) {
@@ -93,7 +126,7 @@ export const createCameraSlice: StateCreator<FractalStoreState & FractalActions,
         const next = redoStack[redoStack.length - 1]; 
         
         if (engine.activeCamera) { 
-            const current = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera);
+            const current = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera, get().targetDistance);
             engine.virtualSpace.applyCameraState(engine.activeCamera, next);
             
             if (next.sceneOffset) {

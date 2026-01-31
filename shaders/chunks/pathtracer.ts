@@ -1,5 +1,6 @@
 
 
+
 export const getPathTracerGLSL = (isMobile: boolean) => {
     
     // Optimization: On mobile, drastically reduce bounces and shadow quality even if user forces PT mode
@@ -102,7 +103,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         // --- MISS: Sample Environment ---
         if (!hit) {
             // Environment Map lookup (IBL)
-            vec3 env = GetEnvMap(currentRd, 0.0) * uEnvStrength; 
+            vec3 env = GetEnvMap(currentRd, 0.0) * uEnvBackgroundStrength; 
             
             float fogFactor = smoothstep(uFogNear, uFogFar, 100.0);
             vec3 safeFog = InverseACESFilm(uFogColor);

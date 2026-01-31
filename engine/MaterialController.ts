@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { ShaderConfig, ShaderFactory } from './ShaderFactory';
 import { createUniforms } from './UniformSchema';
@@ -198,11 +199,9 @@ export class MaterialController {
         };
         
         this.physicsMaterial.fragmentShader = ShaderFactory.generatePhysicsShader(configAux);
-        this.physicsMaterial.defines = ShaderFactory.getDefines(configAux);
         this.physicsMaterial.needsUpdate = true;
         
         this.histogramMaterial.fragmentShader = ShaderFactory.generateHistogramShader(configAux);
-        this.histogramMaterial.defines = ShaderFactory.getDefines(configAux);
         this.histogramMaterial.needsUpdate = true;
         
         // Sync Uniforms from Config (Both Modular and Features)
@@ -219,9 +218,7 @@ export class MaterialController {
         const checksum = cyrb53(fragDirect).toString(16);
         
         if (checksum !== this.activeDirectChecksum) {
-            const defDirect = ShaderFactory.getDefines(configDirect);
             this.materialDirect.fragmentShader = fragDirect;
-            this.materialDirect.defines = defDirect;
             this.materialDirect.needsUpdate = true;
             this.activeDirectChecksum = checksum;
             
@@ -242,9 +239,7 @@ export class MaterialController {
         const checksum = cyrb53(fragPT).toString(16);
 
         if (checksum !== this.activePTChecksum) {
-            const defPT = ShaderFactory.getDefines(configPT);
             this.materialPT.fragmentShader = fragPT;
-            this.materialPT.defines = defPT;
             this.materialPT.needsUpdate = true;
             this.activePTChecksum = checksum;
             

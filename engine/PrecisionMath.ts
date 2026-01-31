@@ -1,7 +1,7 @@
+
 import * as THREE from 'three';
 import { PreciseVector3, CameraState } from '../types';
 import { Uniforms } from './UniformNames';
-import { engine } from './FractalEngine';
 
 export class VirtualSpace {
     private offset: PreciseVector3;
@@ -116,6 +116,8 @@ export class VirtualSpace {
             this.smoothedPos.copy(targetCamera.position);
             this.smoothedQuat.copy(targetCamera.quaternion);
             this.smoothedFov = targetFov;
+            // Sync offset state to prevent jumps when switching modes or shifting origin
+            this.prevOffsetState = { ...this.offset };
         } else {
             const distSq = this.smoothedPos.distanceToSquared(targetCamera.position);
             const angleDiff = this.smoothedQuat.angleTo(targetCamera.quaternion);
@@ -140,7 +142,7 @@ export class VirtualSpace {
         }
     }
 
-    public getUnifiedCameraState(camera: THREE.Camera): CameraState {
+    public getUnifiedCameraState(camera: THREE.Camera, targetDistance: number): CameraState {
         const unifiedOffset = { ...this.offset };
         unifiedOffset.xL += camera.position.x;
         unifiedOffset.yL += camera.position.y;
@@ -151,7 +153,7 @@ export class VirtualSpace {
             position: { x: 0, y: 0, z: 0 },
             rotation: { x: camera.quaternion.x, y: camera.quaternion.y, z: camera.quaternion.z, w: camera.quaternion.w },
             sceneOffset: unifiedOffset,
-            targetDistance: engine.lastMeasuredDistance > 0 ? engine.lastMeasuredDistance : 3.5
+            targetDistance: targetDistance > 0 ? targetDistance : 3.5
         };
     }
     
@@ -164,7 +166,6 @@ export class VirtualSpace {
             this.state = baked;
         }
         
-        // Robust components access to handle pruned keys from URL loader
         const rot = state.rotation;
         const qx = rot.x ?? (rot as any)._x ?? 0;
         const qy = rot.y ?? (rot as any)._y ?? 0;
@@ -174,7 +175,6 @@ export class VirtualSpace {
         camera.position.set(0, 0, 0);
         camera.quaternion.set(qx, qy, qz, qw).normalize();
         
-        // Ensure Camera Up is updated to reflect any roll in the quaternion
         const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
         camera.up.copy(currentUp);
 

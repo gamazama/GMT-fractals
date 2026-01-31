@@ -38,7 +38,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
     liveModulations: {},
 
     // Actions
-    setFormula: (f, options = {}) => {
+    setFormula: (f, options: { skipDefaultPreset?: boolean } = {}) => {
         const s = get();
         const currentFormula = s.formula;
         if (currentFormula === f && f !== 'Modular') return;
@@ -216,11 +216,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
     getPreset: (options) => {
         const s = get();
         // Access AnimationStore for sequence data
-        // Note: Circular dependency risk if importing useAnimationStore here directly.
-        // Better to pass sequence in via a different method or ensure imports are clean.
-        // Since we import createFeatureSlice, we likely import featureSystem, which might import other things.
-        // For robustness, we'll try to keep this pure or accept that `applyPresetState` handles the restore.
-        // Here we need to SAVE.
         
         const p: Preset = {
             version: s.projectSettings.version,
@@ -232,7 +227,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         if (options?.includeScene !== false) {
              // Access Engine if possible for unified state, or Store fallbacks
              if (engine.activeCamera) {
-                 const u = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera);
+                 const u = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera, s.targetDistance);
                  p.cameraPos = u.position;
                  p.cameraRot = u.rotation;
                  p.sceneOffset = u.sceneOffset;
@@ -254,13 +249,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
              const sliceState = (s as any)[feat.id];
              if (sliceState) {
                  if (!p.features) p.features = {};
-                 // Use sanitizer to clean up Three.js objects
-                 // We need to import sanitizeFeatureState or duplicate logic
-                 // Ideally import from PresetLogic
-                 // Since we import applyPresetState from PresetLogic, we can likely import sanitize there too.
-                 // But wait, the file doesn't export sanitizeFeatureState in the prompt?
-                 // Ah, 'utils/PresetLogic' typically exports it. I will assume it does or implement basic one.
-                 // Implementation below:
                  const clean: any = {};
                  Object.keys(sliceState).forEach(k => {
                      const v = sliceState[k];
@@ -283,11 +271,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
             p.pipeline = s.pipeline;
         }
 
-        // We can't access AnimationStore state here easily without import cycle risk or `useAnimationStore.getState()`.
-        // Let's assume the caller might patch in sequence if needed, OR we use `useAnimationStore` dynamically.
-        // For now, let's skip sequence saving in this specific file if it causes issues, 
-        // OR rely on the fact that `getPreset` is usually called by UI which can merge.
-        // Actually, let's try dynamic import or global access.
         try {
             // @ts-ignore
             const animStore = window.useAnimationStore?.getState?.() || require('../animationStore').useAnimationStore.getState();
@@ -317,8 +300,15 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
 
 })));
 
+// Unified selector for checking if the app is "Busy"
+// Note: 'isGizmoDragging' is covered by 'isUserInteracting' because LightGizmo calls handleInteractionStart.
+export const selectIsGlobalInteraction = (state: FractalStoreState) => {
+    return state.isUserInteracting || 
+           state.interactionMode !== 'none';
+};
+
 export const selectMovementLock = (state: FractalStoreState) => {
-    if (state.isGizmoDragging || state.isPickingFocus || state.isSelectingRegion || state.isPickingJulia || state.isExporting) return true;
+    if (state.isGizmoDragging || state.interactionMode !== 'none' || state.isExporting) return true;
     const features = featureRegistry.getAll();
     for (const feat of features) {
         if (feat.interactionConfig?.blockCamera && feat.interactionConfig.activeParam) {
@@ -372,6 +362,10 @@ export const bindStoreToEngine = () => {
             accumulation: s.accumulation
         }
     });
+    
+    // Initial sync of Pause state
+    engine.isPaused = s.isPaused;
+    engine.setPreviewSampleCap(s.sampleCap);
 
     FractalEvents.emit(FRACTAL_EVENTS.CONFIG, getShaderConfigFromState(s));
 
@@ -381,6 +375,10 @@ export const bindStoreToEngine = () => {
     useFractalStore.subscribe(state => state.optics, (v) => update({ optics: v }));
     useFractalStore.subscribe(state => state.lighting, (v) => update({ lighting: v }));
     useFractalStore.subscribe(state => state.quality, (v) => update({ quality: v })); 
+    
+    // Bind Pause/Cap
+    useFractalStore.subscribe(state => state.isPaused, (v) => { engine.isPaused = v; });
+    useFractalStore.subscribe(state => state.sampleCap, (v) => { engine.setPreviewSampleCap(v); });
 
     const syncBucketConfig = () => {
         const cs = useFractalStore.getState();

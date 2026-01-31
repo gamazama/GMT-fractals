@@ -115,7 +115,6 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
             state.loadPreset(preset);
             vibrate(50);
             
-            if (!engine.isCompiling) FractalEvents.emit('is_compiling', false);
             setShowSystemMenu(false);
         } catch (err: any) {
             console.error("Load Failed:", err);

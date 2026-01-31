@@ -1,5 +1,4 @@
 
-
 import { FractalDefinition } from '../types';
 
 export const MandelTerrain: FractalDefinition = {
@@ -139,7 +138,10 @@ export const MandelTerrain: FractalDefinition = {
         if (escaped) {
             // 1. Base Terrain (Param A)
             // 'dist' goes to 0.0 exactly at the boundary.
-            h += sqrt(dist) * uParamA;
+            // FIXED: Use sqrt(dist * zoom) instead of sqrt(dist) * zoom to keep height
+            // proportional to feature width regardless of zoom level.
+            // This prevents "spikes" from growing uncontrollably deep in the set.
+            h += sqrt(dist * zoom) * uParamA;
             
             // 2. Layer 2 Driven Ripples (Param C) - Driven by Gradient Brightness
             if (abs(uParamC) > 0.001) {
@@ -216,7 +218,7 @@ export const MandelTerrain: FractalDefinition = {
     },
 
     parameters: [
-        { label: 'Map Zoom', id: 'paramB', min: 0.0, max: 8.0, step: 0.01, default: 1.0 },
+        { label: 'Map Zoom', id: 'paramB', min: 0.0, max: 16.0, step: 0.01, default: 1.0 },
         { label: 'Pan X (Real)', id: 'paramE', min: -2.0, max: 0.5, step: 0.0001, default: 0.0 },
         { label: 'Pan Y (Imagin)', id: 'paramF', min: -1.25, max: 1.25, step: 0.0001, default: 0.0 },
         { label: 'Height: Distance Estimator', id: 'paramA', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
@@ -230,7 +232,7 @@ export const MandelTerrain: FractalDefinition = {
         "formula": "MandelTerrain",
         "features": {
             "coreMath": {
-                "iterations": 30,
+                "iterations": 60,
                 "paramA": 0,
                 "paramB": 1,
                 "paramC": 0,

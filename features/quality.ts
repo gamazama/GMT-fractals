@@ -122,5 +122,12 @@ export const QualityFeature: FeatureDefinition = {
             format: (v) => `1/${v}x`,
             noReset: true
         }
+    },
+    inject: (builder, config) => {
+        const state = config.quality as QualityState;
+        // Inject MAX_HARD_ITERATIONS for all variants (Physics/Main/Histogram)
+        // This controls the unrolled loop size in DE.ts
+        const cap = state?.compilerHardCap || 500;
+        builder.addDefine('MAX_HARD_ITERATIONS', Math.floor(cap).toString());
     }
 };

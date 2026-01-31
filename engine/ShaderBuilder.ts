@@ -1,13 +1,8 @@
 
 import { UNIFORMS } from '../shaders/chunks/uniforms';
-import { STRUCTS } from '../shaders/chunks/structs';
 import { getMathGLSL } from '../shaders/chunks/math';
 import { DE_MASTER } from '../shaders/chunks/de';
 import { generateMaterialEval } from '../shaders/chunks/material_eval';
-import { LIGHTING_ENV } from '../shaders/chunks/lighting/env';
-import { LIGHTING_PBR } from '../shaders/chunks/lighting/pbr';
-import { getShadingGLSL } from '../shaders/chunks/lighting/shading';
-import { getPathTracerGLSL } from '../shaders/chunks/pathtracer';
 import { getFragmentMainGLSL } from '../shaders/chunks/main';
 import { getRayGLSL } from '../shaders/chunks/ray';
 import { getTraceGLSL } from '../shaders/chunks/trace';
@@ -20,8 +15,9 @@ export class ShaderBuilder {
     // 1. Storage
     private defines: Map<string, string> = new Map();
     private uniforms: Map<string, { type: string; arraySize?: number }> = new Map();
-    private functions: string[] = []; // Pre-DE functions (Formulas)
-    private postDEFunctions: string[] = []; // Post-DE functions (Shadows, AO, Reflections)
+    private functions: string[] = []; // Pre-DE functions (Formulas, Utils)
+    private postDEFunctions: string[] = []; // Post-DE functions (Shadows, AO, Reflections, Env)
+    private integrators: string[] = []; // Late-stage functions (Lighting Integrators, Path Tracer)
     private headers: string[] = [];
 
     // 2. Logic Hooks (Specific to GMT Architecture)
@@ -81,10 +77,17 @@ export class ShaderBuilder {
         }
     }
 
-    // Adds a function that DEPENDS on DE/Map (e.g. Shadows, AO)
+    // Adds a function that DEPENDS on DE/Map (e.g. Shadows, AO, Reflections)
     addPostDEFunction(code: string) {
         if (!this.postDEFunctions.includes(code)) {
             this.postDEFunctions.push(code);
+        }
+    }
+    
+    // Adds a function that depends on MaterialEval AND PostDE (e.g. Lighting Integrators)
+    addIntegrator(code: string) {
+        if (!this.integrators.includes(code)) {
+            this.integrators.push(code);
         }
     }
 
@@ -143,6 +146,7 @@ export class ShaderBuilder {
         const headers = this.headers.join('\n');
         const userFunctions = this.functions.join('\n');
         const postDEFunctions = this.postDEFunctions.join('\n');
+        const integrators = this.integrators.join('\n');
         const math = getMathGLSL(this.useRotation);
 
         // Core DE
@@ -162,7 +166,6 @@ export class ShaderBuilder {
             return `
 ${defines}
 ${uniforms}
-${STRUCTS}
 ${math}
 ${COLORING} 
 ${headers}
@@ -202,7 +205,6 @@ void main() {
             return `
 ${defines}
 ${uniforms}
-${STRUCTS}
 ${math}
 ${COLORING} 
 ${headers}
@@ -241,19 +243,12 @@ void main() {
         const materialEval = generateMaterialEval(this.materialLogic.join('\n'));
         const isPathTracing = this.renderMode === 'PathTracing';
         
-        // STRICT SEPARATION:
-        // Only load the Path Tracer logic module if we are in PT mode.
-        // Only load the Direct Lighting PBR/Shading logic if we are in Direct mode.
-        const ptModule = isPathTracing ? getPathTracerGLSL(this.isLite) : '';
-        const directModule = !isPathTracing ? (LIGHTING_PBR + getShadingGLSL(this.isLite)) : '';
-        
         const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'));
         const mainGLSL = getFragmentMainGLSL(isPathTracing);
 
         return `
 ${defines}
 ${uniforms}
-${STRUCTS}
 ${headers}
 ${math}
 ${COLORING} 
@@ -264,16 +259,21 @@ ${userFunctions}
 // --- DISTANCE ESTIMATOR ---
 ${de}
 
-// --- LIGHTING & UTILS (Depend on DE) ---
+// --- UTILS (Shadows, AO, Reflections, Env) ---
 ${postDEFunctions}
 
+// --- MATERIAL EVAL ---
 ${materialEval}
+
+// --- RAY GENERATION ---
 ${getRayGLSL(this.renderMode)}
+
+// --- TRACE SCENE ---
 ${traceGLSL}
-${LIGHTING_ENV}
-// INTEGRATOR MODULES (Mutually Exclusive)
-${ptModule}
-${directModule}
+
+// --- INTEGRATORS (Lighting / PT) ---
+${integrators}
+
 // POST PROCESSING
 ${POST}
 ${mainGLSL}

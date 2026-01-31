@@ -1,10 +1,12 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 
 type DragMode = 'draw' | 'move' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null;
 
 export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) => {
-    const { isSelectingRegion, setIsSelectingRegion, setRenderRegion, renderRegion } = useFractalStore();
+    const { interactionMode, setInteractionMode, setRenderRegion, renderRegion } = useFractalStore();
+    const isSelectingRegion = interactionMode === 'selecting_region';
     
     const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null);
     const [currentPos, setCurrentPos] = useState<{x: number, y: number} | null>(null);
@@ -108,7 +110,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
                      const normMinY = 1.0 - (y2 / rect.height); const normMaxY = 1.0 - (y1 / rect.height);
                      setRenderRegion({ minX: normMinX, minY: normMinY, maxX: normMaxX, maxY: normMaxY });
                 }
-                setIsSelectingRegion(false);
+                setInteractionMode('none');
             } else if (currentDragRegion.current) {
                 setRenderRegion(currentDragRegion.current);
             }
@@ -129,7 +131,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
             window.removeEventListener('mousemove', onMove); 
             window.removeEventListener('mouseup', onUp); 
         };
-    }, [isSelectingRegion, renderRegion, startPos, currentPos, setIsSelectingRegion, setRenderRegion, containerRef]);
+    }, [isSelectingRegion, renderRegion, startPos, currentPos, setInteractionMode, setRenderRegion, containerRef]);
 
     return {
         visualRegion,

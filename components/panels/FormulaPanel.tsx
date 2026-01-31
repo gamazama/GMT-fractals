@@ -267,6 +267,12 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
        </div>
 
        <LfoList state={state} actions={actions} />
+
+       {state.showHints && (
+            <div className="text-[9px] text-gray-600 text-center mt-6 pb-2 opacity-50 font-mono tracking-wide">
+                PRESS 'H' TO HIDE HINTS
+            </div>
+       )}
     </div>
   );
 };

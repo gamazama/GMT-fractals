@@ -55,8 +55,10 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
     const { camFov, camType, dofStrength } = sliceState;
     const setOptics = (actions as any).setOptics;
     
-    const isPicking = useFractalStore(s => s.isPickingFocus);
-    const setIsPicking = useFractalStore(s => s.setIsPickingFocus);
+    const interactionMode = useFractalStore(s => s.interactionMode);
+    const setInteractionMode = useFractalStore(s => s.setInteractionMode);
+    
+    const isPicking = interactionMode === 'picking_focus';
     
     const [dollyLocked, setDollyLocked] = useState(true);
     const dollyStartRef = useRef<any>(null);
@@ -161,7 +163,7 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
                     <Button onClick={handleAutoFocus} label="Auto-Centre" />
                     <Button 
                         active={isPicking}
-                        onClick={() => setIsPicking(!isPicking)}
+                        onClick={() => setInteractionMode(isPicking ? 'none' : 'picking_focus')}
                         label={isPicking ? "Picking..." : "Pick Focus"}
                         variant="success"
                     />

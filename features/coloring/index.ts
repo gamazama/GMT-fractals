@@ -78,7 +78,7 @@ export const ColoringFeature: FeatureDefinition = {
         offset: { type: 'float', default: 0.0, label: 'Offset', shortId: 'o1', uniform: 'uColorOffset', group: 'layer1_hist', hidden: true },
         
         repeats: { type: 'float', default: 1.0, label: 'Repeats', shortId: 'r1', min: 0.1, max: 100, step: 0.1, group: 'layer1_hist', hidden: true },
-        phase: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p1', min: 0.0, max: 5.0, step: 0.01, group: 'layer1_hist', hidden: true },
+        phase: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p1', min: -1.0, max: 1.0, step: 0.01, group: 'layer1_hist', hidden: true },
         
         bias: { type: 'float', default: 1.0, label: 'Gamma', shortId: 'b1', uniform: 'uGradientBias', min: 0.1, max: 10.0, step: 0.01, group: 'layer1_hist', hidden: true },
         twist: {
@@ -131,7 +131,7 @@ export const ColoringFeature: FeatureDefinition = {
         offset2: { type: 'float', default: 0.0, label: 'Offset 2', shortId: 'o2', uniform: 'uColorOffset2', group: 'layer2_hist', hidden: true },
         
         repeats2: { type: 'float', default: 1.0, label: 'Repeats', shortId: 'r2', min: 0.1, max: 100, step: 0.1, group: 'layer2_hist', hidden: true },
-        phase2: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p2', min: 0.0, max: 5.0, step: 0.01, group: 'layer2_hist', hidden: true },
+        phase2: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p2', min: -1.0, max: 1.0, step: 0.01, group: 'layer2_hist', hidden: true },
         
         bias2: { type: 'float', default: 1.0, label: 'Gamma', shortId: 'b2', uniform: 'uGradientBias2', min: 0.1, max: 10.0, step: 0.01, group: 'layer2_hist', hidden: true },
         twist2: { type: 'float', default: 0.0, label: 'Twist', shortId: 'w2', uniform: 'uColorTwist2', min: -5, max: 5, step: 0.1, group: 'layer2_bottom' },

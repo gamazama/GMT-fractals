@@ -1,6 +1,4 @@
 
-import React from 'react';
-
 export type FormulaType = 'Mandelbulb' | 'AmazingBox' | 'MengerSponge' | 'MixPinski' | 'AmazingSurf' | 'Kleinian' | 'BoxBulb' | 'MengerAdvanced' | 'Quaternion' | 'Dodecahedron' | 'Mandelbar3D' | 'Bristorbrot' | 'MakinBrot' | 'Tetrabrot' | 'Modular' | 'PseudoKleinian' | 'Phoenix' | 'Buffalo' | 'ArisBrot' | 'MandelTerrain' | 'MarbleMarcher' | 'JuliaMorph' | 'AmazingSurface';
 export type CameraMode = 'Orbit' | 'Fly';
 

@@ -95,6 +95,9 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
     interactionSnapshot: null,
 
     handleInteractionStart: (mode) => {
+        // Set interaction flag
+        set({ isUserInteracting: true });
+
         // Case 1: Camera Snapshot
         if (mode && typeof mode === 'object' && (mode as any).position) {
             const camState = mode as unknown as CameraState;
@@ -111,6 +114,9 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
     },
 
     handleInteractionEnd: () => {
+        // Clear interaction flag
+        set({ isUserInteracting: false });
+
         const { interactionSnapshot, aaMode, aaLevel, msaaSamples, dpr } = get();
 
         let targetDpr = (aaMode === 'Auto' || aaMode === 'Always') ? aaLevel : 1.0; 

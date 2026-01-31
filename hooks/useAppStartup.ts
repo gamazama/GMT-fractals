@@ -33,7 +33,10 @@ export const useAppStartup = (isSceneReady: boolean) => {
         const startConfig = getShaderConfigFromState(currentStore);
         
         try {
-            engine.bootWithConfig(startConfig);
+            // Critical: Yield to UI thread to allow spinner to render before heavy compile
+            setTimeout(() => {
+                engine.bootWithConfig(startConfig);
+            }, 50);
         } catch (e) {
             console.error("Critical Engine Boot Failure:", e);
         }
@@ -82,21 +85,27 @@ export const useAppStartup = (isSceneReady: boolean) => {
             initialBootPreset.current = preset;
         }
 
-        // FAILSAFE: If engine hasn't booted after 3 seconds, force it.
-        // This handles cases where the LoadingScreen animation loop might crash or hang.
+        // Auto-Boot for URL mode (with delay to show spinner)
+        if (startupMode === 'url' && preset) {
+             // We use a longer delay for URL loads to ensure the heavy initial preset 
+             // doesn't freeze the browser before the spinner appears.
+             setTimeout(() => {
+                 bootEngine();
+             }, 500);
+        }
+
+        // FAILSAFE: If engine hasn't booted after 4 seconds, force it.
         const safetyTimer = setTimeout(() => {
             if (!engine.isBooted) {
                 console.warn("App: Loading Screen timeout. Forcing Engine Boot.");
                 bootEngine();
             }
-        }, 3000);
+        }, 4000);
         
         return () => clearTimeout(safetyTimer);
-    }, []);
+    }, [startupMode]); // Added startupMode dependency to handle switch
 
     // 5. Post-Load Sync
-    // Once the Engine has compiled shaders and isSceneReady is true (from ViewportArea),
-    // we re-apply the preset to ensure the camera and physics systems are synced.
     useEffect(() => {
         if (isSceneReady && engine.isBooted) {
             

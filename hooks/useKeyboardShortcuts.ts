@@ -97,7 +97,7 @@ export const useKeyboardShortcuts = (
                     if (fractalStore.getState().isBroadcastMode) {
                         fractalStore.getState().setIsBroadcastMode(false);
                     }
-                    if (fractalStore.getState().isPickingFocus) fractalStore.getState().setIsPickingFocus(false);
+                    if (fractalStore.getState().interactionMode !== 'none') fractalStore.getState().setInteractionMode('none');
                     // Also clear selections
                     animStore.getState().deselectAll();
                     break;

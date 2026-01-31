@@ -82,8 +82,25 @@
       input[type=range].precision-slider { -webkit-appearance: none; background: transparent; margin: 0; width: 100%; }
       input[type=range].precision-slider:focus { outline: none; }
       input[type=range].precision-slider::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 24px; background: transparent; cursor: ew-resize; background-image: linear-gradient(to right, transparent 11px, white 1px, transparent 12px), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='10' viewBox='0 0 6 10'%3E%3Cpath d='M5 2L1 5L5 8' fill='none' stroke='white' stroke-opacity='0.4' stroke-width='1'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='10' viewBox='0 0 6 10'%3E%3Cpath d='M1 2L5 5L1 8' fill='none' stroke='white' stroke-opacity='0.4' stroke-width='1'/%3E%3C/svg%3E"); background-position: center center, center left, center right; background-repeat: no-repeat; border: none; margin-top: 0; }
+      
       @keyframes slider-entry { from { max-height: 0; opacity: 0; transform: translateY(-4px); } to { max-height: 1000px; opacity: 1; transform: translateY(0); } }
       .animate-slider-entry { animation: slider-entry 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; overflow: hidden; }
+
+      /* UTILITY ANIMATIONS */
+      @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+      .animate-fade-in { animation: fade-in 0.2s ease-out forwards; }
+      
+      @keyframes fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      .animate-fade-in-up { animation: fade-in-up 0.3s ease-out forwards; }
+
+      @keyframes fade-in-down { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+      .animate-fade-in-down { animation: fade-in-down 0.3s ease-out forwards; }
+      
+      @keyframes fade-in-left { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+      .animate-fade-in-left { animation: fade-in-left 0.3s ease-out forwards; }
+
+      @keyframes pop-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+      .animate-pop-in { animation: pop-in 0.15s ease-out forwards; }
     </style>
 <script type="importmap">
 {

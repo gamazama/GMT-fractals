@@ -7,22 +7,32 @@ import { useTrackAnimation } from '../hooks/useTrackAnimation';
 import { KeyframeButton } from './KeyframeButton';
 
 // Utility to format floats nicely for UI
-// Cap at 8 decimals, strip trailing zeros
 const formatDisplay = (val: number) => {
     if (val === 0) return "0";
     if (Math.abs(val) < 1e-9) return "0";
-    // Using parseFloat to strip trailing zeros automatically
     return parseFloat(val.toFixed(8)).toString();
 };
 
-export const DraggableNumber = ({ 
+// --- PURE PRIMITIVES ---
+
+interface DraggableNumberProps {
+  value: number;
+  onChange: (v: number) => void;
+  onMiddleChange?: (v: number) => void;
+  step: number;
+  min?: number;
+  max?: number;
+  highlight?: boolean;
+  overrideText?: string;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  sensitivity?: number;
+  disabled?: boolean;
+}
+
+export const RawDraggableNumber = ({ 
   value, onChange, onMiddleChange, step, min, max, highlight, overrideText, onDragStart, onDragEnd, sensitivity = 1.0, disabled = false
-}: { 
-  value: number, onChange: (v: number) => void, onMiddleChange?: (v: number) => void,
-  step: number, min?: number, max?: number, highlight?: boolean, overrideText?: string,
-  onDragStart?: () => void, onDragEnd?: () => void, sensitivity?: number, disabled?: boolean
-}) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+}: DraggableNumberProps) => {
     const [isEditing, setIsEditing] = useState(false);
     const [inputValue, setInputValue] = useState("");
     const [isDragging, setIsDragging] = useState(false);
@@ -46,7 +56,6 @@ export const DraggableNumber = ({
         dragButton.current = e.button;
         setIsDragging(true);
         
-        handleInteractionStart('param');
         if (onDragStart) onDragStart();
     };
 
@@ -59,7 +68,6 @@ export const DraggableNumber = ({
         if (e.shiftKey) multiplier = 10;
         if (e.altKey) multiplier = 0.1;
         
-        // Apply sensitivity
         const delta = dx * step * multiplier * sensitivity;
         
         let nextVal = startVal.current + delta;
@@ -75,7 +83,6 @@ export const DraggableNumber = ({
     const handlePointerUp = (e: React.PointerEvent) => {
         if (disabled) return;
         setIsDragging(false);
-        handleInteractionEnd();
         if (onDragEnd) onDragEnd();
         e.currentTarget.releasePointerCapture(e.pointerId);
         if (!hasMoved.current && dragButton.current === 0) {
@@ -100,8 +107,7 @@ export const DraggableNumber = ({
     };
 
     const commitEdit = () => {
-        handleInteractionStart('param');
-        if (onDragStart) onDragStart(); 
+        if (onDragStart) onDragStart(); // Trigger interaction start for undo history
         
         const val = parseFloat(inputValue);
         if (!isNaN(val)) {
@@ -110,7 +116,8 @@ export const DraggableNumber = ({
             if (max !== undefined) clamped = Math.min(max, clamped);
             onChange(clamped);
         }
-        handleInteractionEnd();
+        
+        if (onDragEnd) onDragEnd(); // Trigger interaction end
         setIsEditing(false);
     };
 
@@ -140,59 +147,43 @@ export const DraggableNumber = ({
 
     return (
         <div 
-        ref={divRef} tabIndex={disabled ? -1 : 0} 
-        onPointerDown={handlePointerDown} 
-        onPointerMove={handlePointerMove} 
-        onPointerUp={handlePointerUp} 
-        onKeyDown={handleKeyDown}
-        onFocus={handleFocus}
-        className={`w-full h-full flex items-center justify-center text-xs font-mono select-none transition-colors touch-none outline-none ${disabled ? 'cursor-not-allowed opacity-50 text-gray-600' : 'cursor-ew-resize focus:ring-1 focus:ring-cyan-500/50'} ${isDragging ? 'bg-cyan-500/20 text-cyan-300' : (highlight && !disabled ? 'text-cyan-400' : (disabled ? '' : 'text-gray-300 hover:text-white'))}`}
-        title={disabled ? "Disabled" : "Click to edit, Drag to adjust (Shift=Fast, Alt=Slow)"}
+            ref={divRef} tabIndex={disabled ? -1 : 0} 
+            onPointerDown={handlePointerDown} 
+            onPointerMove={handlePointerMove} 
+            onPointerUp={handlePointerUp} 
+            onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
+            className={`w-full h-full flex items-center justify-center text-xs font-mono select-none transition-colors touch-none outline-none ${disabled ? 'cursor-not-allowed opacity-50 text-gray-600' : 'cursor-ew-resize focus:ring-1 focus:ring-cyan-500/50'} ${isDragging ? 'bg-cyan-500/20 text-cyan-300' : (highlight && !disabled ? 'text-cyan-400' : (disabled ? '' : 'text-gray-300 hover:text-white'))}`}
+            title={disabled ? "Disabled" : "Click to edit, Drag to adjust (Shift=Fast, Alt=Slow)"}
         >
         {displayText}
         </div>
     );
 };
 
-interface SliderProps {
-  label: string; value: number; min: number; max: number; step: number; hardMin?: number; hardMax?: number;
-  onChange: (val: number) => void; highlight?: boolean; overrideInputText?: string; defaultValue?: number;
-  customMapping?: { toSlider: (val: number) => number; fromSlider: (val: number) => number; min: number; max: number; };
-  mapTextInput?: boolean; 
-  liveValue?: number; trackId?: string; 
-  dataHelpId?: string;
-  onDragStart?: () => void;
-  onDragEnd?: () => void;
-  onKeyToggle?: () => void; // New callback for side-effects
-  disabled?: boolean;
-  className?: string;
+interface BaseSliderProps extends Omit<DraggableNumberProps, 'onMiddleChange'> {
+    label: string;
+    hardMin?: number;
+    hardMax?: number;
+    customMapping?: { toSlider: (val: number) => number; fromSlider: (val: number) => number; min: number; max: number; };
+    mapTextInput?: boolean;
+    liveValue?: number;
+    
+    // Visual slots
+    headerRight?: React.ReactNode;
+    footer?: React.ReactNode;
+    
+    // Interactions
+    onContextMenu?: (e: React.MouseEvent) => void;
+    dataHelpId?: string;
+    className?: string;
 }
 
-const Slider: React.FC<SliderProps> = ({ 
-    label, value, min, max, step, hardMin, hardMax, onChange, highlight, overrideInputText, customMapping, mapTextInput, defaultValue, liveValue, trackId, dataHelpId, onDragStart, onDragEnd, onKeyToggle, disabled = false, className = ''
+export const BaseSlider: React.FC<BaseSliderProps> = ({ 
+    label, value, min, max, step, hardMin, hardMax, onChange, highlight, overrideText, customMapping, mapTextInput, 
+    liveValue, headerRight, footer, onContextMenu, dataHelpId, onDragStart, onDragEnd, disabled = false, className = ''
 }) => {
-    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
     const safeValue = value ?? 0;
-
-    // Use Hook for keyframe logic
-    const { status, toggleKey, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, safeValue, label);
-
-    const handleChange = (newVal: number) => {
-        if (disabled) return;
-        onChange(newVal);
-        autoKeyOnChange(newVal);
-    };
-
-    const handleDragStart = () => {
-        if (disabled) return;
-        autoKeyOnDragStart();
-        if (onDragStart) onDragStart();
-    };
-
-    const handleDragEnd = () => {
-        if (disabled) return;
-        if (onDragEnd) onDragEnd();
-    };
 
     const sliderValue = customMapping ? customMapping.toSlider(safeValue) : safeValue;
     const sliderMin = customMapping ? customMapping.min : min;
@@ -202,7 +193,7 @@ const Slider: React.FC<SliderProps> = ({
         if (disabled) return;
         const raw = parseFloat(e.target.value);
         const output = customMapping ? customMapping.fromSlider(raw) : raw;
-        handleChange(output);
+        onChange(output);
     };
 
     const numValue = (mapTextInput && customMapping) ? sliderValue : safeValue;
@@ -215,34 +206,8 @@ const Slider: React.FC<SliderProps> = ({
 
     const handleNumChange = (v: number) => {
         if (disabled) return;
-        if (mapTextInput && customMapping) handleChange(customMapping.fromSlider(v));
-        else handleChange(v);
-    };
-
-    const helpIds = [];
-    if (trackId) helpIds.push(trackId);
-    if (dataHelpId) helpIds.push(dataHelpId);
-    helpIds.push('ui.slider');
-    const helpIdAttr = helpIds.join(' ');
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        if (disabled) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const items: ContextMenuItem[] = [];
-        if (defaultValue !== undefined) {
-            items.push({
-                label: 'Reset to Default',
-                action: () => {
-                    handleInteractionStart('param');
-                    if (trackId) autoKeyOnDragStart(); // Use hook helper for snapshot
-                    handleChange(defaultValue);
-                    handleInteractionEnd();
-                }
-            });
-        }
-        const ids = collectHelpIds(e.currentTarget);
-        openContextMenu(e.clientX, e.clientY, items, ids);
+        if (mapTextInput && customMapping) onChange(customMapping.fromSlider(v));
+        else onChange(v);
     };
 
     const valuePct = Math.max(0, Math.min(100, ((sliderValue - sliderMin) / (sliderMax - sliderMin)) * 100));
@@ -252,31 +217,29 @@ const Slider: React.FC<SliderProps> = ({
         livePct = Math.max(0, Math.min(100, ((liveMapped - sliderMin) / (sliderMax - sliderMin)) * 100));
     }
 
-    const isActive = highlight || liveValue !== undefined || status !== 'none';
+    const isActive = highlight || liveValue !== undefined;
     
     return (
-        <div className={`mb-px animate-slider-entry ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`} data-help-id={helpIdAttr} onContextMenu={handleContextMenu}>
+        <div className={`mb-px animate-slider-entry ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} onContextMenu={onContextMenu}>
             <div className="flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5">
                 <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
-                    {trackId && !disabled && (
-                        <KeyframeButton status={status} onClick={() => { toggleKey(); if (onKeyToggle) onKeyToggle(); }} />
-                    )}
+                    {headerRight}
                     <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-gray-600' : 'text-gray-400'}`}>
                         {label}
                         {liveValue !== undefined && !disabled && <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_4px_#a855f7]"></span>}
                     </label>
                 </div>
                 <div className="w-1/2 relative bg-white/[0.02] border-l border-white/10 group/num-area touch-none" style={!disabled ? { backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.03) 5px, rgba(255,255,255,0.03) 10px)' } : {}}>
-                    <DraggableNumber 
+                    <RawDraggableNumber 
                         value={numValue} 
                         onChange={handleNumChange} 
                         step={step} 
                         min={hardMin} 
                         max={hardMax} 
                         highlight={isActive} 
-                        overrideText={overrideInputText}
-                        onDragStart={handleDragStart} 
-                        onDragEnd={handleDragEnd}
+                        overrideText={overrideText}
+                        onDragStart={onDragStart} 
+                        onDragEnd={onDragEnd}
                         disabled={disabled}
                     />
                 </div>
@@ -290,10 +253,9 @@ const Slider: React.FC<SliderProps> = ({
                     onPointerDown={(e) => { 
                         if(disabled) return;
                         e.stopPropagation();
-                        handleInteractionStart('param'); 
-                        handleDragStart(); 
+                        if (onDragStart) onDragStart(); 
                     }}
-                    onPointerUp={() => { if(!disabled) { handleInteractionEnd(); handleDragEnd(); }}}
+                    onPointerUp={() => { if(!disabled && onDragEnd) onDragEnd(); }}
                     className={`precision-slider w-full h-full appearance-none cursor-pointer focus:outline-none z-10 ${isActive && !disabled ? 'accent-cyan-500' : 'accent-gray-400'}`} 
                     style={{ background: 'transparent', touchAction: 'none' }} 
                     tabIndex={-1} 
@@ -302,26 +264,124 @@ const Slider: React.FC<SliderProps> = ({
                     <div className={`absolute top-0 bottom-0 left-0 transition-[width] duration-75 ease-out ${disabled ? 'bg-gray-500/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
                     {liveValue !== undefined && !disabled && <div className="absolute top-0 bottom-0 w-1.5 bg-purple-500 blur-[1px] transition-all duration-75 ease-out z-0" style={{ left: `calc(${livePct}% - 0.75px)` }} />}
                 </div>
-                {defaultValue !== undefined && (
-                    <div className="absolute w-0.5 h-full bg-white/40 pointer-events-none z-0 transform -translate-x-1/2" style={{ left: `${((customMapping ? customMapping.toSlider(defaultValue) : defaultValue) - sliderMin) / (sliderMax - sliderMin) * 100}%` }} />
-                )}
-                {defaultValue !== undefined && !disabled && (
-                    <button 
-                        onClick={(e) => { 
-                            e.preventDefault(); e.stopPropagation(); 
-                            handleInteractionStart('param');
-                            if (trackId) autoKeyOnDragStart(); 
-                            handleChange(defaultValue); 
-                            handleInteractionEnd();
-                        }} 
-                        className="absolute top-0 bottom-0 right-0 w-2 bg-gray-500/20 hover:bg-gray-400/50 cursor-pointer z-20 transition-colors border-l border-black/10" 
-                        title={`Reset to ${defaultValue}`} 
-                        aria-label="Reset to default" 
-                        tabIndex={-1} 
-                    />
-                )}
+                {footer}
             </div>
         </div>
+    );
+};
+
+// --- CONNECTED COMPONENTS (Legacy Wrapper) ---
+
+export const DraggableNumber: React.FC<DraggableNumberProps> = (props) => {
+    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    
+    return <RawDraggableNumber 
+        {...props} 
+        onDragStart={() => {
+            handleInteractionStart('param');
+            if (props.onDragStart) props.onDragStart();
+        }}
+        onDragEnd={() => {
+            handleInteractionEnd();
+            if (props.onDragEnd) props.onDragEnd();
+        }}
+    />;
+};
+
+interface SliderProps extends Omit<BaseSliderProps, 'onContextMenu' | 'headerRight' | 'footer' | 'overrideText'> {
+    trackId?: string;
+    onKeyToggle?: () => void;
+    defaultValue?: number;
+    overrideInputText?: string;
+}
+
+const Slider: React.FC<SliderProps> = ({ 
+    trackId, onKeyToggle, defaultValue, overrideInputText, dataHelpId, onChange, ...props 
+}) => {
+    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { status, toggleKey, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, props.value ?? 0, props.label);
+
+    const helpIds = [];
+    if (trackId) helpIds.push(trackId);
+    if (dataHelpId) helpIds.push(dataHelpId);
+    helpIds.push('ui.slider');
+    const helpIdAttr = helpIds.join(' ');
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+        if (props.disabled) return;
+        e.preventDefault(); e.stopPropagation();
+        const items: ContextMenuItem[] = [];
+        if (defaultValue !== undefined) {
+            items.push({
+                label: 'Reset to Default',
+                action: () => {
+                    handleInteractionStart('param');
+                    if (trackId) autoKeyOnDragStart(); 
+                    onChange(defaultValue);
+                    autoKeyOnChange(defaultValue);
+                    handleInteractionEnd();
+                }
+            });
+        }
+        const ids = collectHelpIds(e.currentTarget);
+        openContextMenu(e.clientX, e.clientY, items, ids);
+    };
+
+    const handleChange = (v: number) => {
+        onChange(v);
+        autoKeyOnChange(v);
+    };
+
+    const handleDragStart = () => {
+        handleInteractionStart('param');
+        autoKeyOnDragStart();
+        if (props.onDragStart) props.onDragStart();
+    };
+
+    const handleDragEnd = () => {
+        handleInteractionEnd();
+        if (props.onDragEnd) props.onDragEnd();
+    };
+
+    // Construct Header Right
+    const headerRight = (trackId && !props.disabled) ? (
+        <KeyframeButton status={status} onClick={() => { toggleKey(); if (onKeyToggle) onKeyToggle(); }} />
+    ) : undefined;
+
+    // Construct Footer
+    const footer = (defaultValue !== undefined && !props.disabled) ? (
+        <>
+            <div className="absolute w-0.5 h-full bg-white/40 pointer-events-none z-0 transform -translate-x-1/2" style={{ left: `${((props.customMapping ? props.customMapping.toSlider(defaultValue) : defaultValue) - (props.customMapping?.min ?? props.min ?? 0)) / ((props.customMapping?.max ?? props.max ?? 1) - (props.customMapping?.min ?? props.min ?? 0)) * 100}%` }} />
+            <button 
+                onClick={(e) => { 
+                    e.preventDefault(); e.stopPropagation(); 
+                    handleInteractionStart('param');
+                    if (trackId) autoKeyOnDragStart(); 
+                    onChange(defaultValue);
+                    autoKeyOnChange(defaultValue); 
+                    handleInteractionEnd();
+                }} 
+                className="absolute top-0 bottom-0 right-0 w-2 bg-gray-500/20 hover:bg-gray-400/50 cursor-pointer z-20 transition-colors border-l border-black/10" 
+                title={`Reset to ${defaultValue}`} 
+                aria-label="Reset to default" 
+                tabIndex={-1} 
+            />
+        </>
+    ) : undefined;
+
+    return (
+        <BaseSlider 
+            {...props}
+            onChange={handleChange}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onContextMenu={handleContextMenu}
+            dataHelpId={helpIdAttr}
+            headerRight={headerRight}
+            footer={footer}
+            highlight={props.highlight || status !== 'none'}
+            overrideText={overrideInputText}
+        />
     );
 };
 

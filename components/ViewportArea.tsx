@@ -1,24 +1,21 @@
 
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { useFractalStore } from '../store/fractalStore';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { PerspectiveCamera } from '@react-three/drei';
-import MandelbulbScene from './MandelbulbScene';
-import Navigation from './Navigation';
 import HistogramProbe from './HistogramProbe';
 import HudOverlay from './HudOverlay';
 import { AnimationSystem } from './AnimationSystem';
-import { CompilingIndicator } from './CompilingIndicator';
 import { useInteractionManager } from '../hooks/useInteractionManager';
 import { useRegionSelection } from '../hooks/useRegionSelection';
 import { PerformanceMonitor } from './PerformanceMonitor';
-import { engine } from '../engine/FractalEngine';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from './registry/ComponentRegistry';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 import { FixedResolutionControls } from './viewport/FixedResolutionControls';
-import { useAnimationStore } from '../store/animationStore';
-import { QualityState } from '../features/quality';
+import { engine } from '../engine/FractalEngine';
+import Navigation from './Navigation';
+import { CompilingIndicator } from './CompilingIndicator';
+import * as THREE from 'three';
 
 // Layout Constants
 const LAYOUT_PADDING = 12;
@@ -37,58 +34,8 @@ interface ViewportAreaProps {
     onSceneReady: () => void;
 }
 
-// Tiny component to bridge the Engine's sample count to the UI DOM without re-renders
-const SampleCounterBridge = ({ labelRef }: { labelRef: React.RefObject<HTMLSpanElement> }) => {
-    const { gl } = useThree();
-    
-    useFrame(() => {
-        if (!labelRef.current) return;
-        if (engine.pipeline.frameCount % 10 === 0) {
-            const delta = engine.pipeline.measureConvergence(gl);
-            const percentage = (delta * 100).toFixed(2);
-            labelRef.current.innerText = `${percentage}% Δ`;
-            if (delta > 0.05) labelRef.current.style.color = '#f87171'; 
-            else if (delta > 0.005) labelRef.current.style.color = '#facc15'; 
-            else labelRef.current.style.color = '#4ade80'; 
-        }
-    });
-    return null;
-};
-
-/**
- * DynamicSceneOverlays: Renders components registered as R3F scene objects (inside Canvas)
- */
-const DynamicSceneOverlays = () => {
-    const overlays = featureRegistry.getViewportOverlays().filter(o => !o.type || o.type === 'scene');
-    const state = useFractalStore();
-    const actions = useFractalStore();
-    
-    return (
-        <>
-            {overlays.map(config => {
-                const Component = componentRegistry.get(config.componentId);
-                if (Component) {
-                    const featureId = config.id;
-                    const sliceState = (state as any)[featureId];
-                    return (
-                        <Component 
-                            key={config.id} 
-                            featureId={featureId}
-                            sliceState={sliceState}
-                            actions={actions}
-                        />
-                    );
-                }
-                return null;
-            })}
-        </>
-    );
-};
-
-/**
- * DynamicDomOverlays: Renders components registered as DOM overlays (outside Canvas)
- */
-const DynamicDomOverlays = () => {
+// Renders HTML overlays (Webcam, Debuggers)
+const DomOverlays = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
     const state = useFractalStore();
     const actions = useFractalStore();
@@ -115,22 +62,104 @@ const DynamicDomOverlays = () => {
     );
 };
 
+// Renders R3F overlays (Gizmos, Drawing) inside the Canvas
+const SceneOverlays = () => {
+    const overlays = featureRegistry.getViewportOverlays().filter(o => !o.type || o.type === 'scene');
+    const state = useFractalStore();
+    const actions = useFractalStore();
+
+    return (
+        <>
+            {overlays.map(config => {
+                const Component = componentRegistry.get(config.componentId);
+                if (Component) {
+                    const featureId = config.id;
+                    const sliceState = (state as any)[featureId];
+                    return (
+                        <Component 
+                            key={config.id} 
+                            featureId={featureId}
+                            sliceState={sliceState}
+                            actions={actions}
+                        />
+                    );
+                }
+                return null;
+            })}
+        </>
+    );
+};
+
+// Syncs the R3F overlay camera to match the Main Engine camera
+const CameraSync = () => {
+    const { camera } = useThree();
+    useFrame(() => {
+        if (engine.activeCamera) {
+             engine.activeCamera.position.copy(camera.position);
+             engine.activeCamera.quaternion.copy(camera.quaternion);
+             
+             // Sync Projection props if perspective
+             if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera && (engine.activeCamera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+                const engCam = engine.activeCamera as THREE.PerspectiveCamera;
+                const r3fCam = camera as THREE.PerspectiveCamera;
+                
+                if (engCam.fov !== r3fCam.fov) {
+                    engCam.fov = r3fCam.fov;
+                    engCam.updateProjectionMatrix();
+                }
+             }
+             
+             engine.activeCamera.updateMatrixWorld();
+        }
+    });
+    return null;
+}
+
+// Master Loop component running inside R3F context
+const RenderLoop = () => {
+    const { camera, gl, scene } = useThree();
+    
+    useFrame((state, delta) => {
+        // Clamp delta to prevent massive jumps on tab wake
+        const safeDelta = Math.min(delta, 0.1);
+        
+        if (engine.activeCamera) {
+             // Navigation now sets engine.isCameraInteracting flag.
+             // We combine it with gizmo flag for the master interaction state.
+             const isInteracting = engine.isGizmoInteracting || engine.isCameraInteracting;
+             
+             // Update Engine Logic (Smoothing, Uniforms)
+             // We pass empty state object as uniforms are synced via event bus mostly now
+             engine.update(engine.activeCamera, safeDelta, {}, isInteracting);
+        }
+        
+        // Draw (to the main canvasRef, not the R3F canvas)
+        if (engine.renderer) {
+            engine.render(engine.renderer);
+        }
+
+        // Explicitly render the R3F overlay scene (Gizmos, UI)
+        // This ensures the overlays are drawn even if the default loop behaves unexpectedly
+        gl.render(scene, camera);
+
+    }, 1); // Render Priority 1 to ensure it runs after controls/sync
+
+    return null;
+}
+
 export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneReady }) => {
     const state = useFractalStore();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
-    const sppLabelRef = useRef<HTMLSpanElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     
-    const { drawing } = state;
+    const { drawing, interactionMode } = state;
     const isDrawingToolActive = drawing?.active;
+    const isSelectingRegion = interactionMode === 'selecting_region';
 
-    // Use custom hook for Region Selection logic
-    const { visualRegion, isGhostDragging, renderRegion, isSelectingRegion } = useRegionSelection(canvasContainerRef);
-    
-    // Use custom hook for General Interaction (Julia/Focus Picking)
+    const { visualRegion, isGhostDragging, renderRegion } = useRegionSelection(canvasContainerRef);
     useInteractionManager(canvasContainerRef);
     
-    // Use Standard Mobile Hook
     const { isMobile: isMobileDevice } = useMobileLayout();
     const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
 
@@ -138,119 +167,192 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
         if (!viewportRef.current) return;
         const observer = new ResizeObserver(entries => {
             for (const entry of entries) {
-                setViewportSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+                const w = Math.max(1, entry.contentRect.width);
+                const h = Math.max(1, entry.contentRect.height);
+                setViewportSize({ w, h });
             }
         });
         observer.observe(viewportRef.current);
+        
+        const rect = viewportRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+            setViewportSize({ w: rect.width, h: rect.height });
+        }
+        
         return () => observer.disconnect();
     }, []);
 
-    const isMobile = state.debugMobileLayout || isMobileDevice;
-    const isCleanFeed = state.isBroadcastMode;
     const isFixed = state.resolutionMode === 'Fixed';
     const [w, h] = state.fixedResolution;
+    const activeRegion = visualRegion || renderRegion;
+    const isCleanFeed = state.isBroadcastMode;
 
+    // --- SCALE-TO-FIT LOGIC ---
+    // Calculates a uniform scale to ensure the canvas fits within the viewport.
+    // This prevents distortion (flex squashing) and ensures the whole composition is visible.
+    const padding = 40; 
+    const availW = Math.max(1, viewportSize.w - padding);
+    const availH = Math.max(1, viewportSize.h - padding);
+    let fitScale = 1.0;
+    
+    if (isFixed) {
+        fitScale = Math.min(1.0, availW / w, availH / h);
+    }
+    
     const wrapperStyle: React.CSSProperties = isFixed ? {
-        width: w, height: h, boxShadow: '0 0 50px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)'
+        width: w, 
+        height: h, 
+        transform: `scale(${fitScale})`,
+        transformOrigin: 'center center',
+        boxShadow: '0 0 50px rgba(0,0,0,0.5)', 
+        border: '1px solid rgba(255,255,255,0.1)',
+        flexShrink: 0 // CRITICAL: Prevent flexbox from squashing the layout footprint
     } : { width: '100%', height: '100%' };
     
-    const activeRegion = visualRegion || renderRegion;
-    const fov = state.optics?.camFov || 60;
-
-    // Calculate clamped controls position using constants
-    const canvasTop = (viewportSize.h - h) / 2;
-    const canvasLeft = (viewportSize.w - w) / 2;
+    // Calculate visual dimensions after scaling for UI positioning
+    const visW = isFixed ? w * fitScale : viewportSize.w;
+    const visH = isFixed ? h * fitScale : viewportSize.h;
+    
+    const canvasTop = (viewportSize.h - visH) / 2;
+    const canvasLeft = (viewportSize.w - visW) / 2;
     const controlsTop = Math.max(LAYOUT_PADDING, canvasTop - CONTROLS_OFFSET);
     const controlsLeft = Math.max(LAYOUT_PADDING, canvasLeft);
 
-    // --- DYNAMIC RESOLUTION SCALING LOGIC ---
-    const quality = (state as any).quality as QualityState;
-    const [isInteracting, setIsInteracting] = useState(false);
-
+    // --- MAIN THREAD ENGINE INITIALIZATION ---
     useEffect(() => {
-        // Subscribe directly to the Animation Store's interaction flag
-        const unsub = useAnimationStore.subscribe(
-            (s) => s.isCameraInteracting,
-            (val) => setIsInteracting(val)
-        );
-        return unsub;
+        if (!canvasRef.current) return;
+        
+        try {
+            const renderer = new THREE.WebGLRenderer({ 
+                canvas: canvasRef.current, 
+                context: canvasRef.current.getContext('webgl2', { alpha: false, depth: false, antialias: false }) as WebGL2RenderingContext,
+                powerPreference: "high-performance"
+            });
+            renderer.setPixelRatio(state.dpr);
+            
+            if (viewportSize.w > 0 && viewportSize.h > 0) {
+                 renderer.setSize(viewportSize.w, viewportSize.h, false);
+            }
+            
+            engine.registerRenderer(renderer);
+            
+            // Create a dedicated engine camera (Vanilla)
+            const camera = new THREE.PerspectiveCamera(60, Math.max(1, viewportSize.w / viewportSize.h), 0.1, 1000);
+            camera.position.set(0, 0, 0); // Init at 0,0,0 to avoid Double Distance
+            engine.registerCamera(camera);
+            
+            onSceneReady();
+            
+        } catch (e) {
+            console.error("Critical Engine Failure:", e);
+        }
     }, []);
 
-    // If dynamic scaling enabled AND interacting, divide DPR by downsample factor
-    const targetDpr = (quality?.dynamicScaling && isInteracting) 
-        ? state.dpr / (quality.interactionDownsample || 2) 
-        : state.dpr;
+    // Resize & DPR Effect
+    useEffect(() => {
+        if (!engine.renderer || !engine.activeCamera) return;
+        const width = isFixed ? w : viewportSize.w;
+        const height = isFixed ? h : viewportSize.h;
+        
+        if (width > 0 && height > 0) {
+            engine.renderer.setPixelRatio(state.dpr);
+            engine.renderer.setSize(width, height, false);
+            
+            const cam = engine.activeCamera as THREE.PerspectiveCamera;
+            cam.aspect = width / height;
+            cam.updateProjectionMatrix();
+            
+            engine.pipeline.resize(width, height);
+            engine.resetAccumulation();
+        }
+    }, [viewportSize.w, viewportSize.h, isFixed, w, h, state.dpr]);
+
+    const handleInput = (e: React.PointerEvent | React.WheelEvent) => {};
 
     return (
         <div ref={viewportRef} className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${isSelectingRegion ? 'cursor-crosshair' : (isDrawingToolActive ? 'cursor-crosshair' : '')}`} style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} >
             {isFixed && <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '40px 40px' }} />}
             
-            {!isCleanFeed && <HudOverlay state={state} actions={state} isMobile={isMobile} hudRefs={hudRefs} />}
-            {!isCleanFeed && <CompilingIndicator />}
-            {!isCleanFeed && <PerformanceMonitor />}
+            {!isCleanFeed && <HudOverlay state={state} actions={state} isMobile={state.debugMobileLayout || isMobileDevice} hudRefs={hudRefs} />}
             
-            {state.showHints && !isMobile && !isCleanFeed && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none text-center animate-fade-in z-20">
-                    <div className="text-[10px] text-gray-400 flex items-center gap-2 bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm border border-white/5 shadow-lg">
-                        {state.cameraMode === 'Orbit' ? (
-                            <><span className="flex items-center"><span className="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-gray-200 font-bold mr-1 uppercase">Tab</span> Fly Mode</span><span className="w-px h-3 bg-white/20"></span><span className="flex items-center"><span className="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-gray-200 font-bold mr-1 uppercase">Scroll</span> Zoom</span><span className="flex items-center"><span className="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-gray-200 font-bold mr-1 uppercase">Shift</span> Pan</span></>
-                        ) : (
-                            <><span className="flex items-center"><span className="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-gray-200 font-bold mr-1 uppercase">WASD</span> Move</span><span className="w-px h-3 bg-white/20"></span><span className="flex items-center"><span className="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-gray-200 font-bold mr-1 uppercase">Space / C</span> Up / Down</span><span className="flex items-center"><span className="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-gray-200 font-bold mr-1 uppercase">Shift</span> Boost</span><span className="w-px h-3 bg-white/20"></span><span className="flex items-center"><span className="px-1.5 py-0.5 bg-white/10 border border-white/20 rounded text-gray-200 font-bold mr-1 uppercase">Tab</span> Orbit Mode</span></>
-                        )}
-                    </div>
-                </div>
-            )}
+            {!isCleanFeed && <CompilingIndicator />}
+            
+            {!isCleanFeed && <PerformanceMonitor />}
+            {!isCleanFeed && <AnimationSystem />}
             
             <div ref={canvasContainerRef} style={wrapperStyle} className="relative bg-[#111] group z-0">
                 {(isSelectingRegion || isDrawingToolActive) && <div className="absolute inset-0 z-50 cursor-crosshair bg-transparent pointer-events-none" />}
                 
-                {/* Active Render Region Box */}
                 {activeRegion && !isSelectingRegion && !isCleanFeed && (
                     <div className={`absolute border-2 z-40 group/box region-box cursor-move transition-opacity duration-75 ${isGhostDragging ? 'border-cyan-400 border-dashed opacity-80' : 'border-cyan-500 opacity-100'}`} style={{ left: `${activeRegion.minX * 100}%`, bottom: `${activeRegion.minY * 100}%`, right: `${(1 - activeRegion.maxX) * 100}%`, top: `${(1 - activeRegion.maxY) * 100}%`, }} >
                         <div className="absolute top-0 right-0 bg-cyan-600 text-white text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-2 pointer-events-auto shadow-md">
                             <span>{isGhostDragging ? 'Moving...' : 'Active Region'}</span>
-                            {!isGhostDragging && <><div className="w-px h-2 bg-cyan-400/50" /><span ref={sppLabelRef} className="font-mono text-[8px] min-w-[50px] text-right" title="Max change vs previous frame">--% Δ</span></>}
                             <div className="w-px h-2 bg-cyan-400/50" /><button onClick={(e) => { e.stopPropagation(); state.setRenderRegion(null); }} className="hover:text-black transition-colors" title="Clear Region" >✕</button>
                         </div>
-                        <div data-handle="nw" className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-cyan-600 cursor-nw-resize pointer-events-auto" />
-                        <div data-handle="ne" className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-cyan-600 cursor-ne-resize pointer-events-auto" />
-                        <div data-handle="sw" className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border border-cyan-600 cursor-sw-resize pointer-events-auto" />
-                        <div data-handle="se" className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border border-cyan-600 cursor-se-resize pointer-events-auto" />
-                        <div data-handle="n" className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-cyan-600 cursor-n-resize pointer-events-auto" />
-                        <div data-handle="s" className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-cyan-600 cursor-s-resize pointer-events-auto" />
-                        <div data-handle="w" className="absolute left-[-4px] top-1/2 -translate-y-1/2 w-2 h-4 bg-white border border-cyan-600 cursor-w-resize pointer-events-auto" />
-                        <div data-handle="e" className="absolute right-[-4px] top-1/2 -translate-y-1/2 w-2 h-4 bg-white border border-cyan-600 cursor-e-resize pointer-events-auto" />
                     </div>
                 )}
                 
-                {/* 3D Scene - Use targetDpr for dynamic scaling */}
-                <Canvas dpr={targetDpr} gl={{ antialias: false, preserveDrawingBuffer: true }}>
-                    <PerspectiveCamera makeDefault position={[0, 0, 0]} fov={fov} near={0.00001} />
-                    <AnimationSystem /> 
-                    <Navigation mode={state.cameraMode} hudRefs={hudRefs} onStart={state.handleInteractionStart} onEnd={state.handleInteractionEnd} setSceneOffset={state.setSceneOffset} />
-                    <SampleCounterBridge labelRef={sppLabelRef} />
-                    <HistogramProbe onUpdate={state.setHistogramData} autoUpdate={state.histogramAutoUpdate} trigger={state.histogramTrigger} source="geometry" />
-                    <HistogramProbe onUpdate={state.setSceneHistogramData} autoUpdate={false} trigger={state.sceneHistogramTrigger} source="color" />
-                    <DynamicSceneOverlays />
-                    <MandelbulbScene onLoaded={onSceneReady} />
-                </Canvas>
+                {/* 1. MAIN FRACTAL CANVAS (Raw WebGL) */}
+                <canvas 
+                    ref={canvasRef}
+                    className="w-full h-full block absolute inset-0 z-0"
+                    onPointerDown={(e) => (e.target as Element).setPointerCapture(e.pointerId)}
+                    onPointerMove={handleInput}
+                    onWheel={handleInput}
+                />
                 
-                <DynamicDomOverlays />
+                {/* 2. OVERLAY CANVAS (R3F) - Driving the Logic Loop */}
+                <div className="absolute inset-0 z-10">
+                    <Canvas 
+                        gl={{ alpha: true, depth: false, antialias: true }} 
+                        // Start at 0,0,0 so we don't apply distance offset twice (once via offset, once via camera pos)
+                        camera={{ position: [0,0,0], fov: 60 }} 
+                        style={{ pointerEvents: 'auto' }} // Allow input to pass to Navigation
+                    >
+                        <Navigation 
+                            mode={state.cameraMode} 
+                            hudRefs={hudRefs}
+                            onStart={(s) => state.handleInteractionStart(s)}
+                            onEnd={() => state.handleInteractionEnd()}
+                            setSceneOffset={state.setSceneOffset}
+                            fitScale={fitScale} 
+                        />
+                        <CameraSync />
+                        <SceneOverlays />
+                        {/* Master Logic Loop */}
+                        <RenderLoop />
+                    </Canvas>
+                </div>
+
+                {/* 3. DOM OVERLAYS (Webcam, Debug) */}
+                <DomOverlays />
+                
+                {/* Logic Probes */}
+                {!isCleanFeed && state.histogramData && (
+                     <HistogramProbe 
+                        onUpdate={(d) => state.setHistogramData(d)} 
+                        autoUpdate={state.histogramAutoUpdate}
+                        trigger={state.histogramTrigger}
+                        source={state.histogramLayer === 0 ? 'color' : 'geometry'} 
+                     />
+                )}
+                {!isCleanFeed && state.sceneHistogramData && (
+                    <HistogramProbe
+                        onUpdate={(d) => state.setSceneHistogramData(d)}
+                        autoUpdate={true} 
+                        trigger={state.sceneHistogramTrigger}
+                        source='color' 
+                    />
+                )}
 
                 {isSelectingRegion && !isCleanFeed && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-cyan-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-cyan-500/50 shadow-lg animate-pulse pointer-events-none z-[60]">Drag to select render region</div>}
             </div>
 
-            {/* Fixed Mode Status Overlays */}
             {isFixed && !isCleanFeed && (
                 <FixedResolutionControls 
-                    width={w}
-                    height={h}
-                    top={controlsTop}
-                    left={controlsLeft}
-                    maxAvailableWidth={viewportSize.w}
-                    maxAvailableHeight={viewportSize.h}
-                    onSetResolution={state.setFixedResolution}
-                    onSetMode={state.setResolutionMode}
+                    width={w} height={h} top={controlsTop} left={controlsLeft}
+                    maxAvailableWidth={viewportSize.w} maxAvailableHeight={viewportSize.h}
+                    onSetResolution={state.setFixedResolution} onSetMode={state.setResolutionMode}
                 />
             )}
         </div>

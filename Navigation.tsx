@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -10,6 +11,7 @@ import { useInputController } from '../hooks/useInputController';
 import { usePhysicsProbe } from '../hooks/usePhysicsProbe';
 import { useAnimationStore } from '../store/animationStore';
 import { useFractalStore, selectMovementLock } from '../store/fractalStore';
+import { CameraController } from '../engine/controllers/CameraController';
 
 interface NavigationProps {
   mode: CameraMode;
@@ -39,13 +41,17 @@ const Navigation: React.FC<NavigationProps> = ({
   const isOrtho = optics && Math.abs(optics.camType - 1.0) < 0.1;
   const navSettings = useFractalStore(s => s.navigation);
   const setNavigation = useFractalStore(s => s.setNavigation);
+  const setIsCameraInteracting = useAnimationStore(s => s.setIsCameraInteracting);
   
   const [orbitTarget, setOrbitTarget] = useState<THREE.Vector3>(new THREE.Vector3(0,0,0));
   const [isOrbitReady, setIsOrbitReady] = useState(mode === 'Orbit');
   const [orbitControlsKey, setOrbitControlsKey] = useState(0);
 
+  // -- Physics Controllers --
+  const flyController = useRef(new CameraController());
+
   // Pivot Sync Helper: Re-centers the orbit target on the fractal surface
-  const syncOrbitTargetToCamera = (overrideDistance?: number) => {
+  const syncOrbitTargetToCamera = (overrideDistance?: number, forceRemount: boolean = false) => {
         camera.updateMatrixWorld(); 
         const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
         camera.up.copy(currentUp);
@@ -60,14 +66,21 @@ const Navigation: React.FC<NavigationProps> = ({
         const target = new THREE.Vector3().copy(camera.position).addScaledVector(forward, dist);
         
         setOrbitTarget(target.clone());
-        setOrbitControlsKey(prev => prev + 1); // Force OrbitControls re-mount to pick up new target
+
+        if (forceRemount) {
+             setOrbitControlsKey(prev => prev + 1);
+        } else if (orbitRef.current) {
+             orbitRef.current.target.copy(target);
+             orbitRef.current.update();
+        }
+
         setIsOrbitReady(true);
   };
 
   // On mount, if we are in Orbit mode, we MUST sync the target immediately.
   useEffect(() => {
       if (mode === 'Orbit') {
-          syncOrbitTargetToCamera();
+          syncOrbitTargetToCamera(undefined, true);
       }
   }, []);
 
@@ -78,14 +91,19 @@ const Navigation: React.FC<NavigationProps> = ({
           currentFrameVelocity.current.set(0,0,0);
           currentRotVelocity.current.set(0,0,0);
           rollVelocity.current = 0;
+          flyController.current.reset();
           
           // If we are in Orbit mode, we must sync the pivot to the new camera position/rotation
-          if (mode === 'Orbit') {
-              syncOrbitTargetToCamera(newState.targetDistance);
+          if (mode === 'Orbit' && !isOrbitDragging.current) {
+              syncOrbitTargetToCamera(newState.targetDistance, false);
           }
       };
-      const unsub = FractalEvents.on('camera_teleport', onTeleport);
-      return () => unsub();
+      
+      const onResetAccum = () => {};
+
+      const unsub1 = FractalEvents.on('camera_teleport', onTeleport);
+      const unsub2 = FractalEvents.on('reset_accum', onResetAccum);
+      return () => { unsub1(); unsub2(); };
   }, [mode, camera]);
 
   const isPlaying = useAnimationStore(s => s.isPlaying);
@@ -95,7 +113,6 @@ const Navigation: React.FC<NavigationProps> = ({
   const currentFrame = useAnimationStore(s => s.currentFrame);
   const sequence = useAnimationStore(s => s.sequence);
   const captureCameraFrame = useAnimationStore(s => s.captureCameraFrame);
-  const setIsCameraInteracting = useAnimationStore(s => s.setIsCameraInteracting);
   
   const { moveState, isDraggingRef, dragStart, mousePos, speedRef, joystickMove, joystickLook, invertY, rollVelocity, isInteracting } = useInputController(
       mode, 
@@ -119,6 +136,8 @@ const Navigation: React.FC<NavigationProps> = ({
   const wasPlayingRef = useRef(isPlaying);
   const wasScrubbingRef = useRef(isScrubbing);
   const currentZoomSensitivity = useRef(1.0);
+  const isCameraLockedRef = useRef(false);
+  const allowOrbitInteraction = useRef(false);
 
   // Handle Wheel Start/End for interaction tracking
   useEffect(() => {
@@ -135,12 +154,47 @@ const Navigation: React.FC<NavigationProps> = ({
           if (scrollEndTimeout.current) clearTimeout(scrollEndTimeout.current);
       };
   }, []);
+  
+  // Strict Orbit Gating: Listen for Pointer events on the canvas to enable/disable controls
+  useEffect(() => {
+      if (mode !== 'Orbit') return;
+      const el = gl.domElement;
+      
+      const onPointerDown = (e: PointerEvent) => {
+           // Ignore if hitting UI overlay
+           if ((e.target as HTMLElement).closest('.pointer-events-auto')) {
+               allowOrbitInteraction.current = false;
+               return;
+           }
+           
+           allowOrbitInteraction.current = true;
+
+           // CRITICAL: Synchronously enable controls so they catch this event immediately
+           if (orbitRef.current) {
+               orbitRef.current.enabled = true;
+           }
+      };
+      
+      const onPointerUp = () => {
+           allowOrbitInteraction.current = false;
+      };
+      
+      // Use capture to intercept before OrbitControls (which also listens on this element)
+      el.addEventListener('pointerdown', onPointerDown, { capture: true });
+      window.addEventListener('pointerup', onPointerUp);
+      
+      return () => {
+          el.removeEventListener('pointerdown', onPointerDown, { capture: true });
+          window.removeEventListener('pointerup', onPointerUp);
+      };
+  }, [mode, gl]);
 
   const isCameraLocked = (isPlaying && (!isRecording || !recordCamera) && Object.keys(sequence.tracks).some(k => k.startsWith('camera.'))) || isScrubbing;
+  isCameraLockedRef.current = isCameraLocked;
 
   useEffect(() => {
       if (isCameraLocked) setIsOrbitReady(false);
-      else if (mode === 'Orbit' && !isOrbitReady) syncOrbitTargetToCamera();
+      else if (mode === 'Orbit' && !isOrbitReady) syncOrbitTargetToCamera(undefined, true);
   }, [isCameraLocked, mode]);
 
   // Mode Switching Logic
@@ -154,9 +208,10 @@ const Navigation: React.FC<NavigationProps> = ({
             lastPos.current.set(0,0,0);
             currentFrameVelocity.current.set(0,0,0);
             currentRotVelocity.current.set(0,0,0);
+            flyController.current.reset();
             setIsOrbitReady(false);
         } else if (mode === 'Orbit') {
-            syncOrbitTargetToCamera();
+            syncOrbitTargetToCamera(undefined, true);
         }
         prevMode.current = mode;
     }
@@ -167,7 +222,7 @@ const Navigation: React.FC<NavigationProps> = ({
       const stoppedScrubbing = wasScrubbingRef.current && !isScrubbing;
       if (stoppedPlaying || stoppedScrubbing) {
           FractalEvents.emit('camera_snap', undefined); 
-          if (mode === 'Orbit') syncOrbitTargetToCamera();
+          if (mode === 'Orbit') syncOrbitTargetToCamera(undefined, false);
           else if (mode === 'Fly') {
               FractalEvents.emit('camera_absorb', { camera });
               setSceneOffset({ ...engine.sceneOffset });
@@ -177,14 +232,16 @@ const Navigation: React.FC<NavigationProps> = ({
       wasScrubbingRef.current = isScrubbing;
 
       if (isCameraLocked) {
+          if (orbitRef.current) orbitRef.current.enabled = false;
           if (setIsCameraInteracting) setIsCameraInteracting(false);
           engine.update(camera, delta, state, false);
           return;
       }
+      
+      if (mode === 'Orbit' && !isOrbitReady) {
+           syncOrbitTargetToCamera(undefined, true);
+      }
 
-      const applyCurve = (v: number) => Math.sign(v) * Math.pow(Math.abs(v), 2);
-      const hasJoystickMove = Math.abs(joystickMove.current.x) > 0.01 || Math.abs(joystickMove.current.y) > 0.01;
-      const hasJoystickLook = Math.abs(joystickLook.current.x) > 0.01 || Math.abs(joystickLook.current.y) > 0.01;
       const posChanged = camera.position.distanceToSquared(lastPos.current) > 1e-12;
       const rotChanged = camera.quaternion.angleTo(lastRot.current) > 1e-11;
       const isCurrentlyActive = isInteracting() || isOrbitDragging.current || isScrollingRef.current;
@@ -198,7 +255,7 @@ const Navigation: React.FC<NavigationProps> = ({
           engine.dirty = true;
           if (!isMovingRef.current && onStart) {
               isMovingRef.current = true;
-              onStart(engine.virtualSpace.getUnifiedCameraState(camera));
+              onStart(engine.virtualSpace.getUnifiedCameraState(camera, engine.lastMeasuredDistance));
           }
           if (isRecording && recordCamera) captureCameraFrame(currentFrame, true, isPlaying ? 'Linear' : 'Bezier');
       }
@@ -221,52 +278,30 @@ const Navigation: React.FC<NavigationProps> = ({
       
       if (mode === 'Fly') {
           if (disableMovement) return;
-          const dist = distAverageRef.current;
-          const boost = moveState.current.boost ? 4.0 : 1.0;
-          const autoSlow = navSettings?.autoSlow ?? true;
-          const targetSpeed = autoSlow ? Math.max(dist * speedRef.current * boost, 1e-6) : 2.0 * speedRef.current * boost;
           
-          const tv = new THREE.Vector3(0,0,0);
-          if (moveState.current.forward) tv.z -= 1;
-          if (moveState.current.backward) tv.z += 1;
-          if (moveState.current.left) tv.x -= 1;
-          if (moveState.current.right) tv.x += 1;
-          if (moveState.current.up) tv.y += 1;
-          if (moveState.current.down) tv.y -= 1;
-          if (hasJoystickMove) { tv.z -= applyCurve(joystickMove.current.y); tv.x += applyCurve(joystickMove.current.x); }
-          
-          if (tv.lengthSq() > 0) {
-              tv.normalize().multiplyScalar(targetSpeed * delta);
-              const mv = tv.clone().applyQuaternion(camera.quaternion);
-              FractalEvents.emit('offset_shift', { x: mv.x, y: mv.y, z: mv.z });
-          }
+          const dragDx = isDraggingRef.current ? mousePos.current.x - dragStart.current.x : 0;
+          const dragDy = isDraggingRef.current ? mousePos.current.y - dragStart.current.y : 0;
 
-          const tr = new THREE.Vector3(0,0,0);
-          const yFlip = invertY ? -1 : 1;
-          if (isDraggingRef.current) {
-              const dx = mousePos.current.x - dragStart.current.x;
-              const dy = mousePos.current.y - dragStart.current.y;
-              tr.y = -dx * 2.0; tr.x = dy * 2.0 * yFlip; 
-          } else if (hasJoystickLook) {
-              tr.y = -applyCurve(joystickLook.current.x) * 0.66;
-              tr.x = applyCurve(joystickLook.current.y) * 0.66 * yFlip;
-          }
-          
-          tr.z = rollVelocity.current * 0.62;
-          
-          if (tr.lengthSq() > 0) {
-              currentRotVelocity.current.lerp(tr, delta * 20.0);
-          } else {
-              currentRotVelocity.current.set(0, 0, 0);
-          }
+          flyController.current.update(
+              camera,
+              delta,
+              {
+                  move: moveState.current,
+                  look: joystickLook.current,
+                  moveJoy: joystickMove.current,
+                  isDragging: isDraggingRef.current,
+                  dragDelta: { x: dragDx, y: dragDy },
+                  invertY
+              },
+              {
+                  baseSpeed: speedRef.current,
+                  distEstimate: distAverageRef.current,
+                  autoSlow: navSettings?.autoSlow ?? true
+              }
+          );
 
-          if (currentRotVelocity.current.lengthSq() > 1e-8) {
-              camera.rotateX(currentRotVelocity.current.x * delta * 2.5);
-              camera.rotateY(currentRotVelocity.current.y * delta * 2.5);
-              camera.rotateZ(currentRotVelocity.current.z * delta * 2.5);
-          }
       } else if (mode === 'Orbit' && orbitRef.current) {
-          orbitRef.current.enabled = !disableMovement && !isCameraLocked;
+          orbitRef.current.enabled = !disableMovement && !isCameraLockedRef.current && (allowOrbitInteraction.current || isOrbitDragging.current || isScrollingRef.current);
           orbitRef.current.zoomSpeed = currentZoomSensitivity.current;
           if (Math.abs(rollVelocity.current) > 0.01) {
               const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
@@ -290,11 +325,15 @@ const Navigation: React.FC<NavigationProps> = ({
             touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
             onStart={() => {
                 isOrbitDragging.current = true;
-                const dist = distAverageRef.current;
-                if (dist > 0.0001 && dist < 10.0 && orbitRef.current) {
+                if (orbitRef.current) {
+                    const dist = distAverageRef.current > 0 ? distAverageRef.current : (useFractalStore.getState().targetDistance || 3.5);
                     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
                     const newTarget = new THREE.Vector3().copy(camera.position).addScaledVector(fwd, dist);
+                    
                     orbitRef.current.target.copy(newTarget);
+                    orbitRef.current.update();
+                    orbitRef.current.saveState(); 
+                    
                     const dPivot = camera.position.distanceTo(newTarget);
                     if (dPivot > 1e-8) currentZoomSensitivity.current = Math.max(0.001, (dist / dPivot) * 1.25);
                 }
@@ -307,8 +346,10 @@ const Navigation: React.FC<NavigationProps> = ({
                         FractalEvents.emit('offset_shift', { x: shift.x, y: shift.y, z: shift.z });
                         camera.position.sub(shift);
                         camera.updateMatrixWorld();
+                        
                         orbitRef.current.target.set(0, 0, 0);
                         setOrbitTarget(new THREE.Vector3(0, 0, 0));
+                        
                         setSceneOffset({ ...engine.sceneOffset });
                         orbitRef.current.update();
                     }

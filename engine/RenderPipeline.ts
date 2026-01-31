@@ -2,7 +2,6 @@
 import * as THREE from 'three';
 import { engine } from './FractalEngine';
 import { Uniforms } from './UniformNames';
-import { useFractalStore } from '../store/fractalStore';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
 import { QualityState } from '../features/quality';
 
@@ -48,13 +47,30 @@ export class RenderPipeline {
     private convergenceCamera: THREE.Camera | null = null;
 
     private isHolding: boolean = false;
+
+    // Local State (Decoupled from Store)
+    private _qualityState: QualityState | null = null;
+    private _accumulationEnabled: boolean = true;
+    
+    public updateQuality(q: QualityState) {
+        // Check if buffer precision changed
+        const oldPrec = this._qualityState?.bufferPrecision;
+        const newPrec = q.bufferPrecision;
+        this._qualityState = q;
+        
+        if (this.targetA && oldPrec !== newPrec) {
+            this.resize(this.targetA.width, this.targetA.height);
+        }
+    }
+
+    public setAccumulationEnabled(enabled: boolean) {
+        this._accumulationEnabled = enabled;
+        if (!enabled) this.resetAccumulation();
+    }
     
     private initTargets(width: number, height: number) {
-        // DDFS: Read buffer precision from Quality Feature
-        const quality = (useFractalStore.getState() as any).quality as QualityState;
-        
         // Default to Float32 (High) if undefined
-        const useHalfFloat = (quality?.bufferPrecision ?? 0) > 0.5;
+        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
         
         const opts = {
             minFilter: THREE.LinearFilter,
@@ -107,8 +123,7 @@ export class RenderPipeline {
     
     public resize(width: number, height: number) {
         // Check dimension OR type change
-        const quality = (useFractalStore.getState() as any).quality as QualityState;
-        const useHalfFloat = (quality?.bufferPrecision ?? 0) > 0.5;
+        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
         const currentType = this.targetA?.texture.type;
         const desiredType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
         
@@ -211,7 +226,7 @@ export class RenderPipeline {
         const writeBuffer = isOdd ? this.targetA : this.targetB;
         const readBuffer = isOdd ? this.targetB : this.targetA;
         
-        const accumEnabled = useFractalStore.getState().accumulation;
+        const accumEnabled = this._accumulationEnabled;
         
         if (!accumEnabled) {
             this.accumulationCount = 1;

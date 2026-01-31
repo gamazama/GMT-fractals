@@ -1,4 +1,3 @@
-
 import { CoreMathState } from './core_math';
 import { GeometryState } from './geometry';
 import { AtmosphereState } from './atmosphere';
@@ -12,6 +11,7 @@ import { ColorGradingState } from './color_grading';
 import { OpticsState } from './optics';
 import { NavigationState } from './navigation';
 import { AOState } from './ao/index'; 
+import { WaterPlaneState } from './water_plane';
 
 // Import Feature-Specific Types
 import { AudioState } from './audioMod';
@@ -40,6 +40,7 @@ export interface FeatureStateMap {
     modulation: ModulationState;
     webcam: WebcamState;
     debugTools: DebugToolsState;
+    waterPlane: WaterPlaneState;
 }
 
 // 2. The Master Action Map
@@ -56,5 +57,5 @@ export type {
 export type { 
     CoreMathState, GeometryState, AtmosphereState, AOState, MaterialState, TexturingState, 
     ColoringState, QualityState, LightingState, DrosteState, ColorGradingState, 
-    OpticsState, NavigationState, AudioState, DrawingState, ModulationState, WebcamState, DebugToolsState 
+    OpticsState, NavigationState, AudioState, DrawingState, ModulationState, WebcamState, DebugToolsState, WaterPlaneState 
 };

@@ -48,8 +48,10 @@ export const DrawingFeature: FeatureDefinition = {
         order: 80,
         condition: { param: 'enabled', bool: true }
     },
+    // Explicitly mark as scene (R3F) component
     viewportConfig: {
-        componentId: 'overlay-drawing'
+        componentId: 'overlay-drawing',
+        type: 'scene'
     },
     menuConfig: {
         label: 'Drawing Tools',

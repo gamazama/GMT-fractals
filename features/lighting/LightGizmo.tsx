@@ -1,5 +1,5 @@
 
-import React, { useRef, useMemo } from 'react';
+import React, { useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { TransformControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -12,8 +12,15 @@ import { FeatureComponentProps } from '../../components/registry/ComponentRegist
 const GizmoIndicator = ({ index, visible }: { index: number, visible: boolean }) => {
     const light = useFractalStore(s => getLightFromSlice(s.lighting, index));
     const dragging = useFractalStore(s => s.isGizmoDragging);
-    const toggleFixed = useFractalStore(s => s.toggleLightFixed);
     const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const updateLight = useFractalStore(s => s.updateLight);
+
+    const handleToggleFixed = () => {
+         if (!engine.activeCamera) return;
+         const wasFixed = light.fixed;
+         const newPos = engine.virtualSpace.resolveRealWorldPosition(light.position, wasFixed, engine.activeCamera);
+         updateLight({ index, params: { fixed: !wasFixed, position: newPos } });
+    };
 
     if (!visible || dragging) return null;
 
@@ -24,7 +31,7 @@ const GizmoIndicator = ({ index, visible }: { index: number, visible: boolean })
                     onClick={(e) => {
                         e.stopPropagation();
                         handleInteractionStart('param');
-                        toggleFixed(index);
+                        handleToggleFixed();
                         handleInteractionEnd();
                     }}
                     className={`p-1.5 rounded-full border shadow-lg transition-all duration-200 hover:scale-110 active:scale-95 mb-1 ${
@@ -50,9 +57,7 @@ const SingleGizmo: React.FC<{ index: number }> = ({ index }) => {
     const meshRef = useRef<THREE.Mesh>(null);
     const scratchPos = useRef(new THREE.Vector3());
     
-    // Select minimal state to prevent re-renders
     const showGizmo = useFractalStore(s => s.showLightGizmo);
-    // Use a selector that returns null if lighting is not ready to prevent crash
     const lightData = useFractalStore(s => s.lighting ? getLightFromSlice(s.lighting, index) : null);
     
     const updateLight = useFractalStore(s => s.updateLight);
@@ -62,7 +67,6 @@ const SingleGizmo: React.FC<{ index: number }> = ({ index }) => {
     useFrame(() => {
         if (!meshRef.current || !lightData) return;
         
-        // Don't update position from store while dragging to prevent loop/fighting
         if (useFractalStore.getState().isGizmoDragging) return;
 
         const offset = engine.sceneOffset;
@@ -73,19 +77,15 @@ const SingleGizmo: React.FC<{ index: number }> = ({ index }) => {
             scratchPos.current.add(camera.position);
             meshRef.current.position.copy(scratchPos.current);
         } else {
-            // WORLD MODE
             const sx = (lightData.position.x - (offset.x + offset.xL));
             const sy = (lightData.position.y - (offset.y + offset.yL));
             const sz = (lightData.position.z - (offset.z + offset.zL));
             meshRef.current.position.set(sx, sy, sz);
         }
 
-        // --- Billboard & Scale Logic ---
         meshRef.current.quaternion.copy(camera.quaternion);
         
         const dist = camera.position.distanceTo(meshRef.current.position);
-        
-        // Constant screen size scaling.
         const dynamicScale = dist * 0.08; 
         
         meshRef.current.scale.setScalar(dynamicScale);
@@ -107,7 +107,6 @@ const SingleGizmo: React.FC<{ index: number }> = ({ index }) => {
 
     return (
         <group>
-            {/* Visual Mesh - Uses AlwaysDepth to render on top of the Fractal Quad */}
             <mesh ref={meshRef} renderOrder={999}>
                 <ringGeometry args={[0.42, 0.44, 64]} />
                 <meshBasicMaterial 
@@ -153,7 +152,6 @@ const SingleGizmo: React.FC<{ index: number }> = ({ index }) => {
     );
 };
 
-// Fix: Changed component to accept FeatureComponentProps to satisfy registry types when used in DynamicOverlays
 const LightGizmo: React.FC<FeatureComponentProps> = () => {
     const lights = useFractalStore(s => s.lighting?.lights || []);
     return (

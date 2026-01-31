@@ -45,7 +45,7 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset) {
     vec3 safeFog = InverseACESFilm(uFogColor);
     
     if (uEnvMapVisible > 0.5) {
-        vec3 env = GetEnvMap(rd, 0.0) * uEnvStrength; 
+        vec3 env = GetEnvMap(rd, 0.0) * uEnvBackgroundStrength; 
         bgCol = mix(env, safeFog, clamp(uFogIntensity, 0.0, 1.0));
     } else {
         bgCol = mix(safeFog + vec3(0.01), safeFog, abs(rd.y));

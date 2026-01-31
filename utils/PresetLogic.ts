@@ -5,6 +5,7 @@ import { FractalEvents } from '../engine/FractalEvents';
 import { useAnimationStore } from '../store/animationStore';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
+import { VirtualSpace } from '../engine/PrecisionMath'; // Added Import
 import * as THREE from 'three';
 
 // Helper to clean up Three.js objects for JSON serialization
@@ -183,27 +184,58 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
     if (p.sequence) useAnimationStore.getState().setSequence(p.sequence);
     actions.setAnimations(p.animations || []);
     
-    // Core Scene State
-    const pos = p.cameraPos || { x: 0, y: 0, z: 3.5 };
-    const rot = p.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
-    const dist = p.targetDistance || 3.5;
-    const offset = p.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+    // --- CORE SCENE STATE NORMALIZATION ---
+    // Critical Fix: Ensure camera is at (0,0,0) locally for the Treadmill Engine.
+    // We absorb the Preset's Camera Position into the Scene Offset.
     
+    const rawPos = p.cameraPos || { x: 0, y: 0, z: 3.5 };
+    const rawOffset = p.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+    const dist = p.targetDistance || 3.5;
+    const rot = p.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
+
+    // Calculate Unified (World) Position
+    const totalX = rawOffset.x + rawOffset.xL + rawPos.x;
+    const totalY = rawOffset.y + rawOffset.yL + rawPos.y;
+    const totalZ = rawOffset.z + rawOffset.zL + rawPos.z;
+
+    // Re-Split into High Precision Offset
+    const sX = VirtualSpace.split(totalX);
+    const sY = VirtualSpace.split(totalY);
+    const sZ = VirtualSpace.split(totalZ);
+    
+    const finalOffset = { 
+        x: sX.high, y: sY.high, z: sZ.high, 
+        xL: sX.low, yL: sY.low, zL: sZ.low 
+    };
+    
+    // Camera stays at origin
+    const finalPos = { x: 0, y: 0, z: 0 };
+
     set({
-        cameraPos: pos,
+        cameraPos: finalPos,
         cameraRot: rot,
         targetDistance: dist,
-        sceneOffset: offset,
+        sceneOffset: finalOffset,
         cameraMode: p.cameraMode || get().cameraMode
     });
 
     if (engine.activeCamera) {
+        // Apply to Engine
         engine.virtualSpace.applyCameraState(engine.activeCamera, {
-            position: pos, rotation: rot, sceneOffset: offset, targetDistance: dist
+            position: finalPos, 
+            rotation: rot, 
+            sceneOffset: finalOffset, 
+            targetDistance: dist
         });
     }
     
-    FractalEvents.emit('camera_teleport', { position: pos, rotation: rot, sceneOffset: offset, targetDistance: dist });
+    // Emit teleport with the CLEAN (Zeroed) position to update Navigation/OrbitControls
+    FractalEvents.emit('camera_teleport', { 
+        position: finalPos, 
+        rotation: rot, 
+        sceneOffset: finalOffset, 
+        targetDistance: dist 
+    });
 
     if (p.duration) useAnimationStore.getState().setDuration(p.duration);
     if (p.formula === 'Modular') actions.refreshPipeline();

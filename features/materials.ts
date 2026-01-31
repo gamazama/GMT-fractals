@@ -2,6 +2,7 @@
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import * as THREE from 'three';
 import { GradientStop } from '../types/graphics';
+import { LIGHTING_ENV } from '../shaders/chunks/lighting/env';
 
 export interface MaterialState {
     diffuse: number;
@@ -126,8 +127,7 @@ export const MaterialFeature: FeatureDefinition = {
             label: 'Environment Light',
             shortId: 'es',
             uniform: 'uEnvStrengthSlider', 
-            min: 0.0, max: 10.0, step: 0.01,
-            scale: 'log',
+            min: 0.0, max: 5.0, step: 0.01,
             group: 'env'
         },
         envMapVisible: {
@@ -224,7 +224,7 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'em',
             uniform: 'uEmission',
             min: 0.0000, max: 5.0, step: 0.001,
-            scale: 'log',
+            scale: 'square',
             group: 'emission'
         },
         emissionMode: {
@@ -273,5 +273,8 @@ export const MaterialFeature: FeatureDefinition = {
     inject: (builder) => {
         builder.addHeader(MAIN_HEADER);
         builder.addMaterialLogic(MATERIAL_LOGIC);
+        
+        // Inject Environment Map Logic used by Lighting and Path Tracer
+        builder.addFunction(LIGHTING_ENV);
     }
 };

@@ -30,12 +30,22 @@ const BucketRenderSettingsPopup = () => {
     const handleExport = () => {
         state.handleInteractionStart('param');
         if (state.isBucketRendering) bucketRenderer.stop();
-        else bucketRenderer.start(true, {
-            bucketSize: state.bucketSize,
-            bucketUpscale: state.bucketUpscale,
-            convergenceThreshold: state.convergenceThreshold,
-            accumulation: state.accumulation
-        });
+        else {
+            // Gather Preset Data for Metadata injection
+            const preset = state.getPreset({ includeScene: true });
+            const currentVersion = state.prepareExport();
+            
+            bucketRenderer.start(true, {
+                bucketSize: state.bucketSize,
+                bucketUpscale: state.bucketUpscale,
+                convergenceThreshold: state.convergenceThreshold,
+                accumulation: state.accumulation
+            }, {
+                preset,
+                name: state.projectSettings.name,
+                version: currentVersion
+            });
+        }
         state.handleInteractionEnd();
     };
     
