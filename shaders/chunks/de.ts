@@ -241,3 +241,4 @@ vec4 DE(vec3 p_ray) {
 float DE_Dist(vec3 p_ray) {
     return mapDist(p_ray + uCameraPosition);
 }`;
+};
