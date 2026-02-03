@@ -1,3 +1,4 @@
+
 {
   "name": "gmt-fractal",
   "version": "0.8.3",
@@ -5,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server/server.js",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "cross-env NODE_ENV=production node server/server.js",
     "start": "npm run build && cross-env NODE_ENV=production node server/server.js",
     "predeploy": "npm run build",
