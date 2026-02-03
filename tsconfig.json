@@ -22,6 +22,6 @@
     }
   },
   "include": ["."],
-  "exclude": ["node_modules", "dist", "**/*.min.mjs"],
+  "exclude": ["node_modules", "dist", "**/*.min.mjs", "vite.config.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
