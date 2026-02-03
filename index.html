@@ -56,6 +56,10 @@
         .t-dropdown {
           @apply w-full bg-gradient-to-b from-[#1a1a1a] to-transparent border border-white/5 text-[10px] font-medium text-gray-300 tracking-tight rounded px-2 py-1 outline-none focus:border-cyan-500 appearance-none hover:bg-white/5 transition-colors cursor-pointer text-center;
         }
+        /* FIX: Explicitly style child options to prevent white background in some browsers */
+        .t-dropdown option {
+          @apply bg-[#1a1a1a] text-gray-300;
+        }
         
         /* BUTTONS */
         .t-btn {
@@ -68,7 +72,8 @@
     </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reactflow@11.10.1/dist/style.min.css" />
     <style>
-      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; }
+      /* FIX: color-scheme: dark forces browser native controls (scrollbars, inputs) to use dark theme */
+      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; }
       body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overscroll-behavior-y: none; }
       body::-webkit-scrollbar { width: 3px; }
       body::-webkit-scrollbar-track { background: #000; }

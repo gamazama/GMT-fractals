@@ -1,11 +1,12 @@
 
+
 export const getShadowsGLSL = (enabled: boolean, qualityLevel: number) => {
     
     // ZERO-COST ABSTRACTION:
     // If disabled, replace the entire complex function with a constant return.
     if (!enabled) {
         return `
-        float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist) { return 1.0; }
+        float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) { return 1.0; }
         float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
         `;
     }
@@ -38,19 +39,16 @@ export const getShadowsGLSL = (enabled: boolean, qualityLevel: number) => {
 // ------------------------------------------------------------------
 
 // Classic Robust Soft Shadows
-float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist) {
+// Optimized: Noise is passed in to avoid texture fetch inside light loop
+float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
     if (uShadowIntensity < 0.001) return 1.0;
 
     float res = 1.0;
     
-    // Blue Noise Jitter for Soft Shadow Penumbra
-    // We use the Red channel of the blue noise texture via helper
-    float jitter = getBlueNoise(gl_FragCoord.xy);
-    
     ${settings}
     
     // Jitter starting position to break banding
-    t += jitter * 0.01;
+    t += noise * 0.01;
     
     int limit = uShadowSteps;
 

@@ -4,6 +4,7 @@ import { registry } from '../engine/FractalRegistry';
 import { FORMULA_ID_MODULAR, FORMULA_ID_GENERIC } from '../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
+import { QualityState } from './quality';
 
 export interface CoreMathState {
     iterations: number;
@@ -15,14 +16,46 @@ export interface CoreMathState {
     paramF: number;
 }
 
-// THE NEW DYNAMIC DE CALCULATOR
-// This shader logic now responds to uEstimator at runtime.
-const DYNAMIC_DE_LOGIC = `
+// Generate optimized DE logic based on compile-time estimator type
+const generateGetDist = (estimatorType: number) => {
+    let mathLine = "d = 0.5 * log(max(r, 1.0e-5)) * r / dr_safe;"; // Default 0 (Analytic)
+
+    // Optimized GPU math using log2 where possible
+    if (estimatorType < 0.5) {
+        // 0: Analytic (Log) - Standard for Power Fractals
+        // d = 0.5 * r * log(r) / dr
+        mathLine = `
+        float logR2 = log2(m2);
+        d = 0.17328679 * logR2 * r / dr_safe;
+        `;
+    } else if (estimatorType < 1.5) {
+        // 1: Linear (Fold 1.0) - Standard for Box/Menger
+        // d = (r - 1.0) / dr
+        mathLine = `d = (r - 1.0) / dr_safe;`;
+    } else if (estimatorType < 2.5) {
+        // 2: Pseudo (Raw) - Good for Artifacts
+        // d = r / dr
+        mathLine = `d = r / dr_safe;`;
+    } else if (estimatorType < 3.5) {
+        // 3: Dampened - Fix Slices
+        // d = 0.5 * r * log(r) / (dr + K)
+        mathLine = `
+        float logR2 = log2(m2);
+        d = 0.34657359 * logR2 * r / (dr_safe + 8.0);
+        `;
+    } else {
+        // 4: Linear (Fold 2.0) - Classic Menger offset
+        // d = (r - 2.0) / dr
+        mathLine = `d = (r - 2.0) / dr_safe;`;
+    }
+
+    return `
         vec2 getDist(float r, float dr, float iter, vec4 z) {
             float m2 = r * r;
             if (m2 < 1.0e-20) return vec2(0.0, iter);
             
             // Log Smoothing Calculation (Shared)
+            // Guarded: Only calculate log smoothing if we have actually escaped (> 1.0)
             float smoothIter = iter;
             if (m2 > 1.0) {
                 float threshLog = log2(max(uEscapeThresh, 1.1));
@@ -32,32 +65,11 @@ const DYNAMIC_DE_LOGIC = `
             float d = 0.0;
             float dr_safe = max(abs(dr), 1.0e-20);
             
-            if (uEstimator < 0.5) {
-                // 0: Analytic (Log) - Standard for Power Fractals
-                // d = 0.5 * r * log(r) / dr
-                float logR2 = log2(m2);
-                d = 0.17328679 * logR2 * r / dr_safe;
-            } else if (uEstimator < 1.5) {
-                // 1: Linear (Fold 1.0) - Standard for Box/Menger
-                // d = (r - 1.0) / dr
-                d = (r - 1.0) / dr_safe; 
-            } else if (uEstimator < 2.5) {
-                // 2: Pseudo (Raw) - Good for Artifacts
-                // d = r / dr
-                d = r / dr_safe;
-            } else if (uEstimator < 3.5) {
-                // 3: Dampened - Fix Slices
-                // d = 0.5 * r * log(r) / (dr + K)
-                float logR2 = log2(m2);
-                d = 0.34657359 * logR2 * r / (dr_safe + 8.0);
-            } else {
-                // 4: Linear (Fold 2.0) - Classic Menger offset
-                // d = (r - 2.0) / dr
-                d = (r - 2.0) / dr_safe;
-            }
+            ${mathLine}
             
             return vec2(d, smoothIter);
         }`;
+};
 
 export const CoreMathFeature: FeatureDefinition = {
     id: 'coreMath',
@@ -76,6 +88,7 @@ export const CoreMathFeature: FeatureDefinition = {
     },
     inject: (builder, config) => {
         const formula = config.formula as FormulaType;
+        const quality = config.quality as QualityState;
         
         // 1. Set Formula ID Define
         if (formula === 'Modular') {
@@ -96,15 +109,17 @@ export const CoreMathFeature: FeatureDefinition = {
         let loopBody = "";
         let loopInit = "";
         
-        // Default to the dynamic one unless Formula Overrides
-        let getDistBody = DYNAMIC_DE_LOGIC;
+        // Generate optimized getDist based on Quality Settings
+        // Default to 0 (Analytic) if missing
+        const estimatorType = quality?.estimator || 0;
+        let getDistBody = generateGetDist(estimatorType);
 
         if (formula === 'Modular') {
             const modularCode = compileGraph(config.pipeline || [], config.graph?.edges || []);
             functions += modularCode + "\n";
             loopBody = `formula_Modular(z, dr, trap, distOverride, c, i);`;
             
-            // Modular also uses Dynamic DE Logic now
+            // Modular also uses Dynamic DE Logic
         } else if (def) {
             functions += def.shader.function + "\n";
             loopBody = def.shader.loopBody;

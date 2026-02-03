@@ -117,7 +117,8 @@ const CameraSync = () => {
 
 // Master Loop component running inside R3F context
 const RenderLoop = () => {
-    const { camera, gl, scene } = useThree();
+    // We don't use 'gl' here because we don't want to trigger R3F render manually.
+    // R3F will handle its own render (Overlay) automatically via default loop.
     
     useFrame((state, delta) => {
         // Clamp delta to prevent massive jumps on tab wake
@@ -133,14 +134,10 @@ const RenderLoop = () => {
              engine.update(engine.activeCamera, safeDelta, {}, isInteracting);
         }
         
-        // Draw (to the main canvasRef, not the R3F canvas)
+        // Draw FRACTAL (to the main canvasRef, separate context)
         if (engine.renderer) {
             engine.render(engine.renderer);
         }
-
-        // Explicitly render the R3F overlay scene (Gizmos, UI)
-        // This ensures the overlays are drawn even if the default loop behaves unexpectedly
-        gl.render(scene, camera);
 
     }, 1); // Render Priority 1 to ensure it runs after controls/sync
 
@@ -308,6 +305,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
                         // Start at 0,0,0 so we don't apply distance offset twice (once via offset, once via camera pos)
                         camera={{ position: [0,0,0], fov: 60 }} 
                         style={{ pointerEvents: 'auto' }} // Allow input to pass to Navigation
+                        // REMOVED frameloop="never" to fix black screen
                     >
                         <Navigation 
                             mode={state.cameraMode} 

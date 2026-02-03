@@ -79,7 +79,7 @@ export const QualityFeature: FeatureDefinition = {
             description: 'The shape of "distance". Changes the aesthetic of the fractal surface.'
         },
         estimator: {
-            type: 'float', default: 0.0, label: 'Estimator', shortId: 'es', uniform: 'uEstimator',
+            type: 'float', default: 0.0, label: 'Estimator', shortId: 'es', 
             group: 'kernel',
             options: [
                 { label: 'Analytic (Log)', value: 0.0 },
@@ -88,7 +88,9 @@ export const QualityFeature: FeatureDefinition = {
                 { label: 'Pseudo (Raw)', value: 2.0 },
                 { label: 'Dampened', value: 3.0 }
             ],
-            description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix.'
+            description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix.',
+            onUpdate: 'compile',
+            noReset: true
         },
         fudgeFactor: { 
             type: 'float', default: 1.0, label: 'Slice optimization', shortId: 'ff', uniform: 'uFudgeFactor', 

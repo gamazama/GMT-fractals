@@ -1,6 +1,5 @@
 
 
-
 export const DE_MASTER = (
     formulaBody: string, 
     loopInit: string = '', 
@@ -74,6 +73,9 @@ vec4 map(vec3 p) {
                 decompCaptured = true;
             }
             
+            // --- OPTIMIZATION: EARLY BAILOUT ---
+            // Check if point has escaped BEFORE running expensive math (pow/sin/cos).
+            // Some formulas (JuliaMorph) opt-out of this via define.
             #ifndef SKIP_PRE_BAILOUT
             if (r2_check > bailout) {
                 escaped = true;
@@ -128,7 +130,8 @@ vec4 map(vec3 p) {
     float outTrap = useLLI ? lastLength : trap;
     
     // --- HOOK: Water Plane ---
-    // Will be optimized away if WATER_ENABLED is not defined (stub returns 1e10)
+    // Wrapped in ifdef to ensure it is optimized out if feature disabled
+    #ifdef WATER_ENABLED
     float dWater = mapWater(p_fractal);
     if (dWater < finalD) {
         finalD = dWater;
@@ -139,6 +142,7 @@ vec4 map(vec3 p) {
         smoothIter = 0.0;
         outTrap = 0.0;
     }
+    #endif
 
     return vec4(finalD, outTrap, smoothIter / max(1.0, uIterations), decomp);
 }
@@ -218,10 +222,12 @@ float mapDist(vec3 p) {
     #endif
     
     // --- HOOK: Water Plane ---
+    #ifdef WATER_ENABLED
     float dWater = mapWater(p_fractal);
     if (dWater < finalD) {
         finalD = dWater;
     }
+    #endif
 
     return finalD;
 }
@@ -234,6 +240,4 @@ vec4 DE(vec3 p_ray) {
 // Wrapper for Geometry (Shadows/AO/Normals)
 float DE_Dist(vec3 p_ray) {
     return mapDist(p_ray + uCameraPosition);
-}
-`;
-};
+}`;

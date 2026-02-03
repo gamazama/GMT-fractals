@@ -1,4 +1,5 @@
 
+
 export const LIGHTING_PBR = `
 // ------------------------------------------------------------------
 // PBR HELPERS
@@ -89,8 +90,8 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
                  s = GetHardShadow(shadowRo, jitteredLDir, jitteredDist);
             } else {
                  // Standard SDF Soft Shadows (Uses Soft Trace)
-                 // Use simple seed for jitter
-                 s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight);
+                 // Pass pre-calculated stochasticSeed as noise to avoid texture fetch
+                 s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
             }
             shadow = mix(1.0, s, uShadowIntensity);
         }

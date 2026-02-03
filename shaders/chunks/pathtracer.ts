@@ -1,11 +1,13 @@
 
+
 export const getPathTracerGLSL = (isMobile: boolean) => {
     
     // Optimization: On mobile, drastically reduce bounces and shadow quality even if user forces PT mode
     const loopLimit = isMobile ? '2' : 'maxBounces';
     const shadowLogic = isMobile ? `
         // Mobile: Force simple soft shadow, no stochastic area lights
-        shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight);
+        // Use Red channel of blue noise for shadow jitter
+        shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
     ` : `
         // Desktop: Full Stochastic Area Shadows support
         if (uPTStochasticShadows > 0.5 && lightRadius > 0.0001) {
@@ -25,7 +27,7 @@ export const getPathTracerGLSL = (isMobile: boolean) => {
             
             shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
         } else {
-            shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight);
+            shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
         }
     `;
 
@@ -304,4 +306,3 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
     return radiance;
 }
 `;
-};
