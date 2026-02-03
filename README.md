@@ -12,9 +12,6 @@
 *   **Modular Builder:** A node-based graph editor to construct custom fractal formulas (JIT Compiled to GLSL).
 *   **Animation Studio:** Full keyframe timeline with Bezier curves, Dope Sheet, and Graph Editor.
 *   **Video Export:** Offline rendering pipeline supporting 4K+ resolution and high-bitrate WebM/MP4 export (using WebCodecs).
-*   **Environment Features:**
-    *   **Water Plane:** Infinite ocean with procedural waves.
-    *   **Volumetrics:** Atmospheric fog and glow.
 *   **Data-Driven Architecture:** Features are defined in a registry, automatically generating UI, State, and Shaders.
 
 ## 🚀 Quick Start
