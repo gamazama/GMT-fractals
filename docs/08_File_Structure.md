@@ -63,6 +63,8 @@ Self-contained modules defining State, UI, and Shaders.
 *   **`debug_tools`**: Shader/State debuggers.
 *   **`ao`**: Ambient Occlusion logic.
 *   **`reflections`**: Raymarched reflections logic.
+*   **`water_plane`**: Infinite ocean plane logic.
+*   **`stress_test`**: Holographic scanlines effect.
 *   **`engine`**: Master configuration profiles (Lite/Balanced/Ultra).
 
 ## 4. State Management (`store/`)

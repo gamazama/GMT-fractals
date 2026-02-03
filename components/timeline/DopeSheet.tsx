@@ -272,20 +272,25 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
             selectKeyframe(tid, kid, true);
             if (!selectedTrackIds.includes(tid)) selectTrack(tid, true);
             snapshot();
-            startDragKeys(e.clientX, [{ trackId: tid, keyId: kid, startFrame: sequence.tracks[tid].keyframes.find(k => k.id === kid)!.frame }]);
+            // Start drag on CURRENTLY selected keys (which includes the one clicked)
+            // Note: selectKeyframes updates store, but we need instantaneous list for drag start.
+            // If isMulti=true, we appended to existing.
+            // If selectedKeyframeIds is stale (from previous render), we construct the new list manually?
+            // Actually, we can just use the updated list logic or pass explicit IDs.
+            // For simplicity, we pass specific IDs to startDragKeys
+            const keysToDrag = isSelected 
+                ? selectedKeyframeIds 
+                : [...selectedKeyframeIds, composite];
+            startDragKeys(e.clientX, keysToDrag);
         }
         else if (!isSelected) {
             selectKeyframe(tid, kid, false);
             selectTrack(tid, false);
-             snapshot();
-            startDragKeys(e.clientX, [{ trackId: tid, keyId: kid, startFrame: sequence.tracks[tid].keyframes.find(k => k.id === kid)!.frame }]);
+            snapshot();
+            startDragKeys(e.clientX, [composite]);
         } else {
              snapshot();
-            const keysToDrag = selectedKeyframeIds.map(id => {
-                const [t, k] = id.split('::');
-                return { trackId: t, keyId: k, startFrame: sequence.tracks[t].keyframes.find(key => key.id === k)!.frame };
-            });
-            startDragKeys(e.clientX, keysToDrag);
+             startDragKeys(e.clientX, selectedKeyframeIds);
         }
     };
 
@@ -294,14 +299,12 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
         e.preventDefault();
         
         const keysInGroup: string[] = [];
-        const dragPayload: any[] = [];
         
         groupTrackIds.forEach(tid => {
             const t = sequence.tracks[tid];
             const k = t?.keyframes.find(key => Math.abs(key.frame - frame) < 0.001);
             if (k) {
                 keysInGroup.push(`${tid}::${k.id}`);
-                dragPayload.push({ trackId: tid, keyId: k.id, startFrame: k.frame });
             }
         });
 
@@ -326,15 +329,17 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
             groupTrackIds.forEach(tid => {
                 if(!selectedTrackIds.includes(tid)) selectTrack(tid, true);
             });
+            // Merge existing and new
+            const allKeys = Array.from(new Set([...selectedKeyframeIds, ...keysInGroup]));
+            startDragKeys(e.clientX, allKeys);
         } else {
             selectKeyframes(keysInGroup, false);
             groupTrackIds.forEach((tid, idx) => {
                 if (idx === 0) selectTrack(tid, false);
                 else selectTrack(tid, true);
             });
+            startDragKeys(e.clientX, keysInGroup);
         }
-        
-        startDragKeys(e.clientX, dragPayload);
     };
 
     const wrapAddKey = (tid: string, frame: number) => {

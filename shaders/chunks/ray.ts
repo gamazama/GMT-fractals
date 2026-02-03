@@ -35,8 +35,9 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
     
     ${noiseLogic}
     
+    // Use Blue Noise Red Channel as base seed
     if (needNoise) {
-        stochasticSeed = ign_noise(gl_FragCoord.xy + vec2(seed * 5.588, seed * 2.123));
+        stochasticSeed = getBlueNoise(gl_FragCoord.xy);
     }
     
     vec3 forward = uCamForward;
@@ -74,17 +75,26 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
     // --- DEPTH OF FIELD ---
     if (uDOFStrength > 0.0000001) {
         vec3 focalPoint = ro + rd * uDOFFocus;
-        float r = sqrt(stochasticSeed);
-        float theta = ign_noise(gl_FragCoord.xy + vec2(seed * 1.1, seed * 3.3)) * 6.283185;
+        
+        // Use Blue Noise channels directly for Disk Sampling to ensure good distribution
+        vec4 blue = getBlueNoise4(gl_FragCoord.xy);
+        
+        float r = sqrt(blue.r);
+        float theta = blue.g * 6.283185;
+        
+        // Polygonal Bokeh Shape (Hexagon)
         float blades = 6.0; 
         float pi = 3.14159265;
         float segment = 2.0 * pi / blades;
         float localTheta = mod(theta, segment) - (segment * 0.5);
         float polyRadius = cos(pi / blades) / cos(localTheta);
         r *= polyRadius;
-        theta += 0.26;
+        
+        theta += 0.26; // Rotation offset
+        
         vec2 offset = vec2(cos(theta), sin(theta)) * r * uDOFStrength;
-        offset.y *= 1.3; 
+        offset.y *= 1.3; // Anamorphic squash
+        
         vec3 lensOffset = normalize(right) * offset.x + normalize(up) * offset.y; 
         ro += lensOffset;
         

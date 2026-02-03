@@ -88,9 +88,11 @@ export interface FractalStoreState extends FeatureStateMap {
   histogramAutoUpdate: boolean;
   histogramTrigger: number;
   histogramLayer: 0 | 1;
+  histogramActiveCount: number; // Ref count for probe activation
   
   sceneHistogramData: Float32Array | null;
   sceneHistogramTrigger: number;
+  sceneHistogramActiveCount: number; // Ref count
   
   undoStack: CameraState[];
   redoStack: CameraState[];
@@ -185,6 +187,11 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setHistogramAutoUpdate: (v: boolean) => void;
     refreshHistogram: () => void;
     setHistogramLayer: (v: 0 | 1) => void;
+    
+    registerHistogram: () => void;
+    unregisterHistogram: () => void;
+    registerSceneHistogram: () => void;
+    unregisterSceneHistogram: () => void;
     
     setSceneHistogramData: (d: Float32Array | null) => void;
     refreshSceneHistogram: () => void;

@@ -1,11 +1,11 @@
 
 import { FeatureDefinition } from '../../engine/FeatureSystem';
 import * as THREE from 'three';
-import { GradientStop } from '../../types/graphics';
+import { GradientStop, GradientConfig } from '../../types/graphics';
 import { MAPPING_MODES, generateMappingShader } from './MappingModes';
 
 export interface ColoringState {
-    gradient: GradientStop[];
+    gradient: GradientStop[] | GradientConfig;
     mode: number;
     scale: number;
     offset: number;
@@ -14,7 +14,7 @@ export interface ColoringState {
     bias: number;
     twist: number;
     escape: number;
-    gradient2: GradientStop[];
+    gradient2: GradientStop[] | GradientConfig;
     mode2: number;
     scale2: number;
     offset2: number;
@@ -104,7 +104,21 @@ export const ColoringFeature: FeatureDefinition = {
                     { param: 'mode', eq: 6.0 }, // Decomposition
                     { param: 'mode', eq: 8.0 }, // Potential
                     { param: 'mode2', eq: 6.0 }, 
-                    { param: 'mode2', eq: 8.0 }  
+                    { param: 'mode2', eq: 8.0 },
+                    // Check Texture Mapping Modes ONLY if Texture is Active
+                    {
+                        and: [
+                            { param: '$texturing.active', bool: true },
+                            {
+                                or: [
+                                     { param: '$texturing.mapU', eq: 6.0 },
+                                     { param: '$texturing.mapU', eq: 8.0 },
+                                     { param: '$texturing.mapV', eq: 6.0 },
+                                     { param: '$texturing.mapV', eq: 8.0 }
+                                ]
+                            }
+                        ]
+                    }
                 ]
             }
         },
@@ -160,7 +174,7 @@ export const ColoringFeature: FeatureDefinition = {
             min: 0.0, max: 1.0, step: 0.01,
             group: 'layer2_bottom'
         },
-
+        
         // --- LAYER 3 (NOISE) ---
         layer3Color: { 
             type: 'color', 
@@ -177,16 +191,11 @@ export const ColoringFeature: FeatureDefinition = {
         layer3Turbulence: { type: 'float', default: 0.0, label: 'Turbulence', shortId: 'n3t', uniform: 'uLayer3Turbulence', min: 0, max: 2, step: 0.01, group: 'noise' }
     },
     inject: (builder, config, variant) => {
-        if (variant === 'Main') {
+        // Histogram variant needs the mapping logic to show meaningful data distributions
+        if (variant === 'Main' || variant === 'Histogram') {
             builder.addFunction(generateMappingShader()); 
         } else {
-            // Physics/Histogram modes don't need full mapping logic, just a stub to prevent linking errors
-            // or a simplified version if they need color data.
-            // Since Histogram probe source='color' uses the main texture, it doesn't use this shader.
-            // Histogram probe source='geometry' uses getMappingValue for debugging.
-            // Physics probe uses getMappingValue for debugging.
-            
-            // Safe stub for non-render variants
+            // Physics probe only needs distance/depth, so we can stub mapping
             builder.addFunction(`
                 float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale) { return 0.0; }
             `);

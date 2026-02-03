@@ -3,14 +3,27 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { animationEngine } from '../engine/AnimationEngine';
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame } from '../utils/GraphUtils';
-import { constrainKeyframeHandles, calculateSoftFalloff } from '../utils/timelineUtils';
-import { Keyframe } from '../types';
+import { constrainKeyframeHandles, calculateSoftFalloff, scaleKeyframeHandles } from '../utils/timelineUtils';
+import { Keyframe, BezierHandle } from '../types';
 
 interface KeyDragStart {
     trackId: string;
     keyId: string;
     startFrame: number;
     startVal: number;
+    // Store initial tangents
+    startLeftTan?: BezierHandle;
+    startRightTan?: BezierHandle;
+}
+
+interface NeighborKeyData {
+    trackId: string;
+    keyId: string;
+    frame: number; 
+    startLeftTan?: BezierHandle;  
+    startRightTan?: BezierHandle; 
+    leftReferenceKeyId?: string;  
+    rightReferenceKeyId?: string; 
 }
 
 // Maps TrackID::KeyID -> Original Frame/Value at drag start
@@ -51,11 +64,20 @@ export const useGraphInteraction = (
     const dragMode = useRef<DragMode | null>(null);
     
     const draggedKeysRef = useRef<KeyDragStart[]>([]);
+    const draggedNeighborsRef = useRef<Map<string, NeighborKeyData>>(new Map());
     
     // Store ALL affected keys' initial values for soft selection to prevent drift/explosion
     const softSelectInitialStateRef = useRef<KeyStateMap>({});
     
-    const dragHandleRef = useRef<{ trackId: string, keyId: string, side: 'left' | 'right', key: Keyframe } | null>(null);
+    // Updated to store initial handle state for Angle Locking
+    const dragHandleRef = useRef<{ 
+        trackId: string, 
+        keyId: string, 
+        side: 'left' | 'right', 
+        key: Keyframe,
+        initialHandle: { x: number, y: number } 
+    } | null>(null);
+    
     const boxStartRef = useRef({ x: 0, y: 0 });
     const [selectionBox, setSelectionBox] = useState<{x:number, y:number, w:number, h:number} | null>(null);
     
@@ -264,6 +286,13 @@ export const useGraphInteraction = (
                  });
             } else {
                 // Standard Drag
+                
+                // 1. Cache new positions for neighbor lookups
+                const draggedPositions = new Map<string, number>();
+                draggedKeysRef.current.forEach(k => {
+                    draggedPositions.set(k.keyId, Math.max(0, Math.round(k.startFrame + dFrame)));
+                });
+
                 draggedKeysRef.current.forEach(k => {
                     let newFrame = Math.max(0, Math.round(k.startFrame + dFrame));
                     let newVal = k.startVal + dVal;
@@ -277,12 +306,68 @@ export const useGraphInteraction = (
                              const idx = keysSorted.indexOf(currentKey);
                              const prev = idx > 0 ? keysSorted[idx - 1] : undefined;
                              const next = idx < keysSorted.length - 1 ? keysSorted[idx + 1] : undefined;
-                             const movedKey = { ...currentKey, frame: newFrame, value: newVal };
+                             
+                             // Scale handles proportionally to time change
+                             // Use INITIAL tangent state to prevent compounding errors
+                             const initialKeySnapshot = { 
+                                 ...currentKey, 
+                                 leftTangent: k.startLeftTan, 
+                                 rightTangent: k.startRightTan 
+                             };
+
+                             const scalePatch = scaleKeyframeHandles(initialKeySnapshot, prev, next, k.startFrame, newFrame);
+                             Object.assign(patch, scalePatch);
+
+                             // Apply constraints
+                             const movedKey = { ...currentKey, frame: newFrame, value: newVal, ...patch };
                              const constraintPatch = constrainKeyframeHandles(movedKey, prev, next);
                              Object.assign(patch, constraintPatch);
                         }
                     }
                     updates.push({ trackId: k.trackId, keyId: k.keyId, patch });
+                });
+
+                // Update Neighbors
+                draggedNeighborsRef.current.forEach(neighbor => {
+                    const patch: Partial<any> = {};
+
+                    if (neighbor.rightReferenceKeyId && neighbor.startRightTan) {
+                        const draggedPos = draggedPositions.get(neighbor.rightReferenceKeyId);
+                        const draggedStartFrame = draggedKeysRef.current.find(k => k.keyId === neighbor.rightReferenceKeyId)?.startFrame;
+
+                        if (draggedPos !== undefined && draggedStartFrame !== undefined) {
+                            const oldDist = draggedStartFrame - neighbor.frame;
+                            const newDist = draggedPos - neighbor.frame;
+                            if (Math.abs(oldDist) > 1e-5 && Math.abs(newDist) > 1e-5) {
+                                const ratio = newDist / oldDist;
+                                patch.rightTangent = {
+                                    x: neighbor.startRightTan.x * ratio,
+                                    y: neighbor.startRightTan.y * ratio
+                                };
+                            }
+                        }
+                    }
+                    
+                    if (neighbor.leftReferenceKeyId && neighbor.startLeftTan) {
+                        const draggedPos = draggedPositions.get(neighbor.leftReferenceKeyId);
+                        const draggedStartFrame = draggedKeysRef.current.find(k => k.keyId === neighbor.leftReferenceKeyId)?.startFrame;
+                        
+                        if (draggedPos !== undefined && draggedStartFrame !== undefined) {
+                            const oldDist = neighbor.frame - draggedStartFrame;
+                            const newDist = neighbor.frame - draggedPos;
+                            if (Math.abs(oldDist) > 1e-5 && Math.abs(newDist) > 1e-5) {
+                                const ratio = newDist / oldDist;
+                                patch.leftTangent = {
+                                    x: neighbor.startLeftTan.x * ratio,
+                                    y: neighbor.startLeftTan.y * ratio
+                                };
+                            }
+                        }
+                    }
+
+                    if (Object.keys(patch).length > 0) {
+                        updates.push({ trackId: neighbor.trackId, keyId: neighbor.keyId, patch });
+                    }
                 });
             }
             
@@ -291,7 +376,7 @@ export const useGraphInteraction = (
         }
         else if (dragMode.current === 'handle') {
             if (!dragHandleRef.current) return;
-            const { trackId, keyId, side } = dragHandleRef.current;
+            const { trackId, keyId, side, initialHandle } = dragHandleRef.current;
             
             const track = props.sequence.tracks[trackId];
             if (!track) return;
@@ -313,16 +398,51 @@ export const useGraphInteraction = (
                 if (r) valDelta *= r.span;
             }
             
+            // --- Shift Key: Lock Angle (Project onto original vector) ---
+            if (e.shiftKey) {
+                // Initial handle vector (dx, dy)
+                const v0x = initialHandle.x;
+                const v0y = initialHandle.y;
+                
+                // Current proposed vector
+                const vx = frameDelta;
+                const vy = valDelta;
+                
+                // Magnitude of original vector
+                const len0 = Math.sqrt(v0x*v0x + v0y*v0y);
+                
+                if (len0 > 0.0001) {
+                    // Normalize original
+                    const nx = v0x / len0;
+                    const ny = v0y / len0;
+                    
+                    // Dot product to project V onto N (Scalar projection)
+                    // P = (V . N)
+                    let projLen = (vx * nx) + (vy * ny);
+                    
+                    // New vector = N * projLen
+                    frameDelta = nx * projLen;
+                    valDelta = ny * projLen;
+                }
+            }
+
             const newHandle = { x: frameDelta, y: valDelta };
             const patch: Partial<Keyframe> = {};
+            
+            // --- Ctrl Key: Break Tangents ---
+            const breakTangents = e.ctrlKey || currentKey.brokenTangents;
+            if (breakTangents !== currentKey.brokenTangents) {
+                patch.brokenTangents = breakTangents;
+            }
+
             if (side === 'left') {
                 patch.leftTangent = newHandle;
-                if (!currentKey.brokenTangents && currentKey.rightTangent) {
+                if (!breakTangents && currentKey.rightTangent) {
                     patch.rightTangent = { x: -newHandle.x, y: -newHandle.y };
                 }
             } else {
                 patch.rightTangent = newHandle;
-                if (!currentKey.brokenTangents && currentKey.leftTangent) {
+                if (!breakTangents && currentKey.leftTangent) {
                     patch.leftTangent = { x: -newHandle.x, y: -newHandle.y };
                 }
             }
@@ -399,6 +519,7 @@ export const useGraphInteraction = (
         
         dragMode.current = null;
         draggedKeysRef.current = [];
+        draggedNeighborsRef.current = new Map();
         softSelectInitialStateRef.current = {};
         dragHandleRef.current = null;
         setSoftInteraction({ isAdjusting: false, anchorKey: null });
@@ -453,14 +574,28 @@ export const useGraphInteraction = (
                 if (hit) {
                     if (hit.type === 'handle') {
                         dragMode.current = 'handle';
-                        dragHandleRef.current = { trackId: hit.trackId, keyId: hit.keyId, side: hit.side, key: hit.key };
+                        
+                        // Determine initial handle value for Angle Lock
+                        let initH = { x: 0, y: 0 };
+                        if (hit.side === 'left' && hit.key.leftTangent) initH = { ...hit.key.leftTangent };
+                        else if (hit.side === 'right' && hit.key.rightTangent) initH = { ...hit.key.rightTangent };
+
+                        dragHandleRef.current = { 
+                            trackId: hit.trackId, 
+                            keyId: hit.keyId, 
+                            side: hit.side, 
+                            key: hit.key,
+                            initialHandle: initH
+                        };
                         isDraggingRef.current = true;
                         snapshot();
                     }
                     else if (hit.type === 'key') {
-                        const composite = `${hit.trackId}::${hit.keyId}`;
+                        const composite = `${hit.trackId}::${hit.key.id}`;
                         
-                        if (e.ctrlKey) {
+                        if (e.ctrlKey && !dragHandleRef.current) { 
+                             if (isDraggingRef.current) return; 
+                             
                              dragMode.current = 'soft_radius';
                              isDraggingRef.current = true;
                              setSoftInteraction({ isAdjusting: true, anchorKey: composite });
@@ -489,6 +624,7 @@ export const useGraphInteraction = (
 
                             const keysToDrag: KeyDragStart[] = [];
                             const initialStates: KeyStateMap = {};
+                            const neighbors = new Map<string, NeighborKeyData>();
                             
                             // Identify all involved tracks for initial state capture
                             const involvedTracks = new Set<string>();
@@ -499,10 +635,61 @@ export const useGraphInteraction = (
                                 const t = sequence.tracks[tid];
                                 const k = t?.keyframes.find(kf => kf.id === kid);
                                 if(k) {
-                                   keysToDrag.push({ trackId: tid, keyId: k.id, startFrame: k.frame, startVal: k.value });
+                                   keysToDrag.push({ 
+                                       trackId: tid, 
+                                       keyId: k.id, 
+                                       startFrame: k.frame, 
+                                       startVal: k.value,
+                                       // Capture initial tangents for correct scaling
+                                       startLeftTan: k.leftTangent ? { ...k.leftTangent } : undefined,
+                                       startRightTan: k.rightTangent ? { ...k.rightTangent } : undefined
+                                   });
                                    initialStates[`${tid}::${k.id}`] = { f: k.frame, v: k.value };
                                    involvedTracks.add(tid);
                                }
+                            });
+                            
+                            // Identify neighbors for handle adjustment
+                            const draggedSet = new Set(effectiveSelection);
+                            
+                            keysToDrag.forEach(draggedKey => {
+                                const track = sequence.tracks[draggedKey.trackId];
+                                if (!track) return;
+                                const sortedKeys = [...track.keyframes].sort((a,b) => a.frame - b.frame);
+                                const idx = sortedKeys.findIndex(k => k.id === draggedKey.keyId);
+                                if (idx === -1) return;
+                                
+                                if (idx > 0) {
+                                    const prev = sortedKeys[idx-1];
+                                    const prevId = `${draggedKey.trackId}::${prev.id}`;
+                                    if (!draggedSet.has(prevId)) {
+                                        if (!neighbors.has(prevId)) {
+                                            neighbors.set(prevId, {
+                                                trackId: draggedKey.trackId,
+                                                keyId: prev.id,
+                                                frame: prev.frame,
+                                                startRightTan: prev.rightTangent ? {...prev.rightTangent} : undefined
+                                            });
+                                        }
+                                        neighbors.get(prevId)!.rightReferenceKeyId = draggedKey.keyId;
+                                    }
+                                }
+                                
+                                if (idx < sortedKeys.length - 1) {
+                                    const next = sortedKeys[idx+1];
+                                    const nextId = `${draggedKey.trackId}::${next.id}`;
+                                    if (!draggedSet.has(nextId)) {
+                                        if (!neighbors.has(nextId)) {
+                                            neighbors.set(nextId, {
+                                                trackId: draggedKey.trackId,
+                                                keyId: next.id,
+                                                frame: next.frame,
+                                                startLeftTan: next.leftTangent ? {...next.leftTangent} : undefined
+                                            });
+                                        }
+                                        neighbors.get(nextId)!.leftReferenceKeyId = draggedKey.keyId;
+                                    }
+                                }
                             });
                             
                             // If soft selection enabled, capture initial states of ALL neighbors on involved tracks
@@ -521,6 +708,7 @@ export const useGraphInteraction = (
                             }
                             
                             draggedKeysRef.current = keysToDrag;
+                            draggedNeighborsRef.current = neighbors;
                             softSelectInitialStateRef.current = initialStates;
                             isDraggingRef.current = true;
                             snapshot();

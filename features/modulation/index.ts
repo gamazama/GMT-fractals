@@ -100,6 +100,9 @@ export const ModulationFeature: FeatureDefinition = {
             return { selectedRuleId: id };
         }
     },
-    // We don't expose params to UI auto-generation as this needs a custom editor (Spectrum/List)
-    params: {} 
+    params: {
+        // Expose to DDFS for persistence and URL shortening
+        rules: { type: 'complex', default: [], label: 'Rules', shortId: 'rl', group: 'data', hidden: true, noReset: true },
+        selectedRuleId: { type: 'complex', default: null, label: 'Selection', shortId: 'sr', group: 'data', hidden: true, noReset: true }
+    }
 };

@@ -166,8 +166,8 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
     };
 
     return (
-        <div className={`flex flex-col h-full bg-[#080808] ${className}`} data-help-id="panel.engine">
-            <div className="px-3 py-2 bg-black/60 border-b border-white/10 flex items-center justify-between">
+        <div className={`flex flex-col h-full bg-[#080808] min-h-0 overflow-hidden ${className}`} data-help-id="panel.engine">
+            <div className="px-3 py-2 bg-black/60 border-b border-white/10 flex items-center justify-between shrink-0">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Engine Configuration</span>
                 <div className="w-32">
                     <Dropdown 
@@ -184,8 +184,8 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scroll p-0">
-                <div className="flex gap-2 items-center px-3 py-2 bg-blue-900/10 border-b border-white/5 mb-1">
+            <div className="flex-1 overflow-y-auto custom-scroll p-0 min-h-0">
+                <div className="flex gap-2 items-center px-3 py-2 bg-blue-900/10 border-b border-white/5 mb-1 shrink-0">
                     <div className="text-blue-400"><InfoIcon /></div>
                     <p className="text-[9px] text-blue-200/80 leading-tight">
                         <span className="text-green-400">●</span> Compiled &nbsp; 
@@ -234,7 +234,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
                 </div>
             </div>
 
-            <div className="px-3 py-2 bg-[#1a1a1a] border-t border-white/10 flex items-center justify-between min-h-[40px]">
+            <div className="px-3 py-2 bg-[#1a1a1a] border-t border-white/10 flex items-center justify-between min-h-[40px] shrink-0 z-10">
                 {Object.keys(pendingChanges).length > 0 ? (
                     <>
                         <div className="flex items-center gap-2 text-amber-500 text-[10px] font-bold uppercase tracking-wider animate-pulse">

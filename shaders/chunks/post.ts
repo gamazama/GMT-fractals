@@ -21,8 +21,8 @@ vec3 applyPostProcessing(vec3 col, float d, vec3 glow, float volumetric) {
     }
     
     // Distance Fog (Mix)
-    if (uEnvMapVisible > 0.5) {
-        // If "Show Background" is ON:
+    if (uEnvBackgroundStrength > 0.001) {
+        // If "Background Visibility" is ON:
         // Only apply fog to GEOMETRY (d < MAX_DIST).
         // Leave the background (infinity) untouched so the EnvMap shows through.
         if (d < 990.0) {

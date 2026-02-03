@@ -43,7 +43,7 @@ const halton = (index: number, base: number) => {
 
 export class FractalEngine {
     public materials: MaterialController;
-    private sceneCtrl: SceneController;
+    public sceneCtrl: SceneController;
     private pickingCtrl: PickingController;
     private uniformManager: UniformManager;
     private configManager: ConfigManager;
@@ -86,6 +86,7 @@ export class FractalEngine {
     private _isCompiling: boolean = false; 
     private compileTimer: any = null;
     private _pendingTeleport: CameraState | null = null;
+    private _totalFrames: number = 0; // Master Frame Counter for Dithering
     
     private lastRenderState = {
         pos: new THREE.Vector3(),
@@ -154,6 +155,10 @@ export class FractalEngine {
         this.pickingCtrl = new PickingController(this.materials, this.sceneCtrl, this.virtualSpace);
         this.pipeline = new RenderPipeline();
         
+        // Push initial quality state (detected mobile/desktop) to pipeline immediately
+        // This ensures the first resize/initTargets call uses the correct buffer type (HalfFloat vs Float32)
+        this.pipeline.updateQuality(initialConfig.quality as QualityState);
+
         this.uniformManager = new UniformManager(this.materials.mainUniforms, this.virtualSpace, this.pipeline);
 
         this.materials.setGradient([
@@ -272,6 +277,9 @@ export class FractalEngine {
         this.dirty = true; 
         this.markInteraction(); // Any reset implies an interaction
         this.pipeline?.resetAccumulation(); 
+        
+        // Reset Blue Noise Seed / Frame Count on major changes? 
+        // No, keep it running for temporal stability, just reset accumulation buffer.
     }
     public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); this.resetAccumulation(); }
     
@@ -430,6 +438,10 @@ export class FractalEngine {
         
         if (isInteracting) this.markInteraction();
 
+        // Increment Global Frame Counter for Dithering
+        this._totalFrames++;
+        this.mainUniforms[Uniforms.FrameCount].value = this._totalFrames;
+
         if (this.renderer && this.state.isBucketRendering) {
             bucketRenderer.update(this.renderer, this.state.bucketConfig);
         }
@@ -586,8 +598,8 @@ export class FractalEngine {
         // WebGL reads pixels from bottom-up, Canvas expects top-down
         for (let y = 0; y < h; y++) {
             const srcStart = y * stride;
-            const destStart = (h - 1 - y) * stride;
-            imageData.data.set(buffer.subarray(srcStart, srcStart + stride), destStart);
+            const destRowStart = (h - 1 - y) * stride;
+            imageData.data.set(buffer.subarray(srcStart, srcStart + stride), destRowStart);
         }
         
         ctx.putImageData(imageData, 0, 0);

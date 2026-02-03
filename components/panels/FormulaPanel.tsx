@@ -231,7 +231,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
 
   return (
     <div className="animate-fade-in -mx-4 -mt-4 min-h-full" onContextMenu={handlePanelContextMenu}>
-       <div className="bg-gray-800/20 border-b border-white/5 p-4 mb-0" data-help-id="formula.active">
+       <div className="bg-gray-800/20 border-b border-white/5 p-4 mb-2" data-help-id="formula.active">
            <div className="flex justify-between items-baseline mb-1">
                 <label className="text-[10px] text-gray-500 uppercase font-bold">Active Formula</label>
                 {loadTime && <span className="text-[9px] text-gray-500 animate-fade-in">{loadTime}</span>}
@@ -240,28 +240,25 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
        </div>
        
        <div className="flex flex-col" data-help-id={`panel.formula formula.${state.formula?.toLowerCase() || 'mandelbulb'}`}>
-            <div className="t-section-header" data-help-id="panel.formula">
-                <h3 className="t-section-title cursor-pointer hover:text-gray-300 transition-colors" title="Right-click panel for Randomization">Parameters</h3>
-            </div>
             <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1} onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })} highlight defaultValue={32} customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }} trackId="coreMath.iterations" liveValue={state.liveModulations['coreMath.iterations']} />
             <>{params.map(p => renderSlider(p))}</>
        </div>
        
-       <div className="mt-2 pt-1 border-t border-white/5" data-help-id="formula.transform">
-            <div className="bg-gray-800/10 p-1">
+       <div className="border-t border-white/5 mt-2 pt-2" data-help-id="formula.transform">
+            <div className="bg-gray-800/10">
                 <AutoFeaturePanel featureId="geometry" groupFilter="transform" />
             </div>
        </div>
 
-       <div className="border-t border-white/5 mt-2 pt-1" data-help-id="julia.mode">
-           <div className="bg-gray-800/10 p-1">
+       <div className="border-t border-white/5" data-help-id="julia.mode">
+           <div className="bg-gray-800/10">
               <AutoFeaturePanel featureId="geometry" groupFilter="julia" />
               <AutoFeaturePanel featureId="geometry" groupFilter="julia_params" />
            </div>
        </div>
        
-       <div className="border-t border-white/5 mt-2 pt-1" data-help-id="hybrid.mode">
-           <div className="bg-gray-800/10 p-1">
+       <div className="border-t border-white/5" data-help-id="hybrid.mode">
+           <div className="bg-gray-800/10">
               <AutoFeaturePanel featureId="geometry" groupFilter="hybrid" />
            </div>
        </div>

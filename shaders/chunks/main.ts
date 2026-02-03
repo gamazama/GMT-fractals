@@ -40,14 +40,16 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset) {
     
     getCameraRay(uvCoord, uExtraSeed + seedOffset, ro, rd, stochasticSeed);
     
-    // Background Logic
+    // Background Logic (Direct Mode Miss)
     vec3 bgCol = vec3(0.0);
     vec3 safeFog = InverseACESFilm(uFogColor);
     
-    if (uEnvMapVisible > 0.5) {
+    if (uEnvBackgroundStrength > 0.001) {
         vec3 env = GetEnvMap(rd, 0.0) * uEnvBackgroundStrength; 
         bgCol = mix(env, safeFog, clamp(uFogIntensity, 0.0, 1.0));
     } else {
+        // If Background Visibility is 0, we just show fog color (usually black)
+        // We mix with a tiny bit of fog color based on Y to prevent total pitch black banding
         bgCol = mix(safeFog + vec3(0.01), safeFog, abs(rd.y));
     }
     
@@ -89,5 +91,3 @@ void main() {
 }
 `;
 };
-
-export const FRAGMENT_MAIN = getFragmentMainGLSL(false); // Legacy export

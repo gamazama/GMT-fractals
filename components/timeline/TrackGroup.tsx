@@ -43,7 +43,8 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
                 style={{ height: 24 }}
             >
                 <div 
-                    className="sticky left-0 z-10 w-[220px] bg-[#1a1a1a] border-r border-white/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-gray-700 select-none" 
+                    // Increase Z-Index to 30 to match TrackRow sticky header, ensuring it sits above scrolling keyframes
+                    className="sticky left-0 z-30 w-[220px] bg-[#1a1a1a] border-r border-white/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-gray-700 select-none" 
                     onClick={(e) => { e.stopPropagation(); onToggle(groupName, e.altKey); }}
                     onMouseDown={(e) => e.stopPropagation()}
                 >

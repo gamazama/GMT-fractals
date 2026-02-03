@@ -41,7 +41,7 @@ export const analyzeHistogram = (data: Float32Array | null, bounds?: { min: numb
     }
 
     // Bucketize
-    const bucketCount = 100;
+    const bucketCount = 128; // Increased resolution for better fit
     const buckets = new Array(bucketCount).fill(0);
     const r = max - min;
     const safeR = Math.max(r, 0.000001);
@@ -65,72 +65,79 @@ export const analyzeHistogram = (data: Float32Array | null, bounds?: { min: numb
     return { buckets: normalizedBuckets, min, max };
 };
 
-// Calculates ideal range start/end based on histogram buckets
+// Calculates ideal range start/end using CDF and Void Seeking
 export const calculateSmartLevels = (buckets: number[], min: number, max: number): { start: number, end: number } | null => {
-    if (!buckets || buckets.length === 0) return null;
+    if (!buckets || buckets.length < 10) return null;
     
-    // "Smart" Auto Level: 
-    // 1. Ignore bucket 0 and bucket 99 (The "Sky" and "Core" extremes)
-    //    These often contain massive spikes that skew the auto-fit.
-    // 2. Disregard the bottom 5% of noise floor.
+    const len = buckets.length;
     
-    // Create view of inner buckets for peak detection
-    const innerStart = 1;
-    const innerEnd = buckets.length - 1;
-    let peak = 0;
-    
-    for(let i=innerStart; i<innerEnd; i++) {
-        if (buckets[i] > peak) peak = buckets[i];
-    }
-    
-    // Fallback: If inner data is empty, look at whole thing
-    if (peak === 0) {
-        peak = Math.max(...buckets);
-    }
+    // 1. FILTERING
+    // Ignore the very edges (0 and len-1) for mass calculation, as they often contain 
+    // "Sky" (0.0) or "Core" (max) accumulation spikes that skew the distribution.
+    const cleanBuckets = buckets.map((b, i) => (i === 0 || i === len - 1) ? 0 : b);
 
-    const threshold = peak * 0.05; // 5% threshold (Lowered from 20% to catch fine detail)
+    // 2. MASS CALCULATION (Cumulative Distribution)
+    let totalMass = 0;
+    cleanBuckets.forEach(b => totalMass += b);
+    
+    // If image is mostly empty/flat, fallback to full range
+    if (totalMass < 0.01) return { start: min, end: max };
 
-    let firstIdx = -1;
-    let lastIdx = -1;
+    // 3. PERCENTILE BOUNDS
+    // We look for the range containing the middle 96% of the visual "stuff".
+    // This effectively trims outlier blips (the bottom 2% and top 2%).
+    const lowCutoff = totalMass * 0.02;
+    const highCutoff = totalMass * 0.98;
 
-    // Scan from left
-    for(let i=0; i<buckets.length; i++) {
-        if (buckets[i] > threshold) {
-            firstIdx = i;
+    let accumulated = 0;
+    let startIdx = 0;
+    let endIdx = len - 1;
+    let foundStart = false;
+
+    for(let i = 0; i < len; i++) {
+        accumulated += cleanBuckets[i];
+        if (!foundStart && accumulated >= lowCutoff) {
+            startIdx = i;
+            foundStart = true;
+        }
+        if (accumulated >= highCutoff) {
+            endIdx = i;
             break;
         }
     }
+
+    // 4. VOID SEEKING (Expansion)
+    // The percentile cut might slice through a slope. We want to expand outwards
+    // until we hit a "Void" (near-zero value) to encompass the full feature.
     
-    // Scan from right
-    for(let i=buckets.length-1; i>=0; i--) {
-        if (buckets[i] > threshold) {
-            lastIdx = i;
-            break;
-        }
-    }
-    
-    // Fallback: If data is very sparse or flat (no clear peak), find absolute non-zero boundaries
-    if (firstIdx === -1) {
-         firstIdx = buckets.findIndex(v => v > 0);
-         lastIdx = buckets.length - 1;
-         while(lastIdx > firstIdx && buckets[lastIdx] === 0) lastIdx--;
+    const NOISE_FLOOR = 0.05; // Visual threshold to consider "empty"
+
+    // Expand Left
+    // Keep walking left as long as we have significant data AND haven't hit the edge
+    while(startIdx > 1 && buckets[startIdx - 1] > NOISE_FLOOR) {
+        // Safety: Don't expand if we encounter a massive spike (likely a separate feature or background)
+        if (buckets[startIdx - 1] > buckets[startIdx] * 2.0) break; 
+        startIdx--;
     }
 
-    if (firstIdx === -1) return null;
+    // Expand Right
+    while(endIdx < len - 2 && buckets[endIdx + 1] > NOISE_FLOOR) {
+        if (buckets[endIdx + 1] > buckets[endIdx] * 2.0) break;
+        endIdx++;
+    }
+
+    // 5. MAPPING
+    const step = (max - min) / len;
     
-    const w = 1.0 / buckets.length;
+    let valStart = min + startIdx * step;
+    let valEnd = min + endIdx * step;
     
-    // Clamp to inner if we detected valid inner data, preventing snapping to 0.0/1.0 unless necessary
-    // This keeps the handles visible
-    const pctMin = firstIdx * w;
-    const pctMax = (lastIdx + 1) * w;
+    // Add small padding (5%) for aesthetics, unless we hit the hard edges
+    const range = valEnd - valStart;
+    const pad = range * 0.05;
     
-    const span = max - min;
-    const valMin = min + pctMin * span;
-    const valMax = min + pctMax * span;
-    
-    // Add 10% padding to let it breathe, but clamp to 0-1 if that's the view range
-    const pad = (valMax - valMin) * 0.1;
-    
-    return { start: valMin - pad, end: valMax + pad };
+    valStart = Math.max(min, valStart - pad);
+    valEnd = Math.min(max, valEnd + pad);
+
+    return { start: valStart, end: valEnd };
 };

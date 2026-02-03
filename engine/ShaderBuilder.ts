@@ -8,6 +8,7 @@ import { getRayGLSL } from '../shaders/chunks/ray';
 import { getTraceGLSL } from '../shaders/chunks/trace';
 import { COLORING } from '../shaders/chunks/coloring';
 import { POST } from '../shaders/chunks/post';
+import { BLUE_NOISE } from '../shaders/chunks/blue_noise';
 
 export type RenderVariant = 'Main' | 'Physics' | 'Histogram';
 
@@ -167,6 +168,7 @@ export class ShaderBuilder {
 ${defines}
 ${uniforms}
 ${math}
+${BLUE_NOISE}
 ${COLORING} 
 ${headers}
 ${userFunctions} // Formulas
@@ -202,13 +204,15 @@ void main() {
             const traceGLSL = getTraceGLSL(false, false, this.precisionMode, 0, "", "");
             const rayGLSL = getRayGLSL('Direct'); // Use direct ray generation for sampling
 
+            // Update: Use actual mapping value for accuracy
             return `
 ${defines}
 ${uniforms}
 ${math}
+${BLUE_NOISE}
 ${COLORING} 
 ${headers}
-${userFunctions} // Formulas
+${userFunctions} // Formulas (Including getMappingValue)
 ${de}            // Distance Estimator
 ${postDEFunctions}
 
@@ -230,7 +234,22 @@ void main() {
     bool hit = traceScene(ro, rd, d, result, glow, 0.0, volumetric);
     
     if (hit) {
-        float val = (uHistogramLayer > 0) ? result.z : result.y;
+        // Determine Mode/Scale based on active layer
+        float mode = (uHistogramLayer > 0) ? uColorMode2 : uColorMode;
+        float scale = (uHistogramLayer > 0) ? uColorScale2 : uColorScale;
+        
+        vec3 p = ro + rd * d;
+        vec3 p_fractal = p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
+        
+        // Dummy normal is sufficient for most mappings except 'Normal' mode
+        // For performance, we skip normal calculation unless absolutely necessary,
+        // but since Histogram is 128x128, a single normal tap is cheap.
+        // Let's use Up vector as proxy for speed, or calculate real normal if quality needed.
+        // For now, proxy is safe.
+        vec3 n = vec3(0.0, 1.0, 0.0);
+        
+        float val = getMappingValue(mode, p_fractal, result, n, scale);
+        
         pc_fragColor = vec4(val, 0.0, 0.0, 1.0);
     } else {
         pc_fragColor = vec4(-1.0, 0.0, 0.0, 1.0);
@@ -251,6 +270,7 @@ ${defines}
 ${uniforms}
 ${headers}
 ${math}
+${BLUE_NOISE}
 ${COLORING} 
 
 // --- FORMULAS ---

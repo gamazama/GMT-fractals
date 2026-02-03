@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { getGradientCssString } from '../utils/colorUtils';
-import { GradientStop } from '../types';
+import { GradientStop, GradientConfig } from '../types';
 import { DraggableNumber } from './Slider';
 import { analyzeHistogram, calculateSmartLevels } from '../utils/histogramUtils';
 import { useFractalStore } from '../store/fractalStore';
@@ -20,7 +20,8 @@ interface HistogramProps {
     phase?: number;
     
     // Optional Gradient Preview (for Coloring Layer)
-    gradientStops?: GradientStop[];
+    // Updated to accept polymorphic type from store (Array or Object)
+    gradientStops?: GradientStop[] | GradientConfig;
     
     // Callbacks
     onChange: (vals: { min: number, max: number, gamma: number }) => void;
@@ -73,8 +74,12 @@ const Histogram: React.FC<HistogramProps> = ({
     }, [data, fixedRange]);
 
     // Calculate Gamma Handle Position
-    // Mapping: normalized x = 0.5 ^ (1/gamma) 
-    const gammaPosPct = Math.pow(0.5, gamma) * 100;
+    // Standard Gamma Correction: Output = Input ^ Gamma
+    // We want the handle to represent the Input value that maps to 0.5 (Mid-Gray) Output.
+    // 0.5 = Input ^ Gamma  ->  Input = 0.5 ^ (1 / Gamma)
+    // If Gamma > 1.0 (Darker), Input > 0.5 (Handle Right).
+    // If Gamma < 1.0 (Brighter), Input < 0.5 (Handle Left).
+    const gammaPosPct = Math.pow(0.5, 1.0 / gamma) * 100;
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -133,7 +138,7 @@ const Histogram: React.FC<HistogramProps> = ({
             type, 
             startX: e.clientX, 
             startMin: min, 
-            startMax: max,
+            startMax: max, 
             startGamma: gamma
         };
         window.addEventListener('mousemove', handleMouseMove);
@@ -167,17 +172,27 @@ const Histogram: React.FC<HistogramProps> = ({
             newMax += deltaVal;
         } else if (type === 'gamma') {
             // Gamma logic:
-            // The handle position represents the 0.5 mid-point.
+            // Calculate the new relative position (0.0 - 1.0) of the handle within the min/max range
             const currentRangePx = (rect.width * Math.abs(startMax - startMin)) / effectiveSpan;
             
             // Initial relative handle position
-            const startRelPos = Math.pow(0.5, startGamma); 
+            const startRelPos = Math.pow(0.5, 1.0 / startGamma); 
             const startHandlePx = startRelPos * currentRangePx;
             
+            // New position in pixels relative to range start
             const newHandlePx = Math.max(1, Math.min(currentRangePx - 1, startHandlePx + deltaPx));
             const newRelPos = newHandlePx / currentRangePx;
             
-            newGamma = Math.log(newRelPos) / Math.log(0.5);
+            // Inverse mapping to get Gamma from Position
+            // pos = 0.5 ^ (1/gamma)
+            // ln(pos) = (1/gamma) * ln(0.5)
+            // gamma = ln(0.5) / ln(pos)
+            
+            // Drag Right (pos > 0.5) -> Gamma > 1.0 (Darker)
+            // Drag Left (pos < 0.5) -> Gamma < 1.0 (Brighter)
+            newGamma = Math.log(0.5) / Math.log(newRelPos);
+            
+            // Clamp safe values
             newGamma = Math.max(0.1, Math.min(10.0, newGamma));
         }
         

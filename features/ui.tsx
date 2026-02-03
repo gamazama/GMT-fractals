@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { componentRegistry, FeatureComponentProps } from '../components/registry/ComponentRegistry';
 import { useFractalStore } from '../store/fractalStore';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
@@ -40,6 +40,18 @@ const ConnectedColoringHistogram: React.FC<FeatureComponentProps> = (props) => {
     const refresh = useFractalStore(s => s.refreshHistogram);
     const liveModulations = useFractalStore(s => s.liveModulations);
     
+    // Access full slice state to get colorSpace
+    // sliceState is passed from AutoFeaturePanel
+    
+    // Activation Logic
+    const register = useFractalStore(s => s.registerHistogram);
+    const unregister = useFractalStore(s => s.unregisterHistogram);
+
+    useEffect(() => {
+        register();
+        return () => unregister();
+    }, [register, unregister]);
+    
     const handleChange = (partial: any) => {
         const setAction = useFractalStore.getState().setColoring;
         if (setAction) setAction(partial);
@@ -57,6 +69,19 @@ const ConnectedColoringHistogram: React.FC<FeatureComponentProps> = (props) => {
             liveModulations={liveModulations}
         />
     );
+};
+
+// Wrapper for Grading Histogram to handle registration
+const ConnectedGradingHistogram: React.FC<FeatureComponentProps> = (props) => {
+    const register = useFractalStore(s => s.registerSceneHistogram);
+    const unregister = useFractalStore(s => s.unregisterSceneHistogram);
+
+    useEffect(() => {
+        register();
+        return () => unregister();
+    }, [register, unregister]);
+
+    return <ColorGradingHistogram {...props} />;
 };
 
 // --- 5. REGISTER EVERYTHING ---
@@ -88,7 +113,7 @@ export const registerUI = () => {
     componentRegistry.register('audio-link-controls', AudioLinkControls);
     
     // Scene Widgets
-    componentRegistry.register('scene-histogram', ColorGradingHistogram);
+    componentRegistry.register('scene-histogram', ConnectedGradingHistogram);
     componentRegistry.register('optics-controls', OpticsControls);
     componentRegistry.register('navigation-controls', NavigationControls);
     

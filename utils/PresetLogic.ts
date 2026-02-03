@@ -171,6 +171,15 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
                 }
             }
 
+            // Migration: Materials envMapVisible -> envBackgroundStrength
+            if (feat.id === 'materials' && incomingData) {
+                if (incomingData.envMapVisible !== undefined && incomingData.envBackgroundStrength === undefined) {
+                    // Convert boolean visibility to float strength (0.0 or 1.0)
+                    // Only apply if the new param is missing to avoid overwriting newer presets
+                    nextState.envBackgroundStrength = incomingData.envMapVisible ? 1.0 : 0.0;
+                }
+            }
+
             setter(nextState);
         }
     });

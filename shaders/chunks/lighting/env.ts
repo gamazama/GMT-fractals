@@ -1,4 +1,5 @@
 
+
 export const LIGHTING_ENV = `
 // ------------------------------------------------------------------
 // ENVIRONMENT MAP
@@ -22,6 +23,9 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
         vec2 uv = vec2(atan(dir.z, dir.x) * 0.1591549 + 0.5, 1.0 - acos(dir.y) * 0.3183098);
         float bias = roughness * 6.0; 
         col = texture2D(uEnvMapTexture, uv, bias).rgb;
+        
+        // Apply Color Profile (Linear/ACES)
+        col = applyTextureProfile(col, uEnvMapColorSpace);
     } 
     else {
         // Path 3: Procedural Sky (Explicit Else block)

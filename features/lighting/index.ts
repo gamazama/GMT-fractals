@@ -99,12 +99,12 @@ export const LightingFeature: FeatureDefinition = {
             group: 'engine_settings',
             parentId: 'ptEnabled',
             ui: 'numeric',
-            description: 'Recursion depth. Higher = Brighter interiors, Slower render.',
-            onUpdate: 'compile'
+            description: 'Recursion depth. Higher = Brighter interiors, Slower render.'
+            // Removed onUpdate: 'compile' to allow runtime update
         },
         ptGIStrength: { 
             type: 'float', default: 1.0, label: 'GI Strength', shortId: 'pg', uniform: 'uPTGIStrength', 
-            min: 0.0, max: 2.0, step: 0.01, 
+            min: 0.0, max: 5.0, step: 0.01, 
             group: 'engine_settings',
             parentId: 'ptEnabled',
             description: 'Artistic boost for bounced light intensity.'

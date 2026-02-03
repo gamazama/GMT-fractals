@@ -2,6 +2,7 @@
 export const Uniforms = {
     // Core
     Time: 'uTime',
+    FrameCount: 'uFrameCount',
     Resolution: 'uResolution',
     
     // Precision & Camera
@@ -31,6 +32,7 @@ export const Uniforms = {
     BlendFactor: 'uBlendFactor',
     ExtraSeed: 'uExtraSeed',
     Jitter: 'uJitter',
+    BlueNoiseTexture: 'uBlueNoiseTexture',
 
     // Modular
     ModularParams: 'uModularParams',

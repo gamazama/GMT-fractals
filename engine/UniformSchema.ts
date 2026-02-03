@@ -23,6 +23,7 @@ export interface UniformDefinition {
 const BASE_SCHEMA: UniformDefinition[] = [
     // Core
     { name: Uniforms.Time, type: 'float', default: 0 },
+    { name: Uniforms.FrameCount, type: 'int', default: 0 },
     { name: Uniforms.Resolution, type: 'vec2', default: new THREE.Vector2(100, 100) },
     
     // Precision & Scale
@@ -51,6 +52,7 @@ const BASE_SCHEMA: UniformDefinition[] = [
     { name: Uniforms.BlendFactor, type: 'float', default: 1.0 },
     { name: Uniforms.ExtraSeed, type: 'float', default: 0.0 },
     { name: Uniforms.Jitter, type: 'vec2', default: new THREE.Vector2(0,0) },
+    { name: Uniforms.BlueNoiseTexture, type: 'sampler2D', default: null },
 
     // Modular
     { name: Uniforms.ModularParams, type: 'float', arraySize: MAX_MODULAR_PARAMS, default: new Float32Array(MAX_MODULAR_PARAMS) },

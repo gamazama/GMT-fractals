@@ -14,6 +14,14 @@ export interface GradientStop {
   interpolation?: 'linear' | 'step' | 'smooth' | 'cubic';
 }
 
+export type ColorSpaceMode = 'srgb' | 'linear' | 'aces_inverse';
+
+// The new Rich Object container
+export interface GradientConfig {
+    stops: GradientStop[];
+    colorSpace: ColorSpaceMode;
+}
+
 export interface LightParams {
     position: { x: number, y: number, z: number };
     color: string;

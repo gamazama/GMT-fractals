@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { featureRegistry } from '../engine/FeatureSystem';
+import { registry } from '../engine/FractalRegistry'; // Import FractalRegistry
 import { ChevronRight } from './Icons';
 import { MAX_LIGHTS } from '../data/constants';
 import { useFractalStore } from '../store/fractalStore';
@@ -47,6 +48,9 @@ const MenuPortal = ({
     const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const [layout, setLayout] = useState({ x, y, maxHeight: 300, opacity: 0 });
+
+    // Access active formula to resolve specific param names
+    const activeFormula = useFractalStore(s => s.formula);
 
     const standardFeatures = featureRegistry.getAll()
         .filter(f => !EXCLUDED_IDS.has(f.id) && (Object.values(f.params).some(p => p.type === 'float' || p.type === 'int') || f.id === 'lighting'))
@@ -140,7 +144,28 @@ const MenuPortal = ({
                 
                 return false;
             })
-            .map(([key, config]) => ({ key: `${catId}.${key}`, label: config.label, desc: config.description }));
+            .map(([key, config]) => {
+                // CORE MATH SPECIAL HANDLING
+                // Rename "Param A" to "P-A: Power" based on formula definition
+                let label = config.label;
+                
+                if (catId === 'coreMath' && activeFormula) {
+                    const formulaDef = registry.get(activeFormula);
+                    if (formulaDef) {
+                        const pDef = formulaDef.parameters.find(p => p?.id === key);
+                        if (pDef) {
+                            const shortKey = key.replace('param', 'P-'); // paramA -> P-A
+                            label = `${shortKey}: ${pDef.label}`;
+                        } else if (key.startsWith('param')) {
+                            // If param exists in coreMath but not in formula def (unused), maybe hide or gray out?
+                            // For now, keep generic.
+                            label = `(${config.label})`; 
+                        }
+                    }
+                }
+                
+                return { key: `${catId}.${key}`, label, desc: config.description };
+            });
 
         // Merge and render
         return [...virtuals.map(v => ({ key: `${catId}.${v.key}`, label: v.label, desc: undefined })), ...standardParams].map(p => (
@@ -201,6 +226,9 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
     const [isOpen, setIsOpen] = useState(false);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const [coords, setCoords] = useState({ x: 0, y: 0 });
+    
+    // Subscribe to formula to update label when formula changes
+    const activeFormula = useFractalStore(s => s.formula);
 
     const handleClick = () => {
         if (buttonRef.current) {
@@ -240,7 +268,20 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
              if (feat) {
                  const param = feat.params[pid];
                  if (param) {
-                     label = `${feat.name}: ${param.label}`;
+                     // CORE MATH SPECIAL HANDLING FOR BUTTON LABEL
+                     if (fid === 'coreMath' && activeFormula) {
+                         const formulaDef = registry.get(activeFormula);
+                         const pDef = formulaDef?.parameters.find(p => p?.id === pid);
+                         if (pDef) {
+                             // Display "P-A: Power" style
+                             const shortKey = pid.replace('param', 'P-'); 
+                             label = `${shortKey}: ${pDef.label}`;
+                         } else {
+                             label = param.label; // Fallback to "Param A" if not found in formula
+                         }
+                     } else {
+                         label = `${feat.name}: ${param.label}`;
+                     }
                  } else {
                      // 3. Fallback: Prettify camelCase (e.g. paramA -> Param A)
                      label = `${feat.name}: ${pid}`;

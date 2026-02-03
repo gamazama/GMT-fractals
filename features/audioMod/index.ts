@@ -36,6 +36,7 @@ export const AudioFeature: FeatureDefinition = {
     },
     params: {
         isEnabled: { type: 'boolean', default: false, label: 'Enable Audio Engine', shortId: 'en', group: 'system', noReset: true },
+        smoothing: { type: 'float', default: 0.8, label: 'FFT Smoothing', shortId: 'sm', group: 'system', noReset: true, min: 0, max: 0.99, step: 0.01 },
         threshold: { type: 'float', default: 0.1, label: 'Gate Threshold', shortId: 'gt', group: 'hidden', hidden: true, noReset: true },
         agcEnabled: { type: 'boolean', default: false, label: 'AGC', shortId: 'ag', group: 'hidden', hidden: true, noReset: true },
         attack: { type: 'float', default: 0.1, label: 'Global Attack', shortId: 'ga', group: 'hidden', hidden: true, noReset: true },

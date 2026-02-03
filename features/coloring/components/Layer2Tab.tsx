@@ -8,6 +8,7 @@ export const Layer2Tab = ({ state, actions }: { state: FractalState, actions: Fr
     const setHistogramLayer = useFractalStore(s => s.setHistogramLayer);
     
     const coloring = (state as any).coloring;
+    const mode2 = coloring?.mode2;
 
     useEffect(() => {
         setHistogramLayer(1);
@@ -27,6 +28,13 @@ export const Layer2Tab = ({ state, actions }: { state: FractalState, actions: Fr
              <div className="mb-2">
                  <AutoFeaturePanel featureId="coloring" groupFilter="layer2_hist" />
              </div>
+             
+             {/* 4.1 Extra: Escape Radius (Visible only if relevant to Layer 2 Mode) */}
+             {(mode2 === 6.0 || mode2 === 8.0) && (
+                 <div className="mb-1">
+                     <AutoFeaturePanel featureId="coloring" whitelistParams={['escape']} />
+                 </div>
+             )}
             
             {/* 4. Controls (Twist, Blend Mode) */}
             <AutoFeaturePanel featureId="coloring" groupFilter="layer2_bottom" />

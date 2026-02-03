@@ -35,6 +35,8 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
         const scene = new THREE.Scene();
         const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
         
+        // FIX: Use FloatType instead of HalfFloatType. 
+        // readRenderTargetPixels behavior with HalfFloat is inconsistent across browsers/drivers.
         const renderTarget = new THREE.WebGLRenderTarget(128, 128, {
             minFilter: THREE.NearestFilter,
             magFilter: THREE.NearestFilter,
@@ -50,21 +52,31 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
         if (source === 'geometry') {
              material = engine.histogramMaterial;
         } else {
+             // GLSL 3.0 Shader for Color Probe
+             // Three.js automatically provides 'position' (vec3) and 'uv' (vec2) attributes.
              material = new THREE.ShaderMaterial({
                 uniforms: { tMap: { value: null } },
                 vertexShader: `
-                    varying vec2 vUv;
-                    void main() { vUv = uv; gl_Position = vec4(position, 1.0); }
+                    out vec2 vUv;
+                    void main() { 
+                        vUv = uv; 
+                        gl_Position = vec4(position, 1.0); 
+                    }
                 `,
                 fragmentShader: `
+                    precision highp float;
                     uniform sampler2D tMap;
-                    varying vec2 vUv;
+                    in vec2 vUv;
+                    layout(location = 0) out vec4 pc_fragColor;
                     void main() {
-                        vec4 c = texture2D(tMap, vUv);
+                        vec4 c = texture(tMap, vUv);
                         float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-                        gl_FragColor = vec4(l, 0.0, 0.0, 1.0);
+                        pc_fragColor = vec4(l, 0.0, 0.0, 1.0);
                     }
-                `
+                `,
+                glslVersion: THREE.GLSL3,
+                depthTest: false,
+                depthWrite: false
             });
         }
 
@@ -115,6 +127,9 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
                     const uniforms = engine.histogramUniforms;
                     engine.virtualSpace.updateShaderUniforms(activeCam.position, uniforms[Uniforms.SceneOffsetHigh].value, uniforms[Uniforms.SceneOffsetLow].value);
                     uniforms[Uniforms.CameraPosition].value.set(0, 0, 0);
+                    
+                    // Sync Resolution to ensure safe divide in shader
+                    uniforms[Uniforms.Resolution].value.set(128, 128);
 
                     res.scratchMatrix.makeRotationFromQuaternion(activeCam.quaternion);
                     const e = res.scratchMatrix.elements;
@@ -140,9 +155,13 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
                 gl.setRenderTarget(res.renderTarget);
                 gl.clear();
                 gl.render(res.scene, res.camera);
+                
+                // Read pixels into Float32Array. 
+                // Since we forced THREE.FloatType on the target, this should be reliable.
                 gl.readRenderTargetPixels(res.renderTarget, 0, 0, 128, 128, res.pixelBuffer);
                 gl.setRenderTarget(originalTarget);
                 
+                // Copy buffer to prevent mutation during next frame
                 onUpdate(new Float32Array(res.pixelBuffer));
             }
             

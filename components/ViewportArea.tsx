@@ -327,21 +327,24 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
                 {/* 3. DOM OVERLAYS (Webcam, Debug) */}
                 <DomOverlays />
                 
-                {/* Logic Probes */}
-                {!isCleanFeed && state.histogramData && (
+                {/* Logic Probes - Activated via Reference Counts */}
+                {/* PRIMARY HISTOGRAM (Gradient Editor) - Always Geometry Source */}
+                {!isCleanFeed && state.histogramActiveCount > 0 && (
                      <HistogramProbe 
                         onUpdate={(d) => state.setHistogramData(d)} 
                         autoUpdate={state.histogramAutoUpdate}
                         trigger={state.histogramTrigger}
-                        source={state.histogramLayer === 0 ? 'color' : 'geometry'} 
+                        source="geometry" 
                      />
                 )}
-                {!isCleanFeed && state.sceneHistogramData && (
+                
+                {/* SCENE HISTOGRAM (Color Grading) - Always Color Source */}
+                {!isCleanFeed && state.sceneHistogramActiveCount > 0 && (
                     <HistogramProbe
                         onUpdate={(d) => state.setSceneHistogramData(d)}
                         autoUpdate={true} 
                         trigger={state.sceneHistogramTrigger}
-                        source='color' 
+                        source="color" 
                     />
                 )}
 

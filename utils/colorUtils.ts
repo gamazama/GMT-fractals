@@ -1,5 +1,5 @@
 
-import { GradientStop } from '../types';
+import { GradientStop, GradientConfig, ColorSpaceMode } from '../types';
 import * as THREE from 'three';
 
 export const hexToRgb = (hex: string) => {
@@ -65,9 +65,28 @@ export const lerpRGB = (c1: {r:number, g:number, b:number}, c2: {r:number, g:num
   };
 };
 
-// Helper to generate CSS gradient string for the UI editor
-// Accepts an optional bias parameter to visualize how the shader distorts the gradient (Global View Gamma)
-export const getGradientCssString = (stops: GradientStop[], viewGamma: number = 1.0): string => {
+// Bias Helper: Maps t [0,1] such that input 'bias' maps to 0.5 output
+const applyBias = (t: number, bias: number) => {
+    if (Math.abs(bias - 0.5) < 0.001) return t;
+    const safeBias = Math.max(0.001, Math.min(0.999, bias));
+    const k = Math.log(0.5) / Math.log(safeBias);
+    return Math.pow(t, k);
+};
+
+export const getGradientCssString = (input: GradientStop[] | GradientConfig | undefined, viewGamma: number = 1.0): string => {
+  let stops: GradientStop[];
+
+  if (!input) return 'linear-gradient(90deg, #000 0%, #fff 100%)';
+  
+  if (Array.isArray(input)) {
+      stops = input;
+  } else if (input && Array.isArray((input as GradientConfig).stops)) {
+      stops = (input as GradientConfig).stops;
+  } else {
+      // Fallback for malformed data
+      return 'linear-gradient(90deg, #000 0%, #fff 100%)';
+  }
+
   if (!stops || stops.length === 0) return 'linear-gradient(90deg, #000 0%, #fff 100%)';
   
   const sorted = [...stops].sort((a, b) => a.position - b.position);
@@ -76,8 +95,6 @@ export const getGradientCssString = (stops: GradientStop[], viewGamma: number = 
   for (let i = 0; i < sorted.length; i++) {
       const s = sorted[i];
       
-      // Apply Global View Gamma to the position
-      // Shader Logic: t = pow(input, bias) -> Input = pow(t, 1/bias)
       let pos = Math.pow(s.position, 1.0 / viewGamma);
       pos = Math.max(0, Math.min(1, pos)) * 100;
       
@@ -89,24 +106,8 @@ export const getGradientCssString = (stops: GradientStop[], viewGamma: number = 
           const interpolation = s.interpolation || 'linear';
 
           if (interpolation === 'step') {
-               // Step interpolation with bias
-               // Bias 0.5 -> Step at 50%. Bias 0.25 -> Step later? No, check math below.
-               // Shader: t_biased = pow(t, log(bias)/log(0.5))
-               // Step happens when t_biased >= 0.5
-               // Threshold T = 0.5 ^ (log(0.5) / log(bias))
-               
-               let switchT = 0.5;
-               if (Math.abs(segmentBias - 0.5) > 0.001) {
-                   // If bias is 0.25 (handle left), switchT is ~0.707 (right)
-                   // If bias is 0.75 (handle right), switchT is ~0.18 (left)
-                   // This assumes 'bias' represents the handle position as a ratio of the segment
-                   switchT = Math.pow(0.5, Math.log(0.5) / Math.log(segmentBias));
-               }
-               
-               // Calculate absolute position of switch
+               let switchT = segmentBias; 
                const absSwitchPos = s.position + (next.position - s.position) * switchT;
-               
-               // Apply global view gamma
                let viewSwitchPos = Math.pow(absSwitchPos, 1.0 / viewGamma) * 100;
                viewSwitchPos = Math.max(0, Math.min(100, viewSwitchPos));
 
@@ -114,18 +115,10 @@ export const getGradientCssString = (stops: GradientStop[], viewGamma: number = 
                parts.push(`${next.color} ${viewSwitchPos.toFixed(2)}%`);
           } 
           else {
-              // Linear/Smooth/Cubic -> Use CSS Hint for Bias approximation
               if (Math.abs(segmentBias - 0.5) > 0.001) {
-                  // Hint position H such that color is 50/50 mix at H
-                  const tMid = Math.pow(0.5, Math.log(0.5) / Math.log(segmentBias));
-                  
-                  // Absolute position
-                  const absHintPos = s.position + (next.position - s.position) * tMid;
-                  
-                  // Apply global view gamma
+                  const absHintPos = s.position + (next.position - s.position) * segmentBias;
                   let viewHintPos = Math.pow(absHintPos, 1.0 / viewGamma) * 100;
                   viewHintPos = Math.max(0, Math.min(100, viewHintPos));
-                  
                   parts.push(`${viewHintPos.toFixed(2)}%`);
               }
           }
@@ -135,21 +128,39 @@ export const getGradientCssString = (stops: GradientStop[], viewGamma: number = 
   return `linear-gradient(90deg, ${parts.join(', ')})`;
 };
 
-// --- Texture Generation for Shader ---
+const sRGBToLinear = (c: number) => Math.pow(c / 255.0, 2.2) * 255.0;
+
+const inverseACES = (c: number) => {
+    const y = c / 255.0;
+    if (y >= 0.99) return 255.0;
+    const x = (Math.sqrt(-10127*y*y + 13702*y + 9) + 59*y - 3) / (502 - 486*y);
+    return Math.max(0, x) * 255.0;
+};
+
 // Generates a Uint8Array representing the gradient 256x1
-export const generateGradientTextureBuffer = (stops: GradientStop[]): Uint8Array => {
+// Polymorphic: Accepts legacy array OR new object
+export const generateGradientTextureBuffer = (input: GradientStop[] | GradientConfig): Uint8Array => {
   const width = 256;
   const data = new Uint8Array(width * 4);
   
-  // Safety check to prevent crash if stops is undefined
-  if (!stops || !Array.isArray(stops) || stops.length === 0) {
-      // Return a default black-to-white gradient
+  let stops: GradientStop[];
+  let colorSpace: ColorSpaceMode = 'srgb';
+
+  // Polymorphic Handling
+  if (Array.isArray(input)) {
+      stops = input;
+  } else if (input && Array.isArray(input.stops)) {
+      stops = input.stops;
+      colorSpace = input.colorSpace || 'srgb';
+  } else {
+      // Fallback
+      return data;
+  }
+  
+  if (stops.length === 0) {
       for (let i = 0; i < width; i++) {
         const v = Math.floor((i / 255) * 255);
-        data[i * 4] = v;
-        data[i * 4 + 1] = v;
-        data[i * 4 + 2] = v;
-        data[i * 4 + 3] = 255;
+        data[i * 4] = v; data[i * 4 + 1] = v; data[i * 4 + 2] = v; data[i * 4 + 3] = 255;
       }
       return data;
   }
@@ -157,38 +168,55 @@ export const generateGradientTextureBuffer = (stops: GradientStop[]): Uint8Array
   const sorted = [...stops].sort((a, b) => a.position - b.position);
 
   const getColorAt = (pos: number): {r:number, g:number, b:number} => {
-    if (pos <= sorted[0].position) return hexToRgb(sorted[0].color) || {r:0,g:0,b:0};
-    if (pos >= sorted[sorted.length-1].position) return hexToRgb(sorted[sorted.length-1].color) || {r:0,g:0,b:0};
+    let rawColor = {r:0, g:0, b:0};
+    
+    if (pos <= sorted[0].position) {
+        rawColor = hexToRgb(sorted[0].color) || {r:0,g:0,b:0};
+    } else if (pos >= sorted[sorted.length-1].position) {
+        rawColor = hexToRgb(sorted[sorted.length-1].color) || {r:0,g:0,b:0};
+    } else {
+        for (let i = 0; i < sorted.length - 1; i++) {
+            if (pos >= sorted[i].position && pos <= sorted[i+1].position) {
+                const s1 = sorted[i];
+                const s2 = sorted[i+1];
+                
+                let t = (pos - s1.position) / (s2.position - s1.position);
+                const bias = s1.bias ?? 0.5;
+                if (Math.abs(bias - 0.5) > 0.001) {
+                    t = applyBias(t, bias);
+                }
 
-    for (let i = 0; i < sorted.length - 1; i++) {
-      if (pos >= sorted[i].position && pos <= sorted[i+1].position) {
-        const s1 = sorted[i];
-        const s2 = sorted[i+1];
-        
-        // Calculate T (0 to 1) between stops
-        let t = (pos - s1.position) / (s2.position - s1.position);
-        
-        // Apply Bias
-        const bias = s1.bias ?? 0.5;
-        if (bias !== 0.5) {
-           // Simple bias function: pow(t, log(0.5) / log(bias))
-           const exponent = Math.log(bias) / Math.log(0.5);
-           t = Math.pow(t, exponent);
+                const mode = s1.interpolation || 'linear';
+                if (mode === 'step') {
+                    t = t < 0.5 ? 0 : 1; 
+                } else if (mode === 'smooth' || mode === 'cubic') {
+                    t = t * t * (3 - 2 * t);
+                }
+
+                const c1 = hexToRgb(s1.color) || {r:0,g:0,b:0};
+                const c2 = hexToRgb(s2.color) || {r:0,g:0,b:0};
+                rawColor = lerpRGB(c1, c2, t);
+                break;
+            }
         }
-
-        const mode = s1.interpolation || 'linear';
-        if (mode === 'step') {
-            t = t < 0.5 ? 0 : 1; 
-        } else if (mode === 'smooth' || mode === 'cubic') {
-            t = t * t * (3 - 2 * t);
-        }
-
-        const c1 = hexToRgb(s1.color) || {r:0,g:0,b:0};
-        const c2 = hexToRgb(s2.color) || {r:0,g:0,b:0};
-        return lerpRGB(c1, c2, t);
-      }
     }
-    return {r:0,g:0,b:0};
+    
+    // Apply Output Transform based on stored profile
+    if (colorSpace === 'linear') {
+        return {
+            r: sRGBToLinear(rawColor.r),
+            g: sRGBToLinear(rawColor.g),
+            b: sRGBToLinear(rawColor.b)
+        };
+    } else if (colorSpace === 'aces_inverse') {
+        return {
+            r: inverseACES(rawColor.r),
+            g: inverseACES(rawColor.g),
+            b: inverseACES(rawColor.b)
+        };
+    }
+    
+    return rawColor;
   };
 
   for (let i = 0; i < width; i++) {
@@ -197,7 +225,7 @@ export const generateGradientTextureBuffer = (stops: GradientStop[]): Uint8Array
     data[i * 4] = col.r;
     data[i * 4 + 1] = col.g;
     data[i * 4 + 2] = col.b;
-    data[i * 4 + 3] = 255; // Alpha
+    data[i * 4 + 3] = 255; 
   }
   
   return data;

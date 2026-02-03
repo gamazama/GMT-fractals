@@ -129,6 +129,21 @@ vec3 InverseACESFilm(vec3 x) {
     return (-B - D) / (2.0 * A);
 }
 
+// Applies Color Profile to Texture Lookup
+// 0=sRGB, 1=Linear, 2=ACES
+vec3 applyTextureProfile(vec3 col, float mode) {
+    if (mode < 0.5) {
+        // 0: sRGB -> Linear
+        return pow(max(col, vec3(0.0)), vec3(2.2));
+    } 
+    if (mode > 1.5) {
+        // 2: ACES Inverse -> Linear
+        return InverseACESFilm(col);
+    }
+    // 1: Linear (Pass-through)
+    return col;
+}
+
 void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR) {
     float r2 = dot(z,z); r2 = max(r2, 1.0e-9);
     float minR2 = max(minR * minR, 1.0e-9);

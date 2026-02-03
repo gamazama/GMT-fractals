@@ -11,6 +11,7 @@ export interface TexturingState {
     scaleY: number;
     textureScale: THREE.Vector2;
     offset: THREE.Vector2;
+    colorSpace: number; // 0=sRGB, 1=Linear, 2=ACES
 }
 
 export const TexturingFeature: FeatureDefinition = {
@@ -40,7 +41,22 @@ export const TexturingFeature: FeatureDefinition = {
                 wrapT: THREE.RepeatWrapping,
                 minFilter: THREE.LinearFilter,
                 magFilter: THREE.LinearFilter
+            },
+            // Explicit link to colorSpace param
+            linkedParams: {
+                colorSpace: 'colorSpace'
             }
+        },
+        // Hidden Param controlled by Image Input custom UI
+        colorSpace: {
+            type: 'float',
+            default: 0.0,
+            label: 'Color Profile',
+            shortId: 'cs',
+            uniform: 'uTextureColorSpace',
+            group: 'main',
+            hidden: true
+            // Removed noReset: true to ensure accumulation resets on change
         },
         mapU: {
             type: 'float',
@@ -119,5 +135,8 @@ export const TexturingFeature: FeatureDefinition = {
             min: -2.0, max: 2.0, step: 0.01,
             group: 'transform'
         }
+    },
+    shader: {
+        // applyTextureProfile moved to math.ts
     }
 };

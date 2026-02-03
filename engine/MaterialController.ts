@@ -5,12 +5,13 @@ import { createUniforms } from './UniformSchema';
 import { Uniforms, UniformName } from './UniformNames';
 import { updateModularUniforms } from '../utils/GraphCompiler';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
-import { GradientStop } from '../types';
+import { GradientStop, GradientConfig } from '../types';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
 import { generatePostProcessFrag } from '../shaders/chunks/post_process';
 import { FractalEvents } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
 import { LightingState } from '../features/lighting';
+import { createBlueNoiseTexture } from '../data/BlueNoiseData';
 
 const cloneUniforms = (src: { [key: string]: THREE.IUniform }) => {
     const clone: { [key: string]: THREE.IUniform } = {};
@@ -70,6 +71,11 @@ export class MaterialController {
     
     constructor(initialConfig: ShaderConfig) {
         const baseUniforms = createUniforms();
+        
+        // Initialize Blue Noise Texture
+        const blueNoiseTex = createBlueNoiseTexture();
+        baseUniforms[Uniforms.BlueNoiseTexture].value = blueNoiseTex;
+
         this.mainUniforms = cloneUniforms(baseUniforms);
         this.physicsUniforms = cloneUniforms(baseUniforms);
         this.histogramUniforms = cloneUniforms(baseUniforms);
@@ -364,7 +370,7 @@ export class MaterialController {
         });
     }
     
-    public setGradient(stops: GradientStop[], layer: 1 | 2 | 3) {
+    public setGradient(stops: GradientStop[] | GradientConfig, layer: 1 | 2 | 3) {
         const buffer = generateGradientTextureBuffer(stops);
         
         let name: string = 'uGradientTexture';

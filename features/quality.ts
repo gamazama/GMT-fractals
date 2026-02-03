@@ -10,7 +10,7 @@ export interface QualityState {
     compilerHardCap: number; 
     distanceMetric: number;
     precisionMode: number; // 0=High (Ray Epsilon), 1=Standard
-    bufferPrecision: number; // New: 0=Float32, 1=HalfFloat16
+    bufferPrecision: number; // 0=Float32, 1=HalfFloat16
     dynamicScaling: boolean;
     interactionDownsample: number;
     estimator: number; // New: 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
@@ -57,6 +57,7 @@ export const QualityFeature: FeatureDefinition = {
             group: 'engine_settings',
             options: [{ label: 'Float32 (HDR)', value: 0.0 }, { label: 'HalfFloat16', value: 1.0 }],
             description: 'Controls render target bit-depth. 16-bit is faster and required on some mobile GPUs.',
+            onUpdate: 'compile',
             noReset: true
         },
 

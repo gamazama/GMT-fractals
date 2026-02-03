@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { GradientStop } from '../types';
+import type { GradientStop, GradientConfig, ColorSpaceMode } from '../types';
 import { hexToRgb, rgbToHex, lerpRGB, getGradientCssString } from '../utils/colorUtils';
 import Slider from './Slider';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
@@ -19,7 +19,7 @@ interface AdvancedGradientKnot {
     id: string;
     position: number;
     color: string;
-    bias: number; // 0.0 to 1.0, default 0.5
+    bias: number;
     interpolation: InterpolationMode;
 }
 
@@ -32,8 +32,9 @@ interface DragPayload {
 }
 
 interface AdvancedGradientEditorProps {
-    stops: GradientStop[];
-    onChange: (stops: GradientStop[]) => void;
+    // Polymorphic input: Can be legacy Array OR new Object
+    value: GradientStop[] | GradientConfig;
+    onChange: (val: GradientStop[] | GradientConfig) => void;
     helpId?: string;
 }
 
@@ -71,8 +72,19 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, onChange, helpId }) => {
+const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId }) => {
+    // --- PARSE POLYMORPHIC INPUT ---
+    // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
+    const { stops, colorSpace } = useMemo(() => {
+        if (Array.isArray(value)) {
+            return { stops: value, colorSpace: 'srgb' as ColorSpaceMode };
+        } else {
+            return { stops: value.stops, colorSpace: value.colorSpace };
+        }
+    }, [value]);
+
     const [knots, setKnots] = useState<AdvancedGradientKnot[]>([]);
+    
     const onChangeRef = useRef(onChange);
     useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
@@ -105,13 +117,31 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
     const containerRef = useRef<HTMLDivElement>(null);
     const knotTrackRef = useRef<HTMLDivElement>(null);
 
-    const emitChange = useCallback((newKnots: AdvancedGradientKnot[]) => {
+    // --- OUTPUT LOGIC ---
+    // Always emits the Object format if we detect we are in "Advanced Mode" (internal check), 
+    // or if the input was already an object.
+    // For safety, we simply ALWAYS emit the object now. The utils handle it fine.
+    // The Store handles saving it.
+    const emitChange = useCallback((newKnots: AdvancedGradientKnot[], newColorSpace?: ColorSpaceMode) => {
         const sorted = [...newKnots].sort((a, b) => a.position - b.position);
         setKnots(sorted);
-        onChangeRef.current(sorted.map(({ id, position, color, bias, interpolation }) => ({ 
+        
+        const newStops = sorted.map(({ id, position, color, bias, interpolation }) => ({ 
             id, position, color, bias, interpolation 
-        })));
-    }, []);
+        }));
+
+        onChangeRef.current({
+            stops: newStops,
+            colorSpace: newColorSpace || colorSpace
+        });
+    }, [colorSpace]);
+
+    const cycleColorSpace = () => {
+        handleInteractionStart('param');
+        const nextMode = colorSpace === 'srgb' ? 'linear' : colorSpace === 'linear' ? 'aces_inverse' : 'srgb';
+        emitChange(knots, nextMode);
+        handleInteractionEnd();
+    };
 
     const handleColorChange = useCallback((color: string) => {
         if (selectedIds.size > 0) {
@@ -120,7 +150,10 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
     }, [selectedIds, emitChange]);
 
     const handleCopy = () => {
-        const data = JSON.stringify(knotsRef.current.map(({ position, color, bias, interpolation }) => ({ position, color, bias, interpolation })));
+        const data = JSON.stringify({
+            stops: knotsRef.current.map(({ position, color, bias, interpolation }) => ({ position, color, bias, interpolation })),
+            colorSpace
+        });
         navigator.clipboard.writeText(data);
     };
 
@@ -128,16 +161,28 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
         try {
             const text = await navigator.clipboard.readText();
             const data = JSON.parse(text);
-            if (Array.isArray(data) && data.length >= 2) {
+            
+            // Support pasting legacy array OR new object
+            let newStops = [];
+            let newSpace: ColorSpaceMode = 'srgb';
+
+            if (Array.isArray(data)) {
+                newStops = data;
+            } else if (data.stops) {
+                newStops = data.stops;
+                newSpace = data.colorSpace || 'srgb';
+            }
+
+            if (newStops.length >= 2) {
                 handleInteractionStart('param');
-                const newKnots: AdvancedGradientKnot[] = data.map((k: any, i: number) => ({
+                const newKnots: AdvancedGradientKnot[] = newStops.map((k: any, i: number) => ({
                     id: `${Date.now()}_${i}`,
                     position: k.position,
                     color: k.color,
                     bias: k.bias ?? 0.5,
                     interpolation: (k.interpolation as InterpolationMode) ?? 'linear'
                 }));
-                emitChange(newKnots);
+                emitChange(newKnots, newSpace);
                 setSelectedIds(new Set());
                 handleInteractionEnd();
             }
@@ -155,7 +200,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
              bias: s.bias ?? 0.5,
              interpolation: (s.interpolation as InterpolationMode) ?? 'linear'
         }));
-        emitChange(newKnots);
+        emitChange(newKnots, 'srgb'); // Presets default to sRGB
         setSelectedIds(new Set());
         handleInteractionEnd();
     };
@@ -201,7 +246,6 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
                 return k;
             });
             
-            // Use emitChange for live update, it handles sorting and state update
             emitChange(updatedKnots);
         }
 
@@ -314,11 +358,8 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
         const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const color = getInterpolatedColor(knots, pos);
         
-        // Find previous knot to inherit interpolation mode
-        // Sort knots by position
         const sortedKnots = [...knots].sort((a, b) => a.position - b.position);
         
-        // Find the knot immediately to the left
         let prevKnot: AdvancedGradientKnot | undefined;
         for (let k of sortedKnots) {
             if (k.position <= pos) {
@@ -341,10 +382,10 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
         setSelectedIds(new Set([newKnot.id]));
         emitChange(newKnots);
         
-        // Pass skipSnapshot=true because we just started the interaction manually above
         startDrag('knot', [newKnot.id], e, newKnots, true);
     };
 
+    // ... (Keyboard handling unchanged) ...
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (selectedIds.size === 0 || (e.target as HTMLElement).tagName === 'INPUT') return;
@@ -401,8 +442,6 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
         handleInteractionEnd();
     };
     
-    // --- CONTEXT MENUS VIA GLOBAL MENU ---
-
     const openTrackContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -447,7 +486,23 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
             { 
                 label: 'Reset Default', 
                 danger: true, 
-                action: wrapAction(() => { emitChange([{ id: '1', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' }, { id: '2', position: 1, color: '#FFFFFF', bias: 0.5, interpolation: 'linear' }]); setSelectedIds(new Set<string>()); })
+                action: wrapAction(() => { emitChange([{ id: '1', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' }, { id: '2', position: 1, color: '#FFFFFF', bias: 0.5, interpolation: 'linear' }], 'srgb'); setSelectedIds(new Set<string>()); })
+            },
+            { label: 'Output Mode', action: () => {}, isHeader: true },
+            { 
+                label: 'sRGB (Standard)', 
+                checked: colorSpace === 'srgb',
+                action: wrapAction(() => emitChange(knots, 'srgb'))
+            },
+            { 
+                label: 'Linear (Physical)', 
+                checked: colorSpace === 'linear',
+                action: wrapAction(() => emitChange(knots, 'linear'))
+            },
+            { 
+                label: 'Inverse ACES', 
+                checked: colorSpace === 'aces_inverse',
+                action: wrapAction(() => emitChange(knots, 'aces_inverse'))
             }
         ];
         
@@ -458,10 +513,9 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
         e.stopPropagation();
         e.preventDefault();
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        // Position menu directly below the button, left-aligned if space permits, or handle logic inside menu
         setPresetMenu({ x: rect.left, y: rect.bottom + 5 });
     };
-
+    
     const handleWrapperContextMenu = (e: React.MouseEvent) => {
         const ids = collectHelpIds(e.currentTarget);
         if (ids.length > 0) {
@@ -498,13 +552,24 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
                 </div>
                 
                 <div className="flex items-center gap-2">
-                    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest pointer-events-none">Presets</span>
+                    {/* Visual Indicator of current mode */}
+                    <div 
+                        className="text-[8px] font-bold text-gray-600 uppercase cursor-pointer hover:text-cyan-400 transition-colors select-none"
+                        onClick={cycleColorSpace}
+                        title="Click to switch Color Profile"
+                    >
+                        {colorSpace === 'srgb' ? 'Standard' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
+                    </div>
+
+                    {/* Presets Button */}
                     <button
                         className="gradient-interactive-element p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors active:scale-95"
                         onClick={handlePresetsClick}
+                        title="Presets"
                     >
                         <MenuIcon />
                     </button>
+                    
                     {presetMenu && (
                         <PresetMenu 
                             x={presetMenu.x}
@@ -518,7 +583,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
                                 ...GRADIENT_PRESETS.map(p => ({
                                     label: p.name,
                                     action: () => loadPreset(p.stops),
-                                    stops: p.stops // Renders preview in menu
+                                    stops: p.stops 
                                 }))
                             ]}
                         />
@@ -535,7 +600,9 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
                 >
                      {isBiasHandlesVisible && [...knots].sort((a, b) => a.position - b.position).map((k, i, arr) => {
                         if (i >= arr.length - 1 || arr[i+1].position - k.position < 0.02) return null;
+                        
                         const visualPos = k.position + (arr[i+1].position - k.position) * k.bias;
+                        
                         return (
                             <div 
                                 key={`bias-${k.id}`} 
@@ -598,12 +665,10 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
                 <div className="flex flex-col animate-slider-entry gradient-interactive-element overflow-hidden">
                     {selectedNodes.length > 0 ? (
                         <>
-                             {/* Color picker at top - edge to edge */}
                              <div className="mb-px mt-2">
                                 <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} />
                              </div>
                              
-                             {/* Sub-properties */}
                              <div className="flex flex-col">
                                  <Dropdown 
                                     label="Interpolation"
@@ -628,7 +693,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ stops, 
                                  )}
                                  
                                  <Slider 
-                                    label="Bias" 
+                                    label="Bias (Midpoint)" 
                                     value={commonBias === -1 ? 50 : commonBias * 100} 
                                     min={0} max={100} step={1} 
                                     onChange={(val) => handleMultiPropertyChange('bias', val / 100)}

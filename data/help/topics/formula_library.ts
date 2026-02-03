@@ -389,10 +389,10 @@ $$ z \to \text{Fold}(z) + \sin(z) $$
 Creates structures that look like melting machinery, flowing liquid metal, or alien biomechanical surfaces.
 `
     },
-    'formula.foldingbrot': {
-        id: 'formula.foldingbrot',
+    'formula.boxbulb': {
+        id: 'formula.boxbulb',
         category: 'Formulas',
-        title: 'Folding Brot',
+        title: 'Box Bulb',
         parentId: 'formula.active',
         content: `
 ## The Math
@@ -410,10 +410,10 @@ In each iteration, it first applies a Box Fold, then feeds that result into the 
 Creates "Boxy Bulbs"—fractals that have the general shape of a Mandelbulb but with square, mechanical surface details.
 `
     },
-    'formula.ubermenger': {
-        id: 'formula.ubermenger',
+    'formula.mengeradvanced': {
+        id: 'formula.mengeradvanced',
         category: 'Formulas',
-        title: 'Uber Menger',
+        title: 'Menger Advanced',
         parentId: 'formula.active',
         content: `
 ## The Math

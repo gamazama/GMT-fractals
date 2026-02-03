@@ -15,8 +15,8 @@ export interface UIActionsLocal {
 
 export type UISlice = Pick<FractalStoreState,
     'showLightGizmo' | 'isGizmoDragging' | 
-    'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' |
-    'sceneHistogramData' | 'sceneHistogramTrigger' |
+    'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' |
+    'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
     'draggedLightIndex' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'isControlsMinimized' | 'invertY' |
     'resolutionMode' | 'fixedResolution' | 'isControlsDocked' |
     'helpWindow' | 'contextMenu' |
@@ -30,8 +30,8 @@ export type UISlice = Pick<FractalStoreState,
     'tabSwitchCount'
 > & Pick<FractalActions,
     'setShowLightGizmo' | 'setGizmoDragging' | 
-    'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' |
-    'setSceneHistogramData' | 'refreshSceneHistogram' |
+    'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
+    'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
     'setDraggedLight' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setIsControlsMinimized' | 'setInvertY' |
     'setResolutionMode' | 'setFixedResolution' | 'setIsControlsDocked' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
@@ -55,8 +55,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     isGizmoDragging: false, 
     interactionMode: 'none',
 
-    histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0,
-    sceneHistogramData: null, sceneHistogramTrigger: 0,
+    histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0, histogramActiveCount: 0,
+    sceneHistogramData: null, sceneHistogramTrigger: 0, sceneHistogramActiveCount: 0,
     draggedLightIndex: null,
     autoCompile: false,
     
@@ -96,6 +96,9 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setHistogramAutoUpdate: (v) => set({ histogramAutoUpdate: v }),
     refreshHistogram: () => set((state) => ({ histogramTrigger: state.histogramTrigger + 1 })),
     
+    registerHistogram: () => set(s => ({ histogramActiveCount: s.histogramActiveCount + 1 })),
+    unregisterHistogram: () => set(s => ({ histogramActiveCount: Math.max(0, s.histogramActiveCount - 1) })),
+    
     setHistogramLayer: (v) => {
         if (get().histogramLayer === v) return;
         set({ histogramLayer: v });
@@ -105,6 +108,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     
     setSceneHistogramData: (d) => set({ sceneHistogramData: d }),
     refreshSceneHistogram: () => set((state) => ({ sceneHistogramTrigger: state.sceneHistogramTrigger + 1 })),
+    registerSceneHistogram: () => set(s => ({ sceneHistogramActiveCount: s.sceneHistogramActiveCount + 1 })),
+    unregisterSceneHistogram: () => set(s => ({ sceneHistogramActiveCount: Math.max(0, s.sceneHistogramActiveCount - 1) })),
     
     setDraggedLight: (index) => set({ draggedLightIndex: index }),
     setAutoCompile: (v) => set({ autoCompile: v }),

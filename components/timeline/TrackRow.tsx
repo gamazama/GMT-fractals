@@ -70,7 +70,7 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
             data-help-id="anim.tracks"
         >
             <div 
-                className={`sticky left-0 z-10 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-cyan-500' : ''}`}
+                className={`sticky left-0 z-30 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-cyan-500' : ''}`}
                 onClick={(e) => onSelect(e, tid)}
                 onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={handleContextMenu}
@@ -85,7 +85,7 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                 </div>
             </div>
             <div 
-                className="flex-1 relative group/track"
+                className="flex-1 relative group/track z-10"
                 onDoubleClick={(e) => {
                     e.stopPropagation();
                     const r = e.currentTarget.getBoundingClientRect();
@@ -99,13 +99,13 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                     return (
                         <div
                             key={k.id}
-                            className={`absolute top-1/2 -translate-y-1/2 z-10 cursor-grab group/key`}
+                            className={`absolute top-1/2 -translate-y-1/2 z-20 cursor-grab group/key`}
                             style={{ left: `${k.frame * frameWidth - 10}px`, width: '20px', height: '20px' }} // Big hit area
                             onMouseDown={(e) => onKeyMouseDown(e, tid, k.id)}
                         >
                             <div 
                                 className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 border transition-transform ${
-                                    isKeySelected ? 'bg-white border-white scale-125 z-20' : 'bg-cyan-900 border-cyan-400 group-hover/key:scale-125 group-hover/key:bg-cyan-400'
+                                    isKeySelected ? 'bg-white border-white scale-125 z-30' : 'bg-cyan-900 border-cyan-400 group-hover/key:scale-125 group-hover/key:bg-cyan-400'
                                 } ${k.interpolation === 'Linear' ? 'rotate-45 rounded-sm' : k.interpolation === 'Step' ? 'rounded-none' : 'rounded-full'}`}
                             />
                         </div>

@@ -6,12 +6,15 @@
 ## 🌟 Key Features
 
 *   **Hybrid Render Engine:**
-    *   **Direct Mode:** 60FPS real-time raymarching with soft shadows and ambient occlusion.
+    *   **Direct Mode:** 60FPS real-time raymarching with soft shadows, reflections, and ambient occlusion.
     *   **Path Tracer:** Physically-based Monte Carlo rendering with Global Illumination (GI) and emissive materials.
 *   **High Zoom:** Uses a custom "Split-Float" precision system to exceed standard WebGL limits ($10^{15}$ zoom factor).
 *   **Modular Builder:** A node-based graph editor to construct custom fractal formulas (JIT Compiled to GLSL).
 *   **Animation Studio:** Full keyframe timeline with Bezier curves, Dope Sheet, and Graph Editor.
-*   **Video Export:** Offline rendering pipeline supporting 4K+ resolution and high-bitrate WebM export (using WebCodecs).
+*   **Video Export:** Offline rendering pipeline supporting 4K+ resolution and high-bitrate WebM/MP4 export (using WebCodecs).
+*   **Environment Features:**
+    *   **Water Plane:** Infinite ocean with procedural waves.
+    *   **Volumetrics:** Atmospheric fog and glow.
 *   **Data-Driven Architecture:** Features are defined in a registry, automatically generating UI, State, and Shaders.
 
 ## 🚀 Quick Start
@@ -50,7 +53,7 @@ We maintain detailed documentation for contributors:
 *   **3D/WebGL:** Three.js, React-Three-Fiber (R3F), Drei.
 *   **State:** Zustand (with `subscribeWithSelector`).
 *   **Compute:** Raw GLSL Fragment Shaders (Custom `ShaderMaterial`).
-*   **Video:** `webm-muxer`, Native WebCodecs API.
+*   **Video:** `mediabunny` (Custom Wrapper around WebCodecs).
 
 ## 📂 Directory Structure
 
@@ -73,23 +76,15 @@ We maintain detailed documentation for contributors:
 
 Copyright (c) 2024 Guy Zack
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
 ## 🤝 Contributing
 

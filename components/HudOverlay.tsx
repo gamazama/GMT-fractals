@@ -186,9 +186,9 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
                     )}
                     
                     {/* Persistent Mode Switch Hint */}
-                    {tabSwitchCount < 2 && !isMobile && (
+                    {tabSwitchCount < 2 && !isMobile && state.showHints && (
                          <div className="mt-2 text-[10px] font-bold text-cyan-300 animate-pulse bg-cyan-950/40 px-3 py-1 rounded border border-cyan-500/30 shadow-lg tracking-wider">
-                             PRESS <span className="text-white border border-white/20 rounded px-1 bg-white/10 mx-0.5">TAB</span> TO TOGGLE FLY MODE
+                             PRESS <span className="text-white border border-white/20 rounded px-1 bg-white/10 mx-0.5">TAB</span> FOR {state.cameraMode === 'Orbit' ? 'FLY' : 'ORBIT'} NAVIGATION
                          </div>
                     )}
                 </div>

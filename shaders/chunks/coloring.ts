@@ -51,7 +51,9 @@ vec3 getTextureColor(vec3 p, vec3 n, vec4 result) {
     float u = getMappingValue(uTextureModeU, p, result, n, 1.0);
     float v = getMappingValue(uTextureModeV, p, result, n, 1.0);
     vec2 uv = vec2(u, v) * uTextureScale + uTextureOffset;
-    return textureLod0(uTexture, uv).rgb;
+    
+    vec3 col = textureLod0(uTexture, uv).rgb;
+    return applyTextureProfile(col, uTextureColorSpace);
 }
 
 // Lightweight coloring for volumetric glow

@@ -61,6 +61,14 @@ export const Layer1Tab = ({ state, actions }: { state: FractalState, actions: Fr
                     <div className="px-1 pb-2">
                         <AutoFeaturePanel featureId="texturing" groupFilter="transform" />
                     </div>
+                    
+                    {/* Inject Escape Radius slider here (it lives in coloring.layer1_bottom) */}
+                    {/* We exclude 'twist' because texture mode handles twists via UV transform or not at all */}
+                    <AutoFeaturePanel 
+                        featureId="coloring" 
+                        groupFilter="layer1_bottom" 
+                        excludeParams={['twist']} 
+                    />
                 </div>
             )}
         </>

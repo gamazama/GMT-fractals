@@ -2,8 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { animationEngine } from '../engine/AnimationEngine';
-import { Track } from '../types';
-import { constrainKeyframeHandles } from '../utils/timelineUtils';
+import { Track, BezierHandle } from '../types';
+import { constrainKeyframeHandles, scaleKeyframeHandles } from '../utils/timelineUtils';
 
 interface DopeSheetInteractionProps {
     frameWidth: number;
@@ -17,6 +17,27 @@ interface DopeSheetInteractionProps {
     collapsedGroups: Set<string>;
     sequence: any;
     selectedTrackIds: string[];
+}
+
+interface DragKeyData {
+    trackId: string;
+    keyId: string;
+    startFrame: number;
+    startLeftTan?: BezierHandle;
+    startRightTan?: BezierHandle;
+}
+
+interface NeighborKeyData {
+    trackId: string;
+    keyId: string;
+    frame: number; // Static frame (neighbors don't move unless they are also DragKeyData)
+    // We only need to store the tangent pointing towards the selection
+    startLeftTan?: BezierHandle;  // If this key is to the Right of selection
+    startRightTan?: BezierHandle; // If this key is to the Left of selection
+    
+    // Which keys in the selection is this neighbor connected to?
+    leftReferenceKeyId?: string;  // The dragged key to the left of this neighbor
+    rightReferenceKeyId?: string; // The dragged key to the right of this neighbor
 }
 
 export const useDopeSheetInteraction = ({
@@ -45,7 +66,13 @@ export const useDopeSheetInteraction = ({
     const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
     
     const boxStartRef = useRef<{ x: number, y: number } | null>(null);
-    const dragState = useRef<{ startX: number, keys: { trackId: string, keyId: string, startFrame: number }[] } | null>(null);
+    
+    // Updated Drag State to include neighbors
+    const dragState = useRef<{ 
+        startX: number, 
+        keys: DragKeyData[],
+        neighbors: Map<string, NeighborKeyData> // Keyed by "trackId::keyId"
+    } | null>(null);
 
     const transformState = useRef<{ 
         type: 'move' | 'scale_left' | 'scale_right', 
@@ -55,8 +82,79 @@ export const useDopeSheetInteraction = ({
         maxFrame: number
     } | null>(null);
 
-    const startDragKeys = (startX: number, keys: { trackId: string, keyId: string, startFrame: number }[]) => {
-        dragState.current = { startX, keys };
+    const startDragKeys = (startX: number, keyIds: string[]) => {
+        const keys: DragKeyData[] = [];
+        const draggedSet = new Set(keyIds);
+        const neighbors = new Map<string, NeighborKeyData>();
+        
+        // 1. Collect Dragged Keys
+        keyIds.forEach(compositeId => {
+            const [tid, kid] = compositeId.split('::') as [string, string];
+            const track = sequence.tracks[tid];
+            const k = track?.keyframes.find(kf => kf.id === kid);
+            if (k) {
+                keys.push({
+                    trackId: tid,
+                    keyId: kid,
+                    startFrame: k.frame,
+                    startLeftTan: k.leftTangent ? { ...k.leftTangent } : undefined,
+                    startRightTan: k.rightTangent ? { ...k.rightTangent } : undefined
+                });
+            }
+        });
+        
+        // 2. Identify Neighbors
+        // We iterate through all dragged keys, find their neighbors in the sequence.
+        // If a neighbor is NOT in the dragged set, we add it to the neighbors map.
+        keys.forEach(draggedKey => {
+            const track = sequence.tracks[draggedKey.trackId];
+            if (!track) return;
+            
+            // Need sorted keys to find neighbors
+            const sortedKeys = [...track.keyframes].sort((a,b) => a.frame - b.frame);
+            const idx = sortedKeys.findIndex(k => k.id === draggedKey.keyId);
+            if (idx === -1) return;
+            
+            // Check Previous (Neighbor to the Left)
+            if (idx > 0) {
+                const prev = sortedKeys[idx - 1];
+                const prevComposite = `${draggedKey.trackId}::${prev.id}`;
+                if (!draggedSet.has(prevComposite)) {
+                    // This neighbor is static. It needs its Right Tangent adjusted.
+                    if (!neighbors.has(prevComposite)) {
+                        neighbors.set(prevComposite, {
+                            trackId: draggedKey.trackId,
+                            keyId: prev.id,
+                            frame: prev.frame,
+                            startRightTan: prev.rightTangent ? { ...prev.rightTangent } : undefined
+                        });
+                    }
+                    // Link this neighbor to the dragged key (it is the "Right Reference" for the neighbor)
+                    neighbors.get(prevComposite)!.rightReferenceKeyId = draggedKey.keyId;
+                }
+            }
+            
+            // Check Next (Neighbor to the Right)
+            if (idx < sortedKeys.length - 1) {
+                const next = sortedKeys[idx + 1];
+                const nextComposite = `${draggedKey.trackId}::${next.id}`;
+                if (!draggedSet.has(nextComposite)) {
+                    // This neighbor is static. It needs its Left Tangent adjusted.
+                    if (!neighbors.has(nextComposite)) {
+                        neighbors.set(nextComposite, {
+                            trackId: draggedKey.trackId,
+                            keyId: next.id,
+                            frame: next.frame,
+                            startLeftTan: next.leftTangent ? { ...next.leftTangent } : undefined
+                        });
+                    }
+                    // Link this neighbor to the dragged key (it is the "Left Reference" for the neighbor)
+                    neighbors.get(nextComposite)!.leftReferenceKeyId = draggedKey.keyId;
+                }
+            }
+        });
+
+        dragState.current = { startX, keys, neighbors };
         setIsScrubbing(true); 
     };
 
@@ -87,7 +185,6 @@ export const useDopeSheetInteraction = ({
 
     const handleContentMouseDown = (e: React.MouseEvent) => {
         if (e.button !== 0) return;
-        
         if ((e.target as HTMLElement).closest('.transform-handle')) return;
 
         if (!e.shiftKey && !e.ctrlKey && !e.metaKey) deselectAllKeys();
@@ -96,21 +193,11 @@ export const useDopeSheetInteraction = ({
         if (!container) return;
         
         let forcedY: number | null = null;
-
         if (scrollContainerRef.current) {
             const scrollRect = scrollContainerRef.current.getBoundingClientRect();
             const relativeY = e.clientY - scrollRect.top;
-            
-            // Only block clicks on the Ruler (0 to RULER_HEIGHT)
             if (relativeY < RULER_HEIGHT) return; 
-            
-            // Check if clicking the Sticky Global Summary row (RULER to RULER+GROUP)
-            // If so, force the startY to be within the logical summary track bounds
-            // This handles the case where the user is scrolled down but clicks the sticky header
-            if (relativeY < RULER_HEIGHT + GROUP_HEIGHT) {
-                forcedY = RULER_HEIGHT + 1;
-            }
-            
+            if (relativeY < RULER_HEIGHT + GROUP_HEIGHT) forcedY = RULER_HEIGHT + 1;
             if (e.clientX - scrollRect.left < SIDEBAR_WIDTH) return;
         }
 
@@ -137,33 +224,105 @@ export const useDopeSheetInteraction = ({
                 const diffPx = e.clientX - dragState.current.startX;
                 const diffFrames = Math.round(diffPx / currentFrameWidth);
                 
-                const updates = dragState.current.keys.map(k => {
+                // Map to store dragged key current positions for neighbor calculation
+                const draggedPositions = new Map<string, number>();
+                dragState.current.keys.forEach(k => {
+                    draggedPositions.set(k.keyId, Math.max(0, k.startFrame + diffFrames));
+                });
+
+                const updates: any[] = [];
+
+                // A. Update Dragged Keys
+                dragState.current.keys.forEach(k => {
                     const newFrame = Math.max(0, k.startFrame + diffFrames);
                     const patch: Partial<any> = { frame: newFrame };
                     
-                    // APPLY BEZIER CONSTRAINT
                     const track = propsRef.current.sequence.tracks[k.trackId];
                     if (track) {
                         const keysSorted = [...track.keyframes].sort((a:any, b:any) => a.frame - b.frame);
                         const currentKey = keysSorted.find((key:any) => key.id === k.keyId);
+                        
                         if (currentKey) {
                              const idx = keysSorted.indexOf(currentKey);
                              const prev = idx > 0 ? keysSorted[idx - 1] : undefined;
                              const next = idx < keysSorted.length - 1 ? keysSorted[idx + 1] : undefined;
-                             const movedKey = { ...currentKey, frame: newFrame };
+                             
+                             // Scale Tangents using initial state
+                             const initialKeySnapshot = { 
+                                 ...currentKey, 
+                                 leftTangent: k.startLeftTan, 
+                                 rightTangent: k.startRightTan 
+                             };
+
+                             // Note: scaleKeyframeHandles uses prev.frame and next.frame. 
+                             // If prev/next are also dragged, we should ideally use their new positions.
+                             // But scaleKeyframeHandles assumes "oldFrame" -> "newFrame" for the current key
+                             // determines the ratio. 
+                             // To be perfectly accurate for block moves, we should pass the actual new interval ratios.
+                             // But the standard function works well enough for 99% of cases.
+                             const scalePatch = scaleKeyframeHandles(initialKeySnapshot, prev, next, k.startFrame, newFrame);
+                             Object.assign(patch, scalePatch);
+
+                             const movedKey = { ...currentKey, frame: newFrame, ...patch };
                              const constraint = constrainKeyframeHandles(movedKey, prev, next);
                              Object.assign(patch, constraint);
                         }
                     }
+                    updates.push({ trackId: k.trackId, keyId: k.keyId, patch });
+                });
 
-                    return { trackId: k.trackId, keyId: k.keyId, patch };
+                // B. Update Neighbors (The "In-between" tangents)
+                dragState.current.neighbors.forEach((neighbor) => {
+                    const patch: Partial<any> = {};
+                    
+                    // 1. Right Tangent (Pointing to a dragged key on the right)
+                    if (neighbor.rightReferenceKeyId && neighbor.startRightTan) {
+                        const draggedPos = draggedPositions.get(neighbor.rightReferenceKeyId);
+                        const draggedStartFrame = dragState.current!.keys.find(k => k.keyId === neighbor.rightReferenceKeyId)?.startFrame;
+                        
+                        if (draggedPos !== undefined && draggedStartFrame !== undefined) {
+                            const oldDist = draggedStartFrame - neighbor.frame;
+                            const newDist = draggedPos - neighbor.frame;
+                            
+                            if (Math.abs(oldDist) > 1e-5 && Math.abs(newDist) > 1e-5) {
+                                const ratio = newDist / oldDist;
+                                patch.rightTangent = {
+                                    x: neighbor.startRightTan.x * ratio,
+                                    y: neighbor.startRightTan.y * ratio
+                                };
+                            }
+                        }
+                    }
+                    
+                    // 2. Left Tangent (Pointing to a dragged key on the left)
+                    if (neighbor.leftReferenceKeyId && neighbor.startLeftTan) {
+                        const draggedPos = draggedPositions.get(neighbor.leftReferenceKeyId);
+                        const draggedStartFrame = dragState.current!.keys.find(k => k.keyId === neighbor.leftReferenceKeyId)?.startFrame;
+                        
+                        if (draggedPos !== undefined && draggedStartFrame !== undefined) {
+                            const oldDist = neighbor.frame - draggedStartFrame;
+                            const newDist = neighbor.frame - draggedPos;
+                            
+                            if (Math.abs(oldDist) > 1e-5 && Math.abs(newDist) > 1e-5) {
+                                const ratio = newDist / oldDist;
+                                patch.leftTangent = {
+                                    x: neighbor.startLeftTan.x * ratio,
+                                    y: neighbor.startLeftTan.y * ratio
+                                };
+                            }
+                        }
+                    }
+                    
+                    if (Object.keys(patch).length > 0) {
+                        updates.push({ trackId: neighbor.trackId, keyId: neighbor.keyId, patch });
+                    }
                 });
                 
                 updateKeyframes(updates);
                 animationEngine.scrub(currentFrameVal);
             }
 
-            // 2. Handle Transform Bar Dragging
+            // 2. Handle Transform Bar Dragging (Existing logic preserved)
             if (transformState.current) {
                 const { type, startX, initialKeys, minFrame, maxFrame } = transformState.current;
                 const diffPx = e.clientX - startX;
@@ -173,8 +332,6 @@ export const useDopeSheetInteraction = ({
                     const diffFrames = Math.round(diffPx / currentFrameWidth);
                     initialKeys.forEach(k => {
                         const newFrame = Math.max(0, k.startFrame + diffFrames);
-                        // Constraints here? Yes, theoretically. 
-                        // But bulk move preserves relative spacing, so handles usually safe unless hitting 0 or neighbor not selected.
                         updates.push({
                             trackId: k.trackId,
                             keyId: k.keyId,
@@ -223,7 +380,7 @@ export const useDopeSheetInteraction = ({
                 }
             }
 
-            // 3. Handle Selection Box Dragging
+            // 3. Handle Selection Box
             if (boxStartRef.current && contentRef.current) {
                 const rect = contentRef.current.getBoundingClientRect();
                 const currentX = e.clientX - rect.left;

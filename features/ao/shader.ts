@@ -1,5 +1,4 @@
 
-
 export const getAOGLSL = (aoEnabled: boolean, enableStochastic: boolean, maxSamples: number = 32) => {
     // If feature is hard-disabled in Engine, return dummy function
     if (!aoEnabled) {
@@ -12,13 +11,16 @@ export const getAOGLSL = (aoEnabled: boolean, enableStochastic: boolean, maxSamp
     
     if (enableStochastic) {
         helperFunctions = `
-        vec3 getCosHemisphereDir(vec3 n, float seed) {
-            vec2 r = fract(sin(vec2(seed, seed + 1.0)) * vec2(43758.5453, 22578.1459));
+        vec3 getCosHemisphereDir(vec3 n, vec2 seedVec) {
+            // Use provided vector (Blue Noise Green/Alpha) instead of calculating hash
+            vec2 r = seedVec;
+            
             float sign = n.z >= 0.0 ? 1.0 : -1.0;
             float a = -1.0 / (sign + n.z);
             float b = n.x * n.y * a;
             vec3 tangent = vec3(1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x);
             vec3 bitangent = vec3(b, sign + n.y * n.y * a, -n.y);
+            
             float ra = sqrt(r.y);
             float rx = ra * cos(6.2831 * r.x);
             float ry = ra * sin(6.2831 * r.x);
@@ -44,12 +46,14 @@ float GetAO(vec3 p_ray, vec3 n, float seed) {
     bool isMoving = uBlendFactor >= 0.99;
     bool isStochastic = uAOMode > 0.5;
     
-    float jitter = 0.5;
+    // Sample Blue Noise Texture
+    vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
+    
+    // Green channel for standard jitter
+    float jitter = blueNoise.g;
     
     #if defined(RENDER_MODE_PATHTRACING)
-        jitter = fract(seed * 13.5);
-    #else
-        if (!isMoving) jitter = fract(seed * 13.5);
+        jitter = fract(seed * 13.5 + blueNoise.g);
     #endif
 
     vec3 dir = n;
@@ -61,9 +65,10 @@ float GetAO(vec3 p_ray, vec3 n, float seed) {
 
     #if ${enableStochastic ? 1 : 0}
         if (useRandomDir) {
-            dir = getCosHemisphereDir(n, seed);
+            // Use Green and Alpha channels for 2D direction sampling
+            dir = getCosHemisphereDir(n, blueNoise.ga);
         } else if (isStochastic) {
-            dir = normalize(mix(n, getCosHemisphereDir(n, 0.123), 0.5));
+            dir = normalize(mix(n, getCosHemisphereDir(n, vec2(0.123, 0.456)), 0.5));
         }
     #endif
     

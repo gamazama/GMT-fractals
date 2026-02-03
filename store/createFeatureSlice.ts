@@ -109,14 +109,13 @@ export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelec
                                 }
                             }
                             else if (config.type === 'gradient') {
-                                if (Array.isArray(val)) {
-                                    const buffer = generateGradientTextureBuffer(val);
-                                    FractalEvents.emit('uniform', { 
-                                        key: config.uniform!, 
-                                        value: { isGradientBuffer: true, buffer }, 
-                                        noReset: !!config.noReset 
-                                    });
-                                }
+                                // Handles both GradientStop[] and GradientConfig object via utils/colorUtils logic
+                                const buffer = generateGradientTextureBuffer(val);
+                                FractalEvents.emit('uniform', { 
+                                    key: config.uniform!, 
+                                    value: { isGradientBuffer: true, buffer }, 
+                                    noReset: !!config.noReset 
+                                });
                             }
                             else {
                                 let finalVal = val;
@@ -133,11 +132,34 @@ export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelec
                     const config = feat.params[compKey];
                     if (config && config.composeFrom && config.uniform) {
                         const values = config.composeFrom.map(k => next[k]);
-                        let compositeVal: any = null;
-                        if (config.type === 'vec2') compositeVal = new THREE.Vector2(values[0], values[1]);
-                        else if (config.type === 'vec3') compositeVal = new THREE.Vector3(values[0], values[1], values[2]);
                         
-                        if (compositeVal) {
+                        // Handle Gradient Dependency Trigger (e.g. ColorSpace changed)
+                        if (config.type === 'gradient') {
+                            // In this case, 'values' array depends on composeFrom order in Feature definition.
+                            // But usually we just pass the MAIN gradient param as 'val' to generateGradientTextureBuffer.
+                            // However, since we updated 'colorSpace', we need to re-trigger the gradient uniform update.
+                            // We look up the gradient data from 'next' using the param key from config.
+                            
+                            // NOTE: 'compKey' is the key of the gradient param itself (e.g., 'gradient' or 'gradient2').
+                            const gradientVal = next[compKey]; 
+                            
+                            if (gradientVal) {
+                                const buffer = generateGradientTextureBuffer(gradientVal);
+                                FractalEvents.emit('uniform', { 
+                                    key: config.uniform, 
+                                    value: { isGradientBuffer: true, buffer }, 
+                                    noReset: !!config.noReset 
+                                });
+                                if (!config.noReset) shouldReset = true;
+                            }
+                        }
+                        else if (config.type === 'vec2') {
+                            const compositeVal = new THREE.Vector2(values[0], values[1]);
+                            FractalEvents.emit('uniform', { key: config.uniform, value: compositeVal, noReset: !!config.noReset });
+                            if (!config.noReset) shouldReset = true;
+                        }
+                        else if (config.type === 'vec3') {
+                            const compositeVal = new THREE.Vector3(values[0], values[1], values[2]);
                             FractalEvents.emit('uniform', { key: config.uniform, value: compositeVal, noReset: !!config.noReset });
                             if (!config.noReset) shouldReset = true;
                         }

@@ -109,6 +109,30 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                         Path Tracer (GI)
                     </button>
                 </div>
+
+                {/* Path Tracer Controls */}
+                {state.renderMode === 'PathTracing' && lighting && (
+                    <div className="mt-3 pt-2 border-t border-white/5 animate-fade-in" data-help-id="pt.global">
+                         <div className="flex items-center justify-between mb-1.5">
+                             <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Max Bounces</label>
+                             <div className="w-12 h-4 bg-black/40 rounded border border-white/10 relative">
+                                 <DraggableNumber
+                                    value={lighting.ptBounces}
+                                    min={1} max={8} step={1}
+                                    onChange={(v) => setLighting({ ptBounces: Math.round(v) })}
+                                    highlight
+                                 />
+                             </div>
+                         </div>
+                         <Slider
+                            label="GI Brightness"
+                            value={lighting.ptGIStrength}
+                            min={0} max={5.0} step={0.01}
+                            onChange={(v) => setLighting({ ptGIStrength: v })}
+                            trackId="lighting.ptGIStrength"
+                         />
+                    </div>
+                )}
              </div>
 
              {/* Viewport Mode */}

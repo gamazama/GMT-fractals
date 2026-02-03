@@ -377,7 +377,18 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                                 <div className="text-[9px] text-green-400 font-mono break-all">{gpuInfo}</div>
                                             </div>
                                         )}
-                                        <p>GMT was crafted with ❤️ by <span className="text-white font-bold">Guy Zack</span> using <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">aistudio.google.com</a>.</p>
+                                        <p>GMT was crafted with ❤️ by <span className="text-white font-bold">Guy Zack</span> using <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Gemini</a>.</p>
+                                        
+                                        <div className="flex flex-col gap-1 pt-2 border-t border-white/10">
+                                            <a href="https://www.reddit.com/r/GMT_fractals/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white transition-colors">
+                                                <span>Community:</span>
+                                                <span className="text-cyan-400 hover:underline">r/GMT_fractals</span>
+                                            </a>
+                                            <a href="https://github.com/gamazama/GMT-fractals" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white transition-colors">
+                                                <span>Source:</span>
+                                                <span className="text-cyan-400 hover:underline">GitHub (GPL3)</span>
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             )}

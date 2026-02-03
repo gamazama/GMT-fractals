@@ -13,6 +13,7 @@ export interface ParamCondition {
     neq?: any;     
     bool?: boolean; 
     or?: ParamCondition[];
+    and?: ParamCondition[];
 }
 
 export interface ParamOption {
@@ -62,6 +63,11 @@ export interface ParamConfig {
     composeFrom?: string[]; 
     textureSettings?: TextureConfig;
     
+    // Links to other parameters (e.g., an image param linking to its color profile param)
+    linkedParams?: {
+        colorSpace?: string;
+    };
+
     // 'uniform' (Default): Updates a GLSL uniform (Instant)
     // 'compile': Triggers a shader rebuild (Slow)
     onUpdate?: 'uniform' | 'compile';

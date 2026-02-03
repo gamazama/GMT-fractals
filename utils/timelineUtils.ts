@@ -142,6 +142,7 @@ export const updateTangentFromStats = (isLeft: boolean, angle: number, lenPct: n
 // --- KEYFRAME CONSTRAINT UTILITY ---
 export const constrainKeyframeHandles = AnimationMath.constrainHandles;
 export const calculateSoftFalloff = AnimationMath.calculateSoftFalloff;
+export const scaleKeyframeHandles = AnimationMath.scaleHandles;
 
 // --- EULER FILTER LOGIC ---
 export const calculateEulerUpdates = (trackIds: string[], sequence: AnimationSequence) => {

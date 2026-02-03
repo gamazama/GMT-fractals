@@ -186,7 +186,7 @@ export class VideoExporter {
     public async renderSequence(
         config: VideoExportConfig, 
         directStream: FileSystemWritableFileStream | null,
-        onProgress: (p: number, frameInfo?: string, preview?: ImageBitmap) => void
+        onProgress: (p: number, frameInfo?: string) => void
     ): Promise<void> {
         if (!this.engine.renderer) throw new Error("Renderer not ready");
         
@@ -392,7 +392,7 @@ export class VideoExporter {
     private async processLoop(
         resolve: () => void, 
         reject: (e: any) => void,
-        onProgress: (p: number, frameInfo?: string, preview?: ImageBitmap) => void,
+        onProgress: (p: number, frameInfo?: string) => void,
         checkError: () => Error | null
     ) {
         if (!this.currentSession) return;
@@ -463,11 +463,10 @@ export class VideoExporter {
             session.encoder.encode(frame, { keyFrame: isFirstFrame });
             frame.close();
             
-            const imageData = new ImageData(new Uint8ClampedArray(buffer.buffer), session.safeWidth, session.safeHeight);
-            const previewBitmap = await createImageBitmap(imageData, { resizeWidth: 300 });
+            // NOTE: Removed previewBitmap generation to save performance and remove preview from UI
             
             const percent = ((session.outputFrameIndex + 1) / session.totalFrames) * 99;
-            onProgress(percent, `Frame ${timelineFrame} (${session.outputFrameIndex + 1}/${session.totalFrames})`, previewBitmap);
+            onProgress(percent, `Frame ${timelineFrame} (${session.outputFrameIndex + 1}/${session.totalFrames})`);
             
             session.outputFrameIndex++;
             setTimeout(() => this.processLoop(resolve, reject, onProgress, checkError), 0);
@@ -665,8 +664,19 @@ export class VideoExporter {
         this.engine.materials.exportMaterial.uniforms.map.value = readBuffer.texture;
         this.engine.materials.exportMaterial.uniforms.uResolution.value.set(width, height);
         
+        // --- KEY UPDATE: Push frame to main display for visual feedback ---
+        this.engine.materials.displayMaterial.uniforms.map.value = readBuffer.texture;
+        this.engine.materials.displayMaterial.uniforms.uResolution.value.set(width, height);
+        
+        // Render Post Process to Export Target
         renderer.setRenderTarget(this.exportTarget);
         renderer.render(this.ppScene, this.ppCamera);
+        
+        // Also blit to screen (Optional but good for feedback if Canvas is visible)
+        // Since we are inside an async loop, this might fight with the main loop if not paused.
+        // But renderSequence pauses the main loop first.
+        renderer.setRenderTarget(null);
+        renderer.render(this.engine.sceneCtrl.displayScene, this.engine.sceneCtrl.mainCamera);
     }
 
     private captureFrameData(w: number, h: number): Uint8Array {

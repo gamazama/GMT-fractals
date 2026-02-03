@@ -1,5 +1,4 @@
 
-
 export const getShadowsGLSL = (enabled: boolean, qualityLevel: number) => {
     
     // ZERO-COST ABSTRACTION:
@@ -43,7 +42,15 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist) {
     if (uShadowIntensity < 0.001) return 1.0;
 
     float res = 1.0;
+    
+    // Blue Noise Jitter for Soft Shadow Penumbra
+    // We use the Red channel of the blue noise texture via helper
+    float jitter = getBlueNoise(gl_FragCoord.xy);
+    
     ${settings}
+    
+    // Jitter starting position to break banding
+    t += jitter * 0.01;
     
     int limit = uShadowSteps;
 

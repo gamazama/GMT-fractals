@@ -49,6 +49,45 @@ export const AnimationMath = {
     },
 
     /**
+     * Scales Bezier handles when a keyframe's time changes to maintain curve shape.
+     */
+    scaleHandles: (key: Keyframe, prev: Keyframe | undefined, next: Keyframe | undefined, oldFrame: number, newFrame: number): Partial<Keyframe> => {
+        const updates: Partial<Keyframe> = {};
+        
+        if (key.interpolation !== 'Bezier') return updates;
+
+        // 1. Scale Left Handle (Incoming)
+        if (prev && key.leftTangent) {
+            const oldDist = oldFrame - prev.frame;
+            const newDist = newFrame - prev.frame;
+            if (Math.abs(oldDist) > 1e-5 && Math.abs(newDist) > 1e-5) {
+                const ratio = newDist / oldDist;
+                // Scale BOTH X and Y to preserve angle
+                updates.leftTangent = {
+                    x: key.leftTangent.x * ratio,
+                    y: key.leftTangent.y * ratio
+                };
+            }
+        }
+
+        // 2. Scale Right Handle (Outgoing)
+        if (next && key.rightTangent) {
+            const oldDist = next.frame - oldFrame;
+            const newDist = next.frame - newFrame;
+            if (Math.abs(oldDist) > 1e-5 && Math.abs(newDist) > 1e-5) {
+                const ratio = newDist / oldDist;
+                // Scale BOTH X and Y to preserve angle
+                updates.rightTangent = {
+                    x: key.rightTangent.x * ratio,
+                    y: key.rightTangent.y * ratio
+                };
+            }
+        }
+
+        return updates;
+    },
+
+    /**
      * Calculates auto-tangents for a keyframe based on its neighbors.
      * Supports 'Auto' (Smooth/Catmull-Rom) and 'Ease' (Flat) modes.
      */
@@ -121,6 +160,7 @@ export const AnimationMath = {
             const dist = key.frame - prev.frame;
             if (dist > 0.001) {
                  const maxLen = dist * TANGENT_WEIGHT;
+                 // Constraint: Time (X) shouldn't exceed 1/3 of the interval
                  if (Math.abs(key.leftTangent.x) > maxLen) {
                      const scale = maxLen / Math.abs(key.leftTangent.x);
                      updates.leftTangent = {

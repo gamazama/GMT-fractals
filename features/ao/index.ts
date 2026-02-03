@@ -27,7 +27,7 @@ export const AOFeature: FeatureDefinition = {
         // --- SHADING PARAMETERS (Runtime, in Shading Panel) ---
         aoIntensity: {
             type: 'float', default: 0.2, label: 'Ambient Occlusion', shortId: 'ai', uniform: 'uAOIntensity',
-            min: 0.001, max: 5, step: 0.001, scale: 'log', group: 'shading',
+            min: 0.0, max: 5, step: 0.001, scale: 'log', group: 'shading',
             condition: { param: 'aoEnabled', bool: true }
         },
         aoSpread: {

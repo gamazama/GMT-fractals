@@ -35,10 +35,13 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
         vec3 currRo = p_ray + n * 0.01;
         vec3 currRd = reflect(-v, n);
         
-        // Jitter first bounce based on roughness
+        // Jitter first bounce based on roughness using Blue Noise
         bool isMoving = uBlendFactor >= 0.99;
         if (roughness > 0.05 && !isMoving) {
-             vec3 randomVec = vec3(fract(stochasticSeed * 13.3), fract(stochasticSeed * 19.5), fract(stochasticSeed * 21.1)) * 2.0 - 1.0;
+             // Sample blue noise texture. Use Blue/Alpha channels to decorrelate from Red/Green used elsewhere.
+             vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
+             vec3 randomVec = vec3(blueNoise.b, blueNoise.a, blueNoise.r) * 2.0 - 1.0;
+             
              if (dot(randomVec, randomVec) > 0.001) {
                  vec3 jittered = normalize(currRd + normalize(randomVec) * (roughness * 0.8));
                  if (dot(jittered, n) > 0.05) currRd = jittered;

@@ -26,7 +26,11 @@ const GizmoIndicator = ({ index, visible }: { index: number, visible: boolean })
 
     return (
         <Html position={[0, 0, 0]} center zIndexRange={[1000, 0]} style={{ pointerEvents: 'none' }}>
-            <div className="flex flex-col items-center select-none mb-12 transform -translate-y-4 pointer-events-auto">
+            <div className="flex items-center gap-2 select-none transform -translate-y-16 pointer-events-auto">
+                <div className="text-[9px] font-black text-white/90 bg-black/80 px-1.5 py-0.5 rounded border border-white/10 shadow-sm tracking-wider backdrop-blur-sm">
+                    L{index + 1}
+                </div>
+
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -34,7 +38,7 @@ const GizmoIndicator = ({ index, visible }: { index: number, visible: boolean })
                         handleToggleFixed();
                         handleInteractionEnd();
                     }}
-                    className={`p-1.5 rounded-full border shadow-lg transition-all duration-200 hover:scale-110 active:scale-95 mb-1 ${
+                    className={`p-1.5 rounded-full border shadow-lg transition-all duration-200 hover:scale-110 active:scale-95 ${
                         !light.fixed 
                         ? 'bg-cyan-600 border-cyan-400 text-white ring-2 ring-cyan-500/20' 
                         : 'bg-gray-800 border-gray-600 text-gray-400 hover:text-white hover:border-gray-400'
@@ -43,10 +47,6 @@ const GizmoIndicator = ({ index, visible }: { index: number, visible: boolean })
                 >
                     {!light.fixed ? <AnchorIcon /> : <UnanchoredIcon />}
                 </button>
-                
-                <div className="text-[9px] font-black text-white/90 bg-black/80 px-1.5 py-0.5 rounded border border-white/10 shadow-sm tracking-wider backdrop-blur-sm">
-                    L{index + 1}
-                </div>
             </div>
         </Html>
     );

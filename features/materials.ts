@@ -1,7 +1,7 @@
 
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import * as THREE from 'three';
-import { GradientStop } from '../types/graphics';
+import { GradientStop, GradientConfig } from '../types/graphics';
 import { LIGHTING_ENV } from '../shaders/chunks/lighting/env';
 
 export interface MaterialState {
@@ -12,13 +12,13 @@ export interface MaterialState {
     rim: number;
     rimExponent: number;
     envStrength: number;
-    envMapVisible: boolean;
-    envBackgroundStrength: number;
+    envBackgroundStrength: number; // Renamed UI label to BG Visibility
     envSource: number;
     envMapData: string | null;
+    envMapColorSpace: number; // 0=sRGB, 1=Linear, 2=ACES
     useEnvMap: boolean;
     envRotation: number;
-    envGradientStops: GradientStop[];
+    envGradientStops: GradientStop[] | GradientConfig;
     emission: number;
     emissionMode: number;
     emissionColor: THREE.Color;
@@ -130,27 +130,15 @@ export const MaterialFeature: FeatureDefinition = {
             min: 0.0, max: 5.0, step: 0.01,
             group: 'env'
         },
-        envMapVisible: {
-            type: 'boolean',
-            default: false,
-            label: 'Show Background',
-            shortId: 'ev',
-            uniform: 'uEnvMapVisible',
-            group: 'env',
-            parentId: 'envStrength',
-            condition: { gt: 0.0 }
-        },
         envBackgroundStrength: {
             type: 'float',
-            default: 1.0,
-            label: 'BG Brightness',
+            default: 0.0,
+            label: 'BG Visibility',
             shortId: 'eb',
             uniform: 'uEnvBackgroundStrength',
             min: 0.0, max: 2.0, step: 0.01,
-            scale: 'log',
             group: 'env',
-            parentId: 'envMapVisible',
-            condition: { bool: true }
+            condition: { gt: 0.0, param: 'envStrength' }
         },
         envSource: {
             type: 'float', 
@@ -159,8 +147,9 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'eo',
             uniform: 'uEnvSource',
             group: 'env',
-            parentId: 'envStrength',
-            condition: { gt: 0.0 },
+            // Visible only if light is active (Needed for IBL) or if background is visible?
+            // User requested: visible only when environment light > 0
+            condition: { gt: 0.0, param: 'envStrength' },
             options: [
                 { label: 'Sky Image', value: 0.0 },
                 { label: 'Gradient', value: 1.0 }
@@ -179,7 +168,21 @@ export const MaterialFeature: FeatureDefinition = {
                 mapping: THREE.EquirectangularReflectionMapping,
                 minFilter: THREE.LinearMipmapLinearFilter,
                 generateMipmaps: true
+            },
+            linkedParams: {
+                colorSpace: 'envMapColorSpace'
             }
+        },
+        // Linked Color Space Param (Hidden, controlled by Image UI)
+        envMapColorSpace: {
+            type: 'float',
+            default: 0.0,
+            label: 'Env Profile',
+            shortId: 'ec',
+            uniform: 'uEnvMapColorSpace',
+            group: 'env',
+            hidden: true
+            // Removed noReset: true to ensure accumulation resets on change
         },
         useEnvMap: {
             type: 'boolean',
@@ -198,8 +201,11 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvRotation',
             min: 0.0, max: 6.28, step: 0.01,
             group: 'env',
-            parentId: 'envSource',
-            condition: { eq: 0.0 } 
+            // Show only if Env Strength > 0 AND Source is Image (0.0)
+            condition: [
+                { param: 'envStrength', gt: 0.0 },
+                { param: 'envSource', eq: 0.0 }
+            ]
         },
         envGradientStops: {
             type: 'gradient',

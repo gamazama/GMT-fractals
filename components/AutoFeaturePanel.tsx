@@ -25,6 +25,7 @@ interface AutoFeaturePanelProps {
     isDisabled?: boolean;
     disabledParams?: string[];
     excludeParams?: string[];
+    whitelistParams?: string[]; // New: Render ONLY these params, ignore group
     variant?: 'default' | 'dense';
     // New Props for Engine Panel Interception
     forcedState?: any; 
@@ -37,13 +38,26 @@ const evaluateCondition = (condition: ParamCondition, sliceState: any, globalSta
     if (condition.or) {
         return condition.or.some(subCond => evaluateCondition(subCond, sliceState, globalState, parentId));
     }
+    if (condition.and) {
+        return condition.and.every(subCond => evaluateCondition(subCond, sliceState, globalState, parentId));
+    }
 
     let targetParam = condition.param || parentId;
     let val: any;
 
     if (targetParam && targetParam.startsWith('$')) {
         const key = targetParam.slice(1);
-        val = globalState[key];
+        if (key.includes('.')) {
+            const parts = key.split('.');
+            let ptr = globalState;
+            for (const part of parts) {
+                if (ptr === undefined || ptr === null) { ptr = undefined; break; }
+                ptr = ptr[part];
+            }
+            val = ptr;
+        } else {
+            val = globalState[key];
+        }
     } else if (targetParam) {
         val = sliceState[targetParam];
     } else {
@@ -108,7 +122,7 @@ const getMapping = (config: ParamConfig) => {
 };
 
 export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({ 
-    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], variant = 'default',
+    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], variant = 'default',
     forcedState, onChangeOverride, pendingChanges 
 }) => {
     const feature = featureRegistry.get(featureId);
@@ -255,9 +269,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                  );
             }
             
-            // UI: TOGGLE SWITCH (Default) - Added spacing here
+            // UI: TOGGLE SWITCH (Default) - Tighter spacing (mb-1 instead of mb-2 mt-1)
             return (
-                <div className={`mb-2 mt-1 ${!!config.parentId ? "ml-1 p-1 pl-2 bg-white/5 border-l-2 border-white/10 rounded-r" : ""}`}>
+                <div className={`mb-1 ${!!config.parentId ? "ml-1 p-1 pl-2 bg-white/5 border-l-2 border-white/10 rounded-r" : ""}`}>
                     <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} options={config.options} disabled={isParamDisabled} />
                 </div>
             );
@@ -287,16 +301,51 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         }
         
         if (config.type === 'image') {
+            // Check for linked colorSpace param or default to 'colorSpace'
+            const colorSpaceKey = config.linkedParams?.colorSpace || 'colorSpace';
+            const colorSpaceParam = feature.params[colorSpaceKey];
+            const colorSpaceVal = sliceState[colorSpaceKey];
+            
+            const cycleColorSpace = () => {
+                 if (colorSpaceParam && typeof colorSpaceVal === 'number') {
+                     const next = (colorSpaceVal + 1) % 3;
+                     handleUpdate(colorSpaceKey, next);
+                 }
+            };
+            
+            const profileLabel = colorSpaceVal === 1 ? 'LIN' : colorSpaceVal === 2 ? 'ACES' : 'sRGB';
+
             return (
                 <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                     <div className="bg-gray-800/30 border border-white/5 text-center overflow-hidden">
+                     <div className="bg-gray-800/30 border border-white/5 text-center overflow-hidden relative group">
                         <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, key)} className="hidden" id={`file-input-${key}`} />
                         <label htmlFor={`file-input-${key}`} className="block bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 w-full py-2 text-xs font-bold transition-colors cursor-pointer uppercase">{val ? "Replace Texture" : config.label}</label>
+                        
+                        {/* Overlay for Color Space */}
+                        {colorSpaceParam && (
+                            <div 
+                                className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-bold text-gray-500 bg-black/50 px-1.5 py-0.5 rounded cursor-pointer hover:text-white hover:bg-cyan-900/80 transition-colors select-none"
+                                onClick={(e) => { e.preventDefault(); cycleColorSpace(); }}
+                                title="Input Color Profile: sRGB / Linear / ACES"
+                            >
+                                {profileLabel}
+                            </div>
+                        )}
                     </div>
                 </div>
             );
         }
-        if (config.type === 'gradient') return <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><AdvancedGradientEditor stops={val} onChange={(s) => handleUpdate(key, s)} /></div>;
+        if (config.type === 'gradient') {
+             return (
+                 <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                     <AdvancedGradientEditor 
+                        // Directly pass the value (can be Array or Object)
+                        value={val} 
+                        onChange={(s) => handleUpdate(key, s)}
+                     />
+                 </div>
+             );
+        }
         return null;
     };
 
@@ -320,7 +369,22 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         );
     };
 
-    const paramRoots = Object.keys(feature.params).filter(k => !feature.params[k].parentId && (!groupFilter || feature.params[k].group === groupFilter));
+    const paramRoots = Object.keys(feature.params).filter(k => {
+        if (feature.params[k].parentId) return false;
+        
+        // 1. Whitelist Check
+        if (whitelistParams && whitelistParams.length > 0) {
+            return whitelistParams.includes(k);
+        }
+
+        // 2. Group Check
+        if (groupFilter) {
+            return feature.params[k].group === groupFilter;
+        }
+
+        return true;
+    });
+
     const renderItems: React.ReactNode[] = [];
     for (let i = 0; i < paramRoots.length; i++) {
         const id = paramRoots[i];
@@ -338,6 +402,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     }
 
     feature.customUI?.forEach((c) => {
+        // Prevent CustomUI leakage when using whitelist params (e.g. inserting single slider)
+        if (whitelistParams && whitelistParams.length > 0) return;
+        
         if (groupFilter && c.group !== groupFilter) return;
         if (!checkVisibility(c.condition, sliceState, globalState)) return;
         const Component = componentRegistry.get(c.componentId);
