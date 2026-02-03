@@ -306,3 +306,4 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
     return radiance;
 }
 `;
+};
