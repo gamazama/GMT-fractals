@@ -15,6 +15,9 @@ import { ColoringPanel } from './coloring/components/ColoringPanel';
 import { WebcamOverlay } from './webcam/WebcamOverlay';
 import { DebugToolsOverlay } from './debug_tools/DebugToolsOverlay';
 import { EnginePanel } from '../components/panels/EnginePanel';
+import { SonificationPanel } from './sonification/SonificationPanel';
+import { FHBTProbe } from './sonification/FHBTProbe';
+import { CameraManagerPanel } from './camera_manager/CameraManagerPanel';
 
 // --- 2. Import Legacy/Shared Panels ---
 import FormulaPanel from '../components/panels/FormulaPanel';
@@ -95,6 +98,11 @@ export const registerUI = () => {
     componentRegistry.register('overlay-webcam', WebcamOverlay);
     componentRegistry.register('overlay-debug-tools', DebugToolsOverlay);
     componentRegistry.register('panel-engine', EnginePanel);
+    componentRegistry.register('panel-sonification', SonificationPanel);
+    componentRegistry.register('probe-sonification', FHBTProbe);
+    
+    // Managers
+    componentRegistry.register('panel-cameramanager', CameraManagerPanel);
     
     // Legacy Panels
     componentRegistry.register('panel-formula', FormulaPanel);

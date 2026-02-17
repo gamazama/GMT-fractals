@@ -62,8 +62,8 @@ export const Buffalo: FractalDefinition = {
     parameters: [
         { label: 'Power', id: 'paramA', min: 2.0, max: 16.0, step: 0.001, default: 8.0 },
         { label: 'Fold Scale', id: 'paramB', min: 1.0, max: 3.0, step: 0.001, default: 1.5 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0 }
+        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' }
     ],
 
     defaultPreset: {
@@ -110,9 +110,9 @@ export const Buffalo: FractalDefinition = {
         sceneOffset: { x: -1, y: 0, z: 0, xL: 0.3765650773029154, yL: 0.001230038917818407, zL: 0.08497907239183068 },
         cameraMode: "Fly",
         lights: [
-            { position: { x: -1.2312987020450135, y: 0.08848406939920131, z: 0.14923449323142857 }, color: "#ffffff", intensity: 5, falloff: 2.3040000000000003, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { position: { x: -2, y: -1, z: 1 }, color: "#0044aa", intensity: 2, falloff: 0.8, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { position: { x: 0.06545550750209214, y: 0.6734234224352387, z: -2.486302326628615 }, color: "#001133", intensity: 0.5, falloff: 0, falloffType: "Linear", fixed: true, visible: false, castShadow: false }
+            { type: 'Point', position: { x: -1.2312987020450135, y: 0.08848406939920131, z: 0.14923449323142857 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 5, falloff: 2.3040000000000003, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: -2, y: -1, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0044aa", intensity: 2, falloff: 0.8, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.06545550750209214, y: 0.6734234224352387, z: -2.486302326628615 }, rotation: { x: 0, y: 0, z: 0 }, color: "#001133", intensity: 0.5, falloff: 0, falloffType: "Linear", fixed: true, visible: false, castShadow: false }
         ]
     }
 };

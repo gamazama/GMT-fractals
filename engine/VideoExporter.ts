@@ -1,14 +1,18 @@
 
 import * as THREE from 'three';
-import { FractalEngine, engine } from './FractalEngine';
+import { FractalEngine } from './FractalEngine';
 import { animationEngine } from './AnimationEngine';
 import { useAnimationStore } from '../store/animationStore';
 import { useFractalStore } from '../store/fractalStore';
 import { VIDEO_CONFIG, VIDEO_FORMATS } from '../data/constants';
+import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import * as Mediabunny from 'mediabunny';
+import { modulationEngine } from '../features/modulation/ModulationEngine';
+import { featureRegistry } from './FeatureSystem';
+import { ColoringState } from '../features/coloring';
+import { GeometryState } from '../features/geometry';
 
-// Utils: H.264 Bitstream Converter (Annex B -> AVCC)
-// Fixes Firefox metadata bugs and WMP resolution glitches
+// --- UTILS (Same as before) ---
 class H264Converter {
     static findNALUs(buffer: Uint8Array) {
         const nalus: { type: number, data: Uint8Array }[] = [];
@@ -72,7 +76,6 @@ class H264Converter {
     }
 }
 
-// CPU Halton Sequence Generator
 const halton = (index: number, base: number) => {
     let result = 0;
     let f = 1 / base;
@@ -89,13 +92,13 @@ export interface VideoExportConfig {
     width: number;
     height: number;
     fps: number;
-    bitrate: number; // in Mbps
+    bitrate: number;
     samples: number;
     startFrame: number;
     endFrame: number;
     frameStep: number;
-    formatIndex: number; // Index in VIDEO_FORMATS
-    internalScale?: number; // SSAA Multiplier (Default 1.0)
+    formatIndex: number;
+    internalScale?: number;
 }
 
 interface ExportSession {
@@ -103,34 +106,38 @@ interface ExportSession {
     packetSource: Mediabunny.EncodedVideoPacketSource;
     encoder: VideoEncoder;
     muxerChain: Promise<void>; 
-    
     config: VideoExportConfig;
+    
+    // Runtime State
     safeWidth: number;
     safeHeight: number;
+    renderWidth: number;
+    renderHeight: number;
     totalFrames: number;
-    startFrame: number;
-    step: number;
-    outputFrameIndex: number;
-    startTime: number;
-    // Restore state
+    
+    currentOutputIndex: number; // 0 to totalFrames
+    currentSample: number; // 0 to config.samples
+    
+    // State Restoration
     startState: {
         frame: number;
         offset: any;
         camPos: THREE.Vector3;
         camQuat: THREE.Quaternion;
         wasPlaying: boolean;
+        camAspect: number;
+        lastFrameCount: number; // Save frame counter
     };
     directStream?: FileSystemWritableFileStream | null;
-    formatDef: { ext: string, container: string, codec: string, mime: string };
-    scale: number;
+    formatDef: any;
 }
 
 export class VideoExporter {
     private engine: FractalEngine;
     
-    // Accumulation Buffers
-    private accumTargetA: THREE.WebGLRenderTarget | null = null;
-    private accumTargetB: THREE.WebGLRenderTarget | null = null;
+    // Accumulation Buffers - MRT for compatibility with main shader
+    private accumTargetA: THREE.WebGLMultipleRenderTargets | null = null;
+    private accumTargetB: THREE.WebGLMultipleRenderTargets | null = null;
     private exportTarget: THREE.WebGLRenderTarget | null = null;
     private pixelBuffer: Uint8Array | null = null;
     
@@ -138,12 +145,22 @@ export class VideoExporter {
     private ppScene: THREE.Scene;
     private ppCamera: THREE.OrthographicCamera;
     
-    private isCancelled: boolean = false;
-    private shouldStitchEarly: boolean = false;
+    private session: ExportSession | null = null;
     private isPaused: boolean = false;
-
-    private currentSession: ExportSession | null = null;
+    private shouldStitchEarly: boolean = false;
+    private isFinishing: boolean = false; // Guard to prevent double-finish
     
+    // Used for AVCC extraction
+    private extractedDescription: Uint8Array | null = null;
+    
+    // Frame counter for blue noise
+    private internalFrameCounter: number = 0;
+    
+    // Scratches for Modulation application
+    private juliaScratch = new THREE.Vector3();
+    private mat4Scratch = new THREE.Matrix4();
+    private mat3Scratch = new THREE.Matrix3();
+
     constructor(engineInstance: FractalEngine) {
         this.engine = engineInstance;
         this.ppScene = new THREE.Scene();
@@ -153,557 +170,660 @@ export class VideoExporter {
         this.ppScene.add(quad);
     }
 
-    public cancel() {
-        this.isCancelled = true;
-        this.shouldStitchEarly = false;
-    }
-
-    public finishAndStitch() {
-        this.isCancelled = true;
-        this.shouldStitchEarly = true;
-    }
-
-    public pause() {
-        this.isPaused = true;
-    }
-
-    public resume() {
-        this.isPaused = false;
-    }
-
+    public get active() { return !!this.session; }
+    
     private captureCurrentState() {
         const animStore = useAnimationStore.getState();
         const cam = this.engine.activeCamera;
         return {
             frame: animStore.currentFrame,
-            offset: { ...engine.sceneOffset },
+            offset: { ...this.engine.sceneOffset },
             camPos: cam ? cam.position.clone() : new THREE.Vector3(),
             camQuat: cam ? cam.quaternion.clone() : new THREE.Quaternion(),
-            wasPlaying: animStore.isPlaying
+            wasPlaying: animStore.isPlaying,
+            camAspect: cam instanceof THREE.PerspectiveCamera ? cam.aspect : 1.0,
+            lastFrameCount: this.engine.mainUniforms.uFrameCount.value
         };
     }
 
-    public async renderSequence(
+    public start(
         config: VideoExportConfig, 
-        directStream: FileSystemWritableFileStream | null,
-        onProgress: (p: number, frameInfo?: string) => void
-    ): Promise<void> {
+        directStream: FileSystemWritableFileStream | null
+    ) {
         if (!this.engine.renderer) throw new Error("Renderer not ready");
-        
-        console.log("VideoExporter: Starting render sequence", config);
 
-        // 1. Prepare Session
-        useFractalStore.getState().setIsExporting(true);
-        this.isCancelled = false;
-        this.shouldStitchEarly = false;
-        this.isPaused = false;
-        
         const animStore = useAnimationStore.getState();
         if (animStore.isPlaying) animStore.pause();
-
-        const formatDef = VIDEO_FORMATS[config.formatIndex] || VIDEO_FORMATS[0];
-        console.log(`VideoExporter: Using ${formatDef.label} (${formatDef.codec})`);
-
-        // COMPATIBILITY FIX: Enforce 16-pixel alignment for dimensions.
+        
+        // 1. Setup Dimensions
         const align = 16;
         const safeWidth = Math.floor(config.width / align) * align;
         const safeHeight = Math.floor(config.height / align) * align;
-        
         const scale = config.internalScale || 1.0;
-        this.initTargets(safeWidth, safeHeight, scale);
+        const renderW = Math.floor(safeWidth * scale);
+        const renderH = Math.floor(safeHeight * scale);
+        
+        this.initTargets(safeWidth, safeHeight, renderW, renderH);
+
+        // 2. Setup Camera for Export Aspect Ratio
+        const cam = this.engine.activeCamera as THREE.PerspectiveCamera;
+        const startState = this.captureCurrentState();
+        
+        cam.aspect = safeWidth / safeHeight;
+        cam.updateProjectionMatrix();
+        
+        // Reset local frame counter for deterministic noise
+        this.internalFrameCounter = 0;
+
+        // 3. Encoder Setup
+        const formatDef = VIDEO_FORMATS[config.formatIndex] || VIDEO_FORMATS[0];
+        
+        let target: Mediabunny.Target;
+        let format: Mediabunny.OutputFormat;
+
+        if (formatDef.container === 'webm') {
+            target = directStream 
+                ? new Mediabunny.StreamTarget(directStream as unknown as WritableStream, { chunked: true })
+                : new Mediabunny.BufferTarget();
+            format = new Mediabunny.WebMOutputFormat();
+        } else {
+            target = directStream
+                ? new Mediabunny.StreamTarget(directStream as unknown as WritableStream, { chunked: true })
+                : new Mediabunny.BufferTarget();
+            format = new Mediabunny.Mp4OutputFormat({ fastStart: 'in-memory' });
+        }
+
+        const output = new Mediabunny.Output({ format, target });
+        const packetSource = new Mediabunny.EncodedVideoPacketSource(formatDef.codec as Mediabunny.VideoCodec);
+
+        let encoderError: Error | null = null;
+        this.extractedDescription = null;
+
+        const encoder = new VideoEncoder({
+            output: (chunk, meta) => this.handleEncodedChunk(chunk, meta),
+            error: (e) => { console.error("Encoder Error", e); encoderError = e; }
+        });
+
+        const encoderConfig: VideoEncoderConfig = {
+            codec: formatDef.codec === 'avc' ? 'avc1.640034' : formatDef.codec,
+            width: safeWidth,
+            height: safeHeight,
+            bitrate: config.bitrate * VIDEO_CONFIG.BITRATE_MULTIPLIER,
+            framerate: config.fps,
+            latencyMode: 'quality',
+            avc: { format: formatDef.container === 'mp4' ? 'annexb' : 'avc' }
+        };
+
+        encoder.configure(encoderConfig);
 
         const start = Math.max(0, config.startFrame);
         const end = Math.max(start, Math.min(animStore.durationFrames, config.endFrame));
         const step = Math.max(1, Math.floor(config.frameStep));
         const totalFrames = Math.floor((end - start) / step) + 1;
 
-        // 3. Initialize Mediabunny Output
-        let target: Mediabunny.Target;
-        let format: Mediabunny.OutputFormat;
-
-        if (formatDef.container === 'webm') {
-            console.log("VideoExporter: Streaming WebM Mode");
-            if (directStream) {
-                target = new Mediabunny.StreamTarget(directStream as unknown as WritableStream, { chunked: true });
-            } else {
-                target = new Mediabunny.BufferTarget();
-            }
-            format = new Mediabunny.WebMOutputFormat();
-        } else {
-            if (directStream) {
-                console.log("VideoExporter: Streaming MP4 Mode (True Disk Write)");
-                target = new Mediabunny.StreamTarget(directStream as unknown as WritableStream, { chunked: true });
-                format = new Mediabunny.Mp4OutputFormat({ fastStart: 'in-memory' });
-            } else {
-                console.log("VideoExporter: Buffered MP4 Mode (RAM)");
-                target = new Mediabunny.BufferTarget();
-                format = new Mediabunny.Mp4OutputFormat({ fastStart: 'in-memory' });
-            }
-        }
-
-        const output = new Mediabunny.Output({
-            format: format,
-            target: target
-        });
-
-        const packetSource = new Mediabunny.EncodedVideoPacketSource(formatDef.codec as Mediabunny.VideoCodec);
-        
-        let encoderError: Error | null = null;
-        let muxerChain = Promise.resolve();
-        let extractedDescription: Uint8Array | null = null;
-
-        // 5. Setup Encoder
-        const encoder = new VideoEncoder({
-            output: (chunk, meta) => {
-                if (encoderError) return;
-
-                // 1. Capture Raw Data Sync
-                const rawBuffer = new Uint8Array(chunk.byteLength);
-                chunk.copyTo(rawBuffer);
-
-                // 2. STABLE CLONE OF METADATA (survival in promise chain)
-                const stableMeta = meta ? {
-                    decoderConfig: {
-                        ...meta.decoderConfig,
-                        description: meta.decoderConfig?.description ? new Uint8Array(meta.decoderConfig.description as any).slice() : undefined
-                    }
-                } : undefined;
-
-                // WRAP: Create a new Packet
-                // We don't use fromEncodedChunk because we might modify the buffer (AnnexB -> AVCC)
-                const packet = new Mediabunny.EncodedPacket(
-                    rawBuffer as any,
-                    chunk.type,
-                    chunk.timestamp / 1e6,
-                    (chunk.duration ?? 0) / 1e6
-                );
-
-                // 3. Queue to Muxer
-                muxerChain = muxerChain.then(async () => {
-                    if (encoderError) return;
-                    try {
-                        // FIX: Perform conversion inside the chain
-                        if (formatDef.container === 'mp4' && formatDef.codec === 'avc') {
-                            const converted = H264Converter.convertChunkToAVCC(packet.data);
-                            (packet as any).data = converted.data; // Mutate internal buffer
-                            
-                            if (converted.sps && converted.pps && !extractedDescription) {
-                                console.log("VideoExporter: Manually extracted SPS/PPS for WMP compatibility.");
-                                extractedDescription = H264Converter.createAVCCDescription(converted.sps, converted.pps);
-                            }
-                        }
-
-                        // INJECTION FIX: Ensure stableMeta has the description if we extracted it.
-                        // This prevents Mediabunny from trying to parse the AVCC packet as AnnexB to find the config.
-                        if (stableMeta && stableMeta.decoderConfig && !stableMeta.decoderConfig.description && extractedDescription) {
-                            stableMeta.decoderConfig.description = extractedDescription;
-                        }
-
-                        if (output.state === 'pending') {
-                            const desc = extractedDescription || stableMeta?.decoderConfig?.description;
-                            if (formatDef.container === 'mp4' && !desc) {
-                                throw new Error("Codec configuration (SPS/PPS) missing from stream. Muxer cannot continue.");
-                            }
-                            
-                            output.addVideoTrack(packetSource, {
-                                frameRate: config.fps,
-                                width: safeWidth,
-                                height: safeHeight,
-                                displayWidth: safeWidth,
-                                displayHeight: safeHeight,
-                                trackWidth: safeWidth,
-                                trackHeight: safeHeight,
-                                description: desc
-                            } as any);
-                            await output.start();
-                        }
-                        
-                        // PASS THE CLONED META: This fixes "Video chunk metadata must be provided"
-                        await packetSource.add(packet, stableMeta as any);
-
-                    } catch (err) {
-                        console.error("VideoExporter: Muxing failed", err);
-                        encoderError = err as Error;
-                    }
-                });
-            },
-            error: (e) => {
-                console.error("VideoExporter: WebCodecs Encoder Error", e);
-                encoderError = e;
-            }
-        });
-
-        const encoderConfig: VideoEncoderConfig = {
-            // HIGH PROFILE, LEVEL 5.2 (avc1.640034)
-            // This unblocks high bitrates and fixes quality issues in Firefox
-            // 0x64 = High Profile (100)
-            // 0x00 = Constraints
-            // 0x34 = Level 5.2 (52)
-            codec: formatDef.codec === 'avc' ? 'avc1.640034' : formatDef.codec, 
-            width: safeWidth,
-            height: safeHeight,
-            bitrate: config.bitrate * VIDEO_CONFIG.BITRATE_MULTIPLIER,
-            framerate: config.fps,
-            latencyMode: 'quality',
-            // Force annexb to ensure SPS/PPS are present for manual extraction
-            avc: { format: formatDef.container === 'mp4' ? 'annexb' : 'avc' } 
-        };
-
-        // FORCE CONSTANT BITRATE (CBR)
-        // Helps Firefox software encoder (OpenH264) allocate bits to dark areas
-        try {
-            const support = await VideoEncoder.isConfigSupported({ ...encoderConfig, bitrateMode: 'constant' });
-            if (support.supported) {
-                encoderConfig.bitrateMode = 'constant';
-                console.log("VideoExporter: CBR Enabled for consistent quality.");
-            } else {
-                console.warn("VideoExporter: CBR not supported by browser/hardware. Falling back to VBR.");
-            }
-        } catch(e) {
-            console.warn("VideoExporter: CBR Check failed.", e);
-        }
-
-        encoder.configure(encoderConfig);
-        
-        this.currentSession = {
+        this.session = {
             output,
-            encoder,
             packetSource,
-            muxerChain,
+            encoder,
+            muxerChain: Promise.resolve(),
             config,
             safeWidth,
             safeHeight,
+            renderWidth: renderW,
+            renderHeight: renderH,
             totalFrames,
-            startFrame: start,
-            step,
-            outputFrameIndex: 0,
-            startTime: Date.now(),
-            startState: this.captureCurrentState(),
-            directStream: directStream,
-            formatDef,
-            scale
+            currentOutputIndex: 0,
+            currentSample: 0,
+            startState,
+            directStream,
+            formatDef
         };
+        
+        this.isPaused = false;
+        this.shouldStitchEarly = false;
+        this.isFinishing = false;
+        
+        // Signal Start
+        useFractalStore.getState().setIsExporting(true);
+        this.engine.resetAccumulation(); // Clear any existing history
+    }
 
-        return new Promise<void>((resolve, reject) => {
-             this.processLoop(resolve, reject, onProgress, () => encoderError);
+    private handleEncodedChunk(chunk: EncodedVideoChunk, meta: EncodedVideoChunkMetadata | undefined) {
+        if (!this.session) return;
+        const sess = this.session;
+
+        // 1. Clone data
+        const rawBuffer = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(rawBuffer);
+
+        // 2. Clone Meta
+        const stableMeta = meta ? {
+            decoderConfig: {
+                ...meta.decoderConfig,
+                description: meta.decoderConfig?.description ? new Uint8Array(meta.decoderConfig.description as any).slice() : undefined
+            }
+        } : undefined;
+
+        const packet = new Mediabunny.EncodedPacket(
+            rawBuffer as any,
+            chunk.type,
+            chunk.timestamp / 1e6,
+            (chunk.duration ?? 0) / 1e6
+        );
+
+        // 3. Queue Mux
+        sess.muxerChain = sess.muxerChain.then(async () => {
+            try {
+                // AnnexB -> AVCC conversion for MP4
+                if (sess.formatDef.container === 'mp4' && sess.formatDef.codec === 'avc') {
+                    const converted = H264Converter.convertChunkToAVCC(packet.data);
+                    (packet as any).data = converted.data;
+                    
+                    if (converted.sps && converted.pps && !this.extractedDescription) {
+                        this.extractedDescription = H264Converter.createAVCCDescription(converted.sps, converted.pps);
+                    }
+                }
+
+                if (stableMeta && stableMeta.decoderConfig && !stableMeta.decoderConfig.description && this.extractedDescription) {
+                    stableMeta.decoderConfig.description = this.extractedDescription;
+                }
+
+                if (sess.output.state === 'pending') {
+                    const desc = this.extractedDescription || stableMeta?.decoderConfig?.description;
+                    if (sess.formatDef.container === 'mp4' && !desc) {
+                         // Wait for next keyframe
+                         console.warn("Waiting for SPS/PPS...");
+                         return; 
+                    }
+                    
+                    sess.output.addVideoTrack(sess.packetSource, {
+                        frameRate: sess.config.fps,
+                        width: sess.safeWidth,
+                        height: sess.safeHeight,
+                        description: desc
+                    } as any);
+                    await sess.output.start();
+                }
+
+                await sess.packetSource.add(packet, stableMeta as any);
+            } catch(e) {
+                console.error("Muxing error:", e);
+                this.cancel();
+            }
         });
     }
 
-    private async processLoop(
-        resolve: () => void, 
-        reject: (e: any) => void,
-        onProgress: (p: number, frameInfo?: string) => void,
-        checkError: () => Error | null
-    ) {
-        if (!this.currentSession) return;
-        const session = this.currentSession;
+    // --- MAIN LOOP HOOK ---
+    // Called by FractalEngine.render() when isExporting is true
+    public tick(renderer: THREE.WebGLRenderer) {
+        // Stop if session missing OR if we are in the flush phase
+        if (!this.session || this.isFinishing) return;
+        if (this.isPaused) return;
 
-        const err = checkError();
-        if (err) {
-            this.emergencyCleanup(session.directStream);
-            reject(err);
+        const sess = this.session;
+
+        // 1. Check if done
+        if (sess.currentOutputIndex >= sess.totalFrames) {
+            this.finish();
             return;
         }
 
-        if (this.isPaused) {
-            setTimeout(() => this.processLoop(resolve, reject, onProgress, checkError), 100);
-            return;
-        }
-
-        if (this.isCancelled) {
-            if (this.shouldStitchEarly) {
-                await this.finalizeExport(resolve);
-                return;
-            } else {
-                this.emergencyCleanup(session.directStream);
-                reject(new Error("Cancelled by user"));
-                return;
-            }
-        }
-
-        if (session.outputFrameIndex >= session.totalFrames) {
-            await this.finalizeExport(resolve);
-            return;
-        }
-
-        try {
-            const timelineFrame = session.startFrame + (session.outputFrameIndex * session.step);
-            const time = timelineFrame / session.config.fps;
-            const timestampMicros = session.outputFrameIndex * (1e6 / session.config.fps); 
-            const durationMicros = (1e6 / session.config.fps);
-
+        // 2. Prepare Frame State (Only once per frame)
+        if (sess.currentSample === 0) {
+            const timelineFrame = sess.config.startFrame + (sess.currentOutputIndex * sess.config.frameStep);
+            const time = timelineFrame / sess.config.fps;
+            
+            // Sync Engine State (Keyframes)
             animationEngine.scrub(timelineFrame);
             
-            await this.renderFrameToBuffers(
-                session.safeWidth, 
-                session.safeHeight, 
-                time, 
-                session.config.samples, 
-                session.scale
-            );
+            // Apply Modulations (LFOs)
+            this.applyModulations(time);
             
-            const buffer = this.captureFrameData(session.safeWidth, session.safeHeight);
-            
-            const frame = new VideoFrame(buffer, {
-                format: 'RGBX',
-                codedWidth: session.safeWidth,
-                codedHeight: session.safeHeight,
-                timestamp: timestampMicros,
-                duration: durationMicros,
-                visibleRect: { x: 0, y: 0, width: session.safeWidth, height: session.safeHeight },
-                colorSpace: {
-                    fullRange: true, // Use Full Range RGB for best color retention
-                    matrix: 'bt709',
-                    primaries: 'bt709',
-                    transfer: 'bt709'
-                }
-            });
+            // Sync Derived Logic (Rotation Matrices)
+            this.updateDerivedState();
 
-            const isFirstFrame = session.outputFrameIndex === 0;
-            session.encoder.encode(frame, { keyFrame: isFirstFrame });
-            frame.close();
+            // Explicitly force correct Time and Resolution uniforms via engine helper
+            this.engine.setUniform('uTime', time);
+            this.engine.setUniform('uResolution', new THREE.Vector2(sess.renderWidth, sess.renderHeight));
+            this.engine.pipeline.resize(sess.renderWidth, sess.renderHeight);
+
+            // Sync Camera Matrix for this exact time
+            const cam = this.engine.activeCamera as THREE.PerspectiveCamera;
+            if (cam) this.engine.syncFrame(cam, { clock: { elapsedTime: time } });
             
-            // NOTE: Removed previewBitmap generation to save performance and remove preview from UI
+            // Clear Buffers
+            renderer.setRenderTarget(this.accumTargetA); renderer.clear();
+            renderer.setRenderTarget(this.accumTargetB); renderer.clear();
             
-            const percent = ((session.outputFrameIndex + 1) / session.totalFrames) * 99;
-            onProgress(percent, `Frame ${timelineFrame} (${session.outputFrameIndex + 1}/${session.totalFrames})`);
+            // Update Progress UI
+            const pct = (sess.currentOutputIndex / sess.totalFrames) * 100;
+            // We use a custom event to update the UI without React render loop interference
+            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: true, progress: pct }); 
+        }
+
+        // 3. Render Accumulation Step
+        this.renderStep(renderer);
+        sess.currentSample++;
+
+        // 4. Capture & Advance
+        if (sess.currentSample >= sess.config.samples) {
+            this.captureAndEncode(renderer);
+            sess.currentOutputIndex++;
+            sess.currentSample = 0;
             
-            session.outputFrameIndex++;
-            setTimeout(() => this.processLoop(resolve, reject, onProgress, checkError), 0);
-        } catch (e) {
-            console.error("Frame processing failed", e);
-            this.emergencyCleanup(session.directStream);
-            reject(e);
+            if (this.shouldStitchEarly) {
+                this.finish();
+            }
         }
     }
+    
+    // Calculates LFOs and applies them to uniforms (mimicking AnimationSystem)
+    private applyModulations(time: number) {
+        const store = useFractalStore.getState();
+        const animations = store.animations;
+        
+        // 1. Update LFOs
+        // Using a fixed delta of 1/fps ensures stability
+        modulationEngine.resetOffsets();
+        modulationEngine.updateOscillators(animations, time, 1.0 / this.session!.config.fps);
+        
+        // 2. Apply Rules (if any)
+        if (store.modulation && store.modulation.rules) {
+            modulationEngine.update(store.modulation.rules, 1.0 / this.session!.config.fps);
+        }
+        
+        // 3. Apply Offsets to Uniforms
+        const offsets = modulationEngine.offsets;
+        const targets = Object.keys(offsets);
+        
+        let juliaDirty = false;
+        
+        targets.forEach(targetKey => {
+             const offset = offsets[targetKey];
+             if (Math.abs(offset) < 0.000001) return;
 
-    private async finalizeExport(resolve: () => void) {
-        if (!this.currentSession) return;
-        console.log("VideoExporter: Finalizing...");
-        await this.currentSession.encoder.flush();
-        this.currentSession.encoder.close();
-        await this.currentSession.muxerChain;
-        await this.currentSession.output.finalize();
-
-        if (!this.currentSession.directStream) {
-             const target = this.currentSession.output.target as Mediabunny.BufferTarget;
-             if (target.buffer) {
-                 this.triggerDownload(target.buffer, this.currentSession.formatDef);
+             // Handle Special Cases
+             if (targetKey.startsWith('coloring.')) {
+                 if (targetKey === 'coloring.repeats') {
+                     const c = store.coloring as ColoringState;
+                     const ratio = c.scale / c.repeats;
+                     this.engine.setUniform('uColorScale', (c.repeats + offset) * ratio);
+                     return;
+                 }
+                 if (targetKey === 'coloring.phase') {
+                     const c = store.coloring as ColoringState;
+                     this.engine.setUniform('uColorOffset', c.offset + offset);
+                     return;
+                 }
              }
+             
+             if (targetKey.startsWith('geometry.julia')) {
+                 juliaDirty = true;
+                 return;
+             }
+             
+             // Handle Standard Uniforms
+             let uniformName = '';
+             let baseVal = 0;
+             
+             if (targetKey.includes('.')) {
+                 const [fid, pid] = targetKey.split('.');
+                 const feat = featureRegistry.get(fid);
+                 if (feat && feat.params[pid]) {
+                     uniformName = feat.params[pid].uniform || '';
+                     const slice = (store as any)[fid];
+                     if (slice) baseVal = slice[pid] ?? 0;
+                 }
+             } else if (targetKey.startsWith('param')) {
+                 uniformName = 'u' + targetKey.charAt(0).toUpperCase() + targetKey.slice(1);
+                 baseVal = (store.coreMath as any)?.[targetKey] ?? 0;
+             }
+             
+             if (uniformName) {
+                 this.engine.setUniform(uniformName, baseVal + offset);
+             }
+        });
+        
+        // Julia Composite
+        if (juliaDirty) {
+             const g = (store as any).geometry;
+             const jx = (g.juliaX ?? 0) + (offsets['geometry.juliaX'] || 0);
+             const jy = (g.juliaY ?? 0) + (offsets['geometry.juliaY'] || 0);
+             const jz = (g.juliaZ ?? 0) + (offsets['geometry.juliaZ'] || 0);
+             this.juliaScratch.set(jx, jy, jz);
+             this.engine.setUniform('uJulia', this.juliaScratch);
+        }
+    }
+    
+    private updateDerivedState() {
+        const state = useFractalStore.getState();
+        const geom = (state as any).geometry; 
+        
+        // Geometry Rotation
+        // Add modulation offsets if present
+        const offsets = modulationEngine.offsets;
+        const rotX = (geom.preRotX ?? 0) + (offsets['geometry.preRotX'] || 0);
+        const rotY = (geom.preRotY ?? 0) + (offsets['geometry.preRotY'] || 0);
+        const rotZ = (geom.preRotZ ?? 0) + (offsets['geometry.preRotZ'] || 0);
+
+        if (geom && geom.preRotMaster) {
+             const mx = new THREE.Matrix4().makeRotationX(rotX);
+             const my = new THREE.Matrix4().makeRotationY(rotY);
+             const mz = new THREE.Matrix4().makeRotationZ(rotZ);
+             
+             // Order: Z * X * Y 
+             this.mat4Scratch.identity().multiply(mz).multiply(mx).multiply(my);
+             this.mat3Scratch.setFromMatrix4(this.mat4Scratch);
+             
+             this.engine.setUniform('uPreRotMatrix', this.mat3Scratch);
+        }
+    }
+
+    private renderStep(renderer: THREE.WebGLRenderer) {
+        if (!this.session) return;
+        const { renderWidth, renderHeight, currentSample } = this.session;
+        
+        // Ping-Pong
+        let writeBuffer = this.accumTargetA;
+        let readBuffer = this.accumTargetB;
+        if (currentSample % 2 !== 0) {
+            writeBuffer = this.accumTargetB;
+            readBuffer = this.accumTargetA;
+        }
+
+        // Update Accumulation Uniforms
+        // Blend = 1 / (N + 1)
+        // Sample 0: 1/1 = 1.0 (Replace)
+        // Sample 1: 1/2 = 0.5 (Mix 50%)
+        const blend = 1.0 / (currentSample + 1);
+        
+        this.engine.mainUniforms.uBlendFactor.value = blend;
+        this.engine.mainUniforms.uExtraSeed.value = Math.random() * 100.0;
+        this.engine.mainUniforms.uHistoryTexture.value = readBuffer!.texture[0];
+        
+        // CRITICAL: Increment Frame Count per sample for Blue Noise Dithering
+        // The Blue Noise shader chunks use uFrameCount to offset texture lookup.
+        // If this is constant, noise is static and accumulation fails.
+        this.internalFrameCounter++;
+        this.engine.mainUniforms.uFrameCount.value = this.internalFrameCounter;
+        
+        // Jitter
+        if (currentSample > 0) {
+            const idx = (currentSample % 16) + 1;
+            const jX = halton(idx, 2);
+            const jY = halton(idx, 3);
+            this.engine.mainUniforms.uJitter.value.set(jX * 2.0 - 1.0, jY * 2.0 - 1.0);
         } else {
-             try { await this.currentSession.directStream.close(); } catch(e) {}
+            this.engine.mainUniforms.uJitter.value.set(0, 0);
+        }
+
+        // Render to FBO
+        renderer.setRenderTarget(writeBuffer);
+        renderer.render(this.engine.mainScene, this.engine.mainCamera);
+        
+        // Blit to Screen (Feedback) with Aspect Fit
+        const canvas = renderer.domElement;
+        
+        // 1. Calculate fit
+        const screenW = canvas.width;
+        const screenH = canvas.height;
+        const screenAspect = screenW / screenH;
+        const imgAspect = this.session.renderWidth / this.session.renderHeight;
+        
+        let vx = 0, vy = 0, vw = screenW, vh = screenH;
+        
+        if (screenAspect > imgAspect) {
+            // Screen is wider than image (Pillarbox)
+            vw = Math.round(screenH * imgAspect);
+            vx = Math.round((screenW - vw) / 2);
+        } else {
+            // Screen is taller than image (Letterbox)
+            vh = Math.round(screenW / imgAspect);
+            vy = Math.round((screenH - vh) / 2);
         }
         
-        this.restoreState();
-        resolve();
+        this.engine.materials.displayMaterial.uniforms.map.value = writeBuffer!.texture[0];
+        this.engine.materials.displayMaterial.uniforms.uResolution.value.set(this.session.renderWidth, this.session.renderHeight);
+        
+        renderer.setRenderTarget(null);
+        
+        // Clear background to black (using Scissor to clear full screen efficiently)
+        renderer.setScissor(0, 0, screenW, screenH);
+        renderer.setScissorTest(true);
+        renderer.setClearColor(0x000000, 1.0);
+        renderer.clearColor(); 
+        
+        // Set Viewport for image
+        renderer.setViewport(vx, vy, vw, vh);
+        renderer.setScissor(vx, vy, vw, vh);
+        renderer.render(this.engine.sceneCtrl.displayScene, this.engine.sceneCtrl.mainCamera);
+    }
+
+    private captureAndEncode(renderer: THREE.WebGLRenderer) {
+        if (!this.session) return;
+        
+        // Which buffer has the final frame?
+        const lastWrite = (this.session.currentSample % 2 !== 0) ? this.accumTargetA : this.accumTargetB;
+        
+        // Post Process to Export Target
+        this.engine.materials.exportMaterial.uniforms.map.value = lastWrite!.texture[0];
+        this.engine.materials.exportMaterial.uniforms.uResolution.value.set(this.session.safeWidth, this.session.safeHeight);
+        
+        renderer.setRenderTarget(this.exportTarget);
+        renderer.setViewport(0, 0, this.session.safeWidth, this.session.safeHeight);
+        renderer.render(this.ppScene, this.ppCamera);
+        
+        // Read Pixels
+        renderer.readRenderTargetPixels(this.exportTarget!, 0, 0, this.session.safeWidth, this.session.safeHeight, this.pixelBuffer!);
+        
+        // Flip Y and Fix Alpha
+        const w = this.session.safeWidth;
+        const h = this.session.safeHeight;
+        const stride = w * 4;
+        const halfH = Math.floor(h / 2);
+        
+        for (let y = 0; y < halfH; y++) {
+            const topOff = y * stride;
+            const botOff = (h - y - 1) * stride;
+            const topRow = this.pixelBuffer!.subarray(topOff, topOff + stride);
+            const botRow = this.pixelBuffer!.subarray(botOff, botOff + stride);
+            
+            // Swap rows in place using a temp buffer isn't easy with typed arrays, 
+            // but we can assume we have enough memory to copy.
+            // Optimized swap:
+            for(let i=0; i<stride; i++) {
+                const temp = topRow[i];
+                topRow[i] = botRow[i];
+                botRow[i] = temp;
+            }
+        }
+        
+        // Force Alpha 255
+        // (Optional, VideoEncoder usually ignores alpha unless configured otherwise, but safe)
+        // Note: doing this in shader is faster. uEncodeOutput ensures alpha=1.0 in shader.
+
+        // Encode
+        const frameData = new VideoFrame(this.pixelBuffer!, {
+            format: 'RGBX',
+            codedWidth: w,
+            codedHeight: h,
+            timestamp: this.session.currentOutputIndex * (1e6 / this.session.config.fps),
+            duration: (1e6 / this.session.config.fps),
+            colorSpace: {
+                primaries: 'bt709',
+                transfer: 'bt709',
+                matrix: 'rgb',
+                fullRange: true
+            }
+        });
+        
+        const isKey = this.session.currentOutputIndex === 0;
+        this.session.encoder.encode(frameData, { keyFrame: isKey });
+        frameData.close();
+    }
+
+    public async finish() {
+        if (!this.session || this.isFinishing) return;
+        
+        this.isFinishing = true;
+        const sess = this.session;
+
+        console.log("Export Finishing...");
+        
+        try {
+            await sess.encoder.flush();
+            sess.encoder.close();
+            await sess.muxerChain;
+            await sess.output.finalize();
+
+            if (!sess.directStream) {
+                 const target = sess.output.target as Mediabunny.BufferTarget;
+                 if (target.buffer) {
+                     const blob = new Blob([target.buffer], { type: sess.formatDef.mime });
+                     const url = URL.createObjectURL(blob);
+                     const a = document.createElement('a');
+                     a.href = url;
+                     a.download = `fractal_export.${sess.formatDef.ext}`;
+                     a.click();
+                     setTimeout(() => URL.revokeObjectURL(url), 60000);
+                 }
+            } else {
+                 await sess.directStream.close();
+            }
+        } catch (e) {
+            console.error("Finalize Error", e);
+            alert("Error finalizing video file.");
+        }
+
+        this.session = null; // Detach after flush completes
+        this.isFinishing = false;
+        
+        // Restore
+        this.cleanup();
+        this.restoreState(sess.startState);
     }
     
-    private triggerDownload(buffer: ArrayBuffer, formatDef: any) {
-         const blob = new Blob([buffer], { type: formatDef.mime });
-         const url = URL.createObjectURL(blob);
-         const a = document.createElement('a');
-         a.href = url;
-         a.download = `fractal_export.${formatDef.ext}`;
-         a.click();
-         setTimeout(() => URL.revokeObjectURL(url), 60000);
-    }
-
-    private async emergencyCleanup(stream?: FileSystemWritableFileStream | null) {
-        if (stream) {
-            try { await stream.close(); } catch(e) { console.warn("Stream close failed", e); }
+    public cancel() {
+        if (!this.session) return;
+        const state = this.session.startState;
+        if (this.session.directStream) {
+            this.session.directStream.close().catch(()=>{});
         }
-        this.restoreState();
+        this.session = null;
+        this.isFinishing = false;
+        this.cleanup();
+        this.restoreState(state);
     }
 
-    public restoreState(
-        frame?: number,
-        offset?: any,
-        camPos?: THREE.Vector3,
-        camQuat?: THREE.Quaternion,
-        wasPlaying?: boolean
-    ) {
-        const session = this.currentSession;
-        
-        const finalFrame = frame ?? session?.startState.frame ?? 0;
-        const finalOffset = offset ?? session?.startState.offset ?? { x:0,y:0,z:0, xL:0, yL:0, zL:0 };
-        const finalCamPos = camPos ?? session?.startState.camPos;
-        const finalCamQuat = camQuat ?? session?.startState.camQuat;
-        const finalPlaying = wasPlaying ?? session?.startState.wasPlaying ?? false;
+    public pause() { this.isPaused = true; }
+    public resume() { this.isPaused = false; }
+    public finishAndStitch() { this.shouldStitchEarly = true; }
 
+    private cleanup() {
         useFractalStore.getState().setIsExporting(false);
-        this.isPaused = false;
-        
-        if (this.engine.renderer) {
-            this.engine.renderer.setRenderTarget(null);
-            const canvas = this.engine.renderer.domElement;
-            this.engine.mainUniforms.uResolution.value.set(canvas.width, canvas.height);
-        }
-
-        this.cleanupTargets();
-
-        const fractalStore = useFractalStore.getState();
-        const animStore = useAnimationStore.getState();
-        
-        fractalStore.setSceneOffset(finalOffset);
-        animStore.seek(finalFrame);
-        
-        if (this.engine.activeCamera && finalCamPos && finalCamQuat) {
-            this.engine.activeCamera.position.copy(finalCamPos);
-            this.engine.activeCamera.quaternion.copy(finalCamQuat);
-            this.engine.activeCamera.updateMatrixWorld();
-        }
-
-        animationEngine.scrub(finalFrame);
-        if (finalPlaying) animStore.play();
-        
-        this.engine.resetAccumulation();
-        this.currentSession = null;
-    }
-
-    private initTargets(w: number, h: number, scale: number = 1.0) {
-        const accW = Math.floor(w * scale);
-        const accH = Math.floor(h * scale);
-        
-        if (this.accumTargetA && (this.accumTargetA.width !== accW || this.accumTargetA.height !== accH)) {
-            this.cleanupTargets();
-        }
-
-        if (!this.accumTargetA) {
-            const accumOpts = {
-                minFilter: THREE.LinearFilter,
-                magFilter: THREE.LinearFilter,
-                format: THREE.RGBAFormat,
-                type: THREE.HalfFloatType,
-                stencilBuffer: false,
-                depthBuffer: false,
-            };
-            this.accumTargetA = new THREE.WebGLRenderTarget(accW, accH, accumOpts);
-            this.accumTargetB = new THREE.WebGLRenderTarget(accW, accH, accumOpts);
-            
-            const exportOpts = {
-                minFilter: THREE.LinearFilter,
-                magFilter: THREE.LinearFilter,
-                format: THREE.RGBAFormat,
-                type: THREE.UnsignedByteType, 
-                stencilBuffer: false,
-                depthBuffer: false
-            };
-            this.exportTarget = new THREE.WebGLRenderTarget(w, h, exportOpts);
-            
-            this.pixelBuffer = new Uint8Array(w * h * 4);
-        }
-    }
-    
-    private cleanupTargets() {
+        FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
         this.accumTargetA?.dispose();
         this.accumTargetB?.dispose();
         this.exportTarget?.dispose();
-        
         this.accumTargetA = null;
         this.accumTargetB = null;
         this.exportTarget = null;
         this.pixelBuffer = null;
     }
 
-    private async renderFrameToBuffers(
-        width: number, 
-        height: number, 
-        time: number, 
-        samples: number, 
-        scale: number = 1.0
-    ) {
-        if (!this.engine.renderer || !this.accumTargetA || !this.accumTargetB || !this.exportTarget) return;
-        const renderer = this.engine.renderer;
-        
-        const renderW = Math.floor(width * scale);
-        const renderH = Math.floor(height * scale);
-        
-        this.engine.mainUniforms.uResolution.value.set(renderW, renderH);
-        this.engine.mainUniforms.uTime.value = time;
+    private restoreState(s: ExportSession['startState']) {
+        const animStore = useAnimationStore.getState();
+        const fractalStore = useFractalStore.getState();
+
+        fractalStore.setSceneOffset(s.offset);
+        animStore.seek(s.frame);
         
         if (this.engine.activeCamera) {
             const cam = this.engine.activeCamera as THREE.PerspectiveCamera;
-            const oldAspect = cam.aspect;
-            cam.aspect = width / height; 
+            cam.position.copy(s.camPos);
+            cam.quaternion.copy(s.camQuat);
+            cam.aspect = s.camAspect;
             cam.updateProjectionMatrix();
-            this.engine.syncFrame(cam, { clock: { elapsedTime: time } });
-            cam.aspect = oldAspect; 
-            cam.updateProjectionMatrix();
+            cam.updateMatrixWorld();
         }
 
-        let writeBuffer = this.accumTargetA;
-        let readBuffer = this.accumTargetB;
+        animationEngine.scrub(s.frame);
+        if (s.wasPlaying) animStore.play();
         
-        for (let i = 1; i <= samples; i++) {
-            const blend = 1.0 / i;
-            this.engine.mainUniforms.uBlendFactor.value = blend;
-            this.engine.mainUniforms.uExtraSeed.value = Math.random() * 100.0;
-            this.engine.mainUniforms.uHistoryTexture.value = readBuffer.texture;
-            
-            if (i > 1) {
-                const idx = (i % 16) + 1;
-                const jX = halton(idx, 2);
-                const jY = halton(idx, 3);
-                this.engine.mainUniforms.uJitter.value.set(jX * 2.0 - 1.0, jY * 2.0 - 1.0);
-            } else {
-                this.engine.mainUniforms.uJitter.value.set(0, 0);
-            }
-            
-            renderer.setRenderTarget(writeBuffer);
-            if (i === 1) renderer.clear(); 
-            
-            renderer.render(this.engine.mainScene, this.engine.mainCamera);
-            
-            const temp = writeBuffer;
-            writeBuffer = readBuffer;
-            readBuffer = temp;
+        this.engine.resetAccumulation();
+        
+        // Restore engine frame count to avoid jump
+        this.engine.mainUniforms.uFrameCount.value = s.lastFrameCount;
+
+        // Reset renderer viewport and scissor
+        if (this.engine.renderer) {
+             const canvas = this.engine.renderer.domElement;
+             this.engine.renderer.setViewport(0, 0, canvas.width, canvas.height);
+             this.engine.renderer.setScissor(0, 0, canvas.width, canvas.height);
+             this.engine.renderer.setScissorTest(false);
+             // Force pipeline resize back to screen
+             this.engine.pipeline.resize(canvas.width, canvas.height);
         }
-        
-        const state = useFractalStore.getState();
-        this.engine.materials.updatePostProcessUniforms(state);
-        this.engine.materials.exportMaterial.uniforms.map.value = readBuffer.texture;
-        this.engine.materials.exportMaterial.uniforms.uResolution.value.set(width, height);
-        
-        // --- KEY UPDATE: Push frame to main display for visual feedback ---
-        this.engine.materials.displayMaterial.uniforms.map.value = readBuffer.texture;
-        this.engine.materials.displayMaterial.uniforms.uResolution.value.set(width, height);
-        
-        // Render Post Process to Export Target
-        renderer.setRenderTarget(this.exportTarget);
-        renderer.render(this.ppScene, this.ppCamera);
-        
-        // Also blit to screen (Optional but good for feedback if Canvas is visible)
-        // Since we are inside an async loop, this might fight with the main loop if not paused.
-        // But renderSequence pauses the main loop first.
-        renderer.setRenderTarget(null);
-        renderer.render(this.engine.sceneCtrl.displayScene, this.engine.sceneCtrl.mainCamera);
     }
 
-    private captureFrameData(w: number, h: number): Uint8Array {
-        if (!this.engine.renderer || !this.pixelBuffer) throw new Error("Export fail: Resources cleaned up");
-        if (!this.exportTarget) throw new Error("No buffer rendered");
+    private initTargets(w: number, h: number, rw: number, rh: number) {
+        // Force Float Type for accumulation
+        const floatType = THREE.FloatType; 
         
-        this.engine.renderer.readRenderTargetPixels(this.exportTarget, 0, 0, w, h, this.pixelBuffer);
+        // MRT options for compatibility with main shader (2 outputs: color + depth)
+        const mrtOpts = {
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.LinearFilter,
+            stencilBuffer: false,
+            depthBuffer: false,
+        };
         
-        const stride = w * 4;
-        const halfHeight = Math.floor(h / 2);
-        const row = new Uint8Array(stride);
-        
-        for (let y = 0; y < halfHeight; y++) {
-            const topOffset = y * stride;
-            const bottomOffset = (h - y - 1) * stride;
-            
-            row.set(this.pixelBuffer.subarray(topOffset, topOffset + stride));
-            this.pixelBuffer.set(this.pixelBuffer.subarray(bottomOffset, bottomOffset + stride), topOffset);
-            this.pixelBuffer.set(row, bottomOffset);
-        }
-        
-        for (let i = 3; i < this.pixelBuffer.length; i += 4) {
-            this.pixelBuffer[i] = 255;
+        // Re-create if dimensions mismatch
+        if (this.accumTargetA && (this.accumTargetA.width !== rw || this.accumTargetA.height !== rh)) {
+            this.accumTargetA.dispose();
+            this.accumTargetB?.dispose();
+            this.exportTarget?.dispose();
+            this.accumTargetA = null;
         }
 
-        return this.pixelBuffer;
+        if (!this.accumTargetA) {
+            // Create MRT with 2 outputs (same as main pipeline)
+            this.accumTargetA = new THREE.WebGLMultipleRenderTargets(rw, rh, 2, mrtOpts);
+            this.accumTargetB = new THREE.WebGLMultipleRenderTargets(rw, rh, 2, mrtOpts);
+            
+            // Configure texture formats (same as RenderPipeline)
+            // Texture 0: Color
+            this.accumTargetA.texture[0].format = THREE.RGBAFormat;
+            this.accumTargetA.texture[0].type = floatType;
+            this.accumTargetA.texture[0].minFilter = THREE.LinearFilter;
+            this.accumTargetA.texture[0].magFilter = THREE.LinearFilter;
+            
+            // Texture 1: Depth (unused in export but needed for shader compatibility)
+            this.accumTargetA.texture[1].format = THREE.RGBAFormat;
+            this.accumTargetA.texture[1].type = THREE.FloatType;
+            this.accumTargetA.texture[1].minFilter = THREE.NearestFilter;
+            this.accumTargetA.texture[1].magFilter = THREE.NearestFilter;
+            
+            // Same for target B
+            this.accumTargetB.texture[0].format = THREE.RGBAFormat;
+            this.accumTargetB.texture[0].type = floatType;
+            this.accumTargetB.texture[0].minFilter = THREE.LinearFilter;
+            this.accumTargetB.texture[0].magFilter = THREE.LinearFilter;
+            
+            this.accumTargetB.texture[1].format = THREE.RGBAFormat;
+            this.accumTargetB.texture[1].type = THREE.FloatType;
+            this.accumTargetB.texture[1].minFilter = THREE.NearestFilter;
+            this.accumTargetB.texture[1].magFilter = THREE.NearestFilter;
+            
+            this.exportTarget = new THREE.WebGLRenderTarget(w, h, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter,
+                format: THREE.RGBAFormat,
+                type: THREE.UnsignedByteType,
+                stencilBuffer: false,
+                depthBuffer: false
+            });
+            this.pixelBuffer = new Uint8Array(w * h * 4);
+        }
     }
 }
-
-export const videoExporter = new VideoExporter(engine);

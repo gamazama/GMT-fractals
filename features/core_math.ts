@@ -1,10 +1,11 @@
 
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
-import { FORMULA_ID_MODULAR, FORMULA_ID_GENERIC } from '../data/constants';
+import { FORMULA_ID_MODULAR, FORMULA_ID_GENERIC, MAX_MODULAR_PARAMS } from '../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
 import { QualityState } from './quality';
+import { Uniforms } from '../engine/UniformNames';
 
 export interface CoreMathState {
     iterations: number;
@@ -77,6 +78,9 @@ export const CoreMathFeature: FeatureDefinition = {
     name: 'Formula Math',
     category: 'Formulas',
     tabConfig: { label: 'Formula', componentId: 'panel-formula', order: 10 },
+    extraUniforms: [
+        { name: Uniforms.ModularParams, type: 'float', arraySize: MAX_MODULAR_PARAMS, default: new Float32Array(MAX_MODULAR_PARAMS) }
+    ],
     params: {
         iterations: { type: 'float', default: 16, label: 'Iterations', shortId: 'it', uniform: 'uIterations', min: 1, max: 500, step: 1, group: 'main' },
         paramA: { type: 'float', default: 8.0, label: 'Param A', shortId: 'pa', uniform: 'uParamA', min: -10, max: 10, step: 0.001, group: 'params' },

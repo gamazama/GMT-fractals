@@ -34,6 +34,89 @@ This creates hollow, skeletal structures that resemble microscopic Radiolaria sh
 - **Tip**: Set Coloring Mode to **Trap** to highlight the "cut" surfaces, which are assigned a trap value of 0.
 `
     },
+    'formula.appell': {
+        id: 'formula.appell',
+        category: 'Formulas',
+        title: 'Appell Spectral (Ghost)',
+        parentId: 'formula.active',
+        content: `
+## The Math
+Based on **Appell Polynomials** ($P_k$) from Clifford Analysis. 
+While standard fractal formulas simply power the vector ($z^2$), the Appell sequence introduces a non-conformal subtraction term that exposes the underlying "Skeleton" of the math.
+$$ P_2(x) = x^2 - k|x|^2 $$
+
+## The "Ghost" Visuals
+Because this formula subtracts magnitude during iteration, it doesn't converge to a hard surface like a standard Mandelbrot. 
+Instead, it creates a field of "Interference Patterns". 
+This implementation is designed to be rendered as a **Volumetric Cloud** (using the Glow engine) rather than a solid object.
+
+## Parameters
+- **Param A (Interference)**: The strength of the subtraction term $k$.
+  - **0.0**: Standard "Lathe" fractal (Solid).
+  - **0.33**: The theoretical Euclidean balance point.
+  - **> 0.5**: Breaks the surface, revealing internal veins and structures.
+- **Param C (Ghost Shift)**: Shifts the calculation into the 4th dimension. Use this to scan through the "inside" of the ghost.
+- **Param D (Cloud Density)**: Artificially softens the Distance Estimator to make the fractal look like a nebula.
+`
+    },
+    'formula.mandelbrotck': {
+        id: 'formula.mandelbrotck',
+        category: 'Formulas',
+        title: 'Mandelbrot Hypercomplex',
+        parentId: 'formula.active',
+        content: `
+## The Math
+This is the corrected "True" 3D extension of the Mandelbrot set using Hypercomplex algebra.
+
+## The "Missing Cross-Term"
+Simple 3D extensions often look like a 2D Mandelbrot rotated around a stick (a "Lathe"). This happens because the Y and Z axes don't interact.
+This formula adds the **Cross-Term ($2yz$)** to the iteration, forcing the Y and Z components to mix. This creates a fully connected 3D structure that is not just a surface of revolution.
+
+## Parameters
+- **Param A (Metric)**:
+  - **-1.0**: Elliptic. Solid, bulbous, Tetabrot-like.
+  - **1.0**: Hyperbolic. Creates "Saddles", "Feathers" and open filaments.
+- **Param B (C-Phase)**: Rotates the injection constant $C$ during iteration. Creates spiraling arms and asymmetry.
+- **Param C (Coupling)**: Controls the strength of the Y/Z mixing.
+  - **0.0**: Lathe mode (No mixing).
+  - **1.0**: Full 3D Fractal.
+- **Param D (Burn Mix)**: Blends between Standard Mandelbrot and **Burning Ship** logic ($z \to |z|$).
+  - **0.0**: Smooth.
+  - **1.0**: Sharp, skeletal, mechanical structures.
+- **Param E (Spiral)**: Rotates the Y and Z axes at every step. Turns straight filaments into helixes.
+- **Param F (Y Scale)**: Modifies the width of the fractal arms.
+`
+    },
+    'formula.hypertorus': {
+        id: 'formula.hypertorus',
+        category: 'Formulas',
+        title: 'Mandelorus (HyperTorus)',
+        parentId: 'formula.active',
+        content: `
+## The Concept
+Standard 3D fractals like the Mandelbulb suffer from "Polar Distortion"—the texture gets pinched at the top and bottom poles (like the north pole of a globe).
+The **Mandelorus** solves this by mapping the infinite fractal plane onto the surface of a **Torus** (Donut) instead of a Sphere.
+This creates a **Solenoid** structure where the fractal wraps around the ring endlessly.
+
+## The Math
+1. Convert 3D position $(x,y,z)$ to Toroidal coordinates $(radius, angle, z)$.
+2. The poloidal cross-section (the slice of the donut) forms a complex plane.
+3. We iterate the Mandelbrot formula on this slice.
+4. We apply a **Twist** rotation to the slice based on the angle around the ring.
+
+## Parameters
+- **Param A (Ring Radius)**: The major radius of the donut. Controls the size of the "hole".
+- **Param B (Twist)**: The most important control. Spins the fractal pattern around the ring.
+  - **0.0**: Creates a "Lathe" effect (constant cross-section).
+  - **Values > 0**: Creates twisting, cable-like structures that connect endlessly.
+- **Param C (Power)**: The exponent of the Mandelbrot set ($z^2$, $z^3$, etc).
+- **Param D (Ring Phase)**: Shifts the fractal along the length of the tube.
+- **Param E (Cross Phase)**: Rotates the cross-section slice.
+
+## Usage
+Perfect for creating "Endless Tunnels" or "Ouroboros" structures. Fly the camera inside the tube for infinite loops.
+`
+    },
     'formula.mandelbar3d': {
         id: 'formula.mandelbar3d',
         category: 'Formulas',

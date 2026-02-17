@@ -18,6 +18,8 @@ import { detectEngineProfile, ENGINE_PROFILES } from '../features/engine/profile
 import { pipelineToGraph, isStructureEqual, isPipelineEqual, topologicalSort } from '../utils/graphAlg';
 import { JULIA_REPEATER_PIPELINE } from '../data/initialPipelines';
 import '../features'; // Ensure features are registered
+import { PreciseVector3 } from '../types';
+import { OpticsState } from '../features/optics';
 
 export const useFractalStore = create<FractalStoreState & FractalActions>()(subscribeWithSelector((set, get, api) => ({
     ...createUISlice(set, get, api),
@@ -65,7 +67,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
             const def = registry.get(f);
             const formulaPreset: Preset = (def && def.defaultPreset) ? JSON.parse(JSON.stringify(def.defaultPreset)) : { formula: f };
             
-            // Smart Profile Persistence
             const currentProfileKey = detectEngineProfile(get());
             if (currentProfileKey !== 'custom' && currentProfileKey !== 'balanced') {
                 // @ts-ignore
@@ -84,18 +85,12 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
             if (lockScene) {
                 const current = get().getPreset(); 
                 
-                // When locking scene, we keep the current environment (Lighting, Atmos, etc)
-                // AND Gradients (Coloring, Texturing).
-                // We MUST apply the new formula's math and geometry parameters.
                 const mergedFeatures = { ...(current.features || {}) };
                 const newFeatures = formulaPreset.features || {};
                 
                 if (newFeatures.coreMath) mergedFeatures.coreMath = newFeatures.coreMath;
                 if (newFeatures.geometry) mergedFeatures.geometry = newFeatures.geometry;
                 
-                // NOTE: We do NOT copy coloring/texturing from newFeatures.
-                // This preserves the current coloring setup from mergedFeatures (which came from current).
-
                 const merged: any = {
                     ...current, 
                     formula: f,
@@ -145,7 +140,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         const nextArr = v.map((next) => {
             const current = currentArr.find(c => c.id === next.id);
             if (!current) return next;
-            // Preserve phase continuity if period changed
             if (next.period !== current.period && next.period > 0) {
                 const time = performance.now() / 1000;
                 const newPhase = ((time / current.period) + current.phase - (time / next.period)) % 1.0;
@@ -215,7 +209,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
 
     getPreset: (options) => {
         const s = get();
-        // Access AnimationStore for sequence data
         
         const p: Preset = {
             version: s.projectSettings.version,
@@ -225,7 +218,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         };
 
         if (options?.includeScene !== false) {
-             // Access Engine if possible for unified state, or Store fallbacks
              if (engine.activeCamera) {
                  const u = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera, s.targetDistance);
                  p.cameraPos = u.position;
@@ -239,7 +231,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
                  p.targetDistance = s.targetDistance;
              }
              p.cameraMode = s.cameraMode;
-             p.lights = []; // Legacy
+             p.lights = []; 
              p.renderMode = s.renderMode;
              p.quality = { aaMode: s.aaMode, aaLevel: s.aaLevel, msaa: s.msaaSamples, accumulation: s.accumulation };
         }
@@ -273,12 +265,14 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
 
         try {
             // @ts-ignore
-            const animStore = window.useAnimationStore?.getState?.() || require('../animationStore').useAnimationStore.getState();
+            const animStore = window.useAnimationStore?.getState?.();
             if (animStore) {
                 p.sequence = animStore.sequence;
                 p.duration = animStore.durationFrames;
             }
-        } catch(e) {}
+        } catch(e) {
+            console.warn("Failed to save animation sequence:", e);
+        }
 
         return p;
     },
@@ -300,8 +294,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
 
 })));
 
-// Unified selector for checking if the app is "Busy"
-// Note: 'isGizmoDragging' is covered by 'isUserInteracting' because LightGizmo calls handleInteractionStart.
 export const selectIsGlobalInteraction = (state: FractalStoreState) => {
     return state.isUserInteracting || 
            state.interactionMode !== 'none';
@@ -363,7 +355,6 @@ export const bindStoreToEngine = () => {
         }
     });
     
-    // Initial sync of Pause state
     engine.isPaused = s.isPaused;
     engine.setPreviewSampleCap(s.sampleCap);
 
@@ -372,13 +363,32 @@ export const bindStoreToEngine = () => {
     useFractalStore.subscribe(state => state.isExporting, (v) => update({ isExporting: v }));
     useFractalStore.subscribe(state => state.isBucketRendering, (v) => update({ isBucketRendering: v }));
     useFractalStore.subscribe(state => state.cameraMode, (v) => update({ cameraMode: v }));
-    useFractalStore.subscribe(state => state.optics, (v) => update({ optics: v }));
     useFractalStore.subscribe(state => state.lighting, (v) => update({ lighting: v }));
     useFractalStore.subscribe(state => state.quality, (v) => update({ quality: v })); 
-    
-    // Bind Pause/Cap
     useFractalStore.subscribe(state => state.isPaused, (v) => { engine.isPaused = v; });
     useFractalStore.subscribe(state => state.sampleCap, (v) => { engine.setPreviewSampleCap(v); });
+
+    // Auto-Save Camera Subscription
+    useFractalStore.subscribe(
+        (state) => [state.cameraPos, state.cameraRot, state.sceneOffset, state.targetDistance, state.optics] as const,
+        (data) => {
+            const [pos, rot, off, dist, optics] = data;
+            const current = useFractalStore.getState();
+            // @ts-ignore - access window global to check isPlaying safely without loop
+            const isPlaying = window.useAnimationStore?.getState?.().isPlaying;
+            
+            if (current.activeCameraId && !isPlaying) {
+                current.updateCamera(current.activeCameraId, {
+                    position: pos,
+                    rotation: rot,
+                    sceneOffset: off,
+                    targetDistance: dist,
+                    optics: optics
+                });
+            }
+        },
+        { fireImmediately: false, equalityFn: (a,b) => JSON.stringify(a) === JSON.stringify(b) }
+    );
 
     const syncBucketConfig = () => {
         const cs = useFractalStore.getState();
@@ -402,6 +412,9 @@ export const bindStoreToEngine = () => {
             useFractalStore.setState({ renderMode: mode });
         }
     });
+    
+    // Explicit Optics Sync
+    useFractalStore.subscribe(state => state.optics, (v) => update({ optics: v }));
 
     FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, ({ isRendering }) => {
         useFractalStore.getState().setIsBucketRendering(isRendering);

@@ -1,5 +1,7 @@
 
 import React from 'react';
+// Import panel directly if needed or lazily
+import { CameraManagerPanel } from '../../features/camera_manager/CameraManagerPanel';
 
 // Define the interface for components used in the registry
 export interface FeatureComponentProps {
@@ -27,3 +29,8 @@ class ComponentRegistry {
 }
 
 export const componentRegistry = new ComponentRegistry();
+
+// Pre-register CameraManager here (or do it in a features/index file if preferred)
+// To keep things clean, we will assume registerUI calls this, but since CameraManager isn't a "Feature" in DDFS sense
+// but a UI panel, we can register it here if we import it. 
+// Ideally, `features/ui.tsx` handles registration.

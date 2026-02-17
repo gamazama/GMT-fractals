@@ -12,6 +12,9 @@
 *   **Modular Builder:** A node-based graph editor to construct custom fractal formulas (JIT Compiled to GLSL).
 *   **Animation Studio:** Full keyframe timeline with Bezier curves, Dope Sheet, and Graph Editor.
 *   **Video Export:** Offline rendering pipeline supporting 4K+ resolution and high-bitrate WebM/MP4 export (using WebCodecs).
+*   **Environment Features:**
+    *   **Water Plane:** Infinite ocean with procedural waves.
+    *   **Volumetrics:** Atmospheric fog and glow.
 *   **Data-Driven Architecture:** Features are defined in a registry, automatically generating UI, State, and Shaders.
 
 ## 🚀 Quick Start
@@ -69,13 +72,13 @@ We maintain detailed documentation for contributors:
 
 ## 📜 License
 
-**GPL-2.0 License**
+**GPL-3.0 License**
 
 Copyright (c) 2024 Guy Zack
 
-This program is free software; you can redistribute it and/or modify
+This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
+the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,

@@ -1,4 +1,5 @@
 
+
 export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
     
     const noiseLogic = renderMode === 'PathTracing' ? 
@@ -18,13 +19,14 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
     vec2 uv = uvCoord * 2.0 - 1.0;
     
     // --- TAA JITTER (Calculated on CPU) ---
-    if (uBlendFactor < 0.999) {
+    // Offsets the ray origin slightly to anti-alias over time
+    // SAFETY: Ensure resolution is valid to prevent NaN
+    if (uBlendFactor < 0.999 && uResolution.x > 0.5) {
         vec2 pixelSize = 2.0 / uResolution;
-        // uJitter is pre-calculated Halton(index) from CPU
         uv += uJitter * pixelSize * 0.5;
     }
 
-    stochasticSeed = 0.0;
+    stochasticSeed = 0.5; // Default safe value
     
     // Cache blending factor locally to help compiler optimization
     float blendFactor = uBlendFactor;

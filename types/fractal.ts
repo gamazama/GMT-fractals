@@ -53,6 +53,8 @@ export interface FractalParameter {
     max: number;
     step: number;
     default: number;
+    scale?: 'linear' | 'log' | 'pi'; // Explicit UI scaling mode
+    options?: { label: string; value: number }[];
 }
 
 export interface FractalDefinition {

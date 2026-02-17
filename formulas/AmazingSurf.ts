@@ -39,7 +39,7 @@ export const AmazingSurf: FractalDefinition = {
         { label: 'Min Radius', id: 'paramB', min: 0.0, max: 1.5, step: 0.001, default: 0.8 },
         { label: 'Wave Freq', id: 'paramC', min: 0.0, max: 10.0, step: 0.1, default: 6.0 },
         { label: 'Wave Amp', id: 'paramD', min: 0.0, max: 2.0, step: 0.01, default: 0.5 },
-        { label: 'Wave Twist', id: 'paramE', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
+        { label: 'Wave Twist', id: 'paramE', min: -5.0, max: 5.0, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Vert Shift', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
@@ -88,9 +88,9 @@ export const AmazingSurf: FractalDefinition = {
         targetDistance: 0.504,
         cameraMode: "Orbit",
         lights: [
-            { position: { x: 0.06201624057047557, y: -0.0404139584830392, z: -0.6430434715537097 }, color: "#FF9D7B", intensity: 5, falloff: 22, falloffType: "Quadratic", fixed: true, visible: true, castShadow: true },
-            { position: { x: 0.05, y: 0.075, z: -0.1 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { position: { x: 0.25, y: 0.075, z: -0.1 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.06201624057047557, y: -0.0404139584830392, z: -0.6430434715537097 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FF9D7B", intensity: 5, falloff: 22, falloffType: "Quadratic", fixed: true, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

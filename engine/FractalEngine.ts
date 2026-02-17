@@ -16,12 +16,15 @@ import { OpticsState } from '../features/optics';
 import { LightingState } from '../features/lighting';
 import { QualityState } from '../features/quality'; 
 import '../formulas'; 
+import { VideoExporter } from './VideoExporter';
+import { featureRegistry } from './FeatureSystem';
 
 export interface EngineRenderState {
     cameraMode: 'Orbit' | 'Fly';
     isExporting: boolean;
     isBucketRendering: boolean;
     isGizmoInteracting: boolean;
+    isCameraInteracting: boolean;
     isMobile: boolean;
     optics: OpticsState | null;
     lighting: LightingState | null;
@@ -41,6 +44,14 @@ const halton = (index: number, base: number) => {
     return result;
 };
 
+// Precompute 64 jitter values using Halton sequence for faster access
+const PRECOMPUTED_JITTER: THREE.Vector2[] = [];
+for (let i = 1; i <= 2048; i++) {
+    const jX = halton(i, 2) * 2.0 - 1.0;
+    const jY = halton(i, 3) * 2.0 - 1.0;
+    PRECOMPUTED_JITTER.push(new THREE.Vector2(jX, jY));
+}
+
 export class FractalEngine {
     public materials: MaterialController;
     public sceneCtrl: SceneController;
@@ -52,6 +63,8 @@ export class FractalEngine {
     public renderer: THREE.WebGLRenderer | null = null;
     public pipeline: RenderPipeline;
     
+    public videoExporter: VideoExporter;
+    
     public modulations: Record<string, number> = {};
 
     public state: EngineRenderState = {
@@ -59,6 +72,7 @@ export class FractalEngine {
         isExporting: false,
         isBucketRendering: false,
         isGizmoInteracting: false,
+        isCameraInteracting: false,
         isMobile: false,
         optics: null,
         lighting: null,
@@ -69,10 +83,8 @@ export class FractalEngine {
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }
     public set isGizmoInteracting(v: boolean) { this.state.isGizmoInteracting = v; }
 
-    // New flag for camera interaction (Orbit/Fly)
-    public isCameraInteracting: boolean = false;
-
-    // Pause Control
+    public get isCameraInteracting() { return this.state.isCameraInteracting; }
+    public set isCameraInteracting(v: boolean) { this.state.isCameraInteracting = v; }
     public isPaused: boolean = false;
     private lastInteractionTime: number = 0;
 
@@ -86,7 +98,7 @@ export class FractalEngine {
     private _isCompiling: boolean = false; 
     private compileTimer: any = null;
     private _pendingTeleport: CameraState | null = null;
-    private _totalFrames: number = 0; // Master Frame Counter for Dithering
+    private _totalFrames: number = 0;
     
     private lastRenderState = {
         pos: new THREE.Vector3(),
@@ -109,7 +121,8 @@ export class FractalEngine {
         const isMobile = (typeof window !== 'undefined' && (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768));
         this.state.isMobile = isMobile;
 
-        const initialConfig: ShaderConfig = { 
+        // --- DYNAMIC CONFIG GENERATION ---
+        const initialConfig: any = { 
             formula: 'Mandelbulb', 
             pipelineRevision: 0, 
             msaaSamples: 1, 
@@ -117,46 +130,45 @@ export class FractalEngine {
             maxSteps: 300,
             renderMode: 'Direct',
             compilerHardCap: 500,
-            shadows: true,
-            quality: {
-                precisionMode: isMobile ? 1.0 : 0.0,
-                bufferPrecision: isMobile ? 1.0 : 0.0,
-                maxSteps: 300,
-                distanceMetric: 0.0,
-                dynamicScaling: false,
-                interactionDownsample: 2,
-                estimator: 0
-            },
-            geometry: { 
-                hybridComplex: false,
-                preRotMaster: true
-            },
-            lighting: { 
-                shadows: true, 
-                shadowSteps: 128,
-                ptBounces: 3,
-                ptStochasticShadows: false
-            },
-            ao: {
-                aoEnabled: true,
-                aoSamples: 5,
-                aoStochasticCp: true
-            },
-            reflections: {
-                enabled: true,
-                steps: 64,
-                bounces: 1
-            }
+            shadows: true
         };
+
+        const allFeatures = featureRegistry.getAll();
+        allFeatures.forEach(feat => {
+            const featConfig: any = {};
+            Object.entries(feat.params).forEach(([key, config]) => {
+                if (!config.composeFrom) {
+                    featConfig[key] = config.default;
+                }
+            });
+            const cleanConfig: any = {};
+            Object.keys(featConfig).forEach(k => {
+                const val = featConfig[k];
+                if (val && typeof val === 'object') {
+                    if (val.clone) cleanConfig[k] = val.clone();
+                    else if (Array.isArray(val)) cleanConfig[k] = JSON.parse(JSON.stringify(val));
+                    else cleanConfig[k] = { ...val };
+                } else {
+                    cleanConfig[k] = val;
+                }
+            });
+
+            initialConfig[feat.id] = cleanConfig;
+        });
         
-        this.configManager = new ConfigManager(initialConfig);
-        this.materials = new MaterialController(initialConfig);
+        if (isMobile && initialConfig.quality) {
+            initialConfig.quality.precisionMode = 1.0;
+            initialConfig.quality.bufferPrecision = 1.0;
+        }
+
+        this.configManager = new ConfigManager(initialConfig as ShaderConfig);
+        this.materials = new MaterialController(initialConfig as ShaderConfig);
         this.sceneCtrl = new SceneController(this.materials);
-        this.pickingCtrl = new PickingController(this.materials, this.sceneCtrl, this.virtualSpace);
         this.pipeline = new RenderPipeline();
+        this.pickingCtrl = new PickingController(this.materials, this.sceneCtrl, this.virtualSpace, this.pipeline);
         
-        // Push initial quality state (detected mobile/desktop) to pipeline immediately
-        // This ensures the first resize/initTargets call uses the correct buffer type (HalfFloat vs Float32)
+        this.videoExporter = new VideoExporter(this);
+        
         this.pipeline.updateQuality(initialConfig.quality as QualityState);
 
         this.uniformManager = new UniformManager(this.materials.mainUniforms, this.virtualSpace, this.pipeline);
@@ -169,13 +181,11 @@ export class FractalEngine {
         this.bindEvents();
         this.isBooted = false;
         
-        // Initialize interaction timer
         this.markInteraction();
     }
 
     public handleInput(event: any) {
         if (!this.activeCamera) return;
-
         const { type, dx, dy, delta } = event;
         this.markInteraction();
 
@@ -186,18 +196,14 @@ export class FractalEngine {
         } else if (type === 'drag') {
             const up = new THREE.Vector3(0, 1, 0); 
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.activeCamera.quaternion);
-            
             const qPitch = new THREE.Quaternion().setFromAxisAngle(right, dy * this.inputState.rotateSpeed);
             const qYaw = new THREE.Quaternion().setFromAxisAngle(up, -dx * this.inputState.rotateSpeed);
-            
             this.activeCamera.quaternion.multiplyQuaternions(qYaw, this.activeCamera.quaternion);
             this.activeCamera.quaternion.multiplyQuaternions(this.activeCamera.quaternion, qPitch);
-            
             this.resetAccumulation();
         }
     }
     
-    // Smart Idle Trigger: Call this whenever user changes params or camera
     public markInteraction() {
         this.lastInteractionTime = performance.now();
     }
@@ -206,7 +212,6 @@ export class FractalEngine {
         if (this.isBooted) return;
         console.log("⚡ FractalEngine: Booting...");
         
-        // Setup initial config map
         this.configManager.config = { ...config };
         this.configManager.rebuildMap();
         
@@ -223,10 +228,6 @@ export class FractalEngine {
     public get mainScene() { return this.sceneCtrl.mainScene; }
     public get mainCamera() { return this.sceneCtrl.mainCamera; }
     public get mainMesh() { return this.sceneCtrl.mainMesh; }
-    public get physicsRenderTarget() { return this.sceneCtrl.physicsRenderTarget; }
-    public get physicsScene() { return this.sceneCtrl.physicsScene; }
-    public get physicsCamera() { return this.sceneCtrl.physicsCamera; }
-    public get physicsMesh() { return this.sceneCtrl.physicsMesh; }
     public get activeCamera() { return this.sceneCtrl.activeCamera; }
     public get lastGeneratedFrag() { return this.materials.getLastFrag(); }
     public get isCompiling() { return this._isCompiling; }
@@ -254,7 +255,6 @@ export class FractalEngine {
             this.resetAccumulation();
         });
         FractalEvents.on(FRACTAL_EVENTS.CAMERA_SNAP, () => { this.shouldSnapCamera = true; this.resetAccumulation(); });
-        
         FractalEvents.on(FRACTAL_EVENTS.CAMERA_TELEPORT, (state: CameraState) => {
             if (this.activeCamera) {
                 this.virtualSpace.applyCameraState(this.activeCamera, state);
@@ -274,12 +274,10 @@ export class FractalEngine {
     }
 
     public resetAccumulation() { 
-        this.dirty = true; 
-        this.markInteraction(); // Any reset implies an interaction
+        // NOTE: Removed setting 'this.dirty = true' because it was causing an infinite loop
+        // in the update() method where accumulation was constantly being reset
+        this.markInteraction(); 
         this.pipeline?.resetAccumulation(); 
-        
-        // Reset Blue Noise Seed / Frame Count on major changes? 
-        // No, keep it running for temporal stability, just reset accumulation buffer.
     }
     public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); this.resetAccumulation(); }
     
@@ -302,8 +300,7 @@ export class FractalEngine {
     }
 
     private updateConfigInternal(newConfig: Partial<ShaderConfig>) {
-        this.markInteraction(); // Config change is an interaction
-        
+        this.markInteraction(); 
         if ((newConfig as any).quality) {
             this.pipeline.updateQuality((newConfig as any).quality as QualityState);
         }
@@ -323,7 +320,6 @@ export class FractalEngine {
         }
         
         if (modeChanged) {
-            // Render Mode change requires re-fetch of material but NOT full rebuild if already cached
             const mode = this.configManager.config.renderMode;
             const mat = this.materials.getMaterial(mode || 'Direct');
             this.sceneCtrl.setMaterial(mat);
@@ -334,9 +330,6 @@ export class FractalEngine {
         if (rebuildNeeded) {
             this.scheduleCompile();
         } else {
-            // CRITICAL FIX: Centralized spinner cleanup. 
-            // If a config change came in (e.g. from UI) but no rebuild is needed (cached or simple update),
-            // we must clear the spinner here. But ONLY if a compile isn't already pending/running.
             if (!this._isCompiling) {
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
             }
@@ -357,49 +350,29 @@ export class FractalEngine {
         if (this.compileTimer) {
             clearTimeout(this.compileTimer);
         }
-
-        // 1. SIGNAL UI IMMEDIATELY
         this._isCompiling = true;
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Shader...");
-
-        // 2. Double-RAF Debounce logic
-        // This ensures the browser has painted the "Compiling..." spinner before we lock the thread.
-        this.compileTimer = setTimeout(() => {
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    this.performCompilation();
-                });
-            });
-        }, 50);
+        // Compile immediately without delay to ensure spinner appears
+        this.performCompilation();
     }
 
     private async performCompilation() {
         if (!this.renderer) return;
-        
         const startTime = performance.now();
 
-        // 1. Heavy CPU Work: Generate GLSL Strings
         this.materials.updateConfig(this.configManager.config);
         this.materials.syncConfigUniforms(this.configManager.config);
         if (this.configManager.config.pipeline) this.materials.syncModularUniforms(this.configManager.config.pipeline);
         
-        // 2. YIELD to Main Thread
-        // Allow the browser one last chance to update the UI/Spinner if the CPU work was heavy
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        // 3. Heavy GPU Work: Compile & Link
         const mode = this.configManager.config.renderMode || 'Direct';
         const mat = this.materials.getMaterial(mode);
         this.sceneCtrl.setMaterial(mat);
 
-        // FORCE COMPILE: Render 1 pixel to force driver linking
-        // This is the step that locks the browser
-        const pixel = new Float32Array(4);
-        const originalTarget = this.renderer.getRenderTarget();
-        this.renderer.setRenderTarget(this.sceneCtrl.physicsRenderTarget);
-        this.renderer.render(this.sceneCtrl.mainScene, this.sceneCtrl.mainCamera);
-        this.renderer.readRenderTargetPixels(this.sceneCtrl.physicsRenderTarget, 0,0,1,1, pixel); 
-        this.renderer.setRenderTarget(originalTarget);
+        // Pre-warm MRT framebuffers - this triggers shader compilation for MRT configuration
+        // (shader with 2 outputs needs to be compiled for 2-attachment framebuffer)
+        this.pipeline.preWarmMRT(this.renderer);
 
         this.resetAccumulation();
         this._isCompiling = false;
@@ -435,10 +408,9 @@ export class FractalEngine {
     
     public update(camera: THREE.Camera, delta: number, state: any, isInteracting: boolean = false) {
         if (!this.isBooted) return;
-        
+        if (this.state.isExporting) return;
         if (isInteracting) this.markInteraction();
 
-        // Increment Global Frame Counter for Dithering
         this._totalFrames++;
         this.mainUniforms[Uniforms.FrameCount].value = this._totalFrames;
 
@@ -464,7 +436,7 @@ export class FractalEngine {
         const sQuat = this.virtualSpace.smoothedQuat;
         const sFov = this.virtualSpace.smoothedFov;
 
-        if (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-6 || sQuat.angleTo(this.lastRenderState.quat) > 1e-5 || Math.abs(sFov - this.lastRenderState.fov) > 0.001 || offsetChanged || this.dirty) {
+        if (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged || this.dirty) {
             this.pipeline.resetAccumulation(); this.dirty = false;
             this.lastRenderState.pos.copy(sPos); this.lastRenderState.quat.copy(sQuat);
             this.lastRenderState.offset = { ...currentOffsetState };
@@ -476,152 +448,88 @@ export class FractalEngine {
         this.syncFrame(this.sceneCtrl.fallbackCamera, state);
     }
 
-    public render(renderer: THREE.WebGLRenderer) { 
-        if (!this.isBooted || this._isCompiling) return;
+    // New: Compute Phase (Updates FBOs)
+    public compute(renderer: THREE.WebGLRenderer) {
+        if (!this.isBooted || this._isCompiling || this.state.isExporting) return;
         
-        // --- SMART IDLE LOGIC ---
-        // If manually paused, stop rendering unless:
-        // 1. User interacted within last 1s (Smart Idle override)
-        // 2. We are in special modes (Bucket / Export)
-        // 3. We are forcing a compile/update
-        if (this.isPaused && !this.state.isBucketRendering && !this.state.isExporting) {
-            const timeSinceInteraction = performance.now() - this.lastInteractionTime;
-            // Allow 1 second of rendering after any interaction
-            if (timeSinceInteraction > 1000) {
-                // SKIP PIPELINE RENDER
-                // We proceed to Blit below to keep the canvas alive (anti-flicker)
-            } else {
-                this.runPipelineRender(renderer);
-            }
-        } else {
-             this.runPipelineRender(renderer);
-        }
-        
-        // 3. Blit to Screen (Final Display)
-        const outputTex = this.pipeline.getOutputTexture();
-        if (outputTex) {
-            this.materials.displayMaterial.uniforms.map.value = outputTex;
-            
-            // Render to null target (Screen)
-            renderer.setRenderTarget(null);
-            renderer.render(this.sceneCtrl.displayScene, this.sceneCtrl.mainCamera);
-        }
-    }
-    
-    private runPipelineRender(renderer: THREE.WebGLRenderer) {
-        // --- DYNAMIC RESOLUTION SCALING ---
-        if (!this.state.isBucketRendering && !this.state.isExporting) {
-            const q = this.state.quality;
-            if (q && q.dynamicScaling && this.isGizmoInteracting) {
-                const downsample = Math.max(1, q.interactionDownsample || 2);
-                if (downsample > 1) {
-                     const canvas = renderer.domElement;
-                     const w = Math.ceil(canvas.width / downsample);
-                     const h = Math.ceil(canvas.height / downsample);
-                     
-                     this.pipeline.resize(w, h);
-                     this.mainUniforms.uResolution.value.set(w, h);
-                }
-            }
+        if (this.isPaused && !this.state.isBucketRendering) {
+             const timeSinceInteraction = performance.now() - this.lastInteractionTime;
+             if (timeSinceInteraction > 1000) return;
         }
 
-        // 1. Jitter
+
+
+        // Apply Jitter
         if (this.pipeline.accumulationCount > 1) {
-            const idx = (this.pipeline.accumulationCount % 16) + 1;
-            const jX = halton(idx, 2);
-            const jY = halton(idx, 3);
-            this.jitterVec.set(jX * 2.0 - 1.0, jY * 2.0 - 1.0);
+            const idx = (this.pipeline.accumulationCount % PRECOMPUTED_JITTER.length);
+            const jitter = PRECOMPUTED_JITTER[idx];
+            this.jitterVec.copy(jitter);
             this.mainUniforms.uJitter.value.copy(this.jitterVec);
         } else {
             this.mainUniforms.uJitter.value.set(0,0);
         }
 
-        // 2. Render to FBO
-        this.pipeline.render(renderer); 
+        // Execute Render Pipeline
+        this.pipeline.render(renderer);
     }
     
-    // --- SNAPSHOT FUNCTIONALITY ---
+    // Updated: Only used for legacy or explicit blit calls (e.g. video export)
+    public render(renderer: THREE.WebGLRenderer) { 
+        // Forward compat stub: If called directly, run compute then blit to default
+        this.compute(renderer);
+        
+        // This part is now handled by MandelbulbScene for R3F, but kept for Bucket/Export
+        const outputTex = this.pipeline.getOutputTexture();
+        if (outputTex) {
+            this.materials.displayMaterial.uniforms.map.value = outputTex;
+            renderer.setRenderTarget(null);
+            renderer.render(this.sceneCtrl.displayScene, this.sceneCtrl.mainCamera);
+        }
+    }
+    
     public async captureSnapshot(): Promise<Blob | null> {
         if (!this.renderer) return null;
-        
-        // 1. Get current output texture (Float32 / HalfFloat)
         const tex = this.pipeline.getOutputTexture();
         if (!tex) return null;
         
         const w = (tex.image as any).width;
         const h = (tex.image as any).height;
-        
-        // 2. Create offscreen target for readback
-        // Use UnsignedByteType to get standard 8-bit color compatible with Canvas
-        const target = new THREE.WebGLRenderTarget(w, h, {
-            type: THREE.UnsignedByteType,
-            format: THREE.RGBAFormat,
-            stencilBuffer: false,
-            depthBuffer: false,
-            minFilter: THREE.NearestFilter,
-            magFilter: THREE.NearestFilter
-        });
-        
+        const target = new THREE.WebGLRenderTarget(w, h, { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, stencilBuffer: false, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
         const originalTarget = this.renderer.getRenderTarget();
         this.renderer.setRenderTarget(target);
         this.renderer.clear();
         
-        // 3. Render Post-Process (Tone Mapping & Color Grading) to Target
-        // We reuse displayMaterial but force sRGB output to ensure correct file colors
         this.materials.displayMaterial.uniforms.map.value = tex;
         this.materials.displayMaterial.uniforms.uResolution.value.set(w, h);
-        
         const oldEncode = this.materials.displayMaterial.uniforms.uEncodeOutput.value;
-        this.materials.displayMaterial.uniforms.uEncodeOutput.value = 1.0; // Force sRGB
+        this.materials.displayMaterial.uniforms.uEncodeOutput.value = 1.0; 
         
         this.renderer.render(this.sceneCtrl.displayScene, this.sceneCtrl.mainCamera);
-        
-        // 4. Read Pixels
         const buffer = new Uint8Array(w * h * 4);
         this.renderer.readRenderTargetPixels(target, 0, 0, w, h, buffer);
-        
-        // Restore state
         this.renderer.setRenderTarget(originalTarget);
         this.materials.displayMaterial.uniforms.uEncodeOutput.value = oldEncode;
         target.dispose();
         
-        // 5. Transfer to 2D Canvas (Flip Y)
         const canvas2d = document.createElement('canvas');
         canvas2d.width = w;
         canvas2d.height = h;
         const ctx = canvas2d.getContext('2d');
         if (!ctx) return null;
-        
         const imageData = ctx.createImageData(w, h);
         const stride = w * 4;
-        
-        // WebGL reads pixels from bottom-up, Canvas expects top-down
         for (let y = 0; y < h; y++) {
             const srcStart = y * stride;
             const destRowStart = (h - 1 - y) * stride;
             imageData.data.set(buffer.subarray(srcStart, srcStart + stride), destRowStart);
         }
-        
         ctx.putImageData(imageData, 0, 0);
-        
         return new Promise(resolve => canvas2d.toBlob(resolve, 'image/png'));
     }
 
     public syncFrame(camera: THREE.Camera, state: any) {
-        if (!this.state.optics && !this.state.lighting) {
-            return;
-        }
-        
-        this.uniformManager.syncFrame(
-            camera, 
-            state, 
-            this.renderer, 
-            this.state,
-            this.state.optics || {} as any,
-            this.state.lighting || {} as any,
-            this.modulations,
-            this.materials
-        );
+        if (!this.state.optics && !this.state.lighting) return;
+        this.uniformManager.syncFrame(camera, state, this.renderer, this.state, this.state.optics || {} as any, this.state.lighting || {} as any, this.modulations, this.materials);
     }
 
     public measureDistanceAtScreenPoint(x: number, y: number, renderer: THREE.WebGLRenderer, camera: THREE.Camera): number {

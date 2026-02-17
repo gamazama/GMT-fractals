@@ -7,15 +7,20 @@ export const TIMELINE_TOPICS: Record<string, HelpSection> = {
         category: 'Timeline',
         title: 'Animation Timeline',
         content: `
-The Timeline allows you to animate almost any parameter in the application using keyframes.
+The central hub for creating motion. It allows you to animate almost any parameter in the application using keyframes.
 
-## Interface
-- **Dope Sheet**: The default view. Shows keyframes as diamonds. Best for timing adjustments.
-- **Graph Editor**: Click the "Curve Icon" to switch. Shows values as curves. Best for smoothing easing and values.
-- **Ruler**: The top bar showing frame numbers. Drag here to **Scrub** the timeline.
+## Layout
+- **Toolbar**: Playback controls, Recording toggle, and View Modes.
+- **Navigator**: The mini-map strip below the toolbar. 
+  - **Scroll**: Drag the bar left/right.
+  - **Zoom**: Drag the edges of the active window or use the scroll wheel.
+- **Track List**: On the left. Shows all animated properties grouped by category (Camera, Formula, etc.).
+- **Work Area**: The main grid showing keys.
+  - **Dope Sheet Mode**: View keyframes as discrete diamonds. Best for timing and retiming.
+  - **Graph Editor Mode**: View keyframes as continuous curves. Best for easing and value adjustment.
 
 ## Basic Workflow
-1. **Enable Record**: Click the **Red Circle** button in the timeline toolbar.
+1. **Record**: Click the **Red Circle** button in the timeline toolbar.
 2. **Move Playhead**: Drag the ruler to the desired frame.
 3. **Change Value**: Move any slider (e.g., Param A, Light Intensity, Camera Position).
 4. A keyframe is automatically created.
@@ -57,8 +62,16 @@ Each animated parameter has its own **Track**.
 
 - **Creation**: Tracks are created automatically when you add a keyframe to a parameter.
 - **Visibility**: Use the Eye icon in the Graph Editor sidebar to show/hide curves.
-- **Deletion**: Right-click a track header to remove it and all its keyframes.
 - **Grouping**: Tracks are automatically grouped by category (Camera, Lighting, Formula) in the Dope Sheet.
+
+## Context Menu
+Right-click a track header to access:
+- **Delete Track**: Removes the track and all keyframes.
+- **Post Behavior**: Determines what happens after the last keyframe.
+  - **Hold**: Value stays constant.
+  - **Loop**: Animation repeats from the start.
+  - **Ping-Pong**: Animation reverses, then repeats.
+  - **Continue**: Value continues changing based on the exit velocity (Slope).
 `
     },
     'anim.keyframes': {
@@ -85,20 +98,34 @@ When using Bezier interpolation, handles control the curve slope:
     'anim.graph': {
         id: 'anim.graph',
         category: 'Timeline',
-        title: 'Graph Editor',
+        title: 'Graph Editor (Curves)',
         parentId: 'ui.timeline',
         content: `
-Provides precise control over animation curves.
+A powerful F-Curve editor for fine-tuning motion dynamics.
+Switch to this mode using the **Curve Icon** in the timeline toolbar.
+
+## Toolbar Tools (Top Left)
+- **Fit View / Selection**: Zooms the view to show all keys or just selected ones.
+- **Normalize (N)**: Toggles "Normalized View". 
+  - **Off**: Shows raw values. Good for seeing true scale.
+  - **On**: Scales all curves to fit 0-1 height. Essential for comparing timing between tracks with vastly different values (e.g. Rotation vs Scale).
+- **Euler Filter**: Fixes "Gimbal Lock" or rotation flips where values jump 360 degrees. Unwinds the curves to be continuous.
+- **Simplify**: Drag to reduce the number of keyframes while preserving the curve shape.
+- **Bake**: Resamples the curve at fixed intervals.
+- **Smooth / Bounce**: Physics-based modifiers.
+  - **Drag Right**: Applies Gaussian Smoothing to smooth out jitter.
+  - **Drag Left**: Applies Spring Physics (Bounce) to create overshoot/elasticity.
+
+## Curve Interaction
+- **Select**: Click curve keys or drag a selection box.
+- **Move**: Drag keys. Hold **Shift** to lock movement to X (Time) or Y (Value) axis.
+- **Tangents**: Select a key to see its Bezier handles. Drag handles to adjust easing (Slow-in/Slow-out).
+- **Extrapolation**: Dotted lines at the end of the curve visualize the Post Behavior (Loop, Ping-Pong, etc).
 
 ## Navigation
 - **Alt + Right Drag**: Zoom view (Scale Time/Value).
 - **Alt + Left Drag**: Pan view.
 - **Double Click Ruler**: Fit view to all keyframes.
-
-## Editing
-- **Select**: Click keys or drag a box.
-- **Move**: Drag keys to change Frame (X) or Value (Y).
-- **Handles**: Drag the circles attached to keyframes to adjust the curve shape (Bezier only).
 `
     },
     'anim.camera': {
@@ -117,7 +144,7 @@ To keyframe the camera:
 
 ## Path Interpolation
 - The engine uses **Logarithmic Interpolation** for zoom levels. This ensures that zooming from 1.0 to 1,000,000.0 feels constant speed, rather than accelerating wildly.
-- Use **Fly Mode** to record natural, handheld-like motion paths, then refine them in the Graph Editor.
+- Use **Fly Mode** to record natural, handheld-like motion paths, then refine them in the Graph Editor using the **Smooth** tool.
 `
     }
 };

@@ -1,3 +1,4 @@
+
 import { CoreMathState } from './core_math';
 import { GeometryState } from './geometry';
 import { AtmosphereState } from './atmosphere';
@@ -19,6 +20,7 @@ import { DrawingState, DrawingActions, DrawnShape } from './drawing';
 import { ModulationState, ModulationActions, ModulationRule } from './modulation';
 import { WebcamState } from './webcam';
 import { DebugToolsState } from './debug_tools';
+import { SonificationState } from './sonification/types';
 
 // 1. The Master State Map
 export interface FeatureStateMap {
@@ -41,6 +43,7 @@ export interface FeatureStateMap {
     webcam: WebcamState;
     debugTools: DebugToolsState;
     waterPlane: WaterPlaneState;
+    sonification: SonificationState;
 }
 
 // 2. The Master Action Map
@@ -57,5 +60,5 @@ export type {
 export type { 
     CoreMathState, GeometryState, AtmosphereState, AOState, MaterialState, TexturingState, 
     ColoringState, QualityState, LightingState, DrosteState, ColorGradingState, 
-    OpticsState, NavigationState, AudioState, DrawingState, ModulationState, WebcamState, DebugToolsState, WaterPlaneState 
+    OpticsState, NavigationState, AudioState, DrawingState, ModulationState, WebcamState, DebugToolsState, WaterPlaneState, SonificationState 
 };

@@ -1,5 +1,4 @@
 
-
 export const DE_MASTER = (
     formulaBody: string, 
     loopInit: string = '', 

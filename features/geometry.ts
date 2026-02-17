@@ -92,12 +92,11 @@ export const GeometryFeature: FeatureDefinition = {
             description: 'Enables interleaved folding (Box -> Fractal -> Box). Slow compile.', onUpdate: 'compile', noReset: true 
         },
 
-        // --- GLOBAL MODIFIERS (Runtime/Compile Hybrid) ---
+        // --- GLOBAL MODIFIERS (Runtime) ---
         burningEnabled: { 
             type: 'boolean', default: false, label: 'Burning Mode', shortId: 'bm', group: 'transform', 
             description: 'Applies absolute value to coordinates every iteration. Creates "Burning Ship" variations.',
-            onUpdate: 'compile',
-            noReset: true
+            uniform: 'uBurningEnabled'
         },
 
         // --- HYBRID (Runtime) ---
@@ -165,11 +164,11 @@ export const GeometryFeature: FeatureDefinition = {
         let hybridPreLoop = "";
         let hybridInLoop = "";
 
-        // --- BURNING MODE (Global) ---
-        // Injected statically to avoid branching in hot loop
+        // --- BURNING MODE (Global Runtime) ---
+        // MandelTerrain handles this internally, so we skip injection for it to avoid double-abs or conflicts.
         const formula = config.formula;
-        if (formula !== 'MandelTerrain' && state && state.burningEnabled) {
-            hybridInLoop += `z.xyz = abs(z.xyz);`;
+        if (formula !== 'MandelTerrain') {
+            hybridInLoop += `if (uBurningEnabled > 0.5) z.xyz = abs(z.xyz);`;
         }
 
         const isComplex = state && state.hybridComplex;

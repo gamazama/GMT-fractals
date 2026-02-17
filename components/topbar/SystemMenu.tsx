@@ -386,7 +386,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                             </a>
                                             <a href="https://github.com/gamazama/GMT-fractals" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white transition-colors">
                                                 <span>Source:</span>
-                                                <span className="text-cyan-400 hover:underline">GitHub (GPL3)</span>
+                                                <span className="text-cyan-400 hover:underline">GitHub (GPL-3.0)</span>
                                             </a>
                                         </div>
                                     </div>

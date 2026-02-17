@@ -23,16 +23,24 @@ import { ArisBrot } from './ArisBrot';
 import { MandelTerrain } from './MandelTerrain';
 import { MarbleMarcher } from './MarbleMarcher';
 import { JuliaMorph } from './JuliaMorph';
+import { Mandelorus } from './Mandelorus'; // Renamed
+import { Appell } from './Appell';
+import { Borromean } from './Borromean';
+import { MandelMap } from './MandelMap';
 
-// Organized list determines UI order
+// Organized list determines UI order on LOADING SCREEN
 const formulas = [
     // --- Featured / Cool ---
     Mandelbulb,
+    Mandelorus, // Formerly HyperTorus
+    MixPinski,
+    MandelMap, 
+    Borromean,
+    Appell, 
     AmazingBox,
     AmazingSurface,
     MengerSponge,
     MarbleMarcher,
-    MixPinski,
     Kleinian,
     AmazingSurf,
     MandelTerrain,
@@ -64,16 +72,18 @@ formulas.forEach(def => registry.register(def));
 // Register Legacy Aliases for backward compatibility
 registry.registerAlias('UberMenger', 'MengerAdvanced');
 registry.registerAlias('FoldingBrot', 'BoxBulb');
+registry.registerAlias('HyperTorus', 'Mandelorus'); // Legacy Alias
 
 export const PREDEFINED_CATEGORIES = [
     { 
         name: "Featured Fractals", 
         match: [
-            Mandelbulb.id, 
+            Mandelbulb.id,
+            Mandelorus.id,
+            MixPinski.id, 
             AmazingBox.id, 
             AmazingSurface.id,
             MengerSponge.id, 
-            MixPinski.id, 
             Kleinian.id, 
             AmazingSurf.id, 
             MandelTerrain.id
@@ -92,6 +102,9 @@ export const PREDEFINED_CATEGORIES = [
     { 
         name: "Hybrids & Experiments", 
         match: [
+            MandelMap.id,
+            Borromean.id,
+            Appell.id,
             JuliaMorph.id, 
             ArisBrot.id, 
             Phoenix.id, 

@@ -9,6 +9,10 @@ export const LIGHTING_TOPICS: Record<string, HelpSection> = {
         content: `
 The engine utilizes a sophisticated **Physically Based Rendering (PBR)** approximation to simulate how light interacts with the infinite surfaces of the fractal.
 
+## Light Types
+- **Point (Bulb)**: Standard light source. Has position and falloff.
+- **Directional (Sun)**: Parallel rays from infinity. Has rotation only. No falloff.
+
 ## Top Bar Interaction
 - **Light Orbs**: Toggle lights on/off by clicking the orbs in the top bar.
 - **Drag & Drop**: Drag a light orb from the top bar directly onto the 3D viewport to place a light on the surface at that point (Raycast placement).
@@ -21,12 +25,48 @@ You can enable up to 3 independent light sources to sculpt the 3D form.
 - **Light 3 (Rim)**: Placed behind the object. Creates a glowing outline.
 
 ## Gizmos
-When the panel is open or **Show 3d helpers** is enabled, lights appear as glowing sprites in the viewport. You can drag these sprites to move lights in 3D space.
+When the panel is open or **Show 3d helpers** is enabled, lights appear as glowing sprites in the viewport.
+`
+    },
+    'light.type': {
+        id: 'light.type',
+        category: 'Lighting',
+        title: 'Light Type (Point vs Sun)',
+        parentId: 'panel.light',
+        content: `
+### Point Light (Bulb)
+Emits light from a specific point in space radiating outwards.
+- **Position**: X, Y, Z coordinates define the origin.
+- **Falloff**: Light gets dimmer with distance (Inverse Square Law).
+- **Shadows**: Perspective shadows that grow larger/softer with distance from the object.
 
-## Animation
-All light properties (Position, Intensity, Falloff, Color) can be keyframed in the Timeline.
-- Click the **Diamond Icon** next to sliders in the popup menu.
-- Click the **Key Icon** in the popup header to keyframe the light's Position (X, Y, Z).
+### Directional Light (Sun)
+Emits parallel light rays from infinity.
+- **Position**: Irrelevant. Only **Rotation** matters.
+- **Falloff**: Disabled (Infinite range). The light creates a constant wall of illumination.
+- **Shadows**: Orthographic (Parallel) shadows. Ideally suited for "Sunlight" effects.
+- **Visuals**: Indicated by a Sun icon (Rayed Circle) in the top bar.
+`
+    },
+    'light.rot': {
+        id: 'light.rot',
+        category: 'Lighting',
+        title: 'Heliotrope (Direction)',
+        parentId: 'panel.light',
+        content: `
+The **Heliotrope** is a specialized control for setting the angle of Directional (Sun) lights. It maps the 3D sky dome onto a 2D circle.
+
+### How to use
+- **Center**: Light comes from directly "Forward" (relative to Camera or World, depending on Mode).
+- **Edge**: Light comes from the Horizon (90 degrees).
+- **Drag Dot**: Sets the specific angle.
+
+### Parameters
+- **Pitch**: Elevation angle (Up/Down). 90° is directly overhead.
+- **Yaw**: Compass angle (North/South/East/West).
+
+### Backlighting
+If the dot enters the "Backlight Zone" (indicated by red/warning colors), the light is shining from *behind* the target. This creates Rim Lighting but leaves the front face dark.
 `
     },
     'light.intensity': {
@@ -78,13 +118,14 @@ The light is parented to the **Fractal Universe**.
         parentId: 'panel.light',
         content: `
 In the real world, light creates a sphere of influence that decays over distance. This setting controls that decay curve.
+*Note: This setting is ignored for Directional Lights.*
 
 ### Falloff Type
 - **Quadratic ($1/d^2$)**: Physically accurate. Light is blindingly bright near the source but fades very quickly. Use this for realistic lamps or fires.
 - **Linear ($1/d$)**: Artificial decay. Light travels much further before fading. Useful for abstract scenes where you want to illuminate deep structures without over-exposing the foreground.
 
 ### Falloff Radius
-- **0.0**: **Infinite Light (Sun)**. The light does not decay. It shines with equal intensity at distance $0$ and distance $1,000,000$.
+- **0.0**: **Infinite Light**. The light does not decay. It shines with equal intensity at distance $0$ and distance $1,000,000$.
 - **> 0.0**: The distance at which the light intensity reaches near-zero. Higher values = smaller light sphere.
 
 **Keyframable**: Yes. Use the diamond icon.

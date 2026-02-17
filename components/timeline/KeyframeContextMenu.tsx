@@ -80,21 +80,25 @@ export const getKeyframeMenuItems = (
             action: actions.duplicateKeys 
         },
         {
-             label: 'Loop...',
-             action: () => {}, // Submenu placeholder if supported, but simpler to just list options
-             keepOpen: true
-        },
-        {
-             label: '  Loop x2',
-             action: () => actions.loopKeys(1)
-        },
-        {
-             label: '  Loop x3',
-             action: () => actions.loopKeys(2)
-        },
-        {
-             label: '  Loop x4',
-             action: () => actions.loopKeys(3)
+             label: 'Duplicate & Loop',
+             children: [
+                 {
+                     label: 'Loop x2',
+                     action: () => actions.loopKeys(1)
+                 },
+                 {
+                     label: 'Loop x3',
+                     action: () => actions.loopKeys(2)
+                 },
+                 {
+                     label: 'Loop x4',
+                     action: () => actions.loopKeys(3)
+                 },
+                 {
+                     label: 'Loop x8',
+                     action: () => actions.loopKeys(7)
+                 }
+             ]
         }
     );
 

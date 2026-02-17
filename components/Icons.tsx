@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 //NOTE!!!
@@ -37,6 +38,12 @@ export const FullscreenIcon = () => (
 export const ResizeHandleIcon = () => (
     <svg width="100%" height="100%" viewBox="0 0 10 10">
         <path d="M 6 10 L 10 6 L 10 10 Z" fill="currentColor" opacity="0.5" />
+    </svg>
+);
+export const DragHandleIcon = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="4" y1="9" x2="20" y2="9"></line>
+        <line x1="4" y1="15" x2="20" y2="15"></line>
     </svg>
 );
 

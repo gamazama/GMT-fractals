@@ -35,8 +35,8 @@ export const Tetrabrot: FractalDefinition = {
     parameters: [
         { label: 'Julia C (W)', id: 'paramA', min: -1.0, max: 1.0, step: 0.001, default: -0.2 },
         { label: 'Slice W', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: 0.0 },
-        { label: 'Rot Z', id: 'paramE', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
-        { label: 'Rot X', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Rot Z', id: 'paramE', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rot X', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
         null, null
     ],
 
@@ -81,9 +81,9 @@ export const Tetrabrot: FractalDefinition = {
         sceneOffset: { x: 0, y: 0, z: 0, xL: 0.43671384293273163, yL: -0.013902955556870706, zL: 0.11442336133892608 },
         cameraMode: "Orbit",
         lights: [
-            { position: { x: 0.554923231509613, y: -0.15190121945393503, z: -0.030795909267397503 }, color: "#FFFFFF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { position: { x: 0.05, y: 0.075, z: -0.1 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { position: { x: 0.25, y: 0.075, z: -0.1 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.554923231509613, y: -0.15190121945393503, z: -0.030795909267397503 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFFFFF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

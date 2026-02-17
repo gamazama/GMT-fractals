@@ -11,3 +11,9 @@ export const useAnimationStore = create<AnimationStore>()(subscribeWithSelector(
     ...createSelectionSlice(set, get, api),
     ...createSequenceSlice(set, get, api)
 })));
+
+// Expose for FractalStore to avoid circular dependency lookup issues during save
+if (typeof window !== 'undefined') {
+    // @ts-ignore
+    window.useAnimationStore = useAnimationStore;
+}

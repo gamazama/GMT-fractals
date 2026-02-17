@@ -56,8 +56,8 @@ export const Mandelbar3D: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 0.5, max: 3.0, step: 0.001, default: 1.0 },
         { label: 'Offset X', id: 'paramB', min: -2.0, max: 2.0, step: 0.001, default: 0.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Offset Z', id: 'paramE', min: -2.0, max: 2.0, step: 0.001, default: 0.0 },
         { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
@@ -105,9 +105,9 @@ export const Mandelbar3D: FractalDefinition = {
         cameraRot: { x: -0.35319547668295764, y: 0.8984954585062485, z: 0.19510512782513617, w: -0.17289550425237224 },
         sceneOffset: { x: 0, y: 0, z: 0, xL: -0.003768067067355675, yL: 0.19239495665458275, zL: -0.5314800136479048 },
         lights: [
-            { position: { x: -0.34, y: 0.2, z: 1.76 }, color: "#99A4FF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
-            { position: { x: 0.05, y: 0.075, z: -0.1 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { position: { x: 0.25, y: 0.075, z: -0.1 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: -0.34, y: 0.2, z: 1.76 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

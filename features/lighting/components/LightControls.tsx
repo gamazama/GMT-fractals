@@ -9,13 +9,31 @@ import EmbeddedColorPicker from '../../../components/EmbeddedColorPicker';
 import { KeyIcon, TrashIcon, KeyStatus } from '../../../components/Icons';
 import { KeyframeButton } from '../../../components/KeyframeButton';
 import { evaluateTrackValue } from '../../../utils/timelineUtils';
+import { LightType } from '../../../types';
+import { LightDirectionControl } from './LightDirectionControl';
 
-export const LightOrb = ({ index, color, active, onClick, onDragStart }: { index: number, color: string, active: boolean, onClick: () => void, onDragStart: () => void }) => {
+export const LightOrb = ({ index, color, active, type, rotation, onClick, onDragStart }: { index: number, color: string, active: boolean, type?: LightType, rotation?: {x:number, y:number, z:number}, onClick: () => void, onDragStart: () => void }) => {
+    
+    // Calculate highlight position for Directional Light
+    // Returns just the coordinates, style applied in JSX
+    const getHighlightPos = () => {
+        if (!rotation) return { x: 50, y: 50 };
+        const yaw = rotation.y;
+        return {
+            x: 50 + Math.sin(yaw) * 35,
+            y: 50 - Math.cos(yaw) * 35
+        };
+    };
+    
+    const highlight = getHighlightPos();
+    
+    // Generate 12 rays for the Sun icon
+    const sunRays = Array.from({length: 12}).map((_, i) => i * 30);
+
     return (
         <div 
             className={`group relative flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-all duration-300 touch-none ${active ? 'opacity-100 scale-100' : 'opacity-50 hover:opacity-100 scale-90 hover:scale-100'}`}
             onPointerDown={(e) => {
-                // Only drag on primary button (Left Click/Touch)
                 if (e.button === 0) {
                     e.stopPropagation();
                     onDragStart();
@@ -33,22 +51,71 @@ export const LightOrb = ({ index, color, active, onClick, onDragStart }: { index
                 </div>
             )}
 
-            <div 
-                className="w-8 h-8 rounded-full border border-white/20 shadow-[inset_0_0_10px_rgba(255,255,255,0.2)] transition-all duration-300"
-                style={{ 
-                    backgroundColor: active ? color : 'transparent',
-                    boxShadow: active ? `0 0 20px ${color}, inset 0 0 10px white` : 'none',
-                    borderColor: active ? 'white' : 'rgba(255,255,255,0.2)'
-                }}
-            />
+            <div className="w-8 h-8 relative">
+                
+                {/* LAYER 1: Outer Glow (Unclipped) */}
+                {active && (
+                    <div 
+                        className="absolute inset-0 rounded-full transition-all duration-300"
+                        style={{
+                            boxShadow: `0 0 ${type === 'Directional' ? '12px' : '20px'} ${color}`,
+                            opacity: type === 'Directional' ? 0.6 : 1.0,
+                            backgroundColor: type === 'Directional' ? 'transparent' : color
+                        }}
+                    />
+                )}
+
+                {/* LAYER 2: Sun Rays (Unclipped) - Static */}
+                {active && type === 'Directional' && (
+                    <div className="absolute inset-0 pointer-events-none">
+                        {sunRays.map(deg => (
+                            <div 
+                                key={deg}
+                                className="absolute w-px h-[3px] rounded-full"
+                                style={{
+                                    backgroundColor: color,
+                                    top: '50%', left: '50%',
+                                    marginTop: '-1.5px', // Half height
+                                    marginLeft: '-0.5px', // Half width
+                                    // Translate Y: 16px radius + 1px gap = 17px distance
+                                    transform: `rotate(${deg}deg) translateY(-17px)`, 
+                                    boxShadow: `0 0 2px ${color}`
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {/* LAYER 3: Surface & Gradient (Strictly Clipped) */}
+                {/* 'isolate' creates a new stacking context, helping WebKit clip children correctly */}
+                <div 
+                    className="absolute inset-0 rounded-full border border-white overflow-hidden z-10 shadow-[inset_0_0_6px_rgba(255,255,255,0.4)] isolate"
+                    style={{
+                        backgroundColor: type === 'Directional' ? '#000000' : color
+                    }}
+                >
+                    
+                    {/* Directional Gradient Child */}
+                    {active && type === 'Directional' && (
+                        <div 
+                            className="absolute inset-0 w-full h-full"
+                            style={{
+                                background: `radial-gradient(circle at ${highlight.x}% ${highlight.y}%, ${color} 0%, transparent 65%)`,
+                                opacity: 1.0
+                            }}
+                        />
+                    )}
+                </div>
+                
+                {/* LAYER 4: Ping Animation (Point Light) */}
+                {active && type !== 'Directional' && (
+                    <div className="absolute inset-0 rounded-full border border-white/50 animate-ping opacity-20 pointer-events-none" />
+                )}
+            </div>
             
             <span className="absolute -bottom-4 text-[8px] font-bold text-gray-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                 L{index + 1}
             </span>
-            
-            {active && (
-                <div className="absolute inset-0 rounded-full border border-white/50 animate-ping opacity-20 pointer-events-none" />
-            )}
         </div>
     );
 };
@@ -67,9 +134,17 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
     const handleToggleFixed = () => {
          if (!engine.activeCamera) return;
          const wasFixed = light.fixed;
-         // Calculate new position to keep light visually in same place when switching space
-         const newPos = engine.virtualSpace.resolveRealWorldPosition(light.position, wasFixed, engine.activeCamera);
-         updateLight({ index, params: { fixed: !wasFixed, position: newPos } });
+         
+         let newPos = light.position;
+         let newRot = light.rotation;
+
+         if (light.type === 'Point') {
+            newPos = engine.virtualSpace.resolveRealWorldPosition(light.position, wasFixed, engine.activeCamera);
+         } else {
+            newRot = engine.virtualSpace.resolveRealWorldRotation(light.rotation, wasFixed, engine.activeCamera);
+         }
+
+         updateLight({ index, params: { fixed: !wasFixed, position: newPos, rotation: newRot } });
     };
 
     const handlePositionKey = () => {
@@ -124,8 +199,6 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
 
     const posStatus = getPosKeyStatus();
 
-    // Derived Falloff Factor for UI (Factor = RawFalloff / Intensity)
-    // Avoid division by zero
     const safeIntensity = Math.max(0.01, light.intensity);
     const currentFalloffFactor = light.falloff / safeIntensity;
     const prefix = `lighting.light${index}`;
@@ -134,7 +207,6 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
     const formatValue = (val: number) => {
         if (val === 0) return "0";
         if (Math.abs(val) < 1.0) return val.toFixed(3);
-        // Use precision 5, then strip trailing zeros if it has a decimal point
         const s = val.toPrecision(5);
         return s.includes('.') ? s.replace(/\.?0+$/, "") : s;
     };
@@ -146,7 +218,7 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
             <div className="relative space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2">
                     <div className="flex items-center gap-2">
-                        <KeyframeButton status={posStatus} onClick={handlePositionKey} />
+                        {light.type === 'Point' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Light {index + 1}</span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -176,6 +248,20 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                 </div>
 
                 <div className="space-y-1">
+                    {/* Add Direction Control for Sun Lights */}
+                    {light.type === 'Directional' && (
+                        <div className="mb-2">
+                            <LightDirectionControl 
+                                index={index}
+                                value={light.rotation}
+                                onChange={(v) => updateLight({ index, params: { rotation: v } })}
+                                isFixed={light.fixed}
+                                width={180}
+                                height={110}
+                            />
+                        </div>
+                    )}
+
                     <Slider 
                         label="Intensity" 
                         value={light.intensity} 
@@ -191,25 +277,24 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                         trackId={`${prefix}_intensity`}
                     />
                     
-                    <Slider 
-                        label="Falloff" 
-                        value={currentFalloffFactor} 
-                        min={0} max={10.0} step={0.01} 
-                        onChange={(factor) => {
-                            // Logic: Actual Falloff = Factor * Intensity
-                            const newRawFalloff = factor * light.intensity;
-                            updateLight({ index, params: { falloff: newRawFalloff } });
-                        }} 
-                        customMapping={{
-                            min: 0, max: 100,
-                            // Power curve (1.5) for "Log-like" feel on the Factor slider
-                            toSlider: (val) => Math.pow(val / 10, 1/1.5) * 100,
-                            fromSlider: (val) => Math.pow(val / 100, 1.5) * 10
-                        }}
-                        // Updated threshold for visibility
-                        overrideInputText={currentFalloffFactor < 0.0001 ? "Infinite" : formatValue(currentFalloffFactor)}
-                        trackId={`${prefix}_falloff`}
-                    />
+                    {light.type !== 'Directional' && (
+                        <Slider 
+                            label="Falloff" 
+                            value={currentFalloffFactor} 
+                            min={0} max={10.0} step={0.01} 
+                            onChange={(factor) => {
+                                const newRawFalloff = factor * light.intensity;
+                                updateLight({ index, params: { falloff: newRawFalloff } });
+                            }} 
+                            customMapping={{
+                                min: 0, max: 100,
+                                toSlider: (val) => Math.pow(val / 10, 1/1.5) * 100,
+                                fromSlider: (val) => Math.pow(val / 100, 1.5) * 10
+                            }}
+                            overrideInputText={currentFalloffFactor < 0.0001 ? "Infinite" : formatValue(currentFalloffFactor)}
+                            trackId={`${prefix}_falloff`}
+                        />
+                    )}
                 </div>
 
                 <div className="pt-2 border-t border-white/10 space-y-2">

@@ -73,8 +73,30 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
 
     const handleDollyStart = () => {
         if (!engine.activeCamera) return;
-        let dist = engine.lastMeasuredDistance;
-        if (dist <= 0 || dist > 1000.0) dist = 3.5;
+        
+        const state = useFractalStore.getState();
+        let dist = 3.5;
+
+        // MODE-AWARE DISTANCE SELECTION
+        // For initial lock, we prioritize physical radius for Orbit Mode stability
+        if (state.cameraMode === 'Orbit') {
+            const radius = engine.activeCamera.position.length();
+            if (radius > 0.001) {
+                dist = radius;
+            } else {
+                dist = state.targetDistance || 3.5;
+            }
+        } else {
+            // In Fly Mode, use the visual surface distance (Probe).
+            const probeDist = engine.lastMeasuredDistance;
+            if (probeDist > 0.0001 && probeDist < 900.0) {
+                dist = probeDist;
+            } else {
+                dist = state.targetDistance || 3.5;
+            }
+        }
+        
+        dist = Math.max(0.001, dist);
 
         // Use standard utility for Unified State reading
         const unifiedPos = CameraUtils.getUnifiedFromEngine();
@@ -85,8 +107,6 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
             fov: camFov,
             dist: dist,
             unifiedPos: { x: unifiedPos.x, y: unifiedPos.y, z: unifiedPos.z },
-            localPos: engine.activeCamera.position.clone(),
-            baseOffset: { ...engine.sceneOffset },
             forward: forward,
             quat: engine.activeCamera.quaternion.clone()
         };
@@ -96,33 +116,46 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
         const updates: any = { camFov: newFov };
 
         if (dollyLocked && dollyStartRef.current) {
-            const { fov: startFov, dist: startDist, unifiedPos: startUnified, localPos: startLocal, baseOffset, forward, quat } = dollyStartRef.current;
+            const { fov: startFov, dist: startDist, unifiedPos: startUnified, forward, quat } = dollyStartRef.current;
             const oldFovRad = THREE.MathUtils.degToRad(startFov);
             const newFovRad = THREE.MathUtils.degToRad(newFov);
             
+            // Calculate new distance to keep subject size constant
             const ratio = Math.tan(oldFovRad / 2) / Math.tan(newFovRad / 2);
             const targetDist = startDist * ratio;
+            
+            // Move Amount = Old Distance - New Distance
+            // Positive moveAmount means moving BACKWARDS (away from subject)
+            // But we add scaled Forward vector. Forward is -Z (looking at subject).
+            // So to move backward, we SUBTRACT forward * amount?
+            // Let's trace:
+            // startDist = 10. targetDist = 20. (Zooming In, need to move back)
+            // moveAmount = 10 - 20 = -10.
+            // newPos = start + forward * (-10). 
+            // Forward points TO subject. Adding negative forward moves AWAY. Correct.
+            
             const moveAmount = startDist - targetDist;
             const shift = forward.clone().multiplyScalar(moveAmount);
             
             // Also update Focus Distance to keep target in focus
             updates.dofFocus = targetDist;
             
-            const cameraMode = useFractalStore.getState().cameraMode;
-
-            if (cameraMode === 'Orbit') {
-                const newLocalPos = startLocal.clone().add(shift);
-                FractalEvents.emit('camera_teleport', {
-                    position: { x: newLocalPos.x, y: newLocalPos.y, z: newLocalPos.z },
-                    rotation: { x: quat.x, y: quat.y, z: quat.z, w: quat.w },
-                    sceneOffset: baseOffset,
-                    targetDistance: targetDist
-                });
-            } else {
-                // Fly Mode uses Unified
-                const newPos = new THREE.Vector3(startUnified.x, startUnified.y, startUnified.z).add(shift);
-                CameraUtils.teleportPosition(newPos, { x: quat.x, y: quat.y, z: quat.z, w: quat.w });
-            }
+            // --- UNIFIED TELEPORT LOGIC ---
+            // We use the "Fly Mode" style teleport for BOTH modes.
+            // This resets the local camera to (0,0,0) and updates the Scene Offset.
+            // This prevents OrbitControls from fighting the position update.
+            // We pass 'targetDist' so Navigation can re-sync the Orbit Pivot to the correct depth.
+            
+            const newPos = new THREE.Vector3(startUnified.x, startUnified.y, startUnified.z).add(shift);
+            
+            CameraUtils.teleportPosition(
+                newPos, 
+                { x: quat.x, y: quat.y, z: quat.z, w: quat.w },
+                targetDist // Critical: Update Orbit Pivot Distance
+            );
+            
+            // Sync Store immediately so UI doesn't lag
+            useFractalStore.setState({ targetDistance: targetDist });
         }
         
         setOptics(updates);
@@ -234,7 +267,7 @@ export const NavigationControls: React.FC<FeatureComponentProps> = () => {
                 <Vector3Input
                     label="Absolute Position"
                     value={unified}
-                    onChange={CameraUtils.teleportPosition}
+                    onChange={(v) => CameraUtils.teleportPosition(v)}
                     step={0.1}
                     min={-Infinity}
                     max={Infinity}

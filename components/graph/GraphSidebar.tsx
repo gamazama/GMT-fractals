@@ -1,10 +1,12 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
+import { useFractalStore } from '../../store/fractalStore';
 import { getLiveValue } from '../../utils/timelineUtils';
 import { TRACK_COLORS } from '../../utils/GraphRenderer';
 import { EyeIcon, FolderIcon, SelectAllIcon, TrashIcon } from '../Icons';
-import { Track } from '../../types';
+import { Track, TrackBehavior } from '../../types';
+import { ContextMenuItem } from '../../types/help';
 
 interface GraphSidebarProps {
     visibleTrackIds: string[];
@@ -31,7 +33,8 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
 };
 
 export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, setVisibleTracks }) => {
-    const { sequence, selectedTrackIds, selectTrack, selectKeyframes, removeTrack } = useAnimationStore();
+    const { sequence, selectedTrackIds, selectTrack, selectKeyframes, removeTrack, setTrackBehavior } = useAnimationStore();
+    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
     
     // Grouping State
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['Formula', 'Optics', 'Lighting', 'Shading']));
@@ -112,7 +115,6 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     };
 
     // --- SELECTION (Row Click) ---
-    // Updates global store for editing context, but does NOT remove unselected tracks from graph view.
     const handleSelect = (e: React.MouseEvent, tid: string) => {
         const multi = e.ctrlKey || e.metaKey;
         
@@ -139,7 +141,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                 setVisibleTracks(Array.from(newVis));
             }
         } else {
-            // Standard Select - DOES NOT SELECT KEYS (Refined Spec)
+            // Standard Select
             selectTrack(tid, multi);
             
             // UX Polish: Selecting a track ensures it is visible
@@ -149,6 +151,59 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
         }
         
         lastSelectedTrackId.current = tid;
+    };
+    
+    // --- CONTEXT MENU ---
+    const handleContextMenu = (e: React.MouseEvent, tid: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const track = sequence.tracks[tid];
+        if (!track) return;
+
+        const currentBehavior = track.postBehavior || 'Hold';
+
+        const items: ContextMenuItem[] = [
+            { label: track.label, action: () => {}, isHeader: true },
+            { 
+                label: 'Delete Track', 
+                danger: true,
+                action: () => removeTrack(tid)
+            },
+            { label: 'Extrapolation', action: () => {}, isHeader: true },
+            {
+                label: 'Post Behavior',
+                children: [
+                    { 
+                        label: 'Hold (Default)', 
+                        checked: currentBehavior === 'Hold',
+                        action: () => setTrackBehavior(tid, 'Hold')
+                    },
+                    { 
+                        label: 'Loop (Repeat)', 
+                        checked: currentBehavior === 'Loop',
+                        action: () => setTrackBehavior(tid, 'Loop')
+                    },
+                    { 
+                        label: 'Ping-Pong', 
+                        checked: currentBehavior === 'PingPong',
+                        action: () => setTrackBehavior(tid, 'PingPong')
+                    },
+                    { 
+                        label: 'Continue (Slope)', 
+                        checked: currentBehavior === 'Continue',
+                        action: () => setTrackBehavior(tid, 'Continue')
+                    },
+                    { 
+                        label: 'Offset Loop (Relative)', 
+                        checked: currentBehavior === 'OffsetLoop',
+                        action: () => setTrackBehavior(tid, 'OffsetLoop')
+                    }
+                ]
+            }
+        ];
+        
+        openGlobalMenu(e.clientX, e.clientY, items, ['anim.tracks']);
     };
     
     // --- SELECT ALL KEYS (Button Handler) ---
@@ -202,12 +257,19 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                 key={tid}
                 className={`flex items-center justify-between px-3 py-1.5 cursor-pointer border-b border-white/5 transition-colors group ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'}`}
                 onClick={(e) => handleSelect(e, tid)}
+                onContextMenu={(e) => handleContextMenu(e, tid)}
             >
                 <div className="flex items-center gap-2 min-w-0">
                     <div className={`w-1.5 h-1.5 rounded-full shrink-0 transition-opacity ${isVisible ? 'opacity-100' : 'opacity-0'}`} style={{ backgroundColor: color }} />
                     <span className={`text-[10px] truncate ${isSelected ? 'text-white font-bold' : (isVisible ? 'text-gray-300' : 'text-gray-500')}`} title={track.label}>
                         {track.label}
                     </span>
+                    {/* Indicator for non-default behavior */}
+                    {track.postBehavior && track.postBehavior !== 'Hold' && (
+                        <span className="text-[8px] text-cyan-500 font-mono tracking-tighter opacity-50 ml-1">
+                            [{track.postBehavior.substring(0, 1)}]
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     {/* Select All Keys */}
@@ -221,15 +283,6 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                     
                     {isVisible && <LiveValueDisplay tid={tid} />}
                     
-                    {/* Trash Icon */}
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); removeTrack(tid); }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/20 text-red-500 hover:text-red-400 transition-all"
-                        title="Delete Track"
-                    >
-                        <TrashIcon />
-                    </button>
-
                     {/* Visibility Eye */}
                     <div 
                         className="p-1 rounded hover:bg-white/20 text-gray-500 hover:text-white"

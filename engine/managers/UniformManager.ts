@@ -18,6 +18,17 @@ export class UniformManager {
     private camRight = new THREE.Vector3();
     private camUp = new THREE.Vector3();
     private camForward = new THREE.Vector3();
+    
+    // Light Calculation Cache
+    private lightQuat = new THREE.Quaternion();
+    private lightEuler = new THREE.Euler();
+    private lightDir = new THREE.Vector3();
+    private defaultForward = new THREE.Vector3(0, 0, -1); 
+
+    // Track previous resolution state to avoid redundant updates
+    private lastWidth: number = -1;
+    private lastHeight: number = -1;
+    private lastIsGizmoInteracting: boolean = false;
 
     constructor(
         uniforms: { [key: string]: THREE.IUniform }, 
@@ -43,37 +54,56 @@ export class UniformManager {
         
         // Auto-Resize Logic with Dynamic Scaling
         if (renderer && !runtimeState.isExporting && !runtimeState.isBucketRendering) {
-            const canvas = renderer.domElement;
-            
-            // Default: Match Canvas Buffer Size (controlled by RendererSlice dpr)
-            let w = Math.floor(canvas.width);
-            let h = Math.floor(canvas.height);
+            // Use domElement.width/height to get actual physical pixels of the GL context
+            // Ensure integer values
+            let w = Math.floor(renderer.domElement.width);
+            let h = Math.floor(renderer.domElement.height);
 
-            // Dynamic Scaling Override
-            // If user is interacting and dynamic scaling is enabled, reduce internal resolution
-            if (runtimeState.isGizmoInteracting && runtimeState.quality?.dynamicScaling) {
+            // SAFETY: Prevent 0x0 resolution crashes (happens on init/minimize)
+            if (w < 1) w = 1;
+            if (h < 1) h = 1;
+
+            let targetW = w;
+            let targetH = h;
+            
+            if ((runtimeState.isGizmoInteracting || runtimeState.isCameraInteracting) && runtimeState.quality?.dynamicScaling) {
                 const downsample = Math.max(1.0, runtimeState.quality.interactionDownsample || 2.0);
-                w = Math.max(64, Math.floor(w / downsample));
-                h = Math.max(64, Math.floor(h / downsample));
+                targetW = Math.max(64, Math.floor(w / downsample));
+                targetH = Math.max(64, Math.floor(h / downsample));
             }
             
-            const uRes = this.uniforms[Uniforms.Resolution].value;
+            // OPTIMIZATION: Track previous target resolution to avoid redundant resizes
+            const currentW = this.uniforms[Uniforms.Resolution].value.x;
+            const currentH = this.uniforms[Uniforms.Resolution].value.y;
             
-            if (uRes.x !== w || uRes.y !== h) {
-                uRes.set(w, h);
-                this.pipeline.resize(w, h);
+            if (currentW !== targetW || currentH !== targetH) {
+                console.log(`[UniformManager] Resizing from ${currentW}x${currentH} to ${targetW}x${targetH}`);
+                this.uniforms[Uniforms.Resolution].value.set(targetW, targetH);
+                this.pipeline.resize(targetW, targetH);
                 this.pipeline.resetAccumulation(); 
                 
                 if (materials) {
-                    materials.displayMaterial.uniforms.uResolution.value.set(w, h);
-                    materials.exportMaterial.uniforms.uResolution.value.set(w, h);
+                    materials.displayMaterial.uniforms.uResolution.value.set(targetW, targetH);
+                    materials.exportMaterial.uniforms.uResolution.value.set(targetW, targetH);
                 }
+                
+                // Update tracking variables
+                this.lastWidth = targetW;
+                this.lastHeight = targetH;
             }
             
             const canvasAspect = w / h;
-            if (Math.abs(cam.aspect - canvasAspect) > 0.001) {
+            if (Number.isFinite(canvasAspect) && Math.abs(cam.aspect - canvasAspect) > 0.001) {
                 cam.aspect = canvasAspect;
                 cam.updateProjectionMatrix();
+            }
+        }
+        
+        // Blue Noise Size Sync - Kept for compatibility but unused by IGN shader
+        if (this.uniforms[Uniforms.BlueNoiseTexture].value) {
+            const tex = this.uniforms[Uniforms.BlueNoiseTexture].value;
+            if (tex.image) {
+                this.uniforms[Uniforms.BlueNoiseResolution].value.set(tex.image.width || 128, tex.image.height || 128);
             }
         }
         
@@ -86,10 +116,11 @@ export class UniformManager {
 
         let effectiveQuat = cam.quaternion;
 
-        if (rotModX !== 0 || rotModY !== 0 || rotModZ !== 0) {
-            const modRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(rotModX, rotModY, rotModZ, 'XYZ'));
-            effectiveQuat = cam.quaternion.clone().multiply(modRot);
-        }
+         if (rotModX !== 0 || rotModY !== 0 || rotModZ !== 0) {
+             this.lightEuler.set(rotModX, rotModY, rotModZ, 'XYZ');
+             this.lightQuat.setFromEuler(this.lightEuler);
+             effectiveQuat = cam.quaternion.clone().multiply(this.lightQuat);
+         }
 
         this.rotMatrix.makeRotationFromQuaternion(effectiveQuat);
         const e = this.rotMatrix.elements;
@@ -108,6 +139,10 @@ export class UniformManager {
             width = height * cam.aspect; 
         }
         
+        // Safety check for NaN basis
+        if (!Number.isFinite(width)) width = 1.0;
+        if (!Number.isFinite(height)) height = 1.0;
+
         this.uniforms[Uniforms.CamBasisX].value.copy(this.camRight).multiplyScalar(width);
         this.uniforms[Uniforms.CamBasisY].value.copy(this.camUp).multiplyScalar(height);
         this.uniforms[Uniforms.CamForward].value.copy(this.camForward);
@@ -139,7 +174,9 @@ export class UniformManager {
         }
 
         if (lighting && Array.isArray(lighting.lights)) {
+            const typeArr = this.uniforms[Uniforms.LightType].value as Float32Array;
             const posArr = this.uniforms[Uniforms.LightPos].value;
+            const dirArr = this.uniforms[Uniforms.LightDir].value;
             const colArr = this.uniforms[Uniforms.LightColor].value;
             const intArr = this.uniforms[Uniforms.LightIntensity].value as Float32Array;
             const falArr = this.uniforms[Uniforms.LightFalloff].value as Float32Array;
@@ -157,7 +194,11 @@ export class UniformManager {
                 const dX = modulations[`lighting.light${i}_posX`] || 0;
                 const dY = modulations[`lighting.light${i}_posY`] || 0;
                 const dZ = modulations[`lighting.light${i}_posZ`] || 0;
+                const dRotX = modulations[`lighting.light${i}_rotX`] || 0;
+                const dRotY = modulations[`lighting.light${i}_rotY`] || 0;
+                const dRotZ = modulations[`lighting.light${i}_rotZ`] || 0;
 
+                typeArr[i] = l.type === 'Directional' ? 1.0 : 0.0;
                 intArr[i] = l.visible ? Math.max(0, l.intensity + dIntensity) : 0.0;
                 falArr[i] = Math.max(0, l.falloff + dFalloff);
                 typArr[i] = l.falloffType === 'Linear' ? 1.0 : 0.0;
@@ -174,6 +215,25 @@ export class UniformManager {
                 };
                 
                 this.virtualSpace.getLightShaderVector(effectivePos, l.fixed, cam, (posArr[i] as THREE.Vector3));
+                
+                // Calculate Direction
+                // Base: (0, 0, -1) [Forward]
+                this.lightEuler.set(
+                    l.rotation.x + dRotX, 
+                    l.rotation.y + dRotY, 
+                    l.rotation.z + dRotZ, 
+                    'YXZ' // Matches typical Yaw/Pitch order
+                );
+                this.lightQuat.setFromEuler(this.lightEuler);
+                
+                this.lightDir.copy(this.defaultForward).applyQuaternion(this.lightQuat);
+                
+                // If Fixed (Headlamp), transform direction by Camera Rotation
+                if (l.fixed) {
+                    this.lightDir.applyQuaternion(cam.quaternion);
+                }
+                
+                (dirArr[i] as THREE.Vector3).copy(this.lightDir).normalize();
             }
         }
     }

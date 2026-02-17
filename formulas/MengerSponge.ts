@@ -61,8 +61,8 @@ export const MengerSponge: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 3.0 },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Z Shift (Man)', id: 'paramE', min: -1.0, max: 1.0, step: 0.01, default: 0.0 },
         { label: 'Center Z', id: 'paramF', min: 0.0, max: 1.0, step: 1.0, default: 1.0 },
     ],
@@ -123,7 +123,9 @@ export const MengerSponge: FractalDefinition = {
                 "shadowBias": 0.001,
                 "lights": [
                     {
+                        "type": 'Point',
                         "position": { "x": -0.9689439564723806, "y": 1.464759551794367, "z": 1.3253877287915055 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
                         "color": "#ffffff",
                         "intensity": 5,
                         "falloff": 0,
@@ -133,7 +135,9 @@ export const MengerSponge: FractalDefinition = {
                         "castShadow": true
                     },
                     {
+                        "type": 'Point',
                         "position": { "x": -4, "y": -2, "z": 1 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
                         "color": "#3344ff",
                         "intensity": 0.5,
                         "falloff": 0,
@@ -143,7 +147,9 @@ export const MengerSponge: FractalDefinition = {
                         "castShadow": false
                     },
                     {
+                        "type": 'Point',
                         "position": { "x": 2.068536018579901, "y": 1.017402618613485, "z": 2.7478079181187756 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
                         "color": "#ff3300",
                         "intensity": 0.3,
                         "falloff": 0,
@@ -267,7 +273,7 @@ export const MengerSponge: FractalDefinition = {
                 "bufferPrecision": 0,
                 "maxSteps": 200,
                 "distanceMetric": 0,
-                "estimator": 4.0, // Linear (Offset 2.0)
+                "estimator": 4.0, // Linear (2.0)
                 "fudgeFactor": 1,
                 "detail": 1,
                 "pixelThreshold": 0.001,

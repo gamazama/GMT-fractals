@@ -47,6 +47,7 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
                     className="sticky left-0 z-30 w-[220px] bg-[#1a1a1a] border-r border-white/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-gray-700 select-none" 
                     onClick={(e) => { e.stopPropagation(); onToggle(groupName, e.altKey); }}
                     onMouseDown={(e) => e.stopPropagation()}
+                    data-help-id="anim.tracks"
                 >
                     <span className="text-gray-500 w-4"><FolderIcon open={!collapsed} /></span>
                     <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">{groupName}</span>
@@ -58,6 +59,7 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
                             className="absolute top-1/2 -mt-1.5 w-3 h-3 bg-gray-500/50 border border-gray-400/50 rotate-45 cursor-grab hover:bg-white hover:border-white hover:scale-125 z-10"
                             style={{ left: `${frame * frameWidth - 6}px` }}
                             onMouseDown={(e) => onGroupKeyMouseDown(e, trackIds, frame)}
+                            data-help-id="anim.keyframes"
                         />
                     ))}
                 </div>

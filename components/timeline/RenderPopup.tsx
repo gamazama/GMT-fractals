@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { engine } from '../../engine/FractalEngine';
-import { videoExporter } from '../../engine/VideoExporter';
+// Removed circular import of videoExporter
 import { useAnimationStore } from '../../store/animationStore';
 import { useFractalStore } from '../../store/fractalStore';
 import { VIDEO_FORMATS } from '../../data/constants';
@@ -13,6 +13,8 @@ import DraggableWindow from '../DraggableWindow';
 import * as THREE from 'three';
 import { PlayIcon, StopIcon, CheckIcon, TrashIcon, SaveIcon, AlertIcon, InfoIcon } from '../Icons';
 import * as Mediabunny from 'mediabunny';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
+import { VIDEO_CONFIG } from '../../data/constants';
 
 interface RenderPopupProps {
     onClose: () => void;
@@ -124,6 +126,52 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         };
     }, [vidSamples, isRendering]);
 
+    // Listen for progress updates
+    useEffect(() => {
+        const totalFrames = Math.floor((endFrame - startFrame) / frameStep) + 1;
+        let lastFrameEnd = Date.now();
+
+        const unsub = FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
+             // Re-purposing Bucket Status event for Export Progress since they share UI needs
+             if (!data.isRendering) {
+                 setIsRendering(false);
+                 setWinSize({ width: BASE_WIDTH, height: BASE_HEIGHT });
+                 return;
+             }
+             
+             setProgress(data.progress);
+             
+             // Update Timing Stats
+             const now = Date.now();
+             const elapsed = (now - startTimeRef.current) / 1000;
+             setElapsedTime(elapsed);
+             
+             if (data.progress > 0) {
+                 // Avg calculation
+                 const framesDone = (data.progress / 100) * totalFrames;
+                 // If framesDone changed significantly, update frame time
+                 if (framesDone >= 1 && framesDone % 1 < 0.1) { // roughly every frame
+                     const thisFrameTime = (now - lastFrameEnd) / 1000;
+                     setLastFrameTime(thisFrameTime);
+                     lastFrameEnd = now;
+                 }
+
+                 const avgTime = elapsed / framesDone;
+                 const remainingFrames = totalFrames - framesDone;
+                 
+                 const etaAvg = remainingFrames * avgTime;
+                 
+                 // Smoothing
+                 setEtaRange(prev => ({ 
+                     min: etaAvg * 0.9, 
+                     max: etaAvg * 1.1 
+                 }));
+             }
+        });
+        
+        return unsub;
+    }, [startFrame, endFrame, frameStep]);
+
     // Format Support Check
     useEffect(() => {
         const checkSupport = async () => {
@@ -190,7 +238,6 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         }
 
         // --- STEP 2: SETUP UI & RENDER ---
-        // Expand window slightly for stats
         setWinSize({ width: EXPANDED_WIDTH, height: BASE_HEIGHT });
 
         setIsRendering(true);
@@ -199,23 +246,15 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         setElapsedTime(0);
         setEtaRange({ min: 0, max: 0 });
         setLastFrameTime(0);
-        setStatusText(effectiveDiskMode ? "Initializing Disk Stream..." : "Initializing RAM Buffer...");
+        setStatusText(effectiveDiskMode ? "Exporting to Disk..." : "Exporting to RAM...");
         
         await new Promise(resolve => setTimeout(resolve, 100));
 
         startTimeRef.current = Date.now();
-        const startFrameCurrent = animStore.currentFrame;
-        const wasPlaying = animStore.isPlaying;
-        const startOffset = { ...engine.sceneOffset };
-        const cam = engine.activeCamera;
-        const startCamPos = cam ? cam.position.clone() : new THREE.Vector3();
-        const startCamQuat = cam ? cam.quaternion.clone() : new THREE.Quaternion();
-        const totalFrames = Math.floor((endFrame - startFrame) / frameStep) + 1;
         
-        let lastFrameEnd = Date.now();
-
         try {
-            await videoExporter.renderSequence({
+            // Use engine.videoExporter instance
+            engine.videoExporter.start({
                 width: vidRes.w,
                 height: vidRes.h,
                 fps: fps,
@@ -226,57 +265,27 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                 frameStep: frameStep,
                 formatIndex: formatIndex,
                 internalScale: internalScale
-            }, fileStream, (p, info) => {
-                setProgress(p);
-                if (info) setStatusText(info);
-                
-                // Update Timing Stats
-                const now = Date.now();
-                const elapsed = (now - startTimeRef.current) / 1000;
-                setElapsedTime(elapsed);
-                
-                // Calculate individual frame time
-                const thisFrameTime = (now - lastFrameEnd) / 1000;
-                setLastFrameTime(thisFrameTime);
-                lastFrameEnd = now;
-
-                if (p > 0) {
-                    // Avg calculation
-                    const avgTime = elapsed / ((p / 100) * totalFrames);
-                    const remainingFrames = totalFrames - ((p / 100) * totalFrames);
-                    
-                    const etaAvg = remainingFrames * avgTime;
-                    const etaLast = remainingFrames * thisFrameTime;
-                    
-                    const etaMin = Math.min(etaAvg, etaLast);
-                    const etaMax = Math.max(etaAvg, etaLast);
-
-                    setEtaRange({ min: etaMin, max: etaMax });
-                }
-            });
+            }, fileStream);
+            
+            // The tick loop in FractalEngine will now drive the export
+            
         } catch (e: any) {
             if (e.message !== "Cancelled by user") {
                 console.error("RenderPopup: Render sequence failed", e);
                 alert(`Render process failed.\n\nError: ${e.message}`);
+                setIsRendering(false);
             }
-        } finally {
-            videoExporter.restoreState(startFrameCurrent, startOffset, startCamPos, startCamQuat, wasPlaying);
-            setIsRendering(false);
-            setIsStopping(false);
-            engine.setPreviewSampleCap(vidSamples);
-            setWinSize({ width: BASE_WIDTH, height: BASE_HEIGHT });
         }
     };
 
-    const handleStopClick = () => { setIsStopping(true); videoExporter.pause(); };
-    const handleResume = () => { setIsStopping(false); videoExporter.resume(); };
-    const confirmStitch = () => { setStatusText("Stitching..."); videoExporter.finishAndStitch(); videoExporter.resume(); };
-    const discardRender = () => { videoExporter.cancel(); videoExporter.resume(); };
+    const handleStopClick = () => { setIsStopping(true); engine.videoExporter.pause(); };
+    const handleResume = () => { setIsStopping(false); engine.videoExporter.resume(); };
+    const confirmStitch = () => { setStatusText("Stitching..."); engine.videoExporter.finishAndStitch(); engine.videoExporter.resume(); };
+    const discardRender = () => { engine.videoExporter.cancel(); engine.videoExporter.resume(); setIsRendering(false); };
 
     const totalFramesCount = Math.floor((endFrame - startFrame) / frameStep) + 1;
     
     // Improved Est. Total Logic
-    // Calculates theoretical render time based on current viewport performance extrapolated to target resolution
     const calculateEstimatedTotal = () => {
         if (!frameStats.duration) return 0;
         
@@ -284,7 +293,6 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         if (engine.renderer) {
              const canvas = engine.renderer.domElement;
              const viewportPixels = canvas.width * canvas.height;
-             // Apply internal scale to target resolution
              const targetW = vidRes.w * internalScale;
              const targetH = vidRes.h * internalScale;
              const targetPixels = targetW * targetH;
@@ -315,7 +323,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                 size={winSize}
                 onSizeChange={setWinSize}
                 disableClose={true}
-                zIndex={110}
+                zIndex={600}
             >
                 <div className="flex flex-col h-full space-y-4 p-2">
                     
@@ -406,7 +414,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
             size={winSize}
             onSizeChange={setWinSize}
             disableClose={false}
-            zIndex={110}
+            zIndex={600}
         >
             <div className="flex flex-col -m-3 h-[calc(100%+20px)]">
                 {/* Header Info */}

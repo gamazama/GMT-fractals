@@ -1,5 +1,5 @@
 {
-  "name": "GMT 0.8.4",
+  "name": "GMT 0.8.5",
   "description": "GPU Mandelbulb Tracer - A real-time, GPU-accelerated 3D fractal explorer.",
   "requestFramePermissions": []
 }

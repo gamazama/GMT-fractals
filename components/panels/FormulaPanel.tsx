@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { FractalState, FractalActions, FormulaType, LfoTarget, PanelId } from '../../types';
 import Slider from '../Slider';
@@ -14,6 +13,7 @@ import { nodeRegistry } from '../../engine/NodeRegistry';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { engine } from '../../engine/FractalEngine';
+import Dropdown from '../Dropdown';
 
 interface FormulaParam {
     label: string;
@@ -25,6 +25,8 @@ interface FormulaParam {
     def: number;
     id: LfoTarget;
     trackId: string;
+    scale?: 'linear' | 'log' | 'pi'; // Add scale to local interface
+    options?: { label: string; value: number }[];
 }
 
 const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, actions: FractalActions, onSwitchTab?: (tab: PanelId) => void }) => {
@@ -185,7 +187,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                 case 'paramE': val = coreMath.paramE; set = (v) => actions.setCoreMath({ paramE: v }); break;
                 case 'paramF': val = coreMath.paramF; set = (v) => actions.setCoreMath({ paramF: v }); break;
             }
-            return { label, val, set, min: -5.0, max: 5.0, step: 0.01, def: 0.0, id, trackId: `coreMath.${id}` };
+            return { label, val, set, min: -5.0, max: 5.0, step: 0.01, def: 0.0, id, trackId: `coreMath.${id}`, scale: 'linear' };
         });
     }
     const def = registry.get(state.formula);
@@ -201,7 +203,8 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                 case 'paramE': val = coreMath.paramE; set = (v) => actions.setCoreMath({ paramE: v }); break;
                 case 'paramF': val = coreMath.paramF; set = (v) => actions.setCoreMath({ paramF: v }); break;
             }
-            return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}` };
+            // Pass the scale property from definition to the local object
+            return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, scale: p.scale, options: p.options };
         });
     }
     
@@ -209,21 +212,47 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
   };
   const params = getParams();
 
-  const renderSlider = (p: FormulaParam | null) => {
+  const renderControl = (p: FormulaParam | null) => {
       if (!p) return null;
+
+      if (p.options) {
+        return (
+            <div key={p.id} className="mb-1">
+                <Dropdown
+                    label={p.label}
+                    value={p.val}
+                    options={p.options}
+                    onChange={(v) => p.set(v as number)}
+                    fullWidth
+                    // Since formula panel items are often dense, we can adjust style if needed
+                    // For now default style is fine
+                />
+            </div>
+        );
+      }
+
       const liveVal = state.liveModulations[p.trackId] ?? state.liveModulations[p.id];
       const hasLfo = state.animations.some(a => a.enabled && (a.target === p.trackId || a.target === p.id));
-      const isAngleName = /Rot|Phase|Angle|Twist/i.test(p.label);
-      const isRadianRange = Math.abs(p.max) > 3.0; 
-      if (isAngleName && isRadianRange) {
+      
+      // Explicit PI scaling based on definition, NOT on name regex.
+      if (p.scale === 'pi') {
           return (
               <Slider 
                  key={p.id} label={p.label} value={p.val} min={p.min} max={p.max} step={0.01} 
                  onChange={p.set} defaultValue={p.def} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} 
-                 trackId={p.trackId} liveValue={liveVal} customMapping={{ min: p.min / Math.PI, max: p.max / Math.PI, toSlider: (v) => v / Math.PI, fromSlider: (v) => v * Math.PI }} mapTextInput={true} overrideInputText={`${(p.val / Math.PI).toFixed(2)}π`}
+                 trackId={p.trackId} liveValue={liveVal} 
+                 customMapping={{ 
+                     min: p.min / Math.PI, 
+                     max: p.max / Math.PI, 
+                     toSlider: (v) => v / Math.PI, 
+                     fromSlider: (v) => v * Math.PI 
+                 }} 
+                 mapTextInput={true} 
+                 overrideInputText={`${(p.val / Math.PI).toFixed(2)}π`}
               />
           );
       }
+      // Standard or Log
       return <Slider key={p.id} label={p.label} value={p.val} min={p.min} max={p.max} step={p.step} onChange={p.set} defaultValue={p.def} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} trackId={p.trackId} liveValue={liveVal} />;
   };
 
@@ -241,7 +270,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
        
        <div className="flex flex-col" data-help-id={`panel.formula formula.${state.formula?.toLowerCase() || 'mandelbulb'}`}>
             <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1} onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })} highlight defaultValue={32} customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }} trackId="coreMath.iterations" liveValue={state.liveModulations['coreMath.iterations']} />
-            <>{params.map(p => renderSlider(p))}</>
+            <>{params.map(p => renderControl(p))}</>
        </div>
        
        <div className="border-t border-white/5 mt-2 pt-2" data-help-id="formula.transform">

@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useMemo } from 'react';
 import Controls from './components/Controls';
 import TopBar from './components/TopBar';
@@ -18,6 +17,11 @@ import { useAppStartup } from './hooks/useAppStartup';
 import { useMobileLayout } from './hooks/useMobileLayout';
 import { QualityState } from './features/quality';
 import { FractalEvents } from './engine/FractalEvents';
+import { Dock } from './components/layout/Dock';
+import { DropZones } from './components/layout/DropZones';
+import DraggableWindow from './components/DraggableWindow';
+import { PanelRouter } from './components/PanelRouter';
+import { PanelId, PanelState } from './types';
 
 const App: React.FC = () => {
   const state = useFractalStore();
@@ -34,7 +38,7 @@ const App: React.FC = () => {
   const resetRef = useRef<HTMLButtonElement>(null);
   const reticleRef = useRef<HTMLDivElement>(null);
 
-  // Memoize the refs object to ensure referential stability for downstream dependency arrays
+  // Memoize the refs object
   const hudRefs = useMemo(() => ({
       container: containerRef,
       speed: speedRef,
@@ -50,16 +54,12 @@ const App: React.FC = () => {
   useGlobalContextMenu();
 
   // --- Computed UI State ---
-  // "isCurrentlyMobile" affects UI Layout (Controls vs MobileControls)
-  // Strictly tied to device capabilities OR forced mobile layout (via Debug switch)
   const isCurrentlyMobile = isMobile || state.debugMobileLayout;
-  
-  // "Lite Render" is now a check on the Quality Feature State
   const quality = (state as any).quality as QualityState;
-  const isLiteRender = quality?.precisionMode === 1; // 1 = Standard/Mobile
-  
+  const isLiteRender = quality?.precisionMode === 1; 
   const isFlyMobile = isCurrentlyMobile && state.cameraMode === 'Fly';
   const isBroadcast = state.isBroadcastMode;
+  const showCrosshair = state.interactionMode !== 'none';
 
   const handleTimelineContextMenu = (e: React.MouseEvent) => {
       e.preventDefault(); e.stopPropagation();
@@ -67,32 +67,48 @@ const App: React.FC = () => {
   };
 
   const handleLiteToggle = () => {
-      // Use the DDFS Meta-Action for applying engine profiles
       const mode = isLiteRender ? 'balanced' : 'lite';
-      
-      // Provide immediate feedback to user
       FractalEvents.emit('is_compiling', `Switching to ${mode} mode...`);
-
       // @ts-ignore
       const applyPreset = state.applyPreset;
       if (applyPreset) {
           applyPreset({ mode, actions: state });
       }
   };
+  
+  const handleLoadingFinished = () => {
+      setIsLoadingVisible(false);
+      FractalEvents.emit('camera_teleport', {
+          position: state.cameraPos,
+          rotation: state.cameraRot,
+          sceneOffset: state.sceneOffset,
+          targetDistance: state.targetDistance
+      });
+  };
 
   const rootClass = isCurrentlyMobile && !isBroadcast
       ? "min-h-[120vh] bg-black" 
       : "fixed inset-0 w-full h-full bg-black select-none overflow-hidden flex flex-col";
 
+  // Filter floating panels
+  const floatingPanels = (Object.values(state.panels) as PanelState[]).filter((p) => p.location === 'float' && p.isOpen);
+
   return (
     <div className={rootClass}>
       <EngineBridge />
+      <DropZones />
       
-      {/* Banner: Only show on Mobile Layout (for scrolling to fullscreen) */}
+      {/* Floating Windows Render Layer */}
+      {floatingPanels.map(p => (
+          <DraggableWindow key={p.id} id={p.id} title={p.id}>
+              <PanelRouter activeTab={p.id as PanelId} state={state} actions={state} onSwitchTab={(t) => state.togglePanel(t, true)} />
+          </DraggableWindow>
+      ))}
+
+      {/* Banner for Mobile */}
       {isCurrentlyMobile && !isBroadcast && (
           <div className="w-full bg-[#080808] border-b border-white/10 p-8 pb-12 flex flex-col items-center text-center gap-3">
              <div className="w-12 h-1 bg-gray-800 rounded-full mb-2" />
-             
              {isLiteRender ? (
                 <>
                     <div className="flex items-center gap-2 text-amber-500 mb-1">
@@ -100,14 +116,7 @@ const App: React.FC = () => {
                         <span className="text-xs font-black uppercase tracking-widest">Lite Render Mode</span>
                     </div>
                     <p className="text-[10px] text-gray-400 leading-relaxed max-w-[320px]">
-                        Running lightweight engine for high performance.<br/>
-                        <span className="text-gray-500 block mt-2 font-mono text-[9px] border-t border-white/5 pt-2 space-y-0.5">
-                            <span className="text-green-500/80 block">✓ Fast Glow (Accumulation Only)</span>
-                            <span className="text-green-500/80 block">✓ EnvMap Reflections (No Marching)</span>
-                            <span className="text-green-500/80 block">✓ Low-Step AO (2) & Shadows (16)</span>
-                            <span className="text-green-500/80 block">✓ Reduced Precision (1e-5) & Lights (3)</span>
-                            <span className="text-red-500/60 block mt-1.5 pt-1 border-t border-white/5">✕ Hybrid Cage & Path Tracer Disabled</span>
-                        </span>
+                        Running lightweight engine.<br/>
                     </p>
                 </>
              ) : (
@@ -115,36 +124,25 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-2 text-cyan-500 mb-1">
                         <span className="text-xs font-black uppercase tracking-widest">High Quality Mode</span>
                     </div>
-                    <p className="text-[10px] text-gray-400 leading-relaxed max-w-[320px]">
-                        Full desktop-class rendering enabled.<br/>
-                        <span className="text-gray-600 block mt-1 text-[9px]">Battery usage may increase significantly.</span>
-                    </p>
                 </>
              )}
-             
-             {/* Toggle Button for Mobile Banner */}
              <button 
                 onClick={handleLiteToggle}
                 className="mt-2 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest rounded border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
              >
                  {isLiteRender ? "Switch to High Quality" : "Switch to Lite Mode"}
              </button>
-
-             <div className="text-[9px] text-gray-600 font-mono mt-6 flex flex-col items-center animate-pulse">
-                <span className="tracking-[0.2em] uppercase font-bold">Scroll to Enter</span>
-                <svg width="12" height="12" viewBox='0 0 24 24' fill="none" stroke="currentColor" strokeWidth="2" className="mt-1 opacity-50"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>
-             </div>
           </div>
       )}
 
       <div 
           ref={mainWrapperRef}
-          className={`relative bg-black select-none ${state.interactionMode === 'picking_focus' ? 'cursor-crosshair' : ''} flex flex-col ${isCurrentlyMobile && !isBroadcast ? 'h-[100vh] sticky top-0 overflow-hidden shadow-2xl' : 'w-full h-full'}`} 
+          className={`relative bg-black select-none ${showCrosshair ? 'cursor-crosshair' : ''} flex flex-col ${isCurrentlyMobile && !isBroadcast ? 'h-[100vh] sticky top-0 overflow-hidden shadow-2xl' : 'w-full h-full'}`} 
           onContextMenu={(e) => e.preventDefault()}
       >
         <LoadingScreen 
             isReady={isSceneReady} 
-            onFinished={() => setIsLoadingVisible(false)} 
+            onFinished={handleLoadingFinished} 
             startupMode={startupMode} 
             onPresetLoaded={queuePresetLoad}
             bootEngine={bootEngine}
@@ -157,20 +155,35 @@ const App: React.FC = () => {
                 <p className="text-gray-500 text-sm font-mono tracking-widest">Rotate device to access controls.</p>
             </div>
         )}
+        
         {!isLoadingVisible && (
           <>
             {!isBroadcast && <TopBar />}
+            
+            {/* MAIN CONTENT AREA: 3-COLUMN LAYOUT */}
             <div className="flex-1 flex overflow-hidden relative">
+                
+                {/* LEFT DOCK */}
+                {!isBroadcast && !isCurrentlyMobile && (
+                    <Dock side="left" />
+                )}
+
+                {/* VIEWPORT (Flex-1 to take available space) */}
                 <ViewportArea hudRefs={hudRefs} onSceneReady={() => setIsSceneReady(true)} />
-                {!isBroadcast && <Controls state={state} actions={state} presets={[]} onExport={()=>{}} onImport={()=>{}} />}
+                
+                {/* RIGHT DOCK */}
+                {!isBroadcast && (
+                    <Dock side="right" />
+                )}
             </div>
+            
             {!isBroadcast && <MobileControls />}
-            {/* Debuggers are now rendered via DynamicDomOverlays inside ViewportArea */}
             {!isBroadcast && <PopupSliderSystem />}
             {state.contextMenu.visible && !isBroadcast && (
                 <GlobalContextMenu x={state.contextMenu.x} y={state.contextMenu.y} items={state.contextMenu.items} targetHelpIds={state.contextMenu.targetHelpIds} onClose={state.closeContextMenu} onOpenHelp={state.openHelp} />
             )}
             {state.helpWindow.visible && <HelpBrowser activeTopicId={state.helpWindow.activeTopicId} onClose={state.closeHelp} onNavigate={state.openHelp} />}
+            
             {!showTimeline && !isFlyMobile && !isBroadcast && (
                 <div className={`fixed bottom-4 left-4 z-50 flex gap-2 transition-all duration-500`}>
                     <button onClick={() => setShowTimeline(true)} onContextMenu={handleTimelineContextMenu} className={`p-2 rounded-full border shadow-lg transition-all bg-gray-800 border-gray-600 text-gray-400 hover:text-white`} title="Open Timeline (T)"><TimelineOpenIcon /></button>

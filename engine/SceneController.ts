@@ -7,14 +7,9 @@ export class SceneController {
     public mainCamera: THREE.OrthographicCamera;
     public mainMesh: THREE.Mesh;
 
-    // New: Display Scene for Blitting to Screen
+    // Display Scene for Blitting to Screen
     public displayScene: THREE.Scene;
     public displayMesh: THREE.Mesh;
-
-    public physicsRenderTarget: THREE.WebGLRenderTarget;
-    public physicsScene: THREE.Scene;
-    public physicsCamera: THREE.OrthographicCamera;
-    public physicsMesh: THREE.Mesh;
     
     public activeCamera: THREE.Camera | null = null;
     public fallbackCamera: THREE.PerspectiveCamera;
@@ -33,21 +28,8 @@ export class SceneController {
         this.displayMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), materials.displayMaterial);
         this.displayMesh.frustumCulled = false;
         this.displayScene.add(this.displayMesh);
-
-        // 3. Physics Scene (Distance Probing)
-        this.physicsRenderTarget = new THREE.WebGLRenderTarget(4, 4, {
-            minFilter: THREE.NearestFilter,
-            magFilter: THREE.NearestFilter,
-            format: THREE.RGBAFormat,
-            type: THREE.FloatType, 
-        });
-        this.physicsScene = new THREE.Scene();
-        this.physicsCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        this.physicsMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), materials.physicsMaterial);
-        this.physicsMesh.frustumCulled = false;
-        this.physicsScene.add(this.physicsMesh);
         
-        // 4. Dummy Camera
+        // 3. Dummy Camera
         this.fallbackCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
         this.fallbackCamera.position.set(0, 0, 0);
     }

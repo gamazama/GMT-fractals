@@ -12,7 +12,8 @@ GMT features a client-side render farm.
 4.  **Encode:** The frame is passed to `VideoEncoder` (WebCodecs).
 5.  **Mux:** Frames are stitched into a `.webm` container.
 
-### Storage Strategies (`RecorderStrategy.ts`)
+### Storage Strategies
+Video export uses the `mediabunny` library for encoding. Storage modes depend on browser capabilities:
 *   **Disk Mode (Chrome/Edge):** Uses the File System Access API (OPFS). Streams chunks directly to disk. Supports unlimited file sizes.
 *   **RAM Mode (Firefox/Safari):** Buffers the entire video in RAM. Limited by browser memory (crash risk on 4K renders).
 

@@ -5,6 +5,8 @@ export type LfoTarget = string; // E.g. 'coreMath.paramA', 'geometry.juliaX'
 export type SoftSelectionType = 'Linear' | 'Dome' | 'Pinpoint' | 'S-Curve';
 export type LoopMode = 'Loop' | 'Once' | 'PingPong';
 
+export type TrackBehavior = 'Hold' | 'Loop' | 'PingPong' | 'Continue' | 'OffsetLoop';
+
 export interface AnimationParams {
     id: string;
     enabled: boolean;
@@ -42,6 +44,7 @@ export interface Track {
     color?: string;
     hidden?: boolean;
     locked?: boolean;
+    postBehavior?: TrackBehavior;
 }
 
 export interface AnimationSequence {

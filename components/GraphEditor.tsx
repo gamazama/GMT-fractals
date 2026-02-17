@@ -11,6 +11,7 @@ import { GraphToolbar } from './graph/GraphToolbar';
 import { GraphCanvas } from './graph/GraphCanvas';
 import { WaveIcon, BakeIcon, MagicIcon } from './Icons';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
+import { ContextMenuItem } from '../types/help';
 
 interface GraphEditorProps {
     trackIds: string[]; // These are VISIBLE tracks
@@ -43,6 +44,8 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
         softSelectionEnabled, softSelectionRadius, softSelectionType,
         copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes
     } = useAnimationStore();
+    
+    const { openContextMenu: openGlobalContextMenu } = useFractalStore();
     
     const [viewY, setViewY] = useState({ pan: 0, scale: 50 });
     const [normalized, setNormalized] = useState(propNormalized); 
@@ -102,7 +105,13 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
 
     // --- INTERACTION HOOK ---
     // Now passing the DIV ref instead of canvas ref
-    const { handleMouseDown: onGraphMouseDown, getHit, selectionBox, softInteraction } = useGraphInteraction(
+    const { 
+        handleMouseDown: onGraphMouseDown, 
+        getHit, 
+        selectionBox, 
+        softInteraction,
+        shouldSuppressContextMenu
+    } = useGraphInteraction(
         interactionRef, view, trackIds, normalized, trackRanges, v2p, onSetScroll, onSetFrameWidth, setViewY,
         frameToCanvasPixel, canvasPixelToFrame, GRAPH_LEFT_GUTTER_WIDTH
     );
@@ -235,20 +244,59 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
+        // Prevent default context menu
         e.preventDefault();
+
+        // Check if drag occurred
+        if (shouldSuppressContextMenu()) return;
+
         const rect = interactionRef.current?.getBoundingClientRect();
         if (!rect) return;
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
         
         const hit = getHit(mx, my);
+        
         if (hit && hit.type === 'key' && onContextMenu) {
+            // Key Context Menu
             const composite = `${hit.trackId}::${hit.key.id}`;
             if (!selectedKeyframeIds.includes(composite)) {
                 selectKeyframe(hit.trackId, hit.key.id, false);
                 useAnimationStore.getState().selectTracks([hit.trackId], false);
             }
             onContextMenu(e, hit.trackId, hit.key.id, hit.key.interpolation);
+        } else {
+            // Canvas Context Menu (Background)
+            const mouseFrame = canvasPixelToFrame(mx);
+            const safeFrame = Math.max(0, Math.round(mouseFrame));
+
+            const items: ContextMenuItem[] = [
+                { label: 'Graph Actions', action: () => {}, isHeader: true },
+                {
+                    label: 'Create Keyframe Here',
+                    action: () => tools.createKeyAtMouse(e, rect)
+                },
+                {
+                    label: 'Paste Keys',
+                    action: () => pasteKeyframes(safeFrame),
+                    disabled: !useAnimationStore.getState().clipboard
+                },
+                { label: 'View', action: () => {}, isHeader: true },
+                {
+                    label: 'Fit View',
+                    action: fitView
+                },
+                {
+                    label: 'Reset Zoom',
+                    action: () => {
+                         setViewY({ pan: 0, scale: 50 });
+                         onSetFrameWidth(8);
+                    }
+                }
+            ];
+            
+            // Removed 'ui.graph' to prevent showing Modular Node Graph help in Timeline Curve Editor
+            openGlobalContextMenu(e.clientX, e.clientY, items, ['anim.graph']);
         }
     };
 

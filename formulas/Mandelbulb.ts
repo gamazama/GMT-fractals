@@ -56,8 +56,8 @@ export const Mandelbulb: FractalDefinition = {
 
     parameters: [
         { label: 'Power', id: 'paramA', min: 2.0, max: 16.0, step: 0.001, default: 8.0 },
-        { label: 'Theta Phase', id: 'paramB', min: -3.14, max: 3.14, step: 0.01, default: 0.0 },
-        { label: 'Phi Phase', id: 'paramC', min: -6.28, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Theta Phase', id: 'paramB', min: -3.14, max: 3.14, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Phi Phase', id: 'paramC', min: -6.28, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Z Twist', id: 'paramD', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
         { label: 'Radiolaria', id: 'paramE', min: 0.0, max: 1.0, step: 1.0, default: 0.0 }, 
         { label: 'Radio Limit', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.5 },
@@ -108,9 +108,9 @@ export const Mandelbulb: FractalDefinition = {
         targetDistance: 2.157,
         cameraMode: "Orbit",
         lights: [
-            { position: { x: -0.7, y: 0.37, z: 1.4 }, color: "#ffffff", intensity: 3, falloff: 0.22, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { position: { x: 0.6, y: -0.5, z: 1.4 }, color: "#ff8800", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { position: { x: 0, y: -5, z: 2 }, color: "#0088ff", intensity: 0.25, falloff: 0, falloffType: "Quadratic", fixed: true, visible: true, castShadow: false }
+            { type: 'Point', position: { x: -0.7, y: 0.37, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 3, falloff: 0.22, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0.6, y: -0.5, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: 0, y: -5, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0088ff", intensity: 0.25, falloff: 0, falloffType: "Quadratic", fixed: true, visible: true, castShadow: false }
         ],
         renderMode: "Direct",
         navigation: { flySpeed: 0.5, autoSlow: true },

@@ -1,0 +1,186 @@
+
+import React, { useState } from 'react';
+import { useFractalStore } from '../../store/fractalStore';
+import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
+import { TrashIcon, PlusIcon, CheckIcon, CameraIcon, CloseIcon } from '../../components/Icons';
+import { SavedCamera } from '../../types';
+import { calculateDirectionalView, getDirectionName } from './logic';
+import { CameraUtils } from '../../utils/CameraUtils';
+
+interface CameraManagerPanelProps {
+    className?: string;
+}
+
+export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ className = "-m-3" }) => {
+    const { savedCameras, activeCameraId, addCamera, deleteCamera, selectCamera, updateCamera, resetCamera } = useFractalStore();
+    const optics = useFractalStore(s => s.optics);
+    // We need setOptics to apply changes.
+    // Casting is necessary because Feature Actions aren't explicitly typed on the root interface for all plugins
+    const setOptics = (useFractalStore.getState() as any).setOptics;
+
+    const [editId, setEditId] = useState<string | null>(null);
+    const [editName, setEditName] = useState("");
+
+    const handleRenameStart = (cam: SavedCamera) => {
+        setEditId(cam.id);
+        setEditName(cam.label);
+    };
+
+    const handleRenameSubmit = () => {
+        if (editId) {
+            updateCamera(editId, { label: editName });
+            setEditId(null);
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') handleRenameSubmit();
+        if (e.key === 'Escape') setEditId(null);
+    };
+    
+    const handleDeselect = () => {
+        selectCamera(null);
+    };
+    
+    // Logic: Calculate view using utility, then dispatch atomic actions
+    const handleDirectional = (dir: 'Top' | 'Bottom' | 'Left' | 'Right' | 'Front' | 'Back' | 'Isometric') => {
+        // 1. Calculate
+        const result = calculateDirectionalView(dir, optics);
+        
+        // 2. Teleport Camera (Updates position/rotation in slice + emits event)
+        CameraUtils.teleportPosition(
+            result.position, 
+            result.rotation, 
+            result.targetDistance
+        );
+        
+        // 3. Update Optics if needed
+        if (result.optics && setOptics) {
+            setOptics(result.optics);
+        }
+        
+        // 4. Deselect active camera to prevent overwriting saved one
+        selectCamera(null);
+    };
+    
+    const handleAddCamera = () => {
+        // Generate smart name
+        const rot = CameraUtils.getRotationFromEngine();
+        let name = `Camera ${savedCameras.length + 1}`;
+        const opticsNow = useFractalStore.getState().optics;
+        
+        if (opticsNow && Math.abs(opticsNow.camType - 1.0) < 0.1) {
+             const dirName = getDirectionName(rot);
+             if (dirName) name = dirName;
+        }
+        
+        addCamera(name);
+    };
+    
+    const handleReset = () => {
+        resetCamera();
+        if (setOptics) {
+            setOptics({ camType: 0.0, camFov: 60, orthoScale: 2.0 });
+        }
+    };
+
+    return (
+        <div className={`flex flex-col bg-[#080808] ${className}`}>
+             {/* Toolbar */}
+             <div className="p-2 border-b border-white/10 bg-black/40 grid grid-cols-4 gap-1">
+                 <button onClick={() => handleDirectional('Front')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">FRONT</button>
+                 <button onClick={() => handleDirectional('Back')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">BACK</button>
+                 <button onClick={() => handleDirectional('Left')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">LEFT</button>
+                 <button onClick={() => handleDirectional('Right')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">RIGHT</button>
+                 
+                 <button onClick={() => handleDirectional('Top')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">TOP</button>
+                 <button onClick={() => handleDirectional('Bottom')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">BTM</button>
+                 <button onClick={() => handleDirectional('Isometric')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">ISO</button>
+                 <button onClick={handleReset} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">RESET</button>
+                 
+                 <button 
+                     onClick={handleAddCamera}
+                     className="col-span-4 bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold uppercase flex items-center justify-center gap-1 mt-1"
+                 >
+                     <PlusIcon /> New Camera
+                 </button>
+             </div>
+
+             {/* List */}
+             <div className="p-2 space-y-1">
+                 {savedCameras.length === 0 && (
+                     <div className="text-center text-gray-600 text-[10px] italic py-4">No saved cameras</div>
+                 )}
+                 
+                 {savedCameras.map(cam => {
+                     const isActive = activeCameraId === cam.id;
+                     return (
+                         <div 
+                            key={cam.id}
+                            className={`flex items-center justify-between p-2 rounded border transition-all group ${
+                                isActive 
+                                ? 'bg-cyan-900/20 border-cyan-500/50' 
+                                : 'bg-white/5 border-transparent hover:border-white/10'
+                            }`}
+                            onClick={() => selectCamera(cam.id)}
+                         >
+                             <div className="flex items-center gap-2 flex-1 min-w-0">
+                                 <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-cyan-400 shadow-[0_0_5px_cyan]' : 'bg-gray-600'}`} />
+                                 
+                                 {editId === cam.id ? (
+                                     <input 
+                                        type="text" 
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        onBlur={handleRenameSubmit}
+                                        onKeyDown={handleKeyDown}
+                                        autoFocus
+                                        className="bg-black border border-white/20 text-xs text-white px-1 py-0.5 rounded w-full outline-none"
+                                        onClick={(e) => e.stopPropagation()}
+                                     />
+                                 ) : (
+                                     <span 
+                                        className={`text-xs font-bold truncate cursor-text ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-300'}`}
+                                        onDoubleClick={(e) => { e.stopPropagation(); handleRenameStart(cam); }}
+                                        title="Double-click to rename"
+                                     >
+                                         {cam.label}
+                                     </span>
+                                 )}
+                             </div>
+                             
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); deleteCamera(cam.id); }}
+                                className="p-1.5 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Delete"
+                             >
+                                 <TrashIcon />
+                             </button>
+                         </div>
+                     );
+                 })}
+             </div>
+             
+             {/* Footer / Active Settings */}
+             <div className="border-t border-white/10 bg-black/40 p-2">
+                 <div className="flex items-center justify-between mb-2">
+                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                         {activeCameraId ? 'Active Settings' : 'Free Camera'}
+                     </span>
+                     {activeCameraId && (
+                         <button 
+                            onClick={handleDeselect}
+                            className="text-[9px] text-gray-500 hover:text-white px-2 py-0.5 rounded border border-white/10 hover:bg-white/5 transition-colors"
+                         >
+                             Deselect
+                         </button>
+                     )}
+                 </div>
+                 
+                 <div className="bg-white/5 rounded p-1 max-h-[200px] overflow-y-auto custom-scroll">
+                     <AutoFeaturePanel featureId="optics" />
+                 </div>
+             </div>
+        </div>
+    );
+};

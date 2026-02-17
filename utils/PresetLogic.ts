@@ -146,7 +146,12 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
             // Consolidated Lighting Migration
             if (feat.id === 'lighting' && incomingData) {
                 if (incomingData.lights) {
-                    nextState.lights = incomingData.lights;
+                    // Populate missing new fields (type, rotation)
+                    nextState.lights = incomingData.lights.map((l: any) => ({
+                        ...l,
+                        type: l.type || 'Point',
+                        rotation: l.rotation || { x: 0, y: 0, z: 0 }
+                    }));
                 } else if (incomingData.light0_posX !== undefined) {
                     // V2 Legacy Migration
                     const newLights = [];
@@ -156,7 +161,9 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
                             if (color.getHexString) color = '#' + color.getHexString();
                             
                             newLights.push({
+                                type: 'Point',
                                 position: { x: incomingData[`light${i}_posX`], y: incomingData[`light${i}_posY`], z: incomingData[`light${i}_posZ`] },
+                                rotation: { x: 0, y: 0, z: 0 },
                                 color,
                                 intensity: incomingData[`light${i}_intensity`] ?? 1,
                                 falloff: incomingData[`light${i}_falloff`] ?? 0,
@@ -175,7 +182,6 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
             if (feat.id === 'materials' && incomingData) {
                 if (incomingData.envMapVisible !== undefined && incomingData.envBackgroundStrength === undefined) {
                     // Convert boolean visibility to float strength (0.0 or 1.0)
-                    // Only apply if the new param is missing to avoid overwriting newer presets
                     nextState.envBackgroundStrength = incomingData.envMapVisible ? 1.0 : 0.0;
                 }
             }
@@ -186,7 +192,14 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
 
     // Root Legacy Lights Array Migration
     if (p.lights && p.lights.length > 0) {
-        if (actions.setLighting) actions.setLighting({ lights: p.lights });
+        if (actions.setLighting) {
+             const migratedLights = p.lights.map((l: any) => ({
+                 ...l,
+                 type: l.type || 'Point',
+                 rotation: l.rotation || { x: 0, y: 0, z: 0 }
+             }));
+             actions.setLighting({ lights: migratedLights });
+        }
     }
     
     // Animations & Timeline

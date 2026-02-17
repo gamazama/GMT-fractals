@@ -1,7 +1,7 @@
 
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, pixelToValue, getGridStep, getTimeGridSteps, THEME } from './GraphUtils';
-import { AnimationSequence } from '../types';
-import { calculateSoftFalloff } from './timelineUtils';
+import { AnimationSequence, Track, Keyframe } from '../types';
+import { calculateSoftFalloff, evaluateTrackValue } from './timelineUtils';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 
 export const TRACK_COLORS = [
@@ -84,6 +84,114 @@ const getSoftWeight = (targetKeyId: string, targetFrame: number, trackId: string
     return maxWeight;
 };
 
+const drawPostBehavior = (
+    ctx: CanvasRenderingContext2D,
+    view: GraphViewTransform,
+    track: Track,
+    firstKey: Keyframe,
+    lastKey: Keyframe,
+    width: number,
+    v2p: (val: number) => number, // Pre-bound value mapper
+    frameToPx: (f: number) => number,
+    pxToFrame: (px: number) => number
+) => {
+    const behavior = track.postBehavior || 'Hold';
+    const startPx = frameToPx(lastKey.frame);
+    
+    // Optimization: If curve is off-screen left, don't draw
+    if (startPx > width) return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.globalAlpha = 0.5;
+    ctx.moveTo(Math.max(LEFT_GUTTER_WIDTH, startPx), v2p(lastKey.value));
+
+    // Case 1: Simple Lines (Hold / Continue)
+    if (behavior === 'Hold') {
+        const endY = v2p(lastKey.value);
+        ctx.lineTo(width, endY);
+    } 
+    else if (behavior === 'Continue') {
+        // Calculate Slope
+        let slope = 0;
+        const keys = track.keyframes;
+        if (keys.length > 1) {
+            const prev = keys[keys.length - 2];
+            
+            if (lastKey.interpolation === 'Linear') {
+                slope = (lastKey.value - prev.value) / (lastKey.frame - prev.frame);
+            } else if (lastKey.interpolation === 'Bezier') {
+                // Use left tangent (incoming) to project outgoing if right tangent doesn't exist or is default
+                // In AnimationEngine we prioritized Left Tangent slope for "Continue" to imply momentum
+                if (lastKey.leftTangent && Math.abs(lastKey.leftTangent.x) > 0.001) {
+                    slope = lastKey.leftTangent.y / lastKey.leftTangent.x;
+                } else {
+                    slope = (lastKey.value - prev.value) / (lastKey.frame - prev.frame);
+                }
+            }
+        }
+
+        const endFrame = pxToFrame(width);
+        const endVal = lastKey.value + slope * (endFrame - lastKey.frame);
+        ctx.lineTo(width, v2p(endVal));
+    }
+    // Case 2: Sampling (Loop / PingPong / OffsetLoop)
+    else {
+        const duration = lastKey.frame - firstKey.frame;
+        if (duration > 0.001) {
+            const stepPx = 5; // Pixel step for sampling
+            const isRotation = track.id.startsWith('camera.rotation');
+            
+            // Start from the visible edge or the key, whichever is later
+            const drawStartPx = Math.max(startPx, LEFT_GUTTER_WIDTH);
+            
+            ctx.moveTo(drawStartPx, v2p(lastKey.value)); // Ensure path starts correctly if clipped
+            
+            for (let px = drawStartPx; px < width + stepPx; px += stepPx) {
+                const frame = pxToFrame(px);
+                
+                // Math replicated from AnimationEngine.ts
+                const timeSinceEnd = frame - lastKey.frame;
+                const cycleCount = Math.floor(timeSinceEnd / duration) + 1;
+                const localFrameOffset = timeSinceEnd % duration;
+                
+                let val = 0;
+
+                if (behavior === 'Loop' || behavior === 'OffsetLoop') {
+                     const localFrame = firstKey.frame + localFrameOffset;
+                     val = evaluateTrackValue(track.keyframes, localFrame, isRotation);
+                     
+                     if (behavior === 'OffsetLoop') {
+                         const diff = lastKey.value - firstKey.value;
+                         val += diff * cycleCount;
+                     }
+                }
+                else if (behavior === 'PingPong') {
+                     const isReversed = cycleCount % 2 === 1;
+                     if (isReversed) {
+                         const reversedFrame = lastKey.frame - localFrameOffset;
+                         val = evaluateTrackValue(track.keyframes, reversedFrame, isRotation);
+                     } else {
+                         const localFrame = firstKey.frame + localFrameOffset;
+                         val = evaluateTrackValue(track.keyframes, localFrame, isRotation);
+                     }
+                }
+                
+                ctx.lineTo(px, v2p(val));
+            }
+        } else {
+             // Fallback for 0 duration loops
+             const endY = v2p(lastKey.value);
+             ctx.lineTo(width, endY);
+        }
+    }
+
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+};
+
 export const drawGraph = (props: GraphRenderProps) => {
     const { 
         ctx, width, height, view, sequence, trackIds, currentFrame, durationFrames,
@@ -92,6 +200,7 @@ export const drawGraph = (props: GraphRenderProps) => {
     } = props;
 
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
+    const canvasPixelToFrame = (px: number) => pixelToFrame(px - LEFT_GUTTER_WIDTH, view);
     
     const getLocalY = (val: number, tid: string) => {
         if (!normalized) return val;
@@ -222,9 +331,31 @@ export const drawGraph = (props: GraphRenderProps) => {
                 }
             }
             const lastK = keys[keys.length - 1];
-            ctx.lineTo(Math.max(width, frameToCanvasPixel(lastK.frame)), v2p(lastK.value, tid));
+            ctx.lineTo(frameToCanvasPixel(lastK.frame), v2p(lastK.value, tid));
             ctx.stroke();
             
+            // Draw Post Behavior (Extrapolation)
+            const firstK = keys[0];
+            
+            // Only draw behavior if explicitly set to something interesting, OR if it's the default Hold
+            // but we want to show it. The spec requested visualising post behavior.
+            // Even 'Hold' is a behavior.
+            if (track.postBehavior && track.postBehavior !== 'Hold') {
+                 // Use a bound v2p function to avoid passing tid everywhere
+                 drawPostBehavior(
+                     ctx, view, track, firstK, lastK, width, 
+                     (val) => v2p(val, tid), 
+                     frameToCanvasPixel, canvasPixelToFrame
+                 );
+            } else if (!track.postBehavior || track.postBehavior === 'Hold') {
+                 // Optional: Draw 'Hold' line. It's useful to see where the value stays.
+                 drawPostBehavior(
+                     ctx, view, track, firstK, lastK, width, 
+                     (val) => v2p(val, tid), 
+                     frameToCanvasPixel, canvasPixelToFrame
+                 );
+            }
+
             // Restore Alpha for Keyframes based on Selection Logic
             ctx.globalAlpha = 1.0;
 

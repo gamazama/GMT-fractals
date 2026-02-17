@@ -50,6 +50,22 @@ const Navigation: React.FC<NavigationProps> = ({
 
   // -- Physics Controllers --
   const flyController = useRef(new CameraController());
+  
+  const lastPos = useRef(new THREE.Vector3());
+  const lastRot = useRef(new THREE.Quaternion());
+  const currentFrameVelocity = useRef(new THREE.Vector3());
+  const currentRotVelocity = useRef(new THREE.Vector3()); 
+  const rollVelocity = useRef(0); // Need to lift this out of input controller or sync it
+
+  // Input & Physics Hooks
+  const { moveState, isDraggingRef, dragStart, mousePos, speedRef, joystickMove, joystickLook, invertY, rollVelocity: inputRollVel, isInteracting } = useInputController(
+      mode, 
+      navSettings?.flySpeed ?? 0.5, 
+      (v) => setNavigation({ flySpeed: v }),
+      hudRefs
+  );
+  
+  const { distAverageRef } = usePhysicsProbe(hudRefs, speedRef);
 
   // Pivot Sync Helper: Re-centers the orbit target on the fractal surface
   const syncOrbitTargetToCamera = (overrideDistance?: number, forceRemount: boolean = false) => {
@@ -79,22 +95,23 @@ const Navigation: React.FC<NavigationProps> = ({
   };
 
   // INITIAL SYNC: Fixes Race Condition on First Load
-  // The 'camera_teleport' event often fires before this component mounts.
-  // We must pull the state manually on mount to ensure the camera is in the correct place.
   useEffect(() => {
       const state = useFractalStore.getState();
       
-      // 1. Force R3F Camera to Store State (Position & Rotation)
       camera.position.set(state.cameraPos.x, state.cameraPos.y, state.cameraPos.z);
       camera.quaternion.set(state.cameraRot.x, state.cameraRot.y, state.cameraRot.z, state.cameraRot.w);
       camera.updateMatrixWorld();
+      
+      lastPos.current.copy(camera.position);
+      lastRot.current.copy(camera.quaternion);
 
-      // 2. Initialize Orbit Target based on this correct position
+      // Initialize physics guess to prevent stuck movement on startup
+      if (state.targetDistance) distAverageRef.current = state.targetDistance;
+
       if (mode === 'Orbit') {
-          // Use stored targetDistance to calculate the correct pivot point immediately
           syncOrbitTargetToCamera(state.targetDistance, true);
       }
-  }, []); // Run once on mount
+  }, []);
 
   // PASSIVE LISTENER: Navigation now listens for external teleports (URLs, Undos, Presets)
   useEffect(() => {
@@ -107,10 +124,20 @@ const Navigation: React.FC<NavigationProps> = ({
           // 2. Clear velocities
           currentFrameVelocity.current.set(0,0,0);
           currentRotVelocity.current.set(0,0,0);
-          rollVelocity.current = 0;
           flyController.current.reset();
           
-          // 3. Sync Orbit Pivot
+          // 3. Update trackers so useFrame doesn't trigger a "move" event
+          lastPos.current.copy(camera.position);
+          lastRot.current.copy(camera.quaternion);
+          
+          // 4. RESET PHYSICS ESTIMATE (CRITICAL FIX)
+          // Prevents "stuck" Fly Mode where speed remains near 0 if previous scene was close-up
+          if (newState.targetDistance && newState.targetDistance > 0.001) {
+               distAverageRef.current = newState.targetDistance;
+               engine.lastMeasuredDistance = newState.targetDistance;
+          }
+
+          // 5. Sync Orbit Pivot
           if (mode === 'Orbit' && !isOrbitDragging.current) {
                syncOrbitTargetToCamera(newState.targetDistance, false);
           }
@@ -131,21 +158,8 @@ const Navigation: React.FC<NavigationProps> = ({
   const sequence = useAnimationStore(s => s.sequence);
   const captureCameraFrame = useAnimationStore(s => s.captureCameraFrame);
   
-  const { moveState, isDraggingRef, dragStart, mousePos, speedRef, joystickMove, joystickLook, invertY, rollVelocity, isInteracting } = useInputController(
-      mode, 
-      navSettings?.flySpeed ?? 0.5, 
-      (v) => setNavigation({ flySpeed: v }),
-      hudRefs
-  );
-  
-  const { distAverageRef } = usePhysicsProbe(hudRefs, speedRef);
-  
-  const currentFrameVelocity = useRef(new THREE.Vector3());
-  const currentRotVelocity = useRef(new THREE.Vector3()); 
   const isMovingRef = useRef(false);
   const stopTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPos = useRef(new THREE.Vector3());
-  const lastRot = useRef(new THREE.Quaternion());
   const prevMode = useRef(mode);
   const isOrbitDragging = useRef(false);
   const isScrollingRef = useRef(false);
@@ -225,6 +239,11 @@ const Navigation: React.FC<NavigationProps> = ({
             currentRotVelocity.current.set(0,0,0);
             flyController.current.reset();
             setIsOrbitReady(false);
+            
+            // Reset distance estimate on mode switch to ensure fly speed is reasonable
+            const d = engine.lastMeasuredDistance;
+            if (d > 0.001) distAverageRef.current = d;
+            
         } else if (mode === 'Orbit') {
             syncOrbitTargetToCamera(undefined, true);
         }
@@ -268,14 +287,16 @@ const Navigation: React.FC<NavigationProps> = ({
       // Signal Engine Interaction State (Consumer is RenderLoop in ViewportArea)
       engine.isCameraInteracting = isCurrentlyActive;
 
-      if (isCurrentlyActive && (posChanged || rotChanged)) {
-          engine.dirty = true;
-          if (!isMovingRef.current && onStart) {
-              isMovingRef.current = true;
-              onStart(engine.virtualSpace.getUnifiedCameraState(camera, engine.lastMeasuredDistance));
-          }
-          if (isRecording && recordCamera) captureCameraFrame(currentFrame, true, isPlaying ? 'Linear' : 'Bezier');
-      }
+        // Only reset accumulation when there's significant camera movement
+        if (isCurrentlyActive && (posChanged || rotChanged)) {
+            // Reset accumulation on camera movement
+            engine.dirty = true;
+            if (!isMovingRef.current && onStart) {
+                isMovingRef.current = true;
+                onStart(engine.virtualSpace.getUnifiedCameraState(camera, engine.lastMeasuredDistance));
+            }
+            if (isRecording && recordCamera) captureCameraFrame(currentFrame, true, isPlaying ? 'Linear' : 'Bezier');
+        }
 
       if (posChanged || rotChanged || isCurrentlyActive) {
           if (stopTimeout.current) clearTimeout(stopTimeout.current);
@@ -283,11 +304,20 @@ const Navigation: React.FC<NavigationProps> = ({
               isMovingRef.current = false;
               if (onEnd) onEnd();
               
-              // Sync UI store state lazily
+              if (useFractalStore.getState().isUserInteracting) return;
+              
+              let dist = engine.lastMeasuredDistance;
+              if (mode === 'Orbit') {
+                  const radius = camera.position.length();
+                  if (radius > 1e-4) dist = radius;
+              }
+              if (dist <= 0) dist = 3.5;
+
               useFractalStore.setState({
                   cameraPos: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
                   cameraRot: { x: camera.quaternion.x, y: camera.quaternion.y, z: camera.quaternion.z, w: camera.quaternion.w },
-                  targetDistance: engine.lastMeasuredDistance > 0 ? engine.lastMeasuredDistance : 3.5
+                  sceneOffset: engine.sceneOffset,
+                  targetDistance: dist
               });
           }, 100);
           lastPos.current.copy(camera.position);
@@ -322,14 +352,11 @@ const Navigation: React.FC<NavigationProps> = ({
           orbitRef.current.enabled = !disableMovement && !isCameraLockedRef.current && (allowOrbitInteraction.current || isOrbitDragging.current || isScrollingRef.current);
           orbitRef.current.zoomSpeed = currentZoomSensitivity.current;
           
-          // Compensate for visual scaling: If the canvas is physically huge but scaled down (e.g. 4K on 1080p screen),
-          // the mouse movement covers a smaller percentage of the canvas, making rotation slow.
-          // We invert the scale to restore natural 1:1 feel.
           orbitRef.current.rotateSpeed = 1.0 / (fitScale || 1.0);
           
-          if (Math.abs(rollVelocity.current) > 0.01) {
+          if (Math.abs(inputRollVel.current) > 0.01) {
               const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
-              camera.up.applyAxisAngle(fwd, -rollVelocity.current * 2.0 * delta).normalize();
+              camera.up.applyAxisAngle(fwd, -inputRollVel.current * 2.0 * delta).normalize();
               orbitRef.current.update();
           }
       }
@@ -367,23 +394,16 @@ const Navigation: React.FC<NavigationProps> = ({
                 if (orbitRef.current) {
                     const shift = orbitRef.current.target.clone();
                     if (shift.lengthSq() > 1e-12) {
-                        // Apply Treadmill Shift for Orbit
-                        
-                        // 1. Reset Pivot locally FIRST to allow camera move
                         orbitRef.current.target.set(0, 0, 0);
                         setOrbitTarget(new THREE.Vector3(0, 0, 0));
                         
-                        // 2. Shift Camera locally to maintain relative view
                         camera.position.sub(shift);
                         camera.updateMatrixWorld();
 
-                        // 3. Emit global shift event (Updates VirtualSpace Offset)
                         FractalEvents.emit('offset_shift', { x: shift.x, y: shift.y, z: shift.z });
                         
-                        // 4. Force Engine Snap (Critical: Resets smoothing buffer to prevent glitch)
                         engine.shouldSnapCamera = true;
                         
-                        // 5. Force atomic update to engine 
                         if (engine.activeCamera) {
                             engine.activeCamera.position.copy(camera.position);
                             engine.activeCamera.updateMatrixWorld();

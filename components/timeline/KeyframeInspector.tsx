@@ -233,7 +233,10 @@ export const KeyframeInspector: React.FC = () => {
         : "Global Properties";
 
     return (
-        <div className="w-64 bg-[#111] border-l border-white/10 flex flex-col shrink-0 overflow-y-auto animate-fade-in-left select-none h-full">
+        <div 
+            className="w-64 bg-[#111] border-l border-white/10 flex flex-col shrink-0 overflow-y-auto animate-fade-in-left select-none h-full"
+            data-help-id="anim.keyframes"
+        >
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 shrink-0 h-8">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate mr-2" title={headerTitle}>
                     {headerTitle}
@@ -339,7 +342,10 @@ export const KeyframeInspector: React.FC = () => {
                     {/* Tangent Controls - Only for Bezier */}
                     {firstKey!.interpolation === 'Bezier' && (
                         <>
-                            <div className="px-3 py-2 border-y border-white/5 bg-black/20 mt-2">
+                            <div 
+                                className="px-3 py-2 border-y border-white/5 bg-black/20 mt-2"
+                                data-help-id="anim.graph"
+                            >
                                 <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-2">Tangents</span>
                                 
                                 <div className="grid grid-cols-2 gap-3 mb-3">

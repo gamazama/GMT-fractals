@@ -1,5 +1,4 @@
 
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { FractalActions } from '../types';
 
@@ -24,7 +23,7 @@ export const useDockInteraction = ({ isDocked, isMinimized, actions, onDragStart
         if (isDocked) {
             // If docked, clicking header just toggles minimize (unless clicking buttons)
             if ((e.target as HTMLElement).closest('button')) return;
-            actions.setIsControlsMinimized(!isMinimized);
+            // Legacy toggle removed
             return;
         }
 
@@ -67,7 +66,7 @@ export const useDockInteraction = ({ isDocked, isMinimized, actions, onDragStart
             
             // If it was just a click (no drag), toggle minimize
             if (dragRef.current && !dragRef.current.hasMoved) {
-                actions.setIsControlsMinimized(!isMinimized);
+                // Legacy toggle removed
             }
             
             dragRef.current = null;

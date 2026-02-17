@@ -1,7 +1,6 @@
 
 import * as THREE from 'three';
 import { Uniforms } from './UniformNames';
-import { MAX_MODULAR_PARAMS, MAX_LIGHTS } from '../data/constants';
 import { featureRegistry } from './FeatureSystem';
 import { registerFeatures } from '../features';
 
@@ -19,7 +18,8 @@ export interface UniformDefinition {
     comment?: string;
 }
 
-// Base Schema (Core Engine)
+// Base Schema (Pure Core)
+// Only contains uniforms required by the RenderPipeline and Camera logic.
 const BASE_SCHEMA: UniformDefinition[] = [
     // Core
     { name: Uniforms.Time, type: 'float', default: 0 },
@@ -34,42 +34,29 @@ const BASE_SCHEMA: UniformDefinition[] = [
     { name: Uniforms.CamBasisY, type: 'vec3', default: new THREE.Vector3() },
     { name: Uniforms.CamForward, type: 'vec3', default: new THREE.Vector3() },
 
-    // Render Region
+    // Render Region (Core Viewport Feature)
     { name: Uniforms.RegionMin, type: 'vec2', default: new THREE.Vector2(0, 0) },
     { name: Uniforms.RegionMax, type: 'vec2', default: new THREE.Vector2(1, 1) },
 
-    // Lights
-    { name: Uniforms.LightCount, type: 'int', default: 0 },
-    { name: Uniforms.LightPos, type: 'vec3', arraySize: MAX_LIGHTS, default: new Array(MAX_LIGHTS).fill(new THREE.Vector3()) },
-    { name: Uniforms.LightColor, type: 'vec3', arraySize: MAX_LIGHTS, default: new Array(MAX_LIGHTS).fill(new THREE.Color(1,1,1)) },
-    { name: Uniforms.LightIntensity, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
-    { name: Uniforms.LightShadows, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
-    { name: Uniforms.LightFalloff, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
-    { name: Uniforms.LightFalloffType, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
-
-    // Progressive
+    // Progressive / Pipeline
     { name: Uniforms.HistoryTexture, type: 'sampler2D', default: null },
     { name: Uniforms.BlendFactor, type: 'float', default: 1.0 },
     { name: Uniforms.ExtraSeed, type: 'float', default: 0.0 },
     { name: Uniforms.Jitter, type: 'vec2', default: new THREE.Vector2(0,0) },
     { name: Uniforms.BlueNoiseTexture, type: 'sampler2D', default: null },
-
-    // Modular
-    { name: Uniforms.ModularParams, type: 'float', arraySize: MAX_MODULAR_PARAMS, default: new Float32Array(MAX_MODULAR_PARAMS) },
+    { name: Uniforms.BlueNoiseResolution, type: 'vec2', default: new THREE.Vector2(128, 128) }, // Added
     
-    // Environment
-    { name: Uniforms.EnvMapTexture, type: 'sampler2D', default: null },
-    { name: Uniforms.EnvRotationMatrix, type: 'mat2', default: [1, 0, 0, 1] }, // Identity 2x2
-
-    // Tools
+    // Tools (Histogram)
     { name: Uniforms.HistogramLayer, type: 'int', default: 0 },
 
-    // Optimizations
+    // Optimizations (Shared by Geometry & Lighting)
     { name: Uniforms.PreRotMatrix, type: 'mat3', default: new THREE.Matrix3() },
+    { name: Uniforms.EnvRotationMatrix, type: 'mat2', default: [1, 0, 0, 1] }, 
 ];
 
 const featureUniforms = featureRegistry.getUniformDefinitions();
 
+// Deduplicate in case a feature defines a uniform that's also in base (shouldn't happen with correct separation)
 const existingNames = new Set(BASE_SCHEMA.map(u => u.name));
 const uniqueFeatures = featureUniforms.filter(u => !existingNames.has(u.name));
 

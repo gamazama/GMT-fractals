@@ -430,11 +430,13 @@ export const Phoenix: FractalDefinition = {
       "cameraMode": "Orbit",
       "lights": [
         {
+          "type": 'Point',
           "position": {
             "x": 0.7545657194904971,
             "y": 0.5311043420915486,
             "z": -0.026379577691362677
           },
+          "rotation": { "x": 0, "y": 0, "z": 0 },
           "color": "#ffffff",
           "intensity": 1.4,
           "falloff": 0,
@@ -444,11 +446,13 @@ export const Phoenix: FractalDefinition = {
           "castShadow": true
         },
         {
+          "type": 'Point',
           "position": {
             "x": 0.05,
             "y": 0.075,
             "z": -0.1
           },
+          "rotation": { "x": 0, "y": 0, "z": 0 },
           "color": "#ff0000",
           "intensity": 0.5,
           "falloff": 0.5,
@@ -458,11 +462,13 @@ export const Phoenix: FractalDefinition = {
           "castShadow": false
         },
         {
+          "type": 'Point',
           "position": {
             "x": 0.25,
             "y": 0.075,
             "z": -0.1
           },
+          "rotation": { "x": 0, "y": 0, "z": 0 },
           "color": "#0000ff",
           "intensity": 0.5,
           "falloff": 0.5,

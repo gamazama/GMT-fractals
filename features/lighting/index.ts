@@ -7,6 +7,8 @@ import { LIGHTING_PBR } from '../../shaders/chunks/lighting/pbr';
 import { getShadingGLSL } from '../../shaders/chunks/lighting/shading';
 import { getPathTracerGLSL } from '../../shaders/chunks/pathtracer';
 import { QualityState } from '../quality';
+import { Uniforms } from '../../engine/UniformNames';
+import * as THREE from 'three';
 
 export interface LightingState {
     advancedLighting: boolean;
@@ -29,13 +31,14 @@ export interface LightingActions {
     updateLight: (payload: { index: number, params: Partial<LightParams> }) => void;
     addLight: () => void;
     removeLight: (index: number) => void;
-    // toggleLightFixed removed to break circular dependency. Logic moved to UI.
 }
 
 export const getLightFromSlice = (slice: LightingState | undefined, i: number): LightParams => {
     if (!slice || !slice.lights || i >= slice.lights.length) {
         return {
-            position: { x: 0, y: 0, z: 0 }, color: '#ffffff', intensity: 0, falloff: 0,
+            type: 'Point',
+            position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
+            color: '#ffffff', intensity: 0, falloff: 0,
             falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true
         };
     }
@@ -43,9 +46,9 @@ export const getLightFromSlice = (slice: LightingState | undefined, i: number): 
 };
 
 const DEFAULT_LIGHTS: LightParams[] = [
-    { position: { x: -2.0, y: 1.0, z: 2.0 }, color: '#ffffff', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true },
-    { position: { x: 2.0, y: -1.0, z: 1.0 }, color: '#ff8800', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true },
-    { position: { x: 0.0, y: -5.0, z: 2.0 }, color: '#0088ff', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true }
+    { type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ffffff', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true },
+    { type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ff8800', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true },
+    { type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#0088ff', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true }
 ];
 
 export const LightingFeature: FeatureDefinition = {
@@ -59,14 +62,24 @@ export const LightingFeature: FeatureDefinition = {
         order: 30,
         condition: { param: '$advancedMode', bool: true }
     },
-    // Explicitly mark as scene (R3F) component
-    viewportConfig: { componentId: 'overlay-lighting', renderOrder: 50, type: 'scene' },
+    viewportConfig: { componentId: 'overlay-lighting', renderOrder: 50, type: 'dom' },
     engineConfig: {
         toggleParam: 'advancedLighting',
         mode: 'compile',
         label: 'Lighting Engine', 
         groupFilter: 'engine_settings'
     },
+    extraUniforms: [
+        { name: Uniforms.LightCount, type: 'int', default: 0 },
+        { name: Uniforms.LightType, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        { name: Uniforms.LightPos, type: 'vec3', arraySize: MAX_LIGHTS, default: new Array(MAX_LIGHTS).fill(new THREE.Vector3()) },
+        { name: Uniforms.LightDir, type: 'vec3', arraySize: MAX_LIGHTS, default: new Array(MAX_LIGHTS).fill(new THREE.Vector3(0, -1, 0)) },
+        { name: Uniforms.LightColor, type: 'vec3', arraySize: MAX_LIGHTS, default: new Array(MAX_LIGHTS).fill(new THREE.Color(1,1,1)) },
+        { name: Uniforms.LightIntensity, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        { name: Uniforms.LightShadows, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        { name: Uniforms.LightFalloff, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        { name: Uniforms.LightFalloffType, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+    ],
     params: {
         // --- ENGINE MASTER ---
         advancedLighting: {
@@ -100,7 +113,6 @@ export const LightingFeature: FeatureDefinition = {
             parentId: 'ptEnabled',
             ui: 'numeric',
             description: 'Recursion depth. Higher = Brighter interiors, Slower render.'
-            // Removed onUpdate: 'compile' to allow runtime update
         },
         ptGIStrength: { 
             type: 'float', default: 1.0, label: 'GI Strength', shortId: 'pg', uniform: 'uPTGIStrength', 
@@ -134,9 +146,7 @@ export const LightingFeature: FeatureDefinition = {
             description: 'Treats lights as physical spheres. Creates realistic penumbras. Requires Accumulation.'
         },
 
-        // --- RUNTIME CONTROL (Light Panel / Quality Panel / Shadow Popup) ---
-        
-        // Changed group to 'main' so it doesn't appear in the 'shadows' AutoPanel group
+        // --- RUNTIME CONTROL ---
         shadows: {
             type: 'boolean', default: true, label: 'Enable', shortId: 'sh', 
             group: 'main', 
@@ -144,8 +154,6 @@ export const LightingFeature: FeatureDefinition = {
             ui: 'checkbox',
             condition: { param: 'shadowsCompile', bool: true }
         },
-        
-        // REORDERED SLIDERS: Intensity -> Softness -> Steps -> Bias
         shadowIntensity: {
             type: 'float', default: 1.0, label: 'Opacity', shortId: 'si', uniform: 'uShadowIntensity',
             min: 0.0, max: 1.0, step: 0.01, group: 'shadows',
@@ -175,19 +183,19 @@ export const LightingFeature: FeatureDefinition = {
         lights: { type: 'complex', default: DEFAULT_LIGHTS, label: 'Light List', shortId: 'll', group: 'data', hidden: true, noReset: true }
     },
     inject: (builder, config, variant) => {
-        const state = config.lighting as LightingState;
-        
-        // OPTIMIZATION: Only inject lighting logic for the MAIN render.
         if (variant !== 'Main') {
              builder.addPostDEFunction(`
-             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist) { return 1.0; }
+             float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) { return 1.0; }
              float GetHardShadow(vec3 ro, vec3 rd, float lightDist) { return 1.0; }
+             vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) { return vec3(0.0); }
+             vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) { return vec3(0.0); }
              `);
              return;
         }
         
         builder.addDefine('MAX_LIGHTS', MAX_LIGHTS.toString());
 
+        const state = config.lighting as LightingState;
         if (state && state.advancedLighting === false) {
              builder.addPostDEFunction(`
              float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist) { return 1.0; }
@@ -238,7 +246,9 @@ export const LightingFeature: FeatureDefinition = {
         addLight: (state: LightingState) => {
             if (state.lights.length >= MAX_LIGHTS) return {};
             const newLight: LightParams = {
-                position: { x: 0, y: 0, z: 2.0 }, color: '#ffffff', intensity: 1.0, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true
+                type: 'Point',
+                position: { x: 0, y: 0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 },
+                color: '#ffffff', intensity: 1.0, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true
             };
             return { lights: [...state.lights, newLight] };
         },

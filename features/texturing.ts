@@ -75,7 +75,8 @@ export const TexturingFeature: FeatureDefinition = {
                 { label: 'Normal', value: 5.0 },
                 { label: 'Decomposition', value: 6.0 },
                 { label: 'Raw Iterations', value: 7.0 },
-                { label: 'Potential (Log-Log)', value: 8.0 }
+                { label: 'Potential (Log-Log)', value: 8.0 },
+                { label: "Green's Flow", value: 9.0 }
             ]
         },
         mapV: {
@@ -95,7 +96,8 @@ export const TexturingFeature: FeatureDefinition = {
                 { label: 'Normal', value: 5.0 },
                 { label: 'Decomposition', value: 6.0 },
                 { label: 'Raw Iterations', value: 7.0 },
-                { label: 'Potential (Log-Log)', value: 8.0 }
+                { label: 'Potential (Log-Log)', value: 8.0 },
+                { label: "Green's Flow", value: 9.0 }
             ]
         },
         scaleX: {

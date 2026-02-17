@@ -9,6 +9,7 @@ import { DopeSheet } from './timeline/DopeSheet';
 import { getKeyframeMenuItems } from './timeline/KeyframeContextMenu'; 
 import { TIMELINE_SIDEBAR_WIDTH } from '../data/constants';
 import { Track } from '../types';
+import { ContextMenuItem } from '../types/help';
 
 interface TimelineProps {
     onClose: () => void;
@@ -117,7 +118,9 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         setFrameWidth(newWidth);
     };
 
-    const handleContextMenu = (e: React.MouseEvent, trackId: string, keyId: string, interp: string, broken?: boolean, auto?: boolean) => {
+    // --- CONTEXT MENUS ---
+
+    const handleKeyContextMenu = (e: React.MouseEvent, trackId: string, keyId: string, interp: string, broken?: boolean, auto?: boolean) => {
         e.preventDefault();
         
         const actions = {
@@ -139,6 +142,50 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         };
 
         const items = getKeyframeMenuItems(interp, broken, auto, actions, selectedKeyframeIds.length, !!clipboard);
+        openGlobalMenu(e.clientX, e.clientY, items, ['ui.timeline']);
+    };
+
+    const handleDopeSheetCanvasMenu = (e: React.MouseEvent, frame: number) => {
+        e.preventDefault();
+        const items: ContextMenuItem[] = [
+            { label: 'Timeline Actions', action: () => {}, isHeader: true },
+            { 
+                label: `Copy Selected (${selectedKeyframeIds.length})`, 
+                action: copySelectedKeyframes, 
+                disabled: selectedKeyframeIds.length === 0 
+            },
+            { 
+                label: 'Paste Keys Here', 
+                action: () => pasteKeyframes(frame), 
+                disabled: !clipboard 
+            },
+            {
+                label: 'Duplicate Selection Here',
+                action: () => {
+                    copySelectedKeyframes();
+                    pasteKeyframes(frame);
+                },
+                disabled: selectedKeyframeIds.length === 0
+            },
+            { label: 'View', action: () => {}, isHeader: true },
+            {
+                label: 'Fit View (Duration)',
+                action: () => {
+                    // Calculate frame width to fit duration in viewport
+                    const availWidth = viewportWidth - TIMELINE_SIDEBAR_WIDTH;
+                    const newFrameWidth = availWidth / (durationFrames + 10); // +10 padding
+                    handleNavigatorZoom(newFrameWidth, 'absolute');
+                    setScrollLeft(0);
+                    if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = 0;
+                }
+            },
+            {
+                label: 'Reset Zoom (8px)',
+                action: () => {
+                    handleNavigatorZoom(8, 'absolute');
+                }
+            }
+        ];
         openGlobalMenu(e.clientX, e.clientY, items, ['ui.timeline']);
     };
 
@@ -220,7 +267,8 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                                     frameWidth={frameWidth}
                                     totalContentWidth={totalContentWidth}
                                     scrollContainerRef={scrollContainerRef}
-                                    onContextMenu={handleContextMenu}
+                                    onContextMenu={handleKeyContextMenu}
+                                    onCanvasContextMenu={handleDopeSheetCanvasMenu}
                                     scrollLeft={scrollLeft}
                                     visibleWidth={viewportWidth}
                                 />
@@ -241,7 +289,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                                     onContextMenu={(e, tid, kid, interp) => {
                                         const track = sequence.tracks[tid];
                                         const k = track?.keyframes.find(kf => kf.id === kid);
-                                        handleContextMenu(e, tid, kid, interp, k?.brokenTangents, k?.autoTangent);
+                                        handleKeyContextMenu(e, tid, kid, interp, k?.brokenTangents, k?.autoTangent);
                                     }}
                                 />
                             </div>

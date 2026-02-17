@@ -75,8 +75,8 @@ export const MengerAdvanced: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 0.5, max: 4.0, step: 0.001, default: 3.0 },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 3.0, step: 0.001, default: 1.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Inner Fold', id: 'paramE', min: 0.0, max: 1.5, step: 0.01, default: 0.5 }, 
         { label: 'Z Scale', id: 'paramF', min: 0.2, max: 3.0, step: 0.01, default: 1.5 }, // Reduced min to 0.2
     ],
@@ -206,6 +206,7 @@ export const MengerAdvanced: FractalDefinition = {
                 ptStochasticShadows: false,
                 lights: [
                     {
+                        type: 'Point', 
                         position: { x: -0.985, y: 1.872, z: 2.008 },
                         color: "#ffffff",
                         intensity: 9.18,
@@ -216,6 +217,7 @@ export const MengerAdvanced: FractalDefinition = {
                         castShadow: true
                     },
                     {
+                        type: 'Point', 
                         position: { x: 2, y: -1, z: 1 },
                         color: "#ff8800",
                         intensity: 0.5,
@@ -226,6 +228,7 @@ export const MengerAdvanced: FractalDefinition = {
                         castShadow: true
                     },
                     {
+                        type: 'Point',
                         position: { x: 0, y: -5, z: 2 },
                         color: "#0088ff",
                         intensity: 0.25,

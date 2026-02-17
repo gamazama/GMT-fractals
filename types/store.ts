@@ -6,8 +6,9 @@ import { Preset } from './fractal';
 import { ContextMenuItem } from './help';
 import { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
 import { LightParams } from './graphics';
+import { OpticsState } from '../features/optics';
 
-export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shading' | 'Gradients' | 'Quality' | 'Audio' | 'Drawing' | 'Engine';
+export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager' | 'Sonification';
 
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region';
 
@@ -18,6 +19,26 @@ export { DrawnShape, ModulationRule };
 type FeatureSetters = {
     [K in keyof FeatureStateMap as `set${Capitalize<string & K>}`]: (update: Partial<FeatureStateMap[K]>) => void;
 };
+
+export interface SavedCamera extends CameraState {
+    id: string;
+    label: string;
+    optics: OpticsState;
+    thumbnail?: string;
+}
+
+// --- NEW LAYOUT TYPES ---
+export type DockZone = 'left' | 'right' | 'float';
+
+export interface PanelState {
+    id: PanelId;
+    location: DockZone;
+    isOpen: boolean; // For Float visibility OR Dock active tab logic
+    order: number;
+    isCore: boolean;
+    floatPos?: { x: number, y: number };
+    floatSize?: { width: number, height: number };
+}
 
 // --- MAIN STORE STATE ---
 export interface FractalStoreState extends FeatureStateMap {
@@ -45,9 +66,14 @@ export interface FractalStoreState extends FeatureStateMap {
   
   isUserInteracting: boolean; // Global flag for slider/gizmo interaction
 
+  // Active Viewport State
   cameraPos: { x: number, y: number, z: number };
   cameraRot: { x: number, y: number, z: number, w: number };
   targetDistance: number;
+
+  // Camera Manager State
+  savedCameras: SavedCamera[];
+  activeCameraId: string | null;
 
   isBucketRendering: boolean;
   bucketSize: number; 
@@ -57,13 +83,16 @@ export interface FractalStoreState extends FeatureStateMap {
   advancedMode: boolean;
   showHints: boolean;
   debugMobileLayout: boolean; // New: Forces Mobile UI Layout
-  isControlsMinimized: boolean;
+  // Deprecated UI Flags (Handled by PanelState now)
+  // isControlsMinimized: boolean; 
+  // isControlsDocked: boolean;
+  
   invertY: boolean;
   
   resolutionMode: 'Full' | 'Fixed';
   fixedResolution: [number, number]; 
   renderRegion: { minX: number, minY: number, maxX: number, maxY: number } | null; 
-  isControlsDocked: boolean;
+  
   isBroadcastMode: boolean;
   
   compilerHardCap: number;
@@ -98,7 +127,6 @@ export interface FractalStoreState extends FeatureStateMap {
   redoStack: CameraState[];
   interactionSnapshot: Partial<FractalStoreState> | null;
   
-  // Missing properties added to match HistorySliceState
   paramUndoStack: Partial<FractalStoreState>[];
   paramRedoStack: Partial<FractalStoreState>[];
 
@@ -111,8 +139,16 @@ export interface FractalStoreState extends FeatureStateMap {
   
   tabSwitchCount: number;
 
-  activeTab: PanelId;
-  floatingTabs: PanelId[];
+  // --- NEW LAYOUT STATE ---
+  panels: Record<string, PanelState>;
+  leftDockSize: number;
+  rightDockSize: number;
+  isLeftDockCollapsed: boolean;
+  isRightDockCollapsed: boolean;
+  activeLeftTab: PanelId | null; // Calculated helper
+  activeRightTab: PanelId | null; // Calculated helper
+  draggingPanelId: string | null; // Global Drag State
+  dragSnapshot: Record<string, PanelState> | null; // For canceling drags
 
   helpWindow: { visible: boolean; activeTopicId: string | null; };
   contextMenu: { visible: boolean; x: number; y: number; items: ContextMenuItem[]; targetHelpIds: string[]; };
@@ -148,13 +184,13 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
     setDebugMobileLayout: (v: boolean) => void;
-    setIsControlsMinimized: (v: boolean) => void;
+    // setIsControlsMinimized: (v: boolean) => void; // Deprecated
     setInvertY: (v: boolean) => void;
     
     setResolutionMode: (m: 'Full' | 'Fixed') => void;
     setFixedResolution: (w: number, h: number) => void;
     setRenderRegion: (r: { minX: number, minY: number, maxX: number, maxY: number } | null) => void;
-    setIsControlsDocked: (v: boolean) => void;
+    // setIsControlsDocked: (v: boolean) => void; // Deprecated
     setIsBroadcastMode: (v: boolean) => void;
 
     setCompilerHardCap: (v: number) => void;
@@ -200,12 +236,31 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     
     incrementTabSwitchCount: () => void;
 
-    setActiveTab: (tab: PanelId) => void;
-    floatTab: (tab: PanelId) => void;
-    dockTab: (tab: PanelId) => void;
+    // --- NEW LAYOUT ACTIONS ---
+    movePanel: (id: string, targetZone: DockZone, order?: number) => void;
+    reorderPanel: (draggingId: string, targetId: string) => void; // New Action
+    togglePanel: (id: string, forceState?: boolean) => void; // Toggle Open/Closed
+    setDockSize: (side: 'left' | 'right', size: number) => void;
+    setDockCollapsed: (side: 'left' | 'right', collapsed: boolean) => void;
+    setFloatPosition: (id: string, x: number, y: number) => void;
+    setFloatSize: (id: string, w: number, h: number) => void;
+    startPanelDrag: (id: string) => void;
+    endPanelDrag: () => void;
+    cancelPanelDrag: () => void;
+    
+    // Legacy mapping (Aliases for compatibility during refactor)
+    setActiveTab: (tab: PanelId) => void; // Maps to opening a tab in its dock
+    floatTab: (tab: PanelId) => void; // Maps to movePanel(id, 'float')
+    dockTab: (tab: PanelId) => void; // Maps to movePanel(id, 'right')
 
     resetCamera: () => void;
-    // Updated signature to match HistorySliceActions and allow more flexible types
+    
+    // Camera Manager Actions
+    addCamera: (nameOverride?: string) => void;
+    updateCamera: (id: string, updates: Partial<SavedCamera>) => void;
+    deleteCamera: (id: string) => void;
+    selectCamera: (id: string | null) => void;
+
     handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
     handleInteractionEnd: () => void;
     undoCamera: () => void;

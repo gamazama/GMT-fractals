@@ -12,7 +12,7 @@ The app runs two distinct loops to handle the performance gap between React and 
 ### A. The React Layer (UI & State)
 - **Store:** `store/fractalStore.ts` (Zustand). Holds the Source of Truth.
 - **Slices:** State is split into `cameraSlice`, `uiSlice`, and **dynamic feature slices**.
-- **Legacy Slices:** `visualSlice` (now strictly for Lighting array management).
+-- **Legacy Slices:** `visualSlice` has been removed; lighting is now managed by the `lighting` feature (`features/lighting`).
 - **Updates:** React only re-renders when UI needs to change. It does **not** drive the render loop.
 
 ### B. The Engine Layer (WebGL)
@@ -64,7 +64,7 @@ Standard Float32 precision breaks at zoom levels > $10^6$. We use a "Split Float
 
 ### Modular Graph Compiler (JIT)
 Users can build custom formulas via a Node Graph.
-- **Logic:** `utils/GraphCompiler.ts` & `utils/shaderGenerator.ts`.
+- **Logic:** `utils/GraphCompiler.ts`.
 - **Process:** Topological Sort -> Code Gen -> Uniform Flattening.
 - **Optimization:** All node parameters map to a single `uniform float uModularParams[64]` array to allow instant slider updates without shader recompilation.
 

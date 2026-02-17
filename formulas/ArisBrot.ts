@@ -88,7 +88,7 @@ export const ArisBrot: FractalDefinition = {
         { label: 'Reality Warp', id: 'paramC', min: -2.0, max: 2.0, step: 0.001, default: 0.5 },
         { label: 'Void Radius', id: 'paramD', min: 0.5, max: 3.0, step: 0.001, default: 1.45 },
         { label: 'Offset / Shear', id: 'paramE', min: 0.0, max: 2.0, step: 0.001, default: 0.85 },
-        { label: 'Warp Phase', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Warp Phase', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
     ],
 
     defaultPreset: {
@@ -289,7 +289,9 @@ export const ArisBrot: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
           {
+            type: 'Point',
             position: { x: -0.17107759854656118, y: 0.9929766175094275, z: 1.7793549614211224 },
+            rotation: { x: 0, y: 0, z: 0 },
             color: "#ccffff",
             intensity: 1.5,
             falloff: 0.5,
@@ -299,7 +301,9 @@ export const ArisBrot: FractalDefinition = {
             castShadow: true
           },
           {
+            type: 'Point',
             position: { x: -3, y: 0, z: -1 },
+            rotation: { x: 0, y: 0, z: 0 },
             color: "#ff00aa",
             intensity: 2,
             falloff: 0.8,
@@ -309,7 +313,9 @@ export const ArisBrot: FractalDefinition = {
             castShadow: false
           },
           {
+            type: 'Point',
             position: { x: 0, y: -4, z: 1 },
+            rotation: { x: 0, y: 0, z: 0 },
             color: "#0022aa",
             intensity: 0.8,
             falloff: 0.2,

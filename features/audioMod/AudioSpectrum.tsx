@@ -12,6 +12,7 @@ export const AudioSpectrum: React.FC = () => {
     
     const store = useFractalStore();
     const { modulation, selectModulation, addModulation, openContextMenu } = store;
+    const audioState = (store as any).audio;
     const [isLogScale, setIsLogScale] = useState(true);
     
     // DDFS Wrapper for Modulation
@@ -63,13 +64,18 @@ export const AudioSpectrum: React.FC = () => {
     // Render Loop
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
+        if (!canvas || !audioState?.isEnabled) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         let rafId = 0;
 
         const draw = () => {
+            if (!audioState?.isEnabled) {
+                cancelAnimationFrame(rafId);
+                return;
+            }
+
             const w = canvas.width;
             const h = canvas.height;
             const rawData = audioAnalysisEngine.getRawData();
@@ -202,7 +208,7 @@ export const AudioSpectrum: React.FC = () => {
         
         draw();
         return () => cancelAnimationFrame(rafId);
-    }, [rules, selectedId, isLogScale]);
+    }, [rules, selectedId, isLogScale, audioState?.isEnabled]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (e.button === 2) return; 
@@ -378,6 +384,7 @@ export const AudioSpectrum: React.FC = () => {
         <div 
             ref={containerRef}
             className="w-full h-32 bg-black border border-white/10 rounded overflow-hidden cursor-crosshair relative group"
+            style={{ display: audioState?.isEnabled ? 'block' : 'none' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

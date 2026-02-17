@@ -3,6 +3,7 @@ import React, { useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { engine } from '../engine/FractalEngine';
+import { useFractalStore } from '../store/fractalStore';
 
 export const usePhysicsProbe = (
     hudRefs: { 
@@ -13,6 +14,7 @@ export const usePhysicsProbe = (
     speedRef: React.MutableRefObject<number>
 ) => {
     const { camera } = useThree();
+    const qualityState = useFractalStore(s => s.quality);
     
     // Physics State
     const distAverageRef = useRef(10.0);
@@ -20,174 +22,139 @@ export const usePhysicsProbe = (
     
     // Internals
     const frameCount = useRef(0);
-    const scratchMatrix = useRef(new THREE.Matrix4());
-    const camRight = useRef(new THREE.Vector3());
-    const camUp = useRef(new THREE.Vector3());
-    const probeForward = useRef(new THREE.Vector3());
     
-    // PBO Async Readback State
-    const pboRef = useRef<WebGLBuffer | null>(null);
-    const asyncReading = useRef(false);
+    // Depth buffer readback state
+    const depthBuffer = useRef<Float32Array | null>(null);
 
-    // Init PBO
-    useEffect(() => {
-        // Use ENGINE renderer, not R3F gl, because Physics Target is on Engine Context
-        const renderer = engine.renderer;
-        if (!renderer) return;
-        
-        const glContext = renderer.getContext();
-        // WebGL 2 Check
-        if (glContext instanceof WebGL2RenderingContext) {
-            const pbo = glContext.createBuffer();
-            glContext.bindBuffer(glContext.PIXEL_PACK_BUFFER, pbo);
-            // 4x4 float pixels = 16 pixels * 4 components * 4 bytes = 256 bytes
-            glContext.bufferData(glContext.PIXEL_PACK_BUFFER, 4 * 4 * 4 * 4, glContext.STREAM_READ);
-            glContext.bindBuffer(glContext.PIXEL_PACK_BUFFER, null);
-            pboRef.current = pbo;
-        }
-
-        return () => {
-            if (pboRef.current) {
-                // Ensure we delete on the correct context
-                const ctx = engine.renderer?.getContext();
-                if (ctx instanceof WebGL2RenderingContext) {
-                    ctx.deleteBuffer(pboRef.current);
-                }
-            }
-        };
-    }, []); // Run once on mount
-
-    const processPixelData = (pixelBuffer: Float32Array) => {
-        let skyCount = 0;
-        let minD = Infinity;
-        const hits: number[] = [];
-
-        for(let i=0; i<pixelBuffer.length; i+=4) {
-            const val = pixelBuffer[i];
-            if (val < -0.5) {
-                skyCount++;
-            } else if (val > 0.0000000001 && Number.isFinite(val)) {
-                if (val < minD) minD = val;
-                hits.push(val);
-            }
-        }
-        
-        let avgD = 0;
-        if (hits.length > 0) {
-            hits.sort((a,b) => a - b);
-            const sampleCount = Math.max(1, Math.floor(hits.length * 0.5));
-            let sum = 0;
-            for(let k=0; k<sampleCount; k++) sum += hits[k];
-            avgD = sum / sampleCount;
-        } else {
-            avgD = distAverageRef.current > 0 ? distAverageRef.current : 10.0;
-            minD = distMinRef.current < Infinity ? distMinRef.current : 10.0;
-        }
-
-        if (!Number.isFinite(avgD)) avgD = 10.0;
-        if (!Number.isFinite(minD)) minD = 10.0;
-        const epsilon = 1e-35;
-        if (avgD < epsilon) avgD = epsilon;
-        if (minD === Infinity || minD < epsilon) minD = epsilon;
-        
-        distAverageRef.current = avgD;
-        distMinRef.current = minD;
-        engine.lastMeasuredDistance = avgD;
-        
-        // UI Updates
-        if (hudRefs.dist.current) {
-            if (skyCount > 12) {
+    const processDepthData = (depthValue: number) => {
+        // Check for valid depth (not sky, not invalid)
+        if (depthValue < 0 || depthValue > 1000 || !Number.isFinite(depthValue)) {
+            // Sky or invalid - use cached distance
+            const cachedDist = distAverageRef.current > 0 ? distAverageRef.current : 10.0;
+            
+            if (hudRefs.dist.current) {
                 hudRefs.dist.current.innerText = "DST INF";
                 hudRefs.dist.current.style.color = '#888';
-            } else {
-                hudRefs.dist.current.innerText = `DST ${avgD < 0.001 ? avgD.toExponential(2) : avgD.toFixed(4)}`;
-                hudRefs.dist.current.style.color = avgD < 1.0 ? '#ff4444' : '#00ffff';
             }
+            if (hudRefs.reset.current) {
+                hudRefs.reset.current.style.display = 'block';
+            }
+            return;
+        }
+        
+        // Valid depth
+        distAverageRef.current = depthValue;
+        distMinRef.current = depthValue;
+        engine.lastMeasuredDistance = depthValue;
+        
+        if (hudRefs.dist.current) {
+            hudRefs.dist.current.innerText = `DST ${depthValue < 0.001 ? depthValue.toExponential(2) : depthValue.toFixed(4)}`;
+            hudRefs.dist.current.style.color = depthValue < 1.0 ? '#ff4444' : '#00ffff';
         }
         if (hudRefs.reset.current) {
-            const isLostInSpace = skyCount > 12; 
-            hudRefs.reset.current.style.display = (isLostInSpace || avgD > 20.0 || avgD < 0.001) ? 'block' : 'none';
+            const isLostInSpace = depthValue > 100.0 || depthValue < 0.001;
+            hudRefs.reset.current.style.display = isLostInSpace ? 'block' : 'none';
         }
     };
 
     useFrame((state) => {
         frameCount.current++;
         
-        // Update Frequency: Every 3 frames
-        if (frameCount.current % 3 !== 0) {
+        // Get physics probe mode (0=GPU, 1=CPU, 2=Manual)
+        // Default to GPU (0) which now reads from depth buffer
+        const probeMode = qualityState.physicsProbeMode ?? 0;
+        
+        // MODE 2: Manual Distance - no calculation needed
+        if (probeMode === 2) {
+            const manualDistance = qualityState.manualDistance;
+            distAverageRef.current = manualDistance;
+            distMinRef.current = manualDistance;
+            engine.lastMeasuredDistance = manualDistance;
+            
+            if (hudRefs.dist.current) {
+                hudRefs.dist.current.innerText = `DST ${manualDistance < 0.001 ? manualDistance.toExponential(2) : manualDistance.toFixed(4)}`;
+                hudRefs.dist.current.style.color = manualDistance < 1.0 ? '#ff4444' : '#00ffff';
+            }
+            if (hudRefs.reset.current) {
+                const isLostInSpace = manualDistance > 100.0 || manualDistance < 0.001;
+                hudRefs.reset.current.style.display = isLostInSpace ? 'block' : 'none';
+            }
+            
             if (hudRefs.speed.current && frameCount.current % 10 === 0) {
                  hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
             }
             return;
         }
-
-        const phys = engine.physicsUniforms;
-        phys.uTime.value = state.clock.elapsedTime;
         
-        scratchMatrix.current.makeRotationFromQuaternion(camera.quaternion);
-        const e = scratchMatrix.current.elements;
-        camRight.current.set(e[0], e[1], e[2]);
-        camUp.current.set(e[4], e[5], e[6]);
-        camera.getWorldDirection(probeForward.current);
+        // MODE 0 & 1: Read from depth buffer (previous frame - no stall)
+        // The depth buffer is written during the main render pass (MRT location 1)
+        // We read from the PREVIOUS frame's buffer which is already complete
         
-        const tanFov = Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov) * 0.5);
-        const height = tanFov; 
-        const width = height * (camera as THREE.PerspectiveCamera).aspect;
-        
-        const PROBE_FOV_SCALE = 0.05; 
-        camRight.current.multiplyScalar(width * PROBE_FOV_SCALE);
-        camUp.current.multiplyScalar(height * PROBE_FOV_SCALE);
-        
-        phys.uCamBasisX.value.copy(camRight.current);
-        phys.uCamBasisY.value.copy(camUp.current);
-        phys.uCamForward.value.copy(probeForward.current);
-        
-        engine.virtualSpace.updateShaderUniforms(
-            camera.position,
-            phys.uSceneOffsetHigh.value,
-            phys.uSceneOffsetLow.value
-        );
-        phys.uCameraPosition.value.set(0,0,0);
-        
-        // Render using Engine's Renderer (Not R3F's gl)
         const renderer = engine.renderer;
         if (!renderer) return;
-
-        const originalTarget = renderer.getRenderTarget();
-        renderer.setRenderTarget(engine.physicsRenderTarget);
-        renderer.clear();
-        renderer.render(engine.physicsScene, engine.physicsCamera);
-
-        const glContext = renderer.getContext();
         
-        // --- ASYNC READBACK (WebGL 2 PBO) ---
-        if (pboRef.current && glContext instanceof WebGL2RenderingContext) {
-            // If previous read is pending, try to get result
-            if (asyncReading.current) {
-                glContext.bindBuffer(glContext.PIXEL_PACK_BUFFER, pboRef.current);
-                const buffer = new Float32Array(16 * 4); // 4x4 RGBA
-                
-                // getBufferSubData is non-blocking if the fence is signaled (implicitly handled by driver usually)
-                glContext.getBufferSubData(glContext.PIXEL_PACK_BUFFER, 0, buffer);
-                glContext.bindBuffer(glContext.PIXEL_PACK_BUFFER, null);
-                
-                processPixelData(buffer);
-                asyncReading.current = false;
+        // Get the previous frame's depth render target dimensions
+        const depthTarget = engine.pipeline.getPreviousDepthTarget?.();
+        if (!depthTarget) {
+            // Depth buffer not ready yet - use cached distance
+            if (hudRefs.dist.current && frameCount.current % 10 === 0) {
+                hudRefs.dist.current.innerText = `DST ${distAverageRef.current.toFixed(4)}`;
             }
-
-            // Initiate new read
-            glContext.bindBuffer(glContext.PIXEL_PACK_BUFFER, pboRef.current);
-            glContext.readPixels(0, 0, 4, 4, glContext.RGBA, glContext.FLOAT, 0);
-            glContext.bindBuffer(glContext.PIXEL_PACK_BUFFER, null);
-            asyncReading.current = true;
-        } else {
-            // Fallback: Sync Read (WebGL 1)
-            const pixelBuffer = new Float32Array(64);
-            renderer.readRenderTargetPixels(engine.physicsRenderTarget, 0, 0, 4, 4, pixelBuffer);
-            processPixelData(pixelBuffer);
+            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
+                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+            }
+            return;
         }
-
-        renderer.setRenderTarget(originalTarget);
+        
+        // Read center 4x4 pixels from depth render target
+        const width = depthTarget.width || 1;
+        const height = depthTarget.height || 1;
+        const centerX = Math.floor(width / 2);
+        const centerY = Math.floor(height / 2);
+        
+        // Allocate buffer if needed (4x4 = 16 pixels, RGBA = 64 floats)
+        if (!depthBuffer.current || depthBuffer.current.length !== 64) {
+            depthBuffer.current = new Float32Array(64);
+        }
+        
+        // Read from the depth render target using custom WebGL2 method
+        // This reads from COLOR_ATTACHMENT1 (depth texture in MRT)
+        // Note: This reads from the PREVIOUS frame's buffer, so no GPU stall
+        try {
+            const success = engine.pipeline.readDepthPixels?.(
+                renderer,
+                centerX - 2, centerY - 2, 4, 4,
+                depthBuffer.current
+            );
+            
+            if (success) {
+                // Average the valid depth values (depth is in .r component, so every 4th value)
+                let sum = 0;
+                let count = 0;
+                for (let i = 0; i < 64; i += 4) {
+                    const d = depthBuffer.current[i]; // .r component
+                    if (d > 0 && d < 1000 && Number.isFinite(d)) {
+                        sum += d;
+                        count++;
+                    }
+                }
+                
+                if (count > 0) {
+                    const avgDepth = sum / count;
+                    processDepthData(avgDepth);
+                }
+            }
+        } catch (e) {
+            // Depth target not ready, use cached
+        }
+        
+        if (hudRefs.speed.current && frameCount.current % 10 === 0) {
+            hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+        }
+        
+        if (hudRefs.speed.current && frameCount.current % 10 === 0) {
+            hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+        }
     });
 
     return { distAverageRef, distMinRef };

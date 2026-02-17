@@ -51,8 +51,8 @@ export const MakinBrot: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 0.5, max: 3.0, step: 0.001, default: 1.0 },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 0.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Shift Y', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
         { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
@@ -102,9 +102,9 @@ export const MakinBrot: FractalDefinition = {
         sceneOffset: { x: 0, y: 0, z: 0, xL: -0.8442073707354043, yL: -0.15795817300110893, zL: 0.25127901307775025 },
         cameraMode: "Orbit",
         lights: [
-            { position: { x: -1.5227203148465231, y: -0.10858858668233184, z: 0.5084783790561214 }, color: "#99A4FF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
-            { position: { x: 0.05, y: 0.075, z: -0.1 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { position: { x: 0.25, y: 0.075, z: -0.1 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: -1.5227203148465231, y: -0.10858858668233184, z: 0.5084783790561214 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ],
         animations: [
             { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 1.455, phase: 0, smoothing: 0.5 }

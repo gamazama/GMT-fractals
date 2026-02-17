@@ -7,6 +7,99 @@ import { AlertIcon, CloseIcon, CheckIcon, LayersIcon, CubeIcon } from './Icons';
 import { collectHelpIds } from '../utils/helpUtils';
 import { QualityState } from '../features/quality';
 
+// Global refs to track performance across ticks
+const performanceState = {
+    lowFpsBuffer: 0,
+    lastTime: performance.now(),
+    lastFrameCount: 0,
+    setShowWarning: null as ((show: boolean) => void) | null,
+    setCurrentFps: null as ((fps: number) => void) | null,
+    isPaused: false,
+    isScrubbing: false,
+    isExporting: false,
+    isBroadcastMode: false,
+    renderMode: 'PathTracing',
+    frameTimestamps: [] as number[] // Track individual frame timings for better analysis
+};
+
+// Export tick function for orchestrated updates
+export const tick = () => {
+    const now = performance.now();
+    
+    // Add current frame timestamp
+    performanceState.frameTimestamps.push(now);
+    
+    // Keep only last 2 seconds of timestamps
+    const twoSecondsAgo = now - 2000;
+    performanceState.frameTimestamps = performanceState.frameTimestamps.filter(t => t > twoSecondsAgo);
+    
+    const delta = now - performanceState.lastTime;
+    
+    // Poll every 500ms
+    if (delta >= 500) {
+        // Calculate FPS using individual frame timings for more accuracy
+        let fps = 0;
+        if (performanceState.frameTimestamps.length > 1) {
+            const firstFrame = performanceState.frameTimestamps[0];
+            const lastFrame = performanceState.frameTimestamps[performanceState.frameTimestamps.length - 1];
+            const totalTime = lastFrame - firstFrame;
+            const framesRendered = performanceState.frameTimestamps.length - 1;
+            fps = (framesRendered / totalTime) * 1000;
+        }
+        
+        // Update Refs
+        performanceState.lastTime = now;
+        performanceState.lastFrameCount = engine.pipeline ? engine.pipeline.frameCount : 0;
+
+        // --- Logic Gate ---
+        const state = useFractalStore.getState();
+
+        // Check if Accumulation is finished (Engine stops rendering intentionally)
+        const isAccumulationComplete = state.sampleCap > 0 && engine.pipeline && engine.pipeline.accumulationCount >= state.sampleCap;
+        
+        // 1. Ignore if we aren't *trying* to render efficiently
+        // (Exporting, Paused, Scrubbing, Compiling, Tab Hidden, or Finished Accumulating)
+        const isIdle = performanceState.isPaused || performanceState.isScrubbing || document.hidden || engine.isCompiling || performanceState.isExporting || isAccumulationComplete;
+
+        if (isIdle) {
+            performanceState.lowFpsBuffer = 0; 
+        } 
+        // 2. Ignore Startup (First 8s)
+        else if (now < 8000) { 
+            performanceState.lowFpsBuffer = 0;
+        }
+        else {
+            if (performanceState.setCurrentFps) {
+                performanceState.setCurrentFps(fps);
+            }
+
+            // Thresholds based on Engine Mode
+            // PT is naturally slower, so we tolerate lower FPS before warning
+            const isPT = performanceState.renderMode === 'PathTracing';
+            const lowThreshold = isPT ? 10 : 15;
+            const recoveryThreshold = isPT ? 22 : 30;
+
+            if (fps < lowThreshold) {
+                // FPS is Low -> Increment Penalty (Fast trigger if very low)
+                performanceState.lowFpsBuffer += (fps < 5 ? 2 : 1);
+            } else if (fps >= recoveryThreshold) {
+                // FPS is Good -> Recover
+                // Decrement faster (-3) to make it disappear quickly once performance is back
+                performanceState.lowFpsBuffer = Math.max(0, performanceState.lowFpsBuffer - 3);
+                
+                if (performanceState.lowFpsBuffer === 0 && performanceState.setShowWarning) {
+                     performanceState.setShowWarning(false);
+                }
+            }
+
+            // Trigger Warning Threshold (approx 2.5s of bad performance)
+            if (performanceState.lowFpsBuffer >= 5 && performanceState.setShowWarning) {
+                performanceState.setShowWarning(true);
+            }
+        }
+    }
+};
+
 export const PerformanceMonitor = () => {
     // Logic Refs
     const lowFpsBuffer = useRef(0);
@@ -29,6 +122,30 @@ export const PerformanceMonitor = () => {
     const [showWarning, setShowWarning] = useState(false);
     const [currentFps, setCurrentFps] = useState(60);
     
+    // Sync state with global performanceState
+    useEffect(() => {
+        performanceState.setShowWarning = setShowWarning;
+        performanceState.setCurrentFps = setCurrentFps;
+        performanceState.isPaused = isPaused;
+        performanceState.isScrubbing = isScrubbing;
+        performanceState.isExporting = isExporting;
+        performanceState.isBroadcastMode = isBroadcastMode;
+        performanceState.renderMode = renderMode;
+        
+        // Initial setup
+        performanceState.lastTime = performance.now();
+        performanceState.lastFrameCount = engine.pipeline ? engine.pipeline.frameCount : 0;
+        
+        return () => {
+            if (performanceState.setShowWarning === setShowWarning) {
+                performanceState.setShowWarning = null;
+            }
+            if (performanceState.setCurrentFps === setCurrentFps) {
+                performanceState.setCurrentFps = null;
+            }
+        };
+    }, [isPaused, isScrubbing, isExporting, isBroadcastMode, renderMode]);
+    
     const handleContextMenu = (e: React.MouseEvent) => {
         const ids = collectHelpIds(e.currentTarget);
         if (ids.length > 0) {
@@ -37,82 +154,6 @@ export const PerformanceMonitor = () => {
             openContextMenu(e.clientX, e.clientY, [], ids);
         }
     };
-    
-    useEffect(() => {
-        // Reset buffers
-        lowFpsBuffer.current = 0;
-        lastTimeRef.current = performance.now();
-        lastFrameCountRef.current = engine.pipeline ? engine.pipeline.frameCount : 0;
-
-        const loop = () => {
-            const now = performance.now();
-            const delta = now - lastTimeRef.current;
-            
-            // Poll every 500ms
-            if (delta >= 500) {
-                // Determine Frames Rendered
-                const currentTotal = engine.pipeline ? engine.pipeline.frameCount : 0;
-                const framesRendered = currentTotal - lastFrameCountRef.current;
-                
-                // Calculate FPS
-                const fps = (framesRendered / delta) * 1000;
-                
-                // Update Refs
-                lastTimeRef.current = now;
-                lastFrameCountRef.current = currentTotal;
-
-                // --- Logic Gate ---
-                const state = useFractalStore.getState();
-
-                // Check if Accumulation is finished (Engine stops rendering intentionally)
-                const isAccumulationComplete = state.sampleCap > 0 && engine.pipeline && engine.pipeline.accumulationCount >= state.sampleCap;
-                
-                // 1. Ignore if we aren't *trying* to render efficiently
-                // (Exporting, Paused, Scrubbing, Compiling, Tab Hidden, or Finished Accumulating)
-                const isIdle = isPaused || isScrubbing || document.hidden || engine.isCompiling || isExporting || isAccumulationComplete;
-
-                if (isIdle) {
-                    lowFpsBuffer.current = 0; 
-                } 
-                // 2. Ignore Startup (First 8s)
-                else if (now < 8000) { 
-                    lowFpsBuffer.current = 0;
-                }
-                else {
-                    setCurrentFps(fps);
-
-                    // Thresholds based on Engine Mode
-                    // PT is naturally slower, so we tolerate lower FPS before warning
-                    const isPT = renderMode === 'PathTracing';
-                    const lowThreshold = isPT ? 10 : 15;
-                    const recoveryThreshold = isPT ? 22 : 30;
-
-                    if (fps < lowThreshold) {
-                        // FPS is Low -> Increment Penalty (Fast trigger if very low)
-                        lowFpsBuffer.current += (fps < 5 ? 2 : 1);
-                    } else if (fps >= recoveryThreshold) {
-                        // FPS is Good -> Recover
-                        // Decrement faster (-3) to make it disappear quickly once performance is back
-                        lowFpsBuffer.current = Math.max(0, lowFpsBuffer.current - 3);
-                        
-                        if (lowFpsBuffer.current === 0) {
-                             setShowWarning(false);
-                        }
-                    }
-
-                    // Trigger Warning Threshold (approx 2.5s of bad performance)
-                    if (lowFpsBuffer.current >= 5) {
-                        setShowWarning(true);
-                    }
-                }
-            }
-            
-            requestAnimationFrame(loop);
-        };
-
-        const rafId = requestAnimationFrame(loop);
-        return () => cancelAnimationFrame(rafId);
-    }, [isExporting, isBroadcastMode, isPaused, isScrubbing, renderMode]);
 
     if (isBroadcastMode || !showWarning) return null;
     

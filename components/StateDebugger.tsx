@@ -71,7 +71,7 @@ export const StateDebugger = () => {
             initialPos={{ x: 100, y: 100 }} 
             initialSize={{ width: 500, height: 600 }}
             onClose={() => setIsOpen(false)}
-            zIndex={200}
+            zIndex={600}
         >
             <div className="flex flex-col h-full gap-3">
                 <div className="flex flex-col gap-1">

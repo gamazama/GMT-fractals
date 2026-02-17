@@ -63,6 +63,9 @@ export const useGraphInteraction = (
     const dragStartView = useRef<{ panX: number, panY: number }>({ panX: 0, panY: 0 });
     const dragMode = useRef<DragMode | null>(null);
     
+    // New ref to track if drag distance was significant enough to block context menu
+    const suppressContextMenuRef = useRef(false);
+    
     const draggedKeysRef = useRef<KeyDragStart[]>([]);
     const draggedNeighborsRef = useRef<Map<string, NeighborKeyData>>(new Map());
     
@@ -183,6 +186,11 @@ export const useGraphInteraction = (
         
         const totalDx = e.clientX - dragStartMousePos.current.x;
         const totalDy = e.clientY - dragStartMousePos.current.y;
+
+        // If moved significantly, flag to suppress context menu (usually on Right Click / Alt+Right Click)
+        if (Math.hypot(totalDx, totalDy) > 5) {
+            suppressContextMenuRef.current = true;
+        }
 
         if (dragMode.current === 'scrub') {
             const f = props.canvasPixelToFrame(mx);
@@ -523,12 +531,20 @@ export const useGraphInteraction = (
         softSelectInitialStateRef.current = {};
         dragHandleRef.current = null;
         setSoftInteraction({ isAdjusting: false, anchorKey: null });
+
+        // IMPORTANT: Allow context menu again after short delay, but suppress it immediately after drag
+        setTimeout(() => {
+            suppressContextMenuRef.current = false;
+        }, 100);
         
         window.removeEventListener('mousemove', handleGlobalMove);
         window.removeEventListener('mouseup', handleGlobalUp);
     }, [setIsScrubbing, selectKeyframes, handleGlobalMove]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
+        // Reset suppression immediately on new click
+        suppressContextMenuRef.current = false;
+
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
         const mx = e.clientX - rect.left;
@@ -743,6 +759,7 @@ export const useGraphInteraction = (
         handleMouseDown,
         getHit,
         selectionBox,
-        softInteraction
+        softInteraction,
+        shouldSuppressContextMenu: () => suppressContextMenuRef.current
     };
 };

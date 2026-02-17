@@ -30,7 +30,7 @@ const TopBar = () => {
     const btnActive = "bg-gray-800 border-gray-600 text-white";
 
     return (
-        <header className="relative shrink-0 w-full h-14 z-[60] bg-black/90 border-b border-white/10 flex items-center justify-between px-6 animate-fade-in-down select-none">
+        <header className="relative shrink-0 w-full h-14 z-[500] bg-black/90 border-b border-white/10 flex items-center justify-between px-6 animate-fade-in-down select-none">
             {/* Left: Logo, Status, Render Controls */}
             <RenderTools isMobileMode={isMobileMode} vibrate={vibrate} />
 

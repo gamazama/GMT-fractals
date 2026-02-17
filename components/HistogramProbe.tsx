@@ -117,7 +117,7 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
             if (triggerChanged) prevTrigger.current = trigger;
 
             frameCount++;
-            const shouldRender = (autoUpdate && frameCount % 15 === 0) || triggerChanged;
+            const shouldRender = (autoUpdate && frameCount % 1000 === 0) || triggerChanged;
 
             if (shouldRender) {
                 const gl = engine.renderer;
@@ -165,6 +165,7 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
                 onUpdate(new Float32Array(res.pixelBuffer));
             }
             
+            // Always continue loop to handle trigger events even when autoUpdate is false
             frameId = requestAnimationFrame(loop);
         };
         

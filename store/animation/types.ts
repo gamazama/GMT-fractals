@@ -1,5 +1,5 @@
 
-import { AnimationSequence, Track, Keyframe, SoftSelectionType, LoopMode } from '../../types';
+import { AnimationSequence, Track, Keyframe, SoftSelectionType, LoopMode, TrackBehavior } from '../../types';
 
 export interface CopiedKeyframe {
     relativeFrame: number;
@@ -80,6 +80,7 @@ export interface SequenceSliceActions {
     setSequence: (seq: AnimationSequence) => void;
     addTrack: (id: string, label: string) => void;
     removeTrack: (id: string) => void;
+    setTrackBehavior: (trackId: string, behavior: TrackBehavior) => void;
     
     addKeyframe: (trackId: string, frame: number, value: number, interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
     batchAddKeyframes: (frame: number, updates: { trackId: string, value: number }[], interpolation?: 'Linear' | 'Step' | 'Bezier') => void;

@@ -13,6 +13,7 @@ interface DopeSheetProps {
     frameWidth: number;
     totalContentWidth: number;
     onContextMenu: (e: React.MouseEvent, tid: string, kid: string, interp: string, broken: boolean, auto: boolean) => void;
+    onCanvasContextMenu: (e: React.MouseEvent, frame: number) => void; // New Prop
     scrollContainerRef: React.RefObject<HTMLDivElement>;
     scrollLeft: number;
     visibleWidth: number;
@@ -29,7 +30,7 @@ const PlayheadCursor = ({ frameWidth }: { frameWidth: number }) => {
 };
 
 export const DopeSheet: React.FC<DopeSheetProps> = ({ 
-    frameWidth, totalContentWidth, onContextMenu, scrollContainerRef, scrollLeft, visibleWidth 
+    frameWidth, totalContentWidth, onContextMenu, onCanvasContextMenu, scrollContainerRef, scrollLeft, visibleWidth 
 }) => {
     const sequence = useAnimationStore(s => s.sequence);
     const selectedTrackIds = useAnimationStore(s => s.selectedTrackIds);
@@ -272,12 +273,6 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
             selectKeyframe(tid, kid, true);
             if (!selectedTrackIds.includes(tid)) selectTrack(tid, true);
             snapshot();
-            // Start drag on CURRENTLY selected keys (which includes the one clicked)
-            // Note: selectKeyframes updates store, but we need instantaneous list for drag start.
-            // If isMulti=true, we appended to existing.
-            // If selectedKeyframeIds is stale (from previous render), we construct the new list manually?
-            // Actually, we can just use the updated list logic or pass explicit IDs.
-            // For simplicity, we pass specific IDs to startDragKeys
             const keysToDrag = isSelected 
                 ? selectedKeyframeIds 
                 : [...selectedKeyframeIds, composite];
@@ -349,6 +344,36 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
             addKeyframe(tid, frame, val);
         });
     };
+    
+    const handleBackgroundContextMenu = (e: React.MouseEvent) => {
+         // Stop immediate bubbling to parents, but allow internal logic
+         e.preventDefault();
+         
+         const container = contentRef.current;
+         if (!container) return;
+         
+         const rect = container.getBoundingClientRect();
+         // Calculate X relative to the content area (scrolled)
+         // Note: scrollLeft prop is passed down but we need current scroll state or calc
+         // Better to use absolute clientX mapped to frame
+         // Sidebar is fixed position visually, but content scrolls
+         // Frame 0 starts at SIDEBAR_WIDTH
+         
+         const xRelativeToContainer = e.clientX - rect.left;
+         // Since container moves with scroll, we need to add scroll offset
+         // But the container is inside scrollContainerRef which has scrollLeft
+         // Wait, DopeSheet content div has relative position.
+         // Let's use the scrollContainerRef to get the scroll offset.
+         
+         const scrollOffset = scrollContainerRef.current?.scrollLeft || 0;
+         const totalX = xRelativeToContainer + scrollOffset;
+         
+         // Remove Sidebar width
+         const frameAreaX = totalX - TIMELINE_SIDEBAR_WIDTH;
+         const frame = Math.max(0, Math.round(frameAreaX / frameWidth));
+         
+         onCanvasContextMenu(e, frame);
+    };
 
     const limitX = TIMELINE_SIDEBAR_WIDTH + durationFrames * frameWidth;
     const limitWidth = Math.max(0, (scrollLeft + visibleWidth) - limitX + 500); 
@@ -360,6 +385,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
             style={{ minWidth: totalContentWidth }}
             onMouseDown={handleContentMouseDown}
             data-help-id="ui.timeline"
+            onContextMenu={handleBackgroundContextMenu}
         >
             <div 
                 className="absolute top-0 bottom-0 pointer-events-none z-0"
@@ -404,6 +430,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
                             className="absolute top-1/2 -mt-1.5 w-3 h-3 bg-cyan-600 border border-cyan-300 rotate-45 cursor-grab hover:bg-white hover:border-white hover:scale-125 z-10 shadow-sm"
                             style={{ left: `${frame * frameWidth - 6}px` }}
                             onMouseDown={(e) => handleGroupKeyMouseDown(e, Object.keys(sequence.tracks), frame)}
+                            data-help-id="anim.keyframes"
                         />
                     ))}
 
@@ -475,5 +502,3 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
         </div>
     );
 };
-
-export default DopeSheet;

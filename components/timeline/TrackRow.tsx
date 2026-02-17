@@ -7,26 +7,40 @@ import { collectHelpIds } from '../../utils/helpUtils';
 import { TrashIcon } from '../Icons';
 import { getLiveValue } from '../../utils/timelineUtils';
 
+// Global refs to track LiveValueDisplay components across ticks
+const liveValueState = {
+    displays: new Map<string, HTMLSpanElement>()
+};
+
+// Export tick function for orchestrated updates
+export const tick = () => {
+    const animStore = useAnimationStore.getState();
+    
+    liveValueState.displays.forEach((ref, tid) => {
+        if (ref) {
+            try {
+                const val = getLiveValue(tid, animStore.isPlaying, animStore.currentFrame, animStore.sequence);
+                ref.innerText = val.toFixed(2);
+            } catch (e) {
+                console.error('Error updating live value display:', e);
+            }
+        }
+    });
+};
+
 // Isolated component for the numeric readout
 const LiveValueDisplay = ({ tid }: { tid: string }) => {
     const ref = useRef<HTMLSpanElement>(null);
-    const animStore = useAnimationStore;
     
-    // Subscribe to frame loop using requestAnimationFrame to update text content directly
-    // This avoids React reconciliation entirely for the text update
+    // Sync ref with global liveValueState
     useEffect(() => {
-        let rafId: number;
-        const update = () => {
-            if (!ref.current) return;
-            const state = animStore.getState();
-            // We pass the full sequence object from store state to getLiveValue
-            // Note: getLiveValue internally handles accessing FractalStore for values
-            const val = getLiveValue(tid, state.isPlaying, state.currentFrame, state.sequence);
-            ref.current.innerText = val.toFixed(2);
-            rafId = requestAnimationFrame(update);
+        if (ref.current) {
+            liveValueState.displays.set(tid, ref.current);
+        }
+        
+        return () => {
+            liveValueState.displays.delete(tid);
         };
-        update();
-        return () => cancelAnimationFrame(rafId);
     }, [tid]);
 
     return (
@@ -102,6 +116,7 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                             className={`absolute top-1/2 -translate-y-1/2 z-20 cursor-grab group/key`}
                             style={{ left: `${k.frame * frameWidth - 10}px`, width: '20px', height: '20px' }} // Big hit area
                             onMouseDown={(e) => onKeyMouseDown(e, tid, k.id)}
+                            data-help-id="anim.keyframes"
                         >
                             <div 
                                 className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 border transition-transform ${

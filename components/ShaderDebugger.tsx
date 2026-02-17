@@ -28,7 +28,7 @@ export const ShaderDebuggerGlobalWrapper = () => {
             initialPos={{ x: 20, y: window.innerHeight - 400 }} 
             onClose={() => setIsOpen(false)}
             initialSize={{ width: 640, height: 480 }}
-            zIndex={200}
+            zIndex={600}
         >
              <ShaderDebuggerContent onClose={() => setIsOpen(false)} />
         </DraggableWindow>

@@ -39,6 +39,14 @@ export class ShaderBuilder {
     private renderMode: 'Direct' | 'PathTracing' = 'Direct';
     private isLite: boolean = false;
     private precisionMode: number = 0;
+    private enableDepthOutput: boolean = true;  // MRT depth output for physics probe
+    
+    // 5. Variant Specific
+    private physicsRayGen: string = `
+    // Standard Linear Projection
+    vec2 uv = vUv * 2.0 - 1.0;
+    vec3 rd = normalize(uCamForward + uv.x * uCamBasisX + uv.y * uCamBasisY);
+    `;
 
     constructor(public variant: RenderVariant) {}
 
@@ -55,6 +63,14 @@ export class ShaderBuilder {
     public setQuality(isLite: boolean, precisionMode: number) {
         this.isLite = isLite;
         this.precisionMode = precisionMode;
+    }
+    
+    public setDepthOutput(enabled: boolean) {
+        this.enableDepthOutput = enabled;
+    }
+    
+    public setPhysicsRayGen(code: string) {
+        this.physicsRayGen = code;
     }
 
     // --- Injection API ---
@@ -162,7 +178,48 @@ export class ShaderBuilder {
 
         // --- VARIANT: PHYSICS (Distance Measurement) ---
         if (this.variant === 'Physics') {
-            const traceGLSL = getTraceGLSL(false, false, this.precisionMode, 0, "", "");
+            // Simplified trace function for physics probe (fewer steps, no extra features)
+            const simplifiedTraceGLSL = `
+bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result) {
+    d = 0.0;
+    result = vec4(0.0);
+
+    // 1. Bounding Sphere
+    vec3 sphereCenter = -(uSceneOffsetHigh + uSceneOffsetLow);
+    vec2 bounds = intersectSphere(ro - sphereCenter, rd, BOUNDING_RADIUS);
+    if (bounds.x > bounds.y) return false;
+    
+    d = max(0.0, bounds.x);
+    
+    int limit = 100; // Reduced from uMaxSteps for faster probing
+    float maxMarch = 100.0; // Reduced max distance
+    
+    vec4 h = vec4(0.0);
+
+    for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
+        if (i >= limit) break;
+
+        vec3 p = ro + rd * d;
+        h = map(p + uCameraPosition);
+        
+        // Simple hit detection (no refinement)
+        float distFromFractalOrigin = length(p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh);
+        float floatPrecision = max(1.0e-5, distFromFractalOrigin * 1.0e-5);
+        
+        if (h.x < floatPrecision) {
+            result = h;
+            return true;
+        }
+        
+        // Simple step advance (fixed step size)
+        d += max(h.x, floatPrecision * 0.5) * 0.9;
+        
+        if (d > maxMarch) break;
+    }
+    
+    return false;
+}
+`;
             
             return `
 ${defines}
@@ -173,22 +230,20 @@ ${COLORING}
 ${headers}
 ${userFunctions} // Formulas
 ${de}            // Distance Estimator
-${postDEFunctions} // Shadows/AO (if any needed)
 
-${traceGLSL}
+${simplifiedTraceGLSL}
 
 layout(location = 0) out vec4 pc_fragColor;
 
 void main() {
-    vec3 ro = vec3(0.0);
-    vec3 rd = normalize(uCamForward);
+    // Generate Ray (Standard or Injected)
+    ${this.physicsRayGen}
     
+    vec3 ro = vec3(0.0);
     float d = 0.0;
     vec4 result = vec4(0.0);
-    vec3 dummyGlow = vec3(0.0);
-    float dummyVol = 0.0;
     
-    bool hit = traceScene(ro, rd, d, result, dummyGlow, 0.0, dummyVol);
+    bool hit = traceScene(ro, rd, d, result);
     
     if (hit) {
         pc_fragColor = vec4(d, 0.0, 0.0, 1.0);
@@ -263,7 +318,7 @@ void main() {
         const isPathTracing = this.renderMode === 'PathTracing';
         
         const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'));
-        const mainGLSL = getFragmentMainGLSL(isPathTracing);
+        const mainGLSL = getFragmentMainGLSL(isPathTracing, this.enableDepthOutput);
 
         return `
 ${defines}

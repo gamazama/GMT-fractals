@@ -18,6 +18,7 @@ export interface ContextMenuItem {
     isHeader?: boolean;
     disabled?: boolean;
     keepOpen?: boolean;
+    children?: ContextMenuItem[]; // Nested items
     
     // Slider Extension (Legacy Snapshot Mode)
     type?: 'slider';

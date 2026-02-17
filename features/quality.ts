@@ -4,6 +4,8 @@ import { FeatureDefinition } from '../engine/FeatureSystem';
 export interface QualityState {
     engineQuality: boolean; // Master Anchor
     fudgeFactor: number;
+    stepRelaxation: number; // New: Dynamic Fudge
+    refinementSteps: number; // New: Edge Polish
     detail: number;
     pixelThreshold: number;
     maxSteps: number;
@@ -13,7 +15,10 @@ export interface QualityState {
     bufferPrecision: number; // 0=Float32, 1=HalfFloat16
     dynamicScaling: boolean;
     interactionDownsample: number;
-    estimator: number; // New: 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
+    estimator: number; // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
+    overstepTolerance: number; // Candidate Recovery Threshold
+    physicsProbeMode: number; // 0=GPU Probe, 1=CPU Calculation, 2=Manual
+    manualDistance: number; // Manual distance override when probe is disabled
 }
 
 export const QualityFeature: FeatureDefinition = {
@@ -65,7 +70,8 @@ export const QualityFeature: FeatureDefinition = {
         maxSteps: { 
             type: 'int', default: 300, label: 'Max Ray Steps', shortId: 'ms', uniform: 'uMaxSteps', 
             min: 32, max: 2000, step: 1, group: 'kernel',
-            description: 'Runtime limit. Rays stop after this many steps. Artistic tool for limiting depth.'
+            description: 'Runtime limit. Rays stop after this many steps. Artistic tool for limiting depth.',
+            isAdvanced: true
         },
         distanceMetric: { 
             type: 'float', default: 0.0, label: 'Distance Metric', shortId: 'dm', uniform: 'uDistanceMetric', 
@@ -90,12 +96,26 @@ export const QualityFeature: FeatureDefinition = {
             ],
             description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix.',
             onUpdate: 'compile',
-            noReset: true
+            noReset: true,
+            isAdvanced: true
         },
         fudgeFactor: { 
-            type: 'float', default: 1.0, label: 'Slice optimization', shortId: 'ff', uniform: 'uFudgeFactor', 
-            min: 0.1, max: 1.0, step: 0.01, group: 'kernel', 
-            format: (v) => v < 1.0 ? v.toFixed(2) : "1.0 (fast)"
+            type: 'float', default: 1.0, label: 'Slice Optimization', shortId: 'ff', uniform: 'uFudgeFactor', 
+            min: 0.01, max: 1.0, step: 0.01, group: 'kernel', 
+            description: 'Multiplies step size. Lower = Higher quality but slower. Set to < 0.2 for deep zooms.',
+            format: (v) => v.toFixed(2)
+        },
+        stepRelaxation: { 
+            type: 'float', default: 0.0, label: 'Step Relaxation', shortId: 'sr', uniform: 'uStepRelaxation', 
+            min: 0.0, max: 1.0, step: 0.01, group: 'kernel', 
+            description: 'Dynamic Step Size. 0 = Fixed Fudge. 1 = Variable (Fudge near surface, 1.0 in void). Saves steps.',
+            isAdvanced: true
+        },
+        refinementSteps: { 
+            type: 'int', default: 0, label: 'Edge Polish', shortId: 'rf', uniform: 'uRefinementSteps', 
+            min: 0, max: 5, step: 1, group: 'kernel', 
+            description: 'Extra micro-steps after hitting surface. Fixes slicing/banding artifacts.',
+            isAdvanced: true
         },
         detail: { 
             type: 'float', default: 1.0, label: 'Ray detail', shortId: 'rd', uniform: 'uDetail', 
@@ -104,6 +124,12 @@ export const QualityFeature: FeatureDefinition = {
         pixelThreshold: { 
             type: 'float', default: 0.5, label: 'Pixel threshold', shortId: 'pt', uniform: 'uPixelThreshold', 
             min: 0.1, max: 2.0, step: 0.1, group: 'kernel' 
+        },
+        overstepTolerance: { 
+            type: 'float', default: 0.0, label: 'Overstep Fix', shortId: 'ot', uniform: 'uOverstepTolerance', 
+            min: 0.0, max: 5.0, step: 0.1, group: 'kernel',
+            description: "Recovers details missed by the raymarcher. 0=Off. Higher values fix more holes but may create noise.",
+            isAdvanced: true
         },
         
         dynamicScaling: {
@@ -123,6 +149,33 @@ export const QualityFeature: FeatureDefinition = {
             group: 'performance',
             condition: { param: 'dynamicScaling', bool: true },
             format: (v) => `1/${v}x`,
+            noReset: true
+        },
+        physicsProbeMode: {
+            type: 'float',
+            default: 0.0,
+            label: 'Distance Probe',
+            shortId: 'dp',
+            group: 'performance',
+            isAdvanced: true,
+            options: [
+                { label: 'GPU Probe', value: 0.0 },
+                { label: 'CPU Calc', value: 1.0 },
+                { label: 'Manual', value: 2.0 }
+            ],
+            description: 'GPU Probe: Accurate but causes stall. CPU Calc: Uses idle CPU (no GPU stall). Manual: Fixed value.',
+            noReset: true
+        },
+        manualDistance: {
+            type: 'float',
+            default: 10.0,
+            label: 'Manual Distance',
+            shortId: 'md',
+            min: 0.1, max: 1000.0, step: 0.1,
+            group: 'performance',
+            isAdvanced: true,
+            description: 'Manual distance value. Used for orbit control calculations.',
+            format: (v) => v.toFixed(1),
             noReset: true
         }
     },

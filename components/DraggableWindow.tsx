@@ -1,142 +1,183 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CloseIcon, ResizeHandleIcon, DockIcon } from './Icons'; // Ensure DockIcon is imported
+import { CloseIcon, ResizeHandleIcon, DragHandleIcon } from './Icons';
+import { useFractalStore } from '../store/fractalStore';
 
-interface DraggableWindowProps {
-    title: string;
+export interface DraggableWindowProps {
+    id?: string;
+    title?: string;
     children: React.ReactNode;
-    onClose: () => void;
-    initialPos?: { x: number; y: number };
-    initialSize?: { width: number; height: number };
-    position?: { x: number; y: number };
-    size?: { width: number; height: number };
-    onPositionChange?: (pos: { x: number; y: number }) => void;
-    onSizeChange?: (size: { width: number; height: number }) => void;
+    
+    // Standalone Props
+    position?: { x: number, y: number };
+    onPositionChange?: (pos: { x: number, y: number }) => void;
+    size?: { width: number, height: number };
+    onSizeChange?: (size: { width: number, height: number }) => void;
+    onClose?: () => void;
     disableClose?: boolean;
     zIndex?: number;
-    actionType?: 'close' | 'dock'; // New prop
+    
+    initialPos?: { x: number, y: number };
+    initialSize?: { width: number, height: number };
 }
 
 const DraggableWindow: React.FC<DraggableWindowProps> = ({ 
-    title, 
-    children, 
-    onClose, 
-    initialPos = { x: 100, y: 100 },
-    initialSize = { width: 320, height: 400 },
-    position,
-    size,
-    onPositionChange,
-    onSizeChange,
-    disableClose = false,
-    zIndex = 100,
-    actionType = 'close'
+    id, title, children,
+    position, onPositionChange,
+    size, onSizeChange,
+    onClose, disableClose, zIndex,
+    initialPos, initialSize
 }) => {
-    const [internalPos, setInternalPos] = useState(initialPos);
-    const [internalSize, setInternalSize] = useState(initialSize);
+    const { panels, setFloatPosition, setFloatSize, togglePanel, startPanelDrag } = useFractalStore();
     
-    const effectivePos = position || internalPos;
-    const effectiveSize = size || internalSize;
+    // Determine mode
+    const isManaged = !!id;
+    const panel = id ? panels[id] : null;
 
-    const [isDragging, setIsDragging] = useState(false);
-    const [isResizing, setIsResizing] = useState(false);
+    // Local state for standalone mode or temporary drag state
+    const [internalPos, setInternalPos] = useState(initialPos || { x: 100, y: 100 });
+    const [internalSize, setInternalSize] = useState(initialSize || { width: 300, height: 200 });
+
+    // Computed effective values
+    const effectivePos = isManaged 
+        ? (panel?.floatPos || { x: 100, y: 100 })
+        : (position || internalPos);
+        
+    const effectiveSize = isManaged
+        ? (panel?.floatSize || { width: 320, height: 400 })
+        : (size || internalSize);
+
+    // Refs for drag logic
+    const posRef = useRef(effectivePos);
+    const sizeRef = useRef(effectiveSize);
+    const dragStartRef = useRef<{ x: number, y: number, startX: number, startY: number } | null>(null);
+    const resizeStartRef = useRef<{ x: number, y: number, startW: number, startH: number } | null>(null);
+
+    // Sync refs
+    useEffect(() => { posRef.current = effectivePos; }, [effectivePos.x, effectivePos.y]);
+    useEffect(() => { sizeRef.current = effectiveSize; }, [effectiveSize.width, effectiveSize.height]);
+
+    // Managed: Check visibility
+    if (isManaged && (!panel || !panel.isOpen || panel.location !== 'float')) return null;
     
-    const dragStartRef = useRef({ x: 0, y: 0, winX: 0, winY: 0 });
-    const resizeStartRef = useRef({ x: 0, y: 0, winW: 0, winH: 0 });
-    
-    useEffect(() => {
-        if (!isDragging) return;
-        const onPointerMove = (e: PointerEvent) => {
-            const dx = e.clientX - dragStartRef.current.x;
-            const dy = e.clientY - dragStartRef.current.y;
-            const newPos = { 
-                x: dragStartRef.current.winX + dx, 
-                y: dragStartRef.current.winY + dy 
-            };
+    const displayTitle = title || (panel ? panel.id : "Window");
+    const displayZ = zIndex || (isManaged ? 100 : 200);
+
+    const handleClose = () => {
+        if (onClose) onClose();
+        else if (isManaged && id) {
+            // Special logic for Feature Panels: Closing them turns off the switch
+            const state = useFractalStore.getState();
+            const actions = state as any;
+            if (id === 'Audio') actions.setAudio({ isEnabled: false });
+            else if (id === 'Drawing') actions.setDrawing({ enabled: false });
+            else if (id === 'Engine') actions.setEngineSettings({ showEngineTab: false });
+            else if (id === 'Sonification') actions.setSonification({ isEnabled: false });
+            togglePanel(id, false);
+        }
+    };
+
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest('button')) return;
+        e.preventDefault();
+        dragStartRef.current = { x: e.clientX, y: e.clientY, startX: posRef.current.x, startY: posRef.current.y };
+        
+        const onMove = (ev: MouseEvent) => {
+            if (!dragStartRef.current) return;
+            const dx = ev.clientX - dragStartRef.current.x;
+            const dy = ev.clientY - dragStartRef.current.y;
+            const newPos = { x: dragStartRef.current.startX + dx, y: dragStartRef.current.startY + dy };
+            
             if (onPositionChange) onPositionChange(newPos);
+            else if (isManaged && id) setFloatPosition(id, newPos.x, newPos.y);
             else setInternalPos(newPos);
+            
+            posRef.current = newPos;
         };
-        const onPointerUp = () => setIsDragging(false);
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
-        return () => {
-            window.removeEventListener('pointermove', onPointerMove);
-            window.removeEventListener('pointerup', onPointerUp);
+        
+        const onUp = () => {
+            dragStartRef.current = null;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
         };
-    }, [isDragging, onPositionChange]);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
 
-    useEffect(() => {
-        if (!isResizing) return;
-        const onPointerMove = (e: PointerEvent) => {
-            const dx = e.clientX - resizeStartRef.current.x;
-            const dy = e.clientY - resizeStartRef.current.y;
+    const handleResizeDown = (e: React.MouseEvent) => {
+        e.preventDefault(); e.stopPropagation();
+        resizeStartRef.current = { x: e.clientX, y: e.clientY, startW: sizeRef.current.width, startH: sizeRef.current.height };
+        
+        const onMove = (ev: MouseEvent) => {
+            if (!resizeStartRef.current) return;
+            const dx = ev.clientX - resizeStartRef.current.x;
+            const dy = ev.clientY - resizeStartRef.current.y;
             const newSize = { 
-                width: Math.max(200, resizeStartRef.current.winW + dx), 
-                height: Math.max(150, resizeStartRef.current.winH + dy) 
+                width: Math.max(200, resizeStartRef.current.startW + dx), 
+                height: Math.max(150, resizeStartRef.current.startH + dy) 
             };
+            
             if (onSizeChange) onSizeChange(newSize);
+            else if (isManaged && id) setFloatSize(id, newSize.width, newSize.height);
             else setInternalSize(newSize);
+            
+            sizeRef.current = newSize;
         };
-        const onPointerUp = () => setIsResizing(false);
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
-        return () => {
-            window.removeEventListener('pointermove', onPointerMove);
-            window.removeEventListener('pointerup', onPointerUp);
+        
+        const onUp = () => {
+            resizeStartRef.current = null;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
         };
-    }, [isResizing, onSizeChange]);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
 
     return createPortal(
         <div 
-            className="fixed glass-panel flex flex-col overflow-hidden animate-pop-in transition-[height] duration-300 ease-out"
+            className="fixed glass-panel flex flex-col overflow-hidden animate-pop-in shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
             style={{ 
                 left: effectivePos.x, 
                 top: effectivePos.y, 
                 width: effectiveSize.width, 
                 height: effectiveSize.height,
                 maxHeight: '90vh',
-                touchAction: 'none',
-                zIndex: zIndex
+                zIndex: displayZ
             }}
         >
             <div 
-                onPointerDown={(e) => {
-                    if ((e.target as HTMLElement).closest('button')) return;
-                    setIsDragging(true);
-                    dragStartRef.current = { x: e.clientX, y: e.clientY, winX: effectivePos.x, winY: effectivePos.y };
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                }}
-                className="panel-header cursor-move"
+                onMouseDown={handleMouseDown}
+                className="panel-header cursor-move flex items-center justify-between px-2 py-1.5 bg-gray-800/90 border-b border-white/10"
             >
-                <span className="t-label flex items-center gap-1.5 text-gray-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_5px_cyan]"></span>
-                    {title}
-                </span>
-                <button 
-                    onClick={(e) => {
-                        if (disableClose) return;
-                        e.stopPropagation();
-                        onClose();
-                    }} 
-                    disabled={disableClose}
-                    className={`icon-btn ${disableClose ? 'text-gray-700 cursor-not-allowed hover:bg-transparent hover:text-gray-700' : ''}`}
-                    title={actionType === 'dock' ? "Dock Panel" : "Close"}
-                >
-                    {actionType === 'dock' ? <DockIcon /> : <CloseIcon />}
-                </button>
+                <div className="flex items-center gap-2">
+                     {isManaged && (
+                         <div 
+                            className="cursor-grab text-gray-500 hover:text-white"
+                            onMouseDown={(e) => {
+                                 e.stopPropagation();
+                                 if (id) startPanelDrag(id);
+                            }}
+                         >
+                             <DragHandleIcon />
+                         </div>
+                     )}
+                     <span className="t-label text-gray-200">{displayTitle}</span>
+                </div>
+                
+                {(!disableClose && (onClose || (isManaged && !panel?.isCore))) && (
+                    <button onClick={handleClose} className="icon-btn" title="Close">
+                        <CloseIcon />
+                    </button>
+                )}
             </div>
             
-            <div className="p-3 overflow-y-auto overflow-x-hidden custom-scroll flex-1" style={{ touchAction: 'pan-y' }}>
+            <div className="p-3 overflow-y-auto overflow-x-hidden custom-scroll flex-1 relative bg-black/80 backdrop-blur-md">
                 {children}
             </div>
 
             <div 
-                onPointerDown={(e) => {
-                    e.preventDefault(); e.stopPropagation();
-                    setIsResizing(true);
-                    resizeStartRef.current = { x: e.clientX, y: e.clientY, winW: effectiveSize.width, winH: effectiveSize.height };
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                }}
+                onMouseDown={handleResizeDown}
                 className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-20 touch-none text-gray-500"
             >
                 <ResizeHandleIcon />
@@ -145,5 +186,4 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
         document.body
     );
 };
-
 export default DraggableWindow;

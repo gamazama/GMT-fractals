@@ -22,8 +22,12 @@ export interface GradientConfig {
     colorSpace: ColorSpaceMode;
 }
 
+export type LightType = 'Point' | 'Directional';
+
 export interface LightParams {
+    type: LightType;
     position: { x: number, y: number, z: number };
+    rotation: { x: number, y: number, z: number };
     color: string;
     intensity: number;
     falloff: number;

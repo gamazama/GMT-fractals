@@ -66,8 +66,8 @@ export const MarbleMarcher: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 2.0 },
         { label: 'Shift X', id: 'paramB', min: -5.0, max: 5.0, step: 0.01, default: -2.0 },
-        { label: 'Rot Z', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
-        { label: 'Rot X', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0 },
+        { label: 'Rot Z', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rot X', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'Shift Y', id: 'paramE', min: -5.0, max: 5.0, step: 0.01, default: -2.0 },
         { label: 'Shift Z', id: 'paramF', min: -5.0, max: 5.0, step: 0.01, default: -2.0 },
     ],
@@ -119,9 +119,9 @@ export const MarbleMarcher: FractalDefinition = {
         targetDistance: 0.5,
         cameraMode: "Orbit",
         lights: [
-            { position: { x: 0.936, y: -2.75, z: 6.21 }, color: "#ffffff", intensity: 8, falloff: 0.67, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
-            { position: { x: -5, y: -2, z: 2 }, color: "#ff8800", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
-            { position: { x: 0, y: 0, z: -5 }, color: "#0044ff", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.936, y: -2.75, z: 6.21 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 8, falloff: 0.67, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
+            { type: 'Point', position: { x: -5, y: -2, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0, y: 0, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0044ff", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
         ],
         animations: [
             { id: "2JfG4QE8x4GkvGQU5DKqx", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 1.89, phase: 0, smoothing: 0.5 }

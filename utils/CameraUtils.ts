@@ -36,6 +36,27 @@ export const CameraUtils = {
     },
 
     /**
+     * Helper to get the current Rotation directly from the Engine.
+     * Bypasses the store's debounce lag during rapid interactions.
+     */
+    getRotationFromEngine: (): THREE.Quaternion => {
+        if (engine.activeCamera) return engine.activeCamera.quaternion.clone();
+        return new THREE.Quaternion();
+    },
+
+    /**
+     * Helper to get the current Orbit Distance (Camera Local Length) directly from the Engine.
+     * Returns null if camera is at origin (e.g. Fly Mode reset).
+     */
+    getDistanceFromEngine: (): number | null => {
+        if (engine.activeCamera) {
+             const len = engine.activeCamera.position.length();
+             if (len > 0.001) return len;
+        }
+        return null;
+    },
+
+    /**
      * Converts a Quaternion to Euler Degrees for UI sliders.
      */
     getRotationDegrees: (quat: {x:number, y:number, z:number, w:number}): THREE.Vector3 => {
@@ -52,8 +73,10 @@ export const CameraUtils = {
      * Teleports the camera to a specific Unified Coordinate.
      * Handles the complex logic of splitting the float into High/Low precision parts
      * and resetting the local camera to (0,0,0) (The Treadmill).
+     * 
+     * @param targetDistance Optional. Sets the Orbit Radius / Focus distance.
      */
-    teleportPosition: (unified: THREE.Vector3, currentRot?: {x:number, y:number, z:number, w:number}) => {
+    teleportPosition: (unified: THREE.Vector3, currentRot?: {x:number, y:number, z:number, w:number}, targetDistance?: number) => {
         // 1. Split the unified coordinate into High/Low components
         const sX = VirtualSpace.split(unified.x);
         const sY = VirtualSpace.split(unified.y);
@@ -75,6 +98,10 @@ export const CameraUtils = {
         } else if (engine.activeCamera) {
             const q = engine.activeCamera.quaternion;
             payload.rotation = { x: q.x, y: q.y, z: q.z, w: q.w };
+        }
+        
+        if (targetDistance !== undefined) {
+            payload.targetDistance = targetDistance;
         }
 
         // 4. Emit Event

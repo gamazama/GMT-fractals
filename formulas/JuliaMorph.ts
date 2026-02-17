@@ -1,5 +1,4 @@
 
-
 import { FractalDefinition } from '../types';
 
 export const JuliaMorph: FractalDefinition = {
@@ -136,7 +135,7 @@ export const JuliaMorph: FractalDefinition = {
     parameters: [
         { label: 'Height (Z Scale)', id: 'paramA', min: 0.1, max: 10.0, step: 0.1, default: 5.0 },
         { label: 'Slice Thickness', id: 'paramB', min: 0.01, max: 1.0, step: 0.01, default: 0.27 },
-        { label: 'Twist / Bend', id: 'paramC', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
+        { label: 'Twist / Bend', id: 'paramC', min: -5.0, max: 5.0, step: 0.01, default: 0.0, scale: 'pi' },
         { label: 'End C (Real)', id: 'paramD', min: -2.0, max: 2.0, step: 0.001, default: 0.286 },
         { label: 'End C (Imag)', id: 'paramE', min: -2.0, max: 2.0, step: 0.001, default: 0.009 },
         { label: 'Slice Interval', id: 'paramF', min: 0.0, max: 2.0, step: 0.01, default: 0.33 },
@@ -273,21 +272,27 @@ export const JuliaMorph: FractalDefinition = {
         cameraMode: "Fly",
         lights: [
             {
+                type: 'Point',
                 position: { x: 2.056650977487994, y: -0.7418778505604411, z: 3.39849758131238 },
+                rotation: { x: 0, y: 0, z: 0 },
                 color: "#ffffff",
                 intensity: 8.76,
                 falloff: 0,
                 falloffType: "Quadratic", fixed: false, visible: true, castShadow: true
             },
             {
+                type: 'Point',
                 position: { x: -0.37117243582015064, y: -1.5852765971855902, z: 3.0489919017830487 },
+                rotation: { x: 0, y: 0, z: 0 },
                 color: "#ff8800",
                 intensity: 0.5,
                 falloff: 0,
                 falloffType: "Quadratic", fixed: false, visible: true, castShadow: true
             },
             {
+                type: 'Point',
                 position: { x: 0, y: -5, z: 2 },
+                rotation: { x: 0, y: 0, z: 0 },
                 color: "#0088ff",
                 intensity: 0.25,
                 falloff: 0,

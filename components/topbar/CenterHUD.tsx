@@ -49,6 +49,45 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
         openContextMenu(e.clientX, e.clientY, [], ids);
     };
 
+    const handleLightContextMenu = (e: React.MouseEvent, index: number) => {
+        e.preventDefault(); e.stopPropagation();
+        const light = getLightFromSlice(state.lighting, index);
+        
+        const items = [
+            { label: `Light ${index + 1}`, isHeader: true, action: () => {} },
+            { 
+                label: 'Enabled', 
+                checked: light.visible, 
+                action: () => {
+                    handleInteractionStart('param');
+                    state.updateLight({ index, params: { visible: !light.visible } });
+                    handleInteractionEnd();
+                }
+            },
+            { label: 'Type', isHeader: true, action: () => {} },
+            {
+                label: 'Point',
+                checked: light.type === 'Point',
+                action: () => {
+                    handleInteractionStart('param');
+                    state.updateLight({ index, params: { type: 'Point' } });
+                    handleInteractionEnd();
+                }
+            },
+            {
+                label: 'Directional (Sun)',
+                checked: light.type === 'Directional',
+                action: () => {
+                    handleInteractionStart('param');
+                    state.updateLight({ index, params: { type: 'Directional' } });
+                    handleInteractionEnd();
+                }
+            }
+        ];
+        
+        openContextMenu(e.clientX, e.clientY, items, ['panel.light']);
+    };
+
     const handleLightInteraction = (i: number) => {
         const light = getLightFromSlice(state.lighting, i);
 
@@ -115,12 +154,14 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     className="relative light-orb-wrapper flex justify-center w-8 h-8"
                     onMouseEnter={(e) => handleLightMouseEnter(i, e)}
                     onMouseLeave={handleLightMouseLeave}
-                    onContextMenu={(e) => handleContextMenu(e, ['panel.light', 'light.intensity'])}
+                    onContextMenu={(e) => handleLightContextMenu(e, i)}
                 >
                     <LightOrb 
                         index={i} 
                         color={l.color} 
                         active={l.visible} 
+                        type={l.type}
+                        rotation={l.rotation}
                         onClick={() => handleLightInteraction(i)}
                         onDragStart={() => handleDragStartLogic(i)}
                     />

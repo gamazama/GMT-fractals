@@ -29,7 +29,8 @@ export const ATMOSPHERE_VOLUME_BODY = `
     // Volumetric Fog
     if (uFogDensity > 0.0001) {
         float stepVal = max(h.x, 0.0001);
-        accDensity += (1.0 / (stepVal * 5.0 + 0.1)) * uFogDensity * uFudgeFactor * 0.05;
+        // Corrected density factor: Reduced from 0.05 to 0.0005 (100x reduction)
+        accDensity += (1.0 / (stepVal * 5.0 + 0.1)) * uFogDensity * uFudgeFactor * 0.0005;
     }
 `;
 
@@ -50,4 +51,4 @@ export const ATMOSPHERE_VOLUME_FINALIZE = `
 `;
 
 // Clear out unused exports to prevent import errors if any
-export const ATMOSPHERE_VOLUME_FUNC = ``; 
+export const ATMOSPHERE_VOLUME_FUNC = ``;

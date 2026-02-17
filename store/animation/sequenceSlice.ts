@@ -92,6 +92,20 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         });
     },
 
+    setTrackBehavior: (trackId, behavior) => {
+        get().snapshot();
+        set(state => {
+            const track = state.sequence.tracks[trackId];
+            if (!track) return state;
+            return {
+                sequence: {
+                    ...state.sequence,
+                    tracks: { ...state.sequence.tracks, [trackId]: { ...track, postBehavior: behavior } }
+                }
+            };
+        });
+    },
+
     addKeyframe: (trackId, frame, value, explicitInterpolation) => {
         set(state => {
             const track = state.sequence.tracks[trackId];

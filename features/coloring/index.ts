@@ -39,7 +39,7 @@ export const ColoringFeature: FeatureDefinition = {
     name: 'Coloring',
     category: 'Visuals',
     tabConfig: {
-        label: 'Gradients',
+        label: 'Gradient', // Renamed from Gradients
         componentId: 'panel-gradients',
         order: 50
     },
@@ -103,8 +103,10 @@ export const ColoringFeature: FeatureDefinition = {
                 or: [
                     { param: 'mode', eq: 6.0 }, // Decomposition
                     { param: 'mode', eq: 8.0 }, // Potential
+                    { param: 'mode', eq: 9.0 }, // Green's Flow
                     { param: 'mode2', eq: 6.0 }, 
                     { param: 'mode2', eq: 8.0 },
+                    { param: 'mode2', eq: 9.0 },
                     // Check Texture Mapping Modes ONLY if Texture is Active
                     {
                         and: [
@@ -113,8 +115,10 @@ export const ColoringFeature: FeatureDefinition = {
                                 or: [
                                      { param: '$texturing.mapU', eq: 6.0 },
                                      { param: '$texturing.mapU', eq: 8.0 },
+                                     { param: '$texturing.mapU', eq: 9.0 },
                                      { param: '$texturing.mapV', eq: 6.0 },
-                                     { param: '$texturing.mapV', eq: 8.0 }
+                                     { param: '$texturing.mapV', eq: 8.0 },
+                                     { param: '$texturing.mapV', eq: 9.0 }
                                 ]
                             }
                         ]

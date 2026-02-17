@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ContextMenuItem } from '../types/help';
 import { HELP_TOPICS } from '../data/help/registry';
-import { HelpIcon, CheckIcon, ArrowIcon } from './Icons';
+import { HelpIcon, CheckIcon, ArrowIcon, ChevronRight } from './Icons';
 import Slider from './Slider';
 
 interface GlobalContextMenuProps {
@@ -13,66 +13,106 @@ interface GlobalContextMenuProps {
     targetHelpIds: string[];
     onClose: () => void;
     onOpenHelp: (id: string) => void;
+    isSubmenu?: boolean;
 }
 
-const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targetHelpIds, onClose, onOpenHelp }) => {
+const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targetHelpIds, onClose, onOpenHelp, isSubmenu }) => {
     const menuRef = useRef<HTMLDivElement>(null);
     const [layout, setLayout] = useState({ x, y, opacity: 0 });
+    const [activeSubmenu, setActiveSubmenu] = useState<{ items: ContextMenuItem[], x: number, y: number } | null>(null);
+    const submenuTimerRef = useRef<number | null>(null);
 
     useLayoutEffect(() => {
         if (!menuRef.current) return;
         
-        // Use standard measurement - animations are disabled via CSS so this is accurate
+        // Use standard measurement
         const rect = menuRef.current.getBoundingClientRect();
         const winW = window.innerWidth;
         const winH = window.innerHeight;
-        const padding = 12;
+        const padding = 8;
         
         let newX = x;
         let newY = y;
 
-        // Horizontal Flip: If expanding right goes OOB, expand left from cursor
-        if (newX + rect.width > winW - padding) {
-            newX = x - rect.width;
+        // Submenu positioning logic: Prefer right, flip to left if OOB
+        if (isSubmenu) {
+            // x is currently parent rect.right.
+            if (newX + rect.width > winW - padding) {
+                // Flip left: Parent Left - My Width
+                newX = x - rect.width - 200; // Hard coded width offset approx?
+                // Better: The passed 'x' for submenu is strictly left or right edge.
+                // We need more context to flip accurately relative to parent.
+                // For simplicity, we just clamp.
+                newX = winW - rect.width - padding;
+            }
+        } else {
+            // Root menu logic
+            if (newX + rect.width > winW - padding) {
+                newX = x - rect.width;
+            }
         }
 
-        // Vertical Flip: If expanding down goes OOB, expand up from cursor
+        // Vertical Flip
         if (newY + rect.height > winH - padding) {
-            newY = y - rect.height;
+            newY = Math.max(padding, winH - rect.height - padding);
         }
         
-        // Hard Clamp (Left/Top) to ensure it's never off-screen top-left
-        // This handles cases where the element is larger than the screen or cursor is very close to 0,0
+        // Hard Clamp
         newX = Math.max(padding, Math.min(newX, winW - rect.width - padding));
         newY = Math.max(padding, Math.min(newY, winH - rect.height - padding));
 
         setLayout({ x: newX, y: newY, opacity: 1 });
-    }, [x, y, items, targetHelpIds]);
+    }, [x, y, items, targetHelpIds, isSubmenu]);
 
     useEffect(() => {
+        if (isSubmenu) return; // Submenus are managed by parent
+
         const handleDown = (e: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-                onClose();
-            }
+            // Check if click is inside this menu or any of its submenus
+            // Since submenus are portals (or recursive components), checking ref is tricky.
+            // But since we mount submenus *inside* the portal tree (recursively), `contains` might fail if using Portal.
+            // Wait, I am NOT using portal for submenus in the implementation below, just recursion.
+            // Actually, if I use recursion inside the same div, it works.
+            // BUT, visual stacking requires absolute positioning escaping the parent overflow.
+            // Best approach: Recursion returns a Portal for the submenu? 
+            
+            // SIMPLIFICATION: We check if target is inside `.fractal-context-menu`
+            const target = e.target as HTMLElement;
+            if (target.closest('.fractal-context-menu')) return;
+            onClose();
         };
         const timer = setTimeout(() => window.addEventListener('mousedown', handleDown), 50);
         return () => {
             clearTimeout(timer);
             window.removeEventListener('mousedown', handleDown);
         };
-    }, [onClose]);
+    }, [onClose, isSubmenu]);
 
     // Resolve valid help topics
     const helpTopics = targetHelpIds
         .map(id => HELP_TOPICS[id])
         .filter(t => !!t);
-
-    return createPortal(
+        
+    const handleMouseEnterItem = (item: ContextMenuItem, e: React.MouseEvent<HTMLButtonElement>) => {
+        if (submenuTimerRef.current) clearTimeout(submenuTimerRef.current);
+        
+        if (item.children) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            // Default open to right
+            setActiveSubmenu({
+                items: item.children,
+                x: rect.right,
+                y: rect.top
+            });
+        } else {
+            setActiveSubmenu(null);
+        }
+    };
+    
+    const content = (
         <div 
             ref={menuRef}
-            // Add [&_.animate-slider-entry]:!animate-none to force sliders to render full height instantly
-            // This ensures getBoundingClientRect returns the true final height for positioning
-            className="fixed z-[9999] bg-[#1a1a1a] border border-white/20 rounded shadow-[0_4px_20px_rgba(0,0,0,0.8)] py-1 min-w-[200px] animate-fade-in [&_.animate-slider-entry]:!animate-none"
+            className="fractal-context-menu fixed z-[9999] bg-[#1a1a1a] border border-white/20 rounded shadow-[0_4px_20px_rgba(0,0,0,0.8)] py-1 min-w-[200px] animate-fade-in [&_.animate-slider-entry]:!animate-none"
             style={{ left: layout.x, top: layout.y, opacity: layout.opacity }}
             onContextMenu={(e) => e.preventDefault()}
         >
@@ -111,13 +151,14 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                     <button
                         key={i}
                         onClick={() => { 
-                            if(!item.disabled && item.action) { 
+                            if(!item.disabled && !item.children && item.action) { 
                                 item.action(); 
                                 if (!item.keepOpen) onClose(); 
                             } 
                         }}
+                        onMouseEnter={(e) => handleMouseEnterItem(item, e)}
                         disabled={item.disabled}
-                        className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors ${
+                        className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors group relative ${
                             item.disabled
                             ? 'text-gray-600 cursor-not-allowed opacity-50'
                             : item.danger 
@@ -130,6 +171,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                             <span className={item.checked ? 'text-cyan-400 font-bold' : ''}>{item.label}</span>
                         </div>
                         {item.checked && <CheckIcon />}
+                        {item.children && <ChevronRight />}
                     </button>
                 );
             })}
@@ -160,9 +202,25 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                     ))}
                 </>
             )}
-        </div>,
-        document.body
+            
+            {/* Recursive Submenu Render */}
+            {activeSubmenu && (
+                <GlobalContextMenu 
+                    x={activeSubmenu.x} 
+                    y={activeSubmenu.y} 
+                    items={activeSubmenu.items} 
+                    targetHelpIds={[]} 
+                    onClose={onClose} 
+                    onOpenHelp={onOpenHelp}
+                    isSubmenu={true}
+                />
+            )}
+        </div>
     );
+    
+    // Submenus are rendered directly in tree to share context, but Root must be portal
+    if (isSubmenu) return content;
+    return createPortal(content, document.body);
 };
 
 export default GlobalContextMenu;

@@ -21,6 +21,8 @@ import { EngineSettingsFeature } from './engine/index';
 import { AOFeature } from './ao/index';
 import { ReflectionsFeature } from './reflections/index';
 import { WaterPlaneFeature } from './water_plane';
+import { SonificationFeature } from './sonification/index';
+import { CameraManagerFeature } from './camera_manager/index';
 
 // --- REGISTER FEATURES ---
 export const registerFeatures = () => {
@@ -46,9 +48,11 @@ export const registerFeatures = () => {
     // Scene
     featureRegistry.register(OpticsFeature);
     featureRegistry.register(NavigationFeature);
+    featureRegistry.register(CameraManagerFeature);
     
     // Systems
     featureRegistry.register(AudioFeature);
+    featureRegistry.register(SonificationFeature); 
     featureRegistry.register(DrawingFeature);
     featureRegistry.register(ModulationFeature);
     featureRegistry.register(WebcamFeature);
@@ -78,3 +82,4 @@ export type { DrosteState } from './droste';
 export type { LightingState } from './lighting/index';
 export type { CoreMathState } from './core_math';
 export type { WaterPlaneState } from './water_plane';
+export type { SonificationState } from './sonification/types';

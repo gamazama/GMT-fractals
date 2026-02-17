@@ -20,7 +20,9 @@ export const Uniforms = {
 
     // Lights
     LightCount: 'uLightCount',
+    LightType: 'uLightType', // 0=Point, 1=Directional
     LightPos: 'uLightPos',
+    LightDir: 'uLightDir', // Precomputed direction vector
     LightColor: 'uLightColor',
     LightIntensity: 'uLightIntensity',
     LightShadows: 'uLightShadows',
@@ -33,6 +35,7 @@ export const Uniforms = {
     ExtraSeed: 'uExtraSeed',
     Jitter: 'uJitter',
     BlueNoiseTexture: 'uBlueNoiseTexture',
+    BlueNoiseResolution: 'uBlueNoiseResolution', // Added
 
     // Modular
     ModularParams: 'uModularParams',

@@ -53,7 +53,7 @@ export const MaterialFeature: FeatureDefinition = {
     name: 'Material',
     category: 'Rendering',
     tabConfig: {
-        label: 'Shading',
+        label: 'Shader', // Renamed from Shading
         componentId: 'panel-shading',
         order: 40
     },

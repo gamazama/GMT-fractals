@@ -1,4 +1,5 @@
 
+
 // Updated signature to accept injected code block for volume logic
 export const getTraceGLSL = (
     isMobile: boolean, 
@@ -46,6 +47,11 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
     // Temporary Hit holder (distance, trap, iter, decomp)
     vec4 h = vec4(0.0);
 
+    // --- CANDIDATE TRACKING (Overstep Recovery) ---
+    // Tracks the closest the ray ever got to a surface, normalized by the required precision at that depth.
+    float minCandidateRatio = 1.0e10; 
+    float candidateD = -1.0;
+
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= limit) break;
 
@@ -65,12 +71,40 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
         
         ${precisionLogic}
         
+        // Dynamic Epsilon (Cone Tracing concept)
+        // We relax the hit requirement as we get further away to prevent aliasing and stepping issues
         float threshold = pixelSizeScale * d * (uPixelThreshold / uDetail);
         float finalEps = max(threshold, floatPrecision);
         
         // D. Hit Detection
         if (h.x < finalEps) {
+            
+            // --- SURFACE REFINEMENT (Edge Polish) ---
+            // If enabled, take a few extra tiny steps to settle exactly on the surface.
+            // Helps significantly when uFudgeFactor is low but step count limited.
+            int refine = uRefinementSteps;
+            if (refine > 0) {
+                float refineStep = h.x; 
+                // We use a safe fraction to converge without overshooting
+                float convergeFactor = uFudgeFactor * 0.8; 
+                
+                for(int j=0; j<5; j++) {
+                    if (j >= refine) break;
+                    d += refineStep * convergeFactor;
+                    vec3 p_ref = ro + rd * d;
+                    vec4 h_ref = map(p_ref + uCameraPosition);
+                    
+                    // If we went inside (negative or very small), or improvement is negligible, stop
+                    if (h_ref.x < floatPrecision * 0.1) break;
+                    
+                    h = h_ref;
+                    refineStep = h.x;
+                }
+            }
+
             // Apply Final Volumetric Resolve (Inlined)
+            vec3 p_final = ro + rd * d; 
+            vec3 p = p_final; // Alias for volumeFinalizeCode
             ${volumeFinalizeCode}
             
             // Output
@@ -79,11 +113,58 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
             result = h; // h.x is dist, h.yzw is trap data
             return true;
         }
+
+        // E. Candidate Tracking
+        if (uOverstepTolerance > 0.0) {
+            float ratio = h.x / finalEps;
+            // Capture the 'closest miss'
+            if (ratio < minCandidateRatio) {
+                minCandidateRatio = ratio;
+                candidateD = d;
+            }
+        }
         
-        // E. Step Advance
-        d += max(h.x, floatPrecision * 0.5) * uFudgeFactor;
+        // F. Step Advance (Dynamic Step Relaxation)
+        // If uStepRelaxation > 0, we interpolate between uFudgeFactor and 1.0 based on distance.
+        // Far from surface = Fast. Close to surface = Precise.
+        float currentFudge = uFudgeFactor;
+        if (uStepRelaxation > 0.0) {
+             // 1.0 / (1.0 + 10.0 * uStepRelaxation) scales the "closeness" sensitivity.
+             // If h.x is large relative to eps, we can be aggressive.
+             float safeZone = h.x / (finalEps * 10.0); // 10x epsilon buffer
+             float relax = smoothstep(0.0, 1.0, safeZone);
+             currentFudge = mix(uFudgeFactor, 1.0, relax * uStepRelaxation);
+        }
+
+        d += max(h.x, floatPrecision * 0.5) * currentFudge;
         
         if (d > maxMarch) break;
+    }
+    
+    // --- RECOVERY CHECK ---
+    // If we missed, but we tracked a candidate that was within 'uOverstepTolerance' multiples of the threshold,
+    // we assume we tunneled through a detailed surface and snap back to it.
+    if (uOverstepTolerance > 0.0 && candidateD > 0.0) {
+        // Example: If tolerance is 2.0, we accept misses that were within 2x the epsilon.
+        // E.g. We missed with ratio 1.5, which is < 1.0 (hit) + 2.0 (tol).
+        if (minCandidateRatio <= (1.0 + uOverstepTolerance)) {
+             d = candidateD;
+             // Re-evaluate map at the candidate position to get correct Trap/Color data
+             // We can't trust 'h' because it's from the last missed step at infinity
+             vec3 p_cand = ro + rd * d;
+             result = map(p_cand + uCameraPosition);
+             result.x = 0.0; // Force hit
+             
+             // Finalize volume for the recovered path? 
+             // Strictly speaking we should, but for visual consistency we use the accumulated values.
+             
+             vec3 p = p_cand; // Alias for injected code which expects 'p'
+             
+             ${volumeFinalizeCode}
+             glow = accColor;
+             volumetric = accDensity;
+             return true;
+        }
     }
     
     // MISS: Resolve volume at infinity

@@ -228,6 +228,7 @@ export class VirtualSpace {
     public resolveRealWorldPosition(currentPos: {x:number, y:number, z:number}, wasFixed: boolean, camera: THREE.Camera): {x:number, y:number, z:number} {
         const so = this.offset;
         if (wasFixed) {
+            // Headlamp -> World
             this._visualVector.set(currentPos.x, currentPos.y, currentPos.z).applyQuaternion(camera.quaternion);
             return { 
                 x: camera.position.x + this._visualVector.x + (so.x + so.xL),
@@ -235,6 +236,7 @@ export class VirtualSpace {
                 z: camera.position.z + this._visualVector.z + (so.z + so.zL) 
             };
         } else {
+            // World -> Headlamp
             this._visualVector.set(
                 currentPos.x - (so.x + so.xL) - camera.position.x,
                 currentPos.y - (so.y + so.yL) - camera.position.y,
@@ -244,5 +246,28 @@ export class VirtualSpace {
             this._visualVector.applyQuaternion(this._quatInverse);
             return { x: this._visualVector.x, y: this._visualVector.y, z: this._visualVector.z };
         }
+    }
+
+    public resolveRealWorldRotation(currentRot: {x:number, y:number, z:number}, wasFixed: boolean, camera: THREE.Camera): {x:number, y:number, z:number} {
+        // 1. Convert Euler to Vector direction (Standard Forward 0,0,-1)
+        const lightDir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(currentRot.x, currentRot.y, currentRot.z, 'YXZ'));
+        
+        // 2. Transform the Vector between Spaces
+        if (wasFixed) {
+            // Headlamp -> World
+            // WorldDir = CameraRot * LocalDir
+            lightDir.applyQuaternion(camera.quaternion);
+        } else {
+            // World -> Headlamp
+            // LocalDir = Inverse(CameraRot) * WorldDir
+            lightDir.applyQuaternion(camera.quaternion.clone().invert());
+        }
+
+        // 3. Convert Vector back to Euler
+        // Find rotation R such that R * (0,0,-1) = newDir
+        const targetQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), lightDir);
+        const e = new THREE.Euler().setFromQuaternion(targetQ, 'YXZ');
+        
+        return { x: e.x, y: e.y, z: e.z };
     }
 }

@@ -3,6 +3,27 @@ import React, { useEffect, useRef } from 'react';
 import { useFractalStore, selectIsGlobalInteraction } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
 
+// Global refs to track FPS across ticks
+const fpsState = {
+    frameCount: 0,
+    lastTime: performance.now(),
+    ref: null as HTMLSpanElement | null
+};
+
+// Export tick function for orchestrated updates
+export const tick = () => {
+    const now = performance.now();
+    fpsState.frameCount++;
+    
+    if (now - fpsState.lastTime >= 1000) {
+        if (fpsState.ref) {
+            fpsState.ref.innerText = `${fpsState.frameCount} FPS`;
+        }
+        fpsState.frameCount = 0;
+        fpsState.lastTime = now;
+    }
+};
+
 const FpsCounter = () => {
     // We check effective pause state to show active color during interaction
     const isPaused = useFractalStore(s => s.isPaused);
@@ -17,24 +38,12 @@ const FpsCounter = () => {
     const ref = useRef<HTMLSpanElement>(null);
     
     useEffect(() => {
-        let frameCount = 0;
-        let lastTime = performance.now();
-        let rafId = 0;
-
-        const loop = () => {
-            const now = performance.now();
-            frameCount++;
-            if (now - lastTime >= 1000) {
-                if (ref.current) {
-                    ref.current.innerText = `${frameCount} FPS`;
-                }
-                frameCount = 0;
-                lastTime = now;
+        fpsState.ref = ref.current;
+        return () => {
+            if (fpsState.ref === ref.current) {
+                fpsState.ref = null;
             }
-            rafId = requestAnimationFrame(loop);
         };
-        loop();
-        return () => cancelAnimationFrame(rafId);
     }, []);
 
     return (

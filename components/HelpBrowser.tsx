@@ -374,7 +374,13 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
     };
 
     return (
-        <DraggableWindow title="Library" onClose={onClose} initialPos={{ x: 100, y: 100 }} initialSize={{ width: 700, height: 600 }}>
+        <DraggableWindow 
+            title="Library" 
+            onClose={onClose} 
+            initialPos={{ x: 100, y: 100 }} 
+            initialSize={{ width: 700, height: 600 }}
+            zIndex={600}
+        >
             <div className="flex h-full -m-3">
                 {/* Sidebar */}
                 <div className="w-[30%] bg-black/40 border-r border-white/10 flex flex-col shrink-0">

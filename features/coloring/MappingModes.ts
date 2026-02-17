@@ -84,6 +84,18 @@ export const MAPPING_MODES: MappingDefinition[] = [
             float r = max(result.y, 1.0001); 
             v = log2(log2(r));
         `
+    },
+    {
+        value: 9.0,
+        label: "Flow (Angle + Iter)",
+        description: 'Combines Decomposition (Angle) and Iterations to create spirals and grids.',
+        glsl: `
+            // Result.w = Decomposition (Angle 0-1)
+            // Result.z = Smoothed Iterations (Count 0-N)
+            // Adding them creates a diagonal slope in the mapping space.
+            // When wrapped by the gradient, this creates spirals.
+            v = result.w + result.z;
+        `
     }
 ];
 

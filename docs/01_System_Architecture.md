@@ -41,7 +41,7 @@ At runtime:
 Some features, like **Engine Settings**, do not own shader code directly but orchestrate other features.
 *   **Example:** `EngineSettingsFeature` defines the "Lite Mode" vs "Ultra Mode" presets.
 *   **Action:** Its `applyPreset` action batch-updates `lighting`, `quality`, `reflections`, and `atmosphere` slices simultaneously.
-*   **Hardware Detection:** On boot, the `FractalEngine` constructor detects device capabilities (mobile/desktop) and initializes the `quality` feature parameters (`precisionMode`, `bufferPrecision`) accordingly, rather than setting a global "isMobile" flag.
+*   **Hardware Detection:** On boot, the `FractalEngine` constructor detects device capabilities (mobile/desktop) and initializes `quality` defaults (`precisionMode`, `bufferPrecision`). The engine also sets a runtime `isMobile` hint that flows into `ShaderConfig`/`ConfigManager` and is used by some shader chunks; prefer using the `quality` feature for precision decisions while treating `isMobile` as a runtime capability hint.
 
 ## 3. The Render Loop (`FractalEngine.ts`)
 

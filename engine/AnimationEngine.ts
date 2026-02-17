@@ -3,11 +3,12 @@ import * as THREE from 'three';
 import { engine } from './FractalEngine';
 import { useAnimationStore } from '../store/animationStore';
 import { useFractalStore } from '../store/fractalStore';
-import { Track } from '../types';
+import { Track, Keyframe } from '../types';
 import { solveBezierY } from './BezierMath';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
 import { VirtualSpace } from './PrecisionMath';
+import { AnimationMath } from './math/AnimationMath';
 
 // Pending State Buffer to prevent partial updates per frame
 interface PendingCameraState {
@@ -24,6 +25,9 @@ export class AnimationEngine {
     private pendingCam: PendingCameraState;
     private binders: Map<string, ValueSetter> = new Map();
     private overriddenTracks: Set<string> = new Set();
+    
+    // Track previous active camera to prevent redundant switching
+    private lastCameraIndex: number = -1;
 
     constructor() {
         this.pendingCam = {
@@ -44,9 +48,24 @@ export class AnimationEngine {
         }
 
         let binder: ValueSetter = () => {}; 
+        
+        // 0. Active Camera Switcher
+        if (id === 'camera.active_index') {
+            binder = (v) => {
+                const index = Math.round(v);
+                if (index !== this.lastCameraIndex) {
+                    const store = useFractalStore.getState();
+                    const cameras = store.savedCameras;
+                    if (cameras && cameras[index]) {
+                         store.selectCamera(cameras[index].id);
+                         this.lastCameraIndex = index;
+                    }
+                }
+            }
+        }
 
         // 1. Camera Properties (Unified Only)
-        if (id.startsWith('camera.')) {
+        else if (id.startsWith('camera.')) {
             const parts = id.split('.');
             const type = parts[1];
             const axis = parts[2];
@@ -65,7 +84,6 @@ export class AnimationEngine {
             // Legacy tracks are ignored (no binder created)
         }
         // 2. Light Properties (Legacy format mapping)
-        // If older tracks exist like "lights.0.position.x", map them to new DDFS "lighting.light0_posX"
         else if (id.startsWith('lights.')) {
              const parts = id.split('.');
              const index = parseInt(parts[1]);
@@ -73,16 +91,13 @@ export class AnimationEngine {
              
              let newProp = "";
              if (prop === 'position') newProp = `pos${parts[3].toUpperCase()}`; // position.x -> posX
-             else if (prop === 'color') newProp = "color"; // DDFS colors aren't directly float-animatable yet via single track easily, but let's assume not supported for now or handled by generic.
+             else if (prop === 'color') newProp = "color"; 
              else newProp = prop; // intensity -> intensity
              
              const ddfsKey = `lighting.light${index}_${newProp}`;
-             
-             // Recursively get binder for the new key
              return this.getBinder(ddfsKey);
         }
         // 3. DDFS Lighting Array Mapping (lighting.light0_posX)
-        // This must be handled specifically because the State is an array of objects, not flat params
         else if (id.startsWith('lighting.light')) {
             const match = id.match(/lighting\.light(\d+)_(\w+)/);
             if (match) {
@@ -98,9 +113,18 @@ export class AnimationEngine {
                         const state = useFractalStore.getState();
                         const l = state.lighting?.lights[index];
                         if (l) {
-                            // We must merge with current position to avoid overwriting other axes
                             const newPos = { ...l.position, [axis]: v };
                             actions.updateLight({ index, params: { position: newPos } });
+                        }
+                    };
+                } else if (prop.startsWith('rot')) {
+                    const axis = prop.replace('rot', '').toLowerCase(); // X, Y, Z -> x, y, z
+                    binder = (v) => {
+                        const state = useFractalStore.getState();
+                        const l = state.lighting?.lights[index];
+                        if (l) {
+                            const newRot = { ...l.rotation, [axis]: v };
+                            actions.updateLight({ index, params: { rotation: newRot } });
                         }
                     };
                 }
@@ -112,7 +136,6 @@ export class AnimationEngine {
             const parent = parts[0];
             const child = parts[1];
             
-            // Check if this is a registered Feature (e.g. 'geometry', 'atmosphere', 'coreMath', 'lighting')
             const feature = featureRegistry.get(parent);
             
             if (feature) {
@@ -152,13 +175,10 @@ export class AnimationEngine {
         const deltaFrames = dt * fps;
         let nextFrame = currentFrame + deltaFrames;
         
-        // Loop Logic
         if (nextFrame >= duration) {
             if (loopMode === 'Once' || store.isRecordingModulation) {
                 nextFrame = duration;
                 useAnimationStore.setState({ isPlaying: false, currentFrame: duration });
-                
-                // End of Recording Pass logic
                 if (store.isRecordingModulation) {
                     store.stopModulationRecording();
                 }
@@ -178,22 +198,17 @@ export class AnimationEngine {
         
         this.syncBuffersFromEngine();
 
-        // Feature: Live Camera Recording
-        // If playing AND recording AND camera recording is active, ignore camera tracks.
-        // This allows the user to fly freely while recording new keys.
-        // If recordCamera is FALSE, we PLAY the camera tracks (dubbing mode).
+        // If recording camera, ignore timeline camera tracks to avoid fighting
         const ignoreCamera = isPlaying && isRecording && recordCamera;
 
         for (let i = 0; i < tracks.length; i++) {
             const track = tracks[i];
             
-            // SKIP OVERRIDDEN TRACKS (Modulation recording in progress)
             if (this.overriddenTracks.has(track.id)) continue;
 
             if (track.keyframes.length === 0) continue;
             if (track.type !== 'float') continue; 
 
-            // Skip legacy tracks
             if (track.id.includes('camera.position') || track.id.includes('camera.offset')) continue;
 
             if (ignoreCamera && track.id.startsWith('camera.')) continue;
@@ -221,66 +236,88 @@ export class AnimationEngine {
             this.pendingCam.rotDirty = false;
             this.pendingCam.unifiedDirty = false;
         }
-        // Lights sync is now handled by Zustand's reactivity via bindStoreToEngine > UniformManager
-        // AnimationEngine just blindly writes to store actions, which updates the state source of truth.
     }
 
     private interpolate(track: Track, frame: number): number {
         const keys = track.keyframes;
         if (keys.length === 0) return 0;
         
-        if (frame <= keys[0].frame) return keys[0].value;
-        if (frame >= keys[keys.length - 1].frame) return keys[keys.length - 1].value;
+        const firstKey = keys[0];
+        const lastKey = keys[keys.length - 1];
+        const isRotation = track.id.startsWith('camera.rotation') || track.id.includes('rot') || track.id.includes('phase') || track.id.includes('twist');
         
-        const isRotation = track.id.startsWith('camera.rotation');
-        const PI2 = Math.PI * 2;
+        if (frame > lastKey.frame) {
+            const behavior = track.postBehavior || 'Hold';
+            
+            if (behavior === 'Hold') return lastKey.value;
+            
+            if (behavior === 'Continue') {
+                let slope = 0;
+                if (keys.length > 1) {
+                    const prev = keys[keys.length - 2];
+                    if (lastKey.interpolation === 'Linear') {
+                         slope = (lastKey.value - prev.value) / (lastKey.frame - prev.frame);
+                    } else if (lastKey.interpolation === 'Bezier') {
+                         if (lastKey.leftTangent && Math.abs(lastKey.leftTangent.x) > 0.001) {
+                             slope = lastKey.leftTangent.y / lastKey.leftTangent.x;
+                         } else {
+                             slope = (lastKey.value - prev.value) / (lastKey.frame - prev.frame);
+                         }
+                    }
+                }
+                return lastKey.value + slope * (frame - lastKey.frame);
+            }
 
+            const duration = lastKey.frame - firstKey.frame;
+            if (duration <= 0.001) return lastKey.value;
+            
+            const timeSinceStart = frame - firstKey.frame;
+            const cycleCount = Math.floor(timeSinceStart / duration);
+            const localTime = firstKey.frame + (timeSinceStart % duration);
+            
+            const baseVal = this.evaluateCurveInternal(keys, localTime, isRotation);
+            
+            if (behavior === 'Loop') return baseVal;
+            
+            if (behavior === 'PingPong') {
+                const isReversed = cycleCount % 2 === 1;
+                if (isReversed) {
+                    const reversedTime = lastKey.frame - (timeSinceStart % duration);
+                    return this.evaluateCurveInternal(keys, reversedTime, isRotation);
+                }
+                return baseVal;
+            }
+            
+            if (behavior === 'OffsetLoop') {
+                const cycleDiff = lastKey.value - firstKey.value;
+                return baseVal + (cycleDiff * cycleCount);
+            }
+        }
+        
+        if (frame < firstKey.frame) return firstKey.value;
+
+        return this.evaluateCurveInternal(keys, frame, isRotation);
+    }
+    
+    private evaluateCurveInternal(keys: Keyframe[], frame: number, isRotation: boolean): number {
         for (let i = 0; i < keys.length - 1; i++) {
             const k1 = keys[i];
             const k2 = keys[i+1];
             
-            if (frame >= k1.frame && frame < k2.frame) {
-                if (k1.interpolation === 'Step') return k1.value;
-                
-                let v1 = k1.value;
-                let v2 = k2.value;
-
-                if (isRotation) {
-                    const diff = v2 - v1;
-                    if (diff > Math.PI) v2 -= PI2;
-                    else if (diff < -Math.PI) v2 += PI2;
-                }
-
-                if (k1.interpolation === 'Bezier') {
-                    const h1x = k1.rightTangent ? k1.rightTangent.x : (k2.frame - k1.frame) * 0.33;
-                    const h1y = k1.rightTangent ? k1.rightTangent.y : 0;
-                    const h2x = k2.leftTangent ? k2.leftTangent.x : -(k2.frame - k1.frame) * 0.33;
-                    const h2y = k2.leftTangent ? k2.leftTangent.y : 0;
-                    
-                    return solveBezierY(
-                        frame,
-                        k1.frame, v1, h1x, h1y,
-                        k2.frame, v2, h2x, h2y
-                    );
-                }
-                
-                const t = (frame - k1.frame) / (k2.frame - k1.frame);
-                return v1 + (v2 - v1) * t;
+            if (frame >= k1.frame && frame <= k2.frame) { 
+                return AnimationMath.interpolate(frame, k1, k2, isRotation);
             }
         }
-        return keys[0].value;
+        return keys[keys.length - 1].value;
     }
 
     private commitState() {
-        // Camera Requires Special Commit: Emit Teleport Event
-        // This ensures R3F controls (Navigation.tsx) stay in sync with the engine
         if (this.pendingCam.unifiedDirty || this.pendingCam.rotDirty) {
             engine.shouldSnapCamera = true;
             
             const q = new THREE.Quaternion().setFromEuler(this.pendingCam.rot);
             const rot = { x: q.x, y: q.y, z: q.z, w: q.w };
             
-            // Calculate new Offset for Treadmill (Local Position becomes 0,0,0)
             const sX = VirtualSpace.split(this.pendingCam.unified.x);
             const sY = VirtualSpace.split(this.pendingCam.unified.y);
             const sZ = VirtualSpace.split(this.pendingCam.unified.z);
@@ -294,11 +331,7 @@ export class AnimationEngine {
                 }
             });
 
-            // Update Store for persistence (but Teleport handles the immediate Engine sync)
-            useFractalStore.setState({ 
-                cameraRot: rot,
-                // We update sceneOffset via teleport, so this is handled by listener or implicitly
-            });
+            useFractalStore.setState({ cameraRot: rot });
         }
     }
 }

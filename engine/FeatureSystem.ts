@@ -1,6 +1,7 @@
 
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
 import * as THREE from 'three';
+import { UniformDefinition } from './UniformSchema';
 
 export type ParamType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'color' | 'boolean' | 'gradient' | 'image' | 'complex';
 export type ScaleType = 'linear' | 'log' | 'square' | 'root' | 'pi';
@@ -138,6 +139,9 @@ export interface FeatureDefinition {
     engineConfig?: FeatureEngineConfig;
     customUI?: CustomUIConfig[]; 
     
+    // Allows features to define complex uniforms (Arrays, Structs) that aren't 1:1 with params
+    extraUniforms?: UniformDefinition[];
+    
     // Updated: Inject now receives the global config to access root properties like 'formula'
     inject?: (builder: ShaderBuilder, config: any, variant: RenderVariant) => void;
 
@@ -239,11 +243,12 @@ class FeatureRegistry {
     }
 
     public getUniformDefinitions() {
-        const defs: any[] = [];
+        const defs: UniformDefinition[] = [];
         this.features.forEach(feat => {
+            // 1. Param-linked Uniforms
             Object.values(feat.params).forEach(param => {
                 if (param.uniform) {
-                    let type: string = param.type;
+                    let type: any = param.type;
                     let val = param.default;
                     if (type === 'color') type = 'vec3';
                     if (type === 'boolean') type = 'float';
@@ -254,6 +259,11 @@ class FeatureRegistry {
                     defs.push({ name: param.uniform, type: type, default: val });
                 }
             });
+
+            // 2. Extra Uniforms
+            if (feat.extraUniforms) {
+                defs.push(...feat.extraUniforms);
+            }
         });
         return defs;
     }

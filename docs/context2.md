@@ -1,8 +1,7 @@
 
-# Context Phase 5: Final Polish & Release Candidates
+# Context: Current State & Architecture
 
-**Current Status:** DDFS Migration Complete (Core Math & Geometry).
-**Next Step:** UI Polish, Performance Optimization, and Release Prep.
+**Current Status:** DDFS Migration Complete. All core features migrated to Data-Driven Feature System.
 
 ---
 
@@ -21,27 +20,56 @@ Lights are now handled by the `LightingFeature` DDFS module (`features/lighting`
 
 ---
 
-## 2. Roadmap to V1.0
+## 2. Active Features
 
-### Phase 6: Shader Optimization (Performance)
-Now that features are modular, we can optimize the shader compilation.
-*   **Action:** Implement conditional compilation in `ShaderFactory.ts`.
-*   **Logic:** If `advanced.hybridBox.active` is false, do not inject the advanced hybrid code blocks or uniforms.
-*   **Benefit:** Reduces shader complexity and register pressure on lower-end GPUs.
+All features are registered in `features/index.ts`:
 
-### Phase 7: UI & UX Polish
-*   **Tooltips:** Ensure all DDFS parameters have descriptive tooltips in `ParamConfig`.
-*   **Preset Library:** Improve the visual preset browser with thumbnails. -DONE
-*   **Mobile Layout:** Refine `MobileControls` to ensure the DDFS panels are touch-friendly.
-*   **Design Philosophy:** The Director prefers a strictly functional UI. Avoid decorative headings, labels, or grouping wrappers unless absolutely required for disambiguation. "Less is more."
+### Core
+*   `CoreMathFeature` - Iterations, Params A-F
+*   `GeometryFeature` - Julia, Hybrid (Box), Pre-Rotation
 
-### Phase 8: Code Health
-*   **Cleanup:** Remove any remaining `// Deprecated` files. Watch out for redundant logic or files and note.
+### Rendering & Shading
+*   `LightingFeature` - Light studio, Shadows, Falloff
+*   `AOFeature` - Ambient Occlusion
+*   `ReflectionsFeature` - Raymarched reflections
+*   `AtmosphereFeature` - Fog, Volumetric Glow
+*   `MaterialFeature` - PBR Surface, Emission, Environment
+*   `WaterPlaneFeature` - Infinite ocean plane
+*   `ColoringFeature` - Gradients, Mapping modes
+*   `TexturingFeature` - Image mapping, UV logic
+*   `QualityFeature` - Precision, Steps, Thresholds
+
+### Post & Effects
+*   `DrosteFeature` - Post-process spiral effects
+*   `ColorGradingFeature` - Tone mapping levels
+
+### Scene
+*   `OpticsFeature` - FOV, Depth of Field, Projection
+*   `NavigationFeature` - Fly speed settings
+*   `CameraManagerFeature` - Camera position management
+
+### Systems
+*   `AudioFeature` - WebAudio analysis and linking
+*   `SonificationFeature` - FHBT audio feedback from fractal data
+*   `DrawingFeature` - On-screen measurement tools
+*   `ModulationFeature` - LFOs and signal routing
+*   `WebcamFeature` - Overlay logic
+*   `DebugToolsFeature` - Shader/State debuggers
+*   `EngineSettingsFeature` - Master configuration profiles (Lite/Balanced/Ultra)
 
 ---
 
-## 3. Current File Structure Impact
+## 3. Code Health Notes
 
-*   **`features/geometry.ts`**: Controls Julia/Hybrid modes via DDFS.
-*   **`features/core_math.ts`**: Controls Params A-F and Iterations.
-*   **`engine/UniformSchema.ts`**: Merges Legacy base schema with Dynamic Feature uniforms.
+### Completed
+*   **visualSlice Removal:** Deleted. Lighting managed by `lighting` feature.
+*   **Lite Render Unification:** Logic moved into `QualityFeature` state.
+*   **Subscription Cleanup:** Manual `subscribe` calls replaced by DDFS auto-detection.
+*   **Shader Builder:** `ShaderBuilder.ts` implemented with feature `inject()` contract.
+
+### Minor Issues
+*   **Mobile UI:** Some auto-generated panels are cramped on vertical screens.
+*   **Typing:** Animation Engine binders use `any` casting for dynamic DDFS paths.
+
+### Optimization Opportunities
+*   **Shader permutation:** Could optimize `ShaderFactory` to exclude unused feature chunks when features are disabled.

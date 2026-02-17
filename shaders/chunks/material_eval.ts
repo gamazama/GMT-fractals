@@ -19,15 +19,15 @@ vec3 GetNormal(vec3 p_ray, float eps) {
     return normalize(n);
 }
 
-vec3 GetFastNormal(vec3 p, float d, float eps) {
+vec3 GetFastNormal(vec3 p, float eps) {
     // Low Quality: Forward Difference (3 taps)
     // Optimization: Uses DE_Dist
+    // We assume distance at p is ~0.0 (Surface)
     vec2 e = vec2(eps, 0.0);
     
-    // Note: We use the already calculated 'd' (result.x) as the center value
-    float dx = DE_Dist(p + e.xyy) - d;
-    float dy = DE_Dist(p + e.yxy) - d;
-    float dz = DE_Dist(p + e.yyx) - d;
+    float dx = DE_Dist(p + e.xyy);
+    float dy = DE_Dist(p + e.yxy);
+    float dz = DE_Dist(p + e.yyx);
     
     vec3 n = vec3(dx, dy, dz);
     
@@ -65,7 +65,8 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
         n = GetNormal(p_ray, eps);
     } else {
         // Boost epsilon slightly for fast normals to avoid noise
-        n = GetFastNormal(p_ray, d, eps * 1.5);
+        // FIX: Removed invalid 'd' argument. FastNormal calculates relative to 0.0 surface.
+        n = GetFastNormal(p_ray, eps * 1.5);
     }
     
     // --- Layer 3: Procedural Noise & Bump Mapping ---

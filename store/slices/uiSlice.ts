@@ -1,6 +1,6 @@
 
 import { StateCreator } from 'zustand';
-import { FractalStoreState, FractalActions, PanelId } from '../../types';
+import { FractalStoreState, FractalActions, PanelId, PanelState, DockZone } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
@@ -17,30 +17,35 @@ export type UISlice = Pick<FractalStoreState,
     'showLightGizmo' | 'isGizmoDragging' | 
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
-    'draggedLightIndex' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'isControlsMinimized' | 'invertY' |
-    'resolutionMode' | 'fixedResolution' | 'isControlsDocked' |
+    'draggedLightIndex' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
+    'resolutionMode' | 'fixedResolution' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
     'isTimelineHovered' | 
-    'interactionMode' | // Consolidated Mode
+    'interactionMode' |
     'isBroadcastMode' |
-    'activeTab' |
-    'floatingTabs' |
     'isUserInteracting' |
-    'tabSwitchCount'
+    'tabSwitchCount' |
+    // New Layout Props
+    'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' | 
+    'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot'
 > & Pick<FractalActions,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
-    'setDraggedLight' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setIsControlsMinimized' | 'setInvertY' |
-    'setResolutionMode' | 'setFixedResolution' | 'setIsControlsDocked' |
+    'setDraggedLight' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
+    'setResolutionMode' | 'setFixedResolution' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
-    'setInteractionMode' | // Consolidated Setter
+    'setInteractionMode' |
     'setIsBroadcastMode' |
     'openHelp' | 'closeHelp' | 'openContextMenu' | 'closeContextMenu' |
-    'setActiveTab' | 'floatTab' | 'dockTab' |
-    'incrementTabSwitchCount'
+    'incrementTabSwitchCount' |
+    // New Layout Actions
+    'movePanel' | 'reorderPanel' | 'togglePanel' | 'setDockSize' | 'setDockCollapsed' | 'setFloatPosition' | 'setFloatSize' |
+    'startPanelDrag' | 'endPanelDrag' | 'cancelPanelDrag' |
+    // Legacy Mappers
+    'setActiveTab' | 'floatTab' | 'dockTab'
 >;
 
 const getUrlParam = (key: string) => {
@@ -49,8 +54,31 @@ const getUrlParam = (key: string) => {
     return params.has(key) && params.get(key) !== 'false' && params.get(key) !== '0';
 };
 
+// INITIAL LAYOUT DEFINITION
+// All core panels moved to 'right' to fit on one line as requested.
+const DEFAULT_PANELS: Record<string, PanelState> = {
+    // Left Dock (Empty/Available)
+    
+    // Right Dock (Main Control Deck)
+    'Formula': { id: 'Formula', location: 'right', order: 0, isCore: true, isOpen: true }, // Default Active
+    'Graph': { id: 'Graph', location: 'right', order: 1, isCore: true, isOpen: false },
+    'Scene': { id: 'Scene', location: 'right', order: 2, isCore: true, isOpen: false },
+    'Shader': { id: 'Shader', location: 'right', order: 3, isCore: true, isOpen: false },
+    'Gradient': { id: 'Gradient', location: 'right', order: 4, isCore: true, isOpen: false },
+    'Quality': { id: 'Quality', location: 'right', order: 5, isCore: true, isOpen: false },
+    
+    // Dynamic / Switchable Panels (Initially Hidden/Closed)
+    'Light': { id: 'Light', location: 'right', order: 6, isCore: false, isOpen: false },
+    'Audio': { id: 'Audio', location: 'right', order: 7, isCore: false, isOpen: false },
+    'Drawing': { id: 'Drawing', location: 'right', order: 8, isCore: false, isOpen: false },
+    'Engine': { id: 'Engine', location: 'right', order: 9, isCore: false, isOpen: false }, 
+    'Sonification': { id: 'Sonification', location: 'right', order: 10, isCore: false, isOpen: false },
+    
+    // Floating Windows
+    'Camera Manager': { id: 'Camera Manager', location: 'float', order: 0, isCore: false, isOpen: false, floatPos: {x: 100, y: 100}, floatSize: {width: 300, height: 400} },
+};
+
 export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
-    // FIX: Default showLightGizmo to TRUE so users see lights immediately
     showLightGizmo: true, 
     isGizmoDragging: false, 
     interactionMode: 'none',
@@ -64,32 +92,39 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
 
     advancedMode: false,
     showHints: true,
-    debugMobileLayout: false, // Default to desktop layout
-    isControlsMinimized: false,
+    debugMobileLayout: false,
     invertY: false,
     
     resolutionMode: 'Full',
     fixedResolution: [800, 600],
-    isControlsDocked: true, 
     isBroadcastMode: getUrlParam('clean') || getUrlParam('broadcast'),
     
     lockSceneOnSwitch: false,
     exportIncludeScene: false,
     
     isTimelineHovered: false,
-    
     tabSwitchCount: 0,
-    
-    activeTab: 'Formula',
-    floatingTabs: [],
     
     helpWindow: { visible: false, activeTopicId: null },
     contextMenu: { visible: false, x: 0, y: 0, items: [], targetHelpIds: [] },
 
+    // --- LAYOUT STATE ---
+    panels: DEFAULT_PANELS,
+    leftDockSize: 320, // Collapsed by default via isLeftDockCollapsed
+    rightDockSize: 360, // Slightly wider to fit all tabs on one line
+    isLeftDockCollapsed: true, // Start collapsed as it's empty
+    isRightDockCollapsed: false,
+    draggingPanelId: null,
+    dragSnapshot: null,
+    
+    // Computed props (updated when panels change)
+    activeLeftTab: null,
+    activeRightTab: 'Formula',
+
+    // --- ACTIONS ---
+
     setShowLightGizmo: (v) => set({ showLightGizmo: v }),
     setGizmoDragging: (v) => set({ isGizmoDragging: v }),
-    
-    // Consolidated Setter
     setInteractionMode: (mode) => set({ interactionMode: mode }),
 
     setHistogramData: (d) => set({ histogramData: d }),
@@ -116,25 +151,17 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setAdvancedMode: (v) => set({ advancedMode: v }),
     setShowHints: (v) => set({ showHints: v }),
     setDebugMobileLayout: (v) => set({ debugMobileLayout: v }),
-    setIsControlsMinimized: (v) => set({ isControlsMinimized: v }),
     setInvertY: (v) => set({ invertY: v }),
     
     setResolutionMode: (m) => { set({ resolutionMode: m }); FractalEvents.emit('reset_accum', undefined); },
     setFixedResolution: (w, h) => { set({ fixedResolution: [w, h] }); FractalEvents.emit('reset_accum', undefined); },
-    setIsControlsDocked: (v) => set({ isControlsDocked: v }),
     
     setLockSceneOnSwitch: (v) => set({ lockSceneOnSwitch: v }),
     setExportIncludeScene: (v) => set({ exportIncludeScene: v }),
     
     setIsTimelineHovered: (v) => set({ isTimelineHovered: v }),
-    
     incrementTabSwitchCount: () => set(s => ({ tabSwitchCount: s.tabSwitchCount + 1 })),
-    
     setIsBroadcastMode: (v) => set({ isBroadcastMode: v }),
-    
-    setActiveTab: (t) => set({ activeTab: t }),
-    floatTab: (t) => set((s) => ({ floatingTabs: [...s.floatingTabs.filter(x => x !== t), t] })),
-    dockTab: (t) => set((s) => ({ floatingTabs: s.floatingTabs.filter(x => x !== t), activeTab: t })),
     
     openHelp: (topicId) => set(s => ({ 
         helpWindow: { visible: true, activeTopicId: topicId || s.helpWindow.activeTopicId },
@@ -146,4 +173,129 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         contextMenu: { visible: true, x, y, items, targetHelpIds: targetHelpIds || [] } 
     }),
     closeContextMenu: () => set(s => ({ contextMenu: { ...s.contextMenu, visible: false } })),
+
+    // --- NEW LAYOUT ACTIONS IMPLEMENTATION ---
+
+    movePanel: (id, targetZone, order) => set((state) => {
+        const panels = { ...state.panels };
+        if (!panels[id]) return {};
+
+        const isOpen = targetZone === 'float' ? true : true;
+        
+        let newOrder = order;
+        if (newOrder === undefined) {
+             const existingInZone = (Object.values(panels) as PanelState[]).filter(p => p.location === targetZone);
+             newOrder = existingInZone.length;
+        }
+
+        if (targetZone === 'left' || targetZone === 'right') {
+             (Object.values(panels) as PanelState[]).forEach((p) => {
+                 if (p.location === targetZone && p.id !== id) {
+                     p.isOpen = false;
+                 }
+             });
+        }
+        
+        let floatPos = panels[id].floatPos;
+        if (targetZone === 'float' && !floatPos) {
+             floatPos = { x: window.innerWidth / 2 - 150, y: window.innerHeight / 2 - 200 };
+        }
+
+        panels[id] = { ...panels[id], location: targetZone, order: newOrder, isOpen, floatPos };
+        
+        const activeLeft = targetZone === 'left' ? (id as PanelId) : ((Object.values(panels) as PanelState[]).find((p) => p.location === 'left' && p.isOpen)?.id as PanelId) || null;
+        const activeRight = targetZone === 'right' ? (id as PanelId) : ((Object.values(panels) as PanelState[]).find((p) => p.location === 'right' && p.isOpen)?.id as PanelId) || null;
+
+        return { panels, activeLeftTab: activeLeft, activeRightTab: activeRight };
+    }),
+
+    reorderPanel: (draggingId, targetId) => set((state) => {
+        const panels = { ...state.panels };
+        const sourcePanel = panels[draggingId];
+        const targetPanel = panels[targetId];
+
+        if (!sourcePanel || !targetPanel) return {};
+        
+        if (sourcePanel.location !== targetPanel.location) {
+             sourcePanel.location = targetPanel.location;
+             sourcePanel.isOpen = false; 
+        }
+
+        const location = targetPanel.location;
+        const dockPanels = (Object.values(panels) as PanelState[])
+            .filter(p => p.location === location)
+            .sort((a, b) => a.order - b.order);
+        
+        const fromIndex = dockPanels.findIndex(p => p.id === draggingId);
+        const toIndex = dockPanels.findIndex(p => p.id === targetId);
+
+        if (fromIndex === -1 || toIndex === -1) return {};
+
+        const [moved] = dockPanels.splice(fromIndex, 1);
+        dockPanels.splice(toIndex, 0, moved);
+
+        dockPanels.forEach((p, idx) => {
+            panels[p.id] = { ...panels[p.id], order: idx };
+        });
+
+        return { panels };
+    }),
+
+    togglePanel: (id, forceState) => set((state) => {
+        const panels = { ...state.panels };
+        if (!panels[id]) return {};
+
+        const p = panels[id];
+        const nextState = forceState !== undefined ? forceState : !p.isOpen;
+        
+        if (p.location === 'float') {
+            p.isOpen = nextState;
+        } else {
+            if (nextState) {
+                (Object.values(panels) as PanelState[]).forEach((other) => {
+                    if (other.location === p.location && other.id !== id) {
+                        other.isOpen = false;
+                    }
+                });
+                p.isOpen = true;
+                
+                if (p.location === 'left') return { panels, activeLeftTab: id as PanelId, isLeftDockCollapsed: false };
+                if (p.location === 'right') return { panels, activeRightTab: id as PanelId, isRightDockCollapsed: false };
+            } else {
+                p.isOpen = false;
+            }
+        }
+        
+        const activeLeft = (Object.values(panels) as PanelState[]).find((x) => x.location === 'left' && x.isOpen)?.id as PanelId || null;
+        const activeRight = (Object.values(panels) as PanelState[]).find((x) => x.location === 'right' && x.isOpen)?.id as PanelId || null;
+
+        return { panels, activeLeftTab: activeLeft, activeRightTab: activeRight };
+    }),
+
+    setDockSize: (side, size) => set({ [side === 'left' ? 'leftDockSize' : 'rightDockSize']: size }),
+    setDockCollapsed: (side, collapsed) => set({ [side === 'left' ? 'isLeftDockCollapsed' : 'isRightDockCollapsed']: collapsed }),
+    
+    setFloatPosition: (id, x, y) => set((state) => ({
+        panels: { ...state.panels, [id]: { ...state.panels[id], floatPos: { x, y } } }
+    })),
+
+    setFloatSize: (id, w, h) => set((state) => ({
+        panels: { ...state.panels, [id]: { ...state.panels[id], floatSize: { width: w, height: h } } }
+    })),
+
+    startPanelDrag: (id) => set(state => ({ 
+        draggingPanelId: id,
+        dragSnapshot: JSON.parse(JSON.stringify(state.panels)) 
+    })),
+    endPanelDrag: () => set({ draggingPanelId: null, dragSnapshot: null }),
+    cancelPanelDrag: () => set(state => {
+        if (state.dragSnapshot) {
+            return { panels: state.dragSnapshot, draggingPanelId: null, dragSnapshot: null };
+        }
+        return { draggingPanelId: null };
+    }),
+
+    setActiveTab: (tab) => get().togglePanel(tab, true),
+    floatTab: (tab) => get().movePanel(tab, 'float'),
+    dockTab: (tab) => get().movePanel(tab, 'right')
 });
