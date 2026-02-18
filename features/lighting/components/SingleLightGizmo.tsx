@@ -58,8 +58,11 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
                 return;
             }
 
-            const width = renderer.domElement.width / window.devicePixelRatio;
-            const height = renderer.domElement.height / window.devicePixelRatio;
+            // Use getBoundingClientRect for accurate CSS dimensions on all devices
+            // This fixes mobile offset issues where internal resolution may differ from CSS size
+            const rect = renderer.domElement.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
             const sceneOffset = engine.sceneOffset;
 
             // 1. Calculate World Position

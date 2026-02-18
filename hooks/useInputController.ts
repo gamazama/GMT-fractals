@@ -1,4 +1,4 @@
-
+    
 import React, { useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { CameraMode } from '../types';
