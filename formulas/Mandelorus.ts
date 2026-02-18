@@ -106,7 +106,7 @@ export const Mandelorus: FractalDefinition = {
 
     defaultPreset: {
   "version": 2,
-  "name": "HyperTorus",
+  "name": "Mandelorus",
   "formula": "Mandelorus",
   "features": {
     "coreMath": {

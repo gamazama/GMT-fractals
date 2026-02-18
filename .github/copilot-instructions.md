@@ -28,15 +28,13 @@ Project-specific conventions and patterns
 Safe edit rules for AI agents
 - If changing runtime engine behavior, update both the store bindings and engine singleton. See `bindStoreToEngine` in [store/fractalStore.ts](store/fractalStore.ts).
 - When modifying shader inputs (uniforms), update `UniformNames.ts` and the places that populate `engine.mainUniforms` (search for `mainUniforms`).
-- For UI changes, prefer adding components under `components/panels` and register them via the registry system so they appear in the dynamic Panel Router.
+- For UI changes, prefer adding components under `features/*` and register them via the DDFS system so they appear in the dynamic Panel Router.
 - Avoid introducing global mutable state outside the engine singleton and store; prefer explicit bindings/events (`FractalEvents`).
 
 Notes about tests and debugging
-- There are no formal unit tests in the repo; validate changes by running `npm run dev` and exercising the UI.
-- To debug render issues: enable the convergence probe in `RenderPipeline` and inspect `accumulationCount` and `getCurrentFrameDuration()` values.
+- There are no formal unit tests in the repo; validate changes by asking the user to `npm run dev` and exercising the UI.
 
 References
-- Architecture docs: [docs/01_System_Architecture.md](docs/01_System_Architecture.md)
-- Rendering internals: [docs/02_Rendering_Internals.md](docs/02_Rendering_Internals.md)
+- docs: [docs/*.md)
 
 If any of these areas are unclear, tell me which file or behavior you want more detail on and I will expand this guide accordingly.

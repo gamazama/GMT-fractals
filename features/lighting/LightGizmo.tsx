@@ -100,9 +100,12 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
             _plane.setFromNormalAndCoplanarPoint(normal, origin);
             
             const intersect = new THREE.Vector3();
-            _raycaster.ray.intersectPlane(_plane, intersect);
+            const hit = _raycaster.ray.intersectPlane(_plane, intersect);
             
-            const offsetFromIntersection = new THREE.Vector3().subVectors(origin, intersect || origin);
+            // If ray doesn't hit plane (parallel view), use origin as fallback
+            const offsetFromIntersection = hit 
+                ? new THREE.Vector3().subVectors(origin, intersect)
+                : new THREE.Vector3(0, 0, 0);
 
             dragRef.current = {
                 active: true,
@@ -172,7 +175,9 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         const camera = engine.activeCamera;
         if (!camera) return;
 
-        const light = lights[drag.index];
+        // Get light directly from store to avoid stale closure
+        const currentLights = useFractalStore.getState().lighting?.lights || [];
+        const light = currentLights[drag.index];
         if (!light) return;
 
         let newWorldPos = new THREE.Vector3();
@@ -230,7 +235,8 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
             };
         }
 
-        updateLight({ 
+        // Use store directly to avoid stale closure
+        useFractalStore.getState().updateLight({ 
             index: drag.index, 
             params: { position: finalPos } 
         });

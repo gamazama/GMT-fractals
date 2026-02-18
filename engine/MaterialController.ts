@@ -276,6 +276,11 @@ export class MaterialController {
     public setUniform(key: string, value: any) {
         let valToAssign = value;
 
+        // Handle boolean values - convert to float for GLSL
+        if (typeof value === 'boolean') {
+            valToAssign = value ? 1.0 : 0.0;
+        }
+
         // 1. Handle Gradient Buffer Optimization or Array of Stops
         if (value && value.isGradientBuffer) {
              const existingTex = this.mainUniforms[key]?.value;

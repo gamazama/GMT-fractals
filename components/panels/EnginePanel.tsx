@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { featureRegistry } from '../../engine/FeatureSystem';
-import { AlertIcon, CheckIcon, InfoIcon } from '../Icons';
+import { AlertIcon, CheckIcon, InfoIcon, SpinnerIcon } from '../Icons';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { EngineFeatureRow, EngineStatus } from './engine/EngineFeatureRow';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
@@ -17,6 +17,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
     const store = useFractalStore();
     const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
     const [compileFeedback, setCompileFeedback] = useState<string | null>(null);
+    const [isCompiling, setIsCompiling] = useState(false);
     
     // 1. Construct Virtual State for Detection (Store + Pending Overrides)
     const virtualState = useMemo(() => {
@@ -49,11 +50,20 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
     const engineFeatures = featureRegistry.getEngineFeatures();
     
     useEffect(() => {
-        const unsub = FractalEvents.on('compile_time', (sec) => {
+        const unsubCompile = FractalEvents.on('compile_time', (sec) => {
             setCompileFeedback(`Compiled (${sec.toFixed(2)}s)`);
+            setIsCompiling(false);
             setTimeout(() => setCompileFeedback(null), 3000);
         });
-        return unsub;
+        
+        const unsubIsCompiling = FractalEvents.on('is_compiling', (val) => {
+            setIsCompiling(!!val);
+        });
+        
+        return () => {
+            unsubCompile();
+            unsubIsCompiling();
+        };
     }, []);
 
     const handleParamChange = (featureId: string, param: string, value: any) => {
@@ -235,13 +245,25 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
             </div>
 
             <div className="px-3 py-2 bg-[#1a1a1a] border-t border-white/10 flex items-center justify-between min-h-[40px] shrink-0 z-10">
-                {Object.keys(pendingChanges).length > 0 ? (
+                {isCompiling ? (
+                    <>
+                        <div className="flex items-center gap-2 text-cyan-400 text-[10px] font-bold uppercase tracking-wider">
+                            <SpinnerIcon className="animate-spin h-3 w-3" />
+                            <span>Compiling...</span>
+                        </div>
+                        <div className="text-[9px] text-gray-500">Please wait</div>
+                    </>
+                ) : Object.keys(pendingChanges).length > 0 ? (
                     <>
                         <div className="flex items-center gap-2 text-amber-500 text-[10px] font-bold uppercase tracking-wider animate-pulse">
                             <AlertIcon />
                             <span>Changes Pending</span>
                         </div>
-                        <button onClick={applyPendingChanges} className="px-4 py-1 bg-amber-600 hover:bg-amber-500 text-black font-bold uppercase text-[10px] rounded transition-colors flex items-center gap-1">
+                        <button 
+                            onClick={applyPendingChanges} 
+                            disabled={isCompiling}
+                            className="px-4 py-1 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold uppercase text-[10px] rounded transition-colors flex items-center gap-1"
+                        >
                             <CheckIcon /> Apply
                         </button>
                     </>

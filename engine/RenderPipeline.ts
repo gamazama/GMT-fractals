@@ -56,6 +56,9 @@ export class RenderPipeline {
     private _qualityState: QualityState | null = null;
     private _accumulationEnabled: boolean = true;
     
+    // Reusable buffer for HalfFloat readback (avoid per-frame allocation)
+    private _halfFloatBuffer: Uint16Array | null = null;
+    
     public updateQuality(q: QualityState) {
         // Check if buffer precision changed
         const oldPrec = this._qualityState?.bufferPrecision;
@@ -74,18 +77,46 @@ export class RenderPipeline {
     
     /**
      * Get the color texture from the PREVIOUS frame (for history/accumulation)
+     * Note: writeIndex is swapped AFTER render(), so it points to the NEXT target to write.
+     * The "previous" frame is the one that was just written, which is the OPPOSITE target.
      */
     public getPreviousColorTexture(): THREE.Texture | null {
-        const target = this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;
+        // Inverted logic: when writeIndex=0, the last written target is B (not A)
+        const target = this.writeIndex === 0 ? this.mrtTargetB : this.mrtTargetA;
         return target?.texture || null;
     }
     
     /**
      * Get the render target from the PREVIOUS frame (for physics probe readback)
      * This is safe to read without stalling the GPU
+     * Note: writeIndex is swapped AFTER render(), so it points to the NEXT target to write.
+     * The "previous" frame is the one that was just written, which is the OPPOSITE target.
      */
     public getPreviousRenderTarget(): THREE.WebGLRenderTarget | null {
-        return this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;
+        // Inverted logic: when writeIndex=0, the last written target is B (not A)
+        return this.writeIndex === 0 ? this.mrtTargetB : this.mrtTargetA;
+    }
+    
+    /**
+     * Convert a 16-bit half-float to a 32-bit float
+     */
+    private halfToFloat(h: number): number {
+        const sign = (h & 0x8000) >> 15;
+        const exponent = (h & 0x7C00) >> 10;
+        const mantissa = h & 0x03FF;
+        
+        if (exponent === 0) {
+            if (mantissa === 0) return sign ? -0 : 0;
+            // Subnormal - denormalize
+            const e = Math.clz32(mantissa) - 21;
+            return (sign ? -1 : 1) * (mantissa << e) * Math.pow(2, -24);
+        }
+        
+        if (exponent === 31) {
+            return mantissa ? NaN : (sign ? -Infinity : Infinity);
+        }
+        
+        return (sign ? -1 : 1) * Math.pow(2, exponent - 15) * (1 + mantissa / 1024);
     }
     
     /**
@@ -104,9 +135,31 @@ export class RenderPipeline {
         const target = this.getPreviousRenderTarget();
         if (!target) return false;
         
-        // Use standard Three.js readPixels on color buffer
+        // Clear buffer before reading to detect failures
+        buffer.fill(0);
+        
+        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+        
         try {
-            renderer.readRenderTargetPixels(target, x, y, width, height, buffer);
+            if (useHalfFloat) {
+                // For HalfFloat16 targets, use Uint16Array and convert to floats
+                const pixelCount = width * height;
+                
+                // Reuse buffer to avoid per-frame allocation
+                if (!this._halfFloatBuffer || this._halfFloatBuffer.length !== pixelCount * 4) {
+                    this._halfFloatBuffer = new Uint16Array(pixelCount * 4);
+                }
+                
+                renderer.readRenderTargetPixels(target, x, y, width, height, this._halfFloatBuffer);
+                
+                // Convert half-floats to floats
+                for (let i = 0; i < pixelCount * 4; i++) {
+                    buffer[i] = this.halfToFloat(this._halfFloatBuffer[i]);
+                }
+            } else {
+                // For Float32 targets, read directly
+                renderer.readRenderTargetPixels(target, x, y, width, height, buffer);
+            }
             return true;
         } catch (e) {
             console.warn('Pixel readback failed:', e);
@@ -200,6 +253,28 @@ export class RenderPipeline {
         this.accumulationCount = 0;
         this.lastCompleteDuration = 0;
         this.isHolding = false;
+    }
+    
+    /**
+     * Clear both render targets to prevent bucket bleeding.
+     * Called by BucketRenderer when switching between buckets.
+     */
+    public clearTargets() {
+        // We need a renderer to clear - check if engine has one
+        if (!engine.renderer) return;
+        
+        const currentTarget = engine.renderer.getRenderTarget();
+        
+        if (this.mrtTargetA) {
+            engine.renderer.setRenderTarget(this.mrtTargetA);
+            engine.renderer.clear();
+        }
+        if (this.mrtTargetB) {
+            engine.renderer.setRenderTarget(this.mrtTargetB);
+            engine.renderer.clear();
+        }
+        
+        engine.renderer.setRenderTarget(currentTarget);
     }
     
     public setHold(hold: boolean) {

@@ -83,7 +83,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
     vec4 result = result_init;
     bool hit = true;
     int maxBounces = uPTBounces;
-    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0;
+    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0 / uInternalScale;
     
     for (int bounce = 0; bounce < 8; bounce++) {
         if (bounce >= ${loopLimit}) break;

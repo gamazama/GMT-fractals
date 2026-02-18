@@ -7,6 +7,7 @@ import { OpticsState } from '../../features/optics';
 import { LightingState } from '../../features/lighting';
 import { MAX_LIGHTS } from '../../data/constants';
 import { EngineRenderState } from '../FractalEngine';
+import { useFractalStore } from '../../store/fractalStore';
 
 export class UniformManager {
     private uniforms: { [key: string]: THREE.IUniform };
@@ -24,6 +25,13 @@ export class UniformManager {
     private lightEuler = new THREE.Euler();
     private lightDir = new THREE.Vector3();
     private defaultForward = new THREE.Vector3(0, 0, -1); 
+
+    // Local Rotation Matrix Cache
+    private preRotMatrixX = new THREE.Matrix4();
+    private preRotMatrixY = new THREE.Matrix4();
+    private preRotMatrixZ = new THREE.Matrix4();
+    private preRotMatrix4 = new THREE.Matrix4();
+    private preRotMatrix3 = new THREE.Matrix3();
 
     // Track previous resolution state to avoid redundant updates
     private lastWidth: number = -1;
@@ -235,6 +243,41 @@ export class UniformManager {
                 
                 (dirArr[i] as THREE.Vector3).copy(this.lightDir).normalize();
             }
+        }
+
+        // --- LOCAL ROTATION MATRIX UPDATE ---
+        // Calculate and update uPreRotMatrix when geometry rotation params change
+        // This was previously only done in VideoExporter.ts during video export
+        try {
+            const storeState = useFractalStore.getState();
+            const geom = (storeState as any).geometry;
+            
+            if (geom && geom.preRotMaster && geom.preRotEnabled) {
+                // Apply modulation offsets if present (matches VideoExporter logic)
+                const rotX = (geom.preRotX ?? 0) + (modulations['geometry.preRotX'] || 0);
+                const rotY = (geom.preRotY ?? 0) + (modulations['geometry.preRotY'] || 0);
+                const rotZ = (geom.preRotZ ?? 0) + (modulations['geometry.preRotZ'] || 0);
+                
+                // Build rotation matrix: Z * X * Y order (matches VideoExporter)
+                this.preRotMatrixX.makeRotationX(rotX);
+                this.preRotMatrixY.makeRotationY(rotY);
+                this.preRotMatrixZ.makeRotationZ(rotZ);
+                
+                this.preRotMatrix4.identity()
+                    .multiply(this.preRotMatrixZ)
+                    .multiply(this.preRotMatrixX)
+                    .multiply(this.preRotMatrixY);
+                
+                this.preRotMatrix3.setFromMatrix4(this.preRotMatrix4);
+                
+                // Update the uniform
+                const preRotUniform = this.uniforms[Uniforms.PreRotMatrix];
+                if (preRotUniform) {
+                    preRotUniform.value.copy(this.preRotMatrix3);
+                }
+            }
+        } catch (e) {
+            // Store may not be available during initialization
         }
     }
 }

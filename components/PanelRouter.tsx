@@ -23,7 +23,23 @@ export const PanelRouter: React.FC<PanelRouterProps> = ({ activeTab, state, acti
         }
     }
 
-    // 2. Find feature associated with this tab
+    // 2. Check for Camera Manager Special Case
+    if (activeTab === 'Camera Manager') {
+        const CameraManagerComponent = componentRegistry.get('panel-cameramanager') as React.FC<any>;
+        if (CameraManagerComponent) {
+            return <CameraManagerComponent state={state} actions={actions} />;
+        }
+    }
+
+    // 3. Check for Engine Special Case
+    if (activeTab === 'Engine') {
+        const EngineComponent = componentRegistry.get('panel-engine') as React.FC<any>;
+        if (EngineComponent) {
+            return <EngineComponent state={state} actions={actions} />;
+        }
+    }
+
+    // 4. Find feature associated with this tab
     const tabs = featureRegistry.getTabs();
     const activeFeature = tabs.find(t => t.label === activeTab);
     

@@ -35,4 +35,7 @@ export interface LightParams {
     fixed: boolean;
     visible: boolean;
     castShadow: boolean;
+    // Temperature in Kelvin (1000K - 40000K, typical usable range 1000-10000K)
+    temperature?: number;
+    useTemperature?: boolean;
 }

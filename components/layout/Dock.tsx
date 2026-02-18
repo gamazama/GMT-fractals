@@ -29,7 +29,6 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
     const audioState = (useFractalStore.getState() as any).audio as AudioState;
     const drawingState = (useFractalStore.getState() as any).drawing as DrawingState;
     const sonificationState = (useFractalStore.getState() as any).sonification as SonificationState;
-    const engineSettings = (useFractalStore.getState() as any).engineSettings;
 
     const activeTabId = side === 'left' ? activeLeftTab : activeRightTab;
     const isCollapsed = side === 'left' ? isLeftDockCollapsed : isRightDockCollapsed;
@@ -47,7 +46,6 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             // Feature Switches
             if (p.id === 'Audio' && !audioState?.isEnabled) return false;
             if (p.id === 'Drawing' && !drawingState?.enabled) return false;
-            if (p.id === 'Engine' && !engineSettings?.showEngineTab) return false;
             if (p.id === 'Sonification' && !sonificationState?.isEnabled) return false;
             
             return true;

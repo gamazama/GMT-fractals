@@ -48,6 +48,9 @@ const BASE_SCHEMA: UniformDefinition[] = [
     
     // Tools (Histogram)
     { name: Uniforms.HistogramLayer, type: 'int', default: 0 },
+    
+    // Export/Render Scale
+    { name: Uniforms.InternalScale, type: 'float', default: 1.0 },
 
     // Optimizations (Shared by Geometry & Lighting)
     { name: Uniforms.PreRotMatrix, type: 'mat3', default: new THREE.Matrix3() },

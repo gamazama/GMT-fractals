@@ -1,4 +1,3 @@
-
 # GMT - GPU Mandelbulb Tracer
 
 **GMT** is a professional-grade, real-time 3D fractal engineering tool running entirely in the browser. It combines high-performance GPU Raymarching with a reactive, data-driven UI to render complex mathematical structures (Mandelbulbs, Mandelboxes, IFS) with photorealistic lighting, Path Tracing, and infinite zoom capabilities.
@@ -36,16 +35,25 @@ Open `http://localhost:5173` (or the port shown in your terminal).
 
 ## 🗺️ Documentation
 
-We maintain detailed documentation for contributors:
+GMT has a comprehensive documentation system. **Start with [DOCS_INDEX.md](docs/DOCS_INDEX.md)** for a complete overview and table of contents.
 
-1.  **[System Architecture](docs/01_System_Architecture.md)**: The "Engine-Bridge" pattern and Data-Driven Feature System (DDFS).
-2.  **[Rendering Internals](docs/02_Rendering_Internals.md)**: Raymarching loop, precision math, and Path Tracing integration.
-3.  **[Modular System](docs/03_Modular_System.md)**: How the Node Graph compiles to raw GLSL.
-4.  **[Animation Engine](docs/04_Animation_Engine.md)**: The sequencer, interpolation logic, and unified camera system.
-5.  **[Data & Export](docs/05_Data_and_Export.md)**: Video encoding pipeline, GMF format, and Presets.
-6.  **[Troubleshooting](docs/06_Troubleshooting_and_Quirks.md)**: Common pitfalls, GLSL limits, and browser-specific quirks.
-7.  **[Code Health](docs/07_Code_Health.md)**: Current refactor status and known debt.
-8.  **[File Map](docs/08_File_Structure.md)**: Comprehensive list of files and responsibilities.
+### Documentation System Structure
+
+1.  **[DOCS_INDEX.md](docs/DOCS_INDEX.md)**: **Central Entry Point** - Master index with quick reference, cross-referenced guides, and documentation guidelines
+2.  **Technical Documentation**: Detailed architecture, rendering, and implementation guides (in `docs/` folder)
+3.  **In-App Help System**: User-facing documentation accessible from the application (`data/help/`)
+4.  **README.md**: This file - Project overview, quick start, and high-level documentation
+5.  **Context Files**: Condensed architecture overviews for AI sessions (`docs/context.md`, `docs/context2.md`)
+
+### Key Technical Guides (available via DOCS_INDEX)
+- **System Architecture**: Engine-Bridge pattern, Data-Driven Feature System (DDFS)
+- **Rendering Internals**: Raymarching, precision math, path tracing
+- **Modular System**: Node graph to GLSL compilation
+- **Animation Engine**: Timeline, keyframes, interpolation
+- **Data & Export**: Video export, GMF format, presets
+- **Troubleshooting**: WebGL issues, precision artifacts, browser quirks
+- **Code Health**: Technical debt, refactor status
+- **File Structure**: Complete file map and responsibilities
 
 ## 🛠️ Technology Stack
 
@@ -94,3 +102,27 @@ Contributions are welcome! Please read the technical documentation in `/docs` be
 3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
 4.  Push to the branch (`git push origin feature/AmazingFeature`).
 5.  Open a Pull Request.
+
+Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.
+1.  Fork the repo.
+2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4.  Push to the branch (`git push origin feature/AmazingFeature`).
+5.  Open a Pull Request.
+
+Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.
+1.  Fork the repo.
+2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4.  Push to the branch (`git push origin feature/AmazingFeature`).
+5.  Open a Pull Request.
+5.  Open a Pull Request.
+## 🤝 Contributing
+
+Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.
+1.  Fork the repo.
+2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4.  Push to the branch (`git push origin feature/AmazingFeature`).
+5.  Open a Pull Request.
+

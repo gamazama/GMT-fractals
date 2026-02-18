@@ -68,6 +68,13 @@ export class PickingController {
         
         // Depth is stored in the alpha channel of every pixel
         const depth = pixelBuffer[3];
+        
+        // With HalfFloat16 buffers, the alpha channel may have precision issues
+        // Return -1 if depth is invalid (0, NaN, or Infinity)
+        if (!isFinite(depth) || depth <= 0) {
+            return -1;
+        }
+        
         return depth;
     }
     

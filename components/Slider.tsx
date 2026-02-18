@@ -172,6 +172,7 @@ interface BaseSliderProps extends Omit<DraggableNumberProps, 'onMiddleChange'> {
     // Visual slots
     headerRight?: React.ReactNode;
     footer?: React.ReactNode;
+    labelSuffix?: React.ReactNode;
     
     // Interactions
     onContextMenu?: (e: React.MouseEvent) => void;
@@ -181,7 +182,7 @@ interface BaseSliderProps extends Omit<DraggableNumberProps, 'onMiddleChange'> {
 
 export const BaseSlider: React.FC<BaseSliderProps> = ({ 
     label, value, min, max, step, hardMin, hardMax, onChange, highlight, overrideText, customMapping, mapTextInput, 
-    liveValue, headerRight, footer, onContextMenu, dataHelpId, onDragStart, onDragEnd, disabled = false, className = ''
+    liveValue, headerRight, footer, labelSuffix, onContextMenu, dataHelpId, onDragStart, onDragEnd, disabled = false, className = ''
 }) => {
     const safeValue = value ?? 0;
 
@@ -225,7 +226,7 @@ export const BaseSlider: React.FC<BaseSliderProps> = ({
                 <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
                     {headerRight}
                     <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-gray-600' : 'text-gray-400'}`}>
-                        {label}
+                        {label}{labelSuffix}
                         {liveValue !== undefined && !disabled && <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_4px_#a855f7]"></span>}
                     </label>
                 </div>

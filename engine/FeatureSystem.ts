@@ -251,7 +251,10 @@ class FeatureRegistry {
                     let type: any = param.type;
                     let val = param.default;
                     if (type === 'color') type = 'vec3';
-                    if (type === 'boolean') type = 'float';
+                    if (type === 'boolean') {
+                        type = 'float';
+                        val = val ? 1.0 : 0.0; // Convert boolean default to float
+                    }
                     if (type === 'image' || type === 'gradient') {
                         type = 'sampler2D';
                         val = null; 

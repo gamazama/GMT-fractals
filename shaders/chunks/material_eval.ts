@@ -46,7 +46,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     roughness = 0.5;
 
     float distFromFractalOrigin = length(p_fractal_in);
-    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0;
+    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0 / uInternalScale;
     
     // Matches trace.ts precision floor
     float floatLimit = max(1.0e-20, distFromFractalOrigin * 5.0e-7);

@@ -385,6 +385,7 @@ export class VideoExporter {
             // Explicitly force correct Time and Resolution uniforms via engine helper
             this.engine.setUniform('uTime', time);
             this.engine.setUniform('uResolution', new THREE.Vector2(sess.renderWidth, sess.renderHeight));
+            this.engine.setUniform('uInternalScale', sess.config.internalScale || 1.0);
             this.engine.pipeline.resize(sess.renderWidth, sess.renderHeight);
 
             // Sync Camera Matrix for this exact time

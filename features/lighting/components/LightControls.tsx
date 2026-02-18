@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useFractalStore } from '../../../store/fractalStore';
 import { useAnimationStore } from '../../../store/animationStore';
 import { getLightFromSlice } from '../index';
@@ -11,6 +11,7 @@ import { KeyframeButton } from '../../../components/KeyframeButton';
 import { evaluateTrackValue } from '../../../utils/timelineUtils';
 import { LightType } from '../../../types';
 import { LightDirectionControl } from './LightDirectionControl';
+import { kelvinToHex, COLOR_TEMPERATURE_PRESETS } from '../../../utils/colorUtils';
 
 export const LightOrb = ({ index, color, active, type, rotation, onClick, onDragStart }: { index: number, color: string, active: boolean, type?: LightType, rotation?: {x:number, y:number, z:number}, onClick: () => void, onDragStart: () => void }) => {
     
@@ -128,6 +129,10 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
     
     // Animation Store for Keyframing
     const { addTrack, addKeyframe, currentFrame, sequence, isPlaying } = useAnimationStore();
+    
+    // Temperature mode state - default to temperature if light has useTemperature flag
+    const [useTempMode, setUseTempMode] = useState(light.useTemperature ?? false);
+    const [tempKelvin, setTempKelvin] = useState(light.temperature ?? 6500);
 
     if (!light.visible) return null;
 
@@ -298,10 +303,75 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                 </div>
 
                 <div className="pt-2 border-t border-white/10 space-y-2">
-                    <EmbeddedColorPicker 
-                        color={light.color} 
-                        onColorChange={(c) => updateLight({ index, params: { color: c } })}
-                    />
+                    {/* Color/Temperature Toggle - Color first */}
+                    <div className="flex items-center gap-1 mb-2">
+                        <button
+                            onClick={() => {
+                                setUseTempMode(false);
+                                updateLight({ index, params: { useTemperature: false } });
+                            }}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                                !useTempMode 
+                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50' 
+                                    : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
+                            }`}
+                        >
+                            COLOR
+                        </button>
+                        <button
+                            onClick={() => {
+                                const newMode = !useTempMode;
+                                setUseTempMode(newMode);
+                                if (newMode) {
+                                    // Switching to temperature mode - update color from current temp
+                                    const newColor = kelvinToHex(tempKelvin);
+                                    updateLight({ index, params: { color: newColor, useTemperature: true, temperature: tempKelvin } });
+                                } else {
+                                    updateLight({ index, params: { useTemperature: false } });
+                                }
+                            }}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                                useTempMode 
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' 
+                                    : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
+                            }`}
+                        >
+                            TEMPERATURE
+                        </button>
+                    </div>
+                    
+                    {useTempMode ? (
+                        /* Temperature Slider */
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                                <label className="text-[10px] text-gray-400 font-medium">Temperature (K)</label>
+                                <span className="text-[10px] text-gray-300 font-mono">{tempKelvin}</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={1000}
+                                max={10000}
+                                step={100}
+                                value={tempKelvin}
+                                onChange={(e) => {
+                                    const kelvin = parseInt(e.target.value);
+                                    setTempKelvin(kelvin);
+                                    const newColor = kelvinToHex(kelvin);
+                                    updateLight({ index, params: { temperature: kelvin, color: newColor } });
+                                }}
+                                className="w-full h-1.5 bg-gradient-to-r from-orange-500 via-yellow-200 to-blue-200 rounded-full appearance-none cursor-pointer"
+                                style={{
+                                    background: 'linear-gradient(to right, #ff6b35, #ffcc66, #ffffff, #cce5ff, #66b3ff)'
+                                }}
+                            />
+                        </div>
+                    ) : (
+                        /* Color Picker */
+                        <EmbeddedColorPicker 
+                            color={light.color} 
+                            onColorChange={(c) => updateLight({ index, params: { color: c } })}
+                        />
+                    )}
                     
                     <div className="flex items-center justify-between pt-1">
                         <label className="text-xs text-gray-400 font-medium">Cast Shadows</label>

@@ -106,13 +106,13 @@ export const getGradientCssString = (input: GradientStop[] | GradientConfig | un
           const interpolation = s.interpolation || 'linear';
 
           if (interpolation === 'step') {
-               let switchT = segmentBias; 
-               const absSwitchPos = s.position + (next.position - s.position) * switchT;
-               let viewSwitchPos = Math.pow(absSwitchPos, 1.0 / viewGamma) * 100;
-               viewSwitchPos = Math.max(0, Math.min(100, viewSwitchPos));
+               // Step mode: color stays constant until the next knot position
+               // The switch happens exactly at the next knot position, not at bias
+               let nextPos = Math.pow(next.position, 1.0 / viewGamma);
+               nextPos = Math.max(0, Math.min(1, nextPos)) * 100;
 
-               parts.push(`${s.color} ${viewSwitchPos.toFixed(2)}%`);
-               parts.push(`${next.color} ${viewSwitchPos.toFixed(2)}%`);
+               parts.push(`${s.color} ${nextPos.toFixed(2)}%`);
+               parts.push(`${next.color} ${nextPos.toFixed(2)}%`);
           } 
           else {
               if (Math.abs(segmentBias - 0.5) > 0.001) {
@@ -230,3 +230,74 @@ export const generateGradientTextureBuffer = (input: GradientStop[] | GradientCo
   
   return data;
 };
+
+/**
+ * Convert color temperature in Kelvin to RGB color.
+ * Based on Tanner Helland's algorithm.
+ * Valid range: 1000K - 40000K (typical usable: 1000K - 10000K)
+ * @param kelvin Temperature in Kelvin
+ * @returns Object with r, g, b values (0-255)
+ */
+export const kelvinToRgb = (kelvin: number): { r: number, g: number, b: number } => {
+  // Clamp to valid range
+  const temp = Math.max(1000, Math.min(40000, kelvin)) / 100;
+  
+  let r: number, g: number, b: number;
+  
+  // Calculate Red
+  if (temp <= 66) {
+    r = 255;
+  } else {
+    r = temp - 60;
+    r = 329.698727446 * Math.pow(r, -0.1332047592);
+    r = Math.max(0, Math.min(255, r));
+  }
+  
+  // Calculate Green
+  if (temp <= 66) {
+    g = temp;
+    g = 99.4708025861 * Math.log(g) - 161.1195681661;
+    g = Math.max(0, Math.min(255, g));
+  } else {
+    g = temp - 60;
+    g = 288.1221695283 * Math.pow(g, -0.0755148492);
+    g = Math.max(0, Math.min(255, g));
+  }
+  
+  // Calculate Blue
+  if (temp >= 66) {
+    b = 255;
+  } else if (temp <= 19) {
+    b = 0;
+  } else {
+    b = temp - 10;
+    b = 138.5177312231 * Math.log(b) - 305.0447927307;
+    b = Math.max(0, Math.min(255, b));
+  }
+  
+  return { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+};
+
+/**
+ * Convert Kelvin temperature to hex color string
+ * @param kelvin Temperature in Kelvin
+ * @returns Hex color string (e.g., "#FFCC99")
+ */
+export const kelvinToHex = (kelvin: number): string => {
+  const { r, g, b } = kelvinToRgb(kelvin);
+  return rgbToHex(r, g, b);
+};
+
+/**
+ * Preset color temperatures for UI convenience
+ */
+export const COLOR_TEMPERATURE_PRESETS = [
+  { label: 'Candle', value: 1900 },
+  { label: 'Tungsten', value: 2700 },
+  { label: 'Halogen', value: 3000 },
+  { label: 'Warm White', value: 3500 },
+  { label: 'Neutral', value: 5000 },
+  { label: 'Daylight', value: 6500 },
+  { label: 'Overcast', value: 7500 },
+  { label: 'Blue Sky', value: 10000 },
+] as const;

@@ -21,12 +21,13 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
     const [coords, setCoords] = useState({ top: y, left: x, visible: false });
 
     useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
+        const handleClickOutside = (e: MouseEvent | PointerEvent) => {
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
         };
-        // Use capture to catch events before they trigger new menus
-        document.addEventListener('mousedown', handleClickOutside, true);
-        return () => document.removeEventListener('mousedown', handleClickOutside, true);
+        // Use pointerdown with capture - fires before React's synthetic events
+        // This ensures we catch clicks even if stopPropagation is called
+        document.addEventListener('pointerdown', handleClickOutside, true);
+        return () => document.removeEventListener('pointerdown', handleClickOutside, true);
     }, [onClose]);
 
     // Use LayoutEffect to measure and reposition BEFORE the browser paints

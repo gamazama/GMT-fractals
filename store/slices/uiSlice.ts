@@ -1,6 +1,6 @@
 
 import { StateCreator } from 'zustand';
-import { FractalStoreState, FractalActions, PanelId, PanelState, DockZone } from '../../types';
+import { FractalStoreState, FractalActions, PanelId, PanelState, DockZone, CompositionOverlayType, CompositionOverlaySettings } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
@@ -26,6 +26,8 @@ export type UISlice = Pick<FractalStoreState,
     'isBroadcastMode' |
     'isUserInteracting' |
     'tabSwitchCount' |
+    'compositionOverlay' |
+    'compositionOverlaySettings' |
     // New Layout Props
     'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' | 
     'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot'
@@ -41,6 +43,8 @@ export type UISlice = Pick<FractalStoreState,
     'setIsBroadcastMode' |
     'openHelp' | 'closeHelp' | 'openContextMenu' | 'closeContextMenu' |
     'incrementTabSwitchCount' |
+    'setCompositionOverlay' |
+    'setCompositionOverlaySettings' |
     // New Layout Actions
     'movePanel' | 'reorderPanel' | 'togglePanel' | 'setDockSize' | 'setDockCollapsed' | 'setFloatPosition' | 'setFloatSize' |
     'startPanelDrag' | 'endPanelDrag' | 'cancelPanelDrag' |
@@ -55,9 +59,10 @@ const getUrlParam = (key: string) => {
 };
 
 // INITIAL LAYOUT DEFINITION
-// All core panels moved to 'right' to fit on one line as requested.
+// Left dock is empty by default - panels are added when called from menus
+// Right dock contains main control panels
 const DEFAULT_PANELS: Record<string, PanelState> = {
-    // Left Dock (Empty/Available)
+    // Left Dock - Empty by default, panels added dynamically
     
     // Right Dock (Main Control Deck)
     'Formula': { id: 'Formula', location: 'right', order: 0, isCore: true, isOpen: true }, // Default Active
@@ -71,11 +76,7 @@ const DEFAULT_PANELS: Record<string, PanelState> = {
     'Light': { id: 'Light', location: 'right', order: 6, isCore: false, isOpen: false },
     'Audio': { id: 'Audio', location: 'right', order: 7, isCore: false, isOpen: false },
     'Drawing': { id: 'Drawing', location: 'right', order: 8, isCore: false, isOpen: false },
-    'Engine': { id: 'Engine', location: 'right', order: 9, isCore: false, isOpen: false }, 
-    'Sonification': { id: 'Sonification', location: 'right', order: 10, isCore: false, isOpen: false },
-    
-    // Floating Windows
-    'Camera Manager': { id: 'Camera Manager', location: 'float', order: 0, isCore: false, isOpen: false, floatPos: {x: 100, y: 100}, floatSize: {width: 300, height: 400} },
+    'Sonification': { id: 'Sonification', location: 'right', order: 9, isCore: false, isOpen: false },
 };
 
 export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
@@ -107,18 +108,36 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     
     helpWindow: { visible: false, activeTopicId: null },
     contextMenu: { visible: false, x: 0, y: 0, items: [], targetHelpIds: [] },
+    
+    // Composition overlay
+    compositionOverlay: 'none',
+    compositionOverlaySettings: {
+        opacity: 0.5,
+        lineThickness: 1,
+        showCenterMark: false,
+        showSafeAreas: false,
+        color: 'rgba(255, 255, 255, 1)',
+        // Grid settings
+        gridDivisionsX: 4,
+        gridDivisionsY: 4,
+        // Spiral settings
+        spiralRotation: 0,
+        spiralPositionX: 0.5,
+        spiralPositionY: 0.5,
+        spiralScale: 1.0
+    },
 
     // --- LAYOUT STATE ---
     panels: DEFAULT_PANELS,
-    leftDockSize: 320, // Collapsed by default via isLeftDockCollapsed
+    leftDockSize: 320, // Width for Engine and Camera Manager panels
     rightDockSize: 360, // Slightly wider to fit all tabs on one line
-    isLeftDockCollapsed: true, // Start collapsed as it's empty
+    isLeftDockCollapsed: true, // Collapsed by default - panels will open it when initialized
     isRightDockCollapsed: false,
     draggingPanelId: null,
     dragSnapshot: null,
     
     // Computed props (updated when panels change)
-    activeLeftTab: null,
+    activeLeftTab: null, // No active tab since panels are closed
     activeRightTab: 'Formula',
 
     // --- ACTIONS ---
@@ -178,9 +197,19 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
 
     movePanel: (id, targetZone, order) => set((state) => {
         const panels = { ...state.panels };
-        if (!panels[id]) return {};
+        
+        // Create panel dynamically if it doesn't exist (for Engine, Camera Manager, etc.)
+        if (!panels[id]) {
+            panels[id] = { 
+                id: id as PanelId, 
+                location: targetZone, 
+                order: 0, 
+                isCore: false, 
+                isOpen: true 
+            };
+        }
 
-        const isOpen = targetZone === 'float' ? true : true;
+        const isOpen = true;
         
         let newOrder = order;
         if (newOrder === undefined) {
@@ -206,7 +235,11 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         const activeLeft = targetZone === 'left' ? (id as PanelId) : ((Object.values(panels) as PanelState[]).find((p) => p.location === 'left' && p.isOpen)?.id as PanelId) || null;
         const activeRight = targetZone === 'right' ? (id as PanelId) : ((Object.values(panels) as PanelState[]).find((p) => p.location === 'right' && p.isOpen)?.id as PanelId) || null;
 
-        return { panels, activeLeftTab: activeLeft, activeRightTab: activeRight };
+        // Auto-expand dock when panel is moved to it
+        const leftCollapsed = targetZone === 'left' ? false : state.isLeftDockCollapsed;
+        const rightCollapsed = targetZone === 'right' ? false : state.isRightDockCollapsed;
+
+        return { panels, activeLeftTab: activeLeft, activeRightTab: activeRight, isLeftDockCollapsed: leftCollapsed, isRightDockCollapsed: rightCollapsed };
     }),
 
     reorderPanel: (draggingId, targetId) => set((state) => {
@@ -297,5 +330,11 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
 
     setActiveTab: (tab) => get().togglePanel(tab, true),
     floatTab: (tab) => get().movePanel(tab, 'float'),
-    dockTab: (tab) => get().movePanel(tab, 'right')
+    dockTab: (tab) => get().movePanel(tab, 'right'),
+    
+    // Composition overlay
+    setCompositionOverlay: (type) => set({ compositionOverlay: type }),
+    setCompositionOverlaySettings: (settings) => set(state => ({
+        compositionOverlaySettings: { ...state.compositionOverlaySettings, ...settings }
+    }))
 });

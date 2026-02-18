@@ -12,6 +12,25 @@ export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Grad
 
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region';
 
+export type CompositionOverlayType = 'none' | 'grid' | 'thirds' | 'golden' | 'spiral' | 'center' | 'diagonal' | 'safearea';
+
+// Composition overlay settings (inspired by Blender/C4D)
+export interface CompositionOverlaySettings {
+    opacity: number;           // 0-1
+    lineThickness: number;     // 0.5-3
+    showCenterMark: boolean;
+    showSafeAreas: boolean;    // Action/title safe zones
+    color: string;             // CSS color
+    // Grid settings
+    gridDivisionsX: number;    // 2-16 divisions
+    gridDivisionsY: number;    // 2-16 divisions
+    // Spiral settings
+    spiralRotation: number;    // 0-360 degrees
+    spiralPositionX: number;   // 0-1 (0=left, 1=right)
+    spiralPositionY: number;   // 0-1 (0=top, 1=bottom)
+    spiralScale: number;       // 0.5-2.0
+}
+
 // Export helper types for components
 export { DrawnShape, ModulationRule }; 
 
@@ -152,6 +171,10 @@ export interface FractalStoreState extends FeatureStateMap {
 
   helpWindow: { visible: boolean; activeTopicId: string | null; };
   contextMenu: { visible: boolean; x: number; y: number; items: ContextMenuItem[]; targetHelpIds: string[]; };
+
+  // Composition overlay for viewport
+  compositionOverlay: CompositionOverlayType;
+  compositionOverlaySettings: CompositionOverlaySettings;
 }
 
 export type FractalState = FractalStoreState;
@@ -273,4 +296,8 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     closeHelp: () => void;
     openContextMenu: (x: number, y: number, items: ContextMenuItem[], targetHelpIds?: string[]) => void;
     closeContextMenu: () => void;
+
+    // Composition overlay
+    setCompositionOverlay: (type: CompositionOverlayType) => void;
+    setCompositionOverlaySettings: (settings: Partial<CompositionOverlaySettings>) => void;
 }

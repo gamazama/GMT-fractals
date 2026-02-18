@@ -160,10 +160,9 @@ export const QualityFeature: FeatureDefinition = {
             isAdvanced: true,
             options: [
                 { label: 'GPU Probe', value: 0.0 },
-                { label: 'CPU Calc', value: 1.0 },
                 { label: 'Manual', value: 2.0 }
             ],
-            description: 'GPU Probe: Accurate but causes stall. CPU Calc: Uses idle CPU (no GPU stall). Manual: Fixed value.',
+            description: 'GPU Probe: Reads distance from render target. Manual: Fixed value for orbit control.',
             noReset: true
         },
         manualDistance: {

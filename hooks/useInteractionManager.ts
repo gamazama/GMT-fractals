@@ -190,8 +190,10 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 }
 
                 // Existing Light Gizmo Drag Logic
+                // NOTE: This is for dragging lights from the panel list, NOT from the 3D gizmo
+                // The LightGizmo component sets engine.isGizmoInteracting when handling drag
                 const state = useFractalStore.getState();
-                if (state.draggedLightIndex !== null) {
+                if (state.draggedLightIndex !== null && !engine.isGizmoInteracting) {
                     const cam = engine.activeCamera as THREE.PerspectiveCamera;
                     if (cam) {
                         const raycaster = new THREE.Raycaster();
@@ -201,7 +203,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                         const so = engine.sceneOffset;
                         const absPos = { x: placementPos.x + (so.x + so.xL), y: placementPos.y + (so.y + so.yL), z: placementPos.z + (so.z + so.zL) };
                         
-                        // Updated to use DDFS action
+                        // When dragging from panel, light becomes world-space (not headlamp)
                         state.updateLight({ 
                             index: state.draggedLightIndex, 
                             params: { fixed: false, visible: true, castShadow: true, position: absPos }

@@ -104,6 +104,10 @@ export const useKeyboardShortcuts = (
                 case 'KeyH':
                     fractalStore.getState().setShowHints(!fractalStore.getState().showHints);
                     break;
+                case 'Backquote':
+                    // Toggle Advanced Mode (tilde/backtick key)
+                    fractalStore.getState().setAdvancedMode(!fractalStore.getState().advancedMode);
+                    break;
                 case 'KeyB':
                     if (!isCtrl) {
                          // Toggle Broadcast (Clean Feed) Mode

@@ -155,7 +155,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
         <div className="h-8 border-b border-white/10 flex items-center px-2 gap-2 bg-white/5 shrink-0 z-50 select-none relative" data-help-id="ui.timeline" onContextMenu={handleContextMenu}>
             <div className="flex items-center gap-1 pr-2 mr-1" data-help-id="anim.transport">
                 <button onClick={stop} className="icon-btn"><StopIcon /></button>
-                <button onClick={isPlaying ? pause : play} className={`p-1.5 rounded text-white ${isPlaying ? (isRecordingModulation ? 'bg-red-600 animate-pulse' : 'bg-cyan-700') : 'bg-gray-700 hover:bg-gray-600'}`}>
+                <button onClick={isPlaying ? pause : play} className={`p-1.5 rounded text-white ${isPlaying ? (isRecordingModulation ? 'bg-red-600 animate-pulse' : 'bg-cyan-700') : 'bg-gray-700 hover:bg-gray-600'}`} title="Space">
                     {isPlaying ? <PauseIcon /> : <PlayIcon />}
                 </button>
                 

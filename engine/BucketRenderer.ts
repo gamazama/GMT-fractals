@@ -131,7 +131,11 @@ export class BucketRenderer {
         engine.materials.setUniform(Uniforms.RegionMin, min);
         engine.materials.setUniform(Uniforms.RegionMax, max);
         
+        // Reset accumulation and clear the render targets to prevent 
+        // previous bucket data from bleeding into the new bucket
         engine.pipeline.resetAccumulation();
+        engine.pipeline.clearTargets();
+        
         this.bucketFrameCount = 0;
     }
     

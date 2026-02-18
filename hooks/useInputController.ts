@@ -42,12 +42,14 @@ export const useInputController = (
         markActivity();
     }, [mode]);
 
-    // Update roll momentum
+    // Update roll momentum (affected by speed)
     useFrame((_, delta) => {
         const targetRoll = moveState.current.rollLeft ? 1 : (moveState.current.rollRight ? -1 : 0);
         const accelRate = targetRoll !== 0 ? 1.0 : 3.0;
         const f = 1.0 - Math.exp(-accelRate * delta);
-        rollVelocity.current += (targetRoll - rollVelocity.current) * f;
+        // Scale roll by current speed (minimum 0.1 for usability at low speeds)
+        const speedScale = Math.max(0.1, speedRef.current);
+        rollVelocity.current += (targetRoll * speedScale - rollVelocity.current) * f;
         
         if (targetRoll === 0 && Math.abs(rollVelocity.current) < 0.001) {
             rollVelocity.current = 0;

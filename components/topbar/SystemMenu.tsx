@@ -198,8 +198,13 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
             const feat = featureRegistry.get(featureId);
             if (feat?.tabConfig) {
                  const tabId = feat.tabConfig.label as any;
-                 if (val) state.floatTab(tabId);
-                 else state.dockTab(tabId);
+                 // Engine panel goes to left dock, others float
+                 if (featureId === 'engineSettings') {
+                     if (val) state.movePanel(tabId, 'left');
+                 } else {
+                     if (val) state.floatTab(tabId);
+                     else state.dockTab(tabId);
+                 }
             }
         }
     };
@@ -318,7 +323,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                             </div>
 
                             <button onClick={(e) => { e.stopPropagation(); state.setIsBroadcastMode(true); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
-                                <span className="text-xs font-bold group-hover:text-cyan-400">Hide Interface</span>
+                                <span className="text-xs font-bold group-hover:text-cyan-400">Hide Interface <span className="text-gray-500 font-normal">[B]</span></span>
                                 <FullscreenIcon />
                             </button>
 
@@ -330,8 +335,8 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                             
                             <div className="h-px bg-white/10 my-1" />
                             
-                            <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer">
-                                <span className="text-xs text-gray-300 font-bold">Advanced Mode</span>
+                            <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer" title="Keyboard: ` (tilde)">
+                                <span className="text-xs text-gray-300 font-bold">Advanced Mode <span className="text-gray-500 font-normal">[`]</span></span>
                                 <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${state.advancedMode ? 'bg-purple-600' : 'bg-gray-700'}`}>
                                     <div className={`w-3 h-3 bg-white rounded-full transition-transform ${state.advancedMode ? 'translate-x-4' : 'translate-x-0'}`} />
                                 </div>
@@ -352,8 +357,8 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                             
                             <div className="h-px bg-white/10 my-1" />
                             
-                            <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer">
-                                <span className="text-xs text-gray-300 font-bold">Show Hints</span>
+                            <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer" title="Keyboard: H">
+                                <span className="text-xs text-gray-300 font-bold">Show Hints <span className="text-gray-500 font-normal">[H]</span></span>
                                 <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${state.showHints ? 'bg-green-600' : 'bg-gray-700'}`}><div className={`w-3 h-3 bg-white rounded-full transition-transform ${state.showHints ? 'translate-x-4' : 'translate-x-0'}`} /></div>
                                 <input type="checkbox" className="hidden" checked={state.showHints} onChange={(e) => { vibrate(5); state.setShowHints(e.target.checked); }} />
                             </label>

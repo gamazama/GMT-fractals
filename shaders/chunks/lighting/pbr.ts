@@ -14,7 +14,7 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
     vec3 Lo = vec3(0.0);
     
     // Pixel size estimate for shadow bias
-    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0;
+    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0 / uInternalScale;
     
     // Bias: Push start point away from surface
     float biasAmount = uShadowBias + pixelSizeScale * 2.0;

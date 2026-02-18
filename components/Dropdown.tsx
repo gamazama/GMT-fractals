@@ -18,9 +18,10 @@ interface DropdownProps<T> {
     fullWidth?: boolean;
     className?: string;
     selectClassName?: string;
+    labelSuffix?: React.ReactNode;
 }
 
-export function Dropdown<T extends string | number>({ label, value, options, onChange, helpId, fullWidth, className = '', selectClassName = '' }: DropdownProps<T>) {
+export function Dropdown<T extends string | number>({ label, value, options, onChange, helpId, fullWidth, className = '', selectClassName = '', labelSuffix }: DropdownProps<T>) {
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -49,7 +50,7 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
         >
             {label && (
                 <label className="text-[10px] text-gray-400 font-medium tracking-tight mr-2 shrink-0 select-none">
-                    {label}
+                    {label}{labelSuffix}
                 </label>
             )}
             <div className="relative w-[50%] min-w-[120px]">

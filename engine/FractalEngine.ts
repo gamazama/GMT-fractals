@@ -159,7 +159,14 @@ export class FractalEngine {
         
         if (isMobile && initialConfig.quality) {
             initialConfig.quality.precisionMode = 1.0;
-            initialConfig.quality.bufferPrecision = 1.0;
+            // Check if HalfFloat16 with alpha is supported
+            // Some mobile GPUs don't support alpha in half-float textures
+            const supportsHalfFloatAlpha = this.checkHalfFloatAlphaSupport();
+            if (supportsHalfFloatAlpha) {
+                initialConfig.quality.bufferPrecision = 1.0; // HalfFloat16
+            } else {
+                initialConfig.quality.bufferPrecision = 0.0; // Fallback to Float32
+            }
         }
 
         this.configManager = new ConfigManager(initialConfig as ShaderConfig);
@@ -354,7 +361,10 @@ export class FractalEngine {
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Shader...");
         
         // Wait for renderer to be available before compiling
+        // Also add a small delay to allow React to render the spinner before blocking
         const waitForRenderer = async () => {
+            // Give React a frame to render the spinner
+            await new Promise(resolve => requestAnimationFrame(resolve));
             while (!this.renderer) {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
@@ -634,6 +644,58 @@ export class FractalEngine {
         const shaderObj = (typeof programWrapper.fragmentShader === 'object') ? programWrapper.fragmentShader : null;
         if (shaderObj) return ext.getTranslatedShaderSource(shaderObj);
         return null;
+    }
+
+    /**
+     * Check if the GPU supports HalfFloat16 textures with alpha channel.
+     * Some mobile GPUs don't properly support alpha in half-float render targets.
+     */
+    public checkHalfFloatAlphaSupport(): boolean {
+        // Create a temporary canvas to test WebGL capabilities
+        try {
+            const testCanvas = document.createElement('canvas');
+            testCanvas.width = 1;
+            testCanvas.height = 1;
+            
+            // Try WebGL2 first (Three.js uses WebGL2 by default)
+            let gl: WebGLRenderingContext | WebGL2RenderingContext | null = testCanvas.getContext('webgl2');
+            let halfFloatType: number;
+            
+            if (gl) {
+                // WebGL2 has built-in HalfFloat support
+                halfFloatType = (gl as WebGL2RenderingContext).HALF_FLOAT;
+            } else {
+                // Fallback to WebGL1 with extension
+                gl = testCanvas.getContext('webgl') as WebGLRenderingContext | null;
+                if (!gl) return false;
+                
+                const halfFloatExt = gl.getExtension('OES_texture_half_float');
+                if (!halfFloatExt) return false;
+                halfFloatType = halfFloatExt.HALF_FLOAT_OES;
+            }
+
+            // Try to create a half-float render target with alpha
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, halfFloatType, null);
+
+            const framebuffer = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+            const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+            const isComplete = status === gl.FRAMEBUFFER_COMPLETE;
+
+            // Cleanup
+            gl.deleteFramebuffer(framebuffer);
+            gl.deleteTexture(texture);
+
+            console.log(`[GMT] HalfFloat16 Alpha Support: ${isComplete ? 'YES' : 'NO'}`);
+            return isComplete;
+        } catch (e) {
+            console.warn('[GMT] HalfFloat alpha support check failed:', e);
+            return false;
+        }
     }
 }
 

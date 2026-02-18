@@ -40,6 +40,8 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
     float accAlpha = 0.0; // Scalar glow accumulator for Fast Mode
     
     // 3. Loop Config
+    // pixelSizeScale: world-space size of an output pixel (NOT affected by internal scale)
+    // Internal scale affects ray detail, not pixel size calculations
     float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0;
     int limit = int(uMaxSteps);
     float maxMarch = MAX_DIST;
@@ -73,7 +75,10 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
         
         // Dynamic Epsilon (Cone Tracing concept)
         // We relax the hit requirement as we get further away to prevent aliasing and stepping issues
-        float threshold = pixelSizeScale * d * (uPixelThreshold / uDetail);
+        // Note: uDetail is divided by uInternalScale because at higher internal resolutions,
+        // each output pixel covers more render pixels, so we need less precision per output pixel
+        float effectiveDetail = uDetail / uInternalScale;
+        float threshold = pixelSizeScale * d * (uPixelThreshold / effectiveDetail);
         float finalEps = max(threshold, floatPrecision);
         
         // D. Hit Detection

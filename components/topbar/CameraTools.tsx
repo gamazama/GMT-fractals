@@ -8,14 +8,23 @@ import { getExportFileName } from '../../utils/fileUtils';
 
 export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void, btnBase: string, btnActive: string, btnInactive: string }> = ({ isMobileMode, vibrate, btnBase, btnActive, btnInactive }) => {
     const state = useFractalStore();
-    const { floatTab } = state;
+    const { movePanel } = state;
     const [showCameraMenu, setShowCameraMenu] = useState(false);
+    const [isCapturing, setIsCapturing] = useState(false);
     const camHoverTimeoutRef = useRef<number | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
     // Snapshot Handler
     const handleSnapshot = async () => {
         if (!engine.renderer) return;
+        
+        // Show capturing indicator immediately
+        setIsCapturing(true);
+        setShowCameraMenu(false);
+        
+        // Yield to allow UI to update
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         try {
             // Use the new Engine method to get a high-quality, tone-mapped blob
             const blob = await engine.captureSnapshot();
@@ -62,6 +71,8 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
             }
         } catch (e) { 
             console.error("Snapshot failed", e); 
+        } finally {
+            setIsCapturing(false);
         }
     };
 
@@ -92,7 +103,7 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
 
     const handleOpenManager = () => {
         vibrate(5);
-        floatTab('Camera Manager');
+        movePanel('Camera Manager', 'left');
         setShowCameraMenu(false);
     };
     
@@ -114,12 +125,23 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
     }, [showCameraMenu, isMobileMode]);
 
     return (
-        <div 
-            className="relative" 
-            ref={menuRef}
-            onMouseEnter={handleCamMouseEnter} 
-            onMouseLeave={handleCamMouseLeave}
-        >
+        <>
+            {/* Capturing Overlay */}
+            {isCapturing && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-gray-900 border border-cyan-500/50 rounded-xl px-6 py-4 shadow-2xl flex items-center gap-3">
+                        <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-cyan-300 font-bold text-sm tracking-wide">Capturing...</span>
+                    </div>
+                </div>
+            )}
+        
+            <div 
+                className="relative" 
+                ref={menuRef}
+                onMouseEnter={handleCamMouseEnter} 
+                onMouseLeave={handleCamMouseLeave}
+            >
             <button 
                 onClick={handleInteraction} 
                 className={`camera-menu-trigger ${btnBase} ${showCameraMenu ? btnActive : btnInactive}`}
@@ -132,8 +154,8 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                     <div className="absolute -top-1.5 right-4 w-3 h-3 bg-black border-t border-l border-white/20 transform rotate-45" />
                     <div className="px-2 py-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-white/10 mb-1">Camera Tools</div>
                     <div className="space-y-1">
-                        <button onClick={() => { vibrate(5); state.undoCamera(); }} disabled={state.undoStack.length === 0} className="w-full flex items-center gap-2 p-2 rounded hover:bg-white/10 disabled:opacity-30 text-xs text-gray-300 text-left" title="Ctrl + Shift + Z"><UndoIcon /> Undo Move</button>
-                        <button onClick={() => { vibrate(5); state.redoCamera(); }} disabled={state.redoStack.length === 0} className="w-full flex items-center gap-2 p-2 rounded hover:bg-white/10 disabled:opacity-30 text-xs text-gray-300 text-left" title="Ctrl + Shift + Y"><RedoIcon /> Redo Move</button>
+                        <button onClick={() => { vibrate(5); state.undoCamera(); }} disabled={state.undoStack.length === 0} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/10 disabled:opacity-30 text-xs text-gray-300 text-left"><span className="flex items-center gap-2"><UndoIcon /> Undo Move</span><kbd className="text-[8px] text-gray-500 bg-gray-800 px-1 rounded">Ctrl+Shift+Z</kbd></button>
+                        <button onClick={() => { vibrate(5); state.redoCamera(); }} disabled={state.redoStack.length === 0} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/10 disabled:opacity-30 text-xs text-gray-300 text-left"><span className="flex items-center gap-2"><RedoIcon /> Redo Move</span><kbd className="text-[8px] text-gray-500 bg-gray-800 px-1 rounded">Ctrl+Shift+Y</kbd></button>
                         <button onClick={() => { vibrate(30); state.resetCamera(); state.setShowLightGizmo(false); }} className="w-full flex items-center gap-2 p-2 rounded hover:bg-white/10 text-xs text-gray-300 text-left"><ResetIcon /> Reset Position</button>
                         
                         <div className="h-px bg-white/10 my-1" />
@@ -149,5 +171,6 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                 </div>
             )}
         </div>
+        </>
     );
 };

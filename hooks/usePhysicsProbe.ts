@@ -24,8 +24,9 @@ export const usePhysicsProbe = (
     const frameCount = useRef(0);
     const shaderCompiledRef = useRef(false);
     
-    // Depth buffer readback state
+    // Depth buffer readback state - reuse buffer to avoid per-frame allocation
     const depthBuffer = useRef<Float32Array | null>(null);
+    const readBuffer = useRef(new Float32Array(4));
 
     const processDepthData = (depthValue: number) => {
         // Check for valid depth (not sky, not invalid)
@@ -147,18 +148,17 @@ export const usePhysicsProbe = (
         // Depth is stored in the alpha channel of every pixel
         // Note: This reads from the PREVIOUS frame's buffer, so no GPU stall
         try {
-            const readBuffer = new Float32Array(4);
             const centerX = Math.floor(width / 2);
             const centerY = Math.floor(height / 2);
             
             const success = engine.pipeline.readPixels?.(
                 renderer,
                 centerX, centerY, 1, 1,  // Center pixel
-                readBuffer
+                readBuffer.current
             );
             
             if (success) {
-                const depth = readBuffer[3]; // Depth is in alpha channel
+                const depth = readBuffer.current[3]; // Depth is in alpha channel
                 if (depth > 0 && depth < 1000 && Number.isFinite(depth)) {
                     processDepthData(depth);
                 }

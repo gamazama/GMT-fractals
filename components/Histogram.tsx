@@ -31,6 +31,9 @@ interface HistogramProps {
     onToggleAuto?: () => void;
     onRefresh?: () => void;
     
+    // Data freshness (optional)
+    isStale?: boolean;
+    
     // Styling
     height?: number;
     
@@ -51,6 +54,7 @@ const Histogram: React.FC<HistogramProps> = ({
     gradientStops,
     onChange,
     autoUpdate, onToggleAuto, onRefresh,
+    isStale = false,
     height = 48,
     labelTitle = "Levels",
     labelLeft = "Black",
@@ -262,6 +266,12 @@ const Histogram: React.FC<HistogramProps> = ({
             <div className="flex justify-between items-center mb-2 px-3">
                 <div className="flex items-center gap-2">
                     <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{labelTitle}</label>
+                    {/* Stale Indicator */}
+                    {isStale && !autoUpdate && (
+                        <span className="text-[8px] text-amber-400 bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-500/30">
+                            STALE
+                        </span>
+                    )}
                     {onToggleAuto && (
                         <div 
                             className="flex items-center justify-center w-4 h-4 cursor-pointer group rounded hover:bg-white/10"
@@ -273,19 +283,29 @@ const Histogram: React.FC<HistogramProps> = ({
                     )}
                     {onRefresh && !autoUpdate && (
                          <button onClick={onRefresh} className="text-[9px] text-cyan-500 hover:text-white ml-1">
-                             REFRESH
+                              REFRESH
                          </button>
                     )}
                 </div>
-                {onToggleAuto && (
+                <div className="flex items-center gap-1">
+                    {/* 0-1 Range Button */}
                     <button 
-                        onClick={handleAuto}
-                        className="px-2 py-0.5 bg-cyan-900/40 hover:bg-cyan-700 text-cyan-400 text-[9px] rounded border border-cyan-800 transition-colors uppercase font-bold"
-                        title="Fit range to current data"
+                        onClick={() => onChange({ min: 0, max: 1, gamma: 1.0 })}
+                        className="px-2 py-0.5 bg-gray-800/50 hover:bg-gray-700 text-gray-400 hover:text-white text-[8px] rounded border border-gray-600 transition-colors uppercase font-bold"
+                        title="Reset to 0-1 range"
                     >
-                        Fit
+                        0-1
                     </button>
-                )}
+                    {onToggleAuto && (
+                        <button 
+                            onClick={handleAuto}
+                            className="px-2 py-0.5 bg-cyan-900/40 hover:bg-cyan-700 text-cyan-400 text-[9px] rounded border border-cyan-800 transition-colors uppercase font-bold"
+                            title="Fit range to current data"
+                        >
+                            Fit
+                        </button>
+                    )}
+                </div>
             </div>
             
             <div 

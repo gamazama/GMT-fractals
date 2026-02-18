@@ -278,7 +278,23 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         }
         
         if (config.type === 'float' || config.type === 'int') {
-            if (config.options) return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Dropdown label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} options={config.options} fullWidth /></div>;
+            // Add compile indicator for options dropdowns with onUpdate: 'compile'
+            const compileIndicator = config.onUpdate === 'compile' ? (
+                <span className="text-[8px] text-amber-400 font-bold ml-1" title="Requires shader recompile">⚡</span>
+            ) : null;
+            
+            if (config.options) return (
+                <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <Dropdown 
+                        label={config.label} 
+                        value={val} 
+                        onChange={(v) => handleUpdate(key, v)} 
+                        options={config.options} 
+                        fullWidth 
+                        labelSuffix={compileIndicator}
+                    />
+                </div>
+            );
             
             if (config.ui === 'knob') return <div className={config.layout === 'half' ? "flex flex-col items-center justify-center py-2" : "flex justify-center p-2"}><Knob label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, v)} color={val > (config.min ?? 0) ? "#22d3ee" : "#444"} size={40} /></div>;
             
@@ -290,7 +306,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const trackId = `${featureId}.${key}`;
             const liveValue = liveModulations[trackId];
             
-            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={val !== config.default} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} /></div>;
+            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={val !== config.default} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} /></div>;
         }
         
         if (config.type === 'vec2') return <div className={`mb-2 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Pad label={config.label} valueX={val?.x ?? 0} valueY={val?.y ?? 0} min={config.min ?? -1} max={config.max ?? 1} onChange={(x, y) => handleUpdate(key, { x, y })} /></div>;

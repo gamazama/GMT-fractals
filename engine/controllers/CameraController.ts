@@ -24,14 +24,19 @@ export class CameraController {
     private currentRotVelocity = new THREE.Vector3();
     private rollVelocity = 0;
     
+    // Smoothed distance for speed calculation (lerp when increasing)
+    private smoothedDistEstimate = 10.0;
+    
     // Config
     private readonly ROTATION_SMOOTHING = 20.0;
     private readonly ROLL_SMOOTHING = 3.0; // Decay rate
     private readonly SENSITIVITY = 2.5;
+    private readonly DIST_INCREASE_LERP_RATE = 8.0; // Lerp speed when DST increases
 
     public reset() {
         this.currentRotVelocity.set(0, 0, 0);
         this.rollVelocity = 0;
+        this.smoothedDistEstimate = 10.0;
     }
 
     private applyCurve(v: number): number {
@@ -57,10 +62,27 @@ export class CameraController {
     ): boolean {
         let didMove = false;
 
+        // --- 0. SMOOTH DISTANCE ESTIMATE ---
+        // Lerp when DST increases to prevent sudden speedups
+        // Immediate response when DST decreases (getting closer to surface)
+        const rawDist = settings.distEstimate;
+        const safeDelta = Math.min(delta, 0.1);
+        
+        if (rawDist > this.smoothedDistEstimate) {
+            // DST increased - lerp smoothly to prevent sudden speedup
+            const lerpFactor = 1.0 - Math.exp(-this.DIST_INCREASE_LERP_RATE * safeDelta);
+            this.smoothedDistEstimate += (rawDist - this.smoothedDistEstimate) * lerpFactor;
+        } else {
+            // DST decreased - respond immediately for safety
+            this.smoothedDistEstimate = rawDist;
+        }
+        
+        const effectiveDist = this.smoothedDistEstimate;
+
         // --- 1. LINEAR MOVEMENT ---
         const boost = inputs.move.boost ? 4.0 : 1.0;
         const targetSpeed = settings.autoSlow 
-            ? Math.max(settings.distEstimate * settings.baseSpeed * boost, 1e-6) 
+            ? Math.max(effectiveDist * settings.baseSpeed * boost, 1e-6) 
             : 2.0 * settings.baseSpeed * boost;
 
         const tv = new THREE.Vector3(0, 0, 0);
@@ -82,9 +104,6 @@ export class CameraController {
 
         if (tv.lengthSq() > 0) {
             // Apply Movement
-            // Safety: Clamp delta to prevent massive jumps during lag spikes
-            const safeDelta = Math.min(delta, 0.1);
-            
             tv.normalize().multiplyScalar(targetSpeed * safeDelta);
             
             // Transform local direction to world space
@@ -97,12 +116,14 @@ export class CameraController {
 
         // --- 2. ROTATIONAL MOVEMENT ---
         
-        // Update Roll Momentum
+        // Update Roll Momentum (affected by speed for consistent feel)
         const targetRoll = inputs.move.rollLeft ? 1 : (inputs.move.rollRight ? -1 : 0);
         const rollAccel = targetRoll !== 0 ? 1.0 : this.ROLL_SMOOTHING;
         const rollFactor = 1.0 - Math.exp(-rollAccel * delta);
+        // Scale roll by current speed (minimum 0.1 for usability at low speeds)
+        const speedScale = Math.max(0.1, settings.baseSpeed);
         
-        this.rollVelocity += (targetRoll - this.rollVelocity) * rollFactor;
+        this.rollVelocity += (targetRoll * speedScale - this.rollVelocity) * rollFactor;
         if (targetRoll === 0 && Math.abs(this.rollVelocity) < 0.001) this.rollVelocity = 0;
 
         // Calculate Target Rotation Velocity
@@ -124,7 +145,6 @@ export class CameraController {
         tr.z = this.rollVelocity * 0.62;
 
         // Smoothing (Frame-rate independent)
-        const safeDelta = Math.min(delta, 0.1);
         const rotSmoothFactor = 1.0 - Math.exp(-this.ROTATION_SMOOTHING * safeDelta);
         
         this.currentRotVelocity.lerp(tr, rotSmoothFactor);

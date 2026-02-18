@@ -12,6 +12,7 @@ import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from './registry/ComponentRegistry';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 import { FixedResolutionControls } from './viewport/FixedResolutionControls';
+import { CompositionOverlay } from './viewport/CompositionOverlay';
 import { engine } from '../engine/FractalEngine';
 import Navigation from './Navigation';
 import { CompilingIndicator } from './CompilingIndicator';
@@ -265,6 +266,11 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
                 </Canvas>
 
                 <DomOverlays />
+                
+                {/* Composition Overlay - Grid, Thirds, Golden Ratio, Spiral */}
+                {!isCleanFeed && (
+                    <CompositionOverlay width={isFixed ? w : viewportSize.w} height={isFixed ? h : viewportSize.h} />
+                )}
                 
                 {!isCleanFeed && state.histogramActiveCount > 0 && (
                      <HistogramProbe 

@@ -48,7 +48,10 @@ export const Uniforms = {
     HistogramLayer: 'uHistogramLayer',
     
     // Geometry Transforms (CPU Optimization)
-    PreRotMatrix: 'uPreRotMatrix'
+    PreRotMatrix: 'uPreRotMatrix',
+    
+    // Export/Render Scale
+    InternalScale: 'uInternalScale'
 } as const;
 
 export type UniformName = typeof Uniforms[keyof typeof Uniforms];

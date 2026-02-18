@@ -23,9 +23,10 @@ export const CompilingIndicator: React.FC = () => {
 
     // Removed animate-fade-in to prevent missing class issues
     // Using standard transition logic instead
+    // z-index 99999 to be above all floating windows
     return (
         <div 
-            className={`fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+            className={`fixed inset-0 z-[99999] flex items-center justify-center pointer-events-none transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         >
             <div className="bg-black/90 backdrop-blur-md border border-white/20 px-6 py-3 rounded-full flex items-center gap-3 shadow-2xl">
                 <SpinnerIcon className="animate-spin h-4 w-4 text-cyan-400" />
