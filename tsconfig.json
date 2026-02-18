@@ -16,10 +16,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "baseUrl": ".",
-    "paths": {
-      "mediabunny": ["./utils/mediabunny.d.ts"]
-    }
+    "baseUrl": "."
   },
   "include": ["."],
   "exclude": ["node_modules", "dist", "**/*.min.mjs", "vite.config.ts"],

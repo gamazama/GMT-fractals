@@ -1,5 +1,5 @@
 
-export const getFragmentMainGLSL = (enablePathTracing: boolean, enableDepthOutput: boolean = true) => {
+export const getFragmentMainGLSL = (enablePathTracing: boolean) => {
 
     // Optimized: Only inject the code for the ACTIVE mode.
     // This dramatically reduces shader compilation time.
@@ -17,28 +17,13 @@ export const getFragmentMainGLSL = (enablePathTracing: boolean, enableDepthOutpu
         `;
     }
 
-    // Conditionally add MRT depth output
-    // When disabled (physics probe in Manual mode), shader compiles faster
-    const depthOutputDecl = enableDepthOutput 
-        ? `layout(location = 1) out vec4 fragDepth;  // Distance to surface in .r (RGBA for readPixels compatibility)`
-        : ``;
-    
-    const depthOutputWrite = enableDepthOutput
-        ? `fragDepth = vec4(depth, 0.0, 0.0, 1.0);  // Output distance to second render target`
-        : ``;
-    
-    const depthOutputInvalid = enableDepthOutput
-        ? `fragDepth = vec4(-1.0, 0.0, 0.0, 1.0);  // Invalid depth for region outside`
-        : ``;
-
     return `
 // ------------------------------------------------------------------
 // MAIN RENDER LOOP
 // ------------------------------------------------------------------
 
-// Output Layout for GLSL 3.00 ES - MRT for color + depth
+// Output Layout for GLSL 3.00 ES - single color output
 layout(location = 0) out vec4 pc_fragColor;
-${depthOutputDecl}
 
 // Safety to prevent NaNs/Infs from poisoning the accumulation buffer
 vec3 sanitizeColor(vec3 col) {
@@ -95,18 +80,19 @@ void main() {
     // --- Region Check ---
     if (vUv.x < uRegionMin.x || vUv.y < uRegionMin.y || vUv.x > uRegionMax.x || vUv.y > uRegionMax.y) {
         pc_fragColor = history;
-        ${depthOutputInvalid}
         return;
     }
 
+    // --- Normal rendering for all pixels ---
     float depth;
     vec3 col = renderPixel(vUv, 0.0, depth);
     col = sanitizeColor(col);
     vec3 safeHistory = history.rgb;
     
     vec3 finalCol = mix(safeHistory, col, uBlendFactor);
-    pc_fragColor = vec4(finalCol, 1.0);
-    ${depthOutputWrite}
+    
+    // Store depth in alpha channel - physics probe reads center pixel from previous frame
+    pc_fragColor = vec4(finalCol, depth);
 }
 `;
 };

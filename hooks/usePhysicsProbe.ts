@@ -22,6 +22,7 @@ export const usePhysicsProbe = (
     
     // Internals
     const frameCount = useRef(0);
+    const shaderCompiledRef = useRef(false);
     
     // Depth buffer readback state
     const depthBuffer = useRef<Float32Array | null>(null);
@@ -60,6 +61,20 @@ export const usePhysicsProbe = (
     useFrame((state) => {
         frameCount.current++;
         
+        // Skip physics probe during initial shader compilation
+        // Wait for engine to indicate shader is compiled AND for several frames to pass
+        // to ensure shader is fully compiled and buffer is ready
+        if (!engine.hasCompiledShader || frameCount.current < 15) {
+            // Just use cached distance during initial compilation
+            if (hudRefs.dist.current && frameCount.current % 10 === 0) {
+                hudRefs.dist.current.innerText = `DST ${distAverageRef.current.toFixed(4)}`;
+            }
+            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
+                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+            }
+            return;
+        }
+        
         // Get physics probe mode (0=GPU, 1=CPU, 2=Manual)
         // Default to GPU (0) which now reads from depth buffer
         const probeMode = qualityState.physicsProbeMode ?? 0;
@@ -93,10 +108,23 @@ export const usePhysicsProbe = (
         const renderer = engine.renderer;
         if (!renderer) return;
         
-        // Get the previous frame's depth render target dimensions
-        const depthTarget = engine.pipeline.getPreviousDepthTarget?.();
-        if (!depthTarget) {
-            // Depth buffer not ready yet - use cached distance
+        // Get the previous frame's render target dimensions
+        const renderTarget = engine.pipeline.getPreviousRenderTarget?.();
+        if (!renderTarget) {
+            // Render target not ready yet - use cached distance
+            if (hudRefs.dist.current && frameCount.current % 10 === 0) {
+                hudRefs.dist.current.innerText = `DST ${distAverageRef.current.toFixed(4)}`;
+            }
+            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
+                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+            }
+            return;
+        }
+        
+        // Check if render target has valid dimensions
+        const width = renderTarget.width || 1;
+        const height = renderTarget.height || 1;
+        if (width <= 0 || height <= 0) {
             if (hudRefs.dist.current && frameCount.current % 10 === 0) {
                 hudRefs.dist.current.innerText = `DST ${distAverageRef.current.toFixed(4)}`;
             }
@@ -107,8 +135,6 @@ export const usePhysicsProbe = (
         }
         
         // Read center 4x4 pixels from depth render target
-        const width = depthTarget.width || 1;
-        const height = depthTarget.height || 1;
         const centerX = Math.floor(width / 2);
         const centerY = Math.floor(height / 2);
         
@@ -117,39 +143,29 @@ export const usePhysicsProbe = (
             depthBuffer.current = new Float32Array(64);
         }
         
-        // Read from the depth render target using custom WebGL2 method
-        // This reads from COLOR_ATTACHMENT1 (depth texture in MRT)
+        // Read the center pixel from the previous frame's render target
+        // Depth is stored in the alpha channel of every pixel
         // Note: This reads from the PREVIOUS frame's buffer, so no GPU stall
         try {
-            const success = engine.pipeline.readDepthPixels?.(
+            const readBuffer = new Float32Array(4);
+            const centerX = Math.floor(width / 2);
+            const centerY = Math.floor(height / 2);
+            
+            const success = engine.pipeline.readPixels?.(
                 renderer,
-                centerX - 2, centerY - 2, 4, 4,
-                depthBuffer.current
+                centerX, centerY, 1, 1,  // Center pixel
+                readBuffer
             );
             
             if (success) {
-                // Average the valid depth values (depth is in .r component, so every 4th value)
-                let sum = 0;
-                let count = 0;
-                for (let i = 0; i < 64; i += 4) {
-                    const d = depthBuffer.current[i]; // .r component
-                    if (d > 0 && d < 1000 && Number.isFinite(d)) {
-                        sum += d;
-                        count++;
-                    }
-                }
-                
-                if (count > 0) {
-                    const avgDepth = sum / count;
-                    processDepthData(avgDepth);
+                const depth = readBuffer[3]; // Depth is in alpha channel
+                if (depth > 0 && depth < 1000 && Number.isFinite(depth)) {
+                    processDepthData(depth);
                 }
             }
         } catch (e) {
-            // Depth target not ready, use cached
-        }
-        
-        if (hudRefs.speed.current && frameCount.current % 10 === 0) {
-            hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+            // Depth readback failed, use cached value
+            console.warn('Depth readback failed:', e);
         }
         
         if (hudRefs.speed.current && frameCount.current % 10 === 0) {

@@ -1,4 +1,3 @@
-
 {
   "name": "gmt-fractal",
   "version": "0.8.3",
@@ -17,6 +16,7 @@
     "@react-three/fiber": "^8.16.1",
     "cross-env": "^7.0.3",
     "express": "^4.19.2",
+    "mediabunny": "^1.34.0",
     "nanoid": "^5.0.6",
     "pako": "^2.1.0",
     "react": "^18.2.0",

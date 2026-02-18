@@ -10,7 +10,7 @@ import { QualityState } from '../features/quality';
 import { FractalEvents } from '../engine/FractalEvents';
 import { engine } from '../engine/FractalEngine';
 
-const getThumbPath = (id: string) => `/thumbnails/fractal_${id}.jpg`;
+const getThumbPath = (id: string) => `thumbnails/fractal_${id}.jpg`;
 
 interface LoadingScreenProps {
   isReady: boolean;

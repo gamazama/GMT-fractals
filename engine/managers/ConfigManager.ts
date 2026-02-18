@@ -78,6 +78,22 @@ export class ConfigManager {
             if (a.isVector2 && b.isVector2) {
                 return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
             }
+            // Handle cases where one is a THREE object and the other is a plain object (from preset)
+            if (a.isVector3 || b.isVector3) {
+                const va = a.isVector3 ? a : new THREE.Vector3(a.x, a.y, a.z);
+                const vb = b.isVector3 ? b : new THREE.Vector3(b.x, b.y, b.z);
+                return Math.abs(va.x - vb.x) < 1e-6 && Math.abs(va.y - vb.y) < 1e-6 && Math.abs(va.z - vb.z) < 1e-6;
+            }
+            if (a.isVector2 || b.isVector2) {
+                const va = a.isVector2 ? a : new THREE.Vector2(a.x, a.y);
+                const vb = b.isVector2 ? b : new THREE.Vector2(b.x, b.y);
+                return Math.abs(va.x - vb.x) < 1e-6 && Math.abs(va.y - vb.y) < 1e-6;
+            }
+            if (a.isColor || b.isColor) {
+                const ca = a.isColor ? a : new THREE.Color(a);
+                const cb = b.isColor ? b : new THREE.Color(b);
+                return ca.getHex() === cb.getHex();
+            }
             // Array (Simple shallow check for now)
             if (Array.isArray(a) && Array.isArray(b)) {
                  if (a.length !== b.length) return false;

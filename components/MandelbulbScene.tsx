@@ -34,10 +34,11 @@ const MandelbulbScene: React.FC<MandelbulbSceneProps> = ({ onLoaded }) => {
       engine.registerRenderer(gl);
   }, [camera, gl]);
 
-  // Compilation Sequence (Same as before, robust)
+  // Compilation Sequence
   useEffect(() => {
       if (!gl || isCompiled) return;
       engine.mainUniforms.uResolution.value.set(size.width, size.height);
+      engine.pipeline.resize(size.width, size.height);
 
       let isMounted = true;
 
@@ -47,51 +48,21 @@ const MandelbulbScene: React.FC<MandelbulbSceneProps> = ({ onLoaded }) => {
               await new Promise(r => setTimeout(r, 50));
           }
 
-          FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Initializing GPU...");
-          await new Promise(r => requestAnimationFrame(() => setTimeout(r, 100)));
-          if (!isMounted) return;
-
-          const startTime = performance.now();
-          const context = gl.getContext();
-          const parallelExt = context.getExtension('KHR_parallel_shader_compile');
-          
-          try {
-              // Compile Main Engine Scene (Internal FBO Renderer)
-              if (parallelExt) {
-                  await gl.compileAsync(engine.mainScene, engine.mainCamera);
-              } else {
-                  gl.compile(engine.mainScene, engine.mainCamera);
-              }
-
-              // Warmup Draw removed - was causing double shader compilation
-              // The preWarmMRT in RenderPipeline handles shader warmup for MRT configuration
-              // Rendering to a single-render-target here caused the GPU to compile a second variant
-              
-              const duration = (performance.now() - startTime) / 1000;
-              console.log(`[Shader Compiled] Time: ${duration.toFixed(3)}s`);
-              
-              if (duration > 0.05) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, duration);
-              FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-
-              if (isMounted) {
-                  setIsCompiled(true);
-                  if (onLoaded) onLoaded();
-              }
-          } catch (err) {
-              console.error("MandelbulbScene: Fatal Compilation Error", err);
-              FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-              if (isMounted) {
-                  setIsCompiled(true);
-                  if (onLoaded) onLoaded();
-              }
+          // Wait for engine's internal compilation to complete
+          while (engine.isCompiling) {
+              if (!isMounted) return;
+              await new Promise(r => setTimeout(r, 50));
           }
+
+          // Now that engine compilation is complete, we're ready to render
+          setIsCompiled(true);
+          if (onLoaded) onLoaded();
       };
 
       performCompilation();
 
       return () => {
           isMounted = false;
-          FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
       };
   }, [gl, size]);
 
@@ -107,7 +78,13 @@ const MandelbulbScene: React.FC<MandelbulbSceneProps> = ({ onLoaded }) => {
   // --- RENDER LOOP ---
   // Priority 1: Runs BEFORE default R3F render
   useFrame((state, delta) => {
-    if (!isCompiled || isExporting) return;
+    if (!isCompiled) return;
+    
+    // When exporting, tick the video exporter and skip normal rendering
+    if (isExporting) {
+        engine.videoExporter.tick(gl);
+        return;
+    }
 
     // 1. Animation System Tick
     animationTick(delta);

@@ -38,7 +38,7 @@ const LazyThumbnail = React.memo(({ id, label }: { id: string, label: string }) 
         <div ref={imgRef} className="w-full h-full">
             {isVisible && (
                 <img 
-                    src={`/thumbnails/fractal_${id}.jpg`} 
+                    src={`thumbnails/fractal_${id}.jpg`} 
                     alt={label} 
                     className="w-full h-full object-cover" 
                     onError={() => setHasError(true)}
@@ -298,7 +298,7 @@ const PortalDropdown = ({
                     style={previewStyle}
                 >
                     <img 
-                        src={`/thumbnails/fractal_${hoveredId}.jpg`} 
+                        src={`thumbnails/fractal_${hoveredId}.jpg`} 
                         className="w-full h-full object-cover" 
                         alt="Preview" 
                         onError={(e) => (e.currentTarget.parentElement!.style.display = 'none')}

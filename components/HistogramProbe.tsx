@@ -117,7 +117,7 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
             if (triggerChanged) prevTrigger.current = trigger;
 
             frameCount++;
-            const shouldRender = (autoUpdate && frameCount % 1000 === 0) || triggerChanged;
+            const shouldRender = (autoUpdate && frameCount % 60 === 0) || triggerChanged;
 
             if (shouldRender) {
                 const gl = engine.renderer;

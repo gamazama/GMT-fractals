@@ -12,7 +12,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),
-      'mediabunny': path.resolve(__dirname, './utils/mediabunny.min.mjs'),
     },
   },
   build: {

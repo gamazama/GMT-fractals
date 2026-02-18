@@ -30,8 +30,8 @@ void main() {
 export class RenderPipeline {
     // MRT targets: texture[0] = Color, texture[1] = Depth
     // Double-buffered for temporal accumulation and async depth readback
-    private mrtTargetA: THREE.WebGLMultipleRenderTargets | null = null;
-    private mrtTargetB: THREE.WebGLMultipleRenderTargets | null = null;
+    private mrtTargetA: THREE.WebGLRenderTarget | null = null;
+    private mrtTargetB: THREE.WebGLRenderTarget | null = null;
     
     // Which target was written to last frame (0 = A, 1 = B)
     private writeIndex: number = 0;
@@ -50,7 +50,7 @@ export class RenderPipeline {
     private convergenceScene: THREE.Scene | null = null;
     private convergenceCamera: THREE.Camera | null = null;
 
-    private isHolding: boolean = false;
+    public isHolding: boolean = false;
 
     // Local State (Decoupled from Store)
     private _qualityState: QualityState | null = null;
@@ -77,71 +77,40 @@ export class RenderPipeline {
      */
     public getPreviousColorTexture(): THREE.Texture | null {
         const target = this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;
-        return target?.texture?.[0] || null;
+        return target?.texture || null;
     }
     
     /**
-     * Get the depth texture from the PREVIOUS frame (for physics probe)
+     * Get the render target from the PREVIOUS frame (for physics probe readback)
      * This is safe to read without stalling the GPU
      */
-    public getPreviousDepthTexture(): THREE.Texture | null {
-        const target = this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;
-        return target?.texture?.[1] || null;
-    }
-    
-    /**
-     * Get the MRT target from the PREVIOUS frame (for physics probe readback)
-     */
-    public getPreviousDepthTarget(): THREE.WebGLMultipleRenderTargets | null {
+    public getPreviousRenderTarget(): THREE.WebGLRenderTarget | null {
         return this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;
     }
     
     /**
-     * Read depth values from the previous frame's depth texture (MRT texture[1])
-     * This uses raw WebGL2 to read from the second color attachment
+     * Read pixels from the previous frame's color buffer
+     * This reads from the bottom right corner where depth info is encoded
      */
-    public readDepthPixels(
+    public readPixels(
         renderer: THREE.WebGLRenderer,
         x: number, y: number, 
         width: number, height: number,
         buffer: Float32Array
     ): boolean {
-        const mrtTarget = this.getPreviousDepthTarget();
-        if (!mrtTarget) return false;
+        // Don't attempt readback before targets are initialized or shader is compiled
+        if (!this.mrtTargetA || !this.mrtTargetB) return false;
         
-        // Get WebGL2 context
-        const gl = renderer.getContext() as WebGL2RenderingContext;
-        if (!gl.readBuffer) {
-            console.warn('WebGL2 required for MRT depth readback');
-            return false;
-        }
+        const target = this.getPreviousRenderTarget();
+        if (!target) return false;
         
-        // Get the framebuffer for this MRT target
-        const fbInfo = renderer.properties.get(mrtTarget);
-        if (!fbInfo?.__webglFramebuffer) {
-            return false;
-        }
-        
-        // Save current framebuffer
-        const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING);
-        
+        // Use standard Three.js readPixels on color buffer
         try {
-            // Bind MRT framebuffer
-            gl.bindFramebuffer(gl.FRAMEBUFFER, fbInfo.__webglFramebuffer);
-            
-            // Read from COLOR_ATTACHMENT1 (depth texture)
-            gl.readBuffer(gl.COLOR_ATTACHMENT1);
-            
-            // Read pixels
-            gl.readPixels(x, y, width, height, gl.RGBA, gl.FLOAT, buffer);
-            
+            renderer.readRenderTargetPixels(target, x, y, width, height, buffer);
             return true;
         } catch (e) {
-            console.warn('Depth readback failed:', e);
+            console.warn('Pixel readback failed:', e);
             return false;
-        } finally {
-            // Restore previous framebuffer
-            gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
         }
     }
     
@@ -149,102 +118,25 @@ export class RenderPipeline {
         const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
         const floatType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
         
-        // MRT targets: [0] = Color (RGBA), [1] = Depth (RGBA, depth in .r)
-        const mrtOpts = {
+        // Single render target (color only) - no MRT needed
+        const rtOpts = {
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter,
             stencilBuffer: false,
             depthBuffer: false,
-            generateMipmaps: false
+            generateMipmaps: false,
+            format: THREE.RGBAFormat,
+            type: floatType
         };
         
-        // Create MRT with 2 outputs
-        this.mrtTargetA = new THREE.WebGLMultipleRenderTargets(width, height, 2, mrtOpts);
-        this.mrtTargetB = new THREE.WebGLMultipleRenderTargets(width, height, 2, mrtOpts);
-        
-        // Configure texture formats for target A
-        // Texture 0: Color (RGBA)
-        this.mrtTargetA.texture[0].format = THREE.RGBAFormat;
-        this.mrtTargetA.texture[0].type = floatType;
-        this.mrtTargetA.texture[0].minFilter = THREE.LinearFilter;
-        this.mrtTargetA.texture[0].magFilter = THREE.LinearFilter;
-        
-        // Texture 1: Depth (RGBA for readPixels compatibility, depth in .r)
-        this.mrtTargetA.texture[1].format = THREE.RGBAFormat;
-        this.mrtTargetA.texture[1].type = THREE.FloatType; // Always float for depth precision
-        this.mrtTargetA.texture[1].minFilter = THREE.NearestFilter;
-        this.mrtTargetA.texture[1].magFilter = THREE.NearestFilter;
-        
-        // Same for target B
-        this.mrtTargetB.texture[0].format = THREE.RGBAFormat;
-        this.mrtTargetB.texture[0].type = floatType;
-        this.mrtTargetB.texture[0].minFilter = THREE.LinearFilter;
-        this.mrtTargetB.texture[0].magFilter = THREE.LinearFilter;
-        
-        this.mrtTargetB.texture[1].format = THREE.RGBAFormat;
-        this.mrtTargetB.texture[1].type = THREE.FloatType;
-        this.mrtTargetB.texture[1].minFilter = THREE.NearestFilter;
-        this.mrtTargetB.texture[1].magFilter = THREE.NearestFilter;
+        // Create single render targets
+        this.mrtTargetA = new THREE.WebGLRenderTarget(width, height, rtOpts);
+        this.mrtTargetB = new THREE.WebGLRenderTarget(width, height, rtOpts);
         
         this.resetAccumulation();
     }
     
-    /**
-     * Pre-warm MRT framebuffers to avoid first-use delay
-     * This forces WebGL to validate the framebuffer configuration
-     * AND triggers GPU driver to compile shader for MRT configuration
-     * Call this after shader compilation is complete
-     */
-    public preWarmMRT(renderer: THREE.WebGLRenderer) {
-        if (!this.mrtTargetA || !this.mrtTargetB) return;
-        
-        const currentTarget = renderer.getRenderTarget();
-        
-        // Create a minimal dummy scene with a simple shader
-        // This triggers the GPU driver to validate the MRT framebuffer
-        // WITHOUT doing expensive raymarching
-        const dummyScene = new THREE.Scene();
-        const dummyCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        
-        // Simple shader that outputs to both MRT locations
-        const dummyMaterial = new THREE.ShaderMaterial({
-            vertexShader: `
-                varying vec2 vUv;
-                void main() {
-                    vUv = uv;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `,
-            fragmentShader: `
-                layout(location = 0) out vec4 color;
-                layout(location = 1) out vec4 depth;
-                void main() {
-                    color = vec4(0.0);
-                    depth = vec4(0.0);
-                }
-            `,
-            glslVersion: THREE.GLSL3
-        });
-        
-        const dummyMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), dummyMaterial);
-        dummyMesh.frustumCulled = false;
-        dummyScene.add(dummyMesh);
-        
-        // Render to both MRT targets to trigger validation
-        renderer.setRenderTarget(this.mrtTargetA);
-        renderer.render(dummyScene, dummyCam);
-        
-        renderer.setRenderTarget(this.mrtTargetB);
-        renderer.render(dummyScene, dummyCam);
-        
-        renderer.setRenderTarget(currentTarget);
-        
-        // Clean up
-        dummyMesh.geometry.dispose();
-        dummyMaterial.dispose();
-        
-        console.log('[MRT Pre-warmed] Framebuffers validated');
-    }
+
     
     private initConvergenceTools(floatType: THREE.TextureDataType) {
         if (!this.convergenceTarget) {
@@ -285,7 +177,7 @@ export class RenderPipeline {
     
     public resize(width: number, height: number) {
         const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
-        const currentType = this.mrtTargetA?.texture[0].type;
+        const currentType = this.mrtTargetA?.texture.type;
         const desiredType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
         
         if (!this.mrtTargetA || this.mrtTargetA.width !== width || this.mrtTargetA.height !== height || currentType !== desiredType) {
@@ -328,7 +220,7 @@ export class RenderPipeline {
         if (!this.mrtTargetA) return null;
         // Return color texture from the target we just wrote to
         const target = this.writeIndex === 0 ? this.mrtTargetB : this.mrtTargetA;
-        return target?.texture?.[0] || null;
+        return target?.texture || null;
     }
     
     public measureConvergence(
@@ -340,9 +232,9 @@ export class RenderPipeline {
         
         if (this.accumulationCount <= 1) return 1.0;
 
-        // Bind color textures from both MRT targets
-        this.convergenceMaterial.uniforms.tA.value = this.mrtTargetA.texture[0];
-        this.convergenceMaterial.uniforms.tB.value = this.mrtTargetB.texture[0];
+        // Bind color textures from both render targets
+            this.convergenceMaterial.uniforms.tA.value = this.mrtTargetA.texture;
+            this.convergenceMaterial.uniforms.tB.value = this.mrtTargetB.texture;
         this.convergenceMaterial.uniforms.uBoundsMin.value.copy(boundsMin);
         this.convergenceMaterial.uniforms.uBoundsMax.value.copy(boundsMax);
         
@@ -391,7 +283,7 @@ export class RenderPipeline {
         
         // Set uniforms for temporal blending
         engine.mainUniforms[Uniforms.BlendFactor].value = blend;
-        engine.mainUniforms[Uniforms.HistoryTexture].value = readTarget.texture[0]; // Previous frame's color
+        engine.mainUniforms[Uniforms.HistoryTexture].value = readTarget.texture; // Previous frame's color
         engine.mainUniforms[Uniforms.ExtraSeed].value = Math.random() * 100.0;
         
         const currentTarget = renderer.getRenderTarget();

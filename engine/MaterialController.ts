@@ -48,13 +48,11 @@ export class MaterialController {
     public materialPT: THREE.ShaderMaterial;
     
     // Aux materials
-    public physicsMaterial: THREE.ShaderMaterial;
     public histogramMaterial: THREE.ShaderMaterial;
     public displayMaterial: THREE.ShaderMaterial; 
     public exportMaterial: THREE.ShaderMaterial;  
     
     public mainUniforms: { [key: string]: THREE.IUniform };
-    public physicsUniforms: { [key: string]: THREE.IUniform };
     public histogramUniforms: { [key: string]: THREE.IUniform };
     
     // Cache to prevent redundant compiles
@@ -77,7 +75,6 @@ export class MaterialController {
         baseUniforms[Uniforms.BlueNoiseTexture].value = blueNoiseTex;
 
         this.mainUniforms = cloneUniforms(baseUniforms);
-        this.physicsUniforms = cloneUniforms(baseUniforms);
         this.histogramUniforms = cloneUniforms(baseUniforms);
         
         // Initialize both materials with placeholder shaders
@@ -100,13 +97,6 @@ export class MaterialController {
         });
 
         // Initialize Aux
-        this.physicsMaterial = new THREE.ShaderMaterial({
-            vertexShader: VERTEX_SHADER,
-            fragmentShader: 'layout(location = 0) out vec4 pc_fragColor; void main() { pc_fragColor = vec4(0.0); }',
-            uniforms: this.physicsUniforms,
-            glslVersion: THREE.GLSL3
-        });
-        
         this.histogramMaterial = new THREE.ShaderMaterial({
             vertexShader: VERTEX_SHADER,
             fragmentShader: 'layout(location = 0) out vec4 pc_fragColor; void main() { pc_fragColor = vec4(0.0); }',
@@ -119,6 +109,15 @@ export class MaterialController {
         
         // Sync Initial Uniforms ONLY (No Shader Build)
         this.syncConfigUniforms(initialConfig);
+        
+        // Build histogram shader on initialization
+        const configAux = { 
+            ...initialConfig, 
+            renderMode: 'Direct' as const,
+            lighting: { ...(initialConfig.lighting || {}), renderMode: 0.0 }
+        };
+        this.histogramMaterial.fragmentShader = ShaderFactory.generateHistogramShader(configAux);
+        this.histogramMaterial.needsUpdate = true;
     }
     
     // Legacy getter - returns active material
@@ -127,6 +126,11 @@ export class MaterialController {
     }
 
     public getMaterial(mode: 'Direct' | 'PathTracing') {
+        console.log('getMaterial called with mode:', mode);
+        console.log('directDirty:', this.directDirty);
+        console.log('ptDirty:', this.ptDirty);
+        console.log('Stack trace:', new Error().stack);
+        
         this.currentMode = mode;
         
         // Lazy Load: If switching to a mode that is dirty, compile it now
@@ -188,12 +192,20 @@ export class MaterialController {
              this.currentMode = config.renderMode || 'Direct';
         }
 
+        // CRITICAL: Always compile shader with depth output enabled
+        // This ensures the shader is compiled with the correct output configuration
+        // from the beginning, preventing recompilation when physics probe reads depth
+        const configWithDepth = {
+            ...config,
+            forceDepthOutput: true
+        };
+
         // LAZY LOGIC: Only compile the ACTIVE shader. Mark other as dirty.
         if (this.currentMode === 'Direct') {
-            this.compileDirect(config);
+            this.compileDirect(configWithDepth);
             this.ptDirty = true;
         } else {
-            this.compilePT(config);
+            this.compilePT(configWithDepth);
             this.directDirty = true;
         }
 
@@ -203,9 +215,6 @@ export class MaterialController {
             renderMode: 'Direct' as const,
             lighting: { ...(config.lighting || {}), renderMode: 0.0 }
         };
-        
-        this.physicsMaterial.fragmentShader = ShaderFactory.generatePhysicsShader(configAux);
-        this.physicsMaterial.needsUpdate = true;
         
         this.histogramMaterial.fragmentShader = ShaderFactory.generateHistogramShader(configAux);
         this.histogramMaterial.needsUpdate = true;
@@ -224,12 +233,20 @@ export class MaterialController {
         const checksum = cyrb53(fragDirect).toString(16);
         
         if (checksum !== this.activeDirectChecksum) {
+            console.log('=== Shader Recompilation ===');
+            console.log('Previous checksum:', this.activeDirectChecksum);
+            console.log('New checksum:', checksum);
+            console.log('Shader length:', fragDirect.length);
+            console.log('Stack trace:', new Error().stack);
+            
             this.materialDirect.fragmentShader = fragDirect;
             this.materialDirect.needsUpdate = true;
             this.activeDirectChecksum = checksum;
             
             console.log(`[Shader Generated] Direct | Hash: ${checksum.substring(0, 8)} | Size: ${(fragDirect.length/1024).toFixed(1)}kb`);
             FractalEvents.emit('shader_code', fragDirect);
+        } else {
+            console.log('=== Shader Unchanged ===');
         }
         this.lastGeneratedFrag = fragDirect;
         this.directDirty = false;
@@ -263,11 +280,16 @@ export class MaterialController {
         if (value && value.isGradientBuffer) {
              const existingTex = this.mainUniforms[key]?.value;
              if (existingTex instanceof THREE.DataTexture) {
-                 existingTex.image.data = value.buffer;
-                 existingTex.needsUpdate = true;
-                 valToAssign = existingTex;
+                 // Create new texture with updated data instead of modifying read-only property
+                 const tex = new THREE.DataTexture(value.buffer as any, 256, 1, THREE.RGBAFormat);
+                 tex.minFilter = THREE.LinearFilter;
+                 tex.magFilter = THREE.LinearFilter;
+                 tex.wrapS = THREE.RepeatWrapping;
+                 tex.needsUpdate = true;
+                 existingTex.dispose();
+                 valToAssign = tex;
              } else {
-                 const tex = new THREE.DataTexture(value.buffer, 256, 1, THREE.RGBAFormat);
+                 const tex = new THREE.DataTexture(value.buffer as any, 256, 1, THREE.RGBAFormat);
                  tex.minFilter = THREE.LinearFilter;
                  tex.magFilter = THREE.LinearFilter;
                  tex.wrapS = THREE.RepeatWrapping;
@@ -279,11 +301,16 @@ export class MaterialController {
             const buffer = generateGradientTextureBuffer(value);
             const existingTex = this.mainUniforms[key]?.value;
             if (existingTex instanceof THREE.DataTexture) {
-                 existingTex.image.data = buffer;
-                 existingTex.needsUpdate = true;
-                 valToAssign = existingTex;
+                 // Create new texture with updated data instead of modifying read-only property
+                 const tex = new THREE.DataTexture(buffer as any, 256, 1, THREE.RGBAFormat);
+                 tex.minFilter = THREE.LinearFilter;
+                 tex.magFilter = THREE.LinearFilter;
+                 tex.wrapS = THREE.RepeatWrapping;
+                 tex.needsUpdate = true;
+                 existingTex.dispose();
+                 valToAssign = tex;
              } else {
-                 const tex = new THREE.DataTexture(buffer, 256, 1, THREE.RGBAFormat);
+                 const tex = new THREE.DataTexture(buffer as any, 256, 1, THREE.RGBAFormat);
                  tex.minFilter = THREE.LinearFilter;
                  tex.magFilter = THREE.LinearFilter;
                  tex.wrapS = THREE.RepeatWrapping;
@@ -294,7 +321,6 @@ export class MaterialController {
 
         const targets = [
             this.mainUniforms, 
-            this.physicsUniforms, 
             this.histogramUniforms,
             this.displayMaterial.uniforms,
             this.exportMaterial.uniforms
@@ -384,7 +410,6 @@ export class MaterialController {
         const modularParams = this.mainUniforms[Uniforms.ModularParams].value as Float32Array;
         updateModularUniforms(pipeline, modularParams);
         
-        (this.physicsUniforms[Uniforms.ModularParams].value as Float32Array).set(modularParams);
         (this.histogramUniforms[Uniforms.ModularParams].value as Float32Array).set(modularParams);
     }
 

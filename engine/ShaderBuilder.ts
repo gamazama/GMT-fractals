@@ -39,7 +39,7 @@ export class ShaderBuilder {
     private renderMode: 'Direct' | 'PathTracing' = 'Direct';
     private isLite: boolean = false;
     private precisionMode: number = 0;
-    private enableDepthOutput: boolean = true;  // MRT depth output for physics probe
+    // Depth output is always enabled for MRT - removes shader recompilation issue
     
     // 5. Variant Specific
     private physicsRayGen: string = `
@@ -65,9 +65,7 @@ export class ShaderBuilder {
         this.precisionMode = precisionMode;
     }
     
-    public setDepthOutput(enabled: boolean) {
-        this.enableDepthOutput = enabled;
-    }
+
     
     public setPhysicsRayGen(code: string) {
         this.physicsRayGen = code;
@@ -318,7 +316,7 @@ void main() {
         const isPathTracing = this.renderMode === 'PathTracing';
         
         const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'));
-        const mainGLSL = getFragmentMainGLSL(isPathTracing, this.enableDepthOutput);
+        const mainGLSL = getFragmentMainGLSL(isPathTracing);
 
         return `
 ${defines}

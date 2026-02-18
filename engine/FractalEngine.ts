@@ -99,6 +99,7 @@ export class FractalEngine {
     private compileTimer: any = null;
     private _pendingTeleport: CameraState | null = null;
     private _totalFrames: number = 0;
+    public hasCompiledShader: boolean = false;
     
     private lastRenderState = {
         pos: new THREE.Vector3(),
@@ -220,10 +221,8 @@ export class FractalEngine {
     }
 
     public get mainMaterial() { return this.materials.mainMaterial; }
-    public get physicsMaterial() { return this.materials.physicsMaterial; }
     public get histogramMaterial() { return this.materials.histogramMaterial; }
     public get mainUniforms() { return this.materials.mainUniforms; }
-    public get physicsUniforms() { return this.materials.physicsUniforms; }
     public get histogramUniforms() { return this.materials.histogramUniforms; }
     public get mainScene() { return this.sceneCtrl.mainScene; }
     public get mainCamera() { return this.sceneCtrl.mainCamera; }
@@ -347,19 +346,45 @@ export class FractalEngine {
     }
     
     private scheduleCompile() {
+        console.log("FractalEngine: scheduleCompile called");
         if (this.compileTimer) {
             clearTimeout(this.compileTimer);
         }
         this._isCompiling = true;
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Shader...");
-        // Compile immediately without delay to ensure spinner appears
-        this.performCompilation();
+        
+        // Wait for renderer to be available before compiling
+        const waitForRenderer = async () => {
+            while (!this.renderer) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            this.performCompilation();
+        };
+        
+        waitForRenderer();
     }
 
     private async performCompilation() {
-        if (!this.renderer) return;
+        console.log("FractalEngine: performCompilation started");
+        if (!this.renderer) {
+            console.log("FractalEngine: No renderer available");
+            return;
+        }
+        
         const startTime = performance.now();
 
+        // Ensure pipeline is properly sized before compilation
+        // Use default size if no resolution is set yet
+        if (this.mainUniforms.uResolution.value.x === 0 || this.mainUniforms.uResolution.value.y === 0) {
+            this.mainUniforms.uResolution.value.set(1024, 768);
+        }
+        console.log("FractalEngine: Resizing pipeline to", this.mainUniforms.uResolution.value.x, "x", this.mainUniforms.uResolution.value.y);
+        this.pipeline.resize(
+            Math.floor(this.mainUniforms.uResolution.value.x), 
+            Math.floor(this.mainUniforms.uResolution.value.y)
+        );
+
+        console.log("FractalEngine: Updating materials");
         this.materials.updateConfig(this.configManager.config);
         this.materials.syncConfigUniforms(this.configManager.config);
         if (this.configManager.config.pipeline) this.materials.syncModularUniforms(this.configManager.config.pipeline);
@@ -370,11 +395,35 @@ export class FractalEngine {
         const mat = this.materials.getMaterial(mode);
         this.sceneCtrl.setMaterial(mat);
 
-        // Pre-warm MRT framebuffers - this triggers shader compilation for MRT configuration
-        // (shader with 2 outputs needs to be compiled for 2-attachment framebuffer)
-        this.pipeline.preWarmMRT(this.renderer);
-
         this.resetAccumulation();
+        
+        // For first run, we need to render even if needsUpdate isn't set
+        // This ensures the shader is actually compiled on first boot
+        const currentMaterial = mode === 'Direct' ? this.materials.materialDirect : this.materials.materialPT;
+        
+        // Check if we need to compile the shader
+        const needsCompile = !this.hasCompiledShader || currentMaterial.needsUpdate;
+        
+        if (needsCompile) {
+            console.log("FractalEngine: Triggering GPU shader compilation");
+            
+            // CRITICAL: Render directly to MRT target to compile shader for MRT configuration
+            // This ensures the shader is compiled with the correct output layout (including depth)
+            // and prevents recompilation when physics probe reads from the depth buffer
+            // We render twice to ensure the shader is fully compiled and cached
+            this.pipeline.render(this.renderer);
+            await new Promise(resolve => setTimeout(resolve, 20));
+            this.pipeline.render(this.renderer);
+            
+            // Give renderer time to complete compilation and cache the shader
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            this.hasCompiledShader = true;
+            currentMaterial.needsUpdate = false;
+        } else {
+            console.log("FractalEngine: Shader unchanged - skipping GPU compilation");
+        }
+        
         this._isCompiling = false;
         this.compileTimer = null;
         
@@ -385,6 +434,7 @@ export class FractalEngine {
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
         if (duration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, duration);
         FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
+        console.log("FractalEngine: performCompilation completed");
     }
 
     public setUniform(key: string, value: any, noReset: boolean = false) {
@@ -457,7 +507,15 @@ export class FractalEngine {
              if (timeSinceInteraction > 1000) return;
         }
 
-
+        // Hold accumulation during camera interaction to prevent flickering
+        const wasHolding = this.pipeline.isHolding;
+        const shouldHold = this.state.isCameraInteracting || this.state.isGizmoInteracting;
+        this.pipeline.setHold(shouldHold);
+        
+        // If we just started holding, reset accumulation for clean frame
+        if (shouldHold && !wasHolding) {
+            this.pipeline.resetAccumulation();
+        }
 
         // Apply Jitter
         if (this.pipeline.accumulationCount > 1) {

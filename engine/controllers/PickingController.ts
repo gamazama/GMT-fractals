@@ -50,7 +50,7 @@ export class PickingController {
     }
 
     /**
-     * Reads depth from MRT depth texture at a specific screen coordinate.
+     * Reads depth from the alpha channel at a specific screen coordinate.
      * Returns distance in world units, or -1 if no hit.
      */
     public measureDistance(x: number, y: number, renderer: THREE.WebGLRenderer, camera: THREE.Camera): number {
@@ -60,16 +60,15 @@ export class PickingController {
         const px = Math.floor((x + 1) * 0.5 * width);
         const py = Math.floor((1 - (y + 1) * 0.5) * height); // Flip Y
         
-        // Read depth from MRT depth texture
-        const depthBuffer = new Float32Array(4);
-        if (!this.pipeline.readDepthPixels(renderer, px, py, 1, 1, depthBuffer)) {
+        // Read pixel at specified location
+        const pixelBuffer = new Float32Array(4);
+        if (!this.pipeline.readPixels(renderer, px, py, 1, 1, pixelBuffer)) {
             return -1;
         }
         
-        const depth = depthBuffer[0]; // Depth is in .r channel
-        
-        // Depth < 0 means sky/miss, depth > 0 means hit
-        return (depth > 0 && depth < 1000.0) ? depth : -1;
+        // Depth is stored in the alpha channel of every pixel
+        const depth = pixelBuffer[3];
+        return depth;
     }
     
     /**

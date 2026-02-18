@@ -136,8 +136,8 @@ export class VideoExporter {
     private engine: FractalEngine;
     
     // Accumulation Buffers - MRT for compatibility with main shader
-    private accumTargetA: THREE.WebGLMultipleRenderTargets | null = null;
-    private accumTargetB: THREE.WebGLMultipleRenderTargets | null = null;
+    private accumTargetA: THREE.WebGLRenderTarget | null = null;
+    private accumTargetB: THREE.WebGLRenderTarget | null = null;
     private exportTarget: THREE.WebGLRenderTarget | null = null;
     private pixelBuffer: Uint8Array | null = null;
     
@@ -539,7 +539,7 @@ export class VideoExporter {
         
         this.engine.mainUniforms.uBlendFactor.value = blend;
         this.engine.mainUniforms.uExtraSeed.value = Math.random() * 100.0;
-        this.engine.mainUniforms.uHistoryTexture.value = readBuffer!.texture[0];
+        this.engine.mainUniforms.uHistoryTexture.value = readBuffer!.texture;
         
         // CRITICAL: Increment Frame Count per sample for Blue Noise Dithering
         // The Blue Noise shader chunks use uFrameCount to offset texture lookup.
@@ -582,7 +582,7 @@ export class VideoExporter {
             vy = Math.round((screenH - vh) / 2);
         }
         
-        this.engine.materials.displayMaterial.uniforms.map.value = writeBuffer!.texture[0];
+        this.engine.materials.displayMaterial.uniforms.map.value = writeBuffer!.texture;
         this.engine.materials.displayMaterial.uniforms.uResolution.value.set(this.session.renderWidth, this.session.renderHeight);
         
         renderer.setRenderTarget(null);
@@ -606,7 +606,7 @@ export class VideoExporter {
         const lastWrite = (this.session.currentSample % 2 !== 0) ? this.accumTargetA : this.accumTargetB;
         
         // Post Process to Export Target
-        this.engine.materials.exportMaterial.uniforms.map.value = lastWrite!.texture[0];
+        this.engine.materials.exportMaterial.uniforms.map.value = lastWrite!.texture;
         this.engine.materials.exportMaterial.uniforms.uResolution.value.set(this.session.safeWidth, this.session.safeHeight);
         
         renderer.setRenderTarget(this.exportTarget);
@@ -776,6 +776,7 @@ export class VideoExporter {
             magFilter: THREE.LinearFilter,
             stencilBuffer: false,
             depthBuffer: false,
+            count: 2 // Use count parameter for MRT
         };
         
         // Re-create if dimensions mismatch
@@ -787,33 +788,19 @@ export class VideoExporter {
         }
 
         if (!this.accumTargetA) {
-            // Create MRT with 2 outputs (same as main pipeline)
-            this.accumTargetA = new THREE.WebGLMultipleRenderTargets(rw, rh, 2, mrtOpts);
-            this.accumTargetB = new THREE.WebGLMultipleRenderTargets(rw, rh, 2, mrtOpts);
+            // Create single render targets (no MRT needed)
+            const rtOpts = {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter,
+                stencilBuffer: false,
+                depthBuffer: false,
+                generateMipmaps: false,
+                format: THREE.RGBAFormat,
+                type: floatType
+            };
             
-            // Configure texture formats (same as RenderPipeline)
-            // Texture 0: Color
-            this.accumTargetA.texture[0].format = THREE.RGBAFormat;
-            this.accumTargetA.texture[0].type = floatType;
-            this.accumTargetA.texture[0].minFilter = THREE.LinearFilter;
-            this.accumTargetA.texture[0].magFilter = THREE.LinearFilter;
-            
-            // Texture 1: Depth (unused in export but needed for shader compatibility)
-            this.accumTargetA.texture[1].format = THREE.RGBAFormat;
-            this.accumTargetA.texture[1].type = THREE.FloatType;
-            this.accumTargetA.texture[1].minFilter = THREE.NearestFilter;
-            this.accumTargetA.texture[1].magFilter = THREE.NearestFilter;
-            
-            // Same for target B
-            this.accumTargetB.texture[0].format = THREE.RGBAFormat;
-            this.accumTargetB.texture[0].type = floatType;
-            this.accumTargetB.texture[0].minFilter = THREE.LinearFilter;
-            this.accumTargetB.texture[0].magFilter = THREE.LinearFilter;
-            
-            this.accumTargetB.texture[1].format = THREE.RGBAFormat;
-            this.accumTargetB.texture[1].type = THREE.FloatType;
-            this.accumTargetB.texture[1].minFilter = THREE.NearestFilter;
-            this.accumTargetB.texture[1].magFilter = THREE.NearestFilter;
+            this.accumTargetA = new THREE.WebGLRenderTarget(rw, rh, rtOpts);
+            this.accumTargetB = new THREE.WebGLRenderTarget(rw, rh, rtOpts);
             
             this.exportTarget = new THREE.WebGLRenderTarget(w, h, {
                 minFilter: THREE.LinearFilter,
