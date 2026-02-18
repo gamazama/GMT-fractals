@@ -7,6 +7,12 @@ import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons'
 import { collectHelpIds } from '../../utils/helpUtils';
 import { AudioState, DrawingState, SonificationState } from '../../features/types';
 
+// Mobile detection helper
+const checkIsMobile = () => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
+};
+
 interface DockProps {
     side: 'left' | 'right';
 }
@@ -25,6 +31,9 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
         advancedMode
     } = useFractalStore();
     
+    // Mobile detection
+    const isMobile = checkIsMobile();
+    
     // Access Feature States for Visibility Logic
     const audioState = (useFractalStore.getState() as any).audio as AudioState;
     const drawingState = (useFractalStore.getState() as any).drawing as DrawingState;
@@ -35,9 +44,17 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
     const width = side === 'left' ? leftDockSize : rightDockSize;
 
     // Filter panels for this dock, sorted by order
+    // On mobile: Engine and Camera Manager go to right side
     const dockPanels = (Object.values(panels) as PanelState[])
         .filter((p) => {
-            if (p.location !== side) return false;
+            let location = p.location;
+            
+            // On mobile, redirect Engine and Camera Manager to right dock
+            if (isMobile && (p.id === 'Engine' || p.id === 'Camera Manager')) {
+                location = 'right';
+            }
+            
+            if (location !== side) return false;
             
             // Conditional Visibility Logic
             if (p.id === 'Graph' && formula !== 'Modular') return false;
@@ -148,17 +165,20 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                                 }`
                             }
                         >
-                            <div 
-                                className={`cursor-move ${isActive ? 'text-gray-600 group-hover:text-cyan-600' : 'text-gray-700 group-hover:text-white'} transition-colors`}
-                                onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    startPanelDrag(p.id);
-                                }}
-                            >
-                                <div className="transform scale-75 origin-center">
-                                    <DragHandleIcon />
+                            {/* Drag Handle - Hidden on mobile */}
+                            {!isMobile && (
+                                <div 
+                                    className={`cursor-move ${isActive ? 'text-gray-600 group-hover:text-cyan-600' : 'text-gray-700 group-hover:text-white'} transition-colors`}
+                                    onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                        startPanelDrag(p.id);
+                                    }}
+                                >
+                                    <div className="transform scale-75 origin-center">
+                                        <DragHandleIcon />
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                             <span className="truncate max-w-[140px]">{p.id}</span>
                         </button>
                     );
