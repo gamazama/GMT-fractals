@@ -116,7 +116,7 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         lineThickness: 1,
         showCenterMark: false,
         showSafeAreas: false,
-        color: 'rgba(255, 255, 255, 1)',
+        color: '#FFFFFF', // Hex format for EmbeddedColorPicker compatibility
         // Grid settings
         gridDivisionsX: 4,
         gridDivisionsY: 4,
@@ -124,7 +124,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         spiralRotation: 0,
         spiralPositionX: 0.5,
         spiralPositionY: 0.5,
-        spiralScale: 1.0
+        spiralScale: 1.0,
+        spiralRatio: 1.618033988749895 // Golden ratio (phi) by default
     },
 
     // --- LAYOUT STATE ---

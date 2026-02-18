@@ -29,6 +29,7 @@ export interface CompositionOverlaySettings {
     spiralPositionX: number;   // 0-1 (0=left, 1=right)
     spiralPositionY: number;   // 0-1 (0=top, 1=bottom)
     spiralScale: number;       // 0.5-2.0
+    spiralRatio: number;       // 1.0-2.0 (1.618 = golden ratio/phi)
 }
 
 // Export helper types for components

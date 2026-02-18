@@ -7,7 +7,7 @@ import { SavedCamera, CompositionOverlayType } from '../../types';
 import { calculateDirectionalView, getDirectionName } from './logic';
 import { CameraUtils } from '../../utils/CameraUtils';
 import Slider from '../../components/Slider';
-import EmbeddedColorPicker from '../../components/EmbeddedColorPicker';
+import SmallColorPicker from '../../components/SmallColorPicker';
 
 interface CameraManagerPanelProps {
     className?: string;
@@ -123,156 +123,6 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                      <PlusIcon /> New Camera
                  </button>
              </div>
-             
-             {/* Composition Overlays - Collapsible */}
-             <div className="border-b border-white/10 bg-black/20">
-                 {/* Header - Clickable to expand/collapse */}
-                 <button
-                     onClick={() => setShowCompositionSettings(!showCompositionSettings)}
-                     className="w-full p-2 flex items-center justify-between hover:bg-white/5 transition-colors"
-                 >
-                     <div className="flex items-center gap-2">
-                         {showCompositionSettings ? <ChevronDown /> : <ChevronRight />}
-                         <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Composition Guide</span>
-                     </div>
-                     {compositionOverlay !== 'none' && (
-                         <span className="text-[8px] text-cyan-400 uppercase">{OVERLAY_OPTIONS.find(o => o.type === compositionOverlay)?.label}</span>
-                     )}
-                 </button>
-                 
-                 {/* Content - Collapsible */}
-                 {showCompositionSettings && (
-                     <div className="p-2 pt-0 space-y-2">
-                         {/* Overlay Type Dropdown */}
-                         <div className="flex items-center gap-2">
-                             <label className="text-[9px] text-gray-500 w-16">Type</label>
-                             <select
-                                 value={compositionOverlay}
-                                 onChange={(e) => setCompositionOverlay(e.target.value as CompositionOverlayType)}
-                                 className="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-[10px] text-gray-300 outline-none focus:border-cyan-500/50"
-                             >
-                                 {OVERLAY_OPTIONS.map(opt => (
-                                     <option key={opt.type} value={opt.type}>{opt.label}</option>
-                                 ))}
-                             </select>
-                         </div>
-                         
-                          {/* Settings - only show when overlay is active */}
-                          {compositionOverlay !== 'none' && (
-                              <>
-                                  <Slider
-                                      label="Opacity"
-                                      value={compositionOverlaySettings.opacity}
-                                      min={0.1}
-                                      max={1}
-                                      step={0.1}
-                                      onChange={(v) => setCompositionOverlaySettings({ opacity: v })}
-                                  />
-                                  
-                                  <Slider
-                                      label="Line Width"
-                                      value={compositionOverlaySettings.lineThickness}
-                                      min={0.5}
-                                      max={3}
-                                      step={0.5}
-                                      onChange={(v) => setCompositionOverlaySettings({ lineThickness: v })}
-                                  />
-                                  
-                                  {/* Color Picker */}
-                                  <div className="flex items-center gap-2">
-                                      <label className="text-[9px] text-gray-500 w-16">Color</label>
-                                      <EmbeddedColorPicker 
-                                          color={compositionOverlaySettings.color}
-                                          onColorChange={(c) => setCompositionOverlaySettings({ color: c })}
-                                      />
-                                  </div>
-                                  
-                                  {/* Grid-specific settings */}
-                                  {compositionOverlay === 'grid' && (
-                                      <>
-                                          <Slider
-                                              label="Divisions X"
-                                              value={compositionOverlaySettings.gridDivisionsX}
-                                              min={2}
-                                              max={16}
-                                              step={1}
-                                              onChange={(v) => setCompositionOverlaySettings({ gridDivisionsX: v })}
-                                          />
-                                          <Slider
-                                              label="Divisions Y"
-                                              value={compositionOverlaySettings.gridDivisionsY}
-                                              min={2}
-                                              max={16}
-                                              step={1}
-                                              onChange={(v) => setCompositionOverlaySettings({ gridDivisionsY: v })}
-                                          />
-                                      </>
-                                  )}
-                                  
-                                  {/* Spiral-specific settings */}
-                                  {compositionOverlay === 'spiral' && (
-                                      <>
-                                          <Slider
-                                              label="Rotation"
-                                              value={compositionOverlaySettings.spiralRotation}
-                                              min={0}
-                                              max={360}
-                                              step={15}
-                                              onChange={(v) => setCompositionOverlaySettings({ spiralRotation: v })}
-                                          />
-                                          <Slider
-                                              label="Position X"
-                                              value={compositionOverlaySettings.spiralPositionX}
-                                              min={0}
-                                              max={1}
-                                              step={0.05}
-                                              onChange={(v) => setCompositionOverlaySettings({ spiralPositionX: v })}
-                                          />
-                                          <Slider
-                                              label="Position Y"
-                                              value={compositionOverlaySettings.spiralPositionY}
-                                              min={0}
-                                              max={1}
-                                              step={0.05}
-                                              onChange={(v) => setCompositionOverlaySettings({ spiralPositionY: v })}
-                                          />
-                                          <Slider
-                                              label="Scale"
-                                              value={compositionOverlaySettings.spiralScale}
-                                              min={0.5}
-                                              max={2}
-                                              step={0.1}
-                                              onChange={(v) => setCompositionOverlaySettings({ spiralScale: v })}
-                                          />
-                                      </>
-                                  )}
-                                  
-                                  {/* Toggle Options */}
-                                  <div className="flex items-center gap-3 pt-1">
-                                      <label className="flex items-center gap-1 cursor-pointer">
-                                          <input
-                                              type="checkbox"
-                                              checked={compositionOverlaySettings.showCenterMark}
-                                              onChange={(e) => setCompositionOverlaySettings({ showCenterMark: e.target.checked })}
-                                              className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded"
-                                          />
-                                          <span className="text-[9px] text-gray-400">Center</span>
-                                      </label>
-                                      <label className="flex items-center gap-1 cursor-pointer">
-                                          <input
-                                              type="checkbox"
-                                              checked={compositionOverlaySettings.showSafeAreas}
-                                              onChange={(e) => setCompositionOverlaySettings({ showSafeAreas: e.target.checked })}
-                                              className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded"
-                                          />
-                                          <span className="text-[9px] text-gray-400">Safe Areas</span>
-                                      </label>
-                                  </div>
-                             </>
-                         )}
-                     </div>
-                 )}
-             </div>
 
              {/* List */}
              <div className="p-2 space-y-1">
@@ -330,8 +180,8 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
              </div>
              
              {/* Footer / Active Settings */}
-             <div className="border-t border-white/10 bg-black/40 p-2">
-                 <div className="flex items-center justify-between mb-2">
+             <div className="border-t border-white/10 bg-black/40 p-2 space-y-2">
+                 <div className="flex items-center justify-between">
                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                          {activeCameraId ? 'Active Settings' : 'Free Camera'}
                      </span>
@@ -345,8 +195,166 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                      )}
                  </div>
                  
-                 <div className="bg-white/5 rounded p-1 max-h-[200px] overflow-y-auto custom-scroll">
+                 <div className="bg-white/5 rounded p-1">
                      <AutoFeaturePanel featureId="optics" />
+                 </div>
+                 
+                 {/* Composition Overlays - Under camera settings */}
+                 <div className="border-t border-white/10 pt-2">
+                     {/* Header - Clickable to expand/collapse */}
+                     <button
+                         onClick={() => setShowCompositionSettings(!showCompositionSettings)}
+                         className="w-full flex items-center justify-between hover:bg-white/5 transition-colors rounded"
+                     >
+                         <div className="flex items-center gap-2">
+                             {showCompositionSettings ? <ChevronDown /> : <ChevronRight />}
+                             <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Composition Guide</span>
+                         </div>
+                         {compositionOverlay !== 'none' && (
+                             <span className="text-[8px] text-cyan-400 uppercase">{OVERLAY_OPTIONS.find(o => o.type === compositionOverlay)?.label}</span>
+                         )}
+                     </button>
+                     
+                     {/* Content - Collapsible */}
+                     {showCompositionSettings && (
+                         <div className="mt-2 space-y-2">
+                             {/* Overlay Type Dropdown */}
+                             <div className="flex items-center gap-2">
+                                 <label className="text-[9px] text-gray-500 w-16">Type</label>
+                                 <select
+                                     value={compositionOverlay}
+                                     onChange={(e) => setCompositionOverlay(e.target.value as CompositionOverlayType)}
+                                     className="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-[10px] text-gray-300 outline-none focus:border-cyan-500/50"
+                                 >
+                                     {OVERLAY_OPTIONS.map(opt => (
+                                         <option key={opt.type} value={opt.type}>{opt.label}</option>
+                                     ))}
+                                 </select>
+                             </div>
+                             
+                              {/* Settings - only show when overlay is active */}
+                              {compositionOverlay !== 'none' && (
+                                  <>
+                                      <Slider
+                                          label="Opacity"
+                                          value={compositionOverlaySettings.opacity}
+                                          min={0.1}
+                                          max={1}
+                                          step={0.1}
+                                          onChange={(v) => setCompositionOverlaySettings({ opacity: v })}
+                                      />
+                                      
+                                      <Slider
+                                          label="Line Width"
+                                          value={compositionOverlaySettings.lineThickness}
+                                          min={0.5}
+                                          max={3}
+                                          step={0.5}
+                                          onChange={(v) => setCompositionOverlaySettings({ lineThickness: v })}
+                                      />
+                                      
+                                      {/* Color Picker */}
+                                       <div className="flex items-center gap-2">
+                                           <label className="text-[9px] text-gray-500 w-16">Color</label>
+                                           <SmallColorPicker 
+                                               color={compositionOverlaySettings.color}
+                                               onChange={(c: string) => setCompositionOverlaySettings({ color: c })}
+                                           />
+                                       </div>
+                                      
+                                      {/* Grid-specific settings */}
+                                      {compositionOverlay === 'grid' && (
+                                          <>
+                                              <Slider
+                                                  label="Divisions X"
+                                                  value={compositionOverlaySettings.gridDivisionsX}
+                                                  min={2}
+                                                  max={16}
+                                                  step={1}
+                                                  onChange={(v) => setCompositionOverlaySettings({ gridDivisionsX: v })}
+                                              />
+                                              <Slider
+                                                  label="Divisions Y"
+                                                  value={compositionOverlaySettings.gridDivisionsY}
+                                                  min={2}
+                                                  max={16}
+                                                  step={1}
+                                                  onChange={(v) => setCompositionOverlaySettings({ gridDivisionsY: v })}
+                                              />
+                                          </>
+                                      )}
+                                      
+                                       {/* Spiral-specific settings */}
+                                       {compositionOverlay === 'spiral' && (
+                                           <>
+                                               <Slider
+                                                   label="Rotation"
+                                                   value={compositionOverlaySettings.spiralRotation}
+                                                   min={0}
+                                                   max={360}
+                                                   step={15}
+                                                   onChange={(v) => setCompositionOverlaySettings({ spiralRotation: v })}
+                                               />
+                                               <Slider
+                                                   label="Position X"
+                                                   value={compositionOverlaySettings.spiralPositionX}
+                                                   min={0}
+                                                   max={1}
+                                                   step={0.05}
+                                                   onChange={(v) => setCompositionOverlaySettings({ spiralPositionX: v })}
+                                               />
+                                               <Slider
+                                                   label="Position Y"
+                                                   value={compositionOverlaySettings.spiralPositionY}
+                                                   min={0}
+                                                   max={1}
+                                                   step={0.05}
+                                                   onChange={(v) => setCompositionOverlaySettings({ spiralPositionY: v })}
+                                               />
+                                               <Slider
+                                                   label="Scale"
+                                                   value={compositionOverlaySettings.spiralScale}
+                                                   min={0.5}
+                                                   max={2}
+                                                   step={0.1}
+                                                   onChange={(v) => setCompositionOverlaySettings({ spiralScale: v })}
+                                               />
+                                               <Slider
+                                                   label="Ratio (Phi)"
+                                                   value={compositionOverlaySettings.spiralRatio}
+                                                   min={1.0}
+                                                   max={2.0}
+                                                   step={0.01}
+                                                   onChange={(v) => setCompositionOverlaySettings({ spiralRatio: v })}
+                                               />
+                                           </>
+                                       )}
+                                      
+                                      {/* Toggle Options */}
+                                      <div className="flex items-center gap-3 pt-1">
+                                          <label className="flex items-center gap-1 cursor-pointer">
+                                              <input
+                                                  type="checkbox"
+                                                  checked={compositionOverlaySettings.showCenterMark}
+                                                  onChange={(e) => setCompositionOverlaySettings({ showCenterMark: e.target.checked })}
+                                                  className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded"
+                                              />
+                                              <span className="text-[9px] text-gray-400">Center</span>
+                                          </label>
+                                          <label className="flex items-center gap-1 cursor-pointer">
+                                              <input
+                                                  type="checkbox"
+                                                  checked={compositionOverlaySettings.showSafeAreas}
+                                                  onChange={(e) => setCompositionOverlaySettings({ showSafeAreas: e.target.checked })}
+                                                  className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded"
+                                              />
+                                              <span className="text-[9px] text-gray-400">Safe Areas</span>
+                                          </label>
+                                      </div>
+                                 </>
+                             )}
+                         </div>
+                     )}
                  </div>
              </div>
         </div>

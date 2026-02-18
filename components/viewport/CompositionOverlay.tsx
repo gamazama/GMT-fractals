@@ -2,6 +2,7 @@
 import React from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { CompositionOverlayType, CompositionOverlaySettings } from '../../types';
+import { hexToRgb } from '../../utils/colorUtils';
 
 interface CompositionOverlayProps {
     width: number;
@@ -23,9 +24,15 @@ export const CompositionOverlay: React.FC<CompositionOverlayProps> = ({ width, h
     // Apply settings
     const { opacity, lineThickness, color } = settings;
     
-    // Parse color - handle both rgba and rgb formats
+    // Parse color - handle hex, rgba, and rgb formats
     let strokeColor = color;
-    if (color.startsWith('rgba')) {
+    if (color.startsWith('#')) {
+        // Hex format - convert to rgba
+        const rgb = hexToRgb(color);
+        if (rgb) {
+            strokeColor = `rgba(${rgb.r},${rgb.g},${rgb.b},${opacity})`;
+        }
+    } else if (color.startsWith('rgba')) {
         // Replace the alpha value in rgba
         strokeColor = color.replace(/rgba\(([^,]+),([^,]+),([^,]+),([^)]+)\)/, `rgba($1,$2,$3,${opacity})`);
     } else if (color.startsWith('rgb(')) {
@@ -66,6 +73,7 @@ export const CompositionOverlay: React.FC<CompositionOverlayProps> = ({ width, h
                     positionX={settings.spiralPositionX}
                     positionY={settings.spiralPositionY}
                     scale={settings.spiralScale}
+                    ratio={settings.spiralRatio}
                 />
             )}
             {overlayType === 'center' && (
@@ -178,9 +186,10 @@ const SpiralOverlay: React.FC<{
     positionX?: number;
     positionY?: number;
     scale?: number;
-}> = ({ width, height, strokeColor, lineThickness, rotation = 0, positionX = 0.5, positionY = 0.5, scale = 1.0 }) => {
-    // Generate Fibonacci spiral path
-    const phi = 1.618033988749895;
+    ratio?: number;
+}> = ({ width, height, strokeColor, lineThickness, rotation = 0, positionX = 0.5, positionY = 0.5, scale = 1.0, ratio = 1.618033988749895 }) => {
+    // Generate logarithmic spiral path with configurable ratio
+    // ratio = 1.618... (phi) gives golden spiral
     const minDim = Math.min(width, height);
     
     // Calculate spiral center from position (0-1 range)
@@ -198,7 +207,7 @@ const SpiralOverlay: React.FC<{
     
     for (let i = 0; i <= steps; i++) {
         const t = (i / steps) * turns * 2 * Math.PI;
-        const r = maxRadius * Math.pow(phi, -t / (2 * Math.PI));
+        const r = maxRadius * Math.pow(ratio, -t / (2 * Math.PI));
         // Apply rotation offset
         const x = centerX + r * Math.cos(t + rotationRad);
         const y = centerY + r * Math.sin(t + rotationRad);

@@ -159,7 +159,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                                     <DragHandleIcon />
                                 </div>
                             </div>
-                            <span className="truncate max-w-[80px]">{p.id}</span>
+                            <span className="truncate max-w-[140px]">{p.id}</span>
                         </button>
                     );
                 })}
