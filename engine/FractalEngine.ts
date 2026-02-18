@@ -159,14 +159,10 @@ export class FractalEngine {
         
         if (isMobile && initialConfig.quality) {
             initialConfig.quality.precisionMode = 1.0;
-            // Check if HalfFloat16 with alpha is supported
-            // Some mobile GPUs don't support alpha in half-float textures
-            const supportsHalfFloatAlpha = this.checkHalfFloatAlphaSupport();
-            if (supportsHalfFloatAlpha) {
-                initialConfig.quality.bufferPrecision = 1.0; // HalfFloat16
-            } else {
-                initialConfig.quality.bufferPrecision = 0.0; // Fallback to Float32
-            }
+            // On mobile, default to Float32 to avoid HalfFloat16 compatibility issues
+            // iOS Safari has issues with multiple WebGL contexts and HalfFloat16 support varies
+            // Users can manually enable HalfFloat16 in quality settings if their device supports it
+            initialConfig.quality.bufferPrecision = 0.0; // Float32 - safer for mobile
         }
 
         this.configManager = new ConfigManager(initialConfig as ShaderConfig);
