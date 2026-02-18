@@ -98,7 +98,8 @@ export interface FractalStoreState extends FeatureStateMap {
   isBucketRendering: boolean;
   bucketSize: number; 
   bucketUpscale: number; 
-  convergenceThreshold: number; 
+  convergenceThreshold: number;
+  samplesPerBucket: number; 
 
   advancedMode: boolean;
   showHints: boolean;
@@ -204,6 +205,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setBucketSize: (v: number) => void;
     setBucketUpscale: (v: number) => void;
     setConvergenceThreshold: (v: number) => void;
+    setSamplesPerBucket: (v: number) => void;
 
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;

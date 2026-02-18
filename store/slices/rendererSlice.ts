@@ -14,11 +14,11 @@ const isMobile = () => {
 export type RendererSlice = Pick<FractalStoreState,
     'dpr' | 'aaLevel' | 'msaaSamples' | 'aaMode' | 'accumulation' | 'previewMode' | 'renderMode' |
     'isExporting' | 'renderRegion' | 'isBucketRendering' | 'bucketSize' | 'bucketUpscale' | 'convergenceThreshold' |
-    'isPaused' | 'sampleCap'
+    'isPaused' | 'sampleCap' | 'samplesPerBucket'
 > & Pick<FractalActions,
     'setDpr' | 'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
     'setIsExporting' | 'setRenderRegion' | 'setIsBucketRendering' | 'setBucketSize' | 'setBucketUpscale' | 'setConvergenceThreshold' |
-    'setIsPaused' | 'setSampleCap'
+    'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket'
 >;
 
 export const createRendererSlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], RendererSlice> = (set, get) => ({
@@ -45,6 +45,7 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     bucketSize: 128,
     bucketUpscale: 1.0,
     convergenceThreshold: 0.1, // 0.1% default
+    samplesPerBucket: 64, // Default samples per bucket for predictable quality
     
     setDpr: (v) => { set({ dpr: v }); FractalEvents.emit('reset_accum', undefined); },
     setAALevel: (v) => { 
@@ -109,6 +110,7 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     setBucketSize: (v) => set({ bucketSize: v }),
     setBucketUpscale: (v) => set({ bucketUpscale: v }),
     setConvergenceThreshold: (v) => set({ convergenceThreshold: v }),
+    setSamplesPerBucket: (v) => set({ samplesPerBucket: v }),
     
     setIsExporting: (v) => set({ isExporting: v }),
 });

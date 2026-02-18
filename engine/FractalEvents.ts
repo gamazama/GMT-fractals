@@ -33,7 +33,7 @@ type EventMap = {
     [FRACTAL_EVENTS.SHADER_CODE]: string;
     [FRACTAL_EVENTS.IS_COMPILING]: boolean | string; 
     [FRACTAL_EVENTS.COMPILE_TIME]: number;
-    [FRACTAL_EVENTS.BUCKET_STATUS]: { isRendering: boolean; progress: number };
+    [FRACTAL_EVENTS.BUCKET_STATUS]: { isRendering: boolean; progress: number; totalBuckets?: number; currentBucket?: number };
     [FRACTAL_EVENTS.TRACK_FOCUS]: string;
 };
 

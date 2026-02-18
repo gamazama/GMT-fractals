@@ -93,3 +93,40 @@ For resolutions higher than the GPU limit (e.g., 8K), or to prevent TDR (Timeout
 3.  **Accumulation:** The engine renders that bucket until it converges (noise-free).
 4.  **Composite:** The result is copied to a final canvas. (may need more work to ensure it can handle large files)
 5.  **Repeat:** Move to next bucket.
+
+### 5.1 Bucket Renderer Architecture (Updated 2026-02)
+
+The bucket renderer has been refactored to properly handle high-resolution output (4K-10K+):
+
+#### Key Components:
+- **Composite Buffer**: A separate Float32 render target stores the final accumulated image
+- **Bucket Compositing**: Each completed bucket is copied to the composite buffer
+- **Adaptive Convergence**: Each tile renders until converged (noise-free) or max samples reached
+
+#### Adaptive Convergence Sampling:
+The bucket renderer uses **adaptive convergence-based sampling**:
+1. Each tile renders a minimum number of samples (16 or 1/4 of max)
+2. After minimum samples, measures max pixel difference between frames
+3. When delta < threshold, tile is considered converged and moves to next
+4. Max samples acts as a safety limit for difficult tiles
+
+**Convergence Threshold**:
+- `0.1%` = Production quality (more samples, cleaner)
+- `0.5%` = Balanced quality
+- `1.0%` = Fast preview (fewer samples, some noise)
+
+**Max Samples Per Bucket**:
+- Safety limit for tiles that don't converge quickly
+- Tiles that converge early use fewer samples
+- Typical values: 64-1024
+
+#### Memory Management:
+- Bucket size controls memory usage (smaller = less VRAM)
+- Composite buffer uses Float32 for HDR quality
+- Supports up to 10K+ resolution with appropriate bucket sizes
+
+#### Export Scale:
+- `1x` = Viewport resolution
+- `2x` = 4K from 1080p viewport
+- `4x` = 8K from 1080p viewport
+- `8x` = 10K+ from 1080p viewport

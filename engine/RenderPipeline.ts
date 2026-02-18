@@ -186,6 +186,9 @@ export class RenderPipeline {
         this.mrtTargetA = new THREE.WebGLRenderTarget(width, height, rtOpts);
         this.mrtTargetB = new THREE.WebGLRenderTarget(width, height, rtOpts);
         
+        // Initialize convergence measurement tools
+        this.initConvergenceTools(floatType);
+        
         this.resetAccumulation();
     }
     

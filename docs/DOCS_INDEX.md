@@ -21,7 +21,7 @@ The GMT documentation is organized into several complementary systems:
 | File | Purpose | Key Topics |
 |------|---------|------------|
 | [01_System_Architecture.md](01_System_Architecture.md) | **Foundation** | Engine-Bridge pattern, DDFS, render loop, state management |
-| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, path tracing, precision math, accumulation, bucket rendering |
+| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, path tracing, precision math, accumulation, bucket rendering (4K-10K support) |
 | [03_Modular_System.md](03_Modular_System.md) | **Node Graph** | Graph compiler, JIT GLSL generation, uniform flattening |
 | [04_Animation_Engine.md](04_Animation_Engine.md) | **Timeline** | Keyframes, interpolation, unified camera, offline rendering |
 | [05_Data_and_Export.md](05_Data_and_Export.md) | **I/O System** | Video export, presets, GMF format, storage strategies |
@@ -162,7 +162,7 @@ The GMT documentation is organized into several complementary systems:
 | File | Purpose | Key Topics |
 |------|---------|------------|
 | [01_System_Architecture.md](01_System_Architecture.md) | **Foundation** | Engine-Bridge pattern, DDFS, render loop, state management |
-| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, path tracing, precision math, accumulation, bucket rendering |
+| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, path tracing, precision math, accumulation, bucket rendering (4K-10K support) |
 | [03_Modular_System.md](03_Modular_System.md) | **Node Graph** | Graph compiler, JIT GLSL generation, uniform flattening |
 | [04_Animation_Engine.md](04_Animation_Engine.md) | **Timeline** | Keyframes, interpolation, unified camera, offline rendering |
 | [05_Data_and_Export.md](05_Data_and_Export.md) | **I/O System** | Video export, presets, GMF format, storage strategies |

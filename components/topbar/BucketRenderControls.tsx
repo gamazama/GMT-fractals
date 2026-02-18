@@ -21,7 +21,8 @@ const BucketRenderSettingsPopup = () => {
                 bucketSize: state.bucketSize,
                 bucketUpscale: 1.0,
                 convergenceThreshold: state.convergenceThreshold,
-                accumulation: state.accumulation
+                accumulation: state.accumulation,
+                samplesPerBucket: state.samplesPerBucket
             });
         }
         state.handleInteractionEnd();
@@ -39,7 +40,8 @@ const BucketRenderSettingsPopup = () => {
                 bucketSize: state.bucketSize,
                 bucketUpscale: state.bucketUpscale,
                 convergenceThreshold: state.convergenceThreshold,
-                accumulation: state.accumulation
+                accumulation: state.accumulation,
+                samplesPerBucket: state.samplesPerBucket
             }, {
                 preset,
                 name: state.projectSettings.name,
@@ -98,8 +100,9 @@ const BucketRenderSettingsPopup = () => {
                 )}
 
                 <div className={`space-y-1 transition-opacity ${state.isBucketRendering ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                    {/* Convergence Threshold - Primary Quality Control */}
                     <Slider 
-                        label="Quality Threshold" 
+                        label="Convergence Threshold" 
                         value={state.convergenceThreshold} 
                         min={0.01} max={1.0} step={0.01} 
                         onChange={state.setConvergenceThreshold} 
@@ -110,17 +113,31 @@ const BucketRenderSettingsPopup = () => {
                         }}
                         overrideInputText={`${state.convergenceThreshold.toFixed(2)}%`}
                     />
+                    <p className="text-[8px] text-gray-500 -mt-1 px-1 mb-2">Lower = more samples, higher quality. 0.1%=production, 1%=fast</p>
+                    
+                    {/* Max Samples Per Bucket - Safety Limit */}
+                    <Slider 
+                        label="Max Samples Per Bucket" 
+                        value={state.samplesPerBucket} 
+                        min={16} max={1024} step={16} 
+                        onChange={state.setSamplesPerBucket} 
+                        overrideInputText={`${state.samplesPerBucket} max`}
+                        highlight={state.samplesPerBucket >= 256}
+                    />
+                    <p className="text-[8px] text-gray-500 -mt-1 px-1 mb-2">Safety limit. Tiles stop early if converged.</p>
                     
                     <div className="pt-2 border-t border-white/5">
                         <Slider 
-                            label="Internal Scale (Export Only)" 
+                            label="Export Scale" 
                             value={state.bucketUpscale} 
-                            min={1.0} max={4.0} step={0.5} 
+                            min={1.0} max={8.0} step={0.5} 
                             onChange={state.setBucketUpscale} 
                             overrideInputText={`${state.bucketUpscale}x`}
                             highlight={state.bucketUpscale > 1.0}
                         />
-                        <p className="text-[8px] text-gray-500 -mt-1 px-1 mb-2">Multiplier for "Export Image". 2x = 4x Pixels.</p>
+                        <p className="text-[8px] text-gray-500 -mt-1 px-1 mb-2">
+                            Resolution multiplier. 2x = 4K from 1080p, 4x = 8K, 8x = 10K+
+                        </p>
 
                         <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wide block mb-1">Bucket Size</label>
                         <ToggleSwitch 
@@ -133,6 +150,7 @@ const BucketRenderSettingsPopup = () => {
                                 { label: '512', value: 512 },
                             ]}
                         />
+                        <p className="text-[8px] text-gray-500 mt-1 px-1">Smaller = less memory, larger = faster</p>
                     </div>
                 </div>
             </div>

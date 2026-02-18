@@ -392,12 +392,19 @@ export const bindStoreToEngine = () => {
 
     const syncBucketConfig = () => {
         const cs = useFractalStore.getState();
-        update({ bucketConfig: { bucketSize: cs.bucketSize, bucketUpscale: cs.bucketUpscale, convergenceThreshold: cs.convergenceThreshold, accumulation: cs.accumulation } });
+        update({ bucketConfig: { 
+            bucketSize: cs.bucketSize, 
+            bucketUpscale: cs.bucketUpscale, 
+            convergenceThreshold: cs.convergenceThreshold, 
+            accumulation: cs.accumulation,
+            samplesPerBucket: cs.samplesPerBucket
+        } });
     };
     useFractalStore.subscribe(state => state.bucketSize, syncBucketConfig);
     useFractalStore.subscribe(state => state.bucketUpscale, syncBucketConfig);
     useFractalStore.subscribe(state => state.convergenceThreshold, syncBucketConfig);
     useFractalStore.subscribe(state => state.accumulation, syncBucketConfig);
+    useFractalStore.subscribe(state => state.samplesPerBucket, syncBucketConfig);
 
     useFractalStore.subscribe(state => state.quality?.bufferPrecision, (v) => {
         if (engine.renderer) {
