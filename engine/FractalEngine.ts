@@ -159,10 +159,8 @@ export class FractalEngine {
         
         if (isMobile && initialConfig.quality) {
             initialConfig.quality.precisionMode = 1.0;
-            // On mobile, default to Float32 to avoid HalfFloat16 compatibility issues
-            // iOS Safari has issues with multiple WebGL contexts and HalfFloat16 support varies
-            // Users can manually enable HalfFloat16 in quality settings if their device supports it
-            initialConfig.quality.bufferPrecision = 0.0; // Float32 - safer for mobile
+            // Use HalfFloat16 on mobile - works well on modern iOS devices
+            initialConfig.quality.bufferPrecision = 1.0; // HalfFloat16
         }
 
         this.configManager = new ConfigManager(initialConfig as ShaderConfig);
