@@ -2,12 +2,13 @@
 
 export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
     
-    const noiseLogic = renderMode === 'PathTracing' ? 
+     const noiseLogic = renderMode === 'PathTracing' ? 
         `needNoise = true;` :
         `
-        if (!isMoving) needNoise = true;
+        // Always apply DOF noise for blur preview - even during navigation
+        if (uDOFStrength > 0.00001) needNoise = true;
+        if (!isMoving) needNoise = true;  // Other effects need noise when stationary
         if (uPTStochasticShadows > 0.5) needNoise = true;
-        if (uDOFStrength > 0.0000001) needNoise = true;
         `;
 
     return `
@@ -18,10 +19,16 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
 void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float stochasticSeed) {
     vec2 uv = uvCoord * 2.0 - 1.0;
     
+    // Store original UV for stable noise lookup (before jitter)
+    vec2 uvOriginal = uv;
+    
     // --- TAA JITTER (Calculated on CPU) ---
-    // Offsets the ray origin slightly to anti-alias over time
-    // SAFETY: Ensure resolution is valid to prevent NaN
-    if (uBlendFactor < 0.999 && uResolution.x > 0.5) {
+    // Jitter behavior:
+    // - During navigation (blendFactor >= 0.99): NO jitter (stable view)
+    // - During accumulation (blendFactor < 0.99): Jitter applied for TAA anti-aliasing
+    // isMoving = true means camera is moving (navigation), false means accumulating
+    bool isMoving = uBlendFactor >= 0.99;
+    if (!isMoving && uResolution.x > 0.5) {
         vec2 pixelSize = 2.0 / uResolution;
         uv += uJitter * pixelSize * 0.5;
     }
@@ -30,7 +37,6 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
     
     // Cache blending factor locally to help compiler optimization
     float blendFactor = uBlendFactor;
-    bool isMoving = blendFactor >= 0.99;
     
     // --- STOCHASTIC SEED GENERATION ---
     bool needNoise = false;
@@ -38,8 +44,11 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
     ${noiseLogic}
     
     // Use Blue Noise Red Channel as base seed
+    // Use stable noise during navigation, animated during accumulation for better convergence
     if (needNoise) {
-        stochasticSeed = getBlueNoise(gl_FragCoord.xy);
+        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1]
+        stochasticSeed = isMoving ? getStableBlueNoise4(noiseCoord * uResolution).r
+                                 : getBlueNoise4(noiseCoord * uResolution).r;
     }
     
     vec3 forward = uCamForward;
@@ -75,11 +84,16 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
     }
 
     // --- DEPTH OF FIELD ---
-    if (uDOFStrength > 0.0000001) {
+    // DOF noise behavior:
+    // - During navigation (isMoving): Stable per-pixel noise for blur preview
+    // - During accumulation: Animated noise for Monte Carlo convergence
+    if (uDOFStrength > 0.00001) {
         vec3 focalPoint = ro + rd * uDOFFocus;
         
-        // Use Blue Noise channels directly for Disk Sampling to ensure good distribution
-        vec4 blue = getBlueNoise4(gl_FragCoord.xy);
+        // Use stable blue noise during navigation, animated during accumulation
+        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1]
+        vec4 blue = isMoving ? getStableBlueNoise4(noiseCoord * uResolution) 
+                             : getBlueNoise4(noiseCoord * uResolution);
         
         float r = sqrt(blue.r);
         float theta = blue.g * 6.283185;

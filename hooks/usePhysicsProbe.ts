@@ -144,23 +144,60 @@ export const usePhysicsProbe = (
             depthBuffer.current = new Float32Array(64);
         }
         
-        // Read the center pixel from the previous frame's render target
-        // Depth is stored in the alpha channel of every pixel
-        // Note: This reads from the PREVIOUS frame's buffer, so no GPU stall
+        // Read a small neighborhood around center pixel and average depth
+        // This reduces noise when DOF is enabled
         try {
             const centerX = Math.floor(width / 2);
             const centerY = Math.floor(height / 2);
+            const sampleSize = 3;
+            const halfSize = Math.floor(sampleSize / 2);
+            let validDepthSum = 0;
+            let validCount = 0;
             
-            const success = engine.pipeline.readPixels?.(
-                renderer,
-                centerX, centerY, 1, 1,  // Center pixel
-                readBuffer.current
-            );
+            for (let dx = -halfSize; dx <= halfSize; dx++) {
+                for (let dy = -halfSize; dy <= halfSize; dy++) {
+                    const sampleX = centerX + dx;
+                    const sampleY = centerY + dy;
+                    
+                    if (sampleX >= 0 && sampleX < width && sampleY >= 0 && sampleY < height) {
+                        const success = engine.pipeline.readPixels?.(
+                            renderer,
+                            sampleX, sampleY, 1, 1,
+                            readBuffer.current
+                        );
+                        
+                        if (success) {
+                            const depth = readBuffer.current[3];
+                            if (depth > 0 && depth < 1000 && Number.isFinite(depth)) {
+                                validDepthSum += depth;
+                                validCount++;
+                            }
+                        }
+                    }
+                }
+                
+                if (validCount > 0) {
+                    const averageDepth = validDepthSum / validCount;
+                    processDepthData(averageDepth);
+                }
+            }
             
-            if (success) {
-                const depth = readBuffer.current[3]; // Depth is in alpha channel
-                if (depth > 0 && depth < 1000 && Number.isFinite(depth)) {
-                    processDepthData(depth);
+            if (validCount > 0) {
+                const averageDepth = validDepthSum / validCount;
+                // If average depth is >= 1000.0, treat it as sky (miss)
+                if (averageDepth >= 1000.0) {
+                    // Sky or invalid - use cached distance
+                    const cachedDist = distAverageRef.current > 0 ? distAverageRef.current : 10.0;
+                    
+                    if (hudRefs.dist.current) {
+                        hudRefs.dist.current.innerText = "DST INF";
+                        hudRefs.dist.current.style.color = '#888';
+                    }
+                    if (hudRefs.reset.current) {
+                        hudRefs.reset.current.style.display = 'block';
+                    }
+                } else {
+                    processDepthData(averageDepth);
                 }
             }
         } catch (e) {

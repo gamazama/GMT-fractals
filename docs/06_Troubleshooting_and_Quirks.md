@@ -51,8 +51,8 @@ If the screen turns black or the browser crashes:
 ## 5. Camera Blur (DOF) Issues
 
 ### Inaccurate Picking with Camera Blur Enabled
-*   **Cause:** The depth buffer stores values from rays that have been offset by the lens blur, but the picker uses standard camera rays to calculate world positions.
-*   **Fix:** The picker now reads depth directly from the DOF-offset rays, ensuring accurate world position calculation even when blur is enabled.
+*   **Cause:** The depth buffer stores values from rays that have been offset by the lens blur, resulting in noisy depth measurements.
+*   **Fix:** The picker now reads depth values from a 3x3 neighborhood of pixels and averages them to reduce noise, ensuring accurate world position calculation even when blur is enabled.
 
 ### Screen Shaking with Camera Blur
 *   **Cause:** DOF was using animated blue noise (changing each frame via `uFrameCount`) during navigation, causing the lens offset to change every frame.
@@ -64,10 +64,13 @@ If the screen turns black or the browser crashes:
 The DOF system uses two blue noise functions defined in [`shaders/chunks/blue_noise.ts`](shaders/chunks/blue_noise.ts):
 - `getStableBlueNoise4()`: Returns the same noise value for each pixel across frames (used during navigation)
 - `getBlueNoise4()`: Animates noise using `uFrameCount` for temporal variation (used during accumulation)
+
+The blue noise texture is loaded from a PNG file (`public/blueNoise.png`) for high-quality noise distribution. If loading fails, a procedural noise fallback is used.
  
 This ensures:
 1. No screen shaking during camera movement
 2. Stable blur preview while navigating
+3. High-quality noise distribution for realistic DOF effects
 3. Smooth blur convergence during accumulation
 
 ## 6. Mobile-Specific Issues

@@ -52,6 +52,7 @@ export class PickingController {
     /**
      * Reads depth from the alpha channel at a specific screen coordinate.
      * Returns distance in world units, or -1 if no hit.
+     * Averages depth values from a small neighborhood to reduce noise.
      */
     public measureDistance(x: number, y: number, renderer: THREE.WebGLRenderer, camera: THREE.Camera): number {
         // Convert NDC [-1, 1] to pixel coordinates
@@ -60,22 +61,36 @@ export class PickingController {
         const px = Math.floor((x + 1) * 0.5 * width);
         const py = Math.floor((1 - (y + 1) * 0.5) * height); // Flip Y
         
-        // Read pixel at specified location
-        const pixelBuffer = new Float32Array(4);
-        if (!this.pipeline.readPixels(renderer, px, py, 1, 1, pixelBuffer)) {
-            return -1;
+        const sampleSize = 3; // 3x3 neighborhood for averaging
+        const halfSize = Math.floor(sampleSize / 2);
+        let validDepthSum = 0;
+        let validCount = 0;
+        
+        // Read pixels from the neighborhood
+        for (let dx = -halfSize; dx <= halfSize; dx++) {
+            for (let dy = -halfSize; dy <= halfSize; dy++) {
+                const sampleX = px + dx;
+                const sampleY = py + dy;
+                
+                // Ensure sample coordinates are within bounds
+                if (sampleX >= 0 && sampleX < width && sampleY >= 0 && sampleY < height) {
+                    const pixelBuffer = new Float32Array(4);
+                    if (this.pipeline.readPixels(renderer, sampleX, sampleY, 1, 1, pixelBuffer)) {
+                        const depth = pixelBuffer[3];
+                        
+                        // With HalfFloat16 buffers, the alpha channel may have precision issues
+                        // Check if depth is valid (positive, finite, and not sky)
+                        if (isFinite(depth) && depth > 0 && depth < 1000.0) {
+                            validDepthSum += depth;
+                            validCount++;
+                        }
+                    }
+                }
+            }
         }
         
-        // Depth is stored in the alpha channel of every pixel
-        const depth = pixelBuffer[3];
-        
-        // With HalfFloat16 buffers, the alpha channel may have precision issues
-        // Return -1 if depth is invalid (0, NaN, or Infinity)
-        if (!isFinite(depth) || depth <= 0) {
-            return -1;
-        }
-        
-        return depth;
+        // Return average of valid depth values or -1 if no valid samples
+        return validCount > 0 ? validDepthSum / validCount : -1;
     }
     
     /**

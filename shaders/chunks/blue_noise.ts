@@ -8,34 +8,44 @@ const float PHI = 1.61803398875;
 vec4 getBlueNoise4(vec2 screenCoord) {
     vec2 res = max(uBlueNoiseResolution, vec2(64.0));
     
-    // 1. Static Spatial Lookup
-    // Map screen pixels 1:1 to the texture. 
-    // We do NOT add a temporal offset to UVs here. This prevents "streaking" artifacts
-    // caused by dragging the noise pattern across the screen.
-    vec2 uv = mod(screenCoord, res) / res;
+    // 1. Temporal Offset Calculation
+    // Generate random offset for entire texture each frame
+    float time = float(uFrameCount);
+    vec2 temporalOffset = vec2(
+        fract(time * PHI),
+        fract(time * PHI * PHI)
+    );
     
-    // 2. Fetch Base Blue Noise
-    // This value is constant for a specific pixel across all frames.
-    // It provides the high-quality spatial distribution (dithering).
+    // 2. Spatial Lookup with Temporal Offset
+    vec2 uv = mod(screenCoord + temporalOffset * res, res) / res;
+    
+    // 3. Fetch Base Blue Noise
     vec4 blue = textureLod(uBlueNoiseTexture, uv, 0.0);
     
-    // 3. Temporal Animation (The Martin Roberts Method)
-    // To ensure convergence over time (Monte Carlo integration), we need the value 
-    // at this pixel to vary randomly frame-by-frame.
-    // We add the Golden Ratio * FrameCount and wrap (fract).
-    // This creates a Low-Discrepancy Sequence at every single pixel.
-    
+    // 4. Channel-Wise Temporal Animation
+    // Apply different temporal offsets to each channel for decorrelation
     float frameOffset = float(uFrameCount) * PHI;
+    float frameOffsetG = float(uFrameCount) * PHI * PHI;
+    float frameOffsetB = float(uFrameCount) * PHI * PHI * PHI;
+    float frameOffsetA = float(uFrameCount) * PHI * PHI * PHI * PHI;
     
     return vec4(
         fract(blue.r + frameOffset),
-        fract(blue.g + frameOffset), 
-        fract(blue.b + frameOffset),
-        fract(blue.a + frameOffset)
+        fract(blue.g + frameOffsetG), 
+        fract(blue.b + frameOffsetB),
+        fract(blue.a + frameOffsetA)
     );
 }
 
 float getBlueNoise(vec2 screenCoord) {
     return getBlueNoise4(screenCoord).r;
+}
+
+// Stable blue noise for DOF - does not animate with frame count
+// This prevents screen shake during navigation while still providing good distribution
+vec4 getStableBlueNoise4(vec2 screenCoord) {
+    vec2 res = max(uBlueNoiseResolution, vec2(64.0));
+    vec2 uv = mod(screenCoord, res) / res;
+    return textureLod(uBlueNoiseTexture, uv, 0.0);
 }
 `;
