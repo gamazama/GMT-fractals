@@ -45,10 +45,9 @@ The imperative WebGL system.
 Self-contained modules defining State, UI, and Shaders.
 *   `features/index.ts`: Registration entry point.
 *   `features/types.ts`: Aggregate state types.
-*   `features/ui.tsx`: UI-specific feature components.
 *   **`core_math`**: Iterations, Params A-F.
 *   **`geometry`**: Julia, Hybrid (Box), Pre-Rotation.
-*   **`lighting`**: Light studio, Shadows, Falloff. Includes `LightGizmo.tsx`, `LightPanel.tsx`.
+*   **`lighting`**: Light studio, Shadows, Falloff. Includes `LightGizmo.tsx`, `LightPanel.tsx` (in `features/lighting/`).
 *   **`materials`**: PBR Surface, Emission, Environment.
 *   **`atmosphere`**: Fog, Volumetric Glow.
 *   **`coloring`**: Gradients, Mapping modes, Texturing. Includes `MappingModes.ts` registry.
@@ -141,8 +140,6 @@ Self-contained modules defining State, UI, and Shaders.
 *   `colorUtils.ts`: Color utilities.
 *   `helpUtils.ts`: Help system utilities.
 *   `FormulaFormat.ts`: GMF (GPU Mandelbulb Format) parser/generator.
-*   `mediabunny.min.mjs`: Video encoding library.
-*   `mediabunny.d.ts`: TypeScript declarations for mediabunny.
 
 ## 8. Data (`data/`)
 *   `constants.ts`: Application constants.

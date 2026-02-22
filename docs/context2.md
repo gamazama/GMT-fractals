@@ -66,6 +66,7 @@ All features are registered in `features/index.ts`:
 *   **Lite Render Unification:** Logic moved into `QualityFeature` state.
 *   **Subscription Cleanup:** Manual `subscribe` calls replaced by DDFS auto-detection.
 *   **Shader Builder:** `ShaderBuilder.ts` implemented with feature `inject()` contract.
+*   **Legacy Properties:** `shader` and `shaderGenerator` properties still exist in `FeatureSystem.ts` (marked deprecated).
 
 ### Minor Issues
 *   **Mobile UI:** Some auto-generated panels are cramped on vertical screens.

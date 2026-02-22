@@ -2,7 +2,7 @@
 # Code Health Report
 
 **Status:** Stable (Post-DDFS Refactor & Cleanup)
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-22
 
 ## 1. Architecture ✅
 The codebase has been successfully migrated to the **Data-Driven Feature System (DDFS)**.
@@ -19,6 +19,26 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 *   **Deprecated Feature Removed:** Removed `features/stress_test.ts` placeholder.
 *   **Debug Console Logs Removed:** Cleaned up debug logs from startup and config management (kept compile-time logs).
 
+## 2.5 Recent Fixes (2026-02-18 to 2026-02-22) ✅
+
+### Mobile Support Improvements
+*   **Mobile Black Screen Fix:** Removed WebGL context check for HalfFloat16 support on iOS - now uses HalfFloat16 directly on mobile.
+*   **Light Gizmo Mobile Offset:** Changed from `devicePixelRatio` calculation to `getBoundingClientRect()` for accurate screen projection.
+*   **Mobile Panel Layout:** Engine and Camera Manager panels now redirect to right dock on mobile devices.
+*   **Mobile Drag Handles:** Hidden tab drag handles on mobile (no drag-and-drop reordering).
+
+### Performance Fixes
+*   **FPS Drop Fix:** Reused typed array buffers in `RenderPipeline.ts` and `usePhysicsProbe.ts` to avoid per-frame GC pressure.
+*   **Bucket Render Bleeding:** Added `clearTargets()` call between bucket tiles to prevent artifacts.
+
+### UI/UX Improvements
+*   **Composition Overlays:** Added configurable grid divisions, spiral ratio (golden ratio default), and color picker.
+*   **Light Temperature:** Removed presets, added "Temperature" label, color picker first.
+*   **Histogram:** Added stale indicator, refresh button, and 0-1 normalization toggle.
+*   **Tooltips:** Added keyboard shortcuts in square brackets format.
+*   **Mandelorus Naming:** Fixed formula name from "HyperTorus" to "Mandelorus".
+*   **Snapshot Indicator:** Shows "Capturing..." before snapshot is taken.
+
 ## 3. Technical Debt
 
 ### High Priority
@@ -29,7 +49,7 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 ### Medium Priority
 | Issue | Location | Impact | Recommendation |
 |-------|----------|--------|----------------|
-| **Console Statements** | ~25 instances remaining | Debug noise in production | Review remaining logs; keep error handlers |
+| **Console Statements** | ~18+ instances in engine folder | Debug noise in production | Review remaining logs; keep error handlers |
 
 ### Low Priority
 | Issue | Location | Impact | Recommendation |
@@ -107,8 +127,8 @@ if (feat.inject && isFeatureEnabled(config, feat.id)) {
 
 ### Completed ✅
 1. ✅ Removed `features/stress_test.ts`
-2. ✅ Removed debug `console.log` statements from startup code
-3. ✅ Removed legacy `shader` and `shaderGenerator` properties from `FeatureDefinition`
+2. ⚠️ Partially removed debug `console.log` statements - 18+ remain in engine folder
+3. ⚠️ Legacy `shader` and `shaderGenerator` properties still exist (marked deprecated in `FeatureSystem.ts`)
 4. ✅ Updated documentation
 
 ### Short Term (Medium Effort)
