@@ -94,7 +94,9 @@ Editing these values directly allows for precise teleportation, but be careful: 
 Simulates a physical camera lens.
 
 - **Aperture (Blur)**: Strength of the blur. 0.0 = Pinhole camera (infinite focus). 
-  - Supports **Microscopic Precision** (down to $0.000001$) for extreme macro photography.
+  - The blur effect accumulates over time when the camera is stationary.
+  - During camera movement, DOF is temporarily disabled for a stable preview.
+  - Supports **High Precision** (down to $0.0001$) for macro photography.
 - **Focus Distance**: Distance to the sharp plane.
 - **Auto-Focus**: Use the "Pick Focus" button in the Scene tab to click a point and set this value automatically.
 

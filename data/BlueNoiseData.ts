@@ -6,10 +6,10 @@ const CUSTOM_BLUE_NOISE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAA
 
 // Generates a 128x128 RGBA noise texture or loads custom Base64
 export const createBlueNoiseTexture = (): THREE.Texture => {
-    if (CUSTOM_BLUE_NOISE_BASE64.length > 50) {
-        // Load Custom Texture
-        const loader = new THREE.TextureLoader();
-        const texture = loader.load(CUSTOM_BLUE_NOISE_BASE64);
+    // Load blue noise from PNG file in public folder
+    const loader = new THREE.TextureLoader();
+    try {
+        const texture = loader.load('/blueNoise.png');
         
         // Critical settings for Blue Noise:
         // Nearest Filter ensures we get exact noise values, not interpolated blurs
@@ -19,10 +19,12 @@ export const createBlueNoiseTexture = (): THREE.Texture => {
         texture.wrapT = THREE.RepeatWrapping;
         texture.generateMipmaps = false; // Disable mipmaps to prevent blocky artifacts
         
+        console.log('Blue noise texture loaded from PNG');
         return texture;
-    } else {
+    } catch (error) {
+        console.warn('Failed to load blue noise PNG, using procedural fallback:', error);
+        
         // Fallback: Generate Procedural White/Blue-ish Noise
-        // (Used until you provide the real texture)
         const size = 128;
         const data = new Uint8Array(size * size * 4);
         

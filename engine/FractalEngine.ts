@@ -511,9 +511,11 @@ export class FractalEngine {
              if (timeSinceInteraction > 1000) return;
         }
 
-        // Hold accumulation during camera interaction to prevent flickering
+        // Hold accumulation during camera interaction ONLY if DOF is disabled
+        // If DOF is enabled, continue rendering to show blur preview (with stable per-pixel noise)
+        const dofEnabled = (this.state.optics?.dofStrength ?? 0) > 0.0001;
         const wasHolding = this.pipeline.isHolding;
-        const shouldHold = this.state.isCameraInteracting || this.state.isGizmoInteracting;
+        const shouldHold = !dofEnabled && (this.state.isCameraInteracting || this.state.isGizmoInteracting);
         this.pipeline.setHold(shouldHold);
         
         // If we just started holding, reset accumulation for clean frame

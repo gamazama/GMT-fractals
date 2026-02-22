@@ -25,10 +25,10 @@ export const OpticsFeature: FeatureDefinition = {
         orthoScale: { type: 'float', default: 2.0, label: 'Ortho Scale', shortId: 'os', min: 0.1, max: 10.0, step: 0.1, scale: 'log', group: 'projection', condition: { param: 'camType', eq: 1.0 } },
         dofStrength: { 
             type: 'float', default: 0.0, label: 'Camera Blur', shortId: 'ds', uniform: 'uDOFStrength', 
-            min: 0.0, max: 1.0, step: 0.0000001, scale: 'log', group: 'dof', 
+            min: 0.0, max: 1.0, step: 0.0001, scale: 'log', group: 'dof', 
             format: (v) => {
                 if (v === 0) return "0.0 (off)";
-                if (Math.abs(v) < 0.001) return v.toFixed(7);
+                if (Math.abs(v) < 0.001) return v.toFixed(5);
                 if (Math.abs(v) < 10.0) return v.toFixed(4);
                 return v.toFixed(2);
             }
