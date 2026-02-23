@@ -44,7 +44,7 @@ const BASE_SCHEMA: UniformDefinition[] = [
     { name: Uniforms.ExtraSeed, type: 'float', default: 0.0 },
     { name: Uniforms.Jitter, type: 'vec2', default: new THREE.Vector2(0,0) },
     { name: Uniforms.BlueNoiseTexture, type: 'sampler2D', default: null },
-    { name: Uniforms.BlueNoiseResolution, type: 'vec2', default: new THREE.Vector2(128, 128) }, // Added
+     { name: Uniforms.BlueNoiseResolution, type: 'vec2', default: new THREE.Vector2(512, 512) }, // Blue noise texture is 512x512
     
     // Tools (Histogram)
     { name: Uniforms.HistogramLayer, type: 'int', default: 0 },
