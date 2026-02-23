@@ -66,12 +66,17 @@ The DOF system uses two blue noise functions defined in [`shaders/chunks/blue_no
 - `getBlueNoise4()`: Animates noise using `uFrameCount` for temporal variation (used during accumulation)
 
 The blue noise texture is loaded from a PNG file (`public/blueNoise.png`) for high-quality noise distribution. If loading fails, a procedural noise fallback is used.
- 
+
+**Blue Noise Resolution Fix**:
+- **Problem**: The blue noise resolution uniform (`uBlueNoiseResolution`) wasn't being properly updated when the texture loaded asynchronously, causing incorrect sampling and screen shaking on GitHub Pages.
+- **Solution**: Added a texture load callback that immediately updates the uniform with the actual texture dimensions once loaded. The expected resolution (512x512) is also hardcoded in the uniform schema for initial configuration.
+  
 This ensures:
 1. No screen shaking during camera movement
 2. Stable blur preview while navigating
 3. High-quality noise distribution for realistic DOF effects
-3. Smooth blur convergence during accumulation
+4. Smooth blur convergence during accumulation
+5. Consistent behavior across all environments (localhost and GitHub Pages)
 
 ## 6. Mobile-Specific Issues
 
