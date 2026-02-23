@@ -17,6 +17,22 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core vendor libraries
+          'three': ['three'],
+          'react': ['react', 'react-dom'],
+          'reactflow': ['reactflow'],
+          'three-drei': ['@react-three/drei'],
+          'three-fiber': ['@react-three/fiber'],
+          // Media and encoding libraries
+          'mediabunny': ['mediabunny'],
+          // Compression and utilities
+          'pako': ['pako'],
+        }
+      }
+    }
   },
   server: {
     middlewareMode: true, 

@@ -8,6 +8,7 @@ import { TrackGroup } from './TrackGroup';
 import { useDopeSheetInteraction } from '../../hooks/useDopeSheetInteraction';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { TIMELINE_SIDEBAR_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_GROUP_HEIGHT, TIMELINE_TRACK_HEIGHT } from '../../data/constants';
+import { getLiveValue } from '../../utils/timelineUtils';
 
 interface DopeSheetProps {
     frameWidth: number;
@@ -339,10 +340,8 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
 
     const wrapAddKey = (tid: string, frame: number) => {
         snapshot(); 
-        import('../../utils/timelineUtils').then(mod => {
-            const val = mod.getLiveValue(tid, false, frame, sequence);
-            addKeyframe(tid, frame, val);
-        });
+        const val = getLiveValue(tid, false, frame, sequence);
+        addKeyframe(tid, frame, val);
     };
     
     const handleBackgroundContextMenu = (e: React.MouseEvent) => {

@@ -141,6 +141,22 @@ Self-contained modules defining State, UI, and Shaders.
 *   `helpUtils.ts`: Help system utilities.
 *   `FormulaFormat.ts`: GMF (GPU Mandelbulb Format) parser/generator.
 
+## 8. Vite Build Configuration
+**File:** `vite.config.ts`
+- Manages build optimization and chunking
+- Key Chunks:
+  - `three`: Three.js library (3D rendering core)
+  - `react`: React and React DOM
+  - `three-drei`: React Three Fiber utilities
+  - `three-fiber`: React Three Fiber core
+  - `reactflow`: Graph visualization library
+  - `mediabunny`: Media encoding library (video export)
+  - `pako`: Compression library (URL encoding)
+
+**Optimization Notes:**
+- The `webm-muxer` dependency was removed as it was not actually used in the codebase
+- Chunking strategy focuses on vendor libraries for better browser caching
+
 ## 8. Data (`data/`)
 *   `constants.ts`: Application constants.
 *   `BlueNoiseData.ts`: Blue noise texture data.
