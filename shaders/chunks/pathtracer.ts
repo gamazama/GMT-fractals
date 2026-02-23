@@ -3,11 +3,12 @@
 export const getPathTracerGLSL = (isMobile: boolean) => {
     
     const loopLimit = isMobile ? '2' : 'maxBounces';
-    const shadowLogic = isMobile ? `
+     const shadowLogic = isMobile ? `
         shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
     ` : `
         if (uPTStochasticShadows > 0.5) {
-            vec2 jitter = fract(sin(vec2(lightSeed + float(bounce)*7.1, lightSeed * 9.2)) * 43758.5453);
+            // Use blue noise for shadow jitter to ensure good distribution
+            vec2 jitter = blueNoise.gb; // Use green and blue channels for decorrelation
             vec3 w = lDir;
             vec3 u = normalize(cross(w, abs(w.y) > 0.9 ? vec3(1,0,0) : vec3(0,1,0)));
             vec3 v = cross(w, u);
