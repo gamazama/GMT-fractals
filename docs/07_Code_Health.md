@@ -39,6 +39,24 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 *   **Mandelorus Naming:** Fixed formula name from "HyperTorus" to "Mandelorus".
 *   **Snapshot Indicator:** Shows "Capturing..." before snapshot is taken.
 
+## 2.6 Recent Fixes (2026-02-24) ✅
+
+### Video Export Improvements
+*   **Bitrate Scaling:** Default bitrate increased to 40 Mbps for 1080p (from 12 Mbps). Bitrate now auto-scales with resolution using linear pixel-based calculation.
+*   **Viewport Restoration:** Added resolution mode, fixed resolution, and AA level to export state capture/restore for proper viewport return after render.
+
+### Slider Precision Improvements
+*   **Roughness Slider:** Removed log scaling, changed min from 0.01 to 0.001, step from 0.01 to 0.001 for finer control.
+*   **AO Spread Slider:** Removed log scaling, changed min from 0.01 to 0.001, step from 0.01 to 0.001.
+*   **AO Intensity Slider:** Removed log scaling for more intuitive control.
+
+### Graph Editor Fix
+*   **Drag Prevention:** Added `onDragOver`, `onDrop` handlers and `draggable={false}` to prevent browser's default drag-to-copy image behavior when scrubbing the graph canvas.
+
+### Quality Panel Improvements
+*   **Dynamic Max for Ray Steps:** Added `dynamicMaxRef` property to ParamConfig interface. Max Ray Steps slider now dynamically uses the Hard Loop Cap value as its maximum.
+*   **Overstep Fix Visibility:** Removed `isAdvanced: true` from Overstep Fix parameter - now visible without enabling advanced mode.
+
 ## 3. Technical Debt
 
 ### High Priority

@@ -302,11 +302,17 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             let overrideText = config.format ? config.format(val) : undefined;
             if (config.scale === 'pi') { overrideText = `${(val / Math.PI).toFixed(2)}π`; }
             
+            // Dynamic max support - read max from another parameter's value
+            let effectiveMax = config.max ?? 1;
+            if (config.dynamicMaxRef && sliceState[config.dynamicMaxRef] !== undefined) {
+                effectiveMax = sliceState[config.dynamicMaxRef];
+            }
+            
             // DDFS Live Modulation Hookup
             const trackId = `${featureId}.${key}`;
             const liveValue = liveModulations[trackId];
             
-            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={val !== config.default} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} /></div>;
+            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={val !== config.default} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} /></div>;
         }
         
         if (config.type === 'vec2') return <div className={`mb-2 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Pad label={config.label} valueX={val?.x ?? 0} valueY={val?.y ?? 0} min={config.min ?? -1} max={config.max ?? 1} onChange={(x, y) => handleUpdate(key, { x, y })} /></div>;

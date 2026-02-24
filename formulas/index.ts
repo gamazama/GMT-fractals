@@ -27,6 +27,7 @@ import { Mandelorus } from './Mandelorus'; // Renamed
 import { Appell } from './Appell';
 import { Borromean } from './Borromean';
 import { MandelMap } from './MandelMap';
+import { HyperbolicMandelbrot } from './HyperbolicMandelbrot';
 
 // Organized list determines UI order on LOADING SCREEN
 const formulas = [
@@ -61,6 +62,7 @@ const formulas = [
     Bristorbrot,
     MakinBrot,
     Tetrabrot,
+    HyperbolicMandelbrot,
 
     // --- System ---
     Modular
@@ -113,7 +115,8 @@ export const PREDEFINED_CATEGORIES = [
             MakinBrot.id, 
             Tetrabrot.id, 
             Mandelbar3D.id, 
-            Quaternion.id
+            Quaternion.id,
+            HyperbolicMandelbrot.id
         ] 
     },
     { 

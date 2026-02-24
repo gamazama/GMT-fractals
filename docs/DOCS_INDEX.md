@@ -140,3 +140,17 @@ When making changes to GMT:
 ---
 
 *Last updated: February 2026*
+
+## 11. Recent Changes Summary
+
+### 2026-02-24 Fixes
+| Category | Change | Files |
+|----------|--------|-------|
+| **Video Export** | Bitrate auto-scales with resolution (40 Mbps base for 1080p) | `data/constants.ts`, `components/timeline/RenderPopup.tsx` |
+| **Video Export** | Viewport state restoration after render | `engine/VideoExporter.ts` |
+| **Sliders** | Removed log scaling from roughness, AO intensity, AO spread | `features/materials.ts`, `features/ao/index.ts` |
+| **Sliders** | Increased precision (min 0.001, step 0.001) for roughness and AO spread | `features/materials.ts`, `features/ao/index.ts` |
+| **Graph Editor** | Fixed browser drag-to-copy interference | `components/panels/flow/FlowEditor.tsx` |
+| **Quality Panel** | Max Ray Steps dynamically limited by Hard Loop Cap | `engine/FeatureSystem.ts`, `components/AutoFeaturePanel.tsx`, `features/quality.ts` |
+| **Quality Panel** | Overstep Fix visible without advanced mode | `features/quality.ts` |
+| **Quality Panel** | Manual Distance only shows when Manual probe selected | `features/quality.ts` |

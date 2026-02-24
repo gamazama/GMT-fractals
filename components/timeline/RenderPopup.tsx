@@ -34,7 +34,22 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
 
     const [formatIndex, setFormatIndex] = useState(0); // Default H.264
     const [vidSamples, setVidSamples] = useState(16);
-    const [vidBitrate, setVidBitrate] = useState(12); // Mbps
+    const [vidBitrate, setVidBitrate] = useState(VIDEO_CONFIG.DEFAULT_BITRATE); // Mbps
+
+    // Calculate recommended bitrate based on resolution
+    // Base: 40 Mbps for 1080p, scale linearly with pixel count
+    const calculateBitrate = (w: number, h: number): number => {
+        const pixels1080p = 1920 * 1080;
+        const targetPixels = w * h;
+        const baseBitrate = 40; // Mbps for 1080p
+        return Math.round(baseBitrate * (targetPixels / pixels1080p));
+    };
+
+    // Update bitrate when resolution changes
+    useEffect(() => {
+        const recommendedBitrate = calculateBitrate(vidRes.w, vidRes.h);
+        setVidBitrate(recommendedBitrate);
+    }, [vidRes]);
     const [startFrame, setStartFrame] = useState(0);
     const [endFrame, setEndFrame] = useState(animStore.durationFrames);
     const [frameStep, setFrameStep] = useState(1);
@@ -188,8 +203,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                 const supported = await Mediabunny.canEncodeVideo(currentFormat.codec as any, {
                     width: safeWidth,
                     height: safeHeight,
-                    bitrate: vidBitrate * 1_000_000,
-                    frameRate: fps
+                    bitrate: vidBitrate * 1_000_000
                 });
                 
                 setIsFormatSupported(supported);

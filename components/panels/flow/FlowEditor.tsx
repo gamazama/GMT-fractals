@@ -247,8 +247,26 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
 
     const onPaneClick = useCallback(() => setAddMenu(null), []);
 
+    // Prevent browser drag behaviors (image copy, etc.)
+    const handleDragOver = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+    }, []);
+
+    const handleDrop = useCallback((event: React.DragEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+    }, []);
+
     return (
-        <div ref={wrapperRef} className="w-full h-[600px] flex flex-col relative" data-help-id="ui.graph">
+        <div 
+            ref={wrapperRef} 
+            className="w-full h-[600px] flex flex-col relative" 
+            data-help-id="ui.graph"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            draggable={false}
+        >
             <ReactFlow
                 nodes={nodes}
                 edges={edges}

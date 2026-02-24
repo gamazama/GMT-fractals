@@ -70,8 +70,9 @@ export const QualityFeature: FeatureDefinition = {
         maxSteps: { 
             type: 'int', default: 300, label: 'Max Ray Steps', shortId: 'ms', uniform: 'uMaxSteps', 
             min: 32, max: 2000, step: 1, group: 'kernel',
-            description: 'Runtime limit. Rays stop after this many steps. Artistic tool for limiting depth.',
-            isAdvanced: true
+            description: 'Runtime limit. Rays stop after this many steps. Artistic tool for limiting depth. Maximum is limited by Hard Loop Cap.',
+            isAdvanced: true,
+            dynamicMaxRef: 'compilerHardCap'
         },
         distanceMetric: { 
             type: 'float', default: 0.0, label: 'Distance Metric', shortId: 'dm', uniform: 'uDistanceMetric', 
@@ -127,9 +128,8 @@ export const QualityFeature: FeatureDefinition = {
         },
         overstepTolerance: { 
             type: 'float', default: 0.0, label: 'Overstep Fix', shortId: 'ot', uniform: 'uOverstepTolerance', 
-            min: 0.0, max: 5.0, step: 0.1, group: 'kernel',
-            description: "Recovers details missed by the raymarcher. 0=Off. Higher values fix more holes but may create noise.",
-            isAdvanced: true
+            min: 0.0, max: 1000.0, step: 0.1, scale: 'log', group: 'kernel',
+            description: "Recovers details missed by the raymarcher. 0=Off. Higher values fix more holes but may create noise."
         },
         
         dynamicScaling: {
@@ -173,6 +173,8 @@ export const QualityFeature: FeatureDefinition = {
             min: 0.1, max: 1000.0, step: 0.1,
             group: 'performance',
             isAdvanced: true,
+            parentId: 'physicsProbeMode',
+            condition: { param: 'physicsProbeMode', eq: 2.0 },
             description: 'Manual distance value. Used for orbit control calculations.',
             format: (v) => v.toFixed(1),
             noReset: true

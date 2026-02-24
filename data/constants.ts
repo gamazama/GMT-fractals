@@ -20,7 +20,7 @@ export const DEFAULT_PIPELINE_REVISION = 1;
 // MP4 Export Configuration
 export const VIDEO_CONFIG = {
     BITRATE_MULTIPLIER: 1_000_000, // Mbps to bps
-    DEFAULT_BITRATE: 12,
+    DEFAULT_BITRATE: 40, // 40 Mbps for high-detail fractals
     DEFAULT_SAMPLES: 16
 };
 

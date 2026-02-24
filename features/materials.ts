@@ -92,8 +92,7 @@ export const MaterialFeature: FeatureDefinition = {
             label: 'Roughness',
             shortId: 'ro',
             uniform: 'uRoughness',
-            scale: 'log',
-            min: 0.01, max: 1.0, step: 0.01,
+            min: 0.001, max: 1.0, step: 0.001,
             group: 'surface'
         },
         

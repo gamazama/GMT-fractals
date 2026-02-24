@@ -484,6 +484,61 @@ function bristorbrotDE(pos: Vec3, params: Record<string, number>): number {
     return 0.5 * Math.log(r) * r / dr;
 }
 
+/**
+ * HyperbolicMandelbrot DE function (Poincaré-Ahlfors extension)
+ * Implements a custom distance estimation that accounts for the unique
+ * hyperbolic geometry of this fractal
+ */
+function hyperbolicMandelbrotDE(pos: Vec3, params: Record<string, number>): number {
+    const power = params.paramA || 2.0;
+    const hypScale = params.paramB || 1.0;
+    const conformalShift = params.paramC || 1.0;
+    const phaseTwist = params.paramD || 0.0;
+    const zOffset = params.paramE || 0.0;
+    
+    let x = pos.x, y = pos.y, z = pos.z;
+    let dr = 1.0;
+    
+    const maxIter = 20;
+    for (let i = 0; i < maxIter; i++) {
+        const r = Math.sqrt(x * x + y * y + z * z);
+        if (r > 2.0) break;
+        
+        // HyperbolicMandelbrot iteration logic
+        const rxy2 = x * x + y * y;
+        const rxy = Math.sqrt(rxy2);
+        
+        // Derivative calculation using full 3D magnitude
+        dr = power * Math.pow(r, power - 1) * dr + 1.0;
+        
+        // Ahlfors Extension multiplier: M = (|Z|^2 - T^2) / |Z|^2
+        const m = (rxy2 - conformalShift * z * z) / (rxy2 + 1e-20);
+        
+        // Apply the conformal 3D power with Phase Twist
+        const theta = Math.atan2(y, x) * power + phaseTwist;
+        const rxy_p = Math.pow(rxy, power);
+        
+        // Z_{n+1} = Z_n^p * M + C_z
+        const nx = rxy_p * Math.cos(theta) * m + pos.x;
+        const ny = rxy_p * Math.sin(theta) * m + pos.y;
+        
+        // T_{n+1} = p * |Z_n|^(p-1) * T_n + C_t
+        const nz = power * Math.pow(rxy, power - 1) * z * hypScale + pos.z + zOffset;
+        
+        x = nx;
+        y = ny;
+        z = nz;
+    }
+    
+    const r = Math.sqrt(x * x + y * y + z * z);
+    
+    // Custom distance estimation formula optimized for hyperbolic geometry
+    const drSafe = Math.max(Math.abs(dr), 1e-10);
+    
+    // Use log-based distance estimation for all regions
+    return 0.5 * Math.log(r) * r / drSafe;
+}
+
 // Registry of CPU DE functions
 const cpuDERegistry: Record<string, CPUDEFunction> = {
     'Mandelbulb': mandelbulbDE,
@@ -498,6 +553,7 @@ const cpuDERegistry: Record<string, CPUDEFunction> = {
     'PseudoKleinian': pseudoKleinianDE,
     'BoxBulb': boxBulbDE,
     'Quaternion': quaternionDE,
+    'HyperbolicMandelbrot': hyperbolicMandelbrotDE,
     'Buffalo': buffaloDE,
     'Bristorbrot': bristorbrotDE,
     // Aliases and variants

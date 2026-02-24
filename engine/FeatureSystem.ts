@@ -69,6 +69,9 @@ export interface ParamConfig {
         colorSpace?: string;
     };
 
+    // Reference to another parameter whose value should be used as this param's max
+    dynamicMaxRef?: string;
+
     // 'uniform' (Default): Updates a GLSL uniform (Instant)
     // 'compile': Triggers a shader rebuild (Slow)
     onUpdate?: 'uniform' | 'compile';

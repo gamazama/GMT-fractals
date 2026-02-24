@@ -127,6 +127,9 @@ interface ExportSession {
         wasPlaying: boolean;
         camAspect: number;
         lastFrameCount: number; // Save frame counter
+        resolutionMode: 'Full' | 'Fixed';
+        fixedResolution: [number, number];
+        aaLevel: number;
     };
     directStream?: FileSystemWritableFileStream | null;
     formatDef: any;
@@ -174,6 +177,7 @@ export class VideoExporter {
     
     private captureCurrentState() {
         const animStore = useAnimationStore.getState();
+        const fractalStore = useFractalStore.getState();
         const cam = this.engine.activeCamera;
         return {
             frame: animStore.currentFrame,
@@ -182,7 +186,10 @@ export class VideoExporter {
             camQuat: cam ? cam.quaternion.clone() : new THREE.Quaternion(),
             wasPlaying: animStore.isPlaying,
             camAspect: cam instanceof THREE.PerspectiveCamera ? cam.aspect : 1.0,
-            lastFrameCount: this.engine.mainUniforms.uFrameCount.value
+            lastFrameCount: this.engine.mainUniforms.uFrameCount.value,
+            resolutionMode: fractalStore.resolutionMode,
+            fixedResolution: [...fractalStore.fixedResolution] as [number, number],
+            aaLevel: fractalStore.aaLevel
         };
     }
 
@@ -248,7 +255,7 @@ export class VideoExporter {
             codec: formatDef.codec === 'avc' ? 'avc1.640034' : formatDef.codec,
             width: safeWidth,
             height: safeHeight,
-            bitrate: config.bitrate * VIDEO_CONFIG.BITRATE_MULTIPLIER,
+            bitrate: config.bitrate * VIDEO_CONFIG.BITRATE_MULTIPLIER * 2.5,
             framerate: config.fps,
             latencyMode: 'quality',
             avc: { format: formatDef.container === 'mp4' ? 'annexb' : 'avc' }
@@ -325,7 +332,7 @@ export class VideoExporter {
                 }
 
                 if (stableMeta && stableMeta.decoderConfig && !stableMeta.decoderConfig.description && this.extractedDescription) {
-                    stableMeta.decoderConfig.description = this.extractedDescription;
+                    stableMeta.decoderConfig.description = new Uint8Array(this.extractedDescription) as Uint8Array<ArrayBuffer>;
                 }
 
                 if (sess.output.state === 'pending') {
@@ -738,6 +745,11 @@ export class VideoExporter {
 
         fractalStore.setSceneOffset(s.offset);
         animStore.seek(s.frame);
+        
+        // Restore resolution settings
+        fractalStore.setResolutionMode(s.resolutionMode);
+        fractalStore.setFixedResolution(s.fixedResolution[0], s.fixedResolution[1]);
+        fractalStore.setAALevel(s.aaLevel);
         
         if (this.engine.activeCamera) {
             const cam = this.engine.activeCamera as THREE.PerspectiveCamera;
