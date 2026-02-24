@@ -30,6 +30,17 @@ If the screen turns black or the browser crashes:
 *   **Cause:** The browser does not support the selected codec (e.g., AV1 or HEVC) in hardware.
 *   **Fix:** Switch to **MP4 (H.264)** or **WebM (VP9)**. These have the widest support.
 
+### Viewport Freezes After Export Completes
+*   **Cause:** After export, the WebGL render target was left pointing to the disposed `exportTarget` from the last `captureAndEncode()` call. This caused subsequent renders to target the disposed buffer instead of the screen.
+*   **Fix:** Added explicit render target reset to `null` (screen) in `restoreState()` method before resetting viewport and scissor.
+*   **Location:** `engine/VideoExporter.ts:773`
+
+### "Error finalizing video file" in Chrome Disk Mode
+*   **Cause:** When using `StreamTarget` with `chunked: true`, Mediabunny's `output.finalize()` internally closes the underlying `FileSystemWritableFileStream`. The code was then attempting to close the stream again with `sess.directStream.close()`, which threw an error because the stream was already closed.
+*   **Fix:** Removed the redundant `sess.directStream.close()` call - the stream is already closed by `finalize()`.
+*   **Location:** `engine/VideoExporter.ts:698-700`
+*   **Note:** The video file was always written successfully; the error was only cosmetic.
+
 ## 3. Audio Reactivity
 
 ### "Microphone Access Denied"

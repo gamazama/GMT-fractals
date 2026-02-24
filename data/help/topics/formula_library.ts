@@ -87,8 +87,8 @@ This formula adds the **Cross-Term ($2yz$)** to the iteration, forcing the Y and
 - **Param F (Y Scale)**: Modifies the width of the fractal arms.
 `
     },
-    'formula.hypertorus': {
-        id: 'formula.hypertorus',
+    'formula.mandelorus': {
+        id: 'formula.mandelorus',
         category: 'Formulas',
         title: 'Mandelorus (HyperTorus)',
         parentId: 'formula.active',
@@ -625,6 +625,35 @@ Instead of a single constant $C$, the value of $C$ interpolates from a Start val
 
 ## Slicing
 This formula is often used with "Slice Thickness" to create disjointed, floating layers (like MRI scans or topographic maps).
+`
+    },
+    'formula.mandelbolic': {
+        id: 'formula.mandelbolic',
+        category: 'Formulas',
+        title: 'MandelBolic',
+        parentId: 'formula.active',
+        content: `
+## The Math
+The MandelBolic is a true 3D geometric extension of the Mandelbrot set into Hyperbolic 3-Space using the Poincaré-Ahlfors extension.
+
+This approach bypasses the limitations of 3D algebra by preserving perfect spherical bulbs, exact periodicity, and the true 3D cardioid core without the "smeared" artifacts of standard 3D fractals.
+
+## The Ahlfors Extension
+The formula uses a conformal mapping that extends the complex plane into hyperbolic 3-space:
+$$ M = (|Z|^2 - T^2) / |Z|^2 $$
+
+Where Z is the 2D complex plane (x, y) and T is the hyperbolic height (z).
+
+## Parameters
+- **Param A (Power)**: The exponent of the iteration. Default is 2.0 for classic Mandelbrot behavior.
+- **Param B (Hyp. Scale)**: Scales the hyperbolic height growth. Controls how fast the Z-dimension expands.
+- **Param C (Conformal Shift)**: Distorts the hyperbolic mapping. Creates unique geometric variations.
+- **Param D (Phase Twist)**: Adds rotational offset during iteration. Creates spiraling arms.
+- **Param E (Z-Offset)**: Constant offset added to the Z coordinate each iteration.
+- **Param F (Trap Scale)**: Scales the orbit trap distance for coloring.
+
+## Visuals
+Creates organic, bulbous structures with perfect spherical details. The hyperbolic extension produces unique "saddle" and "feather" filaments that differ from standard Mandelbulb fractals.
 `
     }
 };

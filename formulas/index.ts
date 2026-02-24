@@ -27,7 +27,7 @@ import { Mandelorus } from './Mandelorus'; // Renamed
 import { Appell } from './Appell';
 import { Borromean } from './Borromean';
 import { MandelMap } from './MandelMap';
-import { HyperbolicMandelbrot } from './HyperbolicMandelbrot';
+import { MandelBolic } from './MandelBolic';
 
 // Organized list determines UI order on LOADING SCREEN
 const formulas = [
@@ -62,7 +62,7 @@ const formulas = [
     Bristorbrot,
     MakinBrot,
     Tetrabrot,
-    HyperbolicMandelbrot,
+    MandelBolic,
 
     // --- System ---
     Modular
@@ -75,6 +75,7 @@ formulas.forEach(def => registry.register(def));
 registry.registerAlias('UberMenger', 'MengerAdvanced');
 registry.registerAlias('FoldingBrot', 'BoxBulb');
 registry.registerAlias('HyperTorus', 'Mandelorus'); // Legacy Alias
+registry.registerAlias('HyperbolicMandelbrot', 'MandelBolic'); // Legacy Alias
 
 export const PREDEFINED_CATEGORIES = [
     { 
@@ -116,7 +117,7 @@ export const PREDEFINED_CATEGORIES = [
             Tetrabrot.id, 
             Mandelbar3D.id, 
             Quaternion.id,
-            HyperbolicMandelbrot.id
+            MandelBolic.id
         ] 
     },
     { 

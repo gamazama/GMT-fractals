@@ -679,12 +679,18 @@ export class VideoExporter {
         console.log("Export Finishing...");
         
         try {
+            console.log("[VideoExporter] Flushing encoder...");
             await sess.encoder.flush();
+            console.log("[VideoExporter] Closing encoder...");
             sess.encoder.close();
+            console.log("[VideoExporter] Waiting for muxer chain...");
             await sess.muxerChain;
+            console.log("[VideoExporter] Finalizing output...");
             await sess.output.finalize();
+            console.log("[VideoExporter] Output finalized successfully.");
 
             if (!sess.directStream) {
+                 console.log("[VideoExporter] RAM mode - creating download blob...");
                  const target = sess.output.target as Mediabunny.BufferTarget;
                  if (target.buffer) {
                      const blob = new Blob([target.buffer], { type: sess.formatDef.mime });
@@ -696,7 +702,9 @@ export class VideoExporter {
                      setTimeout(() => URL.revokeObjectURL(url), 60000);
                  }
             } else {
-                 await sess.directStream.close();
+                 // NOTE: StreamTarget's finalize() already closes the underlying stream.
+                 // Attempting to close it again throws an error in Chrome.
+                 console.log("[VideoExporter] Disk mode - stream already closed by finalize()");
             }
         } catch (e) {
             console.error("Finalize Error", e);
@@ -768,9 +776,14 @@ export class VideoExporter {
         // Restore engine frame count to avoid jump
         this.engine.mainUniforms.uFrameCount.value = s.lastFrameCount;
 
-        // Reset renderer viewport and scissor
+        // Reset renderer state: render target, viewport, and scissor
         if (this.engine.renderer) {
              const canvas = this.engine.renderer.domElement;
+             // CRITICAL: Reset render target to screen (null)
+             // After export, the render target may be left pointing to exportTarget
+             // from the last captureAndEncode() call. If not reset, the normal render
+             // loop will render to the disposed export target instead of the screen.
+             this.engine.renderer.setRenderTarget(null);
              this.engine.renderer.setViewport(0, 0, canvas.width, canvas.height);
              this.engine.renderer.setScissor(0, 0, canvas.width, canvas.height);
              this.engine.renderer.setScissorTest(false);

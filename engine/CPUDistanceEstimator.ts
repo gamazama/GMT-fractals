@@ -485,11 +485,11 @@ function bristorbrotDE(pos: Vec3, params: Record<string, number>): number {
 }
 
 /**
- * HyperbolicMandelbrot DE function (Poincaré-Ahlfors extension)
+ * MandelBolic DE function (Poincaré-Ahlfors extension)
  * Implements a custom distance estimation that accounts for the unique
  * hyperbolic geometry of this fractal
  */
-function hyperbolicMandelbrotDE(pos: Vec3, params: Record<string, number>): number {
+function mandelBolicDE(pos: Vec3, params: Record<string, number>): number {
     const power = params.paramA || 2.0;
     const hypScale = params.paramB || 1.0;
     const conformalShift = params.paramC || 1.0;
@@ -504,7 +504,7 @@ function hyperbolicMandelbrotDE(pos: Vec3, params: Record<string, number>): numb
         const r = Math.sqrt(x * x + y * y + z * z);
         if (r > 2.0) break;
         
-        // HyperbolicMandelbrot iteration logic
+        // MandelBolic iteration logic
         const rxy2 = x * x + y * y;
         const rxy = Math.sqrt(rxy2);
         
@@ -553,7 +553,7 @@ const cpuDERegistry: Record<string, CPUDEFunction> = {
     'PseudoKleinian': pseudoKleinianDE,
     'BoxBulb': boxBulbDE,
     'Quaternion': quaternionDE,
-    'HyperbolicMandelbrot': hyperbolicMandelbrotDE,
+    'MandelBolic': mandelBolicDE,
     'Buffalo': buffaloDE,
     'Bristorbrot': bristorbrotDE,
     // Aliases and variants

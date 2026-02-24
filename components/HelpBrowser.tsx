@@ -145,11 +145,22 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
             return;
         }
         
-        // Slight delay to ensure DOM update has flushed after category switch
-        const timer = setTimeout(() => {
+        // Retry mechanism for cases where DOM hasn't rendered yet
+        let attempts = 0;
+        const maxAttempts = 10;
+        const attemptDelay = 50;
+        
+        const tryScroll = () => {
             const el = topicRefs.current[activeTopicId];
             if (!el) {
-                isScrollingRef.current = false;
+                attempts++;
+                if (attempts < maxAttempts) {
+                    // Retry after delay
+                    setTimeout(tryScroll, attemptDelay);
+                } else {
+                    // Give up and unlock
+                    isScrollingRef.current = false;
+                }
                 return;
             }
 
@@ -173,16 +184,19 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
 
             if (!isVisibleAtTop) {
                  if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-                 
+                  
                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                 
+                  
                  scrollTimeoutRef.current = window.setTimeout(() => {
                     isScrollingRef.current = false;
                  }, 750);
             } else {
                 isScrollingRef.current = false;
             }
-        }, 50);
+        };
+        
+        // Initial delay to ensure DOM update has flushed after category switch
+        const timer = setTimeout(tryScroll, 50);
 
         return () => clearTimeout(timer);
     }, [activeTopicId, visibleTopics]);
