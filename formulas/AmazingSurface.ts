@@ -20,15 +20,12 @@ export const AmazingSurface: FractalDefinition = {
         function: `
     void formula_AmazingSurface(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 p = z.xyz;
-        
+        vec3 offset = uVec3B;
         // Params
         float scale = uParamA;      // Fractal Scale (fractal_fold + 1)
         float invMax = uParamB;     // Inversion Clamp Max (3.0)
-        float cSizeZ = uParamC;     // Box Size Z (1.3)
-        float zOffset = uParamD;    // Translation Z (fractal_min_radius)
         
-        vec3 cSize = vec3(1.0, 1.0, cSizeZ);
-        vec3 offset = vec3(0.0, 0.0, -zOffset);
+        vec3 cSize = uVec3A; //box params
         
         if (uJuliaMode > 0.5) offset += uJulia;
 
@@ -39,7 +36,7 @@ export const AmazingSurface: FractalDefinition = {
         if (p.y < p.z) p.yz = p.zy;
         
         // 2. Box Fold / Scale
-        // formula: p = p * scale - csize * (scale - 1.0)
+        // formula: p = p * scale - cSize * (scale - 1.0)
         p = p * scale - cSize * (scale - 1.0);
         
         // 3. Sphere Inversion
@@ -70,8 +67,8 @@ export const AmazingSurface: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 2.37 }, // fractal_fold + 1
         { label: 'Inv Max', id: 'paramB', min: 1.0, max: 5.0, step: 0.01, default: 3.0 },
-        { label: 'Box Size Z', id: 'paramC', min: 0.1, max: 3.0, step: 0.01, default: 1.3 },
-        { label: 'Trans Z', id: 'paramD', min: -2.0, max: 2.0, step: 0.001, default: 0.5 }, // fractal_min_radius
+        { label: 'Box Params', id: 'vec3A', type: 'vec3', min: -3.0, max: 3.0, step: 0.001, default: { x: 1.0, y: 1.0, z: 1.3 } },
+        { label: 'Offset Params', id: 'vec3B', type: 'vec3', min: -3.0, max: 3.0, step: 0.001, default: { x: 0.0, y: 0.0, z: 0.5 } },
         { label: 'Pre-Scale', id: 'paramE', min: 0.1, max: 5.0, step: 0.01, default: 1.0 }, // fractal_scale
         { label: 'Thickness', id: 'paramF', min: 0.0, max: 10.0, step: 0.01, default: 0.4 },
     ],
@@ -223,8 +220,8 @@ export const AmazingSurface: FractalDefinition = {
                 iterations: 12,
                 paramA: 1.866,
                 paramB: 1.63,
-                paramC: 0.62,
-                paramD: -0.64,
+                vec3A: { x: 1.0, y: 1.0, z: 0.62 },
+                vec3B: { x: 0, y: 0, z: 0.62},
                 paramE: 0.97,
                 paramF: 1.4
             },

@@ -5,15 +5,53 @@ export const getFragmentMainGLSL = (enablePathTracing: boolean) => {
     // This dramatically reduces shader compilation time.
     let integrator = '';
     
+    // Shared soft-sphere check block (inlined in both branches)
+    const sphereLoop = `
+        for (int _li = 0; _li < MAX_LIGHTS; _li++) {
+            if (_li >= uLightCount) break;
+            if (uLightIntensity[_li] < 0.01 || uLightType[_li] > 0.5 || uLightRadius[_li] < 0.001) continue;
+            vec3 _oc = ro - uLightPos[_li];
+            float _b = dot(rd, _oc);
+            if (-_b < 0.001) continue;
+            float _dPerp2 = max(0.0, dot(_oc, _oc) - _b * _b);
+            float _r = uLightRadius[_li];
+            float _s = max(0.0, uLightSoftness[_li]);
+            float _fadeMax = _r * (1.0 + _s) + 0.001;
+            if (_dPerp2 < _fadeMax * _fadeMax) {
+                float _dPerp = sqrt(_dPerp2);
+                float _fadeMin = _r * max(0.0, 1.0 - _s);
+                float _fade = 1.0 - smoothstep(_fadeMin, _fadeMax, _dPerp);
+                if (_fade > 0.001) {
+                    float _disc = _r * _r - _dPerp2;
+                    d = _disc > 0.0 ? max(0.001, -_b - sqrt(_disc)) : max(0.001, -_b);
+                    col = mix(col, uLightColor[_li] * uLightIntensity[_li], _fade);
+                    break;
+                }
+            }
+        }
+    `;
+
     if (enablePathTracing) {
         integrator = `
-        // Path Tracer Mode (Compiled)
-        col = calculatePathTracedColor(ro, rd, d, result, stochasticSeed);
+        if (hit) {
+            // Path Tracer Mode (Compiled)
+            col = calculatePathTracedColor(ro, rd, d, result, stochasticSeed);
+        } else {
+            // Primary-ray visibility of light spheres (no fractal occluder)
+            ${sphereLoop}
+            if (d < 0.001) d = 1000.0;
+        }
         `;
     } else {
         integrator = `
-        // Direct Lighting Mode (Compiled)
-        col = calculateShading(ro, rd, d, result, stochasticSeed);
+        if (hit) {
+            // Direct Lighting Mode (Compiled)
+            col = calculateShading(ro, rd, d, result, stochasticSeed);
+        } else {
+            // Visible light spheres in Direct mode
+            ${sphereLoop}
+            if (d < 0.001) d = 1000.0;
+        }
         `;
     }
 
@@ -58,18 +96,15 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
     vec4 result = vec4(0.0);
     
     vec3 glow = vec3(0.0);
+    vec3 fogScatter = vec3(0.0);
     float volumetric = 0.0;
-    
+
     // Primary Ray Trace
-    bool hit = traceScene(ro, rd, d, result, glow, stochasticSeed, volumetric);
-    
-    if (hit) {
-        ${integrator}
-    } else {
-        d = 1000.0;
-    }
-    
-    col = applyPostProcessing(col, d, glow, volumetric);
+    bool hit = traceScene(ro, rd, d, result, glow, stochasticSeed, volumetric, fogScatter);
+
+    ${integrator}
+
+    col = applyPostProcessing(col, d, glow, volumetric, fogScatter);
     outDepth = d;  // Output depth for physics probe
     return col;
 }

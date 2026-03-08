@@ -34,6 +34,17 @@ The GMT documentation is organized into several complementary systems:
 |------|---------|
 | [09_Mapping_Modes_Report.md](09_Mapping_Modes_Report.md) | Analysis of coloring mapping modes |
 | [10_Shader_Architecture_Refactor.md](10_Shader_Architecture_Refactor.md) | Shader composition and injection patterns |
+| [11_Fragmentarium_Conversion.md](11_Fragmentarium_Conversion.md) | Converting Fragmentarium .frag files to GMF format |
+
+### Fragmentarium Importer System
+| File | Purpose |
+|------|---------|
+| [12_Vector_Uniform_Requirements.md](12_Vector_Uniform_Requirements.md) | Vec2/Vec3 uniform requirements for formula params |
+| [14_Fragmentarium_Examples_Analysis.md](14_Fragmentarium_Examples_Analysis.md) | Catalog of 100+ formula patterns |
+| [19_GLSL_Parser_Integration_Summary.md](19_GLSL_Parser_Integration_Summary.md) | Parser integration guide (shaderfrog/glsl-parser) |
+| [20_Fragmentarium_Importer_Formula_Analysis.md](20_Fragmentarium_Importer_Formula_Analysis.md) | Formula-level analysis for V2 transformation |
+| [20_Fragmentarium_Importer_V2.md](20_Fragmentarium_Importer_V2.md) | V2 AST-based implementation reference |
+| [21_Frag_Importer_Current_Status.md](21_Frag_Importer_Current_Status.md) | **⚠️ START HERE — current status and known issues** |
 
 ## 🚀 Getting Started
 
@@ -139,9 +150,19 @@ When making changes to GMT:
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026*
 
 ## 11. Recent Changes Summary
+
+### 2026-03-03 Vector Controls Enhancement
+| Category | Change | Files |
+|----------|--------|-------|
+| **Vector3/Vec2 Controls** | Added rotation mode with heliotrope direction visualizer | `components/vector-input/RotationHeliotrope.tsx`, `BaseVectorInput.tsx` |
+| **Vector3/Vec2 Controls** | Unit toggle (degrees/radians) via right-click context menu | `BaseVectorInput.tsx` |
+| **Vector3/Vec2 Controls** | Double-click axis labels to reset to default value | `VectorAxisCell.tsx` |
+| **Slider/Vector Input** | Alt-drag now skips step quantization for full precision | `components/inputs/hooks/useDragValue.ts` |
+| **Slider/Vector Input** | Fixed double-mapping bug where slider min/max were mapped twice | `components/Slider.tsx`, `ScalarInput.tsx` |
+| **Formula Panel** | Rotation parameters auto-detected with word boundary regex | `FormulaPanel.tsx` |
 
 ### 2026-02-24 Fixes
 | Category | Change | Files |

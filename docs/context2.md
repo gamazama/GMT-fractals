@@ -66,11 +66,108 @@ All features are registered in `features/index.ts`:
 *   **Lite Render Unification:** Logic moved into `QualityFeature` state.
 *   **Subscription Cleanup:** Manual `subscribe` calls replaced by DDFS auto-detection.
 *   **Shader Builder:** `ShaderBuilder.ts` implemented with feature `inject()` contract.
-*   **Legacy Properties:** `shader` and `shaderGenerator` properties still exist in `FeatureSystem.ts` (marked deprecated).
+*   **`shaderGenerator` removed:** Dead property deleted from `FeatureDefinition`.
+*   **`shader` → `postShader`:** Renamed in `FeatureDefinition` for clarity. `inject()` = raymarching shader; `postShader` = post-process pass. See `engine/FeatureSystem.ts`.
+*   **`ShaderConfig` extracted:** Lives in `engine/ShaderConfig.ts`. `pipeline` and `graph` fields are now typed (`PipelineNode[]`, `FractalGraph`). Re-exported from `ShaderFactory.ts`.
+*   **Category 2 `any` fixes:** `inject()` config param, `ParamCondition`, `ParamOption`, `EngineInputEvent` discriminated union — all given precise types.
+*   **Shader permutation:** ✅ Already implemented in `ShaderFactory.ts` via `engineConfig.toggleParam`. Features with this set are conditionally injected.
 
 ### Minor Issues
 *   **Mobile UI:** Some auto-generated panels are cramped on vertical screens.
-*   **Typing:** Animation Engine binders use `any` casting for dynamic DDFS paths.
+*   **Typing (Category 3):** `(state as any)[feat.id]` pattern in engine plumbing. Deferred — requires `FeatureStateMap`; adding it would add per-feature friction. See `docs/07_Code_Health.md` Section 4.
 
-### Optimization Opportunities
-*   **Shader permutation:** Could optimize `ShaderFactory` to exclude unused feature chunks when features are disabled.
+---
+
+## 4. Fragmentarium Importer (New Feature)
+
+A built-in tool for importing Fragmentarium `.frag` files has been added:
+
+### Files
+- `features/fragmentarium_import/GenericFragmentariumParserV2.ts` — **Active parser** (AST-based via `@shaderfrog/glsl-parser`)
+- `features/fragmentarium_import/GenericFragmentariumParser.ts` — V1 regex parser (used as fallback pre-parser by V2)
+- `features/fragmentarium_import/FormulaImporter.tsx` — UI component; drives parse → map → transform pipeline
+- `features/fragmentarium_import/index.ts` — barrel export of both V1 and V2
+
+### Usage
+1. Open Formula dropdown in the UI
+2. Click "Import from Fragmentarium (.FRAG)"
+3. Paste .frag code — V2 parser generates AST, auto-maps uniforms to GMT slots
+4. Adjust uniform → param mappings in the workshop UI
+5. Import and compile
+
+### Current Status: ⚠️ Broken — 0% success on reference files
+
+**Root cause (identified 2026-03-05):** All three `.frag` files in `reference/` use `#include "MathUtils.frag"`. The preprocessor strips the include, but the loop body still calls `rotationMatrix3` (defined in that include) → GLSL compile error every time.
+
+**Two blocking bugs:**
+1. `#include`-sourced helpers called but undefined (e.g., `rotationMatrix3` from `MathUtils.frag`)
+2. Computed uniforms (`vec4 scale = vec4(Scale, ...) / MinRad2;`) stripped at global scope but still referenced in loop body → undefined variable
+
+See `docs/21_Frag_Importer_Current_Status.md` for full root cause analysis, fix plan, and a minimal working test formula.
+
+### Technical Notes (Architecture — Not Broken)
+- V2 uses `@shaderfrog/glsl-parser` for AST-level renaming, loop extraction, and helper function transformation — eliminates regex bugs (e.g., `z.z → z_local.z_local`)
+- Automatic pattern detection: `MENGER`, `MANDELBOX`, `AMAZING_SURFACE`, `GENERIC`
+- Vec2/Vec3 slot mapping in UI is implemented (`vec2A/B/C`, `vec3A/B/C`)
+- `providesInit` body inlining is implemented but untested on real files
+
+See `docs/11_Fragmentarium_Conversion.md` for detailed conversion guide.
+
+---
+
+## 5.5 Path Tracer Quality Params (New)
+
+Four new `LightingFeature` params (all `onUpdate: 'compile'`, shown in Engine panel when PT enabled):
+
+| Param | GLSL Define / Uniform | Description |
+|-------|----------------------|-------------|
+| `ptNEEAllLights` | `PT_NEE_ALL_LIGHTS` | Evaluate every active light per bounce (vs. one random) — reduces shadow noise at N× ray cost |
+| `ptEnvNEE` | `PT_ENV_NEE` | Sample env map directly each bounce (one extra trace) — reduces sky-light noise |
+| `ptVolumetric` | `PT_VOLUMETRIC` | Henyey-Greenstein fog scatter (see Section 2.5 in Rendering Internals) |
+| `ptMaxLuminance` | `uPTMaxLuminance` | Firefly clamp — clamps per-sample luminance before accumulation |
+
+Also: **rim light is now bounce-0 only** (prevented incorrect indirect rim brightening).
+
+## 5.6 Vector Formula Parameters (New)
+
+`CoreMathFeature` now exposes six vector params (`features/core_math.ts`):
+
+| Param | Uniform | Type | Notes |
+|-------|---------|------|-------|
+| `vec2A/B/C` | `uVec2A/B/C` | `{x,y}` | Vec2 formula params |
+| `vec3A/B/C` | `uVec3A/B/C` | `{x,y,z}` | Vec3 formula params |
+
+- Rendered in `FormulaPanel.tsx` via `Vector2Input` / `Vector3Input` components
+- Each axis is independently animatable (`coreMath.vec3A_x`, `.y`, `.z`) — `AnimationSystem` reconstructs the full vec3 before uploading
+- `ParameterSelector` expands vec params into per-axis entries for the animation track picker
+- Formulas declare these as `uniform vec3 uVec3A;` etc. and can set `type: 'vec3'` in their `parameters[]` with a `mode` field (`'rotation'` or `'normal'`)
+
+## 5. Vector Input System (Enhanced)
+
+The unified input system for Vector3 and Vector2 parameters has been significantly enhanced:
+
+### Components
+- `BaseVectorInput.tsx` - Core vector input with translation/rotation modes
+- `VectorAxisCell.tsx` - Individual axis cell with label, drag, and reset
+- `RotationHeliotrope.tsx` - 3D direction visualizer for rotation parameters
+- `DualAxisPad.tsx` - XY manipulation pad
+
+### Features
+- **Translation Mode**: Standard X/Y/Z axis controls with color-coded labels
+- **Rotation Mode**: Auto-detected via word boundary regex (`/\brot(ation|ate)?\b/i`)
+  - Heliotrope direction visualizer (drag to change azimuth/pitch)
+  - Unit toggle (degrees/radians) via right-click context menu
+  - Axes labeled A (Azimuth), P (Pitch), ∠ (Angle)
+- **Interactions**:
+  - Drag numbers to adjust values
+  - Shift+Drag: 10x speed
+  - Alt+Drag: 0.1x precision (no step quantization)
+  - Double-click axis label: Reset to default
+  - Click number: Text input with π notation support (e.g., "0.5π", "90°")
+
+### Precision
+- Display: 1 decimal place
+- Text input: Up to 6 decimal places
+- Step quantization: Applied to normal drag, skipped in Alt mode
+
+See `data/help/topics/ui.ts` 'ui.vector' for user documentation.

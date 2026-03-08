@@ -1,0 +1,461 @@
+<!-- 
+  GMF: GPU Mandelbulb Format v1.0 
+  A proprietary container for Fractal math definitions + default presets.
+  You can edit the GLSL blocks below directly.
+-->
+
+  /* 
+   * --- GMT SHADER API REFERENCE ---
+   * 
+   * Available Uniforms:
+   * float uParamA, uParamB, uParamC, uParamD, uParamE, uParamF; // The 6 Sliders
+   * int uIterations;      // Iteration count
+   * float uTime;          // Elapsed time in seconds
+   * vec3 uJulia;          // Julia coordinates (if Julia mode active)
+   * float uJuliaMode;     // 1.0 if active, 0.0 if not
+   * 
+   * Helper Functions:
+   * void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR);
+   * void boxFold(inout vec3 z, inout float dz, float limit);
+   * void dodecaFold(inout vec3 z);
+   * vec3 bulbPow(vec3 z, float power);        // Spherical Power function
+   * vec4 quatPow(vec4 q, float p);            // Quaternion Power
+   * vec4 quatMult(vec4 q1, vec4 q2);          // Quaternion Multiplication
+   * float snoise(vec3 v);                     // Simplex Noise (-1.0 to 1.0)
+   * 
+   * Input/Output:
+   * z    : Current coordinate (vec4). .xyz is position, .w is auxiliary.
+   * dr   : Running derivative (float). Used for distance estimation.
+   * trap : Orbit trap accumulator (float). Used for coloring.
+   * c    : The constant for the fractal (Julia value or Pixel position).
+   */
+
+<Metadata>
+{
+  "id": "SurfaceKIFS",
+  "name": "Surface KIFS",
+  "shortDescription": "A folded Iterated Function System (KIFS) based on Rrrola's Mandelbox variant.",
+  "description": "A beautiful surface-like Iterated Function System. It uses rotation, scaling, and absolute-value folding on the XY plane. Originally devised by Buddhi and optimized by Rrrola.",
+  "parameters": [
+    { "label": "Scale", "id": "paramA", "min": -3, "max": 3, "step": 0.001, "default": 1.449 },
+    { "label": "Fold X", "id": "paramB", "min": -1, "max": 1, "step": 0.001, "default": 0.13 },
+    { "label": "Fold Y", "id": "paramC", "min": -1, "max": 1, "step": 0.001, "default": 0.045 },
+    { "label": "Rot Angle", "id": "paramD", "min": -3.1415, "max": 3.1415, "step": 0.001, "default": 1.627, "scale": "pi" },
+    { "label": "Rot Axis X", "id": "paramE", "min": -1, "max": 1, "step": 0.001, "default": 0.217 },
+    { "label": "Rot Axis Z", "id": "paramF", "min": -1, "max": 1, "step": 0.001, "default": 0.021 }
+  ],
+  "defaultPreset": {
+    "version": 0,
+    "name": "SurfaceKIFS",
+    "formula": "SurfaceKIFS",
+    "features": {
+      "coreMath": {
+        "iterations": 20,
+        "paramA": 1.299,
+        "paramB": 0.164,
+        "paramC": -0.16,
+        "paramD": 1.62758,
+        "paramE": 0.2174,
+        "paramF": 0.02174
+      },
+      "geometry": {
+        "applyTransformLogic": true,
+        "preRotMaster": true,
+        "hybridComplex": false,
+        "burningEnabled": false,
+        "hybridMode": false,
+        "hybridIter": 0,
+        "hybridFoldLimit": 1,
+        "hybridScale": 2,
+        "hybridMinR": 0.5,
+        "hybridFixedR": 1,
+        "hybridAddC": false,
+        "hybridProtect": true,
+        "hybridSwap": false,
+        "hybridSkip": 1,
+        "preRotEnabled": false,
+        "preRotY": 0,
+        "preRotX": 0,
+        "preRotZ": 0,
+        "juliaMode": true,
+        "juliaX": -0.03034,
+        "juliaY": -0.80827,
+        "juliaZ": -0.15862,
+        "preRot": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "julia": { "x": 0, "y": 0, "z": 0 }
+      },
+      "lighting": {
+        "advancedLighting": true,
+        "ptEnabled": true,
+        "renderMode": 0,
+        "ptBounces": 3,
+        "ptGIStrength": 1,
+        "shadowsCompile": true,
+        "shadowAlgorithm": 0,
+        "ptStochasticShadows": false,
+        "shadows": true,
+        "shadowIntensity": 1,
+        "shadowSoftness": 10.8,
+        "shadowSteps": 128,
+        "shadowBias": 0.001,
+        "lights": [
+          {
+            "type": "Point",
+            "position": { "x": -0.47, "y": -0.77, "z": 1.4 },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "color": "#ffffff",
+            "intensity": 1,
+            "falloff": 0.22,
+            "falloffType": "Quadratic",
+            "fixed": false,
+            "visible": true,
+            "castShadow": true
+          }
+        ]
+      },
+      "ao": {
+        "aoIntensity": 0.66,
+        "aoSpread": 0.5,
+        "aoSamples": 5,
+        "aoMode": false,
+        "aoMaxSamples": 32,
+        "aoStochasticCp": true,
+        "aoEnabled": true
+      },
+      "reflections": {
+        "mixStrength": 1,
+        "roughnessThreshold": 0.5,
+        "bounces": 1,
+        "steps": 64,
+        "enabled": true
+      },
+      "atmosphere": {
+        "glowEnabled": true,
+        "glowQuality": 0,
+        "fogIntensity": 0,
+        "fogNear": 0,
+        "fogFar": 5,
+        "fogColor": "#000000",
+        "fogDensity": 0,
+        "glowIntensity": 0,
+        "glowSharpness": 50,
+        "glowMode": false,
+        "glowColor": "#ffffff"
+      },
+      "materials": {
+        "diffuse": 1,
+        "reflection": 0.11,
+        "specular": 1,
+        "roughness": 0.75,
+        "rim": 0,
+        "rimExponent": 3,
+        "envStrength": 0.3,
+        "envBackgroundStrength": 0,
+        "envSource": 1,
+        "envMapData": null,
+        "envMapColorSpace": 0,
+        "useEnvMap": true,
+        "envRotation": 0,
+        "envGradientStops": [
+          {
+            "id": "hor",
+            "position": 0,
+            "color": "#1e263a",
+            "bias": 0.5,
+            "interpolation": "smooth"
+          },
+          {
+            "id": "zen",
+            "position": 1,
+            "color": "#88ccff",
+            "bias": 0.5,
+            "interpolation": "smooth"
+          }
+        ],
+        "emission": 0,
+        "emissionMode": 0,
+        "emissionColor": "#ffffff",
+        "ptEmissionMult": 1
+      },
+      "waterPlane": {
+        "waterEnabled": false,
+        "active": true,
+        "height": -2,
+        "color": "#001133",
+        "roughness": 0.02,
+        "waveStrength": 0.1,
+        "waveSpeed": 1,
+        "waveFrequency": 1.5
+      },
+      "coloring": {
+        "gradient": [
+          {
+            "id": "2",
+            "position": 1,
+            "color": "#FFFFFF",
+            "bias": 0.5,
+            "interpolation": "linear"
+          }
+        ],
+        "mode": 0,
+        "scale": 1,
+        "offset": 0,
+        "repeats": 2,
+        "phase": 0,
+        "bias": 1,
+        "twist": 0,
+        "escape": 1.2,
+        "gradient2": [
+          {
+            "id": "1767363622003",
+            "position": 0,
+            "color": "#FFFFFF",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "1",
+            "position": 0.5,
+            "color": "#000000",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "1767363615540",
+            "position": 1,
+            "color": "#FFFFFF",
+            "bias": 0.5,
+            "interpolation": "linear"
+          }
+        ],
+        "mode2": 4,
+        "scale2": 1,
+        "offset2": 0,
+        "repeats2": 7,
+        "phase2": 0,
+        "bias2": 1,
+        "twist2": 0,
+        "blendMode": 0,
+        "blendOpacity": 0,
+        "layer3Color": "#ffffff",
+        "layer3Scale": 20,
+        "layer3Strength": 0,
+        "layer3Bump": 0,
+        "layer3Turbulence": 0
+      },
+      "texturing": {
+        "active": false,
+        "layer1Data": null,
+        "colorSpace": 0,
+        "mapU": 6,
+        "mapV": 1,
+        "scaleX": 1,
+        "scaleY": 1,
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "textureScale": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "quality": {
+        "engineQuality": true,
+        "compilerHardCap": 500,
+        "precisionMode": 0,
+        "bufferPrecision": 0,
+        "maxSteps": 440,
+        "distanceMetric": 0,
+        "estimator": 0,
+        "fudgeFactor": 0.39,
+        "stepRelaxation": 0,
+        "refinementSteps": 0,
+        "detail": 1,
+        "pixelThreshold": 0.2,
+        "overstepTolerance": 0,
+        "dynamicScaling": false,
+        "interactionDownsample": 2
+      },
+      "droste": {
+        "active": false,
+        "tiling": 1,
+        "center": {
+          "x": 0,
+          "y": 0
+        },
+        "radiusInside": 5,
+        "radiusOutside": 100,
+        "periodicity": 2,
+        "strands": 2,
+        "autoPeriodicity": false,
+        "strandMirror": false,
+        "zoom": 0,
+        "rotate": 0,
+        "rotateSpin": 0,
+        "rotatePolar": 0,
+        "twist": true,
+        "hyperDroste": false,
+        "fractalPoints": 1
+      },
+      "colorGrading": {
+        "active": false,
+        "saturation": 1,
+        "levelsMin": 0,
+        "levelsMax": 1,
+        "levelsGamma": 1
+      },
+      "optics": {
+        "camType": 0,
+        "camFov": 60,
+        "orthoScale": 2,
+        "dofStrength": 0,
+        "dofFocus": 2
+      },
+      "navigation": {
+        "flySpeed": 0.5,
+        "autoSlow": true
+      },
+      "cameraManager": {},
+      "audio": {
+        "isEnabled": false,
+        "smoothing": 0.8,
+        "threshold": 0.1,
+        "agcEnabled": false,
+        "attack": 0.1,
+        "decay": 0.3,
+        "highPass": 20,
+        "lowPass": 20000,
+        "gain": 1
+      },
+      "sonification": {
+        "isEnabled": false,
+        "active": true,
+        "baseFrequency": 220,
+        "masterGain": 0.5,
+        "scanArea": 0.1,
+        "harmonics": true,
+        "lastDimension": 0
+      },
+      "drawing": {
+        "activeTool": "rect",
+        "enabled": false,
+        "active": false,
+        "originMode": 1,
+        "color": "#00ffff",
+        "lineWidth": 1,
+        "showLabels": true,
+        "showAxes": false,
+        "shapes": [],
+        "refreshTrigger": 0
+      },
+      "modulation": {
+        "rules": [],
+        "selectedRuleId": null
+      },
+      "webcam": {
+        "isEnabled": false,
+        "opacity": 1,
+        "posX": 20,
+        "posY": 80,
+        "width": 320,
+        "height": 240,
+        "cropL": 0,
+        "cropR": 0,
+        "cropT": 0,
+        "cropB": 0,
+        "blendMode": 0,
+        "crtMode": false,
+        "tilt": 0,
+        "fontSize": 12
+      },
+      "debugTools": {
+        "shaderDebuggerOpen": false,
+        "stateDebuggerOpen": false
+      },
+      "engineSettings": {
+        "showEngineTab": false
+      }
+    },
+    "cameraPos": { "x": 0, "y": 0, "z": 0 },
+    "cameraRot": { "x": 0.09073970269886565, "y": 0.5488206514507545, "z": -0.060084796657810934, "w": 0.8288256849940645 },
+    "sceneOffset": { "x": 6.240000009536743, "y": -0.9100000262260437, "z": 1.1029999256134033, "xL": -0.49327508584276103, "yL": -0.48405390854149166, "zL": 0.38609393281538207 },
+    "targetDistance": 7.0759349474639555,
+    "cameraMode": "Orbit",
+    "lights": [],
+    "renderMode": "Direct",
+    "quality": {
+      "aaMode": "Always",
+      "aaLevel": 1,
+      "msaa": 1,
+      "accumulation": true
+    },
+    "animations": [],
+    "sequence": {
+      "durationFrames": 300,
+      "fps": 30,
+      "tracks": {}
+    },
+    "duration": 300
+  }
+}
+</Metadata>
+
+<!-- Main Distance Estimator Function -->
+<Shader_Function>
+void formula_SurfaceKIFS(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+            vec3 p = z.xyz;
+            
+            float scale = uParamA;
+            vec2 fold = vec2(uParamB, uParamC);
+            float angle = uParamD;
+            
+            // Construct rotation axis (Y is fixed at 1.0 to match the original preset structure)
+            vec3 axis = normalize(vec3(uParamE, 1.0, uParamF));
+            
+            // Build rotation matrix
+            float s = sin(angle);
+            float c_rot = cos(angle);
+            float oc = 1.0 - c_rot;
+            mat3 rot = mat3(
+                oc * axis.x * axis.x + c_rot,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c_rot,           oc * axis.y * axis.z - axis.x * s,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c_rot
+            );
+            
+            // Apply rotation
+            // Note: GLSL vec * mat is equivalent to Fragmentarium's p *= rot
+            p = p * rot;
+            
+            // Apply XY Fold
+            p.xy = abs(p.xy + fold) - fold;
+            
+            // Apply Scale and Offset
+            vec3 p0 = uJuliaMode > 0.5 ? uJulia : c.xyz;
+            p = p * scale + p0;
+            
+            // Update Derivative
+            if (uJuliaMode > 0.5) {
+                dr = dr * abs(scale);
+            } else {
+                dr = dr * abs(scale) + 1.0;
+            }
+            
+            z.xyz = p;
+            trap = min(trap, length(p));
+        }
+</Shader_Function>
+
+<!-- The Iteration Loop Body -->
+<Shader_Loop>
+formula_SurfaceKIFS(z, dr, trap, c);
+</Shader_Loop>
+

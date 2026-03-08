@@ -47,7 +47,7 @@ const MenuPortal = ({
 }) => {
     const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
-    const [layout, setLayout] = useState({ x, y, maxHeight: 300, opacity: 0 });
+    const [layout, setLayout] = useState({ x, y, maxHeight: 300, opacity: 0, flip: false });
 
     // Access active formula to resolve specific param names
     const activeFormula = useFractalStore(s => s.formula);
@@ -76,25 +76,34 @@ const MenuPortal = ({
         const winW = window.innerWidth;
         const winH = window.innerHeight;
         const padding = 10;
+        const menuWidth = 320; // w-32 (128) + w-48 (192) + borders
         
-        let left = x;
-        if (left + 330 > winW - padding) {
-            left = Math.max(padding, winW - 330 - padding);
+        // Determine if we need to flip the menu to the left
+        const shouldFlip = x + menuWidth > winW - padding;
+        let left = shouldFlip ? Math.max(padding, x - menuWidth) : x;
+        
+        // If still off-screen, clamp to right edge
+        if (left + menuWidth > winW - padding) {
+            left = Math.max(padding, winW - menuWidth - padding);
         }
         
         const spaceBelow = winH - y - padding;
-        let maxHeight = 400; 
+        let maxHeight = 350; // Slightly reduced to fit better
         let top = y;
 
         if (spaceBelow < 200 && y > spaceBelow) {
-             if (top + maxHeight > winH - padding) {
-                top = Math.max(padding, winH - maxHeight - padding);
+             // Not enough space below, position above if possible
+             if (y > maxHeight + padding) {
+                 top = y - maxHeight;
+             } else {
+                 top = padding;
+                 maxHeight = Math.min(maxHeight, y - padding * 2);
              }
         } else {
              maxHeight = Math.min(maxHeight, Math.max(150, spaceBelow));
         }
 
-        setLayout({ x: left, y: top, maxHeight, opacity: 1 });
+        setLayout({ x: left, y: top, maxHeight, opacity: 1, flip: shouldFlip });
     }, [x, y]);
 
     useEffect(() => {
@@ -130,25 +139,56 @@ const MenuPortal = ({
         if (!feat) return null;
 
         const virtuals = getVirtualParams(catId);
-        const standardParams = Object.entries(feat.params)
-            .filter(([key, config]) => {
-                // Filter out non-numeric types
-                if (config.type !== 'float' && config.type !== 'int') return false;
-                
-                // CRITICAL: Filter out heavy compile-time params
-                if (config.onUpdate === 'compile') return false;
+        const standardParams: { key: string; label: string; desc?: string }[] = [];
+        
+        // For coreMath, get formula definition once to check which params are used
+        const formulaDef = catId === 'coreMath' && activeFormula ? registry.get(activeFormula) : null;
+        const formulaParamIds = formulaDef?.parameters?.map(p => p?.id).filter(id => !!id) as string[] || [];
+        
+        Object.entries(feat.params).forEach(([key, config]) => {
+            // CRITICAL: Filter out heavy compile-time params
+            if (config.onUpdate === 'compile') return;
+            
+            // Filter out hidden params (unless explicitly whitelisted)
+            if (config.hidden && !WHITELIST_HIDDEN.has(key)) return;
+            
+            // CORE MATH: Only show params that the current formula actually uses
+            if (catId === 'coreMath' && formulaParamIds.length > 0) {
+                if (!formulaParamIds.includes(key)) return;
+            }
 
+            // Handle vec2/vec3 - expand into components
+            if (config.type === 'vec2' || config.type === 'vec3') {
+                const axes = config.type === 'vec2' ? ['x', 'y'] : ['x', 'y', 'z'];
+                axes.forEach(axis => {
+                    let label = `${config.label} ${axis.toUpperCase()}`;
+                    
+                    // CORE MATH SPECIAL HANDLING for vectors
+                    if (catId === 'coreMath' && formulaDef) {
+                        const pDef = formulaDef.parameters.find(p => p?.id === key);
+                        if (pDef) {
+                            const shortKey = key.replace('vec', 'V-'); // vec3A -> V-3A
+                            label = `${shortKey}: ${pDef.label} ${axis.toUpperCase()}`;
+                        }
+                    }
+                    
+                    standardParams.push({ 
+                        key: `${catId}.${key}_${axis}`, // e.g., coreMath.vec3A_x
+                        label, 
+                        desc: `${config.description || config.label} - ${axis.toUpperCase()} component` 
+                    });
+                });
+                return;
+            }
+            
+            // Handle scalar params (float/int)
+            if (config.type === 'float' || config.type === 'int') {
                 // Allow visible params OR whitelisted hidden params
-                if (!config.hidden) return true;
-                if (WHITELIST_HIDDEN.has(key)) return true;
+                if (config.hidden && !WHITELIST_HIDDEN.has(key)) return;
                 
-                return false;
-            })
-            .map(([key, config]) => {
-                // CORE MATH SPECIAL HANDLING
-                // Rename "Param A" to "P-A: Power" based on formula definition
                 let label = config.label;
                 
+                // CORE MATH SPECIAL HANDLING
                 if (catId === 'coreMath' && activeFormula) {
                     const formulaDef = registry.get(activeFormula);
                     if (formulaDef) {
@@ -157,27 +197,35 @@ const MenuPortal = ({
                             const shortKey = key.replace('param', 'P-'); // paramA -> P-A
                             label = `${shortKey}: ${pDef.label}`;
                         } else if (key.startsWith('param')) {
-                            // If param exists in coreMath but not in formula def (unused), maybe hide or gray out?
-                            // For now, keep generic.
                             label = `(${config.label})`; 
                         }
                     }
                 }
                 
-                return { key: `${catId}.${key}`, label, desc: config.description };
-            });
+                standardParams.push({ key: `${catId}.${key}`, label, desc: config.description });
+            }
+        });
 
         // Merge and render
-        return [...virtuals.map(v => ({ key: `${catId}.${v.key}`, label: v.label, desc: undefined })), ...standardParams].map(p => (
-            <button
-                key={p.key}
-                onClick={() => { onSelect(p.key); onClose(); }}
-                className="px-3 py-1.5 text-left text-gray-300 hover:bg-cyan-600 hover:text-white transition-colors truncate"
-                title={p.desc || p.label}
-            >
-                {p.label}
-            </button>
-        ));
+        const items = [...virtuals.map(v => ({ key: `${catId}.${v.key}`, label: v.label, desc: undefined })), ...standardParams];
+        
+        return (
+            <>
+                {items.length === 0 && (
+                    <div className="px-3 py-2 text-gray-500 text-xs italic">No modulatable params</div>
+                )}
+                {items.map(p => (
+                    <button
+                        key={p.key}
+                        onClick={() => { onSelect(p.key); onClose(); }}
+                        className="px-3 py-1.5 text-left text-gray-300 hover:bg-cyan-600 hover:text-white transition-colors truncate flex-shrink-0"
+                        title={p.desc || p.label}
+                    >
+                        {p.label}
+                    </button>
+                ))}
+            </>
+        );
     };
 
     return createPortal(
@@ -188,12 +236,13 @@ const MenuPortal = ({
                 left: layout.x, 
                 top: layout.y, 
                 opacity: layout.opacity,
-                transition: 'opacity 0.05s ease-out'
+                transition: 'opacity 0.05s ease-out',
+                flexDirection: layout.flip ? 'row-reverse' : 'row'
             }}
         >
             {/* Level 1: Categories */}
             <div 
-                className="w-32 bg-[#1a1a1a] border border-white/20 rounded-l shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col py-1 overflow-y-auto custom-scroll"
+                className={`w-32 bg-[#1a1a1a] border border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col py-1 overflow-y-auto custom-scroll ${layout.flip ? 'rounded-r -ml-px' : 'rounded-l'}`}
                 style={{ maxHeight: layout.maxHeight }}
             >
                 {categories.map(cat => (
@@ -203,7 +252,7 @@ const MenuPortal = ({
                         className={`px-3 py-1.5 cursor-pointer flex justify-between items-center transition-colors ${hoveredCategory === cat.id ? 'bg-cyan-900/60 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                     >
                         <span className={`truncate ${cat.id === 'coreMath' ? 'font-bold text-cyan-300' : ''}`}>{cat.name}</span>
-                        <ChevronRight />
+                        {layout.flip ? <span className="text-gray-600">‹</span> : <ChevronRight />}
                     </div>
                 ))}
             </div>
@@ -211,10 +260,12 @@ const MenuPortal = ({
             {/* Level 2: Parameters */}
             {hoveredCategory && (
                 <div 
-                    className="w-48 bg-[#222] border-y border-r border-white/20 rounded-r shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col py-1 -ml-px overflow-y-auto custom-scroll animate-fade-in-left"
+                    className={`w-48 bg-[#222] border-y border-r border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden ${layout.flip ? 'rounded-l animate-fade-in-right' : 'rounded-r -ml-px animate-fade-in-left'}`}
                     style={{ maxHeight: layout.maxHeight }}
                 >
-                     {renderParams(hoveredCategory)}
+                     <div className="flex-1 overflow-y-auto custom-scroll py-1">
+                        {renderParams(hoveredCategory)}
+                     </div>
                 </div>
             )}
         </div>,

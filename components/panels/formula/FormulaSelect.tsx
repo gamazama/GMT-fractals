@@ -7,7 +7,27 @@ import { PREDEFINED_CATEGORIES } from '../../../formulas';
 import { useFractalStore } from '../../../store/fractalStore';
 import { ContextMenuItem } from '../../../types/help';
 import { generateGMF, parseGMF } from '../../../utils/FormulaFormat';
-import { UploadIcon, DownloadIcon, NetworkIcon, ChevronDown, CheckIcon, CubeIcon } from '../../Icons';
+import { UploadIcon, DownloadIcon, NetworkIcon, ChevronDown, CheckIcon, CubeIcon, LoadIcon, CodeIcon } from '../../Icons';
+import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
+
+// --- Gallery Types ---
+interface GalleryItem {
+    id: string;
+    name: string;
+    path: string;
+}
+
+interface GalleryCategory {
+    id: string;
+    name: string;
+    items: GalleryItem[];
+}
+
+interface GalleryManifest {
+    version: string;
+    description: string;
+    categories: GalleryCategory[];
+}
 
 // --- Lazy Thumbnail Component ---
 // Prevents loading all images at once. Only loads when scrolled into view.
@@ -55,19 +75,67 @@ const PortalDropdown = ({
     onSelect, 
     currentValue,
     onImport,
-    showImport
+    showImport,
+    onImportFragmentarium
 }: { 
     rect: DOMRect, 
     onClose: () => void, 
     onSelect: (f: FormulaType) => void, 
     currentValue: FormulaType,
     onImport: () => void,
-    showImport: boolean
+    showImport: boolean,
+    onImportFragmentarium: () => void
 }) => {
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [style, setStyle] = useState<React.CSSProperties>({ opacity: 0, pointerEvents: 'none' }); 
     const [previewStyle, setPreviewStyle] = useState<React.CSSProperties>({});
     const [isMobile, setIsMobile] = useState(false);
+    const [galleryItems, setGalleryItems] = useState<GalleryCategory[]>([]);
+    const [galleryLoading, setGalleryLoading] = useState(false);
+    const [showGallery, setShowGallery] = useState(false);
+    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+    // Fetch gallery items on mount
+    useEffect(() => {
+        const fetchGallery = async () => {
+            setGalleryLoading(true);
+            try {
+                const response = await fetch('/gmf/gallery.json');
+                if (response.ok) {
+                    const data: GalleryManifest = await response.json();
+                    setGalleryItems(data.categories || []);
+                }
+            } catch (err) {
+                console.warn('Failed to load gallery:', err);
+            } finally {
+                setGalleryLoading(false);
+            }
+        };
+        fetchGallery();
+    }, []);
+
+    // Handle loading a formula from gallery
+    const handleGallerySelect = async (item: GalleryItem) => {
+        try {
+            const response = await fetch(item.path);
+            if (response.ok) {
+                const content = await response.text();
+                // Emit compiling event to show spinner before parsing
+                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
+                const def = parseGMF(content);
+                registry.register(def);
+                onSelect(def.id as FormulaType);
+                onClose();
+            } else {
+                console.error('Failed to load formula from gallery:', item.path);
+                alert(`Failed to load formula: ${item.name}`);
+            }
+        } catch (err) {
+            console.error('Error loading gallery formula:', err);
+            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
+            alert(`Error loading formula: ${item.name}`);
+        }
+    };
 
     // Memoize categories to prevent rebuilds on hover updates
     const categories = useMemo(() => {
@@ -214,13 +282,20 @@ const PortalDropdown = ({
                 onMouseLeave={() => setHoveredId(null)}
             >
                 {showImport && (
-                    <div className="p-1 border-b border-white/5 sticky top-0 bg-[#121212] z-50">
+                    <div className="p-1 border-b border-white/5 sticky top-0 bg-[#121212] z-50 space-y-1">
                         <button
                             onClick={() => { onImport(); onClose(); }}
                             className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-cyan-900/20 hover:bg-cyan-900/40 text-cyan-400 text-[10px] font-black uppercase tracking-wider rounded border border-cyan-500/20 hover:border-cyan-500/50 transition-colors"
                         >
                             <UploadIcon />
                             Import Formula (.GMF)
+                        </button>
+                        <button
+                            onClick={() => { onImportFragmentarium(); onClose(); }}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-900/20 hover:bg-purple-900/40 text-purple-400 text-[10px] font-black uppercase tracking-wider rounded border border-purple-500/20 hover:border-purple-500/50 transition-colors"
+                        >
+                            <CodeIcon />
+                            Import from Fragmentarium (.FRAG)
                         </button>
                     </div>
                 )}
@@ -289,6 +364,76 @@ const PortalDropdown = ({
                         })}
                     </div>
                 ))}
+
+                {/* Gallery Section - Add from GMF Gallery */}
+                {galleryItems.length > 0 && (
+                    <div className="py-1 border-t border-white/10">
+                        <div className="px-3 py-1.5 text-[9px] font-black text-gray-500 uppercase tracking-widest bg-[#121212] sticky z-40 shadow-sm top-[38px]">
+                            Add from Gallery
+                        </div>
+                        {galleryItems.map((category) => (
+                            <div key={category.id} className="border-b border-white/5">
+                                {/* Folder Header - Click to Expand */}
+                                <button
+                                    onClick={() => {
+                                        setExpandedFolders(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(category.id)) {
+                                                next.delete(category.id);
+                                            } else {
+                                                next.add(category.id);
+                                            }
+                                            return next;
+                                        });
+                                    }}
+                                    className="w-full text-left px-3 py-2 flex items-center gap-2 group hover:bg-white/5 transition-colors"
+                                >
+                                    <span className={`w-3 h-3 text-gray-500 transition-transform ${expandedFolders.has(category.id) ? 'rotate-180' : ''}`}>
+                                        <ChevronDown />
+                                    </span>
+                                    <span className="text-[11px] font-bold text-purple-400 group-hover:text-purple-300">
+                                        {category.name}
+                                    </span>
+                                    <span className="text-[9px] text-gray-600">
+                                        ({category.items.length} formulas)
+                                    </span>
+                                </button>
+                                
+                                {/* Expanded Items */}
+                                {expandedFolders.has(category.id) && (
+                                    <div className="bg-black/30">
+                                        {category.items.map((item) => (
+                                            <button
+                                                key={item.id}
+                                                onClick={() => handleGallerySelect(item)}
+                                                onMouseEnter={() => setHoveredId(item.id)}
+                                                className="w-full text-left px-6 py-2 transition-all flex gap-3 group hover:bg-white/5"
+                                            >
+                                                <div className="w-16 h-8 shrink-0 bg-black rounded border border-white/10 overflow-hidden relative group-hover:border-purple-500/50 transition-colors">
+                                                    <div className="absolute inset-0 flex items-center justify-center text-gray-800 bg-gray-900 z-0">
+                                                        <LoadIcon />
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col min-w-0 flex-1 justify-center">
+                                                    <span className="text-[11px] font-bold tracking-tight truncate text-gray-200 group-hover:text-white">
+                                                        {item.name}
+                                                    </span>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Loading state for gallery */}
+                {galleryLoading && (
+                    <div className="py-2 text-center text-[10px] text-gray-500">
+                        Loading gallery...
+                    </div>
+                )}
             </div>
 
             {/* Hover Large Preview - Full 256x256 View (Desktop Only) */}
@@ -318,6 +463,7 @@ const PortalDropdown = ({
 
 export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChange: (f: FormulaType) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const openWorkshop = useFractalStore(s => s.openWorkshop);
     const btnRef = useRef<HTMLButtonElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
@@ -391,12 +537,15 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         reader.onload = (ev) => {
             try {
                 const content = ev.target?.result as string;
+                // Emit compiling event to show spinner before parsing
+                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
                 const def = parseGMF(content);
                 registry.register(def);
                 onChange(def.id as FormulaType);
                 if (fileRef.current) fileRef.current.value = '';
             } catch (err) {
                 console.error("Failed to import formula:", err);
+                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
                 alert("Invalid formula file. Ensure it is a valid .gmf or .json definition.");
             }
         };
@@ -450,16 +599,29 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                 </button>
             )}
 
+            {/* Edit button — only visible for imported formulas with saved source */}
+            {registry.get(value)?.importSource && (
+                <button
+                    onClick={() => openWorkshop(value)}
+                    className="w-8 flex items-center justify-center bg-gray-900 border border-gray-700 hover:border-cyan-500/50 hover:bg-cyan-900/10 text-gray-400 hover:text-cyan-400 rounded transition-colors"
+                    title="Re-edit imported formula in Workshop"
+                >
+                    <CodeIcon />
+                </button>
+            )}
+
             {isOpen && rect && (
-                <PortalDropdown 
-                    rect={rect} 
-                    currentValue={value} 
-                    onClose={() => setIsOpen(false)} 
-                    onSelect={(f) => { onChange(f); setIsOpen(false); }} 
+                <PortalDropdown
+                    rect={rect}
+                    currentValue={value}
+                    onClose={() => setIsOpen(false)}
+                    onSelect={(f) => { onChange(f); setIsOpen(false); }}
                     onImport={() => fileRef.current?.click()}
                     showImport={advancedMode}
+                    onImportFragmentarium={() => openWorkshop(undefined)}
                 />
             )}
+
         </div>
     );
 };

@@ -51,6 +51,7 @@ const BASE_SCHEMA: UniformDefinition[] = [
     
     // Export/Render Scale
     { name: Uniforms.InternalScale, type: 'float', default: 1.0 },
+    { name: Uniforms.PixelSizeBase, type: 'float', default: 0.01, comment: 'CPU: length(uCamBasisY)/resolution.y*2, avoids per-fragment sqrt' },
 
     // Optimizations (Shared by Geometry & Lighting)
     { name: Uniforms.PreRotMatrix, type: 'mat3', default: new THREE.Matrix3() },

@@ -206,7 +206,7 @@ export const DrosteFeature: FeatureDefinition = {
             noReset: true
         }
     },
-    shader: {
+    postShader: {
         functions: DROSTE_MATH,
         mainUV: `
             if (uDrosteActive > 0.5) {

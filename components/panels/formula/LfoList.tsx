@@ -85,7 +85,18 @@ export const LfoList = ({ state, actions }: { state: FractalState, actions: Frac
                                                 if (val.includes('.')) {
                                                     const [fid, pid] = val.split('.');
                                                     const slice = (state as any)[fid];
-                                                    if (slice && slice[pid] !== undefined) baseVal = slice[pid];
+                                                    // Handle vector component targets (e.g., vec3A_x)
+                                                    const vectorMatch = pid.match(/^(vec[23][ABC])_(x|y|z)$/);
+                                                    if (vectorMatch && slice) {
+                                                        const vectorName = vectorMatch[1];
+                                                        const axis = vectorMatch[2];
+                                                        const vector = slice[vectorName];
+                                                        if (vector && typeof vector === 'object') {
+                                                            baseVal = (vector as any)[axis] || 0;
+                                                        }
+                                                    } else if (slice && slice[pid] !== undefined) {
+                                                        baseVal = slice[pid];
+                                                    }
                                                 }
                                                 updateAnimation(anim.id, { target: val, baseValue: baseVal });
                                             }}
@@ -133,6 +144,7 @@ export const LfoList = ({ state, actions }: { state: FractalState, actions: Frac
                                             min={0.0} max={1.0} step={0.01} 
                                             onChange={(v) => updateAnimation(anim.id, { phase: v })} 
                                             customMapping={{ min: 0, max: 360, toSlider: v => v * 360, fromSlider: v => v / 360 }} 
+                                            mapTextInput={true}
                                             overrideInputText={`${(anim.phase * 360).toFixed(0)}°`} 
                                         />
                                     )}

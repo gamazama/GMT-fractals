@@ -267,38 +267,80 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                         </div>
                     )}
 
-                    <Slider 
-                        label="Intensity" 
-                        value={light.intensity} 
-                        min={0} max={100} step={0.1} 
-                        onChange={(v) => updateLight({ index, params: { intensity: v } })} 
+                    <Slider
+                        label="Intensity"
+                        value={light.intensity}
+                        min={0} max={100} step={0.1}
+                        onChange={(v) => updateLight({ index, params: { intensity: v } })}
                         customMapping={{
                             min: 0, max: 100,
                             // Square curve for better control at low intensities (0-10 range)
                             toSlider: (val) => Math.sqrt(val / 100) * 100,
                             fromSlider: (val) => (val * val) / 100
                         }}
+                        mapTextInput={false}
                         overrideInputText={formatValue(light.intensity)}
                         trackId={`${prefix}_intensity`}
                     />
                     
                     {light.type !== 'Directional' && (
-                        <Slider 
-                            label="Falloff" 
-                            value={currentFalloffFactor} 
-                            min={0} max={10.0} step={0.01} 
+                        <Slider
+                            label="Falloff"
+                            value={currentFalloffFactor}
+                            min={0} max={10.0} step={0.01}
                             onChange={(factor) => {
                                 const newRawFalloff = factor * light.intensity;
                                 updateLight({ index, params: { falloff: newRawFalloff } });
-                            }} 
+                            }}
                             customMapping={{
                                 min: 0, max: 100,
                                 toSlider: (val) => Math.pow(val / 10, 1/1.5) * 100,
                                 fromSlider: (val) => Math.pow(val / 100, 1.5) * 10
                             }}
+                            mapTextInput={false}
                             overrideInputText={currentFalloffFactor < 0.0001 ? "Infinite" : formatValue(currentFalloffFactor)}
                             trackId={`${prefix}_falloff`}
                         />
+                    )}
+                    {light.type !== 'Directional' && (
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs text-gray-400 font-medium">Visible Sphere</label>
+                                <button
+                                    onClick={() => {
+                                        const isOn = (light.radius ?? 0) > 0.001;
+                                        handleInteractionStart('param');
+                                        updateLight({ index, params: { radius: isOn ? 0 : 0.1 } });
+                                        handleInteractionEnd();
+                                    }}
+                                    className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                                        (light.radius ?? 0) > 0.001
+                                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                                            : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
+                                    }`}
+                                >
+                                    {(light.radius ?? 0) > 0.001 ? 'ON' : 'OFF'}
+                                </button>
+                            </div>
+                            {(light.radius ?? 0) > 0.001 && (
+                                <>
+                                <Slider
+                                    label="Sphere Radius"
+                                    value={light.radius ?? 0.1}
+                                    min={0.01} max={5.0} step={0.01}
+                                    onChange={(v) => updateLight({ index, params: { radius: v } })}
+                                    trackId={`${prefix}_radius`}
+                                />
+                                <Slider
+                                    label="Edge Softness"
+                                    value={light.softness ?? 0.0}
+                                    min={0} max={2.0} step={0.01}
+                                    onChange={(v) => updateLight({ index, params: { softness: v } })}
+                                    trackId={`${prefix}_softness`}
+                                />
+                                </>
+                            )}
+                        </div>
                     )}
                 </div>
 

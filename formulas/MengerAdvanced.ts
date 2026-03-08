@@ -11,14 +11,17 @@ export const MengerAdvanced: FractalDefinition = {
         function: `
     void formula_MengerAdvanced(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        
-        // 1. Rotation
-        float angX = uParamC; float angZ = uParamD;
-        float sx = sin(angX), cx = cos(angX);
-        float sz = sin(angZ), cz = cos(angZ);
+
+        // 1. Rotation (vec3A = Rot X/Y/Z)
+        vec3 rot = uVec3A;
+        float sx = sin(rot.x), cx = cos(rot.x);
+        float sy = sin(rot.y), cy = cos(rot.y);
+        float sz = sin(rot.z), cz = cos(rot.z);
         mat2 rotX = mat2(cx, -sx, sx, cx);
+        mat2 rotY = mat2(cy, -sy, sy, cy);
         mat2 rotZ = mat2(cz, -sz, sz, cz);
         z3.yz = rotX * z3.yz;
+        z3.xz = rotY * z3.xz;
         z3.xy = rotZ * z3.xy;
 
         // 2. Menger Sorting (The Sponge Logic)
@@ -27,10 +30,10 @@ export const MengerAdvanced: FractalDefinition = {
         if (z3.x < z3.z) z3.xz = z3.zx;
         if (z3.y < z3.z) z3.yz = z3.zy;
         
-        // 3. UBER FEATURE: Inner Box Fold (Param E)
+        // 3. UBER FEATURE: Inner Box Fold (Param C)
         // Injects Mandelbox-like complexity inside the sponge voids
-        if (uParamE > 0.0) {
-            float limit = uParamE;
+        if (uParamC > 0.0) {
+            float limit = uParamC;
             z3 = clamp(z3, -limit, limit) * 2.0 - z3;
         }
 
@@ -40,9 +43,9 @@ export const MengerAdvanced: FractalDefinition = {
         
         z3 = z3 * scale - vec3(offset * (scale - 1.0));
         
-        // 5. UBER FEATURE: Z-Scale (Param F)
+        // 5. UBER FEATURE: Z-Scale (Param D)
         // Calculate Adaptive Stretch based on alignment with the Z-Axis.
-        float zScale = uParamF;
+        float zScale = uParamD;
         float stretchFactor = 1.0;
         
         if (abs(zScale - 1.0) > 0.01) {
@@ -75,10 +78,9 @@ export const MengerAdvanced: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 0.5, max: 4.0, step: 0.001, default: 3.0 },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 3.0, step: 0.001, default: 1.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Inner Fold', id: 'paramE', min: 0.0, max: 1.5, step: 0.01, default: 0.5 }, 
-        { label: 'Z Scale', id: 'paramF', min: 0.2, max: 3.0, step: 0.01, default: 1.5 }, // Reduced min to 0.2
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
+        { label: 'Inner Fold', id: 'paramC', min: 0.0, max: 1.5, step: 0.01, default: 0.5 }, 
+        { label: 'Z Scale', id: 'paramD', min: 0.2, max: 3.0, step: 0.01, default: 1.5 },
     ],
 
     defaultPreset: {
@@ -191,10 +193,9 @@ export const MengerAdvanced: FractalDefinition = {
                 iterations: 12,
                 paramA: 2.236, // Sqrt(5)
                 paramB: 1,
-                paramC: 0,
-                paramD: 0.88,
-                paramE: 0.618, // Golden Ratio
-                paramF: 0.442  // Z Scale
+                paramC: 0.618, // Golden Ratio (Inner Fold)
+                paramD: 0.442, // Z Scale
+                vec3A: { x: 0, y: 0, z: 0.88 } // Rot X/Y/Z
             },
             lighting: {
                 shadows: true,

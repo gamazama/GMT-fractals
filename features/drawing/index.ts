@@ -88,5 +88,4 @@ export const DrawingFeature: FeatureDefinition = {
         }),
         clearDrawnShapes: (state: DrawingState) => ({ shapes: [] })
     },
-    shader: {}
 };

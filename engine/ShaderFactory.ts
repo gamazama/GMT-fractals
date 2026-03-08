@@ -3,19 +3,8 @@ import { featureRegistry } from './FeatureSystem';
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
 import { LightingState } from '../features/lighting';
 
-export interface ShaderConfig {
-    formula: string;
-    pipeline?: any[];
-    graph?: any;
-    pipelineRevision: number;
-    msaaSamples?: number;
-    previewMode?: boolean;
-    maxSteps?: number;
-    renderMode?: 'Direct' | 'PathTracing';
-    compilerHardCap?: number;
-    shadows?: boolean;
-    [key: string]: any;
-}
+import type { ShaderConfig } from './ShaderConfig';
+export type { ShaderConfig } from './ShaderConfig';
 
 export class ShaderFactory {
     
@@ -51,39 +40,12 @@ export class ShaderFactory {
         const allFeatures = featureRegistry.getAll();
         
         allFeatures.forEach(feat => {
-            let isEnabled = true;
-            
-            // Check if feature has an explicit toggle parameter
-            if (feat.engineConfig?.toggleParam) {
-                const featState = config[feat.id];
-                if (featState && featState[feat.engineConfig.toggleParam] === false) {
-                    isEnabled = false;
-                }
-            }
-            
             if (feat.inject) {
-                // Modern DDFS Injection
-                // For WaterPlaneFeature, we always need to inject stubs to avoid shader errors
-                if (feat.id === 'waterPlane') {
-                    feat.inject(builder, config, variant);
-                } else {
-                    // Only inject other features if they are enabled
-                    if (isEnabled) {
-                        feat.inject(builder, config, variant);
-                    }
-                }
-            } else if (feat.shaderLibrary) {
-                // Legacy Library Support (Backwards Compatibility)
-                // This shouldn't be hit if migration is complete, but keeps system robust
-                const lib = feat.shaderLibrary;
-                
-                if (isEnabled) {
-                    if (lib.defineTrigger) builder.addDefine(lib.defineTrigger, '1');
-                    builder.addFunction(lib.code);
-                    if (lib.uniforms) builder.addHeader(lib.uniforms);
-                } else if (lib.stubs) {
-                    builder.addFunction(lib.stubs);
-                }
+                // Always call inject() — each feature's inject() is responsible for
+                // injecting stubs when disabled. Skipping inject() entirely causes
+                // undefined function errors when other code (e.g. calculateShading)
+                // depends on functions that the feature would have stubbed out.
+                feat.inject(builder, config, variant);
             }
         });
 

@@ -26,13 +26,13 @@ export const generatePostProcessFrag = () => {
             }
         });
 
-        if (feat.shader) {
-            const isPostProcessFeature = feat.shader.main || feat.shader.mainUV;
+        if (feat.postShader) {
+            const isPostProcessFeature = feat.postShader.main || feat.postShader.mainUV;
             if (isPostProcessFeature) {
-                if (feat.shader.uniforms) injectedUniforms += feat.shader.uniforms + "\n";
-                if (feat.shader.functions) injectedFunctions += feat.shader.functions + "\n";
-                if (feat.shader.mainUV) injectedMainUV += `\n    // Feature: ${feat.name} (UV)\n    ${feat.shader.mainUV}\n`;
-                if (feat.shader.main) injectedMainColor += `\n    // Feature: ${feat.name} (Color)\n    ${feat.shader.main}\n`;
+                if (feat.postShader.uniforms) injectedUniforms += feat.postShader.uniforms + "\n";
+                if (feat.postShader.functions) injectedFunctions += feat.postShader.functions + "\n";
+                if (feat.postShader.mainUV) injectedMainUV += `\n    // Feature: ${feat.name} (UV)\n    ${feat.postShader.mainUV}\n`;
+                if (feat.postShader.main) injectedMainColor += `\n    // Feature: ${feat.name} (Color)\n    ${feat.postShader.main}\n`;
             }
         }
     });

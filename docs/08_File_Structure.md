@@ -16,6 +16,7 @@ The imperative WebGL system.
 *   `RenderPipeline.ts`: Manages resolution, ping-pong buffers, and TSS accumulation.
 *   `ShaderFactory.ts`: Generates GLSL strings from Config + DDFS Features.
 *   `ShaderBuilder.ts`: Builder pattern for composing shaders from feature injections.
+*   `ShaderConfig.ts`: Extracted `ShaderConfig` type — shared between `ShaderFactory`, `ShaderBuilder`, and feature `inject()` contracts.
 *   `FeatureSystem.ts`: **Core DDFS Architecture**. Defines interfaces for features.
 *   `FractalRegistry.ts`: Database of available Fractal Formulas.
 *   `FractalEvents.ts`: Event bus for UI-to-Engine communication.
@@ -45,6 +46,15 @@ The imperative WebGL system.
 Self-contained modules defining State, UI, and Shaders.
 *   `features/index.ts`: Registration entry point.
 *   `features/types.ts`: Aggregate state types.
+*   **`fragmentarium_import/`**: Fragmentarium .frag file importer (AST-based V2)
+    *   `FragmentariumParser.ts`: Original V1 parser — single-file regex-based; kept for reference.
+    *   `GenericFragmentariumParser.ts`: V1 generic parser — regex extraction, auto-param mapping.
+    *   `GenericFragmentariumParserV2.ts`: **Active parser** — AST-based via `@shaderfrog/glsl-parser`. Fixes `z.z→z_local.z_local` variable renaming bug. Precise loop/helper extraction. `FormulaImporter.tsx` uses V2 as primary, V1 as fallback for pre-parsing context.
+    *   `FormulaImporter.tsx`: UI dialog for importing formulas; drives the full parse → map → transform pipeline.
+    *   `index.ts`: Barrel export (V1 and V2).
+    *   `reference/`: Sample .frag files and expected GMF outputs for regression testing.
+    *   `test-v2-parser.ts`: V2 test suite (Menger, Mandelbox, pattern detection, auto-mapping).
+    *   `test-glsl-parser.ts`: Proof-of-concept for `@shaderfrog/glsl-parser` integration.
 *   **`core_math`**: Iterations, Params A-F.
 *   **`geometry`**: Julia, Hybrid (Box), Pre-Rotation.
 *   **`lighting`**: Light studio, Shadows, Falloff. Includes `LightGizmo.tsx`, `LightPanel.tsx` (in `features/lighting/`).
@@ -86,7 +96,18 @@ Self-contained modules defining State, UI, and Shaders.
 
 ## 5. Components (`components/`)
 *   **Core**: `ViewportArea`, `Controls`, `Timeline`, `TopBar`, `MobileControls`, `App`.
-*   **Primitives**: `Slider`, `Knob`, `Vector3Input`, `Vector2Pad`, `ToggleSwitch`, `Button`, `Dropdown`.
+*   **Primitives**: `Slider`, `Knob`, `ToggleSwitch`, `Button`, `Dropdown`.
+*   **`inputs/`**: Unified scalar/vector input primitives.
+    *   `ScalarInput.tsx`: Core draggable-number primitive (replaces inline `RawDraggableNumber` in `Slider.tsx`).
+    *   `VectorInput.tsx`: Thin wrapper that delegates to `vector-input/` components.
+    *   `types.ts`, `index.ts`: Shared types and barrel export.
+    *   `primitives/`, `hooks/`: Internal sub-components and drag hooks.
+*   **`vector-input/`**: Rich vector controls (replaces deleted `Vector2Pad.tsx` / `Vector3Input.tsx`).
+    *   `BaseVectorInput.tsx`: Shared layout for both Vec2 and Vec3 modes.
+    *   `VectorAxisCell.tsx`: Individual axis cell (label + draggable number + reset).
+    *   `RotationHeliotrope.tsx`: Circular 3D-direction visualiser for rotation params.
+    *   `DualAxisPad.tsx`: XY manipulation pad.
+    *   `index.tsx`, `types.ts`: Public API and types.
 *   **Pickers**: `SmallColorPicker`, `EmbeddedColorPicker`, `AdvancedGradientEditor`.
 *   **Panels**: `FormulaPanel`, `ScenePanel`, `LightPanel`, `RenderPanel`, `QualityPanel`, `EnginePanel`.
 *   **Visuals**: `MandelbulbScene`, `HudOverlay`, `CompilingIndicator`, `PerformanceMonitor`, `LoadingScreen`.
@@ -121,6 +142,7 @@ Self-contained modules defining State, UI, and Shaders.
         *   `pbr.ts`: PBR lighting.
         *   `shading.ts`: Shading calculations.
         *   `shadows.ts`: Shadow computation.
+        *   `volumetric_scatter.ts`: Henyey-Greenstein single-scatter GLSL body, injected into the march loop when `PT_VOLUMETRIC` is defined.
 
 ## 7. Utils (`utils/`)
 *   `CameraUtils.ts`: Unified coordinate math.

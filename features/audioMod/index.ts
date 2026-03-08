@@ -43,7 +43,6 @@ export const AudioFeature: FeatureDefinition = {
         decay: { type: 'float', default: 0.3, label: 'Global Decay', shortId: 'gd', group: 'hidden', hidden: true, noReset: true },
         highPass: { type: 'float', default: 20, label: 'High Pass', shortId: 'hp', group: 'hidden', hidden: true, noReset: true },
         lowPass: { type: 'float', default: 20000, label: 'Low Pass', shortId: 'lp', group: 'hidden', hidden: true, noReset: true },
-        gain: { type: 'float', default: 1.0, label: 'Global Gain', shortId: 'gn', group: 'hidden', hidden: true, noReset: true }
+        gain: { type: 'float', default: 0.8, label: 'Volume', shortId: 'vl', group: 'system', noReset: true, min: 0, max: 2, step: 0.01 }
     },
-    shader: { uniforms: `` }
 };

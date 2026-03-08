@@ -28,6 +28,8 @@ export const Uniforms = {
     LightShadows: 'uLightShadows',
     LightFalloff: 'uLightFalloff',
     LightFalloffType: 'uLightFalloffType',
+    LightRadius: 'uLightRadius',
+    LightSoftness: 'uLightSoftness',
 
     // Accumulation & History
     HistoryTexture: 'uHistoryTexture',
@@ -51,7 +53,16 @@ export const Uniforms = {
     PreRotMatrix: 'uPreRotMatrix',
     
     // Export/Render Scale
-    InternalScale: 'uInternalScale'
+    InternalScale: 'uInternalScale',
+    PixelSizeBase: 'uPixelSizeBase',
+    
+    // Vector Formula Parameters (NEW)
+    Vec2A: 'uVec2A',
+    Vec2B: 'uVec2B',
+    Vec2C: 'uVec2C',
+    Vec3A: 'uVec3A',
+    Vec3B: 'uVec3B',
+    Vec3C: 'uVec3C',
 } as const;
 
 export type UniformName = typeof Uniforms[keyof typeof Uniforms];

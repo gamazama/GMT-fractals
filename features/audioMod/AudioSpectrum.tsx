@@ -176,14 +176,15 @@ export const AudioSpectrum: React.FC = () => {
                     ctx.fillRect(meterX, meterY, meterW, meterH);
                 }
 
-                if (isSelected && width > 10) {
+                if (isSelected) {
                     ctx.fillStyle = '#fff';
-                    const boxSize = 6;
+                    const boxSize = width > 10 ? 6 : 4; // Smaller handles for tiny boxes
                     const halfBox = boxSize / 2;
+                    // Always draw handles at box edges (even if box is tiny)
                     ctx.fillRect(x - halfBox, topY + height/2 - halfBox, boxSize, boxSize); // Left
-                    ctx.fillRect(x + width - halfBox, topY + height/2 - halfBox, boxSize, boxSize); // Right
-                    ctx.fillRect(x + width/2 - halfBox, topY - halfBox, boxSize, boxSize); // Top
-                    ctx.fillRect(x + width/2 - halfBox, bottomY - halfBox, boxSize, boxSize); // Bottom
+                    ctx.fillRect(x + Math.max(0, width) - halfBox, topY + height/2 - halfBox, boxSize, boxSize); // Right
+                    ctx.fillRect(x + Math.max(0, width)/2 - halfBox, topY - halfBox, boxSize, boxSize); // Top
+                    ctx.fillRect(x + Math.max(0, width)/2 - halfBox, bottomY - halfBox, boxSize, boxSize); // Bottom
                 }
                 
                 // Label & Gain Indicator
@@ -231,13 +232,24 @@ export const AudioSpectrum: React.FC = () => {
                 const bottomY = topY + height;
                 
                 const checkHit = (hx: number, hy: number) => Math.abs(mx - hx) < HANDLE_HIT_SIZE && Math.abs(my - hy) < HANDLE_HIT_SIZE;
+                // For very small boxes, allow hitting anywhere near the box edges
+                const checkHitNearEdge = (hx: number, hy: number) => Math.abs(mx - hx) < HANDLE_HIT_SIZE * 1.5 && Math.abs(my - hy) < HANDLE_HIT_SIZE * 1.5;
 
-                // Only check handles if wide enough
-                if (width > 10 && !e.ctrlKey) {
-                    if (checkHit(x, topY + height/2)) { dragRef.current = { type: 'l', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
-                    if (checkHit(x + width, topY + height/2)) { dragRef.current = { type: 'r', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
-                    if (checkHit(x + width/2, topY)) { dragRef.current = { type: 't', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
-                    if (checkHit(x + width/2, bottomY)) { dragRef.current = { type: 'b', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
+                // Allow handles on selected boxes regardless of width (important for log scale)
+                if (!e.ctrlKey) {
+                    // Ensure centerX is properly calculated even for tiny boxes
+                    const safeWidth = Math.max(0, width);
+                    const centerX = x + safeWidth / 2;
+                    
+                    // Horizontal resize handles (left/right)
+                    const useHorizHit = width > 10 ? checkHit : checkHitNearEdge;
+                    if (useHorizHit(x, topY + height/2)) { dragRef.current = { type: 'l', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
+                    if (useHorizHit(x + safeWidth, topY + height/2)) { dragRef.current = { type: 'r', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
+                    
+                    // Vertical resize handles (top/bottom) - use larger hit area
+                    const useVertHit = height > 10 ? checkHit : checkHitNearEdge;
+                    if (useVertHit(centerX, topY)) { dragRef.current = { type: 't', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
+                    if (useVertHit(centerX, bottomY)) { dragRef.current = { type: 'b', ruleId: selectedId, startX: mx, startY: my, startRule: {...rule} }; return; }
                 }
             }
         }
@@ -357,13 +369,13 @@ export const AudioSpectrum: React.FC = () => {
             const currentRules = useFractalStore.getState().modulation.rules;
             const newRule = currentRules[currentRules.length - 1];
             if (newRule) {
-                // Default thin slice
-                const width = isLogScale ? 0.05 : 0.02;
+                // Default size - wider for easier resizing
+                const width = isLogScale ? 0.1 : 0.05;
                 updateModulation(newRule.id, {
                     freqStart: Math.max(0, freq - width/2),
                     freqEnd: Math.min(1, freq + width/2),
-                    thresholdMin: Math.max(0, my - 0.1),
-                    thresholdMax: Math.min(1, my + 0.1)
+                    thresholdMin: Math.max(0, my - 0.15),
+                    thresholdMax: Math.min(1, my + 0.15)
                 });
             }
         }, 0);

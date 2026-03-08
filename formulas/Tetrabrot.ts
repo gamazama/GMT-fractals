@@ -9,6 +9,10 @@ export const Tetrabrot: FractalDefinition = {
     
     shader: {
         function: `
+    vec4 tetraSquare(vec4 q) {
+        return vec4(q.x*q.x - q.y*q.y - q.z*q.z + q.w*q.w, 2.0*(q.x*q.y - q.z*q.w), 2.0*(q.x*q.z - q.y*q.w), 2.0*(q.x*q.w + q.y*q.z));
+    }
+
     void formula_Tetrabrot(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         
         // Rotations E and F

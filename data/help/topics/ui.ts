@@ -115,13 +115,51 @@ All numeric inputs in the application use **Precision Draggable Sliders**.
 ## Interaction
 - **Drag Number**: Click and hold the number display text to adjust the value. This allows values to extend beyond the visual slider's min/max limits.
 - **Shift + Drag Number**: **10x Speed**. Useful for large adjustments.
-- **Alt + Drag Number**: **0.1x Precision**. Useful for fine-tuning.
+- **Alt + Drag Number**: **0.1x Precision**. Useful for fine-tuning. Also disables step quantization for full precision.
 - **Click Number**: Switch to typing mode to enter exact values.
 - **Reset**: Hover over the right edge of the slider track to reveal a hidden reset button (restores default value).
 
 ## Keyframing
 If the Timeline is open and recording, changing a slider will automatically create a keyframe.
 Sliders with active animations (LFO or Keyframes) will show a **Key Icon** or Highlight color.
+`
+    },
+    'ui.vector': {
+        id: 'ui.vector',
+        category: 'UI',
+        title: 'Vector3 & Vector2 Controls',
+        content: `
+Multi-axis numeric controls for position, rotation, and transformation parameters.
+
+## Translation Mode (Default)
+Standard X, Y, Z (or X, Y) axis controls.
+- **Axis Labels**: X (red), Y (green), Z (blue)
+- **Drag**: Adjust individual axis values
+- **Double-click Label**: Reset that axis to its default value
+
+## Rotation Mode
+Automatically activated for rotation parameters (detected by "rot" in the name).
+Displays a **Heliotrope** direction visualizer alongside the numeric inputs.
+
+### Heliotrope (Direction Visualizer)
+The circular widget shows the rotation direction in 3D space.
+- **Center Dot**: Points toward the camera (forward)
+- **Arrow**: Shows the direction the rotation is pointing
+- **Boundary Ring**: Represents 90° from center
+- **Drag**: Change azimuth (horizontal) and pitch (vertical)
+- **Shift + Drag**: Constrain to single axis
+- **Alt + Drag**: High precision mode
+- **Double-click**: Reset both angles to 0
+
+### Rotation Axes (A, P, ∠)
+- **A (Azimuth)**: Horizontal rotation angle (-π to +π)
+- **P (Pitch)**: Vertical tilt angle (-π/2 to +π/2)
+- **∠ (Angle)**: Additional rotation around the direction vector (vec3 only)
+
+### Unit Display
+- **Right-click** the control to toggle between Degrees (°) and Radians (π)
+- Display shows 1 decimal, text input accepts up to 6 decimals
+- In π mode, type values like "0.5π" or "90°"
 `
     },
     'panel.drawing': {

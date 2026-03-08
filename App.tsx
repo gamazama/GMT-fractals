@@ -13,6 +13,7 @@ import HelpBrowser from './components/HelpBrowser';
 import { PopupSliderSystem } from './components/PopupSliderSystem';
 import { SmartphoneRotateIcon, TimelineOpenIcon, AlertIcon, CheckIcon } from './components/Icons';
 import { EngineBridge } from './components/EngineBridge';
+import { FormulaWorkshop } from './features/fragmentarium_import/FormulaWorkshop';
 import { useAppStartup } from './hooks/useAppStartup';
 import { useMobileLayout } from './hooks/useMobileLayout';
 import { QualityState } from './features/quality';
@@ -162,15 +163,20 @@ const App: React.FC = () => {
             
             {/* MAIN CONTENT AREA: 3-COLUMN LAYOUT */}
             <div className="flex-1 flex overflow-hidden relative">
-                
-                {/* LEFT DOCK */}
-                {!isBroadcast && !isCurrentlyMobile && (
-                    <Dock side="left" />
+
+                {/* LEFT DOCK — replaced by Workshop when open */}
+                {state.workshopOpen ? (
+                    <FormulaWorkshop
+                        onClose={state.closeWorkshop}
+                        editFormula={state.workshopEditFormula}
+                    />
+                ) : (
+                    !isBroadcast && !isCurrentlyMobile && <Dock side="left" />
                 )}
 
                 {/* VIEWPORT (Flex-1 to take available space) */}
                 <ViewportArea hudRefs={hudRefs} onSceneReady={() => setIsSceneReady(true)} />
-                
+
                 {/* RIGHT DOCK */}
                 {!isBroadcast && (
                     <Dock side="right" />

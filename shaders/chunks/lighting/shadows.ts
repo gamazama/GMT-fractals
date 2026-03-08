@@ -15,20 +15,20 @@ export const getShadowsGLSL = (enabled: boolean, qualityLevel: number) => {
     const MAX_SHADOW_STEPS = 256; 
 
     const settings = qualityLevel < 1.5 ? `
-        float t = 0.05;       
+        float t = 0.05;
         float fudge = 1.0;
     ` : `
         float t = 0.0;
-        float fudge = uFudgeFactor; 
+        float fudge = uFudgeFactor;
     `;
 
     const softLoopBody = qualityLevel < 1.5 ? `
             if(h < 0.005) return 0.0;
             res = min(res, k * h / t);
-            t += max(h, 0.05); 
+            t += max(h, 0.05);
     ` : `
-            float thresh = max(1.0e-6, t * 0.0005); 
-            if(h < thresh) return 0.0; 
+            float thresh = max(1.0e-6, t * 0.0001);
+            if(h < thresh) return 0.0;
             res = min(res, k * h / max(t, 1.0e-5));
             t += h * fudge;
     `;

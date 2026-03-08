@@ -13,19 +13,20 @@ export const Mandelbulb: FractalDefinition = {
             vec3 z3 = z.xyz;
             float r = length(z3);
             
-            // Standard derivative
+            // Standard derivative — reuse pow(r, power-1) for both dr and zr
             float power = uParamA;
-            dr = pow(r, power - 1.0) * power * dr + 1.0;
-            
+            float rp1 = pow(r, power - 1.0);
+            dr = rp1 * power * dr + 1.0;
+
             // Spherical exponentiation
             float theta = acos(clamp(z3.z / r, -1.0, 1.0));
             float phi = atan(z3.y, z3.x);
-            
+
             // Apply Power & Phase Shifts
-            theta = theta * power + uParamB; 
-            phi = phi * power + uParamC;     
-            
-            float zr = pow(r, power);
+            theta = theta * power + uParamB;
+            phi = phi * power + uParamC;
+
+            float zr = rp1 * r;
             z3 = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
             
             // Optional Z-Twist (Param D)

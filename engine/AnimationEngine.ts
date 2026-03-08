@@ -144,7 +144,25 @@ export class AnimationEngine {
                 const setter = (actions as any)[setterName];
                 
                 if (setter && typeof setter === 'function') {
-                    binder = (v) => setter({ [child]: v });
+                    // Check if this is a vector component track (e.g., vec3A_x, vec2B_y)
+                    const vectorMatch = child.match(/^(vec[23][ABC])_(x|y|z)$/);
+                    if (vectorMatch) {
+                        const vectorName = vectorMatch[1]; // e.g., vec3A
+                        const axis = vectorMatch[2] as 'x' | 'y' | 'z'; // x, y, or z
+                        
+                        binder = (v) => {
+                            const state = useFractalStore.getState() as any;
+                            const currentVector = state[parent]?.[vectorName];
+                            if (currentVector) {
+                                const newVector = currentVector.clone();
+                                newVector[axis] = v;
+                                setter({ [vectorName]: newVector });
+                            }
+                        };
+                    } else {
+                        // Standard scalar param
+                        binder = (v) => setter({ [child]: v });
+                    }
                 } else {
                     console.warn(`AnimationEngine: Setter ${setterName} not found for feature ${parent}`);
                 }

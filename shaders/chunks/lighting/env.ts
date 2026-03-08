@@ -16,13 +16,13 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
     if (uEnvSource > 0.5) {
         // Path 1: Gradient Texture
         float t = dir.y * 0.5 + 0.5;
-        col = texture2D(uEnvGradient, vec2(t, 0.5)).rgb;
-    } 
+        col = texture(uEnvGradient, vec2(t, 0.5)).rgb;
+    }
     else if (uUseEnvMap > 0.5) {
         // Path 2: EnvMap Texture (Flattened else-if for compiler safety)
         vec2 uv = vec2(atan(dir.z, dir.x) * 0.1591549 + 0.5, 1.0 - acos(dir.y) * 0.3183098);
-        float bias = roughness * 6.0; 
-        col = texture2D(uEnvMapTexture, uv, bias).rgb;
+        float bias = roughness * 6.0;
+        col = texture(uEnvMapTexture, uv, bias).rgb;
         
         // Apply Color Profile (Linear/ACES)
         col = applyTextureProfile(col, uEnvMapColorSpace);

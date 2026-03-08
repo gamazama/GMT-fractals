@@ -154,3 +154,48 @@ This ensures:
     // Convert to float
     const depth = halfToFloat(rawPixels[0]);  // Use conversion function
     ```
+
+## 9. Environment Light Sky Image Not Loading
+
+### Issue
+The environment light sky image loads correctly for some formulas (e.g., Mandelbulb) but not for others (e.g., MixPinski, PseudoKleinian, etc.).
+
+### Root Cause
+The shader checks `uUseEnvMap > 0.5` before sampling the environment map texture ([`shaders/chunks/lighting/env.ts`](shaders/chunks/lighting/env.ts:21)). However:
+1. `useEnvMap` defaults to `false` in the feature definition ([`features/materials.ts`](features/materials.ts:188))
+2. Some formula presets don't include `useEnvMap: true` in their materials configuration
+3. The system wasn't automatically setting `useEnvMap` to `true` when a user uploads a sky image
+
+### Trace Path (UI to Pixel)
+1. **UI**: User uploads image via [`AutoFeaturePanel.tsx`](components/AutoFeaturePanel.tsx:355) → `handleFileChange()` → `handleUpdate()`
+2. **State**: [`createFeatureSlice.ts`](store/createFeatureSlice.ts:95) detects image type, loads texture with `THREE.TextureLoader`
+3. **Uniform**: Texture is emitted via `FractalEvents.emit('uniform', { key: 'uEnvMapTexture', value: tex })`
+4. **Shader**: [`env.ts`](shaders/chunks/lighting/env.ts:21) checks `if (uUseEnvMap > 0.5)` before using `uEnvMapTexture`
+
+### Fix
+Modified [`store/createFeatureSlice.ts`](store/createFeatureSlice.ts:108-117) to automatically set `useEnvMap = true` when `envMapData` is loaded:
+
+```typescript
+// Auto-enable environment map when image is loaded
+if (paramKey === 'envMapData' && next['useEnvMap'] === false) {
+    next['useEnvMap'] = true;
+    FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 1.0, noReset: false });
+}
+```
+
+Also auto-disables when image is cleared (lines 121-125) and applies the same pattern to texturing (lines 114-117, 127-130).
+
+### Related Parameters
+- `envSource`: Controls gradient (1) vs image (0) - defaults to 1 (gradient)
+- `useEnvMap`: Boolean flag that enables texture sampling - defaults to false
+- `envMapData`: The actual image data (base64 string)
+
+### Formula Preset Pattern
+Formulas that work correctly include in their preset:
+```typescript
+materials: {
+    useEnvMap: true,  // Required for sky images to work
+    envSource: 1,     // 0=Image, 1=Gradient
+    // ... other material props
+}
+```

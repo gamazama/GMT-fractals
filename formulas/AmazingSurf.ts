@@ -11,6 +11,7 @@ export const AmazingSurf: FractalDefinition = {
         function: `
     void formula_AmazingSurf(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
+        vec3 transform = uVec3A;
         float limit = 1.0;
         z3 = clamp(z3, -limit, limit) * 2.0 - z3;
         float r2 = max(dot(z3,z3), 1e-10);
@@ -19,12 +20,12 @@ export const AmazingSurf: FractalDefinition = {
         else if (r2 < 1.0) { z3 *= (1.0/r2); dr *= (1.0/r2); }
         z3 = z3 * uParamA + c.xyz;
         
-        // Param E: Wave Twist
+        // Param X: Wave Twist
         float twist = 0.0;
-        if (abs(uParamE) > 0.001) twist = z3.z * uParamE;
+        if (abs(transform.x) > 0.001) twist = z3.z * transform.x;
         
-        // Param F: Vertical Shift
-        if (abs(uParamF) > 0.001) z3.y += uParamF;
+        // Param Y: Vertical Shift
+        if (abs(transform.y) > 0.001) z3.y += transform.y;
 
         z3 += vec3(sin(z3.y * uParamC + twist), cos(z3.x * uParamC + twist), 0.0) * uParamD * 0.1;
         dr = dr * abs(uParamA) + 1.0;
@@ -39,14 +40,13 @@ export const AmazingSurf: FractalDefinition = {
         { label: 'Min Radius', id: 'paramB', min: 0.0, max: 1.5, step: 0.001, default: 0.8 },
         { label: 'Wave Freq', id: 'paramC', min: 0.0, max: 10.0, step: 0.1, default: 6.0 },
         { label: 'Wave Amp', id: 'paramD', min: 0.0, max: 2.0, step: 0.01, default: 0.5 },
-        { label: 'Wave Twist', id: 'paramE', min: -5.0, max: 5.0, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Vert Shift', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Transform', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 0, y: 0, z: 0 } },
     ],
 
     defaultPreset: {
         formula: "AmazingSurf",
         features: {
-            coreMath: { iterations: 21, paramA: 3.03, paramB: 0.47, paramC: 1, paramD: 1, paramE: 0, paramF: 0 },
+            coreMath: { iterations: 21, paramA: 3.03, paramB: 0.47, paramC: 1, paramD: 1, vec3A: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 6, // Decomposition
                 repeats: 1, phase: 1.44, scale: 1, offset: 1.44, bias: 1, twist: 0, escape: 100,

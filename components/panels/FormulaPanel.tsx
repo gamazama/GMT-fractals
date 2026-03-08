@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as THREE from 'three';
 import { FractalState, FractalActions, FormulaType, LfoTarget, PanelId } from '../../types';
 import Slider from '../Slider';
 import { registry } from '../../engine/FractalRegistry';
@@ -14,19 +15,23 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { engine } from '../../engine/FractalEngine';
 import Dropdown from '../Dropdown';
+import { Vector2Input, Vector3Input } from '../vector-input';
 
 interface FormulaParam {
     label: string;
-    val: number;
-    set: (v: number) => void;
+    val: number | { x: number; y: number } | { x: number; y: number; z: number };
+    set: (v: any) => void;
     min: number;
     max: number;
     step: number;
-    def: number;
+    def: number | { x: number; y: number } | { x: number; y: number; z: number };
     id: LfoTarget;
     trackId: string;
     scale?: 'linear' | 'log' | 'pi'; // Add scale to local interface
     options?: { label: string; value: number }[];
+    type?: 'float' | 'vec2' | 'vec3';
+    mode?: 'rotation' | 'normal'; // For vec3: rotation mode uses A/P/∠, normal uses X/Y/Z
+    linkable?: boolean; // For vec3/vec2: enable axis linking for uniform scale
 }
 
 const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, actions: FractalActions, onSwitchTab?: (tab: PanelId) => void }) => {
@@ -194,6 +199,28 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
     if (def) {
         return def.parameters.map(p => {
             if (!p) return null;
+            // Handle vector params
+            if (p.type === 'vec3') {
+                let val = coreMath.vec3A;
+                let set = (v: any) => actions.setCoreMath({ vec3A: v });
+                switch(p.id) {
+                    case 'vec3A': val = coreMath.vec3A; set = (v) => actions.setCoreMath({ vec3A: v }); break;
+                    case 'vec3B': val = coreMath.vec3B; set = (v) => actions.setCoreMath({ vec3B: v }); break;
+                    case 'vec3C': val = coreMath.vec3C; set = (v) => actions.setCoreMath({ vec3C: v }); break;
+                }
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec3', mode: p.mode, linkable: p.linkable };
+            }
+            if (p.type === 'vec2') {
+                let val = coreMath.vec2A;
+                let set = (v: any) => actions.setCoreMath({ vec2A: v });
+                switch(p.id) {
+                    case 'vec2A': val = coreMath.vec2A; set = (v) => actions.setCoreMath({ vec2A: v }); break;
+                    case 'vec2B': val = coreMath.vec2B; set = (v) => actions.setCoreMath({ vec2B: v }); break;
+                    case 'vec2C': val = coreMath.vec2C; set = (v) => actions.setCoreMath({ vec2C: v }); break;
+                }
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec2', mode: p.mode, linkable: p.linkable };
+            }
+            // Handle scalar params
             let val = 0; let set = (v: number) => {};
             switch(p.id) {
                 case 'paramA': val = coreMath.paramA; set = (v) => actions.setCoreMath({ paramA: v }); break;
@@ -215,17 +242,67 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
   const renderControl = (p: FormulaParam | null) => {
       if (!p) return null;
 
+      // Handle vec3 type
+      if (p.type === 'vec3') {
+          const v3 = p.val as { x: number; y: number; z: number };
+          const vec = new THREE.Vector3(v3.x, v3.y, v3.z);
+          // Generate track keys for animation (x, y, z components) - using underscore format like lighting.light0_posX
+          const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`];
+          const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`];
+          
+          // Use explicit mode prop for rotation, fallback to label detection for backwards compatibility
+          const isRotation = p.mode === 'rotation' ||
+                           (/\brot(ation|ate)?\b/i.test(p.label) && p.mode !== 'normal');
+          
+          return (
+              <div key={p.id} className="mb-px">
+                  <Vector3Input
+                      label={p.label}
+                      value={vec}
+                      min={isRotation ? -Math.PI * 2 : p.min}
+                      max={isRotation ? Math.PI * 2 : p.max}
+                      step={p.step}
+                      onChange={p.set}
+                      trackKeys={trackKeys}
+                      trackLabels={isRotation ? ['Azimuth', 'Pitch', 'Angle'] : trackLabels}
+                      mode={isRotation ? 'rotation' : 'normal'}
+                      defaultValue={p.def ? new THREE.Vector3((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0) : undefined}
+                      linkable={p.linkable}
+                  />
+              </div>
+          );
+      }
+
+      // Handle vec2 type
+      if (p.type === 'vec2') {
+          const v2 = p.val as { x: number; y: number };
+          return (
+              <div key={p.id} className="mb-2">
+                  <Vector2Input 
+                      label={p.label} 
+                      value={new THREE.Vector2(v2.x, v2.y)} 
+                      min={p.min} 
+                      max={p.max} 
+                      onChange={(v) => p.set({ x: v.x, y: v.y })} 
+                      defaultValue={p.def ? new THREE.Vector2((p.def as any).x ?? 0, (p.def as any).y ?? 0) : undefined}
+                      linkable={p.linkable}
+                  />
+              </div>
+          );
+      }
+
+      // Scalar params below
+      const val = p.val as number;
+
       if (p.options) {
         return (
             <div key={p.id} className="mb-1">
                 <Dropdown
                     label={p.label}
-                    value={p.val}
+                    value={val}
                     options={p.options}
                     onChange={(v) => p.set(v as number)}
                     fullWidth
-                    // Since formula panel items are often dense, we can adjust style if needed
-                    // For now default style is fine
                 />
             </div>
         );
@@ -238,8 +315,8 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
       if (p.scale === 'pi') {
           return (
               <Slider 
-                 key={p.id} label={p.label} value={p.val} min={p.min} max={p.max} step={0.01} 
-                 onChange={p.set} defaultValue={p.def} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} 
+                 key={p.id} label={p.label} value={val} min={p.min} max={p.max} step={0.01} 
+                 onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} 
                  trackId={p.trackId} liveValue={liveVal} 
                  customMapping={{ 
                      min: p.min / Math.PI, 
@@ -248,12 +325,12 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                      fromSlider: (v) => v * Math.PI 
                  }} 
                  mapTextInput={true} 
-                 overrideInputText={`${(p.val / Math.PI).toFixed(2)}π`}
+                 overrideInputText={`${(val / Math.PI).toFixed(2)}π`}
               />
           );
       }
       // Standard or Log
-      return <Slider key={p.id} label={p.label} value={p.val} min={p.min} max={p.max} step={p.step} onChange={p.set} defaultValue={p.def} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} trackId={p.trackId} liveValue={liveVal} />;
+      return <Slider key={p.id} label={p.label} value={val} min={p.min} max={p.max} step={p.step} onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} trackId={p.trackId} liveValue={liveVal} />;
   };
 
   const switchFormula = (f: FormulaType) => { actions.setFormula(f); if (f === 'Modular' && onSwitchTab) onSwitchTab('Graph'); };
@@ -268,12 +345,13 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
            <FormulaSelect value={state.formula} onChange={switchFormula} />
        </div>
        
-       <div className="flex flex-col" data-help-id={`panel.formula formula.${state.formula?.toLowerCase() || 'mandelbulb'}`}>
-            <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1} onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })} highlight defaultValue={32} customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }} trackId="coreMath.iterations" liveValue={state.liveModulations['coreMath.iterations']} />
-            <>{params.map(p => renderControl(p))}</>
-       </div>
-       
-       <div className="border-t border-white/5 mt-2 pt-2" data-help-id="formula.transform">
+        <div className="flex flex-col" data-help-id={`panel.formula formula.${state.formula?.toLowerCase() || 'mandelbulb'}`}>
+             <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1} onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })} highlight defaultValue={32} customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }} mapTextInput={false} trackId="coreMath.iterations" liveValue={state.liveModulations['coreMath.iterations']} />
+             {/* Formula params (scalar and vector) rendered via getParams/renderControl */}
+             <>{params.map(p => renderControl(p))}</>
+        </div>
+        
+        <div className="border-t border-white/5 mt-2 pt-2" data-help-id="formula.transform">
             <div className="bg-gray-800/10">
                 <AutoFeaturePanel featureId="geometry" groupFilter="transform" />
             </div>

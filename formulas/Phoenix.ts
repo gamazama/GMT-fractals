@@ -9,6 +9,15 @@ export const Phoenix: FractalDefinition = {
     
     shader: {
         function: `
+    vec3 bulbPow(vec3 z, float power) {
+        float r = length(z); if (r < 1.0e-4) return vec3(0.0);
+        float r_safe = max(r, 1.0e-9);
+        float theta = acos(clamp(z.z / r_safe, -1.0, 1.0));
+        float phi = atan(z.y, z.x);
+        float zr = pow(r, power); theta *= power; phi *= power;
+        return zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+    }
+
         void formula_Phoenix(inout vec4 z, inout float dr, inout float trap, vec4 c, inout vec4 z_prev, inout float dr_prev) {
             vec3 z3 = z.xyz;
             vec3 zp3 = z_prev.xyz;

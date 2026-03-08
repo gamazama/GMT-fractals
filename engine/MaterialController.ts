@@ -8,7 +8,7 @@ import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { GradientStop, GradientConfig } from '../types';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
 import { generatePostProcessFrag } from '../shaders/chunks/post_process';
-import { FractalEvents } from './FractalEvents';
+import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
 import { LightingState } from '../features/lighting';
 import { createBlueNoiseTexture } from '../data/BlueNoiseData';
@@ -66,6 +66,11 @@ export class MaterialController {
     private storedConfig: ShaderConfig | null = null;
     private directDirty: boolean = true;
     private ptDirty: boolean = true;
+
+    // Tracks whether compileDirect/compilePT produced a new shader.
+    // Three.js Material.needsUpdate is a write-only setter (no getter), so we can't
+    // read it back to detect changes. This flag is the reliable alternative.
+    public shaderDirty: boolean = false;
     
     constructor(initialConfig: ShaderConfig) {
         const baseUniforms = createUniforms();
@@ -126,11 +131,6 @@ export class MaterialController {
     }
 
     public getMaterial(mode: 'Direct' | 'PathTracing') {
-        console.log('getMaterial called with mode:', mode);
-        console.log('directDirty:', this.directDirty);
-        console.log('ptDirty:', this.ptDirty);
-        console.log('Stack trace:', new Error().stack);
-        
         this.currentMode = mode;
         
         // Lazy Load: If switching to a mode that is dirty, compile it now
@@ -192,20 +192,12 @@ export class MaterialController {
              this.currentMode = config.renderMode || 'Direct';
         }
 
-        // CRITICAL: Always compile shader with depth output enabled
-        // This ensures the shader is compiled with the correct output configuration
-        // from the beginning, preventing recompilation when physics probe reads depth
-        const configWithDepth = {
-            ...config,
-            forceDepthOutput: true
-        };
-
         // LAZY LOGIC: Only compile the ACTIVE shader. Mark other as dirty.
         if (this.currentMode === 'Direct') {
-            this.compileDirect(configWithDepth);
+            this.compileDirect(config);
             this.ptDirty = true;
         } else {
-            this.compilePT(configWithDepth);
+            this.compilePT(config);
             this.directDirty = true;
         }
 
@@ -233,20 +225,13 @@ export class MaterialController {
         const checksum = cyrb53(fragDirect).toString(16);
         
         if (checksum !== this.activeDirectChecksum) {
-            console.log('=== Shader Recompilation ===');
-            console.log('Previous checksum:', this.activeDirectChecksum);
-            console.log('New checksum:', checksum);
-            console.log('Shader length:', fragDirect.length);
-            console.log('Stack trace:', new Error().stack);
-            
             this.materialDirect.fragmentShader = fragDirect;
             this.materialDirect.needsUpdate = true;
             this.activeDirectChecksum = checksum;
-            
+            this.shaderDirty = true;
+
             console.log(`[Shader Generated] Direct | Hash: ${checksum.substring(0, 8)} | Size: ${(fragDirect.length/1024).toFixed(1)}kb`);
-            FractalEvents.emit('shader_code', fragDirect);
-        } else {
-            console.log('=== Shader Unchanged ===');
+            FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragDirect);
         }
         this.lastGeneratedFrag = fragDirect;
         this.directDirty = false;
@@ -265,9 +250,10 @@ export class MaterialController {
             this.materialPT.fragmentShader = fragPT;
             this.materialPT.needsUpdate = true;
             this.activePTChecksum = checksum;
-            
+            this.shaderDirty = true;
+
             console.log(`[Shader Generated] PathTracing | Hash: ${checksum.substring(0, 8)} | Size: ${(fragPT.length/1024).toFixed(1)}kb`);
-            FractalEvents.emit('shader_code', fragPT);
+            FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragPT);
         }
         this.lastGeneratedFrag = fragPT;
         this.ptDirty = false;

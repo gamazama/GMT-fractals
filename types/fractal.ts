@@ -48,13 +48,16 @@ export interface Preset {
 
 export interface FractalParameter {
     label: string;
-    id: 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF';
+    id: 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF' | 'vec2A' | 'vec2B' | 'vec2C' | 'vec3A' | 'vec3B' | 'vec3C';
+    type?: 'float' | 'vec2' | 'vec3';
     min: number;
     max: number;
     step: number;
-    default: number;
+    default: number | { x: number; y: number } | { x: number; y: number; z: number };
     scale?: 'linear' | 'log' | 'pi'; // Explicit UI scaling mode
     options?: { label: string; value: number }[];
+    mode?: 'rotation'; // For vec3: use rotation mode (A/P/∠) instead of XYZ
+    linkable?: boolean; // For vec3/vec2: enable axis linking (uniform scale)
 }
 
 export interface FractalDefinition {
@@ -63,15 +66,33 @@ export interface FractalDefinition {
     thumbnail?: string;
     shortDescription?: string;
     shader: {
-        function: string; 
+        function: string;
         loopBody: string;
         loopInit?: string;
         getDist?: string;
+        preamble?: string;  // Global code before functions (for pre-calculation)
     };
     parameters: (FractalParameter | null)[];
     description?: string;
     defaultPreset: Partial<Preset>;
     flags?: {
         coordinateMode?: 'Unified' | 'DataAware';
+    };
+    /** Present on runtime-imported formulas. Enables re-editing in the Workshop. */
+    importSource?: {
+        glsl: string;
+        selectedFunction: string;
+        loopMode: 'loop' | 'single';
+        mappings: Array<{
+            name: string;
+            type: string;
+            mappedSlot: string;
+            fixedValue: string;
+            uiMin: number;
+            uiMax: number;
+            uiStep: number;
+            uiDefault: number | number[];
+            isDegrees?: boolean;
+        }>;
     };
 }

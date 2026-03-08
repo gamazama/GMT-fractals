@@ -1,5 +1,6 @@
 
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
+import type { ShaderConfig } from './ShaderConfig';
 import * as THREE from 'three';
 import { UniformDefinition } from './UniformSchema';
 
@@ -7,19 +8,19 @@ export type ParamType = 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'color' | '
 export type ScaleType = 'linear' | 'log' | 'square' | 'root' | 'pi';
 
 export interface ParamCondition {
-    param?: string; 
-    gt?: number;   
-    lt?: number;   
-    eq?: any;      
-    neq?: any;     
-    bool?: boolean; 
+    param?: string;
+    gt?: number;
+    lt?: number;
+    eq?: string | number | boolean;
+    neq?: string | number | boolean;
+    bool?: boolean;
     or?: ParamCondition[];
     and?: ParamCondition[];
 }
 
 export interface ParamOption {
     label: string;
-    value: any;
+    value: string | number | boolean;
 }
 
 export interface TextureConfig {
@@ -56,7 +57,7 @@ export interface ParamConfig {
     isCollapsible?: boolean;    
     ui?: 'slider' | 'knob' | 'numeric' | 'checkbox'; 
     scale?: ScaleType;          
-    format?: (value: any) => string; 
+    format?: (value: unknown) => string;
     options?: ParamOption[];    
     layout?: 'full' | 'half' | 'embedded';   
     parentId?: string;          
@@ -118,53 +119,51 @@ export interface FeatureEngineConfig {
     groupFilter?: string;     
 }
 
-// NEW: Robust Shader Library Definition
-export interface FeatureShaderLibrary {
-    code: string; 
-    defineTrigger: string;
-    stubs?: string;
-    uniforms?: string;
-}
 
 export interface FeatureDefinition {
+    // --- Identity ---
     id: string;
-    shortId?: string; 
+    shortId?: string;  // Compact alias used in URL state encoding
     name: string;
     category: string;
-    params: Record<string, ParamConfig>;
-    state?: any;
-    tabConfig?: FeatureTabConfig;
-    viewportConfig?: FeatureViewportConfig;
-    actions?: Record<string, (state: any, payload: any) => Partial<any>>;
-    menuConfig?: FeatureMenuConfig;
-    menuItems?: FeatureMenuItem[];
-    interactionConfig?: FeatureInteractionConfig;
-    engineConfig?: FeatureEngineConfig;
-    customUI?: CustomUIConfig[]; 
-    
-    // Allows features to define complex uniforms (Arrays, Structs) that aren't 1:1 with params
-    extraUniforms?: UniformDefinition[];
-    
-    // Updated: Inject now receives the global config to access root properties like 'formula'
-    inject?: (builder: ShaderBuilder, config: any, variant: RenderVariant) => void;
 
-    // Legacy Generator (Deprecated)
-    shaderGenerator?: (state: any, globalConfig?: any) => string | any;
-    
-    // Legacy Static (Deprecated)
-    shader?: {
+    // --- State & Parameters ---
+    // params: auto-generates Zustand state slice, UI controls, and GLSL uniforms
+    params: Record<string, ParamConfig>;
+    state?: any;       // Extra state not covered by params (e.g. arrays, complex objects)
+    actions?: Record<string, (state: any, payload: any) => Partial<any>>;
+
+    // --- UI Configuration ---
+    tabConfig?: FeatureTabConfig;           // Registers a panel tab for this feature
+    viewportConfig?: FeatureViewportConfig; // Registers a viewport overlay component
+    menuConfig?: FeatureMenuConfig;         // Adds a top-level on/off toggle in the system menu
+    menuItems?: FeatureMenuItem[];          // Adds sub-items to the system menu
+    interactionConfig?: FeatureInteractionConfig;
+    customUI?: CustomUIConfig[];            // Inserts a named React component into the auto-generated panel
+
+    // --- Engine Integration ---
+    // engineConfig: declares a master enable/disable toggle for ShaderFactory to conditionally skip injection.
+    // mode 'compile' = toggling triggers a full shader rebuild; 'runtime' = handled in-shader via uniforms.
+    engineConfig?: FeatureEngineConfig;
+
+    // extraUniforms: complex uniforms (arrays, structs) that aren't 1:1 with a param entry
+    extraUniforms?: UniformDefinition[];
+
+    // --- Shader Injection ---
+    // inject(): injects GLSL into the RAYMARCHING shader (main render pass).
+    // Consumed by engine/ShaderFactory.ts. Use for SDFs, lighting, material effects.
+    inject?: (builder: ShaderBuilder, config: ShaderConfig, variant: RenderVariant) => void;
+
+    // postShader: injects GLSL into the POST-PROCESS shader (screen-space pass after raymarching).
+    // Consumed by shaders/chunks/post_process.ts. Use for UV warps, color corrections, overlays.
+    postShader?: {
         uniforms?: string;
         functions?: string;
-        main?: string;       
-        mainUV?: string;     
-        mainHeader?: string; 
-        material?: string;
-        volumeFunctions?: string; 
-        volumeBody?: string;      
-        volumeFinalize?: string;  
+        main?: string;    // Color-space modification (runs before tone mapping)
+        mainUV?: string;  // UV modification (runs before texture sample)
     };
 
-    shaderLibrary?: FeatureShaderLibrary;
+
 }
 
 class FeatureRegistry {

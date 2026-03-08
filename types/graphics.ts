@@ -38,4 +38,8 @@ export interface LightParams {
     // Temperature in Kelvin (1000K - 40000K, typical usable range 1000-10000K)
     temperature?: number;
     useTemperature?: boolean;
+    // Visible radius in world-space units. 0 = invisible analytical light.
+    radius?: number;
+    // Soft edge width as a fraction of radius. 0 = hard edge, 1 = fade extends one full radius beyond sphere.
+    softness?: number;
 }

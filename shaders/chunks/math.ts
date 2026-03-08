@@ -58,10 +58,9 @@ vec4 textureLod0(sampler2D tex, vec2 uv) {
         #ifdef GL_EXT_shader_texture_lod
             return texture2DLodEXT(tex, uv, 0.0);
         #else
-            return texture2D(tex, uv, -16.0); 
+            return texture2D(tex, uv, -16.0);
         #endif
     #endif
-    return vec4(0.0);
 }
 
 float getLength(vec3 p) {
@@ -73,6 +72,7 @@ float getLength(vec3 p) {
     return pow(dot(p4, vec3(1.0)), 0.25);
 }
 
+#ifdef LAYER3_ENABLED
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
@@ -90,16 +90,16 @@ float snoise(vec3 v) {
   vec3 x1 = x0 - i1 + C.xxx;
   vec3 x2 = x0 - i2 + C.yyy;
   vec3 x3 = x0 - D.yyy;
-  i = mod289(i); 
-  vec4 p = permute( permute( permute( 
+  i = mod289(i);
+  vec4 p = permute( permute( permute(
              i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
-           + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+           + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
            + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
-  float n_ = 0.142857142857; 
+  float n_ = 0.142857142857;
   vec3  ns = n_ * D.wyz - D.xzx;
-  vec4 j = p - 49.0 * floor(p * ns.z * ns.z); 
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
   vec4 x_ = floor(j * ns.z);
-  vec4 y_ = floor(j - 7.0 * x_ );   
+  vec4 y_ = floor(j - 7.0 * x_ );
   vec4 x = x_ *ns.x + ns.yyyy;
   vec4 y = y_ *ns.x + ns.yyyy;
   vec4 h = 1.0 - abs(x) - abs(y);
@@ -120,6 +120,7 @@ float snoise(vec3 v) {
   m = m * m;
   return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
 }
+#endif // LAYER3_ENABLED
 
 vec3 InverseACESFilm(vec3 x) {
     float a = 2.51; float b = 0.03; float c = 2.43; float d = 0.59; float e = 0.14;
@@ -156,51 +157,10 @@ void boxFold(inout vec3 z, inout float dz, float foldLimit) {
     z = clamp(z, -foldLimit, foldLimit) * 2.0 - z;
 }
 
-// Mandelbulb iteration helper
-void DE_Bulb(inout vec3 z, inout float dr, inout float trap, float power) {
-    float r = length(z);
-    if (r > 1.0e-4) {
-        dr = pow(r, power - 1.0) * power * dr + 1.0;
-        float theta = acos(clamp(z.z / r, -1.0, 1.0));
-        float phi = atan(z.y, z.x);
-        theta *= power;
-        phi *= power;
-        float zr = pow(r, power);
-        z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
-        trap = min(trap, r);
-    } else {
-        dr = 1.0;
-    }
-}
-
-vec3 bulbPow(vec3 z, float power) {
-    float r = length(z); if (r < 1.0e-4) return vec3(0.0);
-    float r_safe = max(r, 1.0e-9);
-    float theta = acos(clamp(z.z / r_safe, -1.0, 1.0));
-    float phi = atan(z.y, z.x);
-    float zr = pow(r, power); theta *= power; phi *= power;
-    return zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
-}
-
-vec4 quatSquare(vec4 q) {
-    return vec4(q.x*q.x - q.y*q.y - q.z*q.z - q.w*q.w, 2.0*q.x*q.y, 2.0*q.x*q.z, 2.0*q.x*q.w);
-}
-
-vec4 tetraSquare(vec4 q) {
-    return vec4(q.x*q.x - q.y*q.y - q.z*q.z + q.w*q.w, 2.0*(q.x*q.y - q.z*q.w), 2.0*(q.x*q.z - q.y*q.w), 2.0*(q.x*q.w + q.y*q.z));
-}
-
 vec2 intersectSphere(vec3 ro, vec3 rd, float r) {
     float b = dot(ro, rd); float c = dot(ro, ro) - r * r;
     float h = b * b - c; if (h < 0.0) return vec2(1.0, 0.0);
     h = sqrt(h); return vec2(-b - h, -b + h);
-}
-
-void dodecaFold(inout vec3 z) {
-    vec3 n = normalize(vec3(phi, 1.0, 0.0));
-    z -= 2.0 * min(0.0, dot(z, n)) * n;
-    vec3 n2 = normalize(vec3(1.0, 0.0, phi));
-    z -= 2.0 * min(0.0, dot(z, n2)) * n2;
 }
 
 ${rotationLogic}

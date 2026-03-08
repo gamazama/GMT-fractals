@@ -58,6 +58,7 @@ export class AudioAnalysisEngine {
         if (this.audioContext) return;
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         this.masterGain = this.audioContext.createGain();
+        this.masterGain.gain.value = 0.8; // Default volume
         this.masterGain.connect(this.audioContext.destination);
         
         this.analyser = this.audioContext.createAnalyser();
@@ -170,6 +171,12 @@ export class AudioAnalysisEngine {
         
         if (this.decks[0]) this.decks[0].setVolume(gainA);
         if (this.decks[1]) this.decks[1].setVolume(gainB);
+    }
+    
+    public setMasterGain(val: number) {
+        if (this.masterGain) {
+            this.masterGain.gain.setTargetAtTime(val, this.audioContext!.currentTime, 0.1);
+        }
     }
     
     public update() {

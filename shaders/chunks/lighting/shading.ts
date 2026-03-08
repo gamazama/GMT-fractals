@@ -120,8 +120,9 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
 
     // 8. Compose
     vec3 finalColor = directLighting + reflectionLighting + rimColor + emission + ambient;
-    
-    finalColor *= ao;
+
+    // AO Tint: black = classic darkening. Custom color = tinted occlusion.
+    finalColor *= mix(uAOColor, vec3(1.0), ao);
     
     return finalColor;
 }

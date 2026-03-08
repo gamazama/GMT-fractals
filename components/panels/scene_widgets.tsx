@@ -8,7 +8,7 @@ import Histogram from '../Histogram';
 import ToggleSwitch from '../ToggleSwitch';
 import Slider from '../Slider';
 import Button from '../Button';
-import { Vector3Input } from '../Vector3Input';
+import { Vector3Input } from '../vector-input';
 import { LinkIcon } from '../Icons';
 import * as THREE from 'three';
 import { FractalEvents } from '../../engine/FractalEvents';

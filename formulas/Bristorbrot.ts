@@ -12,9 +12,9 @@ export const Bristorbrot: FractalDefinition = {
     void formula_Bristorbrot(inout vec4 z, inout float dr, inout float trap, vec4 c, mat2 rotX, mat2 rotZ) {
         vec3 z3 = z.xyz;
         
-        // Twist F
-        if (abs(uParamF) > 0.001) {
-            float ang = z3.z * uParamF;
+        // Twist D
+        if (abs(uParamD) > 0.001) {
+            float ang = z3.z * uParamD;
             float s = sin(ang); float co = cos(ang);
             z3.xy = mat2(co, -s, s, co) * z3.xy;
         }
@@ -29,8 +29,8 @@ export const Bristorbrot: FractalDefinition = {
         dr = 2.0 * r * dr + 1.0;
         z3 = z3 * uParamA + c.xyz;
         
-        // Shift E (X)
-        if (abs(uParamE) > 0.001) z3.x += uParamE;
+        // Shift C (X)
+        if (abs(uParamC) > 0.001) z3.x += uParamC;
         
         // Offset B (Y)
         if (abs(uParamB) > 0.001) z3.y += uParamB;
@@ -40,11 +40,11 @@ export const Bristorbrot: FractalDefinition = {
         trap = min(trap, dot(z3,z3));
     }`,
         loopInit: `
-        float angC = uParamC;
+        float angC = uVec3A.x;
         float sC = sin(angC), cC = cos(angC);
         mat2 rotX = mat2(cC, -sC, sC, cC);
         
-        float angD = uParamD;
+        float angD = uVec3A.z;
         float sD = sin(angD), cD = cos(angD);
         mat2 rotZ = mat2(cD, -sD, sD, cD);
         `,
@@ -54,16 +54,15 @@ export const Bristorbrot: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 0.5, max: 3.0, step: 0.001, default: 1.0 },
         { label: 'Offset', id: 'paramB', min: -2.0, max: 2.0, step: 0.001, default: 0.0 }, 
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Shift X', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
-        { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0, z: 0.0 }, scale: 'pi', mode: 'rotation' },
+        { label: 'Shift X', id: 'paramC', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Twist', id: 'paramD', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
     defaultPreset: {
         formula: "Bristorbrot",
         features: {
-            coreMath: { iterations: 21, paramA: 0.738, paramB: 0, paramC: 0, paramD: 1.2, paramE: 0.98, paramF: 0.97 },
+            coreMath: { iterations: 21, paramA: 0.738, paramB: 0, vec3A: { x: 0, y: 0, z: 1.2 }, paramC: 0.98, paramD: 0.97 },
             coloring: {
                 mode: 1, // Iterations
                 repeats: 24.4, phase: 3.9, scale: 24.415, offset: 3.906, bias: 1, twist: 0, escape: 4,

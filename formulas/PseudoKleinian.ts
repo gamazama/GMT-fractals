@@ -11,10 +11,11 @@ export const PseudoKleinian: FractalDefinition = {
         function: `
     void formula_PseudoKleinian(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 q = z.xyz;
+        vec3 transform = uVec3A;
         
-        // Param F: Twist
-        if (abs(uParamF) > 0.001) {
-            float ang = q.z * uParamF;
+        // Param Y: Twist
+        if (abs(transform.y) > 0.001) {
+            float ang = q.z * transform.y;
             float s = sin(ang); float co = cos(ang);
             q.xy = mat2(co, -s, s, co) * q.xy;
         }
@@ -31,9 +32,14 @@ export const PseudoKleinian: FractalDefinition = {
         q *= k1;
         dr *= k1;
         
-        // Param E: Shift
-        if (abs(uParamE) > 0.001) {
-            q.z += uParamE;
+        // Param Z: Shift
+        if (abs(transform.z) > 0.001) {
+            q.z += transform.z;
+        }
+        
+        // Param X: XY Shift
+        if (abs(transform.x) > 0.001) {
+            q.xy += transform.x;
         }
         
         z.xyz = q;
@@ -47,8 +53,7 @@ export const PseudoKleinian: FractalDefinition = {
         { label: 'Size (C)', id: 'paramB', min: 0.5, max: 2.5, step: 0.001, default: 1.354 },
         { label: 'Power', id: 'paramC', min: 1.0, max: 2.5, step: 0.001, default: 1.576 },
         { label: 'Magic Factor', id: 'paramD', min: 0.0, max: 1.5, step: 0.001, default: 0.772 },
-        { label: 'Z Shift', id: 'paramE', min: -1.0, max: 1.0, step: 0.001, default: 0.0 },
-        { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Transform', id: 'vec3A', type: 'vec3', min: -2.0, max: 2.0, step: 0.001, default: { x: 0, y: 0, z: 0 } },
     ],
 
     defaultPreset: {
@@ -204,8 +209,7 @@ export const PseudoKleinian: FractalDefinition = {
                 paramB: 2.5,
                 paramC: 1.504,
                 paramD: 0.801,
-                paramE: 0.099,
-                paramF: 0
+                vec3A: { x: 0, y: 0, z: 0.099 }
             },
             lighting: {
                 shadows: true,

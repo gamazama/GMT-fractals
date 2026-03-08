@@ -6,6 +6,7 @@ import { getShadowsGLSL } from '../../shaders/chunks/lighting/shadows';
 import { LIGHTING_PBR } from '../../shaders/chunks/lighting/pbr';
 import { getShadingGLSL } from '../../shaders/chunks/lighting/shading';
 import { getPathTracerGLSL } from '../../shaders/chunks/pathtracer';
+import { VOLUMETRIC_SCATTER_BODY } from '../../shaders/chunks/lighting/volumetric_scatter';
 import { QualityState } from '../quality';
 import { Uniforms } from '../../engine/UniformNames';
 import * as THREE from 'three';
@@ -17,13 +18,17 @@ export interface LightingState {
     shadowsCompile: boolean;
     shadows: boolean;
     shadowAlgorithm: number;
-    shadowSteps: number; 
+    shadowSteps: number;
     shadowSoftness: number;
     shadowIntensity: number;
     shadowBias: number;
     ptBounces: number;
     ptGIStrength: number;
     ptStochasticShadows: boolean;
+    ptNEEAllLights: boolean;
+    ptEnvNEE: boolean;
+    ptVolumetric: boolean;
+    ptMaxLuminance: number;
     lights: LightParams[];
 }
 
@@ -39,16 +44,16 @@ export const getLightFromSlice = (slice: LightingState | undefined, i: number): 
             type: 'Point',
             position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
             color: '#ffffff', intensity: 0, falloff: 0,
-            falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true
+            falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0
         };
     }
     return slice.lights[i];
 };
 
 const DEFAULT_LIGHTS: LightParams[] = [
-    { type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ffffff', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true },
-    { type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ff8800', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true },
-    { type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#0088ff', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true }
+    { type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ffffff', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0, softness: 0.0 },
+    { type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ff8800', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0, softness: 0.0 },
+    { type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#0088ff', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true, radius: 0.0, softness: 0.0 }
 ];
 
 export const LightingFeature: FeatureDefinition = {
@@ -79,6 +84,8 @@ export const LightingFeature: FeatureDefinition = {
         { name: Uniforms.LightShadows, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
         { name: Uniforms.LightFalloff, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
         { name: Uniforms.LightFalloffType, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        { name: Uniforms.LightRadius, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        { name: Uniforms.LightSoftness, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
     ],
     params: {
         // --- ENGINE MASTER ---
@@ -138,14 +145,39 @@ export const LightingFeature: FeatureDefinition = {
             onUpdate: 'compile',
             noReset: true
         },
-        ptStochasticShadows: { 
-            type: 'boolean', default: false, label: 'Area Lights (Stochastic)', shortId: 'ps', uniform: 'uPTStochasticShadows', 
+        ptStochasticShadows: {
+            type: 'boolean', default: false, label: 'Area Lights (Stochastic)', shortId: 'ps', uniform: 'uPTStochasticShadows',
             group: 'engine_settings',
             parentId: 'shadowsCompile',
             ui: 'checkbox',
             description: 'Treats lights as physical spheres. Creates realistic penumbras. Requires Accumulation.'
         },
 
+        // --- PATH TRACING QUALITY (Engine Panel) ---
+        ptNEEAllLights: {
+            type: 'boolean', default: false, label: 'Sample All Lights', shortId: 'pal',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            description: 'Evaluates every active light per bounce instead of one random light. Reduces shadow noise at the cost of N× more shadow rays.'
+        },
+        ptEnvNEE: {
+            type: 'boolean', default: false, label: 'Environment NEE', shortId: 'pen',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            description: 'Directly samples the environment as a light source each bounce. Large noise reduction for sky-lit scenes at the cost of one extra trace per bounce.'
+        },
+        ptVolumetric: {
+            type: 'boolean', default: false, label: 'Volumetric Scattering (HG)', shortId: 'pvs',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            description: 'Replaces absorption-only fog with Henyey-Greenstein single scatter. Enables god rays and directional haze.'
+        },
+        ptMaxLuminance: {
+            type: 'float', default: 10.0, label: 'Firefly Clamp', shortId: 'pfl', uniform: 'uPTMaxLuminance',
+            min: 0.5, max: 200.0, step: 0.5, scale: 'log',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            description: 'Clamps per-sample luminance to suppress bright firefly spikes. Lower = cleaner but slightly biased. Raise to effectively disable.'
+        },
         // --- RUNTIME CONTROL ---
         shadows: {
             type: 'boolean', default: true, label: 'Enable', shortId: 'sh', 
@@ -219,6 +251,12 @@ export const LightingFeature: FeatureDefinition = {
 
         if (state?.ptEnabled !== false) {
             builder.addDefine('PT_ENABLED', '1');
+            if (state?.ptNEEAllLights) builder.addDefine('PT_NEE_ALL_LIGHTS', '1');
+            if (state?.ptEnvNEE)      builder.addDefine('PT_ENV_NEE', '1');
+            if (state?.ptVolumetric) {
+                builder.addDefine('PT_VOLUMETRIC', '1');
+                builder.addVolumeLogic(VOLUMETRIC_SCATTER_BODY, '');
+            }
         }
         
         const isPathTracing = config.renderMode === 'PathTracing' || state?.renderMode === 1.0;
@@ -248,7 +286,7 @@ export const LightingFeature: FeatureDefinition = {
             const newLight: LightParams = {
                 type: 'Point',
                 position: { x: 0, y: 0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 },
-                color: '#ffffff', intensity: 1.0, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true
+                color: '#ffffff', intensity: 1.0, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0
             };
             return { lights: [...state.lights, newLight] };
         },

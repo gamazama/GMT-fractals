@@ -46,7 +46,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     roughness = 0.5;
 
     float distFromFractalOrigin = length(p_fractal_in);
-    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0 / uInternalScale;
+    float pixelSizeScale = uPixelSizeBase / uInternalScale;
     
     // Matches trace.ts precision floor
     float floatLimit = max(1.0e-20, distFromFractalOrigin * 5.0e-7);
@@ -158,7 +158,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     // --- HOOK: Water Plane Material ---
     // Overrides albedo/normal/roughness if water ID is detected
     // Safe to call even if water disabled (stub will be empty)
-    if (abs(result.w - 12345.0) < 0.1) {
+    if (result.w >= 5.0) {
         applyWaterMaterial(albedo, roughness, n, p_fractal);
         emission = vec3(0.0);
     }

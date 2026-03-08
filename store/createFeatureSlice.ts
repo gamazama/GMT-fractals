@@ -10,7 +10,7 @@ export interface FeatureSlice {
     [key: string]: any; 
 }
 
-export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelector", never]], [], any> = (set, get) => {
+export const createFeatureSlice: StateCreator<any> = (set, get) => {
     const slice: any = {};
     const features = featureRegistry.getAll();
 
@@ -104,8 +104,30 @@ export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelec
                                         tex.needsUpdate = true;
                                         FractalEvents.emit('uniform', { key: config.uniform!, value: tex, noReset: !!config.noReset });
                                     });
+                                    
+                                    // Auto-enable environment map when image is loaded
+                                    if (paramKey === 'envMapData' && next['useEnvMap'] === false) {
+                                        next['useEnvMap'] = true;
+                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 1.0, noReset: false });
+                                    }
+                                    // Auto-enable texturing when image is loaded
+                                    if (paramKey === 'layer1Data' && next['active'] === false) {
+                                        next['active'] = true;
+                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 1.0, noReset: false });
+                                    }
                                 } else {
                                     FractalEvents.emit('uniform', { key: config.uniform!, value: null, noReset: !!config.noReset });
+                                    
+                                    // Auto-disable environment map when image is cleared
+                                    if (paramKey === 'envMapData' && next['useEnvMap'] === true) {
+                                        next['useEnvMap'] = false;
+                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 0.0, noReset: false });
+                                    }
+                                    // Auto-disable texturing when image is cleared
+                                    if (paramKey === 'layer1Data' && next['active'] === true) {
+                                        next['active'] = false;
+                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 0.0, noReset: false });
+                                    }
                                 }
                             }
                             else if (config.type === 'gradient') {

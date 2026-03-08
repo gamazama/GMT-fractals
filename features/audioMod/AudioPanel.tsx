@@ -122,6 +122,87 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
     );
 };
 
+// --- COLLAPSED MODULATION LIST COMPONENT ---
+const AudioModulationList: React.FC = () => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const store = useFractalStore();
+    const { modulation, selectModulation, removeModulation } = store;
+    
+    // Show ALL modulation rules (audio + LFOs)
+    const allRules = modulation.rules;
+    
+    if (allRules.length === 0) return null;
+    
+    const selectedId = modulation.selectedRuleId;
+    
+    // Get source label
+    const getSourceLabel = (source: string) => {
+        if (source === 'audio') return 'AUD';
+        if (source.startsWith('lfo')) return source.toUpperCase();
+        return source;
+    };
+    
+    return (
+        <div className="bg-black/30 border border-white/10 rounded mb-2 overflow-hidden">
+            <button 
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="w-full px-3 py-2 flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors"
+            >
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-cyan-400 uppercase">Active Links</span>
+                    <span className="text-[9px] bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded">
+                        {allRules.length}
+                    </span>
+                </div>
+                <span className="text-gray-500 text-xs">{isExpanded ? '▼' : '▶'}</span>
+            </button>
+            
+            {isExpanded && (
+                <div className="max-h-32 overflow-y-auto custom-scroll">
+                    {allRules.map((rule, index) => {
+                        const isSelected = rule.id === selectedId;
+                        const targetName = rule.target.split('.').pop() || 'Param';
+                        const isAudio = rule.source === 'audio';
+                        return (
+                            <div 
+                                key={rule.id}
+                                onClick={() => selectModulation(rule.id)}
+                                className={`px-3 py-1.5 flex justify-between items-center cursor-pointer text-[10px] border-b border-white/5 last:border-0 transition-colors ${
+                                    isSelected ? 'bg-cyan-900/30 text-cyan-300' : 'text-gray-400 hover:bg-white/5'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span 
+                                        className="w-2 h-2 rounded-full" 
+                                        style={{ backgroundColor: rule.color }}
+                                    />
+                                    <span className="font-mono">{index + 1}. {targetName}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-[8px] px-1 rounded ${isAudio ? 'bg-purple-900/50 text-purple-300' : 'bg-green-900/50 text-green-300'}`}>
+                                        {getSourceLabel(rule.source)}
+                                    </span>
+                                    {isAudio && (
+                                        <span className="text-gray-600">
+                                            {Math.round(rule.freqStart * 100)}-{Math.round(rule.freqEnd * 100)}%
+                                        </span>
+                                    )}
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); removeModulation(rule.id); }}
+                                        className="text-red-500/50 hover:text-red-400 px-1"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
 interface AudioPanelProps {
     className?: string;
 }
@@ -154,6 +235,16 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = "-m-3" }) =>
         setAudio({ smoothing: v });
         audioAnalysisEngine.setSmoothing(v);
     };
+    
+    const handleGain = (v: number) => {
+        setAudio({ gain: v });
+        audioAnalysisEngine.setMasterGain(v);
+    };
+    
+    // Initialize engine with current gain on mount
+    useEffect(() => {
+        audioAnalysisEngine.setMasterGain(gain ?? 0.8);
+    }, []);
 
     return (
         <div 
@@ -173,7 +264,14 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = "-m-3" }) =>
                         value={smoothing || 0.8} 
                         min={0} max={0.99} step={0.01} 
                         onChange={handleSmoothing}
-                        className="w-36"
+                        className="w-28"
+                    />
+                     <Slider 
+                        label="Volume" 
+                        value={gain ?? 0.8} 
+                        min={0} max={2} step={0.01} 
+                        onChange={handleGain}
+                        className="w-28"
                     />
                  </div>
                  
@@ -228,6 +326,7 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({ className = "-m-3" }) =>
              </div>
              
              <div className={`flex-1 overflow-y-auto custom-scroll p-1`}>
+                 <AudioModulationList />
                  <AudioSpectrum />
                  <AudioLinkControls featureId="audio" sliceState={{}} actions={{}} />
              </div>

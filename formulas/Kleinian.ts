@@ -9,17 +9,17 @@ export const Kleinian: FractalDefinition = {
     
     shader: {
         function: `
-    void formula_Kleinian(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+        void formula_Kleinian(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        float limit = uParamC;
+        float limit = uParamB;
         z3 = clamp(z3, -limit, limit) * 2.0 - z3;
         float r2 = max(dot(z3, z3), 1e-10);
-        float k = max(uParamD / r2, 1.0);
+        float k = max(uParamC / r2, 1.0);
         z3 *= k;
         dr *= k;
         
-        // Apply Scale (A) and Offset (B)
-        z3 = z3 * uParamA + vec3(uParamB, 0.0, 0.0) + c.xyz;
+        // Apply Scale (A) and Offset (vec3A)
+        z3 = z3 * uParamA + uVec3A + c.xyz;
         dr = dr * abs(uParamA) + 1.0;
         
         z.xyz = z3;
@@ -30,15 +30,15 @@ export const Kleinian: FractalDefinition = {
 
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 2.5, step: 0.001, default: 1.8 },
-        { label: 'X Offset', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: 0.0 }, 
-        { label: 'Fold Size', id: 'paramC', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
-        { label: 'K Factor', id: 'paramD', min: 0.5, max: 2.0, step: 0.001, default: 1.2 },
+        { label: 'Offset', id: 'vec3A', type: 'vec3', min: -2.0, max: 2.0, step: 0.001, default: { x: 0, y: 0, z: 0 } },
+        { label: 'Fold Size', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
+        { label: 'K Factor', id: 'paramC', min: 0.5, max: 2.0, step: 0.001, default: 1.2 },
     ],
 
     defaultPreset: {
         formula: "Kleinian",
         features: {
-            coreMath: { iterations: 53, paramA: 2.058, paramB: 0, paramC: 0.907, paramD: 0.976, paramE: 1, paramF: 1 },
+            coreMath: { iterations: 53, paramA: 2.058, paramB: 0.907, paramC: 0.976, vec3A: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 3, // Z-Depth
                 repeats: 100, phase: 0, scale: 126.58, offset: 67.08, bias: 1, twist: 0, escape: 2,

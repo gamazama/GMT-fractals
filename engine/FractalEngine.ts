@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { ShaderConfig } from './ShaderFactory';
-import { PreciseVector3, CameraState } from '../types';
+import { CameraState } from '../types';
 import { Uniforms } from './UniformNames';
 import { VirtualSpace } from './PrecisionMath';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
@@ -18,6 +18,11 @@ import { QualityState } from '../features/quality';
 import '../formulas'; 
 import { VideoExporter } from './VideoExporter';
 import { featureRegistry } from './FeatureSystem';
+
+/** Custom input event passed to FractalEngine.handleInput() from viewport interaction handlers. */
+export type EngineInputEvent =
+    | { type: 'wheel'; delta: number }
+    | { type: 'drag'; dx: number; dy: number };
 
 export interface EngineRenderState {
     cameraMode: 'Orbit' | 'Fly';
@@ -95,8 +100,7 @@ export class FractalEngine {
     public lastCompileDuration: number = 0; 
     public isBooted: boolean = false;
     
-    private _isCompiling: boolean = false; 
-    private compileTimer: any = null;
+    private _isCompiling: boolean = false;
     private _pendingTeleport: CameraState | null = null;
     private _totalFrames: number = 0;
     public hasCompiledShader: boolean = false;
@@ -186,20 +190,19 @@ export class FractalEngine {
         this.markInteraction();
     }
 
-    public handleInput(event: any) {
+    public handleInput(event: EngineInputEvent) {
         if (!this.activeCamera) return;
-        const { type, dx, dy, delta } = event;
         this.markInteraction();
 
-        if (type === 'wheel') {
+        if (event.type === 'wheel') {
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.activeCamera.quaternion);
-            this.activeCamera.position.addScaledVector(forward, delta * this.inputState.zoomSpeed * this.lastMeasuredDistance);
+            this.activeCamera.position.addScaledVector(forward, event.delta * this.inputState.zoomSpeed * this.lastMeasuredDistance);
             this.resetAccumulation();
-        } else if (type === 'drag') {
-            const up = new THREE.Vector3(0, 1, 0); 
+        } else if (event.type === 'drag') {
+            const up = new THREE.Vector3(0, 1, 0);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.activeCamera.quaternion);
-            const qPitch = new THREE.Quaternion().setFromAxisAngle(right, dy * this.inputState.rotateSpeed);
-            const qYaw = new THREE.Quaternion().setFromAxisAngle(up, -dx * this.inputState.rotateSpeed);
+            const qPitch = new THREE.Quaternion().setFromAxisAngle(right, event.dy * this.inputState.rotateSpeed);
+            const qYaw = new THREE.Quaternion().setFromAxisAngle(up, -event.dx * this.inputState.rotateSpeed);
             this.activeCamera.quaternion.multiplyQuaternions(qYaw, this.activeCamera.quaternion);
             this.activeCamera.quaternion.multiplyQuaternions(this.activeCamera.quaternion, qPitch);
             this.resetAccumulation();
@@ -347,70 +350,51 @@ export class FractalEngine {
     }
     
     private scheduleCompile() {
-        console.log("FractalEngine: scheduleCompile called");
-        if (this.compileTimer) {
-            clearTimeout(this.compileTimer);
-        }
         this._isCompiling = true;
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Shader...");
-        
-        // Wait for renderer to be available before compiling
-        // Also add a small delay to allow React to render the spinner before blocking
-        const waitForRenderer = async () => {
-            // Give React a frame to render the spinner
+        // Give React one frame to render the spinner, then wait for the renderer
+        void (async () => {
             await new Promise(resolve => requestAnimationFrame(resolve));
             while (!this.renderer) {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             this.performCompilation();
-        };
-        
-        waitForRenderer();
+        })();
     }
 
     private async performCompilation() {
-        console.log("FractalEngine: performCompilation started");
-        if (!this.renderer) {
-            console.log("FractalEngine: No renderer available");
-            return;
-        }
-        
-        const startTime = performance.now();
+        if (!this.renderer) return;
 
-        // Ensure pipeline is properly sized before compilation
-        // Use default size if no resolution is set yet
+        // Ensure pipeline is properly sized; use a safe default on first boot
         if (this.mainUniforms.uResolution.value.x === 0 || this.mainUniforms.uResolution.value.y === 0) {
             this.mainUniforms.uResolution.value.set(1024, 768);
         }
-        console.log("FractalEngine: Resizing pipeline to", this.mainUniforms.uResolution.value.x, "x", this.mainUniforms.uResolution.value.y);
         this.pipeline.resize(
-            Math.floor(this.mainUniforms.uResolution.value.x), 
+            Math.floor(this.mainUniforms.uResolution.value.x),
             Math.floor(this.mainUniforms.uResolution.value.y)
         );
 
-        console.log("FractalEngine: Updating materials");
+        // updateConfig generates new GLSL, sets shaderDirty if checksum changed,
+        // and calls syncConfigUniforms internally — no need to call it again here.
         this.materials.updateConfig(this.configManager.config);
-        this.materials.syncConfigUniforms(this.configManager.config);
         if (this.configManager.config.pipeline) this.materials.syncModularUniforms(this.configManager.config.pipeline);
-        
+
+        // Check if GPU compilation is needed. We use our own shaderDirty flag because
+        // Three.js Material.needsUpdate is a write-only setter (no getter — reads as undefined).
+        const mode = this.configManager.config.renderMode || 'Direct';
+        const needsCompile = !this.hasCompiledShader || this.materials.shaderDirty;
+
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        const mode = this.configManager.config.renderMode || 'Direct';
         const mat = this.materials.getMaterial(mode);
         this.sceneCtrl.setMaterial(mat);
 
         this.resetAccumulation();
-        
-        // For first run, we need to render even if needsUpdate isn't set
-        // This ensures the shader is actually compiled on first boot
-        const currentMaterial = mode === 'Direct' ? this.materials.materialDirect : this.materials.materialPT;
-        
-        // Check if we need to compile the shader
-        const needsCompile = !this.hasCompiledShader || currentMaterial.needsUpdate;
-        
+
         if (needsCompile) {
-            console.log("FractalEngine: Triggering GPU shader compilation");
-            
+            // Measure GPU compilation time only (excludes GLSL generation and setup overhead)
+            const startTime = performance.now();
+
             // CRITICAL: Render directly to MRT target to compile shader for MRT configuration
             // This ensures the shader is compiled with the correct output layout (including depth)
             // and prevents recompilation when physics probe reads from the depth buffer
@@ -418,27 +402,22 @@ export class FractalEngine {
             this.pipeline.render(this.renderer);
             await new Promise(resolve => setTimeout(resolve, 20));
             this.pipeline.render(this.renderer);
-            
+
             // Give renderer time to complete compilation and cache the shader
             await new Promise(resolve => setTimeout(resolve, 50));
-            
-            this.hasCompiledShader = true;
-            currentMaterial.needsUpdate = false;
-        } else {
-            console.log("FractalEngine: Shader unchanged - skipping GPU compilation");
-        }
-        
-        this._isCompiling = false;
-        this.compileTimer = null;
-        
-        const duration = (performance.now() - startTime) / 1000;
-        this.lastCompileDuration = duration;
-        console.log(`[Shader Compiled] Time: ${duration.toFixed(3)}s`);
 
+            this.hasCompiledShader = true;
+            this.materials.shaderDirty = false;
+
+            const duration = (performance.now() - startTime) / 1000;
+            this.lastCompileDuration = duration;
+            console.log(`[Shader Compiled] Time: ${duration.toFixed(3)}s`);
+            if (duration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, duration);
+        }
+
+        this._isCompiling = false;
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-        if (duration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, duration);
         FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
-        console.log("FractalEngine: performCompilation completed");
     }
 
     public setUniform(key: string, value: any, noReset: boolean = false) {

@@ -20,6 +20,7 @@ export class ShaderBuilder {
     private postDEFunctions: string[] = []; // Post-DE functions (Shadows, AO, Reflections, Env)
     private integrators: string[] = []; // Late-stage functions (Lighting Integrators, Path Tracer)
     private headers: string[] = [];
+    private preambles: string[] = []; // Global code before functions (for pre-calculation)
 
     // 2. Logic Hooks (Specific to GMT Architecture)
     private materialLogic: string[] = [];
@@ -33,6 +34,11 @@ export class ShaderBuilder {
     private formulaLoopBody: string = "";
     private formulaInit: string = "";
     private formulaDist: string = "";
+    private distOverrideInit: string = '';
+    private distOverrideInLoopMap: string = '';
+    private distOverrideInLoopDist: string = '';
+    private distOverridePostMap: string = '';
+    private distOverridePostDist: string = '';
 
     // 4. Config State
     private useRotation: boolean = true;
@@ -66,10 +72,6 @@ export class ShaderBuilder {
     }
     
 
-    
-    public setPhysicsRayGen(code: string) {
-        this.physicsRayGen = code;
-    }
 
     // --- Injection API ---
 
@@ -83,6 +85,13 @@ export class ShaderBuilder {
 
     addHeader(code: string) {
         this.headers.push(code);
+    }
+
+    // Adds global code at global scope, before functions (e.g. for pre-calculation)
+    addPreamble(code: string) {
+        if (!this.preambles.includes(code)) {
+            this.preambles.push(code);
+        }
     }
 
     // Adds a function that does NOT depend on DE/Map (e.g. Formula)
@@ -112,6 +121,14 @@ export class ShaderBuilder {
         this.formulaLoopBody = loopBody;
         this.formulaInit = init;
         this.formulaDist = distFunc;
+    }
+
+    setDistOverride(init: string, inLoopMap: string, inLoopDist: string, postMap: string, postDist: string) {
+        this.distOverrideInit = init;
+        this.distOverrideInLoopMap = inLoopMap;
+        this.distOverrideInLoopDist = inLoopDist;
+        this.distOverridePostMap = postMap;
+        this.distOverridePostDist = postDist;
     }
 
     addHybrid(init: string, preLoop: string, inLoop: string) {
@@ -159,6 +176,7 @@ export class ShaderBuilder {
         const defines = this.buildDefinesString();
         const uniforms = this.buildUniformsString();
         const headers = this.headers.join('\n');
+        const preambles = this.preambles.join('\n');
         const userFunctions = this.functions.join('\n');
         const postDEFunctions = this.postDEFunctions.join('\n');
         const integrators = this.integrators.join('\n');
@@ -171,7 +189,12 @@ export class ShaderBuilder {
             this.formulaDist,
             this.hybridInit.join('\n'),
             this.hybridPreLoop.join('\n'),
-            this.hybridInLoop.join('\n')
+            this.hybridInLoop.join('\n'),
+            this.distOverrideInit,
+            this.distOverrideInLoopMap,
+            this.distOverrideInLoopDist,
+            this.distOverridePostMap,
+            this.distOverridePostDist
         );
 
         // --- VARIANT: PHYSICS (Distance Measurement) ---
@@ -224,8 +247,9 @@ ${defines}
 ${uniforms}
 ${math}
 ${BLUE_NOISE}
-${COLORING} 
+${COLORING}
 ${headers}
+${preambles}    // Global pre-calculation code
 ${userFunctions} // Formulas
 ${de}            // Distance Estimator
 
@@ -263,8 +287,9 @@ ${defines}
 ${uniforms}
 ${math}
 ${BLUE_NOISE}
-${COLORING} 
+${COLORING}
 ${headers}
+${preambles}
 ${userFunctions} // Formulas (Including getMappingValue)
 ${de}            // Distance Estimator
 ${postDEFunctions}
@@ -280,11 +305,12 @@ void main() {
     getCameraRay(vUv, 0.0, ro, rd, stochasticSeed);
     
     vec3 glow = vec3(0.0);
+    vec3 fogScatter = vec3(0.0);
     float volumetric = 0.0;
     float d = 0.0;
     vec4 result = vec4(0.0);
-    
-    bool hit = traceScene(ro, rd, d, result, glow, 0.0, volumetric);
+
+    bool hit = traceScene(ro, rd, d, result, glow, 0.0, volumetric, fogScatter);
     
     if (hit) {
         // Determine Mode/Scale based on active layer
@@ -324,7 +350,10 @@ ${uniforms}
 ${headers}
 ${math}
 ${BLUE_NOISE}
-${COLORING} 
+${COLORING}
+
+// --- PREAMBLES (Global Pre-calculation) ---
+${preambles}
 
 // --- FORMULAS ---
 ${userFunctions}

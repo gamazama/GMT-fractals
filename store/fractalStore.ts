@@ -67,18 +67,29 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
             const def = registry.get(f);
             const formulaPreset: Preset = (def && def.defaultPreset) ? JSON.parse(JSON.stringify(def.defaultPreset)) : { formula: f };
             
-            const currentProfileKey = detectEngineProfile(get());
-            if (currentProfileKey !== 'custom' && currentProfileKey !== 'balanced') {
-                // @ts-ignore
-                const profileConfig = ENGINE_PROFILES[currentProfileKey];
-                if (profileConfig) {
-                    if (!formulaPreset.features) formulaPreset.features = {};
-                    Object.entries(profileConfig).forEach(([featId, params]) => {
-                        if (!formulaPreset.features![featId]) formulaPreset.features![featId] = {};
-                        Object.assign(formulaPreset.features![featId], params);
-                    });
+            // Preserve all compile-time engine params from current state, regardless of
+            // whether they match a named profile. This ensures engine settings survive
+            // formula switches even when the user has a "custom" configuration.
+            if (!formulaPreset.features) formulaPreset.features = {};
+            const currentState = get();
+            featureRegistry.getEngineFeatures().forEach(feat => {
+                const currentSlice = (currentState as any)[feat.id];
+                if (!currentSlice) return;
+                const engineParams: Record<string, any> = {};
+                // Always preserve the master toggle
+                const toggleParam = feat.engineConfig!.toggleParam;
+                if (currentSlice[toggleParam] !== undefined) {
+                    engineParams[toggleParam] = currentSlice[toggleParam];
                 }
-            }
+                // Preserve any compile-time param
+                Object.entries(feat.params).forEach(([key, config]) => {
+                    if (config.onUpdate === 'compile' && currentSlice[key] !== undefined) {
+                        engineParams[key] = currentSlice[key];
+                    }
+                });
+                if (!formulaPreset.features![feat.id]) formulaPreset.features![feat.id] = {};
+                Object.assign(formulaPreset.features![feat.id], engineParams);
+            });
 
             const lockScene = get().lockSceneOnSwitch;
             

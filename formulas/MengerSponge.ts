@@ -11,16 +11,18 @@ export const MengerSponge: FractalDefinition = {
         function: `
     void formula_MengerSponge(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        
-        // Rotation
-        float angX = uParamC;
-        float angZ = uParamD;
-        if (abs(angX) > 0.001 || abs(angZ) > 0.001) {
-             float sx = sin(angX), cx = cos(angX);
-             float sz = sin(angZ), cz = cos(angZ);
+
+        // Rotation (vec3A = Rot X/Y/Z)
+        vec3 rot = uVec3A;
+        if (length(rot) > 0.001) {
+             float sx = sin(rot.x), cx = cos(rot.x);
+             float sy = sin(rot.y), cy = cos(rot.y);
+             float sz = sin(rot.z), cz = cos(rot.z);
              mat2 rotX = mat2(cx, -sx, sx, cx);
+             mat2 rotY = mat2(cy, -sy, sy, cy);
              mat2 rotZ = mat2(cz, -sz, sz, cz);
              z3.yz = rotX * z3.yz;
+             z3.xz = rotY * z3.xz;
              z3.xy = rotZ * z3.xy;
         }
 
@@ -37,17 +39,17 @@ export const MengerSponge: FractalDefinition = {
         
         z3 = z3 * scale - vec3(shift);
         
-        // Param F: Center Z (The "Full Sponge" Correction)
+        // Param D: Center Z (The "Full Sponge" Correction)
         // If active, this conditional shift restores the full cubic symmetry
-        if (uParamF > 0.5) {
+        if (uParamD > 0.5) {
             if (z3.z < -0.5 * shift) {
                 z3.z += shift;
             }
         }
-        
-        // Param E: Manual Z Shift (Axis Shift)
-        if (abs(uParamE) > 0.001) {
-            z3.z += uParamE * scale;
+
+        // Param C: Manual Z Shift (Axis Shift)
+        if (abs(uParamC) > 0.001) {
+            z3.z += uParamC * scale;
         }
 
         if (uJuliaMode > 0.5) z3 += c.xyz * 0.1;
@@ -61,10 +63,9 @@ export const MengerSponge: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 3.0 },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Z Shift (Man)', id: 'paramE', min: -1.0, max: 1.0, step: 0.01, default: 0.0 },
-        { label: 'Center Z', id: 'paramF', min: 0.0, max: 1.0, step: 1.0, default: 1.0 },
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
+        { label: 'Z Shift (Man)', id: 'paramC', min: -1.0, max: 1.0, step: 0.01, default: 0.0 },
+        { label: 'Center Z', id: 'paramD', min: 0.0, max: 1.0, step: 1.0, default: 1.0 },
     ],
 
     defaultPreset: {
@@ -76,10 +77,9 @@ export const MengerSponge: FractalDefinition = {
                 "iterations": 10,
                 "paramA": 3,
                 "paramB": 1.013,
-                "paramC": 0.031415926535897934,
-                "paramD": 0,
-                "paramE": 0.02,
-                "paramF": 1
+                "paramC": 0.02,
+                "paramD": 1,
+                "vec3A": { "x": 0.031415926535897934, "y": 0, "z": 0 }
             },
             "geometry": {
                 "applyTransformLogic": true,

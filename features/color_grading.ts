@@ -83,7 +83,7 @@ export const ColorGradingFeature: FeatureDefinition = {
             hidden: true 
         }
     },
-    shader: {
+    postShader: {
         functions: `
             vec3 applyColorGrading(vec3 col) {
                 col = max(vec3(0.0), col - uLevelsMin);

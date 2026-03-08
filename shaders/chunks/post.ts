@@ -3,7 +3,7 @@ export const POST = `
 // ------------------------------------------------------------------
 // POST PROCESSING (LINEAR ONLY)
 // ------------------------------------------------------------------
-vec3 applyPostProcessing(vec3 col, float d, vec3 glow, float volumetric) {
+vec3 applyPostProcessing(vec3 col, float d, vec3 glow, float volumetric, vec3 fogScatter) {
     float d_norm = d;
     // Scale smoothstep by intensity slider
     float fogFactor = smoothstep(uFogNear, uFogFar, d_norm) * uFogIntensity;
@@ -34,6 +34,11 @@ vec3 applyPostProcessing(vec3 col, float d, vec3 glow, float volumetric) {
         col = mix(col, fogColor, fogFactor);
     }
     
+    // Volumetric Scatter (God Rays — primary-ray single scatter)
+    #ifdef PT_VOLUMETRIC
+    col += fogScatter;
+    #endif
+
     // Glow (Additive Bloom)
     if (uGlowIntensity > 0.0001) {
         col += glow * uGlowIntensity;

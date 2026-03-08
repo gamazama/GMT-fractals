@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { FractalState, FractalActions } from '../../types';
 import Slider from '../../components/Slider';
-import { Vector3Input } from '../../components/Vector3Input';
+import { Vector3Input } from '../../components/vector-input';
 import EmbeddedColorPicker from '../../components/EmbeddedColorPicker';
 import ToggleSwitch from '../../components/ToggleSwitch';
 import { useFractalStore } from '../../store/fractalStore';
@@ -240,16 +240,17 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                </div>
            )}
            
-           <Slider 
-             label="Intensity" 
-             value={currentLight.intensity} 
-             min={0} max={100} step={0.1} 
-             onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })} 
+           <Slider
+             label="Intensity"
+             value={currentLight.intensity}
+             min={0} max={100} step={0.1}
+             onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })}
              customMapping={{
                  min: 0, max: 100,
                  toSlider: (val) => Math.sqrt(val / 100) * 100,
                  fromSlider: (val) => (val * val) / 100
              }}
+             mapTextInput={false}
              overrideInputText={formatValue(currentLight.intensity)}
              dataHelpId="light.intensity"
              trackId={`${prefix}_intensity`}
@@ -271,16 +272,17 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                         />
                    </div>
 
-                   <Slider 
-                     label="Falloff (Decay)" 
-                     value={currentLight.falloff} 
-                     min={0} max={500.0} step={0.1} 
-                     onChange={(v) => actions.updateLight({ index: activeLight, params: { falloff: v } })} 
+                   <Slider
+                     label="Falloff (Decay)"
+                     value={currentLight.falloff}
+                     min={0} max={500.0} step={0.1}
+                     onChange={(v) => actions.updateLight({ index: activeLight, params: { falloff: v } })}
                      customMapping={{
                          min: 0, max: 100,
                          toSlider: (val) => (Math.log10(val + 1) / Math.log10(501)) * 100,
                          fromSlider: (val) => Math.pow(501, val / 100) - 1
                      }}
+                     mapTextInput={false}
                      overrideInputText={currentLight.falloff < 0.01 ? "Infinite" : currentLight.falloff.toFixed(2)}
                      dataHelpId="light.falloff"
                      trackId={`${prefix}_falloff`}

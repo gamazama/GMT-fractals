@@ -29,8 +29,9 @@ export type UISlice = Pick<FractalStoreState,
     'compositionOverlay' |
     'compositionOverlaySettings' |
     // New Layout Props
-    'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' | 
-    'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot'
+    'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
+    'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
+    'workshopOpen' | 'workshopEditFormula'
 > & Pick<FractalActions,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
@@ -49,7 +50,9 @@ export type UISlice = Pick<FractalStoreState,
     'movePanel' | 'reorderPanel' | 'togglePanel' | 'setDockSize' | 'setDockCollapsed' | 'setFloatPosition' | 'setFloatSize' |
     'startPanelDrag' | 'endPanelDrag' | 'cancelPanelDrag' |
     // Legacy Mappers
-    'setActiveTab' | 'floatTab' | 'dockTab'
+    'setActiveTab' | 'floatTab' | 'dockTab' |
+    // Workshop
+    'openWorkshop' | 'closeWorkshop'
 >;
 
 const getUrlParam = (key: string) => {
@@ -141,6 +144,10 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     activeLeftTab: null, // No active tab since panels are closed
     activeRightTab: 'Formula',
 
+    // Workshop
+    workshopOpen: false,
+    workshopEditFormula: undefined,
+
     // --- ACTIONS ---
 
     setShowLightGizmo: (v) => set({ showLightGizmo: v }),
@@ -193,6 +200,9 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         contextMenu: { visible: true, x, y, items, targetHelpIds: targetHelpIds || [] } 
     }),
     closeContextMenu: () => set(s => ({ contextMenu: { ...s.contextMenu, visible: false } })),
+
+    openWorkshop: (editFormula) => set({ workshopOpen: true, workshopEditFormula: editFormula }),
+    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined }),
 
     // --- NEW LAYOUT ACTIONS IMPLEMENTATION ---
 

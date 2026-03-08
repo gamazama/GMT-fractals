@@ -23,8 +23,8 @@ export const Buffalo: FractalDefinition = {
         dr *= abs(scale);
 
         // 3. ROTATION
-        float angX = uParamC;
-        float angZ = uParamD;
+        float angX = uVec3A.x;
+        float angZ = uVec3A.z;
         if (abs(angX) > 0.0) {
             float s = sin(angX), c_ = cos(angX);
             z3.yz = mat2(c_, -s, s, c_) * z3.yz;
@@ -62,14 +62,13 @@ export const Buffalo: FractalDefinition = {
     parameters: [
         { label: 'Power', id: 'paramA', min: 2.0, max: 16.0, step: 0.001, default: 8.0 },
         { label: 'Fold Scale', id: 'paramB', min: 1.0, max: 3.0, step: 0.001, default: 1.5 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' }
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0, z: 0.0 }, scale: 'pi', mode: 'rotation' }
     ],
 
     defaultPreset: {
         formula: "Buffalo",
         features: {
-            coreMath: { iterations: 22, paramA: 2.911, paramB: 1.358, paramC: 1, paramD: 1.27, paramE: 1, paramF: 1 },
+            coreMath: { iterations: 22, paramA: 2.911, paramB: 1.358, vec3A: { x: 1, y: 0, z: 1.27 } },
             coloring: {
                 mode: 0, // Trap
                 repeats: 3.58, phase: 0.7, scale: 3.579, offset: 0.6958, bias: 1, twist: 0, escape: 4,

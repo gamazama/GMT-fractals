@@ -26,6 +26,131 @@ Standard 32-bit floats (`float32`) have 7 digits of precision. This limits zoom 
 *   **Performance:** Iterative. Renders noisy frames that accumulate over time.
 *   **Use Case:** High-quality stills, Photorealism.
 
+## 2.1 Visible Light Spheres
+
+Lights can optionally be rendered as physical emissive spheres visible in the viewport (both Direct and Path Tracing modes). Controlled per-light via the **Sphere Radius** and **Edge Softness** sliders in the Light panel.
+
+### Sphere Intersection
+
+A `sphereLoop` code block is inlined in the `!hit` branch of both render modes in `shaders/chunks/main.ts`. For each active light with `radius > 0`:
+
+1. Compute perpendicular distance `_dPerp` from the ray to the sphere centre.
+2. **Soft edge**: `smoothstep(_fadeMin, _fadeMax, _dPerp)` fades the sphere over a band controlled by `uLightSoftness[i]`.
+   - `softness = 0`: hard-edge sphere (classic billboard look).
+   - `softness = 1`: edge fades over a band equal to the radius (smooth disc).
+3. If `_fade > 0.001`: intersect the sphere analytically (`-b ± sqrt(r²-d_perp²)`) to get hit distance `d`, then blend `col = mix(col, lightColor * intensity, _fade)`.
+4. The same `sphereLoop` runs in the PT bounce `!hit` branch so light spheres are visible in reflections and indirect paths.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `shaders/chunks/main.ts` | `sphereLoop` const, inlined in Direct and PT `!hit` branches |
+| `shaders/chunks/pathtracer.ts` | Same sphere code in bounce `!hit` |
+| `engine/UniformNames.ts` | `LightRadius`, `LightSoftness` uniforms |
+| `engine/managers/UniformManager.ts` | Uploads `sofArr` per light |
+| `types/graphics.ts` | `softness?: number` on `LightParams` |
+| `features/lighting/components/LightControls.tsx` | Edge Softness slider (shown when sphere visible) |
+
+### Parameters
+
+| Param | Uniform | Notes |
+|-------|---------|-------|
+| Sphere Radius | `uLightRadius[i]` | 0 = light is invisible |
+| Edge Softness | `uLightSoftness[i]` | 0 = hard edge, 1 = full fade band |
+
+## 2.2 Path Tracer Quality Modes
+
+Four compile-time options in the `LightingFeature` / `EngineSettingsFeature` control PT quality vs cost trade-offs. All are `onUpdate: 'compile'` — toggling any one triggers a full shader rebuild.
+
+### PT_NEE_ALL_LIGHTS (`ptNEEAllLights`)
+
+**Default off.** By default the PT bounce loop samples one randomly-chosen active light per bounce (standard stochastic NEE). When this define is set, **every active light** is evaluated per bounce.
+
+- Trade-off: N× more shadow rays per bounce (N = active light count), but shadow noise on all lights converges in parallel rather than accumulating independently.
+- Best for: scenes with 2-3 lights where per-light shadow quality matters more than raw frame rate.
+
+### PT_ENV_NEE (`ptEnvNEE`)
+
+**Default off.** Adds a direct-sample of the environment map as an additional NEE contributor each bounce. One extra `traceScene` call is issued per bounce to shadow-test the env sample.
+
+- Large noise reduction for open, sky-dominated scenes.
+- Cost: +1 shadow trace per bounce.
+
+### PT_VOLUMETRIC (`ptVolumetric`)
+
+**Default off.** Replaces absorption-only fog in the PT bounce loop with Henyey-Greenstein single-scatter volumetric lighting. Injected via `builder.addVolumeLogic(VOLUMETRIC_SCATTER_BODY)` in `features/lighting/index.ts`.
+
+See **Section 2.5** for full technical details.
+
+### Firefly Clamp (`ptMaxLuminance`)
+
+**Uniform `uPTMaxLuminance`, default 10.0.** Per-sample luminance is clamped to this value before accumulation. Suppresses bright firefly spikes caused by high-variance paths (e.g., very small solid-angle lights or caustic-like geometry). Lower values are cleaner but introduce slight bias; raise toward 200 to effectively disable clamping.
+
+### Rim Light — Bounce 0 Only
+
+The rim-light contribution (`uRim * pow(1 - NdotV, uRimExponent)`) is now guarded by `if (bounce == 0)`. Prior to this fix, rim light was added on every bounce, causing incorrectly bright rim halos in indirect lighting paths (visible as light-colored fringing on reflective surfaces).
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `features/lighting/index.ts` | Defines and injects `PT_NEE_ALL_LIGHTS`, `PT_ENV_NEE`, `PT_VOLUMETRIC` defines |
+| `shaders/chunks/pathtracer.ts` | Compile-gated branches for each define |
+| `engine/UniformSchema.ts` | `uPTMaxLuminance` uniform definition |
+
+## 2.5 Volumetric Scatter (God Rays)
+
+Primary-ray single-scatter volumetric lighting. Injected into `traceScene`'s march loop via `builder.addVolumeLogic()`. Active in both Direct and Path Tracing modes. Controlled via **Scene → Fog → Volumetric Density**.
+
+### Technique
+
+At each march step, a stochastic gate fires with probability 1/8 (spatially distributed, decoupled from DE iteration count to prevent orbit-trap banding in sky). When fired:
+
+1. **Beer-Lambert transmittance** `T = exp(-σ·d)` attenuates contribution from camera to scatter point. Early-out when `T < 0.001`.
+2. **Per-light shadow ray** with jitter proportional to `h.x` (the DE distance at that step):
+   - Near the surface (`h.x` small) → minimal jitter → hard god-ray edges.
+   - Open sky (`h.x` large) → large jitter → temporal accumulation blurs the fractal silhouette, eliminating iteration-count banding.
+3. **Henyey-Greenstein phase function** `p(θ) = (1−g²) / (4π·(1+g²−2g·cosθ)^1.5)` — controlled by **Anisotropy (g)**:
+   - `g=0`: isotropic scatter (uniform glow).
+   - `g>0`: forward scatter (classic god rays toward lights).
+   - `g<0`: back scatter.
+4. **Surface Color Scatter** (optional): at the same stochastic sample, evaluates the fractal's Layer 1 orbit-trap color field via `getMappingValue` + `uGradientTexture` — no extra `map()` call needed since `h.yzw` is already in scope. Adds colored volumetric haze driven by the fractal's own gradient palette.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `shaders/chunks/lighting/volumetric_scatter.ts` | Full GLSL body, injected into march loop |
+| `shaders/chunks/trace.ts` | `traceScene` accumulates `accScatter`, outputs `fogScatter` |
+| `shaders/chunks/main.ts` | `applyPostProcessing` adds `fogScatter` additively to final color |
+| `shaders/chunks/pathtracer.ts` | PT bounce fog uses `exp(-uFogDensity·d)` Beer-Lambert |
+| `features/atmosphere/index.ts` | UI params: Density, Anisotropy, Surface Color Scatter |
+| `features/lighting/index.ts` | Injects `#define PT_VOLUMETRIC` and `addVolumeLogic()` when enabled |
+
+### Parameters
+
+| Param | Uniform | Range | Notes |
+|-------|---------|-------|-------|
+| Fog Intensity | `uFogIntensity` | 0–1 | Master switch for fog section visibility |
+| Volumetric Density (σ) | `uFogDensity` | 0–0.5 (log) | Beer-Lambert extinction. Sweet spot ~0.005–0.05 |
+| Anisotropy (g) | `uPTFogG` | −0.99–0.99 | HG phase. Default 0.3 (mild forward) |
+| Surface Color Scatter | `uFogEmissiveStrength` | 0–2 (log) | Layer 1 orbit trap color injected into fog |
+
+### Stochastic Sampling Strategy
+
+- **Gate**: `fract(stochasticSeed × 7.43 + d × 1.0) < 0.125` — spatial, not iteration-indexed.
+- **Segment weight**: `_seg = 8.0` (unbiased: 8× contribution compensates 1/8 sampling rate).
+- **Why spatial not iterative**: DE step sizes follow the fractal's level-set structure. Iteration-indexed sampling creates visible banding correlated with orbit counts, especially visible in sky regions. Distance-based sampling (`d × K`) is uniform in world space.
+
+### Path Tracer Fog Fixes
+
+Two bugs in `shaders/chunks/pathtracer.ts` were fixed alongside the volumetric scatter work:
+
+1. **Bounce fog Beer-Lambert**: The PT bounce loop previously applied `exp(-volumetric * 2.0)` where `2.0` was an arbitrary artistic constant. Changed to `exp(-uFogDensity * d)` — proper Beer-Lambert using the actual march distance `d` and the same density uniform as the primary scatter, giving physically consistent fog attenuation across all bounces.
+
+2. **envNEE traceScene call**: The `PT_ENV_NEE` branch called `traceScene` with 7 arguments after the signature was extended to 8 (`out vec3 fogScatter`). Fixed by adding the missing `vec3 envScatter = vec3(0.0)` output argument.
+
 ## 3. The Pipeline (`RenderPipeline.ts`)
 
 To achieve high quality in a real-time browser environment, we use **Temporal Super Sampling (TSS)**.

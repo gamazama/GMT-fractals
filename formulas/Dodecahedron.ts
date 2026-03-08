@@ -9,6 +9,13 @@ export const Dodecahedron: FractalDefinition = {
     
     shader: {
         function: `
+    void dodecaFold(inout vec3 z) {
+        vec3 n = normalize(vec3(phi, 1.0, 0.0));
+        z -= 2.0 * min(0.0, dot(z, n)) * n;
+        vec3 n2 = normalize(vec3(1.0, 0.0, phi));
+        z -= 2.0 * min(0.0, dot(z, n2)) * n2;
+    }
+
     void formula_Dodecahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
         

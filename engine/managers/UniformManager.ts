@@ -85,7 +85,6 @@ export class UniformManager {
             const currentH = this.uniforms[Uniforms.Resolution].value.y;
             
             if (currentW !== targetW || currentH !== targetH) {
-                console.log(`[UniformManager] Resizing from ${currentW}x${currentH} to ${targetW}x${targetH}`);
                 this.uniforms[Uniforms.Resolution].value.set(targetW, targetH);
                 this.pipeline.resize(targetW, targetH);
                 this.pipeline.resetAccumulation(); 
@@ -156,6 +155,10 @@ export class UniformManager {
         this.uniforms[Uniforms.CamForward].value.copy(this.camForward);
         this.uniforms[Uniforms.CameraPosition].value.set(0, 0, 0);
 
+        // CPU pre-compute: length(uCamBasisY) / resolution.y * 2.0
+        // camUp is a unit vector so length(uCamBasisY) == height
+        this.uniforms[Uniforms.PixelSizeBase].value = height * 2.0 / this.uniforms[Uniforms.Resolution].value.y;
+
         const camModX = modulations['camera.unified.x'] || 0;
         const camModY = modulations['camera.unified.y'] || 0;
         const camModZ = modulations['camera.unified.z'] || 0;
@@ -190,6 +193,8 @@ export class UniformManager {
             const falArr = this.uniforms[Uniforms.LightFalloff].value as Float32Array;
             const typArr = this.uniforms[Uniforms.LightFalloffType].value as Float32Array;
             const shaArr = this.uniforms[Uniforms.LightShadows].value as Float32Array;
+            const radArr = this.uniforms[Uniforms.LightRadius].value as Float32Array;
+            const sofArr = this.uniforms[Uniforms.LightSoftness].value as Float32Array;
     
             const count = Math.min(lighting.lights.length, MAX_LIGHTS);
             this.uniforms[Uniforms.LightCount].value = count;
@@ -211,7 +216,9 @@ export class UniformManager {
                 falArr[i] = Math.max(0, l.falloff + dFalloff);
                 typArr[i] = l.falloffType === 'Linear' ? 1.0 : 0.0;
                 shaArr[i] = l.castShadow ? 1.0 : 0.0;
-                
+                radArr[i] = l.radius ?? 0.0;
+                sofArr[i] = l.softness ?? 0.0;
+
                 if ((colArr[i] as any).isColor) {
                     (colArr[i] as THREE.Color).set(l.color);
                 }

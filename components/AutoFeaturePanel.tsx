@@ -8,8 +8,7 @@ import SmallColorPicker from './SmallColorPicker';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import Dropdown from './Dropdown';
 import AdvancedGradientEditor from './AdvancedGradientEditor';
-import Vector2Pad from './Vector2Pad';
-import { Vector3Input } from './Vector3Input'; 
+import { Vector2Input, Vector3Input } from './vector-input';
 import { Knob } from './Knob'; 
 import { collectHelpIds } from '../utils/helpUtils';
 import { componentRegistry } from './registry/ComponentRegistry';
@@ -315,11 +314,24 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={val !== config.default} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} /></div>;
         }
         
-        if (config.type === 'vec2') return <div className={`mb-2 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Pad label={config.label} valueX={val?.x ?? 0} valueY={val?.y ?? 0} min={config.min ?? -1} max={config.max ?? 1} onChange={(x, y) => handleUpdate(key, { x, y })} /></div>;
+        if (config.type === 'vec2') {
+            const x = val?.x ?? config.default?.x ?? 0;
+            const y = val?.y ?? config.default?.y ?? 0;
+            return <div className={`mb-2 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} /></div>;
+        }
         if (config.type === 'vec3') {
-             const v3 = val instanceof THREE.Vector3 ? val : new THREE.Vector3(val.x, val.y, val.z);
-             const trackKeys = config.composeFrom ? config.composeFrom.map(k => `${featureId}.${k}`) : undefined;
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} /></div>;
+             const x = val?.x ?? config.default?.x ?? 0;
+             const y = val?.y ?? config.default?.y ?? 0;
+             const z = val?.z ?? config.default?.z ?? 0;
+             const v3 = new THREE.Vector3(x, y, z);
+             // Generate track keys for animation (x, y, z components) - using underscore format
+             const trackKeys = config.composeFrom 
+                 ? config.composeFrom.map(k => `${featureId}.${k}`)
+                 : [`${featureId}.${key}_x`, `${featureId}.${key}_y`, `${featureId}.${key}_z`];
+             const trackLabels = config.composeFrom
+                 ? undefined
+                 : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`];
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} /></div>;
         }
         
         if (config.type === 'image') {

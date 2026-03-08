@@ -291,14 +291,31 @@ In Path Tracer mode, AO is applied **only to the direct camera view**. It is dis
     'fog.settings': {
         id: 'fog.settings',
         category: 'Rendering',
-        title: 'Atmospheric Fog',
+        title: 'Atmospheric Fog & God Rays',
         parentId: 'panel.scene',
         content: `
-Adds depth cues by fading distant objects to a color.
+Adds depth and atmospheric effects to the scene. Fog controls appear when **Fog Intensity > 0**.
 
+## Distance Fog
+- **Fog Intensity**: Master control. Fades distant objects to the Fog Color.
 - **Start (Near)**: Distance where fog begins.
-- **Density (Far)**: Distance where everything becomes solid fog color.
-- **Volumetric Density**: Adds a constant "thickness" to the air, making light shafts and distance haze visible even without geometry.
+- **Fog End**: Distance where everything becomes the solid fog color.
+- **Fog Color**: The color distant objects fade into.
+
+## Volumetric Scatter (God Rays)
+Simulates light scattering through a participating medium. Requires **Volumetric Scattering (HG)** enabled in the Engine panel under Path Tracing settings.
+
+- **Volumetric Density (σ)**: Thickness of the air. Higher values = denser fog, shorter light shafts. Good range: 0.005–0.05.
+- **Anisotropy (g)**: Controls direction bias of scattered light (Henyey-Greenstein phase):
+  - **0**: Isotropic — light scatters equally in all directions.
+  - **+0.9**: Strong forward scatter — classic god rays pointing toward lights.
+  - **−0.9**: Back scatter — halo effect around light sources.
+- **Surface Color Scatter**: Injects the fractal's Layer 1 color field into the fog. Creates a colored volumetric haze whose tones match the fractal's gradient palette.
+
+## Tips
+- God rays accumulate over frames via Temporal Accumulation — they look best when the camera is still.
+- Shadow jitter is proportional to the DE distance at each scatter sample, which softens the fractal silhouette in open sky while keeping crisp edges near the surface.
+- In Direct mode, god rays work without Path Tracing enabled.
 `
     },
     'dof.settings': {

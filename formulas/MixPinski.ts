@@ -8,6 +8,31 @@ export const MixPinski: FractalDefinition = {
     description: 'A variation of the Sierpinski Tetrahedron with added rotation and twist.',
     
     shader: {
+        // Preamble: Global variables and pre-calculation function (runs once per frame)
+        preamble: `
+    // Pre-calculated rotation values for MixPinski (computed once per frame)
+    vec3 uMixPinski_rotAxis = vec3(0.0, 1.0, 0.0);
+    float uMixPinski_rotCos = 1.0;
+    float uMixPinski_rotSin = 0.0;
+    
+    void MixPinski_precalcRotation() {
+        if (abs(uVec3B.z) > 0.001) {
+            float azimuth = uVec3B.x;
+            float pitch = uVec3B.y;
+            float rotAngle = uVec3B.z * 0.5;
+            
+            // Convert spherical to direction vector
+            float cosPitch = cos(pitch);
+            uMixPinski_rotAxis = vec3(
+                cosPitch * sin(azimuth),
+                sin(pitch),
+                cosPitch * cos(azimuth)
+            );
+            
+            uMixPinski_rotSin = sin(rotAngle);
+            uMixPinski_rotCos = cos(rotAngle);
+        }
+    }`,
         function: `
     void formula_MixPinski(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -22,40 +47,43 @@ export const MixPinski: FractalDefinition = {
         if (z3.x + z3.y < 0.0) z3.xy = -z3.yx;
         if (z3.x + z3.z < 0.0) z3.xz = -z3.zx;
         if (z3.y + z3.z < 0.0) z3.yz = -z3.zy;
-        float scale = (abs(uParamA - 1.0) < 0.001) ? 1.001 : uParamA;
-        z3 = z3 * scale - vec3(uParamB * (scale - 1.0));
-        float ang = uParamC * 0.5;
-        float si = sin(ang), co = cos(ang);
-        mat2 rot = mat2(co, -si, si, co);
-        z3.xy = rot * z3.xy;
+        // Vec3C: Per-axis scale (average for DR calculation)
+        vec3 scale3 = uVec3C;
+        z3 = z3 * scale3 - vec3(uParamB * (scale3 - 1.0));
         
-        // Param D: Shift Z
-        if (abs(uParamD) > 0.001) z3.z += uParamD;
+        // Vec3B: Rotation using pre-calculated values (no trig in loop!)
+        if (abs(uVec3B.z) > 0.001) {
+            // Rodrigues' rotation formula with pre-calculated axis and angles
+            z3 = z3 * uMixPinski_rotCos + cross(uMixPinski_rotAxis, z3) * uMixPinski_rotSin
+                 + uMixPinski_rotAxis * dot(uMixPinski_rotAxis, z3) * (1.0 - uMixPinski_rotCos);
+        }
         
-        // Param E: Shift Y
-        if (abs(uParamE) > 0.001) z3.y += uParamE;
+        // Vec3A: Shift X, Y, Z
+        z3 += uVec3A;
 
         if (uJuliaMode > 0.5) z3 += c.xyz;
-        dr = dr * abs(scale);
+        // Use average scale for derivative calculation
+        float avgScale = (scale3.x + scale3.y + scale3.z) / 3.0;
+        dr = dr * avgScale;
         z.xyz = z3;
         trap = min(trap, length(z3));
     }`,
-        loopBody: `formula_MixPinski(z, dr, trap, c);`
+        loopBody: `formula_MixPinski(z, dr, trap, c);`,
+        loopInit: `MixPinski_precalcRotation();`
     },
 
     parameters: [
-        { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 2.0 },
+        { label: 'Scale', id: 'vec3C', type: 'vec3', min: 0.1, max: 4.0, step: 0.001, default: { x: 2.0, y: 2.0, z: 2.0 }, linkable: true },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
-        { label: 'Rotation', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Shift Z', id: 'paramD', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
-        { label: 'Shift Y', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Rotation', id: 'vec3B', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
+        { label: 'Shift', id: 'vec3A', type: 'vec3', min: -2.0, max: 2.0, step: 0.01, default: { x: 0, y: 0, z: 0 } },
         { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
     defaultPreset: {
         formula: "MixPinski",
         features: {
-            coreMath: { iterations: 32, paramA: 2, paramB: 1, paramC: 0, paramD: 0, paramE: 0, paramF: 0 },
+            coreMath: { iterations: 32, paramB: 1, paramF: 0, vec3A: { x: 0, y: 0, z: 0 }, vec3B: { x: 0, y: 0, z: 0 }, vec3C: { x: 2, y: 2, z: 2 } },
             coloring: {
                 mode: 0, // Trap
                 repeats: 2.6, phase: 0.78, scale: 2.595, offset: 0.785, bias: 1, twist: 0, escape: 3.2,

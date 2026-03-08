@@ -14,7 +14,7 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
     vec3 Lo = vec3(0.0);
     
     // Pixel size estimate for shadow bias
-    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0 / uInternalScale;
+    float pixelSizeScale = uPixelSizeBase / uInternalScale;
     
     // Bias: Push start point away from surface
     float biasAmount = uShadowBias + pixelSizeScale * 2.0;
@@ -43,8 +43,8 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
         float distToLight;
         
         if (isDirectional) {
-             lVec = -uLightDir[i]; // Light comes from source
-             distToLight = 10000.0; // Infinite
+             lVec = -uLightDir[i]; // Negate: uLightDir points toward surface, we need toward light
+             distToLight = 100.0; // Effectively infinite for fractals (structure < bailout radius)
         } else {
              lVec = uLightPos[i] - p;
              distToLight = length(lVec);

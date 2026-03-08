@@ -177,6 +177,10 @@ export interface FractalStoreState extends FeatureStateMap {
   // Composition overlay for viewport
   compositionOverlay: CompositionOverlayType;
   compositionOverlaySettings: CompositionOverlaySettings;
+
+  // Formula Workshop
+  workshopOpen: boolean;
+  workshopEditFormula: string | undefined;
 }
 
 export type FractalState = FractalStoreState;
@@ -299,6 +303,9 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     closeHelp: () => void;
     openContextMenu: (x: number, y: number, items: ContextMenuItem[], targetHelpIds?: string[]) => void;
     closeContextMenu: () => void;
+
+    openWorkshop: (editFormula?: string) => void;
+    closeWorkshop: () => void;
 
     // Composition overlay
     setCompositionOverlay: (type: CompositionOverlayType) => void;

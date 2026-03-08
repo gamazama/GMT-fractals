@@ -122,11 +122,13 @@ export const TexturingFeature: FeatureDefinition = {
         },
         textureScale: {
             type: 'vec2',
-            default: new THREE.Vector2(1,1),
-            label: 'Texture Scale',
+            default: new THREE.Vector2(1, 1),
+            label: 'Scale UV',
+            shortId: 'ts',
             uniform: 'uTextureScale',
-            composeFrom: ['scaleX', 'scaleY'],
-            hidden: true
+            min: 0.1, max: 500.0, step: 0.1,
+            scale: 'log',
+            group: 'transform'
         },
         offset: {
             type: 'vec2',
@@ -138,7 +140,4 @@ export const TexturingFeature: FeatureDefinition = {
             group: 'transform'
         }
     },
-    shader: {
-        // applyTextureProfile moved to math.ts
-    }
 };

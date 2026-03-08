@@ -32,6 +32,7 @@ vec3 blendColors(vec3 c1, vec3 c2, float opacity, float mode) {
     return col;
 }
 
+#ifdef LAYER3_ENABLED
 float getLayer3Noise(vec3 p) {
     float n = 0.0;
     if (uLayer3Turbulence > 0.001) {
@@ -46,6 +47,9 @@ float getLayer3Noise(vec3 p) {
     }
     return n;
 }
+#else
+float getLayer3Noise(vec3 p) { return 0.0; }
+#endif // LAYER3_ENABLED
 
 vec3 getTextureColor(vec3 p, vec3 n, vec4 result) {
     float u = getMappingValue(uTextureModeU, p, result, n, 1.0);

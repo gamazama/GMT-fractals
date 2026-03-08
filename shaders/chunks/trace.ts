@@ -18,31 +18,40 @@ export const getTraceGLSL = (
         float floatPrecision = max(1.0e-20, distFromFractalOrigin * 5.0e-7);
     `;
 
+    const missBlock = volumeFinalizeCode.trim().length > 0
+        ? `vec3 p_end = ro + rd * d;
+    h = map(p_end + uCameraPosition);
+    h.x = 1000.0;
+    vec3 p = p_end;
+    ${volumeFinalizeCode}`
+        : `h = vec4(1000.0, 0.0, 0.0, 0.0);`;
+
     return `
 // ------------------------------------------------------------------
 // STAGE 2: RAYMARCHING (Flattened & Optimized)
 // ------------------------------------------------------------------
 
-bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow, float stochasticSeed, inout float volumetric) {
+bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow, float stochasticSeed, inout float volumetric, out vec3 fogScatter) {
     d = 0.0;
     result = vec4(0.0);
 
     // 1. Bounding Sphere
     vec3 sphereCenter = -(uSceneOffsetHigh + uSceneOffsetLow);
     vec2 bounds = intersectSphere(ro - sphereCenter, rd, BOUNDING_RADIUS);
-    if (bounds.x > bounds.y) return false;
-    
+    if (bounds.x > bounds.y) { fogScatter = vec3(0.0); return false; }
+
     d = max(0.0, bounds.x);
-    
+
     // 2. Flattened Accumulators
     vec3 accColor = vec3(0.0);
+    vec3 accScatter = vec3(0.0); // Volumetric scatter (god rays) accumulator
     float accDensity = 0.0;
     float accAlpha = 0.0; // Scalar glow accumulator for Fast Mode
     
     // 3. Loop Config
     // pixelSizeScale: world-space size of an output pixel (NOT affected by internal scale)
     // Internal scale affects ray detail, not pixel size calculations
-    float pixelSizeScale = length(uCamBasisY) / uResolution.y * 2.0;
+    float pixelSizeScale = uPixelSizeBase;
     int limit = int(uMaxSteps);
     float maxMarch = MAX_DIST;
     
@@ -114,6 +123,7 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
             
             // Output
             glow = accColor;
+            fogScatter = accScatter;
             volumetric = accDensity;
             result = h; // h.x is dist, h.yzw is trap data
             return true;
@@ -167,23 +177,19 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
              
              ${volumeFinalizeCode}
              glow = accColor;
+             fogScatter = accScatter;
              volumetric = accDensity;
              return true;
         }
     }
-    
+
     // MISS: Resolve volume at infinity
-    vec3 p_end = ro + rd * d;
-    h = map(p_end + uCameraPosition);
-    h.x = 1000.0; // Override dist
-    
-    // Run finalize on the miss state to color any accumulated glow
-    vec3 p = p_end; // Alias for injected code
-    ${volumeFinalizeCode}
-    
+    ${missBlock}
+
     glow = accColor;
+    fogScatter = accScatter;
     volumetric = accDensity;
-    
+
     return false;
 }
 `;

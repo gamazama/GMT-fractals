@@ -2,7 +2,7 @@
 # Code Health Report
 
 **Status:** Stable (Post-DDFS Refactor & Cleanup)
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-03-03
 
 ## 1. Architecture ✅
 The codebase has been successfully migrated to the **Data-Driven Feature System (DDFS)**.
@@ -15,9 +15,29 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 *   **Lite Render Unification:** Moved logic from `uiSlice` and `FractalEngine` flags into the `QualityFeature` state. This allows granular control over precision (Float32 vs Float16) and Ray Epsilon via the DDFS.
 *   **Subscription Cleanup:** Removed ~20 lines of manual `subscribe` calls in `bindStoreToEngine`. The system now automatically detects parameters that require shader recompilation based on their DDFS config.
 *   **Shader Builder:** Implemented `ShaderBuilder.ts` with feature `inject()` contract for cleaner shader composition.
-*   **Legacy Shader Properties Removed:** Removed deprecated `shaderGenerator` and `shader` properties from `FeatureDefinition` interface.
+*   **`shaderGenerator` Removed:** Dead property removed from `FeatureDefinition` — was never read by any engine code.
+*   **`shader` → `postShader` Rename:** `FeatureDefinition.shader` renamed to `postShader` for self-documenting clarity. `inject()` targets the raymarching shader; `postShader` targets the screen-space post-process pass. Empty stubs removed from audioMod, drawing, texturing.
+*   **`ShaderConfig` Extracted:** Moved from `ShaderFactory.ts` to `engine/ShaderConfig.ts`. Now imports `PipelineNode` and `FractalGraph` from `types/graph.ts` instead of `any`. Re-exported from `ShaderFactory.ts` for backwards compatibility.
+*   **`FeatureDefinition` Interface Documented:** All properties annotated with inline comments explaining purpose, pipeline target, and relationship to adjacent properties.
+*   **Category 2 `any` Fixes:** `ParamCondition.eq/neq`, `ParamOption.value`, `ParamConfig.format`, `inject()` config param, `FractalEngine.compileTimer`, and `handleInput` event all given precise types. `EngineInputEvent` is now a discriminated union.
 *   **Deprecated Feature Removed:** Removed `features/stress_test.ts` placeholder.
 *   **Debug Console Logs Removed:** Cleaned up debug logs from startup and config management (kept compile-time logs).
+
+## 2.4 Recent Fixes (2026-03-05) ✅
+
+### Shader / Uniform Optimizations
+*   **`PixelSizeBase` CPU Pre-Compute:** `uPixelSizeBase` uniform added (`engine/UniformNames.ts`, `engine/UniformSchema.ts`). The value `length(uCamBasisY) / resolution.y * 2.0` (used in the PT bounce loop's bias epsilon) is now computed on the CPU each frame in `UniformManager.updateCamera()` and uploaded once, eliminating a redundant per-fragment square-root in the hot path of `calculatePathTracedColor`.
+*   **UniformManager Resize Log Removed:** `console.log` in the resolution resize path deleted — was firing every frame during interactive resize.
+
+### Vector Formula Parameters (CoreMath)
+*   **Six new `coreMath` params** added to `features/core_math.ts`: `vec2A`, `vec2B`, `vec2C` (`{x,y}`), `vec3A`, `vec3B`, `vec3C` (`{x,y,z}`). Each maps to a uniform (`uVec2A` … `uVec3C`) and renders in `FormulaPanel` via the new `VectorInput` / `Vector2Input` / `Vector3Input` components.
+*   **Formulas reference these as** `uniform vec3 uVec3A;` etc. — the DDFS auto-declares and uploads them per frame.
+
+### AnimationSystem Vector Component Support
+*   `components/AnimationSystem.tsx` now handles component-level LFO/keyframe targeting for vector params using the `(coreMath|geometry).(vec[23][ABC])_(x|y|z)` key pattern (e.g., `coreMath.vec3A_x`). Each axis can be independently keyframed and modulated. The full vec3 is reconstructed and written to the uniform after per-axis offset application.
+
+### ParameterSelector Vec2/Vec3 Expansion
+*   `components/ParameterSelector.tsx` expands `vec2` and `vec3` params into their component sub-targets (e.g., `coreMath.vec3A_x`) so the animation system's "Add Track" picker shows individual axis entries per vector param.
 
 ## 2.5 Recent Fixes (2026-02-18 to 2026-02-22) ✅
 
@@ -62,12 +82,12 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 ### High Priority
 | Issue | Location | Impact | Recommendation |
 |-------|----------|--------|----------------|
-| **`any` Type Usage** | 141+ instances across codebase | Type safety, IDE support | Create typed interfaces for DDFS state access |
+| **`any` Type Usage (Category 3)** | ~85 instances in engine plumbing (`ConfigManager`, `UniformManager`, `fractalStore`, `AnimationEngine`) | Type safety in engine internals | Implement `FeatureStateMap` — deferred intentionally, see Section 4 |
 
 ### Medium Priority
 | Issue | Location | Impact | Recommendation |
 |-------|----------|--------|----------------|
-| **Console Statements** | ~18+ instances in engine folder | Debug noise in production | Review remaining logs; keep error handlers |
+| **Console Statements** | ~17 instances in engine folder | Debug noise in production | Review remaining logs; keep error handlers |
 
 ### Low Priority
 | Issue | Location | Impact | Recommendation |
@@ -77,81 +97,82 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 
 ## 4. `any` Type Analysis
 
-The `any` type is used extensively for dynamic DDFS state access. Key locations:
+`any` instances are categorised into three groups:
 
-### Store & State Access (Expected Pattern)
-- `store/createFeatureSlice.ts` - Dynamic slice generation
-- `store/fractalStore.ts` - Dynamic feature state access
-- `utils/PresetLogic.ts` - Preset hydration
-- `engine/AnimationEngine.ts` - Dynamic binder lookup
+### Category 1: Third-party library gaps (~15 instances) — Leave as-is
+`(this.renderer as any).properties`, `(rot as any)._x`, `value.buffer as any`. These access Three.js internals or untyped library APIs. Not worth fighting.
 
-### Recommended Fix
-Create a typed state accessor utility:
-```typescript
-// utils/typedAccess.ts
-import { featureRegistry } from '../engine/FeatureSystem';
+### Category 2: Lazy typing (~40 instances) — ✅ Fixed 2026-03-03
+All developer-facing API surfaces have been given precise types:
+- `inject(config: ShaderConfig)` — was `any`
+- `ParamCondition.eq/neq: string | number | boolean` — was `any`
+- `ParamOption.value: string | number | boolean` — was `any`
+- `ParamConfig.format: (value: unknown) => string` — was `any`
+- `FractalEngine.compileTimer: ReturnType<typeof setTimeout> | null` — was `any`
+- `handleInput(event: EngineInputEvent)` — was `any`; now a discriminated union
 
-export function getFeatureState<T extends keyof FeatureStateMap>(
-  state: any, 
-  featureId: T
-): FeatureStateMap[T] {
-  return state[featureId];
-}
-```
+### Category 3: Structural DDFS dynamics (~85 instances) — Deferred
+Every `(state as any)[feat.id]` in `ConfigManager`, `UniformManager`, `fractalStore`, `AnimationEngine`. These exist because no type maps feature IDs (`'lighting'`, `'ao'`) to their state types at compile time.
 
-## 5. Console Statement Analysis
+**Fix:** A `FeatureStateMap` interface in `features/types.ts` mapping all feature IDs to state types, then intersect with `ShaderConfig` and `FractalStoreState`.
+
+**Why deferred:** Adding this map requires a new entry per feature. Since feature authoring is the primary developer activity, adding friction there has outsized cost. Revisit if engine contributors increase.
+
+## 5. Console Statement Analysis ✅ Cleaned up 2026-03-03
+
+Active debug dumps (getMaterial stack trace, recompilation trace, scheduleCompile/performCompilation progress logs, UniformManager resize) removed. Compile time log timing fixed to measure GPU rendering only.
 
 ### Compile-Time Logs (Kept)
-| File | Line | Purpose |
-|------|------|---------|
-| `engine/FractalEngine.ts` | 383 | Shader compile time |
-| `engine/MaterialController.ts` | 231, 252 | Shader generation size/hash |
+| File | Purpose |
+|------|---------|
+| `engine/FractalEngine.ts` | GPU shader compile time (measured from first render call only) |
+| `engine/MaterialController.ts` | Shader generation size/hash for Direct and PathTracing modes |
+| `engine/ConfigManager.ts` | Logs which param triggered a shader rebuild; formula change |
+| `engine/FractalEngine.ts` | Boot message (once per session) |
+| `engine/FractalEngine.ts` | HalfFloat16 alpha support capability check (once per session) |
 
 ### Error Handlers (Keep)
-| File | Line | Purpose |
-|------|------|---------|
-| `utils/UrlStateEncoder.ts` | 46, 73 | URL encoding/decoding errors |
-| `utils/Sharing.ts` | 58, 80 | Share string errors |
-| `engine/VideoExporter.ts` | 244, 350, 694 | Video export errors |
-| `engine/LoadingRenderer.ts` | 111 | Shader compile error |
-| `features/audioMod/AudioAnalysisEngine.ts` | 107 | Mic access denied |
+| File | Purpose |
+|------|---------|
+| `utils/UrlStateEncoder.ts` | URL encoding/decoding errors |
+| `utils/Sharing.ts` | Share string errors |
+| `engine/VideoExporter.ts` | Video export errors + finalization progress |
+| `engine/LoadingRenderer.ts` | Shader compile error |
+| `engine/BucketRenderer.ts` | Metadata injection error |
+| `features/audioMod/AudioAnalysisEngine.ts` | Mic access denied |
 
 ### Warnings (Keep)
-| File | Line | Purpose |
-|------|------|---------|
-| `store/fractalStore.ts` | 274 | Animation save failure |
-| `engine/FractalRegistry.ts` | 16 | Unknown alias registration |
-| `engine/AnimationEngine.ts` | 149 | Missing setter warning |
-| `engine/VideoExporter.ts` | 335 | SPS/PPS wait warning |
-| `engine/BucketRenderer.ts` | 157, 245 | Bucket render warnings |
-| `hooks/useAppStartup.ts` | 100 | Loading screen timeout |
+| File | Purpose |
+|------|---------|
+| `engine/FractalRegistry.ts` | Unknown alias registration |
+| `engine/AnimationEngine.ts` | Missing setter warning |
+| `engine/VideoExporter.ts` | SPS/PPS wait warning |
+| `engine/BucketRenderer.ts` | Bucket render warnings |
+| `engine/RenderPipeline.ts` | Pixel readback failure |
+| `engine/GLSLToJS.ts` | Formula DE extraction failure |
 
 ## 6. Optimization Opportunities
 
-### Shader Permutation
-Currently, all feature code chunks are included in shaders regardless of whether the feature is enabled. 
+### Shader Permutation ✅ Already Implemented
+`ShaderFactory.ts` conditionally injects feature code based on `engineConfig.toggleParam`. Features with this config (ao, atmosphere, geometry, lighting, quality, reflections, water_plane) are only injected when enabled — skipped features produce zero GPU code. Features without a toggle param have no on/off concept and are always injected, which is correct.
 
-**Recommendation:** Implement conditional compilation in `ShaderFactory.ts`:
-```typescript
-// Skip feature code injection if feature is disabled
-if (feat.inject && isFeatureEnabled(config, feat.id)) {
-    feat.inject(builder, config, variant);
-}
-```
-
-**Benefit:** Faster shader compilation, reduced GPU register pressure.
+The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full shader rebuild on toggle; `'runtime'` is handled in-shader via uniforms.
 
 ## 7. Recommended Actions
 
 ### Completed ✅
 1. ✅ Removed `features/stress_test.ts`
-2. ⚠️ Partially removed debug `console.log` statements - 18+ remain in engine folder
-3. ⚠️ Legacy `shader` and `shaderGenerator` properties still exist (marked deprecated in `FeatureSystem.ts`)
-4. ✅ Updated documentation
+2. ✅ Conditional shader chunk inclusion implemented in `ShaderFactory.ts`
+3. ✅ `utils/FragmentariumParser.ts` duplicate removed — single source in `features/fragmentarium_import/`
+4. ✅ `FeatureDefinition.shaderGenerator` removed — was never read by any engine code
+5. ✅ Dead `shader` sub-properties removed (`mainHeader`, `material`, `volumeFunctions`, `volumeBody`, `volumeFinalize`) — post_process.ts only reads `uniforms`, `functions`, `main`, `mainUV`
+6. ✅ `shader:` renamed to `postShader:` in `FeatureDefinition` — self-documenting: `inject()` targets the raymarching shader, `postShader` targets the screen-space post-process pass. Empty `shader:{}` stubs removed from audioMod, drawing, texturing.
+7. ✅ `FeatureDefinition` interface fully documented — all properties have inline comments explaining purpose, pipeline target, and relationship to adjacent properties
+8. ✅ Debug `console.log` statements removed — active debug dumps (stack traces, progress logs) cleaned up. Compile time log timing fixed (measures GPU render only). See Section 5 for what remains.
+9. ✅ `FeatureShaderLibrary` / `shaderLibrary` removed from `FeatureDefinition` — was a migration stepping stone, never used by any feature. `inject()` supersedes it completely.
 
 ### Short Term (Medium Effort)
-1. Create typed state accessor utility for DDFS
-2. Implement conditional shader chunk inclusion for better performance
+1. Create typed state accessor utility for DDFS (reduce 141+ `any` instances)
 
 ### Long Term (High Effort)
 1. Generate TypeScript types from `FeatureRegistry` for full type safety

@@ -9,6 +9,10 @@ export const Quaternion: FractalDefinition = {
     
     shader: {
         function: `
+    vec4 quatSquare(vec4 q) {
+        return vec4(q.x*q.x - q.y*q.y - q.z*q.z - q.w*q.w, 2.0*q.x*q.y, 2.0*q.x*q.z, 2.0*q.x*q.w);
+    }
+
     void formula_Quaternion(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         // 4D Rotation Injection
         // We rotate the 4D vector z before squaring.
