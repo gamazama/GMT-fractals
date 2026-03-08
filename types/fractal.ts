@@ -56,7 +56,7 @@ export interface FractalParameter {
     default: number | { x: number; y: number } | { x: number; y: number; z: number };
     scale?: 'linear' | 'log' | 'pi'; // Explicit UI scaling mode
     options?: { label: string; value: number }[];
-    mode?: 'rotation'; // For vec3: use rotation mode (A/P/∠) instead of XYZ
+    mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed'; // 'rotation' = Rodrigues (A/P/∠), 'direction' = azimuth/pitch, 'axes' = per-axis angles, 'toggle' = bool on/off, 'mixed' = toggle X + slider Y
     linkable?: boolean; // For vec3/vec2: enable axis linking (uniform scale)
 }
 

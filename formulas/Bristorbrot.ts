@@ -4,8 +4,8 @@ import { FractalDefinition } from '../types';
 export const Bristorbrot: FractalDefinition = {
     id: 'Bristorbrot',
     name: 'Bristorbrot',
-    shortDescription: 'Analytic hybrid. Mixes sharp edges with smooth bulbous forms.',
-    description: 'A hybrid formula that mixes folding and analytical functions.',
+    shortDescription: 'Custom 3D polynomial with sharp edges and smooth bulbous forms.',
+    description: 'A custom polynomial fractal: x²-y²-z², y(2x-z), z(2x+y). No folding — the asymmetric cross-terms between axes create sharp crystalline edges mixed with smooth bulb regions. Supports scale, rotation, twist, and shift.',
     
     shader: {
         function: `

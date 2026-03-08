@@ -45,6 +45,8 @@ The GMT documentation is organized into several complementary systems:
 | [20_Fragmentarium_Importer_Formula_Analysis.md](20_Fragmentarium_Importer_Formula_Analysis.md) | Formula-level analysis for V2 transformation |
 | [20_Fragmentarium_Importer_V2.md](20_Fragmentarium_Importer_V2.md) | V2 AST-based implementation reference |
 | [21_Frag_Importer_Current_Status.md](21_Frag_Importer_Current_Status.md) | **⚠️ START HERE — current status and known issues** |
+| [22_Frag_to_Native_Formula_Conversion.md](22_Frag_to_Native_Formula_Conversion.md) | Guide: converting .frag formulas to native GMT .ts formulas |
+| [23_Formula_Audit.md](23_Formula_Audit.md) | Formula correctness audit: naming, descriptions, params, DE |
 
 ## 🚀 Getting Started
 

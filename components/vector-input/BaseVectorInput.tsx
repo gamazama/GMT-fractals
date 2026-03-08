@@ -70,6 +70,11 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     const [isLinked, setIsLinked] = useState(linkable); // Linked by default when linkable is true
     const isDragging = useRef(false);
     const dragStartSnapshot = useRef<THREE.Vector2 | THREE.Vector3 | null>(null);
+
+    // Sync currentMode when the mode prop changes (e.g., formula switch reuses same key)
+    useEffect(() => {
+        setCurrentMode(mode);
+    }, [mode]);
     
     // Get context menu opener from store
     const openContextMenu = useFractalStore(s => s.openContextMenu);
@@ -79,6 +84,12 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
 
     // Determine if in rotation mode
     const isRotationMode = currentMode === 'rotation';
+
+    // Determine if in toggle mode (boolean on/off per axis)
+    const isToggleMode = currentMode === 'toggle';
+
+    // Determine if in mixed mode (toggle X + slider Y)
+    const isMixedMode = currentMode === 'mixed';
 
     // Determine if in direction mode (vec3 displayed as azimuth/pitch)
     const isDirectionMode = currentMode === 'direction' && isVec3;
@@ -262,30 +273,49 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
         );
     };
 
-    // Context menu handler for rotation mode - uses GMT native menu
+    // Context menu handler - uses GMT native menu
     const handleContextMenu = (e: React.MouseEvent) => {
-        if (!isRotationMode) {
-            // Allow default menu for non-rotation mode
-            return;
+        const items: ContextMenuItem[] = [];
+
+        // Rotation display options (available in rotation and axes modes)
+        if (isRotationMode) {
+            items.push(
+                { label: 'Rotation Units', action: () => {}, isHeader: true },
+                {
+                    label: 'Degrees (°)',
+                    checked: rotationDisplayMode === 'degrees',
+                    action: () => setRotationDisplayMode('degrees')
+                },
+                {
+                    label: 'Radians (π)',
+                    checked: rotationDisplayMode === 'radians',
+                    action: () => setRotationDisplayMode('radians')
+                },
+            );
         }
-        
+
+        // Mode switching for vec3 rotation-type controls
+        if (isVec3 && (mode === 'rotation' || mode === 'axes')) {
+            // Add spacing between sections
+            items.push(
+                { label: 'Display Mode', action: () => {}, isHeader: true },
+                {
+                    label: 'Azimuth / Pitch (A/P)',
+                    checked: currentMode === 'rotation',
+                    action: () => setCurrentMode('rotation')
+                },
+                {
+                    label: 'Per-Axis (X/Y/Z)',
+                    checked: currentMode === 'axes' || currentMode === 'normal',
+                    action: () => setCurrentMode('normal')
+                },
+            );
+        }
+
+        if (items.length === 0) return; // Allow default menu
+
         e.preventDefault();
         e.stopPropagation();
-        
-        const items: ContextMenuItem[] = [
-            { label: 'Rotation Units', action: () => {}, isHeader: true },
-            {
-                label: 'Degrees (°)',
-                checked: rotationDisplayMode === 'degrees',
-                action: () => setRotationDisplayMode('degrees')
-            },
-            {
-                label: 'Radians (π)',
-                checked: rotationDisplayMode === 'radians',
-                action: () => setRotationDisplayMode('radians')
-            },
-        ];
-        
         openContextMenu(e.clientX, e.clientY, items, ['ui.vector']);
     };
 
@@ -318,7 +348,63 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                 data-help-id="ui.vector"
             >
                 <div className="flex gap-px w-full h-full">
-                    {isDirectionMode ? (
+                    {isToggleMode ? (
+                        <>
+                            {/* Toggle mode: clickable on/off buttons per axis */}
+                            {(['x', 'y', 'z'] as const).slice(0, isVec3 ? 3 : 2).map((axis, i) => {
+                                const val = (localValue as any)[axis];
+                                const isOn = val > 0.5;
+                                const colors = [
+                                    { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+                                    { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+                                    { on: 'bg-blue-500/30 text-blue-300 border-blue-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+                                ];
+                                return (
+                                    <button
+                                        key={axis}
+                                        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-bold tracking-wider transition-all border ${
+                                            isOn ? colors[i].on : colors[i].off
+                                        } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'}`}
+                                        onClick={() => updateAxis(axis, isOn ? 0 : 1)}
+                                        disabled={disabled}
+                                    >
+                                        <span className="uppercase">{axis}</span>
+                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-40'}`}>{isOn ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                );
+                            })}
+                        </>
+                    ) : isMixedMode ? (
+                        <>
+                            {/* Mixed mode: toggle button for X, normal slider for Y */}
+                            {(() => {
+                                const isOn = localValue.x > 0.5;
+                                return (
+                                    <button
+                                        className={`w-14 flex-shrink-0 flex items-center justify-center gap-1 text-[10px] font-bold tracking-wider transition-all border ${
+                                            isOn ? 'bg-red-500/30 text-red-300 border-red-500/40' : 'bg-white/[0.04] text-gray-600 border-white/5'
+                                        } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'}`}
+                                        onClick={() => updateAxis('x', isOn ? 0 : 1)}
+                                        disabled={disabled}
+                                    >
+                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-40'}`}>{isOn ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                );
+                            })()}
+                            <VectorAxisCell
+                                axisIndex={1}
+                                value={localValue.y}
+                                {...getAxisBounds('y')}
+                                onUpdate={(v) => updateAxis('y', v)}
+                                onDragStart={handleStart}
+                                onDragEnd={handleEnd}
+                                disabled={disabled || localValue.x < 0.5}
+                                mapping={getAxisMapping('y')}
+                                liveValue={showLiveIndicator ? getLiveValue('y') : undefined}
+                                defaultValue={getDefaultValue('y')}
+                            />
+                        </>
+                    ) : isDirectionMode ? (
                         <>
                             {/* Heliotrope: drag to rotate direction */}
                             <div className="flex items-center justify-center px-1 flex-shrink-0">

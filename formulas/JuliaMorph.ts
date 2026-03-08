@@ -5,50 +5,53 @@ export const JuliaMorph: FractalDefinition = {
     id: 'JuliaMorph',
     name: 'Julia Morph (Stack)',
     shortDescription: 'Constructs 3D volumes by stacking 2D Julia sets. Perfect for topographic or sliced "MRI" effects.',
-    description: 'Constructs a 3D object by stacking 2D Julia sets along the Z-axis. Use the Julia Panel to set the Start shape, and Params D/E for the End shape.',
-    
+    description: 'Constructs a 3D object by stacking 2D Julia sets along the Z-axis. Start C and End C define the Julia constants at the bottom and top. The constant smoothly interpolates between them along the height.',
+
     shader: {
         function: `
     void formula_JuliaMorph(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 p = z.xyz;
-        
-        // --- 1. MAPPING & DEFORMATION ---
-        float height = max(0.1, uParamA); 
-        vec2 Z = p.xy;
-        float z_val = p.z;
-        float t = clamp((p.z / height) + 0.5, 0.0, 1.0);
 
-        if (uParamC > 0.001) {
-            // Standard Twist: Rotate around center (0,0) in XY plane
-            float ang = p.z * uParamC;
+        // --- 1. MAPPING & DEFORMATION ---
+        float height = max(0.1, uParamA);
+        float z_val = p.z;
+        float taperFactor = 1.0;
+
+        // Bend FIRST: Curve the column along X-axis (works on original p)
+        // paramD = bend direction (signed distance), abs value = curvature amount
+        // Must come before twist/taper since it remaps all coordinates
+        if (abs(uParamD) > 0.001) {
+            float R = 20.0 / abs(uParamD);
+            float sd = sign(uParamD);
+            // Mirror X for negative bend, bend around +X pivot, then mirror back
+            float px = p.x * sd;
+            float px_shifted = px + R;
+            float dist = length(vec2(px_shifted, p.z));
+            float ang = atan(p.z, px_shifted);
+            // Unbend: radial distance becomes new X, arc length becomes new Z
+            p.x = (dist - R) * sd;
+            z_val = ang * R;
+        }
+
+        float t = clamp((z_val / height) + 0.5, 0.0, 1.0);
+        vec2 Z = p.xy;
+
+        // Taper: scale XY based on Z position, with DE compensation
+        if (abs(uParamE) > 0.001) {
+            taperFactor = 1.0 + t * uParamE;
+            Z *= taperFactor;
+        }
+
+        // Twist: Rotate XY around center based on Z
+        if (abs(uParamC) > 0.001) {
+            float ang = z_val * uParamC;
             float s = sin(ang); float co = cos(ang);
-            Z = mat2(co, -s, s, co) * p.xy;
-        } else if (uParamC < -0.001) {
-            // Spatial Bend: Rotate the slices along the Y-axis pivot at X = -2.0
-            // Curvature kappa scales with strength. 
-            // R (Radius of Curvature) = 2.0 / strength. 
-            // This ensures at strength 1.0, the pivot is exactly at X = -2.0.
-            float strength = -uParamC; 
-            float R = 20.0 / strength;
-            
-            // Shift coordinates so the pivot is at the origin of this local polar space
-            vec2 xz_shifted = vec2(p.x + R, p.z);
-            float dist_to_pivot = length(xz_shifted);
-            float angle_to_pivot = atan(xz_shifted.y, xz_shifted.x);
-            
-            // Inverse Transform: Map the curved ray back to the straight fractal stack
-            // Local X is the radial distance from the pivot (offset back so center is 0)
-            Z.x = dist_to_pivot - R;
-            Z.y = p.y;
-            
-            // Local Z is the arc length along the curve
-            z_val = angle_to_pivot * R;
-            t = clamp((z_val / height) + 0.5, 0.0, 1.0);
+            Z = mat2(co, -s, s, co) * Z;
         }
 
         // --- 2. INTERPOLATION ---
-        vec2 c1 = uJulia.xy;
-        vec2 c2 = vec2(uParamD, uParamE);
+        vec2 c1 = uVec2B;
+        vec2 c2 = uVec2A;
         float t_smooth = t * t * (3.0 - 2.0 * t);
         vec2 C = mix(c1, c2, t_smooth);
 
@@ -56,40 +59,39 @@ export const JuliaMorph: FractalDefinition = {
         float r2 = dot(Z,Z);
         float dz_2d = 1.0;
         float iter_count = 0.0;
-        float smooth_iter = 0.0;
-        
-        float bailout = 10000.0; 
+
+        float bailout = 10000.0;
         int limit = int(uIterations);
         float localTrap = 1e10;
-        
+
         bool escaped = false;
-        
-        // Local hard limit high enough for intricate sets
+
         const int MAX_FORMULA_ITER = 3000;
 
         for(int i=0; i<MAX_FORMULA_ITER; i++) {
             if (i >= limit) break;
-            
-            // Derivative: dz = 2*Z*dz
+
+            // Derivative: |dz'| = 2|z| * |dz|
             dz_2d *= 2.0 * sqrt(r2);
             if (dz_2d > 1.0e10) dz_2d = 1.0e10;
-            
+
             // Z = Z^2 + C
             float nx = (Z.x * Z.x - Z.y * Z.y) + C.x;
             float ny = (2.0 * Z.x * Z.y) + C.y;
             Z = vec2(nx, ny);
-            
+
             r2 = dot(Z,Z);
-            localTrap = min(localTrap, r2); 
+            localTrap = min(localTrap, r2);
             iter_count += 1.0;
-            
+
             if(r2 > bailout) {
                 escaped = true;
-                break; 
+                break;
             }
         }
-        
+
         // --- 4. SMOOTH ITERATION ---
+        float smooth_iter;
         if (escaped) {
             float logZn = log(r2) / 2.0;
             float nu = log(logZn / log(2.0)) / log(2.0);
@@ -99,19 +101,27 @@ export const JuliaMorph: FractalDefinition = {
         }
 
         // --- 5. DISTANCE ESTIMATION ---
-        float d2d = 0.0;
+        float d2d;
         if (escaped && dz_2d > 1.0e-7) {
+             // Exterior: standard 2D Julia DE
              d2d = 0.5 * sqrt(r2) * log(r2) / dz_2d;
         } else {
-             d2d = 0.0;
+             // Interior: approximate negative distance from boundary
+             // Use sqrt of orbit trap (minimum r² seen) as rough interior distance
+             d2d = -sqrt(localTrap) * 0.5;
         }
-        
+
+        // Taper DE compensation: scaled coordinates produce scaled distances
+        if (abs(taperFactor) > 0.01) {
+            d2d /= abs(taperFactor);
+        }
+
         // Vertical Box Bounds (using warped z_val)
         float d_z = abs(z_val) - (height * 0.5);
-        
-        // Combine: Intersection of Infinite Column + Height Box
-        float d = max(d2d * 0.25, d_z);
-        
+
+        // Combine: Intersection of Julia Column + Height Box
+        float d = max(d2d, d_z);
+
         // --- 6. SLICING ---
         float sliceInterval = uParamF;
         if (sliceInterval > 0.01) {
@@ -120,13 +130,13 @@ export const JuliaMorph: FractalDefinition = {
             float distToSlice = abs(mod(z_val, sliceInterval) - sliceInterval * 0.5) - thickness;
             d = max(d, distToSlice);
         }
-        
+
         trap = min(trap, localTrap);
-        
+
         // Return packed result
         z = vec4(Z.x, Z.y, d, smooth_iter);
     }`,
-        loopBody: `formula_JuliaMorph(z, dr, trap, c); break;`, 
+        loopBody: `formula_JuliaMorph(z, dr, trap, c); break;`,
         getDist: `
             return vec2(z.z, z.w);
         `
@@ -134,34 +144,36 @@ export const JuliaMorph: FractalDefinition = {
 
     parameters: [
         { label: 'Height (Z Scale)', id: 'paramA', min: 0.1, max: 10.0, step: 0.1, default: 5.0 },
-        { label: 'Slice Thickness', id: 'paramB', min: 0.01, max: 1.0, step: 0.01, default: 0.27 },
-        { label: 'Twist / Bend', id: 'paramC', min: -5.0, max: 5.0, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'End C (Real)', id: 'paramD', min: -2.0, max: 2.0, step: 0.001, default: 0.286 },
-        { label: 'End C (Imag)', id: 'paramE', min: -2.0, max: 2.0, step: 0.001, default: 0.009 },
         { label: 'Slice Interval', id: 'paramF', min: 0.0, max: 2.0, step: 0.01, default: 0.33 },
+        { label: 'Slice Thickness', id: 'paramB', min: 0.01, max: 1.0, step: 0.01, default: 0.27 },
+        { label: 'Start C', id: 'vec2B', type: 'vec2', min: -2.0, max: 2.0, step: 0.001, default: { x: 1.03, y: -1.072 } },
+        { label: 'End C', id: 'vec2A', type: 'vec2', min: -2.0, max: 2.0, step: 0.001, default: { x: 0.286, y: 0.009 } },
+        { label: 'Twist', id: 'paramC', min: -5.0, max: 5.0, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Bend', id: 'paramD', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
+        { label: 'Taper', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
     defaultPreset: {
         formula: 'JuliaMorph',
         features: {
-            coreMath: { 
-                iterations: 100, 
-                paramA: 5, 
-                paramB: 0.27, 
-                paramC: 0.0, 
-                paramD: 0.286, 
-                paramE: 0.009, 
-                paramF: 0.53 
+            coreMath: {
+                iterations: 100,
+                paramA: 5,
+                paramB: 0.27,
+                paramC: 0.0,
+                paramF: 0.53,
+                vec2A: { x: 0.286, y: 0.009 },
+                vec2B: { x: 1.03, y: -1.072 }
             },
-            geometry: { 
-                juliaMode: true, 
-                juliaX: 1.03, 
-                juliaY: -1.072, 
-                juliaZ: 0 
+            geometry: {
+                juliaMode: false,
+                juliaX: 0,
+                juliaY: 0,
+                juliaZ: 0
             },
             coloring: {
                 mode: 1,
-                scale: 4.697920323185873, 
+                scale: 4.697920323185873,
                 offset: 0.13,
                 repeats: 1,
                 phase: 0.13,
@@ -177,7 +189,7 @@ export const JuliaMorph: FractalDefinition = {
                 mode2: 0,
                 scale2: 0.4003079069279198,
                 offset2: 0.48021004308135196,
-                repeats2: 1, 
+                repeats2: 1,
                 phase2: 0,
                 bias2: 1,
                 twist2: 0,
@@ -202,9 +214,9 @@ export const JuliaMorph: FractalDefinition = {
                 layer3Turbulence: 0
             },
             atmosphere: {
-                fogNear: 0, 
-                fogFar: 5, 
-                fogColor: "#050510", 
+                fogNear: 0,
+                fogFar: 5,
+                fogColor: "#050510",
                 fogDensity: 0.02,
                 glowIntensity: 0,
                 glowSharpness: 200,
@@ -237,10 +249,10 @@ export const JuliaMorph: FractalDefinition = {
                 emissionColor: "#ffffff",
                 ptEmissionMult: 1
             },
-            lighting: { 
-                shadows: true, 
-                shadowSoftness: 41.7859226170808, 
-                shadowIntensity: 0.92, 
+            lighting: {
+                shadows: true,
+                shadowSoftness: 41.7859226170808,
+                shadowIntensity: 0.92,
                 shadowBias: 0.002,
                 ptBounces: 3,
                 ptGIStrength: 1,

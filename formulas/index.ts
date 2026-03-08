@@ -10,6 +10,7 @@ import { PseudoKleinian } from './PseudoKleinian';
 import { Dodecahedron } from './Dodecahedron';
 import { Phoenix } from './Phoenix';
 import { MixPinski } from './MixPinski';
+import { SierpinskiTetrahedron } from './SierpinskiTetrahedron';
 import { AmazingSurf } from './AmazingSurf';
 import { AmazingSurface } from './AmazingSurface';
 import { BoxBulb } from './BoxBulb';
@@ -28,6 +29,7 @@ import { Appell } from './Appell';
 import { Borromean } from './Borromean';
 import { MandelMap } from './MandelMap';
 import { MandelBolic } from './MandelBolic';
+import { KaliBox } from './KaliBox';
 
 // Organized list determines UI order on LOADING SCREEN
 const formulas = [
@@ -35,13 +37,15 @@ const formulas = [
     Mandelbulb,
     Mandelorus, // Formerly HyperTorus
     MixPinski,
-    MandelMap, 
+    SierpinskiTetrahedron,
+    MandelMap,
     Borromean,
     Appell, 
     AmazingBox,
     AmazingSurface,
     MengerSponge,
     MarbleMarcher,
+    KaliBox,
     Kleinian,
     AmazingSurf,
     MandelTerrain,
@@ -95,10 +99,12 @@ export const PREDEFINED_CATEGORIES = [
     { 
         name: "Geometric & Folding", 
         match: [
-            MarbleMarcher.id, 
-            PseudoKleinian.id, 
-            Dodecahedron.id, 
-            MengerAdvanced.id, 
+            MarbleMarcher.id,
+            KaliBox.id,
+            SierpinskiTetrahedron.id,
+            PseudoKleinian.id,
+            Dodecahedron.id,
+            MengerAdvanced.id,
             BoxBulb.id
         ] 
     },

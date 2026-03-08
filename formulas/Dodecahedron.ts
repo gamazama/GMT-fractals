@@ -4,21 +4,41 @@ import { FractalDefinition } from '../types';
 export const Dodecahedron: FractalDefinition = {
     id: 'Dodecahedron',
     name: 'Dodecahedron',
-    shortDescription: 'Folds space into the symmetry of a Dodecahedron (12 faces).',
-    description: 'A folding fractal based on the symmetry of a dodecahedron. Now with twist and shift.',
-    
-    shader: {
-        function: `
-    void dodecaFold(inout vec3 z) {
-        vec3 n = normalize(vec3(phi, 1.0, 0.0));
-        z -= 2.0 * min(0.0, dot(z, n)) * n;
-        vec3 n2 = normalize(vec3(1.0, 0.0, phi));
-        z -= 2.0 * min(0.0, dot(z, n2)) * n2;
-    }
+    shortDescription: 'Kaleidoscopic IFS with dodecahedral symmetry (Knighty).',
+    description: 'Kaleidoscopic IFS fractal with true dodecahedral symmetry using 3 golden-ratio reflection normals. Based on Knighty\'s method: 3 normals × 3 reflections = 9 fold operations per iteration, producing the icosahedral/dodecahedral reflection group. Supports rotation, twist, and shift.',
 
+    shader: {
+        preamble: `
+    // Dodecahedron: Pre-calculated golden-ratio normals and rotation (computed once per frame)
+    // Reference: Syntopia/Knighty Kaleidoscopic IFS
+    const float dodeca_Phi = (1.0 + sqrt(5.0)) * 0.5; // golden ratio 1.618...
+    const vec3 dodeca_n1 = normalize(vec3(-1.0, dodeca_Phi - 1.0, 1.0 / (dodeca_Phi - 1.0)));
+    const vec3 dodeca_n2 = normalize(vec3(dodeca_Phi - 1.0, 1.0 / (dodeca_Phi - 1.0), -1.0));
+    const vec3 dodeca_n3 = normalize(vec3(1.0 / (dodeca_Phi - 1.0), -1.0, dodeca_Phi - 1.0));
+
+    vec3 uDodeca_rotAxis = vec3(0.0, 1.0, 0.0);
+    float uDodeca_rotCos = 1.0;
+    float uDodeca_rotSin = 0.0;
+
+    void Dodecahedron_precalcRotation() {
+        if (abs(uVec3B.z) > 0.001) {
+            float azimuth = uVec3B.x;
+            float pitch = uVec3B.y;
+            float rotAngle = uVec3B.z * 0.5;
+            float cosPitch = cos(pitch);
+            uDodeca_rotAxis = vec3(
+                cosPitch * sin(azimuth),
+                sin(pitch),
+                cosPitch * cos(azimuth)
+            );
+            uDodeca_rotSin = sin(rotAngle);
+            uDodeca_rotCos = cos(rotAngle);
+        }
+    }`,
+        function: `
     void formula_Dodecahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        
+
         // Param F: Twist
         if (abs(uParamF) > 0.001) {
             float ang = z3.z * uParamF;
@@ -26,46 +46,54 @@ export const Dodecahedron: FractalDefinition = {
             z3.xy = mat2(co, -s, s, co) * z3.xy;
         }
 
-        float ang = uParamC;
-        float s = sin(ang), c_ang = cos(ang);
-        z3.xy = mat2(c_ang, -s, s, c_ang) * z3.xy;
-        ang = uParamD;
-        s = sin(ang); c_ang = cos(ang);
-        z3.yz = mat2(c_ang, -s, s, c_ang) * z3.yz;
+        // Vec3B: Rotation using pre-calculated values (no trig in loop)
+        if (abs(uVec3B.z) > 0.001) {
+            z3 = z3 * uDodeca_rotCos + cross(uDodeca_rotAxis, z3) * uDodeca_rotSin
+                 + uDodeca_rotAxis * dot(uDodeca_rotAxis, z3) * (1.0 - uDodeca_rotCos);
+        }
+
+        // 3 normals × 3 repetitions = 9 fold operations (true dodecahedral symmetry)
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n1)) * dodeca_n1;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n2)) * dodeca_n2;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n3)) * dodeca_n3;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n1)) * dodeca_n1;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n2)) * dodeca_n2;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n3)) * dodeca_n3;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n1)) * dodeca_n1;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n2)) * dodeca_n2;
+        z3 -= 2.0 * min(0.0, dot(z3, dodeca_n3)) * dodeca_n3;
+
+        // Scale and offset
         float scale = uParamA;
-        float offset = uParamB;
-        z3 = abs(z3);
-        if(z3.x < z3.y) z3.xy = z3.yx;
-        if(z3.x < z3.z) z3.xz = z3.zx;
-        if(z3.y < z3.z) z3.yz = z3.zy;
-        dodecaFold(z3);
-        dodecaFold(z3);
-        
-        // Param E: Shift
-        vec3 shift = vec3(offset * (scale - 1.0));
-        if (abs(uParamE) > 0.001) shift.z += uParamE;
-        
-        z3 = z3 * scale - shift;
+        vec3 offset = vec3(uParamB * (scale - 1.0));
+
+        // Vec3A: Shift
+        offset -= uVec3A;
+
+        z3 = z3 * scale - offset;
+
+        if (uJuliaMode > 0.5) z3 += c.xyz;
+
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, length(z3));
     }`,
-        loopBody: `formula_Dodecahedron(z, dr, trap, c);`
+        loopBody: `formula_Dodecahedron(z, dr, trap, c);`,
+        loopInit: `Dodecahedron_precalcRotation();`
     },
 
     parameters: [
-        { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 2.5 },
+        { label: 'Scale', id: 'paramA', min: 0.5, max: 4.0, step: 0.001, default: 2.618 },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Z Shift', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Rotation', id: 'vec3B', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
+        { label: 'Shift', id: 'vec3A', type: 'vec3', min: -2.0, max: 2.0, step: 0.01, default: { x: 0, y: 0, z: 0 } },
         { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
     defaultPreset: {
         formula: "Dodecahedron",
         features: {
-            coreMath: { iterations: 50, paramA: 2.617, paramB: 1.525, paramC: 0.251, paramD: 0.282, paramE: 1.17, paramF: 0 },
+            coreMath: { iterations: 30, paramA: 2.618, paramB: 1.0, paramF: 0, vec3A: { x: 0, y: 0, z: 0 }, vec3B: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 0, // Trap
                 repeats: 2.63, phase: 0.42, scale: 2.63, offset: 0.42, bias: 1, twist: 0, escape: 2,
@@ -95,7 +123,7 @@ export const Dodecahedron: FractalDefinition = {
                 aoIntensity: 0, aoSpread: 0.1
             },
             lighting: { shadows: true, shadowSoftness: 538, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 2.4, fudgeFactor: 0.47, pixelThreshold: 0.5, maxSteps: 300, aaMode: "Auto", aaLevel: 1, estimator: 4.0 }, // Estimator 4 = Linear (2.0)
+            quality: { detail: 2.4, fudgeFactor: 0.47, pixelThreshold: 0.5, maxSteps: 300, aaMode: "Auto", aaLevel: 1, estimator: 1.0 }, // Linear (Unit 1.0) = (r-1)/dr — correct for IFS
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             geometry: { juliaMode: false, juliaX: 0.04, juliaY: -0.12, juliaZ: -0.24, hybridMode: false, hybridIter: 2, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1 },
             optics: { dofStrength: 0, dofFocus: 1.515 }
@@ -112,7 +140,7 @@ export const Dodecahedron: FractalDefinition = {
             { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ],
         animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 2.617, phase: 0, smoothing: 0.5 }
+            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 2.618, phase: 0, smoothing: 0.5 }
         ]
     }
 };

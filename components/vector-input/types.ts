@@ -71,7 +71,7 @@ export interface BaseVectorInputProps {
     
     // New unified system props
     /** Input mode for specialized handling */
-    mode?: 'normal' | 'rotation' | 'translation' | 'scale' | 'direction';
+    mode?: 'normal' | 'rotation' | 'translation' | 'scale' | 'direction' | 'toggle' | 'mixed' | 'axes';
     /** Allow user to toggle between modes */
     modeToggleable?: boolean;
     /** Show animated live value indicator */

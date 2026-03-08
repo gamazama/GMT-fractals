@@ -23,8 +23,8 @@ export const Mandelbulb: FractalDefinition = {
             float phi = atan(z3.y, z3.x);
 
             // Apply Power & Phase Shifts
-            theta = theta * power + uParamB;
-            phi = phi * power + uParamC;
+            theta = theta * power + uVec2A.x;
+            phi = phi * power + uVec2A.y;
 
             float zr = rp1 * r;
             z3 = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
@@ -41,11 +41,11 @@ export const Mandelbulb: FractalDefinition = {
             
             // --- RADIOLARIA MUTATION (Tom Beddard) ---
             // Applied AFTER iteration to affect the triplex structure, not the world bounding box.
-            if (uParamE > 0.5) {
-                float limit = uParamF;
+            // vec2B.x = toggle (on/off), vec2B.y = limit value
+            if (uVec2B.x > 0.5) {
+                float limit = uVec2B.y;
                 if (z3.y > limit) {
                     z3.y = limit;
-                    // Removed trap override to allow gradients to form naturally on the cut surface
                 }
             }
             
@@ -57,17 +57,15 @@ export const Mandelbulb: FractalDefinition = {
 
     parameters: [
         { label: 'Power', id: 'paramA', min: 2.0, max: 16.0, step: 0.001, default: 8.0 },
-        { label: 'Theta Phase', id: 'paramB', min: -3.14, max: 3.14, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Phi Phase', id: 'paramC', min: -6.28, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 } },
         { label: 'Z Twist', id: 'paramD', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
-        { label: 'Radiolaria', id: 'paramE', min: 0.0, max: 1.0, step: 1.0, default: 0.0 }, 
-        { label: 'Radio Limit', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.5 },
+        { label: 'Radiolaria', id: 'vec2B', type: 'vec2', min: -2.0, max: 2.0, step: 0.01, default: { x: 0, y: 0.5 }, mode: 'mixed' },
     ],
 
     defaultPreset: {
         formula: "Mandelbulb",
         features: {
-            coreMath: { iterations: 16, paramA: 8, paramB: 0, paramC: 0, paramD: 0, paramE: 0, paramF: 0.5 },
+            coreMath: { iterations: 16, paramA: 8, paramD: 0, vec2A: { x: 0, y: 0 }, vec2B: { x: 0, y: 0.5 } },
             geometry: { hybridMode: false, hybridIter: 0, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1, hybridSkip: 1, hybridSwap: false, juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0 },
             coloring: {
                 mode: 0, repeats: 2, phase: 0, scale: 1, offset: 0, bias: 1, twist: 0, escape: 1.2,

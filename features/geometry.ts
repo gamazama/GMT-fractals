@@ -132,17 +132,17 @@ export const GeometryFeature: FeatureDefinition = {
             group: 'transform',
             condition: { param: 'preRotMaster', bool: true }
         },
-        preRotY: { type: 'float', default: 0.0, label: 'Spin Y', shortId: 'ry', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true } },
-        preRotX: { type: 'float', default: 0.0, label: 'Spin X', shortId: 'rx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true } },
-        preRotZ: { type: 'float', default: 0.0, label: 'Spin Z', shortId: 'rz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true } },
+        preRotY: { type: 'float', default: 0.0, label: 'Spin Y', shortId: 'ry', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        preRotX: { type: 'float', default: 0.0, label: 'Spin X', shortId: 'rx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        preRotZ: { type: 'float', default: 0.0, label: 'Spin Z', shortId: 'rz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
         
         preRot: { type: 'vec3', default: new THREE.Vector3(0,0,0), label: 'Pre Rotation', composeFrom: ['preRotX', 'preRotY', 'preRotZ'], hidden: true },
 
         // --- JULIA SET ---
         juliaMode: { type: 'boolean', default: false, label: 'Julia Mode', shortId: 'jm', uniform: 'uJuliaMode', group: 'julia' },
-        juliaX: { type: 'float', default: 0.0, label: 'Julia X', shortId: 'jx', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true } },
-        juliaY: { type: 'float', default: 0.0, label: 'Julia Y', shortId: 'jy', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true } },
-        juliaZ: { type: 'float', default: 0.0, label: 'Julia Z', shortId: 'jz', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true } },
+        juliaX: { type: 'float', default: 0.0, label: 'Julia X', shortId: 'jx', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true }, hidden: true },
+        juliaY: { type: 'float', default: 0.0, label: 'Julia Y', shortId: 'jy', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true }, hidden: true },
+        juliaZ: { type: 'float', default: 0.0, label: 'Julia Z', shortId: 'jz', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true }, hidden: true },
         julia: { type: 'vec3', default: new THREE.Vector3(0,0,0), label: 'Julia Vector', uniform: 'uJulia', composeFrom: ['juliaX', 'juliaY', 'juliaZ'], hidden: true },
     },
     inject: (builder, config) => {

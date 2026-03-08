@@ -41,13 +41,12 @@ This creates hollow, skeletal structures that resemble microscopic Radiolaria sh
         parentId: 'formula.active',
         content: `
 ## The Math
-Based on **Appell Polynomials** ($P_k$) from Clifford Analysis. 
-While standard fractal formulas simply power the vector ($z^2$), the Appell sequence introduces a non-conformal subtraction term that exposes the underlying "Skeleton" of the math.
-$$ P_2(x) = x^2 - k|x|^2 $$
+Implements a simplified Appell polynomial iteration. The non-conformal subtraction term destabilizes the surface, revealing skeletal interference patterns.
+$$ P(x) = x^n - k|x|^2 $$
 
 ## The "Ghost" Visuals
-Because this formula subtracts magnitude during iteration, it doesn't converge to a hard surface like a standard Mandelbrot. 
-Instead, it creates a field of "Interference Patterns". 
+Because this formula subtracts magnitude during iteration, it doesn't converge to a hard surface like a standard Mandelbrot.
+Instead, it creates a field of "Interference Patterns".
 This implementation is designed to be rendered as a **Volumetric Cloud** (using the Glow engine) rather than a solid object.
 
 ## Parameters
@@ -124,17 +123,14 @@ Perfect for creating "Endless Tunnels" or "Ouroboros" structures. Fly the camera
         parentId: 'formula.active',
         content: `
 ## The Math
-A 3D variation of the "Tricorn" or Mandelbar set. In 2D, the Tricorn uses the complex conjugate: $z_{n+1} = \bar{z}_n^2 + c$.
-In 3D, this manifests as negating specific terms in the squaring formula.
+The 3D extension of the Tricorn (Mandelbar) fractal. The iteration uses: $x' = x^2 - y^2 - z^2$, $y' = 2xy$, $z' = -2xz$. The conjugation (negation on $z'$) creates the distinctive tri-corner symmetry.
 
 **Reference:** [Wikipedia: Tricorn (Mathematics)](https://en.wikipedia.org/wiki/Tricorn_(mathematics))
 
 ## Parameters
 - **Param A (Scale)**: Scales the entire coordinate system before iteration.
-- **Param B (Offset)**: Shifts the fractal along the X-axis.
-- **Param C (Rot X)**: Rotates the coordinate system around X per iteration.
-- **Param D (Rot Z)**: Rotates the coordinate system around Z per iteration.
-- **Param E (Offset Z)**: Shifts the fractal along the Z-axis.
+- **Rotation (Vec3B)**: 3D rotation using direction + angle (Rodrigues formula). Pre-calculated for performance.
+- **Offset (Vec3A)**: Shifts the fractal along X/Y/Z axes.
 - **Param F (Twist)**: Twists space based on Z-depth.
 
 ## Characteristics
@@ -223,17 +219,18 @@ It is famous for resembling Borg cubes, sci-fi cities, and brutalist architectur
         content: `
 ## The Math
 The formula from the game *Marble Marcher*. It is a specialized Menger Sponge Iterated Function System (IFS) that incorporates dynamic rotation and linear shifting in every step.
+Algorithm: abs → Rot Z → Menger fold (sort descending) → Rot X → Scale → Shift.
 
 **Credits:** Created by **CodeParade** for the game [Marble Marcher](https://codeparade.itch.io/marblemarcher).
 
 ## Parameters
 - **Param A (Scale)**: The scaling factor.
-- **Param B/E/F (Shift)**: Linear translation vector.
-- **Param C (Rot Z)**: Rotates the Z-plane.
-- **Param D (Rot X)**: Rotates the X-plane.
+- **Shift (Vec3A)**: Linear translation vector (X, Y, Z).
+- **Rotation (Vec3B)**: X = Rot Z angle (after abs), Y = Rot X angle (after Menger fold). Pre-calculated sin/cos for performance.
 
 ## Usage
 Produces highly dynamic, shifting geometric landscapes. Animate the Rotation and Shift parameters to see the geometry unfold and reconfigure itself.
+**Tip:** Select **Chebyshev** distance metric in Quality for the classic look.
 `
     },
     'formula.mengersponge': {
@@ -312,17 +309,22 @@ Creates intricate, filigree-like patterns that look like carved ivory or 3D prin
         parentId: 'formula.active',
         content: `
 ## The Math
-Uses folding planes aligned to the 12 faces of a Dodecahedron (using the Golden Ratio $\phi$).
-Instead of folding into a box (Cube symmetry), it folds space into a Dodecahedron.
+Kaleidoscopic IFS with true dodecahedral symmetry. Uses 3 golden-ratio reflection normals based on Knighty's method:
+- $n_1 = \\text{normalize}(-1, \\phi-1, 1/(\\phi-1))$
+- $n_2 = \\text{normalize}(\\phi-1, 1/(\\phi-1), -1)$
+- $n_3 = \\text{normalize}(1/(\\phi-1), -1, \\phi-1)$
+
+Each iteration reflects across all 3 normals × 3 repetitions = **9 fold operations**, producing the full icosahedral/dodecahedral reflection group.
 
 **Reference:** [Wikipedia: Regular Dodecahedron](https://en.wikipedia.org/wiki/Regular_dodecahedron)
+**Credits:** Based on **Knighty's** Kaleidoscopic IFS (Syntopia 2010).
 
 ## Parameters
-- **Param A (Scale)**: Expansion factor.
+- **Param A (Scale)**: Expansion factor. Default 2.618 (golden ratio).
 - **Param B (Offset)**: Separation of the faces.
-- **Param C/D (Rotation)**: Rotates the symmetry axis.
-- **Param E (Z Shift)**: Stretches the shape.
-- **Param F (Twist)**: Twists the arms of the fractal.
+- **Rotation (Vec3B)**: 3D rotation using direction + angle (Rodrigues formula). Pre-calculated for performance.
+- **Shift (Vec3A)**: Linear offset in X/Y/Z.
+- **Param F (Twist)**: Twists the arms of the fractal along the Z-axis.
 
 ## Visuals
 Produces soccer-ball-like symmetries, icosahedral viruses, and crystalline stars.
@@ -409,20 +411,20 @@ Creates distorted, stretching shapes that look like pulling taffy or molten glas
         parentId: 'formula.active',
         content: `
 ## The Math
-Based on the "Buffalo" variation of the Mandelbrot set: $z_{n+1} = |z_n|^2 + c$.
-In 3D, we apply the absolute value to coordinates *before* the rotation/power step.
-Also includes a Menger-style scaling step to add structural holes.
+The Buffalo fractal — a Mandelbulb variant with **selective per-axis absolute value folding**. Ported from Mandelbulber via 3Dickulus, based on the original by youhn @ fractalforums.com.
+
+The signature feature is choosing which axes get abs() applied before and after the power iteration. The default (abs on Y+Z post-iteration) creates the distinctive "buffalo horn" shape.
 
 **Reference:** [Wikipedia: Burning Ship Fractal](https://en.wikipedia.org/wiki/Burning_Ship_fractal) (Mathematical cousin)
 
 ## Parameters
-- **Param A (Power)**: The exponent of the bulb function.
-- **Param B (Fold Scale)**: Strength of the Menger-style scaling (cuts holes).
-- **Param C (Rot X)**: Internal rotation.
-- **Param D (Rot Z)**: Internal rotation.
+- **Param A (Power)**: The Mandelbulb exponent. Default 2 for the classic Buffalo shape.
+- **Abs After Power (Vec3A)**: Per-axis absolute value toggles AFTER the power iteration (0=off, 1=on). Default: Y=1, Z=1 for the signature buffalo shape.
+- **Abs Before Power (Vec3B)**: Per-axis absolute value toggles BEFORE the power iteration (0=off, 1=on). Default: all off.
+- **Rotation (Vec3C)**: 3D rotation using direction + angle (Rodrigues formula).
 
 ## Visuals
-Similar to the Mandelbulb but with a "furry" or "plate-like" texture due to the absolute value folds.
+With default post-abs Y+Z: creates the distinctive buffalo/horn shape. Try different abs combinations for varied symmetries. All axes on = classic Burning Ship style.
 `
     },
     'formula.mixpinski': {
@@ -432,20 +434,57 @@ Similar to the Mandelbulb but with a "furry" or "plate-like" texture due to the 
         parentId: 'formula.active',
         content: `
 ## The Math
-A variant of the Sierpinski Tetrahedron (Tetrahedral symmetry).
-It mixes the folding logic of a Sierpinski with an Analytic inversion and rotation.
+A faithful port of **Darkbeam's** 4D Sierpinski-Menger hybrid from Fragmentarium. Alternates between two folding systems in 4D:
+1. **Sierpinski folds**: 6 axis-pair reflections in 4D $(x+y, x+z, y+z, x+w, y+w, z+w)$, then uniform scale + offset.
+2. **Menger folds**: Axis-aligned scale with Z abs-fold, creating the characteristic rectangular holes.
+
+**Credits:** Original by **Darkbeam** (Fragmentarium).
+
+## Parameters
+- **Param A (Sierpinski Scale)**: Scale for the Sierpinski phase.
+- **Param C (Menger Scale)**: Scale for the Menger phase.
+- **Param B (W 4th Dim)**: Initial 4th dimension coordinate (w-component).
+- **Sierpinski Offset (Vec3A)**: XYZ offset for the Sierpinski phase.
+- **Menger Offset (Vec3B)**: XYZ offset for the Menger phase.
+- **4D Offsets (Vec2A)**: X = Sierpinski W offset, Y = Menger W offset.
+- **Rotation (Vec3C)**: 3D rotation (Rodrigues formula).
+
+## Distance Estimator
+Uses a custom 4D Chebyshev norm: $r = \\max(|x|, |y|, |z|, |w|)$, then $(r-1)/|dr|$.
+
+## Visuals
+Creates complex hybrid structures mixing tetrahedral and cubic symmetries — mechanical lattices, alien cityscapes, and intricate geometric patterns.
+`
+    },
+    'formula.sierpinskitetrahedron': {
+        id: 'formula.sierpinskitetrahedron',
+        category: 'Formulas',
+        title: 'Sierpinski Tetrahedron',
+        parentId: 'formula.active',
+        content: `
+## The Math
+The classic Sierpinski Tetrahedron (Tetrix) — a 3D IFS fractal built from reflective folds across tetrahedron face planes.
+Each iteration applies 3 fold operations:
+1. If $x + y < 0$: swap and negate $x, y$
+2. If $x + z < 0$: swap and negate $x, z$
+3. If $y + z < 0$: swap and negate $y, z$
+
+Then scales and offsets the result.
 
 **Reference:** [Wikipedia: Sierpinski Triangle (Higher Dimensions)](https://en.wikipedia.org/wiki/Sierpi%C5%84ski_triangle#Analogs_in_higher_dimensions)
 
 ## Parameters
-- **Param A (Scale)**: Recursive scaling factor (usually 2.0).
+- **Scale (Vec3C)**: Per-axis scale factor with linkable toggle for uniform scaling. Default 2.0.
 - **Param B (Offset)**: Separation of child tetrahedrons.
-- **Param C (Rotation)**: Spins the child elements.
-- **Param D/E (Shift)**: Offsets the structure in Z/Y.
-- **Param F (Twist)**: Twists the entire structure.
+- **Rotation (Vec3B)**: 3D rotation using direction + angle (Rodrigues formula). Pre-calculated for performance.
+- **Shift (Vec3A)**: Linear offset in X/Y/Z.
+- **Param F (Twist)**: Z-axis twist.
+
+## Distance Estimator
+Uses Linear (Unit 1.0) estimator: $(r-1)/dr$, correct for IFS with default scale 2 and offset 1.
 
 ## Visuals
-Creates "Greeble" surfaces—patterns that look like highly detailed mechanical plating or cityscapes from a bird's eye view.
+Creates "Greeble" surfaces — patterns that look like highly detailed mechanical plating or cityscapes from a bird's eye view.
 `
     },
     'formula.amazingsurf': {
@@ -523,19 +562,19 @@ Capable of generating "impossible geometry", piping systems, and Escher-like arc
         parentId: 'formula.active',
         content: `
 ## The Math
-A specific algebraic variation of the Mandelbulb math.
-Instead of standard spherical conversion, it uses a unique coordinate mixing strategy:
-$y' = y \cdot (2x - z)$
-$z' = z \cdot (2x + y)$
+A custom 3D polynomial fractal. No folding or spherical conversion — the asymmetric cross-terms between axes create sharp crystalline edges mixed with smooth bulb regions.
+$$x' = x^2 - y^2 - z^2$$
+$$y' = y(2x - z)$$
+$$z' = z(2x + y)$$
 
 **Credits:** Discovered by **Bristor** (Fractal Forums).
 
 ## Parameters
-- **Param A (Scale)**: Overall size.
-- **Param B (Offset)**: Linear offset.
-- **Param C/D (Rotation)**: Coordinate rotation.
-- **Param E (Shift X)**: X-axis shift.
-- **Param F (Twist)**: Z-axis twist.
+- **Param A (Scale)**: Overall size multiplier.
+- **Param B (Offset)**: Y-axis linear offset.
+- **Rotation (Vec3A)**: 3D rotation with direction + angle (rotation mode). Pre-calculated sin/cos.
+- **Param C (Shift X)**: X-axis shift.
+- **Param D (Twist)**: Z-axis twist.
 
 ## Visuals
 Produces bulbous but distorted shapes, often with large smooth areas contrasted by sharp, bristly details (hence the name).
@@ -548,17 +587,16 @@ Produces bulbous but distorted shapes, often with large smooth areas contrasted 
         parentId: 'formula.active',
         content: `
 ## The Math
-Another analytic variation discovered by a fractal forum user named **Makin**.
-It uses a variation of the triplex multiplication found in the Mandelbulb but swaps axis dependencies.
-
-**Credits:** Discovered by **Makin** (Fractal Forums).
+A custom 3D polynomial discovered by **Makin** (Fractal Forums). Uses a variation of the triplex multiplication:
+$$x' = x^2 - y^2 - z^2$$
+$$y' = 2xy$$
+$$z' = 2z(x - y)$$
 
 ## Parameters
-- **Param A (Scale)**: Zoom/Scale of the object.
-- **Param B (Offset)**: Offset vector size.
-- **Param C/D (Rotation)**: Rotates the system.
-- **Param E (Shift Y)**: Shifts the fractal vertically.
-- **Param F (Twist)**: Twists the fractal.
+- **Param A (Scale)**: Size multiplier.
+- **Rotation (Vec3B)**: 3D rotation using direction + angle (Rodrigues formula). Pre-calculated for performance.
+- **Shift (Vec3A)**: Linear offset in X/Y/Z.
+- **Param F (Twist)**: Z-axis twist.
 
 ## Visuals
 Known for creating "Pagoda" shapes and deeply stacked, ornate structures.

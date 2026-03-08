@@ -15,17 +15,23 @@ export const Tetrabrot: FractalDefinition = {
 
     void formula_Tetrabrot(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         
-        // Rotations E and F
-        float angE = uParamE;
-        if (abs(angE) > 0.001) {
-            float s = sin(angE); float co = cos(angE);
+        // Rotations via vec3A (Z, X, Y axes)
+        float angZ = uVec3A.x;
+        if (abs(angZ) > 0.001) {
+            float s = sin(angZ); float co = cos(angZ);
             z.xy = mat2(co, -s, s, co) * z.xy;
         }
-        
-        float angF = uParamF;
-        if (abs(angF) > 0.001) {
-            float s = sin(angF); float co = cos(angF);
+
+        float angX = uVec3A.y;
+        if (abs(angX) > 0.001) {
+            float s = sin(angX); float co = cos(angX);
             z.yz = mat2(co, -s, s, co) * z.yz;
+        }
+
+        float angY = uVec3A.z;
+        if (abs(angY) > 0.001) {
+            float s = sin(angY); float co = cos(angY);
+            z.xz = mat2(co, -s, s, co) * z.xz;
         }
 
         // Fix: Chain rule +1.0
@@ -39,15 +45,13 @@ export const Tetrabrot: FractalDefinition = {
     parameters: [
         { label: 'Julia C (W)', id: 'paramA', min: -1.0, max: 1.0, step: 0.001, default: -0.2 },
         { label: 'Slice W', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: 0.0 },
-        { label: 'Rot Z', id: 'paramE', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot X', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        null, null
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0, z: 0.0 }, mode: 'axes' },
     ],
 
     defaultPreset: {
         formula: "Tetrabrot",
         features: {
-            coreMath: { iterations: 28, paramA: 0.186, paramB: 0, paramC: 0, paramD: 0, paramE: 0, paramF: 0 },
+            coreMath: { iterations: 28, paramA: 0.186, paramB: 0, vec3A: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 5, // Normal
                 repeats: 1, phase: 0.87, scale: 1, offset: 0.87, bias: 1, twist: 0, escape: 4,

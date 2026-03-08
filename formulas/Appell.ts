@@ -4,8 +4,8 @@ import { FractalDefinition } from '../types';
 export const Appell: FractalDefinition = {
     id: 'Appell',
     name: 'Appell Spectral (Ghost)',
-    shortDescription: 'Based on Appell Polynomials and Clifford Analysis. Renders the "Hidden Skeleton" of 3D numbers.',
-    description: 'Implements the "Pseudo-Square" $P_2(x) = x^2 - k|x|^2$. This iteration destabilizes the surface, revealing a skeletal, interference-like structure. Best viewed as a volumetric cloud.',
+    shortDescription: 'Simplified Appell polynomial iteration. Renders skeletal, interference-like structures.',
+    description: 'Implements a simplified Appell polynomial: P(x) = x^n - k|x|^2, where the non-conformal subtraction destabilizes the surface, revealing skeletal interference patterns. The "Interference" parameter k controls how much structure is stripped away. Best viewed as a volumetric cloud.',
     
     shader: {
         function: `

@@ -68,8 +68,8 @@ export const MandelMap: FractalDefinition = {
 
     void formula_MandelMap(inout vec4 z, inout float dr, inout float trap, inout vec4 c) {
         float power = uParamA;
-        float thetaPhase = uParamE;
-        float phiPhase = uParamF;
+        float thetaPhase = uVec2A.x;
+        float phiPhase = uVec2A.y;
 
         // Run transform only on the first iteration
         if (dr == 1.0) {
@@ -138,8 +138,7 @@ export const MandelMap: FractalDefinition = {
             { label: 'Cylindrical', value: 1.0 },
             { label: 'Toroidal', value: 2.0 }
         ]},
-        { label: 'Theta Phase', id: 'paramE', min: -3.14, max: 3.14, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Phi Phase', id: 'paramF', min: -6.28, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 } },
     ],
 
     defaultPreset: {
@@ -153,8 +152,7 @@ export const MandelMap: FractalDefinition = {
       "paramB": 1.61,
       "paramC": 1,
       "paramD": 0,
-      "paramE": 0,
-      "paramF": 0
+      "vec2A": { "x": 0, "y": 0 }
     },
     "geometry": {
       "applyTransformLogic": true,

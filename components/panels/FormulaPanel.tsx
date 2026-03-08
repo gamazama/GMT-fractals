@@ -30,7 +30,7 @@ interface FormulaParam {
     scale?: 'linear' | 'log' | 'pi'; // Add scale to local interface
     options?: { label: string; value: number }[];
     type?: 'float' | 'vec2' | 'vec3';
-    mode?: 'rotation' | 'normal'; // For vec3: rotation mode uses A/P/∠, normal uses X/Y/Z
+    mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'normal'; // For vec3: rotation = Rodrigues (A/P/∠), direction = azimuth/pitch, axes = per-axis angles, toggle = bool on/off, normal = X/Y/Z
     linkable?: boolean; // For vec3/vec2: enable axis linking for uniform scale
 }
 
@@ -250,22 +250,27 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
           const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`];
           const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`];
           
-          // Use explicit mode prop for rotation, fallback to label detection for backwards compatibility
-          const isRotation = p.mode === 'rotation' ||
-                           (/\brot(ation|ate)?\b/i.test(p.label) && p.mode !== 'normal');
-          
+          // Pass mode directly from formula definition — no auto-detection
+          const vecMode = p.mode || 'normal';
+          const isAngleMode = vecMode === 'rotation' || vecMode === 'direction' || vecMode === 'axes';
+          const rotTrackLabels: Record<string, string[]> = {
+              rotation: ['Azimuth', 'Pitch', 'Angle'],
+              direction: ['Azimuth', 'Pitch', 'Length'],
+              axes: [`${p.label} X`, `${p.label} Y`, `${p.label} Z`],
+          };
+
           return (
               <div key={p.id} className="mb-px">
                   <Vector3Input
                       label={p.label}
                       value={vec}
-                      min={isRotation ? -Math.PI * 2 : p.min}
-                      max={isRotation ? Math.PI * 2 : p.max}
+                      min={isAngleMode ? -Math.PI * 2 : p.min}
+                      max={isAngleMode ? Math.PI * 2 : p.max}
                       step={p.step}
                       onChange={p.set}
                       trackKeys={trackKeys}
-                      trackLabels={isRotation ? ['Azimuth', 'Pitch', 'Angle'] : trackLabels}
-                      mode={isRotation ? 'rotation' : 'normal'}
+                      trackLabels={isAngleMode ? (rotTrackLabels[vecMode] || trackLabels) : trackLabels}
+                      mode={vecMode === 'axes' ? 'normal' : vecMode as any}
                       defaultValue={p.def ? new THREE.Vector3((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0) : undefined}
                       linkable={p.linkable}
                   />
@@ -278,14 +283,16 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
           const v2 = p.val as { x: number; y: number };
           return (
               <div key={p.id} className="mb-2">
-                  <Vector2Input 
-                      label={p.label} 
-                      value={new THREE.Vector2(v2.x, v2.y)} 
-                      min={p.min} 
-                      max={p.max} 
-                      onChange={(v) => p.set({ x: v.x, y: v.y })} 
+                  <Vector2Input
+                      label={p.label}
+                      value={new THREE.Vector2(v2.x, v2.y)}
+                      min={p.min}
+                      max={p.max}
+                      step={p.step}
+                      onChange={(v) => p.set({ x: v.x, y: v.y })}
                       defaultValue={p.def ? new THREE.Vector2((p.def as any).x ?? 0, (p.def as any).y ?? 0) : undefined}
                       linkable={p.linkable}
+                      mode={p.mode}
                   />
               </div>
           );
@@ -354,13 +361,51 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
         <div className="border-t border-white/5 mt-2 pt-2" data-help-id="formula.transform">
             <div className="bg-gray-800/10">
                 <AutoFeaturePanel featureId="geometry" groupFilter="transform" />
+                {state.geometry.preRotEnabled && state.geometry.preRotMaster && (
+                    <div className="mb-px pl-3">
+                        <Vector3Input
+                            label="Local Rotation"
+                            value={new THREE.Vector3(state.geometry.preRotX, state.geometry.preRotY, state.geometry.preRotZ)}
+                            min={-Math.PI}
+                            max={Math.PI}
+                            step={0.01}
+                            onChange={(v) => {
+                                const v3 = v as THREE.Vector3;
+                                actions.setGeometry({ preRotX: v3.x, preRotY: v3.y, preRotZ: v3.z });
+                                recordUpdates('geometry', { preRotX: v3.x, preRotY: v3.y, preRotZ: v3.z });
+                            }}
+                            mode="rotation"
+                            trackKeys={['geometry.preRotX', 'geometry.preRotY', 'geometry.preRotZ']}
+                            trackLabels={['Spin X', 'Spin Y', 'Spin Z']}
+                            defaultValue={new THREE.Vector3(0, 0, 0)}
+                        />
+                    </div>
+                )}
             </div>
        </div>
 
        <div className="border-t border-white/5" data-help-id="julia.mode">
            <div className="bg-gray-800/10">
               <AutoFeaturePanel featureId="geometry" groupFilter="julia" />
-              <AutoFeaturePanel featureId="geometry" groupFilter="julia_params" />
+              {state.geometry.juliaMode && (
+                  <div className="mb-px">
+                      <Vector3Input
+                          label="Julia Coordinate"
+                          value={new THREE.Vector3(state.geometry.juliaX, state.geometry.juliaY, state.geometry.juliaZ)}
+                          min={-2.0}
+                          max={2.0}
+                          step={0.01}
+                          onChange={(v) => {
+                              const v3 = v as THREE.Vector3;
+                              actions.setGeometry({ juliaX: v3.x, juliaY: v3.y, juliaZ: v3.z });
+                              recordUpdates('geometry', { juliaX: v3.x, juliaY: v3.y, juliaZ: v3.z });
+                          }}
+                          trackKeys={['geometry.juliaX', 'geometry.juliaY', 'geometry.juliaZ']}
+                          trackLabels={['Julia X', 'Julia Y', 'Julia Z']}
+                          defaultValue={new THREE.Vector3(0, 0, 0)}
+                      />
+                  </div>
+              )}
            </div>
        </div>
        
