@@ -13,7 +13,7 @@ The GMT documentation is organized into several complementary systems:
 1. **Technical Documentation** (this folder): Detailed architecture, rendering, and implementation guides
 2. **In-App Help System** (`data/help/`): User-facing documentation accessible from the application
 3. **README.md**: Project overview, quick start, and high-level documentation
-4. **Context Files** (`context.md`, `context2.md`): Condensed architecture overviews for AI sessions
+4. **CLAUDE.md**: Condensed architecture overview and instructions for AI sessions
 
 ## 📖 Technical Documentation - Table of Contents
 
@@ -21,7 +21,7 @@ The GMT documentation is organized into several complementary systems:
 | File | Purpose | Key Topics |
 |------|---------|-------------|
 | [01_System_Architecture.md](01_System_Architecture.md) | **Foundation** | Engine-Bridge pattern, DDFS, render loop, state management |
-| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, path tracing, precision math, accumulation, bucket rendering (4K-10K support) |
+| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, Cook-Torrance PBR, reflection tracing, path tracing, fog system, precision math, accumulation, bucket rendering |
 | [03_Modular_System.md](03_Modular_System.md) | **Node Graph** | Graph compiler, JIT GLSL generation, uniform flattening |
 | [04_Animation_Engine.md](04_Animation_Engine.md) | **Timeline** | Keyframes, interpolation, unified camera, offline rendering |
 | [05_Data_and_Export.md](05_Data_and_Export.md) | **I/O System** | Video export, presets, GMF format, storage strategies |
@@ -29,24 +29,20 @@ The GMT documentation is organized into several complementary systems:
 | [07_Code_Health.md](07_Code_Health.md) | **Maintenance** | Technical debt, refactor status, optimization opportunities |
 | [08_File_Structure.md](08_File_Structure.md) | **Reference** | Complete file map with responsibilities |
 
-### Specialized Reports
+### Fragmentarium Importer & Formulas
 | File | Purpose |
 |------|---------|
-| [09_Mapping_Modes_Report.md](09_Mapping_Modes_Report.md) | Analysis of coloring mapping modes |
-| [10_Shader_Architecture_Refactor.md](10_Shader_Architecture_Refactor.md) | Shader composition and injection patterns |
-| [11_Fragmentarium_Conversion.md](11_Fragmentarium_Conversion.md) | Converting Fragmentarium .frag files to GMF format |
-
-### Fragmentarium Importer System
-| File | Purpose |
-|------|---------|
-| [12_Vector_Uniform_Requirements.md](12_Vector_Uniform_Requirements.md) | Vec2/Vec3 uniform requirements for formula params |
-| [14_Fragmentarium_Examples_Analysis.md](14_Fragmentarium_Examples_Analysis.md) | Catalog of 100+ formula patterns |
-| [19_GLSL_Parser_Integration_Summary.md](19_GLSL_Parser_Integration_Summary.md) | Parser integration guide (shaderfrog/glsl-parser) |
-| [20_Fragmentarium_Importer_Formula_Analysis.md](20_Fragmentarium_Importer_Formula_Analysis.md) | Formula-level analysis for V2 transformation |
-| [20_Fragmentarium_Importer_V2.md](20_Fragmentarium_Importer_V2.md) | V2 AST-based implementation reference |
 | [21_Frag_Importer_Current_Status.md](21_Frag_Importer_Current_Status.md) | **⚠️ START HERE — current status and known issues** |
 | [22_Frag_to_Native_Formula_Conversion.md](22_Frag_to_Native_Formula_Conversion.md) | Guide: converting .frag formulas to native GMT .ts formulas |
 | [23_Formula_Audit.md](23_Formula_Audit.md) | Formula correctness audit: naming, descriptions, params, DE |
+
+### Archive
+Historical design docs, completed reports, and superseded references are in [`docs/archive/`](archive/).
+
+### Changelog
+| File | Purpose |
+|------|---------|
+| [CHANGELOG_DEV.md](CHANGELOG_DEV.md) | Development changelog for current dev branch (v0.8.9) |
 
 ## 🚀 Getting Started
 
@@ -86,7 +82,7 @@ The GMT documentation is organized into several complementary systems:
 | Store & State | `store/fractalStore.ts` |
 | Shader Assembly | `engine/ShaderFactory.ts` |
 | Animation Timeline | `engine/AnimationEngine.ts` |
-| Video Export | `engine/VideoExporter.ts` |
+| Video Export | `engine/worker/WorkerExporter.ts` |
 | Auto-Generated UI | `components/AutoFeaturePanel.tsx` |
 
 ### User Documentation
@@ -104,7 +100,7 @@ The in-app help system is located in `data/help/`. Topics include:
 1. **Start with the README** for project overview and quick start
 2. **Use the Table of Contents** to find relevant technical guides
 3. **Follow cross-references** between different documentation types
-4. **Check context files** for AI session overviews
+4. **Check CLAUDE.md** for AI session context
 
 ### Updating Documentation
 When making changes to GMT:
@@ -170,7 +166,7 @@ When making changes to GMT:
 | Category | Change | Files |
 |----------|--------|-------|
 | **Video Export** | Bitrate auto-scales with resolution (40 Mbps base for 1080p) | `data/constants.ts`, `components/timeline/RenderPopup.tsx` |
-| **Video Export** | Viewport state restoration after render | `engine/VideoExporter.ts` |
+| **Video Export** | Viewport state restoration after render | `engine/worker/WorkerExporter.ts` |
 | **Sliders** | Removed log scaling from roughness, AO intensity, AO spread | `features/materials.ts`, `features/ao/index.ts` |
 | **Sliders** | Increased precision (min 0.001, step 0.001) for roughness and AO spread | `features/materials.ts`, `features/ao/index.ts` |
 | **Graph Editor** | Fixed browser drag-to-copy interference | `components/panels/flow/FlowEditor.tsx` |

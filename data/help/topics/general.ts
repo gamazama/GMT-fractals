@@ -62,6 +62,9 @@ Tracks keyframes, tracks, and sequence data.
 - **Tab**: Toggle between Orbit and Fly Mode
 - **T**: Toggle Timeline Panel
 - **H**: Toggle UI Hints (Tooltip overlay)
+- **\` (Backtick)**: Toggle Advanced Mode (show/hide advanced controls)
+- **B**: Toggle Broadcast Mode (clean feed — hides all UI overlays)
+- **Space** (non-fly mode): Play / Pause animation
 - **Esc**: Cancel Focus Picking / Close Menus / Deselect
 `
     },

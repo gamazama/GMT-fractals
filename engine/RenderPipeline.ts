@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { engine } from './FractalEngine';
 import { Uniforms } from './UniformNames';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
 import { QualityState } from '../features/quality';
@@ -95,6 +94,28 @@ export class RenderPipeline {
     public getPreviousRenderTarget(): THREE.WebGLRenderTarget | null {
         // Inverted logic: when writeIndex=0, the last written target is B (not A)
         return this.writeIndex === 0 ? this.mrtTargetB : this.mrtTargetA;
+    }
+
+    // Tiny 1x1 render target for compile-time program hash matching.
+    // Shares the same float type / format as the real MRT targets so Three.js
+    // generates identical program params, but is a separate FBO so compileAsync
+    // doesn't interfere with the live render loop.
+    private _compileTarget: THREE.WebGLRenderTarget | null = null;
+
+    /** Get a render target for compile-time context (so Three.js generates matching program params) */
+    public getCompileTarget(): THREE.WebGLRenderTarget | null {
+        if (!this._compileTarget && this.mrtTargetA) {
+            this._compileTarget = new THREE.WebGLRenderTarget(1, 1, {
+                minFilter: THREE.NearestFilter,
+                magFilter: THREE.NearestFilter,
+                stencilBuffer: false,
+                depthBuffer: false,
+                generateMipmaps: false,
+                format: THREE.RGBAFormat,
+                type: this.mrtTargetA.texture.type
+            });
+        }
+        return this._compileTarget;
     }
     
     /**
@@ -262,22 +283,19 @@ export class RenderPipeline {
      * Clear both render targets to prevent bucket bleeding.
      * Called by BucketRenderer when switching between buckets.
      */
-    public clearTargets() {
-        // We need a renderer to clear - check if engine has one
-        if (!engine.renderer) return;
-        
-        const currentTarget = engine.renderer.getRenderTarget();
-        
+    public clearTargets(renderer: THREE.WebGLRenderer) {
+        const currentTarget = renderer.getRenderTarget();
+
         if (this.mrtTargetA) {
-            engine.renderer.setRenderTarget(this.mrtTargetA);
-            engine.renderer.clear();
+            renderer.setRenderTarget(this.mrtTargetA);
+            renderer.clear();
         }
         if (this.mrtTargetB) {
-            engine.renderer.setRenderTarget(this.mrtTargetB);
-            engine.renderer.clear();
+            renderer.setRenderTarget(this.mrtTargetB);
+            renderer.clear();
         }
-        
-        engine.renderer.setRenderTarget(currentTarget);
+
+        renderer.setRenderTarget(currentTarget);
     }
     
     public setHold(hold: boolean) {
@@ -332,7 +350,7 @@ export class RenderPipeline {
         return maxDelta;
     }
 
-    public render(renderer: THREE.WebGLRenderer) {
+    public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
         if (this.isHolding) return;
 
@@ -345,36 +363,40 @@ export class RenderPipeline {
         }
 
         const accumEnabled = this._accumulationEnabled;
-        
+
         if (!accumEnabled) {
             this.accumulationCount = 1;
         } else {
             if (this.accumulationCount === 0) this.accumulationCount = 1;
             else this.accumulationCount++;
         }
-        
+
         const blend = 1.0 / this.accumulationCount;
-        
+
         // Determine write/read targets (double-buffering)
         const writeTarget = this.writeIndex === 0 ? this.mrtTargetA : this.mrtTargetB;
         const readTarget = this.writeIndex === 0 ? this.mrtTargetB : this.mrtTargetA;
-        
+
         // Set uniforms for temporal blending
-        engine.mainUniforms[Uniforms.BlendFactor].value = blend;
-        engine.mainUniforms[Uniforms.HistoryTexture].value = readTarget.texture; // Previous frame's color
-        engine.mainUniforms[Uniforms.ExtraSeed].value = Math.random() * 100.0;
-        
+        if (uniforms) {
+            uniforms[Uniforms.BlendFactor].value = blend;
+            uniforms[Uniforms.HistoryTexture].value = readTarget.texture;
+            uniforms[Uniforms.ExtraSeed].value = Math.random() * 100.0;
+        }
+
         const currentTarget = renderer.getRenderTarget();
-        
+
         // SINGLE render to MRT - outputs both color (location 0) and depth (location 1)
         renderer.setRenderTarget(writeTarget);
-        renderer.render(engine.mainScene, engine.mainCamera);
-        
+        if (scene && camera) {
+            renderer.render(scene, camera);
+        }
+
         renderer.setRenderTarget(currentTarget);
-        
+
         // Swap buffers for next frame
         this.writeIndex = 1 - this.writeIndex;
-        
+
         this.frameCount++;
 
         if (this.sampleCap > 0 && this.accumulationCount === this.sampleCap) {

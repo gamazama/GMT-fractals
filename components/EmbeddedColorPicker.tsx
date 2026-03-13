@@ -179,7 +179,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({ color, onColo
                 onContextMenu={handleStripAction}
                 title="Color Actions & History (Right Click)"
             >
-                <div className="absolute inset-0 flex items-center justify-center -rotate-90 whitespace-nowrap text-[10px] font-mono font-bold mix-blend-difference text-white tracking-[0.25em] uppercase opacity-80 group-hover/picker:opacity-100 transition-opacity pl-[0.25em]">
+                <div className="absolute inset-0 flex items-center justify-center -rotate-90 whitespace-nowrap text-[10px] font-mono font-bold mix-blend-difference text-white opacity-80 group-hover/picker:opacity-100 transition-opacity">
                     {color}
                 </div>
             </div>

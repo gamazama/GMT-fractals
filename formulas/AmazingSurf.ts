@@ -16,8 +16,8 @@ export const AmazingSurf: FractalDefinition = {
         z3 = clamp(z3, -limit, limit) * 2.0 - z3;
         float r2 = max(dot(z3,z3), 1e-10);
         float mR2 = max(uParamB * uParamB, 1e-10);
-        if (r2 < mR2) { z3 *= (1.0/mR2); dr *= (1.0/mR2); }
-        else if (r2 < 1.0) { z3 *= (1.0/r2); dr *= (1.0/r2); }
+        float sphereK = clamp(1.0 / r2, 1.0, 1.0 / mR2);
+        z3 *= sphereK; dr *= sphereK;
         z3 = z3 * uParamA + c.xyz;
         
         // Param X: Wave Twist

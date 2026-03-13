@@ -55,7 +55,8 @@ const BASE_SCHEMA: UniformDefinition[] = [
 
     // Optimizations (Shared by Geometry & Lighting)
     { name: Uniforms.PreRotMatrix, type: 'mat3', default: new THREE.Matrix3() },
-    { name: Uniforms.EnvRotationMatrix, type: 'mat2', default: [1, 0, 0, 1] }, 
+    { name: Uniforms.EnvRotationMatrix, type: 'mat2', default: [1, 0, 0, 1] },
+    { name: Uniforms.FogColorLinear, type: 'vec3', default: new THREE.Vector3(0, 0, 0), comment: 'CPU: InverseACESFilm(uFogColor)' },
 ];
 
 const featureUniforms = featureRegistry.getUniformDefinitions();

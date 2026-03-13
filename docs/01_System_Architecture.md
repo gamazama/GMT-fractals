@@ -57,7 +57,63 @@ The `FractalEngine` class acts as the conductor.
     *   If **Moving**: Renders a single fast frame.
 4.  **Post-Process:** Passes the result through Tone Mapping (ACES) and Gamma Correction.
 
-## 4. State Management
+## 4. Web Worker Render Architecture
+
+GMT renders entirely on a Web Worker using OffscreenCanvas. The main thread handles React UI and R3F overlay (light gizmos); the worker owns the GPU.
+
+### 4.1 Architecture Overview
+
+```
+Main Thread                          Worker Thread
+┌──────────────────┐                ┌──────────────────────┐
+│ React UI (Zustand)│                │ FractalEngine         │
+│ EngineBridge      │──RENDER_TICK──▶│ MaterialController    │
+│ WorkerTickScene   │                │ RenderPipeline        │
+│ Navigation (cam)  │                │ OffscreenCanvas (GPU) │
+│ R3F (gizmos)      │◀──BOOTED,etc──│ BucketRenderer        │
+│ WorkerProxy       │                │ WorkerExporter        │
+└──────────────────┘                └──────────────────────┘
+```
+
+- **WorkerProxy** (`engine/worker/WorkerProxy.ts`): Worker-only proxy. Main thread calls `proxy.post(msg)` to send messages. No direct engine access from main thread.
+- **State flow**: Zustand → EngineBridge → RENDER_TICK message → worker's `FractalEngine`. No `setRenderState` calls; all state goes via messages.
+- **OffscreenCanvas**: Auto-presenting — the browser composites directly from the worker's canvas. No `transferToImageBitmap()` (which caused 26ms GPU stalls).
+- **Depth readback**: PBO async readback avoids `glFinish()`. Frame order: compute → blit+flush → PBO work.
+
+### 4.2 Worker Protocols
+
+| Protocol | Messages | Purpose |
+|----------|----------|---------|
+| Boot | `BOOTED` | Worker reports GPU info, ready state |
+| Render | `RENDER_TICK` | Per-frame state snapshot (camera, params) |
+| Bucket | `BUCKET_START/STOP/STATUS/IMAGE` | Tiled high-res rendering |
+| Video | `VIDEO_START/STOP/FRAME` | Offline video export |
+| Focus Pick | `FOCUS_PICK_START/SAMPLE/END` | DoF focus distance from depth buffer |
+| Histogram | `HISTOGRAM_REQUEST/RESULT` | Probe RPC for histogram data |
+| Snapshot | `SNAPSHOT_REQUEST/RESULT` | Screenshot capture |
+
+### 4.3 Worker-Mode Gotchas
+
+- `engine.renderer` is always `null` on main thread — use `engine.isBooted` for guards
+- `engine.pipeline` is not accessible — use `engine.accumulationCount` (shadow state)
+- Store offset is stale during fly mode (offset shifts go directly to worker) — prefer worker shadow state for gizmos
+- Vite config requires `worker: { format: 'es' }` for prod builds with code-splitting
+- `FileSystemWritableFileStream` is not transferable via `postMessage` — wrap in plain `WritableStream` proxy for disk-mode video export
+- `Matrix3`/`Matrix4` from worker arrive as plain `{elements: [...]}` objects (structured clone) — `MaterialController.setUniform` handles this
+
+## 5. TickRegistry (`engine/TickRegistry.ts`)
+
+The **TickRegistry** is a phase-based tick orchestrator that runs on the main thread (inside `WorkerTickScene`). It replaces ad-hoc `useFrame` hooks with a structured, deterministic update order.
+
+### Phases (executed in order each frame)
+1. **SNAPSHOT** — Capture current Zustand state for the worker's `RENDER_TICK` message
+2. **ANIMATE** — Run animation engine interpolation
+3. **OVERLAY** — Update R3F overlay elements (light gizmos, drawing tools)
+4. **UI** — Update UI-only concerns (FPS counter, histogram refresh)
+
+Systems register callbacks at a specific phase and priority. This ensures deterministic ordering — e.g., state snapshot always happens before animation updates are applied.
+
+## 6. State Management
 
 *   **Zustand:** Used for global state.
 *   **Slices:** State is divided into:

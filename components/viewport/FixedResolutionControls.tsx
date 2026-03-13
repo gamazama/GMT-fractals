@@ -170,7 +170,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
                     ref={presetMenuRef}
                     className="absolute top-8 left-0 w-32 bg-black border border-white/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
                 >
-                    <div className="px-3 py-1 text-[8px] font-bold text-gray-500 uppercase tracking-wider border-b border-white/10 mb-1">Fit to Window</div>
+                    <div className="px-3 py-1 text-[8px] font-bold text-gray-500 border-b border-white/10 mb-1">Fit to Window</div>
                     {RATIO_PRESETS.map(p => (
                         <button 
                             key={p.label}
@@ -185,7 +185,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
 
             <button 
                 onClick={(e) => { e.stopPropagation(); onSetMode('Full'); }}
-                className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md uppercase tracking-wide group"
+                className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"
                 title="Return to Fullscreen Mode"
             >
                 <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform"></span>

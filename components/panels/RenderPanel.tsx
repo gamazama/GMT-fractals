@@ -3,7 +3,6 @@ import React, { useRef } from 'react';
 import { FractalState, FractalActions } from '../../types';
 import Slider from '../Slider';
 import ToggleSwitch from '../ToggleSwitch';
-import AdvancedGradientEditor from '../../components/AdvancedGradientEditor'; 
 import { useFractalStore } from '../../store/fractalStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
@@ -32,7 +31,7 @@ const RenderPanel = ({ state, actions }: { state: FractalState, actions: Fractal
 
   return (
     <div className="animate-fade-in -mx-4 -mt-4 flex flex-col" data-help-id="panel.render">
-        
+
         {/* --- SURFACE MATERIALS --- */}
         <div className="flex flex-col" data-help-id="mat.diffuse">
              <AutoFeaturePanel featureId="materials" groupFilter="surface" />
@@ -42,9 +41,13 @@ const RenderPanel = ({ state, actions }: { state: FractalState, actions: Fractal
         <div className="flex flex-col" data-help-id="mat.env">
              <AutoFeaturePanel featureId="materials" groupFilter="env" />
         </div>
-        
+
+        {/* Rounded divider */}
+        <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
+        <div className="h-1" />
+
         {/* --- REFLECTIONS --- */}
-        <div className="flex flex-col border-t border-white/5" data-help-id="mat.reflection">
+        <div className="flex flex-col" data-help-id="mat.reflection">
              <AutoFeaturePanel featureId="reflections" groupFilter="shading" />
         </div>
 
@@ -52,15 +55,18 @@ const RenderPanel = ({ state, actions }: { state: FractalState, actions: Fractal
         <div className="flex flex-col" data-help-id="mat.glow">
             <AutoFeaturePanel featureId="atmosphere" groupFilter="glow" />
         </div>
-        
+
         {/* --- SELF ILLUMINATION (EMISSION) --- */}
         <div className="flex flex-col" data-help-id="mat.emission">
             <AutoFeaturePanel featureId="materials" groupFilter="emission" />
         </div>
 
+        {/* Rounded divider */}
+        <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
+        <div className="h-1" />
+
         {/* --- AO (NEW FEATURE SLICE) --- */}
-        <div className="flex flex-col border-t border-white/5" data-help-id="mat.ao">
-             {/* Only show 'shading' group (Intensity, Spread). Samples/Mode are in Engine Panel. */}
+        <div className="flex flex-col" data-help-id="mat.ao">
              <AutoFeaturePanel featureId="ao" groupFilter="shading" />
         </div>
     </div>

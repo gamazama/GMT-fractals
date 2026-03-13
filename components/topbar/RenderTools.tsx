@@ -5,9 +5,11 @@ import { useAnimationStore } from '../../store/animationStore';
 import { LayersIcon, PathTraceIcon, CropIcon, CloseRegionIcon, RenderGridIcon, CheckIcon, PlayIcon, PauseIcon } from '../Icons';
 import FpsCounter from './FpsCounter';
 import BucketRenderSettingsPopup from './BucketRenderControls';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FractalEvents } from '../../engine/FractalEvents';
 import Slider, { DraggableNumber } from '../Slider';
+import { Popover } from '../../components/Popover';
 import { LightingState } from '../../features/lighting';
 
 export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void }> = ({ isMobileMode, vibrate }) => {
@@ -114,25 +116,21 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
     return (
         <div className="flex items-center gap-6">
             <div className="flex flex-col leading-none relative">
-                <span className="text-xl font-black tracking-tighter text-white">G<span className="text-cyan-400">M</span>T</span>
+                <span className="text-xl font-bold tracking-tighter text-white">G<span className="text-cyan-400">M</span>T</span>
                 
                 <button 
                     onClick={() => setIsRenaming(true)}
-                    className="text-[8px] font-mono text-gray-500 uppercase tracking-[0.2em] hover:text-cyan-300 transition-colors text-left truncate max-w-[120px]"
+                    className="text-[8px] font-mono text-gray-500 hover:text-cyan-300 transition-colors text-left truncate max-w-[120px]"
                     title="Click to Rename Project"
                 >
                     {state.projectSettings.name}
                 </button>
                 
                 {isRenaming && (
-                    <div 
-                        ref={renameRef}
-                        className="absolute top-full left-0 mt-2 w-48 bg-black border border-white/20 rounded-lg p-3 shadow-2xl z-[100] animate-fade-in origin-top-left"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                    <Popover width="w-48" align="start" arrow={false} onClose={() => setIsRenaming(false)}>
                         <div className="space-y-3">
                             <div>
-                                <label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Project Name</label>
+                                <label className="text-[9px] text-gray-500 font-bold block mb-1">Project Name</label>
                                 <input 
                                     type="text" 
                                     value={tempName}
@@ -145,7 +143,7 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                             
                             <div className="flex gap-2">
                                 <div className="flex-1">
-                                    <label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Ver</label>
+                                    <label className="text-[9px] text-gray-500 font-bold block mb-1">Ver</label>
                                     <div className="h-6 bg-gray-900 border border-white/10 rounded overflow-hidden">
                                         <DraggableNumber 
                                             value={tempVersion}
@@ -165,17 +163,17 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                                 </button>
                             </div>
                         </div>
-                    </div>
+                    </Popover>
                 )}
             </div>
-            
+
             <div className="h-6 w-px bg-white/10" />
             
             <div className="flex items-center gap-2">
                 <FpsCounter />
                 
                 {isPlaying && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-900/30 border border-green-500/30 rounded text-[9px] font-bold text-green-400 uppercase tracking-wider animate-pulse">
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-900/30 border border-green-500/30 rounded text-[9px] font-bold text-green-400 animate-pulse">
                         <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                         <span>Playing</span>
                     </div>
@@ -201,10 +199,9 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                         </button>
                         
                         {showPauseMenu && (
-                             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-40 bg-black border border-white/20 rounded-xl p-2 shadow-2xl z-[70] animate-fade-in origin-top">
-                                <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-black border-t border-l border-white/20 transform rotate-45" />
+                             <Popover width="w-40">
                                 <div className="mb-1">
-                                    <Slider 
+                                    <Slider
                                         label="Auto-Stop (Samples)"
                                         value={state.sampleCap}
                                         min={0} max={4096} step={32}
@@ -215,7 +212,7 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                                         0 = Never Stop
                                     </div>
                                 </div>
-                             </div>
+                             </Popover>
                         )}
                     </div>
                 )}

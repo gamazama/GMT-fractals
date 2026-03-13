@@ -38,18 +38,15 @@ vec4 map(vec3 p) {
     float lastLength = 0.0;
     bool decompCaptured = false;
     
-    bool rotated = false; 
+    bool rotated = false;
 
     ${distOverrideInit}
     ${loopInit}
     ${hybridPreLoop}
 
-    if (uHybridProtect > 0.5 && uPreRotEnabled > 0.5) {
-         applyLocalRotation(z.xyz);
-         rotated = true;
-    }
-
     bool escaped = false;
+    // Bailout must exceed escape threshold so coloring captures the last pre-escape state.
+    // +100 buffer prevents premature bailout on slowly-escaping orbits.
     float bailout = max(100.0, uEscapeThresh + 100.0);
 
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
@@ -60,17 +57,12 @@ vec4 map(vec3 p) {
         ${hybridInLoop}
 
         if (!skipMainFormula) {
-            if (uHybridProtect < 0.5) {
-                 applyLocalRotation(z.xyz);
-            } else if (!rotated) {
-                 applyLocalRotation(z.xyz);
-                 rotated = true;
-            }
+            applyLocalRotation(z.xyz);
 
             float r2_check = dot(z.xyz, z.xyz);
 
             if (!decompCaptured && r2_check > uEscapeThresh) {
-                decomp = atan(z.y, z.x) * 0.15915494 + 0.5;
+                decomp = atan(z.y, z.x) * INV_TAU + 0.5;
                 lastLength = sqrt(r2_check);
                 decompCaptured = true;
             }
@@ -96,7 +88,7 @@ vec4 map(vec3 p) {
         g_orbitTrap = min(g_orbitTrap, abs(vec4(z.xyz, r2)));
 
         if (!decompCaptured && r2 > uEscapeThresh) {
-            decomp = atan(z.y, z.x) * 0.15915494 + 0.5;
+            decomp = atan(z.y, z.x) * INV_TAU + 0.5;
             lastLength = sqrt(r2);
             decompCaptured = true;
         }
@@ -113,7 +105,7 @@ vec4 map(vec3 p) {
     float safeDr = max(abs(dr), 1.0e-10);
 
     if (!decompCaptured) {
-        decomp = atan(z.y, z.x) * 0.15915494 + 0.5;
+        decomp = atan(z.y, z.x) * INV_TAU + 0.5;
         lastLength = r;
     }
 
@@ -124,6 +116,7 @@ vec4 map(vec3 p) {
 
     ${distOverridePostMap}
     
+    // Color mode 8 = LLI (Last Length Iteration) decomposition — needs lastLength from escape check
     bool useLLI = (abs(uColorMode - 8.0) < 0.1) || (abs(uColorMode2 - 8.0) < 0.1);
     if (uUseTexture > 0.5) {
         if (abs(uTextureModeU - 8.0) < 0.1) useLLI = true;
@@ -164,15 +157,10 @@ float mapDist(vec3 p) {
     float iter = 0.0;
     
     bool rotated = false;
-    
+
     ${distOverrideInit}
     ${loopInit}
     ${hybridPreLoop}
-
-    if (uHybridProtect > 0.5 && uPreRotEnabled > 0.5) {
-         applyLocalRotation(z.xyz);
-         rotated = true;
-    }
 
     float bailout = max(100.0, uEscapeThresh + 100.0);
 
@@ -185,12 +173,7 @@ float mapDist(vec3 p) {
         ${hybridInLoop}
 
         if (!skipMainFormula) {
-            if (uHybridProtect < 0.5) {
-                 applyLocalRotation(z.xyz);
-            } else if (!rotated) {
-                 applyLocalRotation(z.xyz);
-                 rotated = true;
-            }
+            applyLocalRotation(z.xyz);
 
             #ifndef SKIP_PRE_BAILOUT
             if (dot(z.xyz, z.xyz) > bailout) break;

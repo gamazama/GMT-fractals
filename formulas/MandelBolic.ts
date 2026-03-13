@@ -10,61 +10,42 @@ export const MandelBolic: FractalDefinition = {
         function: `
         void formula_MandelBolic(inout vec4 z, inout float dr, inout float trap, vec4 c) {
             vec3 z3 = z.xyz;
-            float r = length(z3);
-            
             float power = uParamA;
-            
+
             // Z is the 2D complex plane (x, y), T is the hyperbolic height (z)
             float rxy2 = z3.x*z3.x + z3.y*z3.y;
             float rxy = sqrt(rxy2);
-            
-            // Derivative calculation using full 3D magnitude
-            dr = power * pow(r, power - 1.0) * dr + 1.0;
-            
+
             // Ahlfors Extension multiplier: M = (|Z|^2 - T^2) / |Z|^2
             // uParamC (Conformal Shift) distorts the hyperbolic mapping
             float m = (rxy2 - uParamC * z3.z*z3.z) / (rxy2 + 1e-20);
-            
+
+            // Shared rxy^(p-1) — used by both derivative and Z mapping
+            float rxy_pm1 = pow(max(rxy, 1e-10), power - 1.0);
+            float rxy_p = rxy_pm1 * rxy;
+
+            // Derivative: account for split XY/Z Jacobian
+            // XY stretch: p * rxy^(p-1) * |m|  (conformal distortion)
+            // Z  stretch: p * rxy^(p-1) * |B|  (hyperbolic scaling)
+            // Use max for conservative bound on largest singular value
+            float stretch = power * rxy_pm1 * max(abs(m), abs(uParamB));
+            dr = stretch * dr + 1.0;
+
             // Apply the conformal 3D power with Phase Twist (uParamD)
             float theta = atan(z3.y, z3.x) * power + uParamD;
-            float rxy_p = pow(rxy, power);
-            
+
             // Z_{n+1} = Z_n^p * M + C_z
             float nx = rxy_p * cos(theta) * m + c.x;
             float ny = rxy_p * sin(theta) * m + c.y;
-            
+
             // T_{n+1} = p * |Z_n|^(p-1) * T_n + C_t
             // uParamB scales the hyperbolic height growth, uParamE adds a constant Z-offset
-            float nz = power * pow(rxy, power - 1.0) * z3.z * uParamB + c.z + uParamE;
-            
-            z3 = vec3(nx, ny, nz);
-            
-            z.xyz = z3;
-            trap = min(trap, length(z3) * uParamF);
+            float nz = power * rxy_pm1 * z3.z * uParamB + c.z + uParamE;
+
+            z.xyz = vec3(nx, ny, nz);
+            trap = min(trap, length(z.xyz) * uParamF);
         }`,
-        loopBody: `formula_MandelBolic(z, dr, trap, c);`,
-        getDist: `
-            float m2 = r * r;
-            if (m2 < 1.0e-20) return vec2(0.0, iter);
-            
-            // Log Smoothing Calculation (Shared)
-            // Guarded: Only calculate log smoothing if we have actually escaped (> 1.0)
-            float smoothIter = iter;
-            if (m2 > 1.0) {
-                float threshLog = log2(max(uEscapeThresh, 1.1));
-                smoothIter = iter + 1.0 - log2(log2(m2) / threshLog);
-            }
-            
-            float d = 0.0;
-            float dr_safe = max(abs(dr), 1.0e-20);
-            
-            // Custom distance estimator for MandelBolic
-            // Optimized for hyperbolic geometry - use log-based estimator for all regions
-            float logR2 = log2(m2);
-            d = 0.17328679 * logR2 * r / dr_safe;
-            
-            return vec2(d, smoothIter);
-        `
+        loopBody: `formula_MandelBolic(z, dr, trap, c);`
     },
 
     parameters: [
@@ -330,15 +311,6 @@ export const MandelBolic: FractalDefinition = {
                 highPass: 20,
                 lowPass: 20000,
                 gain: 1
-            },
-            sonification: {
-                isEnabled: false,
-                active: true,
-                baseFrequency: 220,
-                masterGain: 0.5,
-                scanArea: 0.1,
-                harmonics: true,
-                lastDimension: 0
             },
             drawing: {
                 activeTool: "rect",

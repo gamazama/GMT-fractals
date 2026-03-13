@@ -34,14 +34,16 @@ export const LfoList = ({ state, actions }: { state: FractalState, actions: Frac
         actions.setAnimations(state.animations.map(a => a.id === id ? { ...a, ...updates } : a));
     };
 
+    const hasActive = state.animations.some(a => a.enabled);
+
     return (
-        <div className="flex flex-col border-t border-white/5 bg-purple-900/10" data-help-id="lfo.system">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-purple-500/20">
-                <label className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">LFO Modulators</label>
-                <button 
+        <div className={`flex flex-col border-t border-white/5 ${hasActive ? 'bg-purple-900/10' : 'bg-white/[0.02]'}`} data-help-id="lfo.system">
+            <div className={`flex items-center justify-between px-3 py-2 border-b ${hasActive ? 'border-purple-500/20' : 'border-white/5'}`}>
+                <label className={`text-[10px] font-bold ${hasActive ? 'text-purple-300' : 'text-gray-500'}`}>LFO Modulators</label>
+                <button
                     onClick={addAnimation}
                     disabled={state.animations.length >= 3}
-                    className={`w-5 h-5 flex items-center justify-center rounded bg-purple-500/20 border border-purple-500/50 text-purple-300 hover:bg-purple-500 hover:text-white disabled:opacity-30 transition-all`}
+                    className={`w-5 h-5 flex items-center justify-center rounded border disabled:opacity-30 transition-all ${hasActive ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 hover:bg-purple-500 hover:text-white' : 'bg-white/10 border-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
                     title="Add LFO (Max 3)"
                 >
                     <PlusIcon />
@@ -52,7 +54,7 @@ export const LfoList = ({ state, actions }: { state: FractalState, actions: Frac
                 {state.animations.map((anim, idx) => (
                     <div key={anim.id} className={`bg-black/40 rounded border border-purple-500/10 animate-fade-in relative transition-all ${anim.enabled ? 'p-2' : 'p-2'}`}>
                         <div className="flex items-center justify-between mb-2 min-h-[26px]">
-                            <span className="text-[9px] font-black text-purple-400/50 uppercase tracking-[0.2em]">LFO {idx + 1}</span>
+                            <span className="text-[9px] font-bold text-purple-400/50">LFO {idx + 1}</span>
                             <div className="flex items-center gap-3">
                                 <button 
                                     onClick={() => removeAnimation(anim.id)}
@@ -77,7 +79,7 @@ export const LfoList = ({ state, actions }: { state: FractalState, actions: Frac
                                 
                                 <div className="grid grid-cols-2 gap-1 mb-1">
                                     <div>
-                                        <label className="text-[9px] text-gray-500 uppercase font-bold block mb-0.5">Target</label>
+                                        <label className="text-[9px] text-gray-500 font-bold block mb-0.5">Target</label>
                                         <ParameterSelector 
                                             value={anim.target}
                                             onChange={(val) => {
@@ -104,11 +106,11 @@ export const LfoList = ({ state, actions }: { state: FractalState, actions: Frac
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-[9px] text-gray-500 uppercase font-bold block mb-0.5">Shape</label>
+                                        <label className="text-[9px] text-gray-500 font-bold block mb-0.5">Shape</label>
                                         <select 
                                             value={anim.shape}
                                             onChange={(e) => updateAnimation(anim.id, { shape: e.target.value as any })}
-                                            className="w-full bg-gray-900 border border-gray-700 text-[9px] text-white rounded p-1 outline-none focus:border-purple-500"
+                                            className="t-select text-white focus:border-purple-500"
                                         >
                                             <option value="Sine">Sine</option>
                                             <option value="Triangle">Triangle</option>

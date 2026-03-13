@@ -18,7 +18,7 @@ interface ActionBtnProps {
 const ActionBtn = ({ label, onClick, title, active }: ActionBtnProps) => (
     <button
         onClick={onClick}
-        className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wide rounded border transition-colors ${
+        className={`flex-1 py-1.5 text-[9px] font-bold rounded border transition-colors ${
             active 
             ? 'bg-cyan-900/50 text-cyan-300 border-cyan-500/50' 
             : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10 hover:text-white'
@@ -35,7 +35,7 @@ const ToggleGroup = ({ options, value, onChange }: { options: {label: string, va
             <button
                 key={opt.label}
                 onClick={() => onChange(opt.value)}
-                className={`flex-1 py-1 text-[9px] font-bold uppercase rounded transition-colors flex items-center justify-center gap-1 ${
+                className={`flex-1 py-1 text-[9px] font-bold rounded transition-colors flex items-center justify-center gap-1 ${
                     value === opt.value
                     ? 'bg-cyan-900 text-cyan-300 shadow-sm'
                     : 'text-gray-500 hover:text-gray-300'
@@ -238,7 +238,7 @@ export const KeyframeInspector: React.FC = () => {
             data-help-id="anim.keyframes"
         >
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 shrink-0 h-8">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate mr-2" title={headerTitle}>
+                <span className="text-[10px] font-bold text-gray-400 truncate mr-2" title={headerTitle}>
                     {headerTitle}
                 </span>
                 {hasSelection && (
@@ -295,7 +295,7 @@ export const KeyframeInspector: React.FC = () => {
                                 const val = e.target.value as 'Linear' | 'Step' | 'Bezier';
                                 updateKeyframes(selectedKeys.map(x => ({ trackId: x.tid, keyId: x.kid, patch: { interpolation: val } })));
                             }}
-                            className="bg-transparent text-[10px] text-cyan-400 font-bold outline-none text-right cursor-pointer w-20"
+                            className="t-select text-cyan-400 font-bold text-right w-20"
                         >
                             {(!sameInterp) && <option value="Mixed">Mixed</option>}
                             <option value="Bezier">Bezier</option>
@@ -307,7 +307,7 @@ export const KeyframeInspector: React.FC = () => {
                     {/* --- SOFT SELECTION --- */}
                     <div className="border-t border-white/5 mt-2 bg-purple-900/10">
                         <div className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-white/5" onClick={() => setSoftSelection(softSelectionRadius || 10, !softSelectionEnabled)}>
-                            <span className="text-[9px] font-bold text-purple-300 uppercase tracking-wider">Soft Selection</span>
+                            <span className="text-[9px] font-bold text-purple-300">Soft Selection</span>
                             <div className={`w-2 h-2 rounded-full ${softSelectionEnabled ? 'bg-purple-500 shadow-[0_0_5px_rgba(168,85,247,0.8)]' : 'bg-gray-700'}`} />
                         </div>
                         {softSelectionEnabled && (
@@ -317,7 +317,7 @@ export const KeyframeInspector: React.FC = () => {
                                     <select 
                                         value={softSelectionType}
                                         onChange={(e) => setSoftSelectionType(e.target.value as SoftSelectionType)}
-                                        className="bg-black/40 border border-white/10 rounded px-1 py-0.5 text-[9px] text-purple-300 outline-none cursor-pointer"
+                                        className="t-select text-purple-300"
                                     >
                                         <option value="Linear">Linear</option>
                                         <option value="Dome">Dome</option>
@@ -346,11 +346,11 @@ export const KeyframeInspector: React.FC = () => {
                                 className="px-3 py-2 border-y border-white/5 bg-black/20 mt-2"
                                 data-help-id="anim.graph"
                             >
-                                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-2">Tangents</span>
+                                <span className="text-[9px] font-bold text-gray-500 block mb-2">Tangents</span>
                                 
                                 <div className="grid grid-cols-2 gap-3 mb-3">
                                     <div>
-                                        <span className="text-[8px] text-gray-500 font-bold block mb-1">LEFT HANDLE</span>
+                                        <span className="text-[8px] text-gray-500 font-bold block mb-1">Left Handle</span>
                                         <div className="flex flex-col gap-1 pl-1 border-l border-white/5">
                                             <div className="flex justify-between items-center h-5">
                                                 <span className="text-[9px] text-gray-400">Angle</span> 
@@ -367,7 +367,7 @@ export const KeyframeInspector: React.FC = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <span className="text-[8px] text-gray-500 font-bold block mb-1">RIGHT HANDLE</span>
+                                        <span className="text-[8px] text-gray-500 font-bold block mb-1">Right Handle</span>
                                         <div className="flex flex-col gap-1 pl-1 border-l border-white/5">
                                             <div className="flex justify-between items-center h-5">
                                                 <span className="text-[9px] text-gray-400">Angle</span> 

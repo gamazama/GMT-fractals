@@ -50,7 +50,6 @@ All features are registered in `features/index.ts`:
 
 ### Systems
 *   `AudioFeature` - WebAudio analysis and linking
-*   `SonificationFeature` - FHBT audio feedback from fractal data
 *   `DrawingFeature` - On-screen measurement tools
 *   `ModulationFeature` - LFOs and signal routing
 *   `WebcamFeature` - Overlay logic
@@ -83,10 +82,10 @@ All features are registered in `features/index.ts`:
 A built-in tool for importing Fragmentarium `.frag` files has been added:
 
 ### Files
-- `features/fragmentarium_import/GenericFragmentariumParserV2.ts` — **Active parser** (AST-based via `@shaderfrog/glsl-parser`)
-- `features/fragmentarium_import/GenericFragmentariumParser.ts` — V1 regex parser (used as fallback pre-parser by V2)
-- `features/fragmentarium_import/FormulaImporter.tsx` — UI component; drives parse → map → transform pipeline
-- `features/fragmentarium_import/index.ts` — barrel export of both V1 and V2
+- `features/fragmentarium_import/parsers/ast-parser.ts` — **Active parser** (AST-based via `@shaderfrog/glsl-parser`)
+- `features/fragmentarium_import/parsers/dec-preprocessor.ts` — DEC format preprocessor
+- `features/fragmentarium_import/transform/` — Code generation, variable renaming, init generation
+- `features/fragmentarium_import/FormulaWorkshop.tsx` — UI workshop for import pipeline
 
 ### Usage
 1. Open Formula dropdown in the UI
@@ -95,15 +94,9 @@ A built-in tool for importing Fragmentarium `.frag` files has been added:
 4. Adjust uniform → param mappings in the workshop UI
 5. Import and compile
 
-### Current Status: ⚠️ Broken — 0% success on reference files
+### Current Status: 🟢 40/40 tests passing
 
-**Root cause (identified 2026-03-05):** All three `.frag` files in `reference/` use `#include "MathUtils.frag"`. The preprocessor strips the include, but the loop body still calls `rotationMatrix3` (defined in that include) → GLSL compile error every time.
-
-**Two blocking bugs:**
-1. `#include`-sourced helpers called but undefined (e.g., `rotationMatrix3` from `MathUtils.frag`)
-2. Computed uniforms (`vec4 scale = vec4(Scale, ...) / MinRad2;`) stripped at global scope but still referenced in loop body → undefined variable
-
-See `docs/21_Frag_Importer_Current_Status.md` for full root cause analysis, fix plan, and a minimal working test formula.
+Run `npx tsx debug/test-frag-importer.mts` to verify. See `docs/21_Frag_Importer_Current_Status.md` for details and remaining open issues.
 
 ### Technical Notes (Architecture — Not Broken)
 - V2 uses `@shaderfrog/glsl-parser` for AST-level renaming, loop extraction, and helper function transformation — eliminates regex bugs (e.g., `z.z → z_local.z_local`)

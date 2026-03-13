@@ -2,9 +2,12 @@
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+// OrbitControlsImpl type comes from drei's transitive dep on three-stdlib.
+// drei re-exports this as the ref type of its <OrbitControls> component.
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import * as THREE from 'three';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FractalEvents } from '../engine/FractalEvents';
 import { CameraState, CameraMode } from '../types';
 import { useInputController } from '../hooks/useInputController';
@@ -74,8 +77,8 @@ const Navigation: React.FC<NavigationProps> = ({
         camera.up.copy(currentUp);
 
         let dist = overrideDistance || engine.lastMeasuredDistance;
-        // Fallback for sky/invalid distance
-        if (dist <= 1e-7 || dist > 1000.0) {
+        // Fallback for sky/invalid distance (MISS_DIST = 1000.0 in shader — use >= to catch exact sentinel)
+        if (dist <= 1e-7 || dist >= 1000.0) {
             dist = useFractalStore.getState().targetDistance || 3.5;
         }
         
@@ -125,11 +128,11 @@ const Navigation: React.FC<NavigationProps> = ({
           currentFrameVelocity.current.set(0,0,0);
           currentRotVelocity.current.set(0,0,0);
           flyController.current.reset();
-          
+
           // 3. Update trackers so useFrame doesn't trigger a "move" event
           lastPos.current.copy(camera.position);
           lastRot.current.copy(camera.quaternion);
-          
+
           // 4. RESET PHYSICS ESTIMATE (CRITICAL FIX)
           // Prevents "stuck" Fly Mode where speed remains near 0 if previous scene was close-up
           if (newState.targetDistance && newState.targetDistance > 0.001) {
@@ -137,7 +140,14 @@ const Navigation: React.FC<NavigationProps> = ({
                engine.lastMeasuredDistance = newState.targetDistance;
           }
 
-          // 5. Sync Orbit Pivot
+          // 5. Update store + forward offset to worker
+          if (newState.sceneOffset) {
+              setSceneOffset(newState.sceneOffset);
+              engine.shouldSnapCamera = true;
+              engine.dirty = true;
+          }
+
+          // 6. Sync Orbit Pivot
           if (mode === 'Orbit' && !isOrbitDragging.current) {
                syncOrbitTargetToCamera(newState.targetDistance, false);
           }
@@ -170,8 +180,9 @@ const Navigation: React.FC<NavigationProps> = ({
   const isCameraLockedRef = useRef(false);
   const allowOrbitInteraction = useRef(false);
 
-  // Handle Wheel Start/End for interaction tracking
+  // Handle Wheel Start/End for interaction tracking (canvas only, not UI panels)
   useEffect(() => {
+      const el = gl.domElement;
       const onWheel = () => {
           isScrollingRef.current = true;
           if (scrollEndTimeout.current) clearTimeout(scrollEndTimeout.current);
@@ -179,12 +190,12 @@ const Navigation: React.FC<NavigationProps> = ({
               isScrollingRef.current = false;
           }, 100);
       };
-      window.addEventListener('wheel', onWheel, { passive: true });
+      el.addEventListener('wheel', onWheel, { passive: true });
       return () => {
-          window.removeEventListener('wheel', onWheel);
+          el.removeEventListener('wheel', onWheel);
           if (scrollEndTimeout.current) clearTimeout(scrollEndTimeout.current);
       };
-  }, []);
+  }, [gl]);
   
   // Strict Orbit Gating: Listen for Pointer events on the canvas to enable/disable controls
   useEffect(() => {
@@ -231,9 +242,18 @@ const Navigation: React.FC<NavigationProps> = ({
     if (prevMode.current !== mode) {
         FractalEvents.emit('camera_snap', undefined);
         if (mode === 'Fly') {
-            FractalEvents.emit('camera_absorb', { camera });
+            // Absorb camera position into offset before switching to fly
             const so = engine.sceneOffset;
-            setSceneOffset({ ...so });
+            const absorbed = {
+                x: so.x, y: so.y, z: so.z,
+                xL: (so.xL ?? 0) + camera.position.x,
+                yL: (so.yL ?? 0) + camera.position.y,
+                zL: (so.zL ?? 0) + camera.position.z
+            };
+            camera.position.set(0, 0, 0);
+            camera.updateMatrixWorld();
+            setSceneOffset(absorbed);
+            FractalEvents.emit('camera_snap', undefined);
             lastPos.current.set(0,0,0);
             currentFrameVelocity.current.set(0,0,0);
             currentRotVelocity.current.set(0,0,0);
@@ -259,8 +279,16 @@ const Navigation: React.FC<NavigationProps> = ({
           FractalEvents.emit('camera_snap', undefined); 
           if (mode === 'Orbit') syncOrbitTargetToCamera(undefined, false);
           else if (mode === 'Fly') {
-              FractalEvents.emit('camera_absorb', { camera });
-              setSceneOffset({ ...engine.sceneOffset });
+              const so = engine.sceneOffset;
+              const absorbed = {
+                  x: so.x, y: so.y, z: so.z,
+                  xL: (so.xL ?? 0) + camera.position.x,
+                  yL: (so.yL ?? 0) + camera.position.y,
+                  zL: (so.zL ?? 0) + camera.position.z
+              };
+              camera.position.set(0, 0, 0);
+              camera.updateMatrixWorld();
+              setSceneOffset(absorbed);
           }
       }
       wasPlayingRef.current = isPlaying;
@@ -280,12 +308,19 @@ const Navigation: React.FC<NavigationProps> = ({
 
       const posChanged = camera.position.distanceToSquared(lastPos.current) > 1e-12;
       const rotChanged = camera.quaternion.angleTo(lastRot.current) > 1e-11;
+      const cameraMoving = posChanged || rotChanged;
       const isCurrentlyActive = isInteracting() || isOrbitDragging.current || isScrollingRef.current;
-      
+
       if (setIsCameraInteracting) setIsCameraInteracting(isCurrentlyActive);
 
       // Signal Engine Interaction State (Consumer is RenderLoop in ViewportArea)
       engine.isCameraInteracting = isCurrentlyActive;
+
+      // No dirty kick needed here — the engine's own threshold detection
+      // in update() handles accumulation transitions naturally:
+      //   - During movement above threshold → engine resets each frame
+      //   - Movement drops below threshold → accumulation starts automatically
+      // A dirty kick would reset already-accumulated frames, causing a flash.
 
         // Only reset accumulation when there's significant camera movement
         if (isCurrentlyActive && (posChanged || rotChanged)) {
@@ -293,7 +328,10 @@ const Navigation: React.FC<NavigationProps> = ({
             engine.dirty = true;
             if (!isMovingRef.current && onStart) {
                 isMovingRef.current = true;
-                onStart(engine.virtualSpace.getUnifiedCameraState(camera, engine.lastMeasuredDistance));
+                const camState = engine.virtualSpace
+                    ? engine.virtualSpace.getUnifiedCameraState(camera, engine.lastMeasuredDistance)
+                    : { position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, rotation: { x: camera.quaternion.x, y: camera.quaternion.y, z: camera.quaternion.z, w: camera.quaternion.w }, targetDistance: engine.lastMeasuredDistance };
+                onStart(camState);
             }
             if (isRecording && recordCamera) captureCameraFrame(currentFrame, true, isPlaying ? 'Linear' : 'Bezier');
         }
@@ -307,11 +345,12 @@ const Navigation: React.FC<NavigationProps> = ({
               if (useFractalStore.getState().isUserInteracting) return;
               
               let dist = engine.lastMeasuredDistance;
+              // Guard sky/miss sentinel before writing to store (MISS_DIST = 1000.0)
+              if (dist <= 0 || dist >= 1000.0) dist = useFractalStore.getState().targetDistance || 3.5;
               if (mode === 'Orbit') {
                   const radius = camera.position.length();
                   if (radius > 1e-4) dist = radius;
               }
-              if (dist <= 0) dist = 3.5;
 
               useFractalStore.setState({
                   cameraPos: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
@@ -389,29 +428,12 @@ const Navigation: React.FC<NavigationProps> = ({
                     if (dPivot > 1e-8) currentZoomSensitivity.current = Math.max(0.001, (dist / dPivot) * 1.25);
                 }
             }}
-            onEnd={() => { 
-                isOrbitDragging.current = false; 
-                if (orbitRef.current) {
-                    const shift = orbitRef.current.target.clone();
-                    if (shift.lengthSq() > 1e-12) {
-                        orbitRef.current.target.set(0, 0, 0);
-                        setOrbitTarget(new THREE.Vector3(0, 0, 0));
-                        
-                        camera.position.sub(shift);
-                        camera.updateMatrixWorld();
-
-                        FractalEvents.emit('offset_shift', { x: shift.x, y: shift.y, z: shift.z });
-                        
-                        engine.shouldSnapCamera = true;
-                        
-                        if (engine.activeCamera) {
-                            engine.activeCamera.position.copy(camera.position);
-                            engine.activeCamera.updateMatrixWorld();
-                        }
-                        
-                        orbitRef.current.update();
-                    }
-                }
+            onEnd={() => {
+                isOrbitDragging.current = false;
+                // No pivot absorption here — in worker mode, camera.position.sub(shift)
+                // and OFFSET_SHIFT can't be delivered atomically, causing a 1-frame glitch.
+                // The pivot is overwritten on next orbit start (onStart), so it doesn't accumulate.
+                // Absorption into offset only happens on Orbit→Fly mode switch.
             }}
          />;
 };

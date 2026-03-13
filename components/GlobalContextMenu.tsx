@@ -124,7 +124,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
 
                 if (item.isHeader) {
                     return (
-                        <div key={i} className="px-4 py-1 text-[9px] text-gray-500 font-bold uppercase tracking-wider border-b border-white/10 mt-1 mb-1 bg-white/5">
+                        <div key={i} className="px-4 py-1 text-[9px] text-gray-500 font-bold border-b border-white/10 mt-1 mb-1 bg-white/5">
                             {item.label}
                         </div>
                     );
@@ -181,7 +181,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
             {/* Help Items with Hierarchy */}
             {helpTopics.length > 0 && (
                 <>
-                    <div className="px-4 py-1 text-[9px] text-cyan-700 font-bold uppercase tracking-wider mb-1 flex items-center gap-2">
+                    <div className="px-4 py-1 text-[9px] text-cyan-700 font-bold mb-1 flex items-center gap-2">
                         <HelpIcon /> Context Help
                     </div>
                     {helpTopics.map((topic, i) => (

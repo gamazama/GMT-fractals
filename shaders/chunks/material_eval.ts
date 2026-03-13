@@ -48,8 +48,8 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     float distFromFractalOrigin = length(p_fractal_in);
     float pixelSizeScale = uPixelSizeBase / uInternalScale;
     
-    // Matches trace.ts precision floor
-    float floatLimit = max(1.0e-20, distFromFractalOrigin * 5.0e-7);
+    // Matches trace.ts precision floor — PRECISION_RATIO_HIGH of distance from fractal origin
+    float floatLimit = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
     
     float visualLimit = pixelSizeScale * d * (1.0 / uDetail);
     
@@ -79,7 +79,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
         noiseVal = getLayer3Noise(noiseP);
         
         if (abs(uLayer3Bump) > 0.001) {
-            vec2 e = vec2(0.01, 0.0);
+            vec2 e = vec2(0.01, 0.0);  // Fixed-size finite difference step for bump gradient (world-space units)
             float nx = getLayer3Noise(noiseP + e.xyy) - noiseVal;
             float ny = getLayer3Noise(noiseP + e.yxy) - noiseVal;
             float nz = getLayer3Noise(noiseP + e.yyx) - noiseVal;
@@ -88,7 +88,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
             // Only apply detailed bump mapping on high quality rays (primary hit)
             // Skip bump on bounces to save perf and reduce shimmering
             if (highQuality) {
-                n = normalize(n - grad * uLayer3Bump * 10.0);
+                n = normalize(n - grad * uLayer3Bump * 10.0);  // 10x amplification to make bump visually significant at world scale
             }
         }
     }
@@ -103,7 +103,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
         float val1 = getMappingValue(uColorMode, p_fractal, result, n, uColorScale);
         float twistAngle = 0.0;
         if (abs(uColorTwist) > 0.001) {
-            twistAngle = atan(p_fractal.y, p_fractal.x) * 0.15915;
+            twistAngle = atan(p_fractal.y, p_fractal.x) * INV_TAU;
         }
         float t1Raw = val1 * uColorScale + uColorOffset + (distFromFractalOrigin + twistAngle) * uColorTwist;
         float t1 = pow(abs(fract(mod(t1Raw, 1.0))), uGradientBias);
@@ -120,7 +120,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
         
         float twistAngle2 = 0.0;
         if (abs(uColorTwist2) > 0.001) {
-            twistAngle2 = atan(p_fractal.y, p_fractal.x) * 0.15915;
+            twistAngle2 = atan(p_fractal.y, p_fractal.x) * INV_TAU;
         }
         
         float t2Raw = val2 * uColorScale2 + uColorOffset2 + (distFromFractalOrigin + twistAngle2) * uColorTwist2;

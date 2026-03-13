@@ -14,23 +14,40 @@ import {
     analyzeAsDE,
 } from '../parsers/ast-parser';
 import { buildWorkshopParams } from './param-builder';
+import { detectDECFormat } from '../parsers/dec-detector';
+import { preprocessDEC } from '../parsers/dec-preprocessor';
 
 export function detectFormula(src: string, fileBaseName?: string): WorkshopDetection | { error: string } {
     if (!src.trim()) return { error: 'No source provided.' };
 
     try {
-        let v1Doc;
-        try { v1Doc = GenericFragmentariumParser.parse(src); } catch (_) {}
+        // DEC preprocessing: detect raw DE snippets and transform to Fragmentarium format
+        let processedSrc = src;
+        const decWarnings: string[] = [];
+        const decResult = detectDECFormat(src);
+        if (decResult.isDEC && decResult.confidence > 0.4) {
+            const preprocessed = preprocessDEC(src);
+            processedSrc = preprocessed.fragmentariumSource;
+            decWarnings.push(
+                `DEC format detected (confidence ${(decResult.confidence * 100).toFixed(0)}%). ` +
+                `${preprocessed.expandedMacros.length} macro(s) expanded, ` +
+                `${preprocessed.extractedConstants.length} constant(s) promoted to uniforms.`
+            );
+            decWarnings.push(...preprocessed.warnings);
+        }
 
-        const doc = parseFragmentariumSource(src, v1Doc);
+        let v1Doc;
+        try { v1Doc = GenericFragmentariumParser.parse(processedSrc); } catch (_) {}
+
+        const doc = parseFragmentariumSource(processedSrc, v1Doc);
         const candidates = getAllFunctionCandidates(doc);
 
         if (candidates.length === 0) {
             return { error: 'No GLSL functions found. Make sure the code contains at least one function definition.' };
         }
 
-        const warnings: string[] = [];
-        if (hasProvidesColor(src)) {
+        const warnings: string[] = [...decWarnings];
+        if (hasProvidesColor(processedSrc)) {
             warnings.push('This formula uses providesColor — color output is not supported by GMT. Only the distance estimator will be imported.');
         }
         if (doc.includes.length > 0) {
@@ -54,6 +71,12 @@ export function detectFormula(src: string, fileBaseName?: string): WorkshopDetec
                 if (clean) suggestedName = clean;
             }
         }
+        // Fall back to the detected function name (strip common prefixes like "DE_")
+        if (!suggestedName && suggested) {
+            const fn = suggested.name.replace(/^(DE_|de_|sdf_|SDF_)/, '');
+            const clean = fn.replace(/[^a-zA-Z0-9_]/g, '');
+            if (clean && clean !== 'DE' && clean !== 'de') suggestedName = clean;
+        }
 
         return {
             doc,
@@ -65,7 +88,7 @@ export function detectFormula(src: string, fileBaseName?: string): WorkshopDetec
             params,
             warnings,
         };
-    } catch (e: any) {
-        return { error: 'Detection failed: ' + (e.message || String(e)) };
+    } catch (e) {
+        return { error: 'Detection failed: ' + (e instanceof Error ? e.message : String(e)) };
     }
 }

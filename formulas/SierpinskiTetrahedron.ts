@@ -44,9 +44,10 @@ export const SierpinskiTetrahedron: FractalDefinition = {
             z3.xy = mat2(co, -s, s, co) * z3.xy;
         }
 
-        if (z3.x + z3.y < 0.0) z3.xy = -z3.yx;
-        if (z3.x + z3.z < 0.0) z3.xz = -z3.zx;
-        if (z3.y + z3.z < 0.0) z3.yz = -z3.zy;
+        float sf;
+        sf = step(0.0, z3.x + z3.y); z3.xy = mix(-z3.yx, z3.xy, sf);
+        sf = step(0.0, z3.x + z3.z); z3.xz = mix(-z3.zx, z3.xz, sf);
+        sf = step(0.0, z3.y + z3.z); z3.yz = mix(-z3.zy, z3.yz, sf);
         // Vec3C: Per-axis scale (average for DR calculation)
         vec3 scale3 = uVec3C;
         z3 = z3 * scale3 - vec3(uParamB * (scale3 - 1.0));

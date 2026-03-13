@@ -226,7 +226,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
     return (
         <div className="flex flex-col items-center mb-2">
             <div className="w-full flex justify-between items-center mb-1 px-1">
-                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Heliotrope</label>
+                <label className="text-[9px] font-bold text-gray-500">Heliotrope</label>
                 <KeyframeButton status={keyStatus} onClick={handleKeyToggle} />
             </div>
             

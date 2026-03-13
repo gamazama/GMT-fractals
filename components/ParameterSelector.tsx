@@ -22,7 +22,10 @@ const PRIORITY_ORDER = ['coreMath', 'geometry', 'materials', 'coloring', 'atmosp
 const WHITELIST_HIDDEN = new Set([
     'repeats', 'phase', 'scale', 'offset', 'bias', // Coloring
     'repeats2', 'phase2', 'scale2', 'offset2', 'bias2',
-    'levelsMin', 'levelsMax', 'levelsGamma', 'saturation' // Grading
+    'levelsMin', 'levelsMax', 'levelsGamma', 'saturation', // Grading
+    'juliaX', 'juliaY', 'juliaZ', // Julia
+    'preRotX', 'preRotY', 'preRotZ', // Pre-rotation
+    'hybridFoldLimit' // Hybrid
 ]);
 
 // Virtual Expansions for Array-based features

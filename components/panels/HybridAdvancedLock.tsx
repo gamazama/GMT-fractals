@@ -6,6 +6,7 @@ import { GeometryState } from '../../features/geometry';
 import { FeatureComponentProps } from '../registry/ComponentRegistry';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { CloseIcon, AlertIcon } from '../Icons';
+import { SectionLabel } from '../SectionLabel';
 
 export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState, actions }) => {
     const geom = sliceState as GeometryState;
@@ -39,7 +40,7 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
                 className={`transition-all duration-300 ${!isUnlocked ? 'opacity-30 blur-[0.5px] pointer-events-none grayscale' : ''}`}
             >
                 <div className="flex items-center gap-1 mb-1">
-                    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Advanced Mixing</span>
+                    <SectionLabel variant="secondary">Advanced Mixing</SectionLabel>
                 </div>
                 
                 <Slider 
@@ -55,14 +56,8 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
                     trackId="geometry.hybridSkip"
                 />
                 
-                <div className="grid grid-cols-2 gap-1 mt-1">
-                    {/* Fix: Removed unsupported 'description' prop from ToggleSwitch component */}
-                    <ToggleSwitch 
-                        label="Protect Folds"
-                        value={geom.hybridProtect}
-                        onChange={(v) => setGeometry({ hybridProtect: v })}
-                    />
-                    <ToggleSwitch 
+                <div className="mt-1">
+                    <ToggleSwitch
                         label="Swap Order"
                         value={geom.hybridSwap}
                         onChange={(v) => setGeometry({ hybridSwap: v })}
@@ -97,7 +92,7 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
                          <div className="flex items-start justify-between p-2 border-b border-white/10 bg-white/5">
                             <div className="flex items-center gap-2 text-gray-300">
                                 <AlertIcon />
-                                <span className="text-[10px] font-bold uppercase tracking-wider">Advanced Shader</span>
+                                <SectionLabel>Advanced Shader</SectionLabel>
                             </div>
                             <button 
                                 onClick={(e) => { e.stopPropagation(); setShowDialog(false); }}
@@ -114,7 +109,7 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
                                  <span className="text-orange-300">Compilation may take 30-60 seconds.</span>
                              </p>
                              
-                             <div className="flex items-center justify-center p-1.5 bg-white/5 rounded border border-white/10 text-cyan-400 text-[9px] font-bold uppercase tracking-widest group-hover:bg-cyan-900/30 group-hover:text-cyan-200 group-hover:border-cyan-500/30 transition-all">
+                             <div className="flex items-center justify-center p-1.5 bg-white/5 rounded border border-white/10 text-cyan-400 text-[9px] font-bold group-hover:bg-cyan-900/30 group-hover:text-cyan-200 group-hover:border-cyan-500/30 transition-all">
                                  Click to Load
                              </div>
                          </div>

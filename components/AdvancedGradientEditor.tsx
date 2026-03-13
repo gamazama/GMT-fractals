@@ -527,7 +527,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
     return (
         <div 
-            className="w-full select-none" 
+            className="w-full select-none bg-[#1f1f1f] rounded"
             ref={containerRef}
             data-help-id={helpId || "ui.gradient_editor"}
             onContextMenu={handleWrapperContextMenu}
@@ -545,7 +545,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         >
             <div className="flex items-center justify-between mb-1">
                 <div 
-                    className="flex items-center gap-2 cursor-pointer text-[10px] font-semibold text-gray-400 hover:text-white tracking-wider gradient-interactive-element" 
+                    className="flex items-center gap-2 cursor-pointer text-[10px] font-semibold text-gray-400 hover:text-white gradient-interactive-element" 
                     onClick={() => setIsExpanded(!isExpanded)}
                 >
                     <span className={`transform transition-transform duration-200 text-base ${isExpanded ? 'rotate-90' : ''}`}>›</span>
@@ -554,7 +554,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 <div className="flex items-center gap-2">
                     {/* Visual Indicator of current mode */}
                     <div 
-                        className="text-[8px] font-bold text-gray-600 uppercase cursor-pointer hover:text-cyan-400 transition-colors select-none"
+                        className="text-[8px] font-bold text-gray-600 cursor-pointer hover:text-cyan-400 transition-colors select-none"
                         onClick={cycleColorSpace}
                         title="Click to switch Color Profile"
                     >

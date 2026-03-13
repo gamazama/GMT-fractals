@@ -45,6 +45,7 @@ export const Uniforms = {
     // Environment
     EnvMapTexture: 'uEnvMapTexture',
     EnvRotationMatrix: 'uEnvRotationMatrix', // CPU Optimization
+    FogColorLinear: 'uFogColorLinear', // CPU: InverseACESFilm(uFogColor)
 
     // Debug Tools
     HistogramLayer: 'uHistogramLayer',

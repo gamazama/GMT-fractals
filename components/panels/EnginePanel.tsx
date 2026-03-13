@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { AlertIcon, CheckIcon, InfoIcon, SpinnerIcon } from '../Icons';
@@ -7,7 +7,8 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { EngineFeatureRow, EngineStatus } from './engine/EngineFeatureRow';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import Dropdown from '../Dropdown';
-import { detectEngineProfile, ENGINE_PROFILES } from '../../features/engine/profiles';
+import { detectEngineProfile, ENGINE_PROFILES, estimateCompileTime } from '../../features/engine/profiles';
+import { SectionLabel } from '../SectionLabel';
 
 interface EnginePanelProps {
     className?: string;
@@ -15,20 +16,21 @@ interface EnginePanelProps {
 
 export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) => {
     const store = useFractalStore();
-    const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
+    const [pendingChanges, setPendingChanges] = useState<Record<string, unknown>>({});
     const [compileFeedback, setCompileFeedback] = useState<string | null>(null);
     const [isCompiling, setIsCompiling] = useState(false);
     
     // 1. Construct Virtual State for Detection (Store + Pending Overrides)
     const virtualState = useMemo(() => {
-        const vState: any = {};
+        const vState: Record<string, Record<string, unknown>> = {};
         // Only need to clone slices that are actually used in profiles
         const relevantFeatures = ['lighting', 'ao', 'geometry', 'reflections', 'quality', 'atmosphere'];
-        
+
         relevantFeatures.forEach(fid => {
             // Shallow copy slice if it exists
-            if ((store as any)[fid]) {
-                vState[fid] = { ...(store as any)[fid] };
+            const slice = (store as Record<string, unknown>)[fid];
+            if (slice && typeof slice === 'object') {
+                vState[fid] = { ...(slice as Record<string, unknown>) };
             }
         });
 
@@ -43,26 +45,37 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
         return vState;
     }, [store, pendingChanges]);
 
-    // 2. Detect Profile based on Virtual State
+    // 2. Detect Profile and estimate compile time based on Virtual State
     const activeProfileKey = detectEngineProfile(virtualState);
     const activeProfileLabel = activeProfileKey.charAt(0).toUpperCase() + activeProfileKey.slice(1);
+    const estCompileMs = useMemo(() => estimateCompileTime(virtualState), [virtualState]);
+    const estCompileSec = (estCompileMs / 1000).toFixed(1);
     
     const engineFeatures = featureRegistry.getEngineFeatures();
-    
+
+    // Ref to latest handleParamChange so the ENGINE_QUEUE listener never goes stale
+    const handleParamChangeRef = useRef<(featureId: string, param: string, value: any) => void>(() => {});
+
     useEffect(() => {
         const unsubCompile = FractalEvents.on('compile_time', (sec) => {
             setCompileFeedback(`Compiled (${sec.toFixed(2)}s)`);
             setIsCompiling(false);
             setTimeout(() => setCompileFeedback(null), 3000);
         });
-        
+
         const unsubIsCompiling = FractalEvents.on('is_compiling', (val) => {
             setIsCompiling(!!val);
         });
-        
+
+        // External panels route compile-time changes here via ENGINE_QUEUE
+        const unsubQueue = FractalEvents.on('engine_queue', ({ featureId, param, value }) => {
+            handleParamChangeRef.current(featureId, param, value);
+        });
+
         return () => {
             unsubCompile();
             unsubIsCompiling();
+            unsubQueue();
         };
     }, []);
 
@@ -107,6 +120,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
             setCompileFeedback(null);
         }
     };
+    handleParamChangeRef.current = handleParamChange;
 
     const applyPendingChanges = () => {
         FractalEvents.emit('is_compiling', "Compiling Shaders...");
@@ -132,17 +146,15 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
     const handlePreset = (mode: string) => {
         if (mode === 'Custom') return;
 
-        // @ts-ignore
-        const profile = ENGINE_PROFILES[mode];
+        const profile = ENGINE_PROFILES[mode as keyof typeof ENGINE_PROFILES];
         if (!profile) return;
 
-        const newPending: Record<string, any> = {};
+        const newPending: Record<string, unknown> = {};
 
         // Populate pending changes based on diffs between Profile and Store
         Object.entries(profile).forEach(([featId, params]) => {
-            // @ts-ignore
-            Object.entries(params).forEach(([param, val]) => {
-                const storeVal = (store as any)[featId]?.[param];
+            Object.entries(params as Record<string, unknown>).forEach(([param, val]) => {
+                const storeVal = (store as Record<string, Record<string, unknown>>)[featId]?.[param];
                 
                 let isDiff = storeVal !== val;
                 // Fuzzy match for floats
@@ -178,7 +190,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
     return (
         <div className={`flex flex-col h-full bg-[#080808] min-h-0 overflow-hidden ${className}`} data-help-id="panel.engine">
             <div className="px-3 py-2 bg-black/60 border-b border-white/10 flex items-center justify-between shrink-0">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Engine Configuration</span>
+                <SectionLabel>Engine Configuration</SectionLabel>
                 <div className="w-32">
                     <Dropdown 
                         value={activeProfileLabel}
@@ -247,31 +259,37 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
             <div className="px-3 py-2 bg-[#1a1a1a] border-t border-white/10 flex items-center justify-between min-h-[40px] shrink-0 z-10">
                 {isCompiling ? (
                     <>
-                        <div className="flex items-center gap-2 text-cyan-400 text-[10px] font-bold uppercase tracking-wider">
+                        <div className="flex items-center gap-2 text-cyan-400 text-[10px] font-bold">
                             <SpinnerIcon className="animate-spin h-3 w-3" />
                             <span>Compiling...</span>
                         </div>
-                        <div className="text-[9px] text-gray-500">Please wait</div>
+                        <div className="text-[9px] text-gray-500">~{estCompileSec}s</div>
                     </>
                 ) : Object.keys(pendingChanges).length > 0 ? (
                     <>
-                        <div className="flex items-center gap-2 text-amber-500 text-[10px] font-bold uppercase tracking-wider animate-pulse">
-                            <AlertIcon />
-                            <span>Changes Pending</span>
+                        <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-2 text-amber-500 text-[10px] font-bold animate-pulse">
+                                <AlertIcon />
+                                <span>Pending</span>
+                            </div>
+                            <span className="text-[9px] text-gray-500 font-mono">~{estCompileSec}s</span>
                         </div>
-                        <button 
-                            onClick={applyPendingChanges} 
+                        <button
+                            onClick={applyPendingChanges}
                             disabled={isCompiling}
-                            className="px-4 py-1 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold uppercase text-[10px] rounded transition-colors flex items-center gap-1"
+                            className="px-4 py-1 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold text-[10px] rounded transition-colors flex items-center gap-1"
                         >
                             <CheckIcon /> Apply
                         </button>
                     </>
                 ) : (
                     <>
-                         <div className="text-[10px] text-gray-600 font-medium">System Ready</div>
+                         <div className="flex items-center gap-2">
+                             <span className="text-[10px] text-gray-600 font-medium">System Ready</span>
+                             <span className="text-[9px] text-gray-600 font-mono">~{estCompileSec}s</span>
+                         </div>
                          {compileFeedback && (
-                             <div className="text-[10px] text-green-400 font-bold uppercase animate-fade-in flex items-center gap-1">
+                             <div className="text-[10px] text-green-400 font-bold animate-fade-in flex items-center gap-1">
                                  <CheckIcon /> {compileFeedback}
                              </div>
                          )}

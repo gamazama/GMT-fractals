@@ -5,7 +5,8 @@
  * for CPU-based distance estimation.
  */
 
-import { engine } from './FractalEngine';
+import { getProxy } from './worker/WorkerProxy';
+const engine = getProxy();
 
 // Vector types for CPU computation
 export interface Vec3 { x: number; y: number; z: number; }

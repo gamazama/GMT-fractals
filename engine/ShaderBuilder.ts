@@ -12,6 +12,7 @@ import { BLUE_NOISE } from '../shaders/chunks/blue_noise';
 
 export type RenderVariant = 'Main' | 'Physics' | 'Histogram';
 
+
 export class ShaderBuilder {
     // 1. Storage
     private defines: Map<string, string> = new Map();
@@ -45,6 +46,7 @@ export class ShaderBuilder {
     private renderMode: 'Direct' | 'PathTracing' = 'Direct';
     private isLite: boolean = false;
     private precisionMode: number = 0;
+    private maxLights: number = 0;
     // Depth output is always enabled for MRT - removes shader recompilation issue
     
     // 5. Variant Specific
@@ -69,6 +71,10 @@ export class ShaderBuilder {
     public setQuality(isLite: boolean, precisionMode: number) {
         this.isLite = isLite;
         this.precisionMode = precisionMode;
+    }
+
+    public setMaxLights(n: number) {
+        this.maxLights = n;
     }
     
 
@@ -249,24 +255,23 @@ ${math}
 ${BLUE_NOISE}
 ${COLORING}
 ${headers}
-${preambles}    // Global pre-calculation code
-${userFunctions} // Formulas
-${de}            // Distance Estimator
+${preambles}
+${userFunctions}
+${de}
 
 ${simplifiedTraceGLSL}
 
 layout(location = 0) out vec4 pc_fragColor;
 
 void main() {
-    // Generate Ray (Standard or Injected)
     ${this.physicsRayGen}
-    
+
     vec3 ro = vec3(0.0);
     float d = 0.0;
     vec4 result = vec4(0.0);
-    
+
     bool hit = traceScene(ro, rd, d, result);
-    
+
     if (hit) {
         pc_fragColor = vec4(d, 0.0, 0.0, 1.0);
     } else {
@@ -290,8 +295,8 @@ ${BLUE_NOISE}
 ${COLORING}
 ${headers}
 ${preambles}
-${userFunctions} // Formulas (Including getMappingValue)
-${de}            // Distance Estimator
+${userFunctions}
+${de}
 ${postDEFunctions}
 
 ${traceGLSL}
@@ -300,10 +305,10 @@ ${rayGLSL}
 layout(location = 0) out vec4 pc_fragColor;
 
 void main() {
-    vec3 ro, rd;
+    vec3 ro, rd, roClean, rdClean;
     float stochasticSeed;
-    getCameraRay(vUv, 0.0, ro, rd, stochasticSeed);
-    
+    getCameraRay(vUv, 0.0, ro, rd, stochasticSeed, roClean, rdClean);
+
     vec3 glow = vec3(0.0);
     vec3 fogScatter = vec3(0.0);
     float volumetric = 0.0;
@@ -311,24 +316,18 @@ void main() {
     vec4 result = vec4(0.0);
 
     bool hit = traceScene(ro, rd, d, result, glow, 0.0, volumetric, fogScatter);
-    
+
     if (hit) {
-        // Determine Mode/Scale based on active layer
         float mode = (uHistogramLayer > 0) ? uColorMode2 : uColorMode;
         float scale = (uHistogramLayer > 0) ? uColorScale2 : uColorScale;
-        
+
         vec3 p = ro + rd * d;
         vec3 p_fractal = p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
-        
-        // Dummy normal is sufficient for most mappings except 'Normal' mode
-        // For performance, we skip normal calculation unless absolutely necessary,
-        // but since Histogram is 128x128, a single normal tap is cheap.
-        // Let's use Up vector as proxy for speed, or calculate real normal if quality needed.
-        // For now, proxy is safe.
+
         vec3 n = vec3(0.0, 1.0, 0.0);
-        
+
         float val = getMappingValue(mode, p_fractal, result, n, scale);
-        
+
         pc_fragColor = vec4(val, 0.0, 0.0, 1.0);
     } else {
         pc_fragColor = vec4(-1.0, 0.0, 0.0, 1.0);
@@ -340,9 +339,40 @@ void main() {
         // --- VARIANT: MAIN (Full Render) ---
         const materialEval = generateMaterialEval(this.materialLogic.join('\n'));
         const isPathTracing = this.renderMode === 'PathTracing';
-        
+
         const traceGLSL = getTraceGLSL(this.isLite, true, this.precisionMode, 0, this.volumeBody.join('\n'), this.volumeFinalize.join('\n'));
-        const mainGLSL = getFragmentMainGLSL(isPathTracing);
+        const traceLeanGLSL = isPathTracing
+            ? getTraceGLSL(this.isLite, false, this.precisionMode, 0, "", "", "traceSceneLean")
+            : "";
+        const mainGLSL = getFragmentMainGLSL(isPathTracing, this.maxLights);
+        const rayGLSL = getRayGLSL(this.renderMode);
+
+        // Section size profiling — log where the bytes are
+        const sections: [string, string][] = [
+            ['Defines',     defines],
+            ['Uniforms',    uniforms],
+            ['Headers',     headers],
+            ['Math',        math],
+            ['BlueNoise',   BLUE_NOISE],
+            ['Coloring',    COLORING],
+            ['Preambles',   preambles],
+            ['Formulas',    userFunctions],
+            ['DE',          de],
+            ['PostDE',      postDEFunctions],
+            ['MatEval',     materialEval],
+            ['Ray',         rayGLSL],
+            ['Trace',       traceGLSL],
+            ['TraceLean',   traceLeanGLSL],
+            ['Integrators', integrators],
+            ['Post',        POST],
+            ['Main',        mainGLSL],
+        ];
+        const profile = sections
+            .filter(([, s]) => s.length > 0)
+            .map(([name, s]) => `${name}: ${(s.length / 1024).toFixed(1)}kb`)
+            .join(' | ');
+        const totalSize = sections.reduce((sum, [, s]) => sum + s.length, 0);
+        if (import.meta.env.DEV) console.log(`[Shader Profile] ${(totalSize / 1024).toFixed(1)}kb — ${profile}`);
 
         return `
 ${defines}
@@ -352,31 +382,23 @@ ${math}
 ${BLUE_NOISE}
 ${COLORING}
 
-// --- PREAMBLES (Global Pre-calculation) ---
 ${preambles}
 
-// --- FORMULAS ---
 ${userFunctions}
 
-// --- DISTANCE ESTIMATOR ---
 ${de}
 
-// --- UTILS (Shadows, AO, Reflections, Env) ---
 ${postDEFunctions}
 
-// --- MATERIAL EVAL ---
 ${materialEval}
 
-// --- RAY GENERATION ---
-${getRayGLSL(this.renderMode)}
+${rayGLSL}
 
-// --- TRACE SCENE ---
 ${traceGLSL}
+${traceLeanGLSL}
 
-// --- INTEGRATORS (Lighting / PT) ---
 ${integrators}
 
-// POST PROCESSING
 ${POST}
 ${mainGLSL}
 `;

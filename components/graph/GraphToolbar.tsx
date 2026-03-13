@@ -75,7 +75,7 @@ const BounceSettingsMenu = () => {
              <div className="px-3 pt-1">
                  <button 
                     onClick={() => setBouncePhysics(0.5, 0.6)}
-                    className="w-full py-1 text-[9px] uppercase font-bold text-gray-500 hover:text-white border border-white/10 rounded hover:bg-white/5 transition-colors"
+                    className="w-full py-1 text-[9px] font-bold text-gray-500 hover:text-white border border-white/10 rounded hover:bg-white/5 transition-colors"
                  >
                     Reset Defaults
                  </button>

@@ -1,6 +1,8 @@
 
 import { Preset } from '../types';
-import { engine } from '../engine/FractalEngine';
+import type { FormulaType } from '../types/common';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FractalEvents } from '../engine/FractalEvents';
 import { useAnimationStore } from '../store/animationStore';
 import { featureRegistry } from '../engine/FeatureSystem';
@@ -9,18 +11,19 @@ import { VirtualSpace } from '../engine/PrecisionMath'; // Added Import
 import * as THREE from 'three';
 
 // Helper to clean up Three.js objects for JSON serialization
-export const sanitizeFeatureState = (state: any) => {
-    const out: any = {};
+export const sanitizeFeatureState = (state: Record<string, unknown>) => {
+    const out: Record<string, unknown> = {};
     if (!state) return out;
     Object.keys(state).forEach(key => {
         if (key.startsWith('is')) return;
-        const val = state[key];
-        if (val && typeof val === 'object' && val.isColor) {
-            out[key] = '#' + val.getHexString();
-        } else if (val && typeof val === 'object' && (val.isVector2 || val.isVector3)) {
-            out[key] = { ...val };
-            delete out[key].isVector2;
-            delete out[key].isVector3;
+        const val = state[key] as Record<string, unknown>;
+        if (val && typeof val === 'object' && 'isColor' in val) {
+            out[key] = '#' + (val as THREE.Color).getHexString();
+        } else if (val && typeof val === 'object' && ('isVector2' in val || 'isVector3' in val)) {
+            const cleaned = { ...val };
+            delete cleaned.isVector2;
+            delete cleaned.isVector3;
+            out[key] = cleaned;
         } else {
             out[key] = val;
         }
@@ -29,17 +32,17 @@ export const sanitizeFeatureState = (state: any) => {
 };
 
 export const getFullDefaultPreset = (formula: string): Preset => {
-    const def = registry.get(formula as any);
-    const formulaDefault: Partial<Preset> = (def && def.defaultPreset) ? def.defaultPreset : { formula: formula as any };
+    const def = registry.get(formula);
+    const formulaDefault: Partial<Preset> = (def && def.defaultPreset) ? def.defaultPreset : { formula: formula as FormulaType };
     const full: Preset = {
         version: 5,
-        name: formula, // Default name matches formula ID
-        formula: formula as any,
+        name: formula,
+        formula: formula as FormulaType,
         features: {}
     };
 
     featureRegistry.getAll().forEach(feat => {
-        const featDefaults: any = {};
+        const featDefaults: Record<string, unknown> = {};
         Object.entries(feat.params).forEach(([key, config]) => {
             if (!config.composeFrom) featDefaults[key] = config.default;
         });
@@ -82,7 +85,7 @@ export const getFullDefaultPreset = (formula: string): Preset => {
     return full;
 };
 
-export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
+export const applyPresetState = (p: Partial<Preset>, set: (partial: Record<string, unknown>) => void, get: () => Record<string, unknown>) => {
     const actions = get();
 
     // Create map of features
@@ -99,7 +102,7 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
 
     // MIGRATION: AO from Atmosphere -> AO Feature
     if (features.atmosphere && !features.ao) {
-        const aoData: any = {};
+        const aoData: Record<string, unknown> = {};
         if (features.atmosphere.aoIntensity !== undefined) aoData.aoIntensity = features.atmosphere.aoIntensity;
         if (features.atmosphere.aoSpread !== undefined) aoData.aoSpread = features.atmosphere.aoSpread;
         if (features.atmosphere.aoMode !== undefined) aoData.aoMode = features.atmosphere.aoMode;
@@ -116,7 +119,7 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
         
         if (typeof setter === 'function') {
             const incomingData = features[feat.id];
-            const nextState: Record<string, any> = {};
+            const nextState: Record<string, unknown> = {};
 
             if (feat.state) Object.assign(nextState, feat.state);
             
@@ -147,7 +150,7 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
             if (feat.id === 'lighting' && incomingData) {
                 if (incomingData.lights) {
                     // Populate missing new fields (type, rotation)
-                    nextState.lights = incomingData.lights.map((l: any) => ({
+                    nextState.lights = incomingData.lights.map((l: Record<string, unknown>) => ({
                         ...l,
                         type: l.type || 'Point',
                         rotation: l.rotation || { x: 0, y: 0, z: 0 }
@@ -193,7 +196,7 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
     // Root Legacy Lights Array Migration
     if (p.lights && p.lights.length > 0) {
         if (actions.setLighting) {
-             const migratedLights = p.lights.map((l: any) => ({
+             const migratedLights = p.lights.map((l: Record<string, unknown>) => ({
                  ...l,
                  type: l.type || 'Point',
                  rotation: l.rotation || { x: 0, y: 0, z: 0 }
@@ -241,7 +244,7 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
         cameraMode: p.cameraMode || get().cameraMode
     });
 
-    if (engine.activeCamera) {
+    if (engine.activeCamera && engine.virtualSpace) {
         // Apply to Engine
         engine.virtualSpace.applyCameraState(engine.activeCamera, {
             position: finalPos, 

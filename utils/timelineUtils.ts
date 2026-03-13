@@ -1,6 +1,7 @@
 
 import { useFractalStore } from '../store/fractalStore';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import * as THREE from 'three';
 import { Keyframe, AnimationSequence, SoftSelectionType } from '../types';
 import { featureRegistry } from '../engine/FeatureSystem';
@@ -8,6 +9,7 @@ import { getLightFromSlice } from '../features/lighting';
 import { nanoid } from 'nanoid';
 import { AnimationMath } from '../engine/math/AnimationMath';
 import { CameraUtils } from './CameraUtils';
+import { getViewportCamera } from '../engine/worker/ViewportRefs';
 
 // --- LIVE VALUE HELPER ---
 // Reads current value from the specific store slice
@@ -22,16 +24,17 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
     if (trackId.startsWith('camera.unified')) {
         // Use the new CameraUtils to ensure math consistency with Scene Panel
         // We fallback to Engine for camera local pos as Store might lag during high-speed fly
-        const camPos = engine.activeCamera ? engine.activeCamera.position : fs.cameraPos;
+        const cam0 = getViewportCamera() || engine.activeCamera;
+        const camPos = cam0 ? cam0.position : fs.cameraPos;
         const unified = CameraUtils.getUnifiedPosition(camPos, fs.sceneOffset);
-        
+
         if (trackId === 'camera.unified.x') return unified.x;
         if (trackId === 'camera.unified.y') return unified.y;
         if (trackId === 'camera.unified.z') return unified.z;
     }
-    
+
     if (trackId.startsWith('camera.rotation')) {
-        const cam = engine.activeCamera;
+        const cam = getViewportCamera() || engine.activeCamera;
         if (cam) {
             const euler = new THREE.Euler().setFromQuaternion(cam.quaternion);
             if (trackId === 'camera.rotation.x') return euler.x;
@@ -63,13 +66,26 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
         const parts = trackId.split('.');
         const parent = parts[0];
         const child = parts[1];
-        
+
         if (featureRegistry.get(parent)) {
             const featureState = (fs as any)[parent];
-            if (featureState && featureState[child] !== undefined) {
-                let val = featureState[child];
-                if (typeof val === 'boolean') return val ? 1 : 0;
-                if (typeof val === 'number') return val;
+            if (featureState) {
+                // Direct scalar/boolean lookup
+                if (featureState[child] !== undefined) {
+                    const val = featureState[child];
+                    if (typeof val === 'boolean') return val ? 1 : 0;
+                    if (typeof val === 'number') return val;
+                }
+                // Vec2/Vec3 component tracks: e.g. hybridShift_x → hybridShift.x
+                const vecMatch = child.match(/^(.+)_(x|y|z)$/);
+                if (vecMatch) {
+                    const baseParam = vecMatch[1];
+                    const component = vecMatch[2] as 'x' | 'y' | 'z';
+                    const vec = featureState[baseParam];
+                    if (vec && typeof vec === 'object' && component in vec) {
+                        return vec[component] as number;
+                    }
+                }
             }
         }
     }

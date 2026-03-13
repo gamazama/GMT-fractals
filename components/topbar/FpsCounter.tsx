@@ -2,24 +2,30 @@
 import React, { useEffect, useRef } from 'react';
 import { useFractalStore, selectIsGlobalInteraction } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
+import { registerWorkerFrameCounter } from '../../engine/worker/WorkerProxy';
 
 // Global refs to track FPS across ticks
 const fpsState = {
     frameCount: 0,
     lastTime: performance.now(),
-    ref: null as HTMLSpanElement | null
+    ref: null as HTMLSpanElement | null,
+    workerFrameCount: 0,  // Counts actual worker frames received
 };
+
+// Register frame counter with WorkerProxy (avoids circular import)
+registerWorkerFrameCounter(() => { fpsState.workerFrameCount++; });
 
 // Export tick function for orchestrated updates
 export const tick = () => {
     const now = performance.now();
     fpsState.frameCount++;
-    
+
     if (now - fpsState.lastTime >= 1000) {
         if (fpsState.ref) {
-            fpsState.ref.innerText = `${fpsState.frameCount} FPS`;
+            fpsState.ref.innerText = `${fpsState.workerFrameCount} FPS`;
         }
         fpsState.frameCount = 0;
+        fpsState.workerFrameCount = 0;
         fpsState.lastTime = now;
     }
 };
@@ -36,7 +42,7 @@ const FpsCounter = () => {
     const isEffectivePaused = isPaused && !isGlobalInteraction && !isCameraInteracting && !isScrubbing;
 
     const ref = useRef<HTMLSpanElement>(null);
-    
+
     useEffect(() => {
         fpsState.ref = ref.current;
         return () => {

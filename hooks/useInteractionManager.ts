@@ -1,9 +1,12 @@
 
 import { useEffect, RefObject, useRef } from 'react';
 import * as THREE from 'three';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
+import { getViewportCamera } from '../engine/worker/ViewportRefs';
 import { useFractalStore } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
+
 
 export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     // Julia Drag State
@@ -14,6 +17,9 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     // Focus Drag State
     const isDraggingFocusRef = useRef(false);
     
+    // Light drag-in sync (fly mode offset absorption)
+    const lightDragSyncedRef = useRef(false);
+
     // Shared Loop Refs
     const rafRef = useRef<number | null>(null);
     const mousePosRef = useRef({ x: 0, y: 0 });
@@ -35,144 +41,145 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 mousePosRef.current = { x, y };
                 
                 // Case 1: Focus Picking
+                // Captures a depth snapshot (with DoF disabled) on click,
+                // then samples from it as the user drags — no re-rendering needed.
+                // DoF is re-enabled immediately so the user sees a live blur preview.
                 if (mode === 'picking_focus') {
                     isDraggingFocusRef.current = true;
-                    
+                    let snapshotReady = false;
+                    let pendingSample = false;
+                    let lastFocusDist = -1;
+
+                    // Deactivate Focus Lock — user is manually picking, auto-sync would fight it
+                    const store = useFractalStore.getState();
+                    if (store.focusLock) store.setFocusLock(false);
+
+                    // Start: disable DoF, render clean frame, capture depth
+                    engine.startFocusPick(x, y).then((dist) => {
+                        if (!isDraggingFocusRef.current) return;
+                        snapshotReady = true;
+                        if (dist > 0 && dist !== lastFocusDist) {
+                            lastFocusDist = dist;
+                            useFractalStore.getState().setOptics({ dofFocus: dist });
+                        }
+                    });
+
                     const loop = () => {
                         if (!isDraggingFocusRef.current) return;
-                        
-                        if (engine.renderer && engine.activeCamera) {
-                            const dist = engine.measureDistanceAtScreenPoint(
-                                mousePosRef.current.x, 
-                                mousePosRef.current.y, 
-                                engine.renderer, 
-                                engine.activeCamera
-                            );
-                            
-                            if (dist > 0) {
-                                useFractalStore.getState().setOptics({ dofFocus: dist });
 
-                                // Record Keyframe if Recording
-                                const { isRecording, isPlaying, addKeyframe, addTrack, currentFrame, sequence } = animStore.getState();
-                                
-                                if (isRecording) {
-                                    const trackId = 'optics.dofFocus';
-                                    if (!sequence.tracks[trackId]) addTrack(trackId, 'Focus Distance');
-                                    
-                                    const interp = isPlaying ? 'Linear' : 'Bezier';
-                                    addKeyframe(trackId, currentFrame, dist, interp);
+                        if (snapshotReady && !pendingSample) {
+                            pendingSample = true;
+                            engine.sampleFocusPick(
+                                mousePosRef.current.x,
+                                mousePosRef.current.y
+                            ).then((dist) => {
+                                pendingSample = false;
+                                if (!isDraggingFocusRef.current) return;
+
+                                // Only update when distance changes — lets accumulation proceed on static frames
+                                if (dist > 0 && dist !== lastFocusDist) {
+                                    lastFocusDist = dist;
+                                    useFractalStore.getState().setOptics({ dofFocus: dist });
+
+                                    // Record Keyframe if Recording
+                                    const { isRecording, isPlaying, addKeyframe, addTrack, currentFrame, sequence } = animStore.getState();
+
+                                    if (isRecording) {
+                                        const trackId = 'optics.dofFocus';
+                                        if (!sequence.tracks[trackId]) addTrack(trackId, 'Focus Distance');
+
+                                        const interp = isPlaying ? 'Linear' : 'Bezier';
+                                        addKeyframe(trackId, currentFrame, dist, interp);
+                                    }
                                 }
-                            }
+                            });
                         }
                         rafRef.current = requestAnimationFrame(loop);
                     };
                     rafRef.current = requestAnimationFrame(loop);
                 }
                 
-                // Case 2: Julia Picking (Continuous Drag Mode)
+                // Case 2: Julia Picking (Continuous Drag Mode, via worker RPC)
                 if (mode === 'picking_julia') {
                     isDraggingJuliaRef.current = true;
-                    
+
                     // Sync start position from store to prevent jumping
                     const geom = state.geometry;
                     currentJuliaRef.current.set(geom.juliaX, geom.juliaY, geom.juliaZ);
-                    
-                    // Initial Pick
-                    const pick = engine.pickWorldPosition(x, y);
-                    
-                    if (pick) {
-                        // MANDELTERRAIN SPECIAL CASE:
-                        // Map picked world position to Complex Plane coordinates using Pan/Zoom params.
-                        if (state.formula === 'MandelTerrain') {
-                            const cm = state.coreMath;
-                            // Formula: vec2 mapPos = p * (2.0 / zoom) + center;
-                            // p is world xz. mapPos is the complex coord we want for Julia.
+                    targetJuliaRef.current.copy(currentJuliaRef.current);
+
+                    // Helper to map pick result to julia target
+                    const applyPick = (pickPos: THREE.Vector3, formula: string, storeState: any) => {
+                        if (formula === 'MandelTerrain') {
+                            const cm = storeState.coreMath;
                             const zoom = Math.pow(2.0, cm.paramB);
-                            const centerX = cm.paramE;
-                            const centerY = cm.paramF;
-                            
-                            const mappedX = pick.x * (2.0 / zoom) + centerX;
-                            const mappedY = pick.z * (2.0 / zoom) + centerY;
-                            
-                            targetJuliaRef.current.set(mappedX, mappedY, 0.0);
-                        } 
-                        // JULIA MORPH SPECIAL CASE:
-                        // Map picked X/Y to Julia X/Y (Real/Imag). Z is not used for C in this formula.
-                        else if (state.formula === 'JuliaMorph') {
-                            targetJuliaRef.current.set(pick.x, pick.y, 0.0);
+                            targetJuliaRef.current.set(
+                                pickPos.x * (2.0 / zoom) + cm.paramE,
+                                pickPos.z * (2.0 / zoom) + cm.paramF,
+                                0.0
+                            );
+                        } else if (formula === 'JuliaMorph') {
+                            targetJuliaRef.current.set(pickPos.x, pickPos.y, 0.0);
+                        } else {
+                            targetJuliaRef.current.copy(pickPos);
                         }
-                        else {
-                            targetJuliaRef.current.copy(pick);
+                    };
+
+                    // Initial Pick (async)
+                    engine.pickWorldPosition(x, y, true).then((pick) => {
+                        if (pick && isDraggingJuliaRef.current) {
+                            applyPick(pick, state.formula, state);
                         }
-                    } else {
-                        // If picking sky, stay at current
-                        targetJuliaRef.current.copy(currentJuliaRef.current);
-                    }
-                    
+                    });
+
                     // Start Picking Loop
+                    let pendingPick = false;
                     const loop = () => {
                         if (!isDraggingJuliaRef.current) return;
-                        
-                        // 1. Pick (Throttled to Frame Rate via RAF)
-                        // We use the latest mouse position from the ref
-                        const pickPos = engine.pickWorldPosition(mousePosRef.current.x, mousePosRef.current.y);
-                        
-                        // 3. Update Store (Need fresh state inside loop)
-                        const freshState = useFractalStore.getState();
-                        
-                        if (pickPos) {
-                            if (freshState.formula === 'MandelTerrain') {
-                                const cm = freshState.coreMath;
-                                const zoom = Math.pow(2.0, cm.paramB);
-                                const centerX = cm.paramE;
-                                const centerY = cm.paramF;
-                                
-                                const mappedX = pickPos.x * (2.0 / zoom) + centerX;
-                                const mappedY = pickPos.z * (2.0 / zoom) + centerY;
-                                
-                                targetJuliaRef.current.set(mappedX, mappedY, 0.0);
-                            } 
-                            else if (freshState.formula === 'JuliaMorph') {
-                                // For Julia Morph, we essentially "paint" the start shape with the X/Y world coords
-                                targetJuliaRef.current.set(pickPos.x, pickPos.y, 0.0);
-                            }
-                            else {
-                                targetJuliaRef.current.copy(pickPos);
-                            }
+
+                        // 1. Pick (async, throttled — skip if previous pick still pending)
+                        if (!pendingPick) {
+                            pendingPick = true;
+                            engine.pickWorldPosition(mousePosRef.current.x, mousePosRef.current.y, true).then((pickPos) => {
+                                pendingPick = false;
+                                if (!isDraggingJuliaRef.current) return;
+                                if (pickPos) {
+                                    const freshState = useFractalStore.getState();
+                                    applyPick(pickPos, freshState.formula, freshState);
+                                }
+                            });
                         }
-                        
-                        // 2. Smooth Interpolation (Lerp)
-                        // Factor 0.1 gives smoother movement, 0.2 is snappier.
+
+                        // 2. Smooth Interpolation (Lerp) — runs every frame regardless of pick
                         currentJuliaRef.current.lerp(targetJuliaRef.current, 0.1);
-                        
-                        // Optimization: Only update if changed significantly
-                        if (currentJuliaRef.current.distanceToSquared(targetJuliaRef.current) > 0.00000001 || pickPos) {
-                             freshState.setGeometry({ 
-                                 juliaX: currentJuliaRef.current.x, 
-                                 juliaY: currentJuliaRef.current.y, 
-                                 juliaZ: currentJuliaRef.current.z 
+
+                        // 3. Update Store if changed significantly
+                        if (currentJuliaRef.current.distanceToSquared(targetJuliaRef.current) > 0.00000001) {
+                             const freshState = useFractalStore.getState();
+                             freshState.setGeometry({
+                                 juliaX: currentJuliaRef.current.x,
+                                 juliaY: currentJuliaRef.current.y,
+                                 juliaZ: currentJuliaRef.current.z
                              });
-                             
+
                              // 4. Record Keyframe if Recording
                              const { isRecording, isPlaying, addKeyframe, addTrack, currentFrame, sequence } = animStore.getState();
-                             
+
                              if (isRecording) {
-                                 // Add tracks if missing
                                  if (!sequence.tracks['geometry.juliaX']) addTrack('geometry.juliaX', 'Julia X');
                                  if (!sequence.tracks['geometry.juliaY']) addTrack('geometry.juliaY', 'Julia Y');
                                  if (!sequence.tracks['geometry.juliaZ']) addTrack('geometry.juliaZ', 'Julia Z');
-                                 
+
                                  const interp = isPlaying ? 'Linear' : 'Bezier';
-                                 
                                  addKeyframe('geometry.juliaX', currentFrame, currentJuliaRef.current.x, interp);
                                  addKeyframe('geometry.juliaY', currentFrame, currentJuliaRef.current.y, interp);
                                  addKeyframe('geometry.juliaZ', currentFrame, currentJuliaRef.current.z, interp);
                              }
                         }
-                        
+
                         rafRef.current = requestAnimationFrame(loop);
                     };
-                    
+
                     rafRef.current = requestAnimationFrame(loop);
                 }
             }
@@ -194,12 +201,28 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 // The LightGizmo component sets engine.isGizmoInteracting when handling drag
                 const state = useFractalStore.getState();
                 if (state.draggedLightIndex !== null && !engine.isGizmoInteracting) {
-                    const cam = engine.activeCamera as THREE.PerspectiveCamera;
+                    const cam = getViewportCamera() as THREE.PerspectiveCamera;
                     if (cam) {
+                        // Fly mode offset sync: on first drag frame, absorb camera position
+                        // into offset so main thread and worker agree on coordinates.
+                        if (!lightDragSyncedRef.current && state.cameraMode === 'Fly') {
+                            lightDragSyncedRef.current = true;
+                            const so = engine.sceneOffset;
+                            const absorbed = {
+                                x: so.x, y: so.y, z: so.z,
+                                xL: (so.xL ?? 0) + cam.position.x,
+                                yL: (so.yL ?? 0) + cam.position.y,
+                                zL: (so.zL ?? 0) + cam.position.z
+                            };
+                            cam.position.set(0, 0, 0);
+                            cam.updateMatrixWorld();
+                            state.setSceneOffset(absorbed);
+                        }
+
                         const raycaster = new THREE.Raycaster();
                         raycaster.setFromCamera(new THREE.Vector2(x, y), cam);
                         const targetDist = Math.max(0.0002, Math.min(20.0, engine.lastMeasuredDistance * 0.5));
-                        const placementPos = new THREE.Vector3().copy(raycaster.ray.direction).multiplyScalar(targetDist).add(raycaster.ray.origin); 
+                        const placementPos = new THREE.Vector3().copy(raycaster.ray.direction).multiplyScalar(targetDist).add(raycaster.ray.origin);
                         const so = engine.sceneOffset;
                         const absPos = { x: placementPos.x + (so.x + so.xL), y: placementPos.y + (so.y + so.yL), z: placementPos.z + (so.z + so.zL) };
                         
@@ -217,8 +240,9 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
         };
 
         const handlePointerUp = () => {
+            lightDragSyncedRef.current = false;
             const state = useFractalStore.getState();
-            state.setDraggedLight(null);
+            if (state.draggedLightIndex !== null) state.setDraggedLight(null);
             
             // End Julia Drag
             if (isDraggingJuliaRef.current) {
@@ -234,7 +258,8 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
             if (isDraggingFocusRef.current) {
                 isDraggingFocusRef.current = false;
                 if (rafRef.current) cancelAnimationFrame(rafRef.current);
-                
+                engine.endFocusPick();
+
                 // Exit picking mode on release
                 state.setInteractionMode('none');
                 if (navigator.vibrate) navigator.vibrate(20);

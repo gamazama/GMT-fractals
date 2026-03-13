@@ -2,7 +2,7 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, valueToPixel as v2pH, pixelToValue } from '../utils/GraphUtils';
-import { calculateViewBounds } from '../utils/GraphAlgorithms';
+import { calculateViewBounds } from '../utils/keyframeViewBounds';
 import { useFractalStore } from '../store/fractalStore';
 import { useGraphInteraction } from '../hooks/useGraphInteraction';
 import { useGraphTools } from '../hooks/useGraphTools';

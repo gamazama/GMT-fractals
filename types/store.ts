@@ -8,7 +8,7 @@ import { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } fro
 import { LightParams } from './graphics';
 import { OpticsState } from '../features/optics';
 
-export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager' | 'Sonification';
+export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
 
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region';
 
@@ -128,6 +128,7 @@ export interface FractalStoreState extends FeatureStateMap {
   
   // Consolidated Interaction State
   interactionMode: InteractionMode;
+  focusLock: boolean;
   
   cameraMode: CameraMode; 
   sceneOffset: PreciseVector3;
@@ -201,7 +202,6 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setAccumulation: (v: boolean) => void;
     setPreviewMode: (v: boolean) => void;
     setRenderMode: (v: 'Direct' | 'PathTracing') => void;
-    
     setIsPaused: (v: boolean) => void;
     setSampleCap: (v: number) => void;
     
@@ -234,6 +234,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setDraggedLight: (index: number | null) => void;
     
     setInteractionMode: (mode: InteractionMode) => void;
+    setFocusLock: (v: boolean) => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;

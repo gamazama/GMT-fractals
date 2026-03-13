@@ -29,15 +29,26 @@ export const getMathGLSL = (useRotation: boolean) => {
     return `
 // Constants
 #define MAX_DIST 10000.0
-#define BOUNDING_RADIUS 400.0 
+#define MISS_DIST 1000.0            // Far sentinel for missed rays — d > MISS_DIST means no geometry hit; must be < MAX_DIST
+#define BOUNDING_RADIUS 400.0
+#define PI 3.14159265
+#define TAU 6.28318530
+#define INV_TAU 0.15915494          // 1/(2π) — maps [-π,π] atan2 to [-0.5,0.5]
+#define INV_PI  0.31830989          // 1/π — maps [0,π] acos to [0,1]
+#define PRECISION_RATIO_HIGH 5.0e-7 // ~0.5 ppm — float precision floor, scales with distance from fractal origin
+#define PRECISION_RATIO_LOW  1.0e-5 // ~10 ppm — low precision / mobile float floor
+#define GGX_EPSILON 0.0001          // GGX denominator safety — prevents divide-by-zero near specular singularities
+#define DIR_LIGHT_DIST 100.0        // Directional light distance proxy — larger than BOUNDING_RADIUS, treated as infinite
 const float phi = 1.61803398875;
 
-// --- RANDOM FUNCTIONS (Moved from random.ts to ensure scope availability) ---
+// --- RANDOM FUNCTIONS ---
+// Interleaved Gradient Noise (Jimenez 2014, "Next Generation Post Processing in Call of Duty")
 float ign_noise(vec2 uv) {
     vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
     return fract(magic.z * fract(dot(uv, magic.xy)));
 }
 
+// Hash without sine — Dave Hoskins (shadertoy.com/view/4djSRW)
 float hash21(vec2 p) {
     vec3 p3  = fract(vec3(p.xyx) * .1031);
     p3 += dot(p3, p3.yzx + 33.33);
@@ -63,21 +74,24 @@ vec4 textureLod0(sampler2D tex, vec2 uv) {
     #endif
 }
 
+// Distance metric: 0=Euclidean, 1=Chebyshev, 2=Manhattan, 3=Quartic
 float getLength(vec3 p) {
     float m = uDistanceMetric;
-    if (m < 0.5) return length(p);
-    if (m < 1.5) return max(abs(p.x), max(abs(p.y), abs(p.z)));
-    if (m < 2.5) return (abs(p.x) + abs(p.y) + abs(p.z)) * 0.57735;
+    if (m < 0.5) return length(p);                                     // Euclidean
+    if (m < 1.5) return max(abs(p.x), max(abs(p.y), abs(p.z)));       // Chebyshev (L∞)
+    if (m < 2.5) return (abs(p.x) + abs(p.y) + abs(p.z)) * 0.57735;  // Manhattan (L1), scaled by 1/√3 to approximate Euclidean magnitude
     vec3 p2 = p*p; vec3 p4 = p2*p2;
-    return pow(dot(p4, vec3(1.0)), 0.25);
+    return pow(dot(p4, vec3(1.0)), 0.25);                              // Quartic (L4)
 }
 
 #ifdef LAYER3_ENABLED
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+// Perlin's fast approximation: taylorInvSqrt(r) ≈ 1/sqrt(r) for r∈[0.5,2.0]
 vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
 
+// 3D Simplex noise — Stefan Gustavson (github.com/stegu/webgl-noise)
 float snoise(vec3 v) {
   const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
   const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
@@ -95,11 +109,11 @@ float snoise(vec3 v) {
              i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
            + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
            + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
-  float n_ = 0.142857142857;
+  float n_ = 0.142857142857;  // 1/7 — gradient grid scale
   vec3  ns = n_ * D.wyz - D.xzx;
-  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);  // 49 = 7×7 gradient cell wrap
   vec4 x_ = floor(j * ns.z);
-  vec4 y_ = floor(j - 7.0 * x_ );
+  vec4 y_ = floor(j - 7.0 * x_ );              // 7 gradient cells per axis
   vec4 x = x_ *ns.x + ns.yyyy;
   vec4 y = y_ *ns.x + ns.yyyy;
   vec4 h = 1.0 - abs(x) - abs(y);
@@ -118,7 +132,7 @@ float snoise(vec3 v) {
   p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
   vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
   m = m * m;
-  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );  // 42.0 = Perlin's empirical normalization to [-1,1]
 }
 #endif // LAYER3_ENABLED
 
@@ -146,11 +160,11 @@ vec3 applyTextureProfile(vec3 col, float mode) {
 }
 
 void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR) {
-    float r2 = dot(z,z); r2 = max(r2, 1.0e-9);
+    float r2 = max(dot(z,z), 1.0e-9);
     float minR2 = max(minR * minR, 1.0e-9);
-    float fixedR2 = max(fixedR * fixedR, 1.0e-9); 
-    if (r2 < minR2) { float temp = (fixedR2 / minR2); z *= temp; dz *= temp; }
-    else if (r2 < fixedR2) { float temp = (fixedR2 / r2); z *= temp; dz *= temp; }
+    float fixedR2 = max(fixedR * fixedR, 1.0e-9);
+    float k = clamp(fixedR2 / r2, 1.0, fixedR2 / minR2);
+    z *= k; dz *= k;
 }
 
 void boxFold(inout vec3 z, inout float dz, float foldLimit) {

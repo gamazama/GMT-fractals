@@ -66,9 +66,8 @@ export const MandelTerrain: FractalDefinition = {
 
             // --- BURNING SHIP SUPPORT ---
             if (uBurningEnabled > 0.5) {
-                 // FIX: Flip derivative to maintain DE continuity across axes
-                 if (z2.x < 0.0) dz.x = -dz.x;
-                 if (z2.y < 0.0) dz.y = -dz.y;
+                 // Flip derivative to maintain DE continuity across axes
+                 dz *= sign(z2 + vec2(1e-10));
                  z2 = abs(z2);
             }
 

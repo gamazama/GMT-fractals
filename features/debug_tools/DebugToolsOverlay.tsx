@@ -1,23 +1,20 @@
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { FeatureComponentProps } from '../../components/registry/ComponentRegistry';
-import { ShaderDebuggerGlobalWrapper } from '../../components/ShaderDebugger';
-import { StateDebugger } from '../../components/StateDebugger';
 
-// We need to bridge the DDFS state to the specific components.
-// The existing components use `useFractalStore`. 
-// We should update them to read from `state.debugTools` instead of `state`.
-// BUT: To avoid refactoring the internals of those complex components right now,
-// we can update `uiSlice` removal step to actually keep the types in store but map them to this feature?
-// NO. The clean way is to update the components to use the DDFS state.
+// Code-split: debug tools are rarely used
+const LazyShaderDebugger = React.lazy(() =>
+    import('../../components/ShaderDebugger').then(m => ({ default: m.ShaderDebuggerGlobalWrapper }))
+);
+const LazyStateDebugger = React.lazy(() =>
+    import('../../components/StateDebugger').then(m => ({ default: m.StateDebugger }))
+);
 
 export const DebugToolsOverlay: React.FC<FeatureComponentProps> = ({ sliceState, actions }) => {
-    // Note: The components handle their own visibility checks internally via the store hooks.
-    // We just mount them. However, we need to update the Components to point to the new store location.
     return (
-        <>
-            <ShaderDebuggerGlobalWrapper />
-            <StateDebugger />
-        </>
+        <Suspense fallback={null}>
+            <LazyShaderDebugger />
+            <LazyStateDebugger />
+        </Suspense>
     );
 };

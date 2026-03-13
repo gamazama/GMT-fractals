@@ -4,6 +4,7 @@ import { FractalState, FractalActions } from '../../../types';
 import { useFractalStore } from '../../../store/fractalStore';
 import { collectHelpIds } from '../../../utils/helpUtils';
 import { AutoFeaturePanel } from '../../../components/AutoFeaturePanel';
+import { SectionLabel } from '../../../components/SectionLabel';
 
 export const NoiseTab = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
     const openGlobalMenu = useFractalStore(s => s.openContextMenu);
@@ -21,8 +22,8 @@ export const NoiseTab = ({ state, actions }: { state: FractalState, actions: Fra
         <div className="flex flex-col" data-help-id="grad.noise">
             <div className="t-section-header" onContextMenu={handleHeaderContextMenu}>
                 <div>
-                    <label className="text-[10px] text-green-400 font-bold uppercase tracking-widest block mb-1">Procedural 3d noise</label>
-                    <p className="text-[9px] text-gray-500 font-normal normal-case tracking-normal">Adds texture and surface detail.</p>
+                    <SectionLabel color="text-green-400" className="block mb-1">Procedural 3d noise</SectionLabel>
+                    <p className="text-[9px] text-gray-500 font-normal">Adds texture and surface detail.</p>
                 </div>
             </div>
             

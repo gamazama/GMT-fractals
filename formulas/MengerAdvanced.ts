@@ -26,9 +26,10 @@ export const MengerAdvanced: FractalDefinition = {
 
         // 2. Menger Sorting (The Sponge Logic)
         z3 = abs(z3);
-        if (z3.x < z3.y) z3.xy = z3.yx;
-        if (z3.x < z3.z) z3.xz = z3.zx;
-        if (z3.y < z3.z) z3.yz = z3.zy;
+        vec3 ms = z3;
+        z3.x = max(max(ms.x, ms.y), ms.z);
+        z3.z = min(min(ms.x, ms.y), ms.z);
+        z3.y = ms.x + ms.y + ms.z - z3.x - z3.z;
         
         // 3. UBER FEATURE: Inner Box Fold (Param C)
         // Injects Mandelbox-like complexity inside the sponge voids
@@ -49,16 +50,10 @@ export const MengerAdvanced: FractalDefinition = {
         float stretchFactor = 1.0;
         
         if (abs(zScale - 1.0) > 0.01) {
-            if (zScale < 1.0) {
-                 // Squashing: Conservative bound (1.0) prevents overstepping artifacts
-                 stretchFactor = 1.0;
-            } else {
-                 // Stretching: Adaptive derivative optimization to skip empty space faster
-                 // If the point is aligned with Z, it suffers full stretch.
-                 // If it is perpendicular (X/Y), it suffers minimal stretch.
-                 float alignment = abs(z3.z) / (length(z3) + 1.0e-9);
-                 stretchFactor = mix(1.0, zScale, alignment);
-            }
+            // Stretching: adaptive derivative based on Z-alignment
+            // Squashing (zScale<1): conservative bound (1.0) prevents overstepping
+            float alignment = abs(z3.z) / (length(z3) + 1.0e-9);
+            stretchFactor = mix(1.0, mix(1.0, zScale, alignment), step(1.0, zScale));
             z3.z *= zScale;
         }
 
@@ -76,11 +71,11 @@ export const MengerAdvanced: FractalDefinition = {
     },
 
     parameters: [
-        { label: 'Scale', id: 'paramA', min: 0.5, max: 4.0, step: 0.001, default: 3.0 },
+        { label: 'Scale', id: 'paramA', min: 0.5, max: 4.0, step: 0.001, default: 2.236 },
         { label: 'Offset', id: 'paramB', min: 0.0, max: 3.0, step: 0.001, default: 1.0 },
-        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
-        { label: 'Inner Fold', id: 'paramC', min: 0.0, max: 1.5, step: 0.01, default: 0.5 }, 
-        { label: 'Z Scale', id: 'paramD', min: 0.2, max: 3.0, step: 0.01, default: 1.5 },
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0.88 }, mode: 'rotation' },
+        { label: 'Inner Fold', id: 'paramC', min: 0.0, max: 1.5, step: 0.01, default: 0.618 },
+        { label: 'Z Scale', id: 'paramD', min: 0.2, max: 3.0, step: 0.01, default: 0.442 },
     ],
 
     defaultPreset: {
@@ -164,30 +159,14 @@ export const MengerAdvanced: FractalDefinition = {
                 layer3Bump: 0,
                 layer3Turbulence: 0
             },
-            geometry: {
-                juliaMode: false,
-                juliaX: 0,
-                juliaY: 0,
-                juliaZ: 0,
-                hybridMode: false,
-                hybridIter: 2,
-                hybridScale: 2,
-                hybridMinR: 0.5,
-                hybridFixedR: 1,
-                hybridFoldLimit: 1,
-                hybridAddC: false,
-                hybridComplex: false,
-                hybridProtect: true,
-                hybridSkip: 1,
-                hybridSwap: false
-            },
+            geometry: {},
             quality: {
                 fudgeFactor: 1,
                 detail: 3, 
                 pixelThreshold: 0.5,
                 maxSteps: 300,
                 distanceMetric: 0,
-                estimator: 4.0 // Linear (2.0)
+                estimator: 1.0
             },
             coreMath: {
                 iterations: 12,
@@ -207,7 +186,7 @@ export const MengerAdvanced: FractalDefinition = {
                 ptStochasticShadows: false,
                 lights: [
                     {
-                        type: 'Point', 
+                        type: 'Point',
                         position: { x: -0.985, y: 1.872, z: 2.008 },
                         color: "#ffffff",
                         intensity: 9.18,
@@ -216,42 +195,11 @@ export const MengerAdvanced: FractalDefinition = {
                         fixed: false,
                         visible: true,
                         castShadow: true
-                    },
-                    {
-                        type: 'Point', 
-                        position: { x: 2, y: -1, z: 1 },
-                        color: "#ff8800",
-                        intensity: 0.5,
-                        falloff: 0,
-                        falloffType: "Quadratic",
-                        fixed: false,
-                        visible: false,
-                        castShadow: true
-                    },
-                    {
-                        type: 'Point',
-                        position: { x: 0, y: -5, z: 2 },
-                        color: "#0088ff",
-                        intensity: 0.25,
-                        falloff: 0,
-                        falloffType: "Quadratic",
-                        fixed: false,
-                        visible: false,
-                        castShadow: true
                     }
                 ]
             },
-            optics: {
-                camType: 0,
-                camFov: 60,
-                orthoScale: 2,
-                dofStrength: 0,
-                dofFocus: 10
-            },
-            navigation: {
-                flySpeed: 0.5,
-                autoSlow: true
-            }
+            optics: {},
+            navigation: {}
         },
         cameraPos: { x: 0, y: 0, z: 0 },
         cameraRot: { x: -0.045, y: -0.453, z: 0.141, w: 0.879 },
@@ -259,8 +207,5 @@ export const MengerAdvanced: FractalDefinition = {
         targetDistance: 2.98,
         cameraMode: "Orbit",
         renderMode: "Direct",
-        animations: [],
-        sequence: { durationFrames: 300, fps: 30, tracks: {} },
-        duration: 300
     }
 };

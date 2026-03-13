@@ -17,7 +17,7 @@ export const AudioSpectrum: React.FC = () => {
     
     // DDFS Wrapper for Modulation
     const updateModulation = (id: string, update: Partial<ModulationRule>) => {
-        // @ts-ignore
+        // @ts-expect-error — DDFS dynamic store action
         store.updateModulation({ id, update });
     };
 
@@ -408,8 +408,8 @@ export const AudioSpectrum: React.FC = () => {
             
             {/* Legend / Overlay */}
             <div className="absolute top-1 right-2 flex gap-2 pointer-events-none">
-                <div className="text-[8px] font-bold text-gray-500 bg-black/50 px-1 rounded">CTRL+DRAG = GAIN</div>
-                <div className="text-[8px] font-bold text-gray-600 uppercase bg-black/50 px-1 rounded">
+                <div className="text-[8px] font-bold text-gray-500 bg-black/50 px-1 rounded">Ctrl+Drag = Gain</div>
+                <div className="text-[8px] font-bold text-gray-600 bg-black/50 px-1 rounded">
                     {isLogScale ? 'LOG' : 'LIN'}
                 </div>
             </div>

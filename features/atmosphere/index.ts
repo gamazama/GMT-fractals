@@ -9,8 +9,6 @@ export interface AtmosphereState {
     fogFar: number;
     fogColor: THREE.Color;
     fogDensity: number;
-    fogAnisotropy: number;
-    fogEmissiveStrength: number;
     glowEnabled: boolean; // Compile-Time Switch
     glowQuality: number;
     glowIntensity: number;
@@ -66,20 +64,11 @@ export const AtmosphereFeature: FeatureDefinition = {
             group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 }
         },
         fogDensity: {
-            type: 'float', default: 0.01, label: 'Volumetric Density', shortId: 'fd', uniform: 'uFogDensity',
-            min: 0, max: 0.5, step: 0.001, scale: 'log', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 }
+            type: 'float', default: 0.01, label: 'Fog Density', shortId: 'fd', uniform: 'uFogDensity',
+            min: 0.001, max: 5.0, step: 0.01, scale: 'log', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            description: 'Basic volumetric fog absorption density. For god rays and scatter, enable Volumetric Scattering in Engine.'
         },
-        fogAnisotropy: {
-            type: 'float', default: 0.3, label: 'Anisotropy (g)', shortId: 'fa', uniform: 'uPTFogG',
-            min: -0.99, max: 0.99, step: 0.01, group: 'fog', parentId: 'fogDensity', condition: { gt: 0.0 },
-            description: 'Henyey-Greenstein phase. 0=isotropic, +0.9=forward scatter (god rays), -0.9=back scatter.'
-        },
-        fogEmissiveStrength: {
-            type: 'float', default: 0.0, label: 'Surface Color Scatter', shortId: 'fes', uniform: 'uFogEmissiveStrength',
-            min: 0, max: 2.0, step: 0.01, scale: 'log', group: 'fog', parentId: 'fogDensity', condition: { gt: 0.0 },
-            description: 'Scatter the fractal\'s Layer 1 orbit trap color field through the fog. Creates colored volumetric haze.'
-        },
-        
+
         // --- GLOW (Runtime) ---
         // Note: These sliders are only visible if the feature is compiled (handled by UI visibility logic)
         glowIntensity: {

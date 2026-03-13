@@ -17,13 +17,18 @@ const crc32 = (buf: Uint8Array): number => {
   return (crc ^ -1) >>> 0;
 };
 
-const stringToUint8 = (s: string) => {
+// UTF-8 safe encoding/decoding via standard APIs
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+// ASCII-only helper for chunk type names and keywords (always ASCII)
+const asciiToUint8 = (s: string) => {
   const data = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) data[i] = s.charCodeAt(i);
   return data;
 };
 
-const uint8ToString = (buf: Uint8Array) => {
+const uint8ToAscii = (buf: Uint8Array) => {
     let s = "";
     for(let i=0; i<buf.length; i++) s += String.fromCharCode(buf[i]);
     return s;
@@ -46,45 +51,51 @@ export const injectMetadata = async (blob: Blob, key: string, value: string): Pr
     throw new Error("Not a valid PNG");
   }
 
-  // Prepare tEXt chunk
-  // Format: Length(4) + Type(4) + Data(Keyword + Null + Text) + CRC(4)
-  const keyData = stringToUint8(key);
-  const valData = stringToUint8(value);
-  const chunkLen = keyData.length + 1 + valData.length;
-  
+  // Use iTXt chunk for proper UTF-8 support
+  // Format: Length(4) + Type(4) + Data + CRC(4)
+  // Data: Keyword + \0 + CompressionFlag(1) + CompressionMethod(1) + LanguageTag + \0 + TranslatedKeyword + \0 + Text
+  const keyData = asciiToUint8(key);
+  const valData = encoder.encode(value); // UTF-8 encoded
+  // keyword \0 compressionFlag(0) compressionMethod(0) languageTag \0 translatedKeyword \0 text
+  const chunkLen = keyData.length + 1 + 1 + 1 + 1 + 1 + valData.length;
+
   // Total size: 4 (len) + 4 (type) + len + 4 (crc)
   const totalChunkSize = 12 + chunkLen;
-  
+
   const chunk = new Uint8Array(totalChunkSize);
-  
+
   // Length
   writeUint32(chunk, 0, chunkLen);
-  
-  // Type 'tEXt'
-  chunk[4] = 116; chunk[5] = 69; chunk[6] = 88; chunk[7] = 116;
-  
+
+  // Type 'iTXt'
+  chunk[4] = 105; chunk[5] = 84; chunk[6] = 88; chunk[7] = 116;
+
   // Data
-  chunk.set(keyData, 8);
-  chunk[8 + keyData.length] = 0; // Null separator
-  chunk.set(valData, 8 + keyData.length + 1);
-  
+  let offset = 8;
+  chunk.set(keyData, offset); offset += keyData.length;
+  chunk[offset++] = 0; // Null separator after keyword
+  chunk[offset++] = 0; // Compression flag (0 = uncompressed)
+  chunk[offset++] = 0; // Compression method
+  chunk[offset++] = 0; // Language tag (empty) + null separator
+  chunk[offset++] = 0; // Translated keyword (empty) + null separator
+  chunk.set(valData, offset);
+
   // CRC (Calculated on Type + Data)
   const crc = crc32(chunk.slice(4, totalChunkSize - 4));
   writeUint32(chunk, totalChunkSize - 4, crc);
 
   // Insert before IEND
-  // Find IEND
   let pos = 8;
   while (pos < data.length) {
     const len = (data[pos] << 24) | (data[pos+1] << 16) | (data[pos+2] << 8) | data[pos+3];
-    const type = uint8ToString(data.slice(pos+4, pos+8));
-    
+    const type = uint8ToAscii(data.slice(pos+4, pos+8));
+
     if (type === 'IEND') {
         break;
     }
     pos += 12 + len;
   }
-  
+
   // Construct new buffer
   const final = new Uint8Array(data.length + totalChunkSize);
   final.set(data.slice(0, pos), 0);
@@ -97,34 +108,57 @@ export const injectMetadata = async (blob: Blob, key: string, value: string): Pr
 export const extractMetadata = async (file: File, key: string): Promise<string | null> => {
     const buffer = await file.arrayBuffer();
     const data = new Uint8Array(buffer);
-    
+
     // Check Signature
     if (data[0] !== 137 || data[1] !== 80) return null;
 
     let pos = 8;
     while (pos < data.length) {
         const len = (data[pos] << 24) | (data[pos+1] << 16) | (data[pos+2] << 8) | data[pos+3];
-        const type = uint8ToString(data.slice(pos+4, pos+8));
-        
+        const type = uint8ToAscii(data.slice(pos+4, pos+8));
+
+        if (type === 'iTXt') {
+            const content = data.slice(pos+8, pos+8+len);
+            // Find keyword null terminator
+            let sep = -1;
+            for(let i=0; i<content.length; i++) {
+                if (content[i] === 0) { sep = i; break; }
+            }
+            if (sep !== -1) {
+                const keyword = uint8ToAscii(content.slice(0, sep));
+                if (keyword === key) {
+                    // Skip: null(1) + compressionFlag(1) + compressionMethod(1) + languageTag + null + translatedKeyword + null
+                    let textStart = sep + 1 + 1 + 1; // past null, compressionFlag, compressionMethod
+                    // Skip language tag (find next null)
+                    while (textStart < content.length && content[textStart] !== 0) textStart++;
+                    textStart++; // past null
+                    // Skip translated keyword (find next null)
+                    while (textStart < content.length && content[textStart] !== 0) textStart++;
+                    textStart++; // past null
+                    return decoder.decode(content.slice(textStart));
+                }
+            }
+        }
+
+        // Backward compatibility: also read legacy tEXt chunks
         if (type === 'tEXt') {
             const content = data.slice(pos+8, pos+8+len);
-            // Split by null byte
             let separator = -1;
             for(let i=0; i<content.length; i++) {
                 if (content[i] === 0) { separator = i; break; }
             }
-            
             if (separator !== -1) {
-                const keyword = uint8ToString(content.slice(0, separator));
+                const keyword = uint8ToAscii(content.slice(0, separator));
                 if (keyword === key) {
-                    return uint8ToString(content.slice(separator + 1));
+                    // Legacy: try UTF-8 decode first, falls back gracefully for Latin-1
+                    return decoder.decode(content.slice(separator + 1));
                 }
             }
         }
-        
+
         if (type === 'IEND') break;
         pos += 12 + len;
     }
-    
+
     return null;
 };

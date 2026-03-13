@@ -273,7 +273,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
             }
             if (part.startsWith('$') && part.endsWith('$')) {
                 // Math styling: Serif, Italic, Cyan tint
-                return <span key={j} className="font-serif italic text-cyan-300 px-0.5 tracking-wide">{part.slice(1, -1)}</span>;
+                return <span key={j} className="font-serif italic text-cyan-300 px-0.5">{part.slice(1, -1)}</span>;
             }
             if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
                 const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
@@ -410,7 +410,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                     <div className="flex-1 overflow-y-auto custom-scroll p-2">
                         {Object.entries(categories).map(([cat, topics]) => (
                             <div key={cat} className="mb-3">
-                                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 px-2 sticky top-0 bg-[#151515]/95 z-10 backdrop-blur-sm py-1 border-b border-white/5">
+                                <div className="text-[10px] font-bold text-gray-500 mb-1 px-2 sticky top-0 bg-[#151515]/95 z-10 backdrop-blur-sm py-1 border-b border-white/5">
                                     {cat}
                                 </div>
                                 {renderTopicTree(topics as HelpSection[])}
@@ -426,7 +426,7 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                 >
                     {!searchTerm && (
                         <div className="mb-6 pb-2 border-b border-white/10">
-                            <h2 className="text-2xl font-black text-gray-700 uppercase tracking-tighter">{activeCategory}</h2>
+                            <h2 className="text-2xl font-bold text-gray-700 tracking-tighter">{activeCategory}</h2>
                         </div>
                     )}
 
@@ -441,9 +441,9 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                                 onClick={() => { if(topic.id !== activeTopicId) onNavigate(topic.id); }}
                             >
                                 <div className="flex items-baseline justify-between border-b border-white/10 pb-2 mb-4">
-                                    <h1 className="text-xl font-black text-white">{topic.title}</h1>
+                                    <h1 className="text-xl font-bold text-white">{topic.title}</h1>
                                     {searchTerm && (
-                                        <span className="text-[9px] font-mono text-gray-600 uppercase bg-black/40 px-2 py-1 rounded">
+                                        <span className="text-[9px] font-mono text-gray-600 bg-black/40 px-2 py-1 rounded">
                                             {topic.category}
                                         </span>
                                     )}

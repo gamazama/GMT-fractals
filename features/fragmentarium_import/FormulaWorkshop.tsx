@@ -10,8 +10,69 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+
+// Default reference script shown when the Workshop opens with no source.
+// Demonstrates optimal structure for a distance estimator function.
+const DEFAULT_SCRIPT = `// ── GMT Formula Workshop — Quick Reference ──
+//
+// Paste a GLSL distance estimator here:
+//   • Fragmentarium .frag files (with uniforms & sliders)
+//   • Shadertoy-style DE snippets
+//   • Raw functions: float DE(vec3 p) { ... }
+//
+// Best results come from a single self-contained function with one
+// iteration loop. Helper functions are included but complex multi-
+// function pipelines may need manual adjustment after import.
+//
+// ── Uniforms & Sliders ──
+//   uniform float Name; slider[min, default, max]
+//   Mapped to engine slots: uParamA–F (scalar), uVec3A–C (vec3)
+//
+// ── Available #defines ──
+//   PI, TAU, MAX_DIST, BOUNDING_RADIUS, MAX_HARD_ITERATIONS
+//
+// ── Available helpers (from engine math) ──
+//   float getLength(vec3 p)           — respects distance metric setting
+//   void sphereFold(inout vec3, inout float, float minR, float fixedR)
+//   void boxFold(inout vec3, inout float, float foldLimit)
+//   void applyLocalRotation(inout vec3) — applies pre-rotation if enabled
+//
+// ── Loop context variables (inout) ──
+//   vec4 z   — current position (.xyz) + derivative (.w)
+//   float dr — running derivative magnitude
+//   float trap — orbit trap distance (engine tracks automatically)
+//   vec4 c   — iteration constant (initial pos or Julia c)
+//
+// ── Coloring ──
+//   Orbit trap tracking and iteration counting are injected into
+//   your loop automatically. The engine's coloring modes (iterations,
+//   orbit trap, decomposition) work without any extra code.
+
+uniform float Scale;   slider[-3.0,2.0,4.0]
+uniform float MinRad2; slider[0.01,0.25,1.0]
+
+float DE(vec3 pos) {
+    float minRad2 = clamp(MinRad2, 1.0e-9, 1.0);
+    vec4 scale = vec4(Scale) / minRad2;
+    float absScaleM1 = abs(Scale - 1.0);
+    float absScale = abs(Scale);
+
+    vec4 p = vec4(pos, 1.0), p0 = p;
+
+    for (int i = 0; i < 12; i++) {
+        p.xyz = clamp(p.xyz, -1.0, 1.0) * 2.0 - p.xyz;  // box fold
+        float r2 = dot(p.xyz, p.xyz);
+        p *= clamp(max(minRad2 / r2, minRad2), 0.0, 1.0); // sphere fold
+        p = p * scale + p0;
+    }
+
+    return (length(p.xyz) - absScaleM1) / p.w - pow(absScale, float(1 - 12));
+}
+`;
+
 import type { FractalDefinition } from '../../types';
 import { registry } from '../../engine/FractalRegistry';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { useFractalStore } from '../../store/fractalStore';
 import { GlslEditor } from '../../components/inputs/GlslEditor';
 import type { WorkshopDetection, WorkshopParam, TransformedFormulaV2 } from './types';
@@ -19,13 +80,25 @@ import { detectFormula } from './workshop/detection';
 import { PREVIEW_ID, buildTransformResult } from './workshop/preview';
 import { buildFractalParams, slotOptionsForType, slotLabel, componentSlotBase } from './workshop/param-builder';
 
+// --- Naming ---
+/** Return a name that doesn't collide with any existing formula in the registry. */
+function uniqueName(base: string): string {
+    if (!base) return '';
+    if (!registry.get(base)) return base;
+    for (let i = 2; i < 100; i++) {
+        const candidate = `${base}_${i}`;
+        if (!registry.get(candidate)) return candidate;
+    }
+    return base; // fallback — let the user adjust
+}
+
 // --- Icons ---
 const XIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 const CodeIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
 const CheckCircleIcon = () => <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
 const ChevronDownIcon = () => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>;
 const ChevronRightIcon = () => <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>;
-const PlayIcon = () => <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+
 
 // --- Types ---
 
@@ -87,7 +160,7 @@ function formatAnnotatedOutput(r: TransformedFormulaV2): string {
 // --- Component ---
 
 export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula }) => {
-    const [source, setSource]                             = useState('');
+    const [source, setSource]                             = useState(editFormula ? '' : DEFAULT_SCRIPT);
     const [sourceCollapsed, setSourceCollapsed]           = useState(false);
     const [detected, setDetected]                         = useState<WorkshopDetection | null>(null);
     const [selectedFunctionName, setSelectedFunctionName] = useState('');
@@ -154,7 +227,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             const result = buildTransformResult(detected, selectedFunctionName, loopMode, formulaName || 'Preview', mappings);
             if (!result) return;
             setTransformedCode(formatAnnotatedOutput(result));
-        } catch (_) {}
+        } catch (_) { console.warn('[Workshop] Transform preview failed:', _); }
     }, [detected, selectedFunctionName, loopMode, mappings, formulaName]);
 
     // ---- Detection ----
@@ -176,8 +249,8 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         setLoopMode(result.loopMode);
         setMappings(result.params);
 
-        if (result.suggestedName && !formulaName) {
-            setFormulaName(result.suggestedName);
+        if (result.suggestedName) {
+            setFormulaName(uniqueName(result.suggestedName));
         }
 
         setSourceCollapsed(true);
@@ -249,10 +322,12 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                 defaultPreset,
             };
             registry.register(previewDef);
+            // Send formula to worker BEFORE setFormula triggers shader compilation
+            FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: previewDef.id, shader: previewDef.shader });
             setFormula(PREVIEW_ID as any);
             applyFormulaDefaults(defaultPreset);
-        } catch (e: any) {
-            setError('Preview failed: ' + (e.message || String(e)));
+        } catch (e) {
+            setError('Preview failed: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
@@ -318,20 +393,21 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             };
 
             registry.register(newDef);
+            // Send formula to worker BEFORE setFormula triggers shader compilation
+            FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: newDef.id, shader: newDef.shader });
             setSuccess(true);
             setTimeout(() => { setFormula(formulaName as any); applyFormulaDefaults(defaultPreset); onClose(); }, 1000);
-        } catch (e: any) {
-            setError('Import failed: ' + (e.message || String(e)));
+        } catch (e) {
+            setError('Import failed: ' + (e instanceof Error ? e.message : String(e)));
         }
     };
 
     const selectedCandidate = detected?.candidates.find(c => c.name === selectedFunctionName) ?? null;
-    const canPreview = !!detected && !!selectedFunctionName;
-    const canImport  = canPreview && formulaName.trim().length > 0;
+    const canImport = !!detected && !!selectedFunctionName && formulaName.trim().length > 0;
 
     // ---- Render ----
     return (
-        <div className="relative w-1/2 bg-[#0d0d0d] border-r border-white/10 flex flex-col overflow-hidden shrink-0">
+        <div className="relative z-[60] w-1/2 max-w-[640px] bg-[#0d0d0d] border-r border-white/10 flex flex-col overflow-hidden shrink-0">
 
             {/* ── Success overlay ── */}
             {success && (
@@ -348,10 +424,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                 <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-black/40 shrink-0">
                     <div className="flex items-center gap-2">
                         <CodeIcon />
-                        <div>
-                            <h2 className="text-[12px] font-semibold text-white leading-tight">Formula Workshop</h2>
-                            <p className="text-[9px] text-gray-500 uppercase tracking-wider">Live viewport on the right · Fastest engine active</p>
-                        </div>
+                        <h2 className="text-[12px] font-semibold text-white leading-tight">Formula Workshop</h2>
                     </div>
                     <button onClick={handleClose} className="p-1.5 hover:bg-white/10 rounded-md transition-colors text-gray-500 hover:text-white">
                         <XIcon />
@@ -359,14 +432,14 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                 </div>
 
                 {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto custom-scroll p-3 space-y-3 min-h-0">
+                <div className="flex-1 overflow-y-auto custom-scroll p-3 min-h-0 flex flex-col gap-3">
 
                     {/* ── Section 1: Source Code (collapsible) ── */}
-                    <section className="space-y-2">
+                    <section className={`space-y-2 ${!detected && !sourceCollapsed ? 'flex-1 flex flex-col min-h-[200px]' : ''}`}>
                         <div className="flex items-center justify-between">
                             <button
                                 onClick={() => setSourceCollapsed(v => !v)}
-                                className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+                                className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-500 hover:text-gray-300 transition-colors"
                             >
                                 {sourceCollapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
                                 <span>1 · Source Code</span>
@@ -388,37 +461,37 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                         </div>
 
                         {!sourceCollapsed && (
-                            <>
+                            <div className={`${!detected ? 'flex-1 flex flex-col min-h-0' : 'contents'}`}>
                                 <GlslEditor
                                     value={source}
                                     onChange={val => setSource(val)}
-                                    height="160px"
-                                    placeholder="Paste GLSL here — Fragmentarium .frag, Shadertoy DE snippet, blog post formula, or any GLSL iteration function."
+                                    height={detected ? '160px' : '100%'}
+                                    placeholder="Paste GLSL here — distance estimator functions, Fragmentarium .frag files, or Shadertoy snippets."
                                 />
-                                <div className="flex justify-end">
+                                <div className="flex justify-end shrink-0 pt-2">
                                     <button
                                         onClick={() => runDetect(source)}
                                         disabled={!source.trim()}
-                                        className="px-4 py-1.5 bg-blue-600/80 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-black uppercase tracking-wider text-white transition-colors"
+                                        className="px-4 py-1.5 bg-cyan-900/60 hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold text-cyan-300 transition-colors border border-cyan-700/30"
                                     >
                                         Detect Functions ▶
                                     </button>
                                 </div>
-                            </>
+                            </div>
                         )}
                     </section>
 
                     {/* ── Section 2: Function Selection ── */}
                     {detected && (
                         <section className="space-y-2 border border-white/10 rounded-lg p-2.5 bg-white/[0.02]">
-                            <h3 className="text-[10px] font-black uppercase tracking-wider text-gray-500">2 · Iteration Function</h3>
+                            <h3 className="text-[10px] font-semibold text-gray-500">2 · Iteration Function</h3>
 
                             <div className="flex items-center gap-2">
                                 <label className="text-[11px] text-gray-400 shrink-0 w-16">Function:</label>
                                 <select
                                     value={selectedFunctionName}
                                     onChange={e => handleSelectFunction(e.target.value)}
-                                    className="flex-1 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-white/30"
+                                    className="flex-1 t-select font-mono text-white"
                                 >
                                     {detected.candidates.map(c => (
                                         <option key={c.name} value={c.name}>
@@ -443,13 +516,13 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => setLoopMode('loop')}
-                                            className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${loopMode === 'loop' ? 'bg-blue-600/80 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
+                                            className={`px-2.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${loopMode === 'loop' ? 'bg-cyan-900/60 text-cyan-300 border border-cyan-700/30' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent'}`}
                                         >
                                             Extract loop body
                                         </button>
                                         <button
                                             onClick={() => setLoopMode('single')}
-                                            className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider transition-colors ${loopMode === 'single' ? 'bg-blue-600/80 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
+                                            className={`px-2.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${loopMode === 'single' ? 'bg-cyan-900/60 text-cyan-300 border border-cyan-700/30' : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-transparent'}`}
                                         >
                                             Whole function
                                         </button>
@@ -462,7 +535,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                     {/* ── Section 3: Parameters & Mapping ── */}
                     {detected && selectedFunctionName && (
                         <section className="space-y-2 border border-white/10 rounded-lg p-2.5 bg-white/[0.02]">
-                            <h3 className="text-[10px] font-black uppercase tracking-wider text-gray-500">3 · Parameters</h3>
+                            <h3 className="text-[10px] font-semibold text-gray-500">3 · Parameters</h3>
 
                             <div className="flex items-center gap-2">
                                 <label className="text-[11px] text-gray-400 shrink-0 w-24">Formula name:</label>
@@ -507,14 +580,14 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-[10px]">
                                         <thead>
-                                            <tr className="text-gray-600 uppercase tracking-wider border-b border-white/10">
-                                                <th className="text-left pb-1 pr-2 font-black">Variable</th>
-                                                <th className="text-left pb-1 pr-2 font-black">Type</th>
-                                                <th className="text-left pb-1 pr-2 font-black">→ Slot</th>
-                                                <th className="text-left pb-1 pr-2 font-black">Default</th>
-                                                <th className="text-left pb-1 pr-1 font-black">Min</th>
-                                                <th className="text-left pb-1 pr-1 font-black">Max</th>
-                                                <th className="text-left pb-1 font-black">Step / Flags</th>
+                                            <tr className="text-gray-600 border-b border-white/10">
+                                                <th className="text-left pb-1 pr-2 font-semibold">Variable</th>
+                                                <th className="text-left pb-1 pr-2 font-semibold">Type</th>
+                                                <th className="text-left pb-1 pr-2 font-semibold">→ Slot</th>
+                                                <th className="text-left pb-1 pr-2 font-semibold">Default</th>
+                                                <th className="text-left pb-1 pr-1 font-semibold">Min</th>
+                                                <th className="text-left pb-1 pr-1 font-semibold">Max</th>
+                                                <th className="text-left pb-1 font-semibold">Step / Flags</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -542,7 +615,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                                                         {isFirstInGroup && groupSize > 1 && (
                                                             <tr className="border-t border-amber-500/20">
                                                                 <td colSpan={7} className="pt-1.5 pb-0.5 px-1">
-                                                                    <span className="text-amber-400/70 text-[9px] font-black uppercase tracking-wider">
+                                                                    <span className="text-amber-400/70 text-[9px] font-semibold">
                                                                         ⚑ Flags · {groupSize} bits packed into {m.mappedSlot} · slider 0–{Math.pow(2, groupSize) - 1}
                                                                     </span>
                                                                     <span className="text-gray-600 text-[9px] ml-2 normal-case">assign bools to the same slot to group them</span>
@@ -553,7 +626,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                                                         {isInVecGroup && isFirstVecIndex && (
                                                             <tr className="border-t border-sky-500/20">
                                                                 <td colSpan={7} className="pt-1.5 pb-0.5 px-1">
-                                                                    <span className="text-sky-400/70 text-[9px] font-black uppercase tracking-wider">
+                                                                    <span className="text-sky-400/70 text-[9px] font-semibold">
                                                                         ⊞ Vec · {vecGroupIndices.length} floats packed into {compInfo!.base} · one vec{vecGroupIndices.length > 2 ? '3' : '2'} control
                                                                     </span>
                                                                     <span className="text-gray-600 text-[9px] ml-2 normal-case">assign floats to {compInfo!.base}.x / .y / .z to group them</span>
@@ -571,7 +644,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                                                                 <select
                                                                     value={m.mappedSlot}
                                                                     onChange={e => handleMappingChange(i, 'mappedSlot', e.target.value)}
-                                                                    className="bg-black/50 border border-white/10 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none focus:border-white/30 w-24"
+                                                                    className="t-select text-white w-24"
                                                                 >
                                                                     {slotOptionsForType(m.type).map(opt => (
                                                                         <option key={opt} value={opt}>{slotLabel(opt)}</option>
@@ -624,7 +697,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                     {detected && selectedFunctionName && (
                         <section className="space-y-1.5">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-[10px] font-black uppercase tracking-wider text-gray-500">4 · Transformed Output</h3>
+                                <h3 className="text-[10px] font-semibold text-gray-500">4 · Transformed Output</h3>
                                 <span className="text-[9px] text-gray-600 italic">① uniforms · ② function · ③ loop init · ④ loop body · ⑤ getDist</span>
                             </div>
                             <GlslEditor
@@ -663,23 +736,13 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                     >
                         Cancel
                     </button>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={handlePreview}
-                            disabled={!canPreview}
-                            className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-700/80 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-black uppercase tracking-wider text-white transition-colors"
-                        >
-                            <PlayIcon />
-                            Preview
-                        </button>
-                        <button
-                            onClick={handleImport}
-                            disabled={!canImport}
-                            className="px-4 py-1.5 bg-purple-600/80 hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-black uppercase tracking-wider text-white transition-colors"
-                        >
-                            Import Formula
-                        </button>
-                    </div>
+                    <button
+                        onClick={handleImport}
+                        disabled={!canImport}
+                        className="px-4 py-1.5 bg-cyan-900/50 hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold text-cyan-300 transition-colors border border-cyan-500/30"
+                    >
+                        Import Formula
+                    </button>
                 </div>
 
         </div>

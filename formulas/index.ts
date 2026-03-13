@@ -20,7 +20,7 @@ import { MakinBrot } from './MakinBrot';
 import { Tetrabrot } from './Tetrabrot';
 import { Buffalo } from './Buffalo';
 import { Modular } from './Modular';
-import { ArisBrot } from './ArisBrot';
+
 import { MandelTerrain } from './MandelTerrain';
 import { MarbleMarcher } from './MarbleMarcher';
 import { JuliaMorph } from './JuliaMorph';
@@ -30,6 +30,7 @@ import { Borromean } from './Borromean';
 import { MandelMap } from './MandelMap';
 import { MandelBolic } from './MandelBolic';
 import { KaliBox } from './KaliBox';
+import { Claude } from './Claude';
 
 // Organized list determines UI order on LOADING SCREEN
 const formulas = [
@@ -49,6 +50,7 @@ const formulas = [
     Kleinian,
     AmazingSurf,
     MandelTerrain,
+    Claude,
 
     // --- Others ---
     Mandelbar3D,
@@ -58,7 +60,6 @@ const formulas = [
     
     // --- Hybrids & Variants ---
     JuliaMorph,
-    ArisBrot, 
     Phoenix,
     Buffalo,
     BoxBulb,
@@ -87,13 +88,14 @@ export const PREDEFINED_CATEGORIES = [
         match: [
             Mandelbulb.id,
             Mandelorus.id,
-            MixPinski.id, 
-            AmazingBox.id, 
+            MixPinski.id,
+            AmazingBox.id,
             AmazingSurface.id,
-            MengerSponge.id, 
-            Kleinian.id, 
-            AmazingSurf.id, 
-            MandelTerrain.id
+            MengerSponge.id,
+            Kleinian.id,
+            AmazingSurf.id,
+            MandelTerrain.id,
+            Claude.id
         ] 
     },
     { 
@@ -115,8 +117,7 @@ export const PREDEFINED_CATEGORIES = [
             Borromean.id,
             Appell.id,
             JuliaMorph.id, 
-            ArisBrot.id, 
-            Phoenix.id, 
+            Phoenix.id,
             Buffalo.id, 
             Bristorbrot.id, 
             MakinBrot.id, 

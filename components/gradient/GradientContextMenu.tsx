@@ -95,7 +95,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
         >
             {options.map((opt, i) => (
                 opt.isHeader ? (
-                    <div key={i} className="px-4 py-1 text-[10px] uppercase font-bold text-gray-500 tracking-wider border-b border-white/5 mt-1 mb-1 bg-black/20">
+                    <div key={i} className="px-4 py-1 text-[10px] font-bold text-gray-500 border-b border-white/5 mt-1 mb-1 bg-black/20">
                         {opt.label}
                     </div>
                 ) : (

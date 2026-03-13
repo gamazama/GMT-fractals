@@ -3,7 +3,8 @@ import { StateCreator } from 'zustand';
 import * as THREE from 'three';
 import { FractalStoreState, FractalActions, CameraState } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { featureRegistry } from '../../engine/FeatureSystem';
 
 export interface HistorySliceState {
@@ -16,7 +17,7 @@ export interface HistorySliceActions {
     undoParam: () => void;
     redoParam: () => void;
     resetParamHistory: () => void;
-    handleInteractionStart: (mode?: 'camera' | 'param' | CameraState | any) => void;
+    handleInteractionStart: (mode?: 'camera' | 'param' | CameraState) => void;
     handleInteractionEnd: () => void;
 }
 
@@ -36,11 +37,11 @@ const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
     // This removes the need to manually update this file when adding new features.
     const features = featureRegistry.getAll();
     features.forEach(feat => {
-        // @ts-ignore - Accessing dynamic slice key
+        // @ts-expect-error — DDFS dynamic slice key access
         const featureState = s[feat.id];
         if (featureState) {
             // Deep copy the feature state to prevent reference mutations in the stack
-            // @ts-ignore
+            // @ts-expect-error — DDFS dynamic slice key assignment
             snap[feat.id] = JSON.parse(JSON.stringify(featureState));
         }
     });
@@ -138,7 +139,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
             const currVal = current[key];
             
             if (JSON.stringify(prevVal) !== JSON.stringify(currVal)) {
-                // @ts-ignore
+                // @ts-expect-error — DDFS dynamic diff key assignment
                 diff[key] = prevVal; 
                 hasChanges = true;
             }
@@ -165,7 +166,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
         const current = get();
         const redoItem: Partial<FractalStoreState> = {};
         Object.keys(undoItem).forEach(k => {
-            // @ts-ignore
+            // @ts-expect-error — DDFS dynamic key access for redo snapshot
             redoItem[k] = current[k];
         });
 
@@ -187,7 +188,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
         const current = get();
         const undoItem: Partial<FractalStoreState> = {};
         Object.keys(redoItem).forEach(k => {
-            // @ts-ignore
+            // @ts-expect-error — DDFS dynamic key access for undo snapshot
             undoItem[k] = current[k];
         });
 

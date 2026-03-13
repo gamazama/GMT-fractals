@@ -50,7 +50,7 @@ export const DropZones: React.FC = () => {
                 onMouseUp={(e) => { if(sourceLocation !== 'left') handleDrop(e, 'left'); }}
             >
                 {sourceLocation !== 'left' && (
-                    <div className="bg-black/80 px-4 py-2 rounded border border-cyan-500/50 text-cyan-200 font-bold uppercase tracking-widest text-sm shadow-xl backdrop-blur-md">
+                    <div className="bg-black/80 px-4 py-2 rounded border border-cyan-500/50 text-cyan-200 font-bold text-sm shadow-xl backdrop-blur-md">
                         Dock Left
                     </div>
                 )}
@@ -66,7 +66,7 @@ export const DropZones: React.FC = () => {
                 onMouseUp={(e) => { if(sourceLocation !== 'float') handleDrop(e, 'float'); }}
             >
                 {sourceLocation !== 'float' && (
-                    <div className="bg-black/80 px-4 py-2 rounded border border-purple-500/50 text-purple-200 font-bold uppercase tracking-widest text-sm shadow-xl backdrop-blur-md">
+                    <div className="bg-black/80 px-4 py-2 rounded border border-purple-500/50 text-purple-200 font-bold text-sm shadow-xl backdrop-blur-md">
                         Float Window
                     </div>
                 )}
@@ -83,7 +83,7 @@ export const DropZones: React.FC = () => {
                 onMouseUp={(e) => { if(sourceLocation !== 'right') handleDrop(e, 'right'); }}
             >
                 {sourceLocation !== 'right' && (
-                    <div className="bg-black/80 px-4 py-2 rounded border border-cyan-500/50 text-cyan-200 font-bold uppercase tracking-widest text-sm shadow-xl backdrop-blur-md">
+                    <div className="bg-black/80 px-4 py-2 rounded border border-cyan-500/50 text-cyan-200 font-bold text-sm shadow-xl backdrop-blur-md">
                         Dock Right
                     </div>
                 )}

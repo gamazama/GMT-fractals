@@ -1,10 +1,12 @@
 
 import React, { useRef, useMemo, useEffect } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FeatureComponentProps } from '../../components/registry/ComponentRegistry';
 import * as THREE from 'three';
 import { SingleLightGizmo } from './components/SingleLightGizmo';
+import { getViewportCamera, getViewportCanvas } from '../../engine/worker/ViewportRefs';
 
 // Global ref to store gizmo refs for orchestrated updates
 const globalGizmoRefs = { current: {} as {[key: number]: { update: () => void }} };
@@ -37,12 +39,15 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         startX: number;
         startY: number;
         startPos: THREE.Vector3;
-        
+
+        // Captured at drag start — must stay consistent throughout the drag
+        sceneOffset: { x: number; y: number; z: number; xL: number; yL: number; zL: number };
+
         // For Plane Dragging
         planeNormal: THREE.Vector3;
         planeOrigin: THREE.Vector3;
         offsetFromIntersection: THREE.Vector3;
-        
+
         // For Axis Dragging
         screenAxis: THREE.Vector2;
         worldAxis: THREE.Vector3;
@@ -68,11 +73,16 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         
         (e.target as Element).setPointerCapture(e.pointerId);
 
-        const camera = engine.activeCamera;
-        if (!camera || !engine.renderer) return;
+        const camera = getViewportCamera();
+        const canvasEl = getViewportCanvas();
+        if (!camera || !canvasEl) return;
+
+        // Capture offset at drag start — must stay consistent for the entire drag
+        const so = engine.sceneOffset || useFractalStore.getState().sceneOffset;
+        const capturedOffset = { x: so.x, y: so.y, z: so.z, xL: so.xL ?? 0, yL: so.yL ?? 0, zL: so.zL ?? 0 };
 
         // Raycast Setup
-        const rect = engine.renderer.domElement.getBoundingClientRect();
+        const rect = canvasEl.getBoundingClientRect();
         const ndc = new THREE.Vector2(
             ((e.clientX - rect.left) / rect.width) * 2 - 1,
             -((e.clientY - rect.top) / rect.height) * 2 + 1
@@ -114,6 +124,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
                 startX: e.clientX,
                 startY: e.clientY,
                 startPos: origin.clone(),
+                sceneOffset: capturedOffset,
                 planeNormal: normal,
                 planeOrigin: origin,
                 offsetFromIntersection,
@@ -135,8 +146,8 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
              const p1 = origin.clone().project(camera);
              const p2 = origin.clone().add(axis).project(camera); // Use 1 unit for direction
              
-             const sw = engine.renderer.domElement.width / window.devicePixelRatio;
-             const sh = engine.renderer.domElement.height / window.devicePixelRatio;
+             const sw = canvasEl.width / window.devicePixelRatio;
+             const sh = canvasEl.height / window.devicePixelRatio;
              
              const sx = (p2.x - p1.x) * sw * 0.5;
              const sy = -(p2.y - p1.y) * sh * 0.5; // Flip Y
@@ -152,6 +163,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
                  startX: e.clientX,
                  startY: e.clientY,
                  startPos: origin.clone(),
+                 sceneOffset: capturedOffset,
                  planeNormal: new THREE.Vector3(),
                  planeOrigin: new THREE.Vector3(),
                  offsetFromIntersection: new THREE.Vector3(),
@@ -172,7 +184,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         e.preventDefault();
         e.stopPropagation();
 
-        const camera = engine.activeCamera;
+        const camera = getViewportCamera();
         if (!camera) return;
 
         // Get light directly from store to avoid stale closure
@@ -184,7 +196,9 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
 
         // --- PLANE LOGIC ---
         if (drag.mode.startsWith('plane') || drag.mode === 'free') {
-            const rect = engine.renderer!.domElement.getBoundingClientRect();
+            const canvasEl = getViewportCanvas();
+            if (!canvasEl) return;
+            const rect = canvasEl.getBoundingClientRect();
             const ndc = new THREE.Vector2(
                 ((e.clientX - rect.left) / rect.width) * 2 - 1,
                 -((e.clientY - rect.top) / rect.height) * 2 + 1
@@ -226,12 +240,12 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
             const local = newWorldPos.clone().sub(camera.position).applyQuaternion(camera.quaternion.clone().invert());
             finalPos = { x: local.x, y: local.y, z: local.z };
         } else {
-            // World -> Unified (Scene Offset)
-            const o = engine.sceneOffset;
-            finalPos = { 
-                x: newWorldPos.x + (o.x + o.xL), 
-                y: newWorldPos.y + (o.y + o.yL), 
-                z: newWorldPos.z + (o.z + o.zL) 
+            // World -> Unified: use offset captured at drag start for consistency
+            const o = drag.sceneOffset;
+            finalPos = {
+                x: newWorldPos.x + (o.x + o.xL),
+                y: newWorldPos.y + (o.y + o.yL),
+                z: newWorldPos.z + (o.z + o.zL)
             };
         }
 

@@ -36,31 +36,34 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         handleInteractionStart('param');
         const val = e.target.value;
-        // Infer type from first option value to maintain strict typing if possible
         const isNumber = typeof options[0]?.value === 'number';
         onChange((isNumber ? Number(val) : val) as T);
         handleInteractionEnd();
     };
 
     return (
-        <div 
-            className={`flex items-center justify-between min-h-[22px] mb-px px-3 ${fullWidth ? 'w-full' : ''} ${className}`}
+        <div
+            className={`flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 ${fullWidth ? 'w-full' : ''} ${className}`}
             data-help-id={helpId}
             onContextMenu={handleContextMenu}
         >
             {label && (
-                <label className="text-[10px] text-gray-400 font-medium tracking-tight mr-2 shrink-0 select-none">
-                    {label}{labelSuffix}
-                </label>
+                <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
+                    <label className="text-[10px] font-medium tracking-tight select-none truncate pointer-events-none text-gray-400">
+                        {label}{labelSuffix}
+                    </label>
+                </div>
             )}
-            <div className="relative w-[50%] min-w-[120px]">
+            <div
+                className={`${label ? 'w-1/2' : 'w-full'} relative border-l border-white/10 bg-white/[0.02] border-t border-t-white/5`}
+            >
                 <select
                     value={value}
                     onChange={handleChange}
-                    className={`t-dropdown pr-6 ${selectClassName}`} // Padding right for chevron
+                    className={`w-full h-full bg-transparent text-[10px] font-medium text-gray-200 px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
                 >
                     {options.map((opt) => (
-                        <option key={String(opt.value)} value={String(opt.value)}>
+                        <option key={String(opt.value)} value={String(opt.value)} className="bg-[#111] text-gray-300">
                             {opt.label}
                         </option>
                     ))}

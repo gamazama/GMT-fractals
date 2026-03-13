@@ -32,24 +32,42 @@ import { findUniforms, findPresets, findIncludes } from './uniform-parser';
 // AST utilities
 // ============================================================================
 
+/** DE function names recognised as distance estimators.
+ *  'DE'/'dist' = Fragmentarium standard; 'de'/'sdf'/'map' = DEC / Shadertoy / blog posts. */
+const DE_FUNCTION_NAMES = new Set(['DE', 'dist', 'de', 'sdf', 'map']);
+
+/** Fragmentarium standard DE names — searched first to avoid false-positives
+ *  when a formula has both e.g. `map()` helper and `DE()` main function. */
+const FRAG_DE_NAMES = new Set(['DE', 'dist']);
+
 function findDEFunction(ast: Program): FunctionNode | null {
+    // Pass 1: prefer standard Fragmentarium names (DE, dist)
     for (const statement of ast.program) {
         if (statement.type === 'function') {
             const func = statement as FunctionNode;
             const funcName = func.prototype?.header?.name?.identifier;
-            if (funcName === 'DE' || funcName === 'dist') return func;
+            if (funcName && FRAG_DE_NAMES.has(funcName)) return func;
+        }
+    }
+    // Pass 2: fall back to DEC / Shadertoy names (de, sdf, map)
+    for (const statement of ast.program) {
+        if (statement.type === 'function') {
+            const func = statement as FunctionNode;
+            const funcName = func.prototype?.header?.name?.identifier;
+            if (funcName && DE_FUNCTION_NAMES.has(funcName)) return func;
         }
     }
     return null;
 }
 
-function findHelperFunctions(ast: Program): FunctionNode[] {
+function findHelperFunctions(ast: Program, deFunc: FunctionNode | null): FunctionNode[] {
+    const deName = deFunc?.prototype?.header?.name?.identifier;
     const helpers: FunctionNode[] = [];
     for (const statement of ast.program) {
         if (statement.type === 'function') {
             const func = statement as FunctionNode;
             const funcName = func.prototype?.header?.name?.identifier;
-            if (funcName && funcName !== 'DE' && funcName !== 'dist' && funcName !== 'init') {
+            if (funcName && funcName !== deName && funcName !== 'init') {
                 helpers.push(func);
             }
         }
@@ -247,7 +265,7 @@ export function parseFragmentariumSource(source: string, v1Doc?: GenericFragDocu
         };
     }
 
-    const helperNodes = findHelperFunctions(ast);
+    const helperNodes = findHelperFunctions(ast, deFunctionNode);
     const helperFunctions: HelperFunctionInfo[] = helperNodes.map(h => ({
         name: h.prototype?.header?.name?.identifier || 'unknown',
         returnType: generate(h.prototype?.header?.returnType?.specifier || { type: 'void' } as any),

@@ -59,7 +59,7 @@ export class PickingController {
         const width = renderer.domElement.width;
         const height = renderer.domElement.height;
         const px = Math.floor((x + 1) * 0.5 * width);
-        const py = Math.floor((1 - (y + 1) * 0.5) * height); // Flip Y
+        const py = Math.floor((y + 1) * 0.5 * height); // GL y=0 is bottom, NDC y=-1 is bottom — no flip needed
         
         const sampleSize = 3; // 3x3 neighborhood for averaging
         const halfSize = Math.floor(sampleSize / 2);

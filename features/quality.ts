@@ -5,11 +5,12 @@ export interface QualityState {
     engineQuality: boolean; // Master Anchor
     fudgeFactor: number;
     stepRelaxation: number; // New: Dynamic Fudge
+    stepJitter: number; // Stochastic step jitter strength
     refinementSteps: number; // New: Edge Polish
     detail: number;
     pixelThreshold: number;
     maxSteps: number;
-    compilerHardCap: number; 
+    compilerHardCap: number;
     distanceMetric: number;
     precisionMode: number; // 0=High (Ray Epsilon), 1=Standard
     bufferPrecision: number; // 0=Float32, 1=HalfFloat16
@@ -106,11 +107,17 @@ export const QualityFeature: FeatureDefinition = {
             description: 'Multiplies step size. Lower = Higher quality but slower. Set to < 0.2 for deep zooms.',
             format: (v) => v.toFixed(2)
         },
-        stepRelaxation: { 
-            type: 'float', default: 0.0, label: 'Step Relaxation', shortId: 'sr', uniform: 'uStepRelaxation', 
-            min: 0.0, max: 1.0, step: 0.01, group: 'kernel', 
+        stepRelaxation: {
+            type: 'float', default: 0.0, label: 'Step Relaxation', shortId: 'sr', uniform: 'uStepRelaxation',
+            min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
             description: 'Dynamic Step Size. 0 = Fixed Fudge. 1 = Variable (Fudge near surface, 1.0 in void). Saves steps.',
             isAdvanced: true
+        },
+        stepJitter: {
+            type: 'float', default: 0.15, label: 'Step Jitter', shortId: 'sj', uniform: 'uStepJitter',
+            min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
+            description: 'Stochastic step variation. Breaks banding artifacts. Higher = softer edges, artistic blur.',
+            format: (v: number) => v.toFixed(2)
         },
         refinementSteps: { 
             type: 'int', default: 0, label: 'Edge Polish', shortId: 'rf', uniform: 'uRefinementSteps', 

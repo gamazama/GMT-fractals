@@ -1,12 +1,11 @@
 
 import { ShaderConfig } from './ShaderFactory';
-import { GradientStop, PreciseVector3, CameraState } from '../types';
+import { PreciseVector3, CameraState } from '../types';
 import * as THREE from 'three';
 
 export const FRACTAL_EVENTS = {
     UNIFORM: 'uniform',
     CONFIG: 'config',
-    GRADIENT: 'gradient',
     RESET_ACCUM: 'reset_accum',
     OFFSET_SHIFT: 'offset_shift',
     OFFSET_SET: 'offset_set',
@@ -16,14 +15,18 @@ export const FRACTAL_EVENTS = {
     SHADER_CODE: 'shader_code',
     IS_COMPILING: 'is_compiling',
     COMPILE_TIME: 'compile_time',
-    BUCKET_STATUS: 'bucket_status', // New event for BucketRenderer feedback
-    TRACK_FOCUS: 'track_focus'
+    COMPILE_ESTIMATE: 'compile_estimate',
+    BUCKET_STATUS: 'bucket_status',
+    BUCKET_IMAGE: 'bucket_image',
+    TRACK_FOCUS: 'track_focus',
+    TEXTURE: 'texture',
+    ENGINE_QUEUE: 'engine_queue',
+    REGISTER_FORMULA: 'register_formula'
 } as const;
 
 type EventMap = {
     [FRACTAL_EVENTS.UNIFORM]: { key: string; value: any; noReset?: boolean };
     [FRACTAL_EVENTS.CONFIG]: Partial<ShaderConfig>;
-    [FRACTAL_EVENTS.GRADIENT]: { stops: GradientStop[]; layer: 1 | 2 };
     [FRACTAL_EVENTS.RESET_ACCUM]: void;
     [FRACTAL_EVENTS.OFFSET_SHIFT]: { x: number; y: number; z: number };
     [FRACTAL_EVENTS.OFFSET_SET]: PreciseVector3;
@@ -33,8 +36,13 @@ type EventMap = {
     [FRACTAL_EVENTS.SHADER_CODE]: string;
     [FRACTAL_EVENTS.IS_COMPILING]: boolean | string; 
     [FRACTAL_EVENTS.COMPILE_TIME]: number;
+    [FRACTAL_EVENTS.COMPILE_ESTIMATE]: number;
     [FRACTAL_EVENTS.BUCKET_STATUS]: { isRendering: boolean; progress: number; totalBuckets?: number; currentBucket?: number };
+    [FRACTAL_EVENTS.BUCKET_IMAGE]: { pixels: Uint8ClampedArray; width: number; height: number; presetJson: string; filename: string };
     [FRACTAL_EVENTS.TRACK_FOCUS]: string;
+    [FRACTAL_EVENTS.TEXTURE]: { textureType: 'color' | 'env'; dataUrl: string | null };
+    [FRACTAL_EVENTS.ENGINE_QUEUE]: { featureId: string; param: string; value: any };
+    [FRACTAL_EVENTS.REGISTER_FORMULA]: { id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string } };
 };
 
 class FractalEventBus {

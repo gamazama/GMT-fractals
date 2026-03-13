@@ -90,7 +90,8 @@ export const AOFeature: FeatureDefinition = {
         aoEnabled: {
             type: 'boolean', default: true, label: 'Enable AO', shortId: 'ae', group: 'main',
             hidden: true, noReset: true,
-            onUpdate: 'compile'
+            onUpdate: 'compile',
+            estCompileMs: 200
         }
     },
     inject: (builder, config, variant) => {

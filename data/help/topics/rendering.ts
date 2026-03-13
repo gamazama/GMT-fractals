@@ -333,6 +333,88 @@ Simulates a physical camera lens.
 **Note**: DOF requires **Temporal Accumulation** to look smooth. It uses stochastic jittering of the camera ray.
 `
     },
+    'render.reflections': {
+        id: 'render.reflections',
+        category: 'Rendering',
+        title: 'Reflections',
+        parentId: 'panel.render',
+        content: `
+Adds reflective surfaces to the fractal. Four modes available, from cheapest to most expensive:
+
+## Reflection Methods
+- **Off**: No reflections. Fastest.
+- **Environment Map**: Samples the environment map at the reflection angle. Cheap, adds realism to metals. Uses Fresnel weighting.
+- **Screen-Space (SSR)**: Approximates reflections using the current screen buffer. No extra DE calls. Fast but limited to visible geometry.
+- **Raymarched (Quality)**: Fires actual reflection rays through the fractal. Physically accurate but adds ~9s compile time.
+
+## Raymarched Settings
+- **Max Bounces (1-3)**: Recursion depth. Each bounce adds a full raytrace pass.
+- **Trace Steps**: Precision of the reflection ray (16-128).
+- **Roughness Cutoff**: Surfaces rougher than this skip raymarching (performance optimization).
+- **Raymarch Mix**: Blend between raymarched (1.0) and environment map (0.0) reflections.
+- **Bounce Shadows**: Compute shadows on reflected surfaces. Adds ~3-4s compile time.
+
+## Tips
+- Combine with low **Roughness** (0.0-0.3) and high **Metallic** for dramatic mirror effects.
+- Use Environment Map mode during editing, then switch to Raymarched for final renders.
+`
+    },
+    'render.volumetric': {
+        id: 'render.volumetric',
+        category: 'Rendering',
+        title: 'Volumetric Scatter',
+        parentId: 'panel.render',
+        content: `
+Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored haze, and directional fog effects.
+
+**Note:** This is a compile-time feature. Enabling it triggers a shader recompile (~5.5s).
+
+## Density & Shadow Rays
+- **Density**: Thickness of the participating medium. Log scale — small values (0.01-0.05) produce subtle haze, higher values create thick fog.
+- **Anisotropy (g)**: Direction bias for scattered light.
+  - **0**: Isotropic (equal scatter in all directions).
+  - **+0.9**: Forward scatter — classic god rays pointing toward light sources.
+  - **-0.9**: Back scatter — halo effect around lights.
+- **Light Sources**: How many lights cast shadow rays into the volume (1-3). More = more expensive.
+- **Scatter Tint**: Color of the scattered light.
+
+## Color Scatter
+- **Color Scatter**: Injects the fractal's orbit trap color field into the volume. Creates a colored volumetric haze matching the gradient palette. No shadow rays needed (cheap).
+- **Surface Falloff**: Concentrates the color near the fractal surface.
+
+## Height Fog
+- **Height Falloff**: Density varies with Y coordinate. Creates ground fog or rising mist.
+- **Height Origin**: The Y level where fog is densest.
+`
+    },
+    'render.waterplane': {
+        id: 'render.waterplane',
+        category: 'Rendering',
+        title: 'Water Plane',
+        content: `
+An infinite ocean plane with animated waves, integrated into the raymarcher. The water surface participates in shadows, AO, and reflections.
+
+## Controls
+- **Height**: Y-level of the water surface.
+- **Color**: Albedo of the water.
+- **Roughness**: Surface roughness (0 = mirror, 1 = matte).
+- **Wave Strength**: Amplitude of the animated waves. Set to 0 for a flat mirror plane.
+- **Wave Speed**: Animation speed of the waves.
+- **Wave Frequency**: Density of wave peaks.
+
+## How It Works
+The water plane is a signed distance field (SDF) composed of 3 layered noise octaves:
+1. Rolling swell (sine-based)
+2. Organic surface (simplex noise)
+3. Fine choppiness (high-frequency noise)
+
+Normals are recomputed via finite differences for accurate specular highlights and reflections.
+
+## Tips
+- Works best with **Reflections** enabled (Environment Map or Raymarched).
+- Set the fractal near the water surface and use **Fog** to create depth.
+`
+    },
     'export.video': {
         id: 'export.video',
         category: 'Export',

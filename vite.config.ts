@@ -14,6 +14,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, './'),
     },
   },
+  worker: {
+    format: 'es',
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

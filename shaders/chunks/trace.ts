@@ -2,36 +2,40 @@
 
 // Updated signature to accept injected code block for volume logic
 export const getTraceGLSL = (
-    isMobile: boolean, 
-    enableGlow: boolean, 
-    precisionMode: number = 0, 
+    isMobile: boolean,
+    enableGlow: boolean,
+    precisionMode: number = 0,
     glowQuality: number = 0,
     volumeBodyCode: string = "",
-    volumeFinalizeCode: string = ""
+    volumeFinalizeCode: string = "",
+    functionName: string = "traceScene"
 ) => {
     
     const useLowPrecision = (precisionMode === 1) || isMobile;
 
+    // Adaptive precision: epsilon scales with distance from fractal origin to prevent
+    // floating-point artifacts at deep zoom. The ratio (5e-7 high / 1e-5 low) determines
+    // minimum detail size relative to distance — lower ratio = finer detail but more noise.
     const precisionLogic = useLowPrecision ? `
-        float floatPrecision = max(1.0e-5, distFromFractalOrigin * 1.0e-5);
+        float floatPrecision = max(PRECISION_RATIO_LOW, distFromFractalOrigin * PRECISION_RATIO_LOW);  // Low precision: ~10 ppm
     ` : `
-        float floatPrecision = max(1.0e-20, distFromFractalOrigin * 5.0e-7);
+        float floatPrecision = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);  // High precision: ~0.5 ppm
     `;
 
     const missBlock = volumeFinalizeCode.trim().length > 0
         ? `vec3 p_end = ro + rd * d;
     h = map(p_end + uCameraPosition);
-    h.x = 1000.0;
+    h.x = MISS_DIST;
     vec3 p = p_end;
     ${volumeFinalizeCode}`
-        : `h = vec4(1000.0, 0.0, 0.0, 0.0);`;
+        : `h = vec4(MISS_DIST, 0.0, 0.0, 0.0);`;
 
     return `
 // ------------------------------------------------------------------
 // STAGE 2: RAYMARCHING (Flattened & Optimized)
 // ------------------------------------------------------------------
 
-bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow, float stochasticSeed, inout float volumetric, out vec3 fogScatter) {
+bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow, float stochasticSeed, inout float volumetric, out vec3 fogScatter) {
     d = 0.0;
     result = vec4(0.0);
 
@@ -100,7 +104,7 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
             if (refine > 0) {
                 float refineStep = h.x; 
                 // We use a safe fraction to converge without overshooting
-                float convergeFactor = uFudgeFactor * 0.8; 
+                float convergeFactor = uFudgeFactor * 0.8;  // 80% of fudge factor — conservative to prevent overshooting surface
                 
                 for(int j=0; j<5; j++) {
                     if (j >= refine) break;
@@ -151,8 +155,15 @@ bool traceScene(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 glow,
              currentFudge = mix(uFudgeFactor, 1.0, relax * uStepRelaxation);
         }
 
-        d += max(h.x, floatPrecision * 0.5) * currentFudge;
-        
+        // Stochastic step jitter: break up deterministic DE banding.
+        // Asymmetric [1-jitter, 1.0] — biased short to avoid overshoot.
+        // uStepJitter=0 disables (stepJitter=1.0). uStepJitter=0.15 is default.
+        // Disabled during navigation for a clean image — banding
+        // averages away once accumulation starts.
+        // Stochastic step jitter — coprime hash constants (127.1, 31.7) prevent banding artifacts
+        float stepJitter = uBlendFactor >= 0.99 ? 1.0 : (1.0 - uStepJitter) + uStepJitter * fract(stochasticSeed * 127.1 + d * 31.7);
+        d += max(h.x, floatPrecision * 0.5) * currentFudge * stepJitter;
+
         if (d > maxMarch) break;
     }
     

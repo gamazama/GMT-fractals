@@ -521,15 +521,6 @@ export const MandelMap: FractalDefinition = {
       "lowPass": 20000,
       "gain": 1
     },
-    "sonification": {
-      "isEnabled": false,
-      "active": true,
-      "baseFrequency": 220,
-      "masterGain": 0.5,
-      "scanArea": 0.1,
-      "harmonics": true,
-      "lastDimension": 0
-    },
     "drawing": {
       "activeTool": "rect",
       "enabled": false,

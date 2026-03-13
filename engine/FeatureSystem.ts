@@ -21,6 +21,7 @@ export interface ParamCondition {
 export interface ParamOption {
     label: string;
     value: string | number | boolean;
+    estCompileMs?: number; // Estimated compile time contribution when this option is selected
 }
 
 export interface TextureConfig {
@@ -33,10 +34,11 @@ export interface TextureConfig {
 }
 
 export interface CustomUIConfig {
-    componentId: string; 
-    group?: string;      
-    props?: Record<string, any>; 
+    componentId: string;
+    group?: string;
+    props?: Record<string, any>;
     condition?: ParamCondition | ParamCondition[];
+    parentId?: string;
 }
 
 export interface ParamConfig {
@@ -76,6 +78,10 @@ export interface ParamConfig {
     // 'uniform' (Default): Updates a GLSL uniform (Instant)
     // 'compile': Triggers a shader rebuild (Slow)
     onUpdate?: 'uniform' | 'compile';
+
+    // Estimated compile time contribution in ms when this param is enabled/active.
+    // For boolean params: cost when true. For dropdowns: use ParamOption.estCompileMs instead.
+    estCompileMs?: number;
 }
 
 export interface FeatureTabConfig {
@@ -120,6 +126,11 @@ export interface FeatureEngineConfig {
 }
 
 
+export interface GroupConfig {
+    label: string;
+    collapsible?: boolean;
+}
+
 export interface FeatureDefinition {
     // --- Identity ---
     id: string;
@@ -130,6 +141,8 @@ export interface FeatureDefinition {
     // --- State & Parameters ---
     // params: auto-generates Zustand state slice, UI controls, and GLSL uniforms
     params: Record<string, ParamConfig>;
+    // groups: optional metadata for UI groups (collapsible sections, labels)
+    groups?: Record<string, GroupConfig>;
     state?: any;       // Extra state not covered by params (e.g. arrays, complex objects)
     actions?: Record<string, (state: any, payload: any) => Partial<any>>;
 

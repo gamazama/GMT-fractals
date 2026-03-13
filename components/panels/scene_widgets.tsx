@@ -2,7 +2,8 @@
 import React, { useState, useRef } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FeatureComponentProps } from '../registry/ComponentRegistry';
 import Histogram from '../Histogram';
 import ToggleSwitch from '../ToggleSwitch';
@@ -14,6 +15,7 @@ import * as THREE from 'three';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { CameraUtils } from '../../utils/CameraUtils';
+import { getViewportCamera } from '../../engine/worker/ViewportRefs';
 
 // --- WIDGET 1: COLOR GRADING HISTOGRAM ---
 export const ColorGradingHistogram: React.FC<FeatureComponentProps> = ({ sliceState, actions }) => {
@@ -57,58 +59,51 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
     
     const interactionMode = useFractalStore(s => s.interactionMode);
     const setInteractionMode = useFractalStore(s => s.setInteractionMode);
-    
+    const focusLock = useFractalStore(s => s.focusLock);
+    const setFocusLock = useFractalStore(s => s.setFocusLock);
+
     const isPicking = interactionMode === 'picking_focus';
-    
+
     const [dollyLocked, setDollyLocked] = useState(true);
     const dollyStartRef = useRef<any>(null);
 
     const isPerspective = Math.abs((camType ?? 0) - 0.0) < 0.1;
 
-    const handleAutoFocus = () => {
-        if (engine.lastMeasuredDistance > 0) {
+    const handleFocusLockToggle = (v: boolean) => {
+        setFocusLock(v);
+        // Immediately sync on enable
+        if (v && engine.lastMeasuredDistance > 0) {
             setOptics({ dofFocus: engine.lastMeasuredDistance });
         }
     };
 
     const handleDollyStart = () => {
-        if (!engine.activeCamera) return;
-        
-        const state = useFractalStore.getState();
-        let dist = 3.5;
+        const cam = getViewportCamera();
+        if (!cam) return;
 
-        // MODE-AWARE DISTANCE SELECTION
-        // For initial lock, we prioritize physical radius for Orbit Mode stability
-        if (state.cameraMode === 'Orbit') {
-            const radius = engine.activeCamera.position.length();
-            if (radius > 0.001) {
-                dist = radius;
-            } else {
-                dist = state.targetDistance || 3.5;
-            }
-        } else {
-            // In Fly Mode, use the visual surface distance (Probe).
-            const probeDist = engine.lastMeasuredDistance;
-            if (probeDist > 0.0001 && probeDist < 900.0) {
-                dist = probeDist;
-            } else {
-                dist = state.targetDistance || 3.5;
-            }
-        }
-        
+        const state = useFractalStore.getState();
+
+        // Use center-screen surface distance (measured by worker every 3 frames)
+        // This is correct for both Orbit and Fly mode — it's the actual distance
+        // to the visible surface, not the orbit radius from origin.
+        const probeDist = engine.lastMeasuredDistance;
+        let dist = (probeDist > 0.0001 && probeDist < 900.0)
+            ? probeDist
+            : (state.targetDistance || 3.5);
+
         dist = Math.max(0.001, dist);
 
         // Use standard utility for Unified State reading
         const unifiedPos = CameraUtils.getUnifiedFromEngine();
-        
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(engine.activeCamera.quaternion);
-        
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+
         dollyStartRef.current = {
             fov: camFov,
             dist: dist,
             unifiedPos: { x: unifiedPos.x, y: unifiedPos.y, z: unifiedPos.z },
             forward: forward,
-            quat: engine.activeCamera.quaternion.clone()
+            quat: cam.quaternion.clone()
         };
     };
 
@@ -190,16 +185,26 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
     };
 
     return (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col">
             {(dofStrength > 0.000001) && (
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                    <Button onClick={handleAutoFocus} label="Auto-Centre" />
-                    <Button 
-                        active={isPicking}
-                        onClick={() => setInteractionMode(isPicking ? 'none' : 'picking_focus')}
-                        label={isPicking ? "Picking..." : "Pick Focus"}
-                        variant="success"
-                    />
+                <div className="flex">
+                    <div className="w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] border-b border-b-white/20 rounded-bl-lg" />
+                    <div className="flex-1 min-w-0 border-b border-b-white/20 bg-white/[0.12]">
+                        <div className="grid grid-cols-2 gap-px p-px">
+                            <Button
+                                active={focusLock}
+                                onClick={() => handleFocusLockToggle(!focusLock)}
+                                label={focusLock ? "Lock On" : "Focus Lock"}
+                                variant="primary"
+                            />
+                            <Button
+                                active={isPicking}
+                                onClick={() => setInteractionMode(isPicking ? 'none' : 'picking_focus')}
+                                label={isPicking ? "Picking..." : "Pick Focus"}
+                                variant="success"
+                            />
+                        </div>
+                    </div>
                 </div>
             )}
             

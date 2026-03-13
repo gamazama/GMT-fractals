@@ -7,13 +7,15 @@ import { createRendererSlice } from './slices/rendererSlice';
 import { createCameraSlice } from './slices/cameraSlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createFeatureSlice } from './createFeatureSlice';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { registry } from '../engine/FractalRegistry';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { generateShareStringFromPreset, parseShareString } from '../utils/Sharing';
-import { getFullDefaultPreset, applyPresetState } from '../utils/PresetLogic';
-import { ShaderConfig } from '../engine/ShaderFactory';
+import { getFullDefaultPreset, applyPresetState, sanitizeFeatureState } from '../utils/PresetLogic';
+import type { ShaderConfig } from '../engine/ShaderFactory';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { animationEngine } from '../engine/AnimationEngine';
 import { detectEngineProfile, ENGINE_PROFILES } from '../features/engine/profiles';
 import { pipelineToGraph, isStructureEqual, isPipelineEqual, topologicalSort } from '../utils/graphAlg';
 import { JULIA_REPEATER_PIPELINE } from '../data/initialPipelines';
@@ -67,23 +69,25 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
             const def = registry.get(f);
             const formulaPreset: Preset = (def && def.defaultPreset) ? JSON.parse(JSON.stringify(def.defaultPreset)) : { formula: f };
             
-            // Preserve all compile-time engine params from current state, regardless of
-            // whether they match a named profile. This ensures engine settings survive
-            // formula switches even when the user has a "custom" configuration.
+            // Preserve compile-time engine params from current state, but only when
+            // the formula preset doesn't specify its own values. Formula presets contain
+            // tuned engine settings (estimator, distanceMetric, etc.) that must not be
+            // overwritten by the previous formula's state.
             if (!formulaPreset.features) formulaPreset.features = {};
             const currentState = get();
             featureRegistry.getEngineFeatures().forEach(feat => {
                 const currentSlice = (currentState as any)[feat.id];
                 if (!currentSlice) return;
+                const presetBlock = formulaPreset.features![feat.id] || {};
                 const engineParams: Record<string, any> = {};
-                // Always preserve the master toggle
+                // Preserve the master toggle only if the preset doesn't set it
                 const toggleParam = feat.engineConfig!.toggleParam;
-                if (currentSlice[toggleParam] !== undefined) {
+                if (currentSlice[toggleParam] !== undefined && presetBlock[toggleParam] === undefined) {
                     engineParams[toggleParam] = currentSlice[toggleParam];
                 }
-                // Preserve any compile-time param
+                // Preserve compile-time params only if the preset doesn't set them
                 Object.entries(feat.params).forEach(([key, config]) => {
-                    if (config.onUpdate === 'compile' && currentSlice[key] !== undefined) {
+                    if (config.onUpdate === 'compile' && currentSlice[key] !== undefined && presetBlock[key] === undefined) {
                         engineParams[key] = currentSlice[key];
                     }
                 });
@@ -229,7 +233,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         };
 
         if (options?.includeScene !== false) {
-             if (engine.activeCamera) {
+             if (engine.activeCamera && engine.virtualSpace) {
                  const u = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera, s.targetDistance);
                  p.cameraPos = u.position;
                  p.cameraRot = u.rotation;
@@ -252,18 +256,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
              const sliceState = (s as any)[feat.id];
              if (sliceState) {
                  if (!p.features) p.features = {};
-                 const clean: any = {};
-                 Object.keys(sliceState).forEach(k => {
-                     const v = sliceState[k];
-                     if (v && typeof v === 'object' && v.isColor) clean[k] = '#' + v.getHexString();
-                     else if (v && typeof v === 'object' && (v.isVector2 || v.isVector3)) {
-                         clean[k] = { ...v };
-                         delete clean[k].isVector2; delete clean[k].isVector3;
-                     } else {
-                         clean[k] = v;
-                     }
-                 });
-                 p.features![feat.id] = clean;
+                 p.features![feat.id] = sanitizeFeatureState(sliceState);
              }
         });
         
@@ -275,7 +268,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         }
 
         try {
-            // @ts-ignore
+            // @ts-expect-error — window global for cross-store access without import cycle
             const animStore = window.useAnimationStore?.getState?.();
             if (animStore) {
                 p.sequence = animStore.sequence;
@@ -349,33 +342,37 @@ export const getShaderConfigFromState = (state: FractalStoreState): ShaderConfig
 
 export const bindStoreToEngine = () => {
     const s = useFractalStore.getState();
-    const update = (partial: any) => engine.setRenderState(partial);
-    
-    update({
-        isExporting: s.isExporting, 
-        isBucketRendering: s.isBucketRendering,
-        cameraMode: s.cameraMode,
-        optics: s.optics,
-        lighting: s.lighting,
-        quality: s.quality,
-        bucketConfig: {
-            bucketSize: s.bucketSize,
-            bucketUpscale: s.bucketUpscale,
-            convergenceThreshold: s.convergenceThreshold,
-            accumulation: s.accumulation
-        }
-    });
-    
+
+    // Connect AnimationEngine to stores (decoupled injection — engine never imports stores directly)
+    animationEngine.connect(window.useAnimationStore, useFractalStore);
+
+    // Push initial state via proxy methods
     engine.isPaused = s.isPaused;
     engine.setPreviewSampleCap(s.sampleCap);
 
-    FractalEvents.emit(FRACTAL_EVENTS.CONFIG, getShaderConfigFromState(s));
+    // NOTE: Do NOT emit CONFIG here — the worker already receives the initial config
+    // via the INIT message. A redundant CONFIG would trigger a second scheduleCompile()
+    // that races with the boot compile, potentially causing generation-counter cancellation
+    // where IS_COMPILING false is never emitted and BOOTED never fires.
 
-    useFractalStore.subscribe(state => state.isExporting, (v) => update({ isExporting: v }));
-    useFractalStore.subscribe(state => state.isBucketRendering, (v) => update({ isBucketRendering: v }));
-    useFractalStore.subscribe(state => state.cameraMode, (v) => update({ cameraMode: v }));
-    useFractalStore.subscribe(state => state.lighting, (v) => update({ lighting: v }));
-    useFractalStore.subscribe(state => state.quality, (v) => update({ quality: v })); 
+    // After boot, sync offset state (not carried in BOOT config).
+    // Uniforms + gradients are already synced by performCompilation() → syncConfigUniforms().
+    engine.onBooted = () => {
+        const current = useFractalStore.getState();
+        const offset = current.sceneOffset;
+        if (offset) {
+            const precise = {
+                x: offset.x, y: offset.y, z: offset.z,
+                xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
+            };
+            engine.setShadowOffset(precise);
+            engine.post({ type: 'OFFSET_SET', offset: precise });
+        }
+    };
+
+    // State subscriptions that work through proxy methods or events.
+    // Render state (cameraMode, optics, lighting, quality, geometry) is sent
+    // to the worker via RENDER_TICK messages from WorkerTickScene each frame.
     useFractalStore.subscribe(state => state.isPaused, (v) => { engine.isPaused = v; });
     useFractalStore.subscribe(state => state.sampleCap, (v) => { engine.setPreviewSampleCap(v); });
 
@@ -385,9 +382,9 @@ export const bindStoreToEngine = () => {
         (data) => {
             const [pos, rot, off, dist, optics] = data;
             const current = useFractalStore.getState();
-            // @ts-ignore - access window global to check isPlaying safely without loop
+            // @ts-expect-error — window global for cross-store access without import cycle
             const isPlaying = window.useAnimationStore?.getState?.().isPlaying;
-            
+
             if (current.activeCameraId && !isPlaying) {
                 current.updateCamera(current.activeCameraId, {
                     position: pos,
@@ -401,40 +398,47 @@ export const bindStoreToEngine = () => {
         { fireImmediately: false, equalityFn: (a,b) => JSON.stringify(a) === JSON.stringify(b) }
     );
 
-    const syncBucketConfig = () => {
-        const cs = useFractalStore.getState();
-        update({ bucketConfig: { 
-            bucketSize: cs.bucketSize, 
-            bucketUpscale: cs.bucketUpscale, 
-            convergenceThreshold: cs.convergenceThreshold, 
-            accumulation: cs.accumulation,
-            samplesPerBucket: cs.samplesPerBucket
-        } });
-    };
-    useFractalStore.subscribe(state => state.bucketSize, syncBucketConfig);
-    useFractalStore.subscribe(state => state.bucketUpscale, syncBucketConfig);
-    useFractalStore.subscribe(state => state.convergenceThreshold, syncBucketConfig);
-    useFractalStore.subscribe(state => state.accumulation, syncBucketConfig);
-    useFractalStore.subscribe(state => state.samplesPerBucket, syncBucketConfig);
+    // Force-save camera to camera manager when animation stops.
+    // The auto-save subscription above skips saves during playback (isPlaying=true),
+    // so the camera manager's saved position can be stale after animation.
+    // @ts-expect-error — window global for cross-store access without import cycle
+    const animStore = window.useAnimationStore;
+    if (animStore) {
+        let wasPlaying = false;
+        animStore.subscribe(
+            (s: { isPlaying: boolean }) => s.isPlaying,
+            (isPlaying: boolean) => {
+                if (!isPlaying && wasPlaying) {
+                    const s = useFractalStore.getState();
+                    if (s.activeCameraId) {
+                        s.updateCamera(s.activeCameraId, {
+                            position: s.cameraPos,
+                            rotation: s.cameraRot,
+                            sceneOffset: s.sceneOffset,
+                            targetDistance: s.targetDistance,
+                            optics: s.optics
+                        });
+                    }
+                }
+                wasPlaying = isPlaying;
+            }
+        );
+    }
 
-    useFractalStore.subscribe(state => state.quality?.bufferPrecision, (v) => {
-        if (engine.renderer) {
-             const canvas = engine.renderer.domElement;
-             engine.pipeline.resize(canvas.width, canvas.height);
-        }
-    });
-    
+    // Sync renderMode UI state when lighting.renderMode changes (compile-time toggle)
     useFractalStore.subscribe(state => (state as any).lighting?.renderMode, (val) => {
         const mode = val === 1.0 ? 'PathTracing' : 'Direct';
         if (useFractalStore.getState().renderMode !== mode) {
             useFractalStore.setState({ renderMode: mode });
         }
     });
-    
-    // Explicit Optics Sync
-    useFractalStore.subscribe(state => state.optics, (v) => update({ optics: v }));
 
     FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, ({ isRendering }) => {
         useFractalStore.getState().setIsBucketRendering(isRendering);
     });
 };
+
+// Expose store on window for dev console access
+if (typeof window !== 'undefined') {
+    (window as any).__store = useFractalStore;
+}

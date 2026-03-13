@@ -29,38 +29,18 @@ Systematic audit of all 28 GMT native formulas. Covers naming accuracy, mathemat
 
 ### CRITICAL Issues (algorithm is wrong vs reference)
 
-#### Dodecahedron — WRONG FOLD STRUCTURE
+#### ✅ Dodecahedron — FIXED (2026-03-13)
 - **Reference**: `Examples/Kaleidoscopic IFS/Dodecahedron.frag` (Syntopia/Knighty)
-- **Reference normals** (3 distinct, golden-ratio based):
+- **Fix applied**: Replaced 2 simplified normals + abs+sort with correct 3 golden-ratio normals × 3 repetitions = 9 fold ops per iteration. True dodecahedral symmetry now implemented.
   ```glsl
-  n1 = normalize(vec3(-1.0, Phi-1.0, 1.0/(Phi-1.0)))
-  n2 = normalize(vec3(Phi-1.0, 1.0/(Phi-1.0), -1.0))
-  n3 = normalize(vec3(1.0/(Phi-1.0), -1.0, Phi-1.0))
+  dodeca_n1 = normalize(vec3(-1.0, Phi-1.0, 1.0/(Phi-1.0)))
+  dodeca_n2 = normalize(vec3(Phi-1.0, 1.0/(Phi-1.0), -1.0))
+  dodeca_n3 = normalize(vec3(1.0/(Phi-1.0), -1.0, Phi-1.0))
   ```
-- **GMT normals** (2 simplified, DIFFERENT):
-  ```glsl
-  n = normalize(vec3(phi, 1.0, 0.0))
-  n2 = normalize(vec3(1.0, 0.0, phi))
-  ```
-- **Reference folds**: 3 normals × 3 repetitions = **9 fold ops** per iteration (pure reflection)
-- **GMT folds**: `abs() + sort()` + 2 folds × 2 calls = wrong symmetry structure
-- **Impact**: GMT does NOT produce true dodecahedral symmetry. The abs+sort breaks the reflection group.
-- **Fix needed**: Rewrite with correct 3 normals and 3×3 fold pattern. Remove abs+sort.
 
-#### Buffalo — MISSING KEY FEATURE, ADDS NON-ORIGINAL CODE
+#### ✅ Buffalo — FIXED (2026-03-13)
 - **Reference**: `Examples/3DickUlus/BuffaloBulb.frag` (ported from Mandelbulber)
-- **Reference features**:
-  - 6 per-axis abs toggles: `preabsx/y/z`, `absx/y/z` (applied before/after Mandelbulb power)
-  - Default preset uses `absy=true, absz=true` (selective Y/Z abs)
-  - Pure Mandelbulb power iteration with optional per-axis abs
-  - Derivative: `r_dz = r_dz * 2.0 * r`
-- **GMT features**:
-  - Blanket `z3 = abs(z3)` (all axes, not selective)
-  - **Adds Menger-style fold** (`z3 * scale - offset * (scale-1)`) — NOT in original
-  - Standard Mandelbulb power
-  - Standard derivative
-- **Impact**: GMT's Buffalo is a different hybrid formula. The per-axis abs control is what makes Buffalo distinctive (e.g., abs on Y+Z only creates the signature "buffalo" shape). GMT's version is a Menger-Buffalo hybrid.
-- **Fix needed**: Remove Menger fold (not in original), add per-axis abs toggles, use `dr = 2.0 * r * dr` derivative.
+- **Fix applied**: Removed Menger-style fold (not in original). Added `vec3A` (Abs After Power) and `vec3B` (Abs Before Power) per-axis toggle parameters. Default preset uses `vec3A = {y:1, z:1}` for the signature Y+Z abs buffalo shape.
 
 ### HIGH Priority Issues
 

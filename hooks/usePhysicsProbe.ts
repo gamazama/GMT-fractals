@@ -2,7 +2,8 @@
 import React, { useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { useFractalStore } from '../store/fractalStore';
 
 export const usePhysicsProbe = (
@@ -30,7 +31,7 @@ export const usePhysicsProbe = (
 
     const processDepthData = (depthValue: number) => {
         // Check for valid depth (not sky, not invalid)
-        if (depthValue < 0 || depthValue > 1000 || !Number.isFinite(depthValue)) {
+        if (depthValue < 0 || depthValue >= 1000.0 || !Number.isFinite(depthValue)) {
             // Sky or invalid - use cached distance
             const cachedDist = distAverageRef.current > 0 ? distAverageRef.current : 10.0;
             
@@ -78,6 +79,7 @@ export const usePhysicsProbe = (
         
         // Get physics probe mode (0=GPU, 1=CPU, 2=Manual)
         // Default to GPU (0) which now reads from depth buffer
+        if (!qualityState) return;
         const probeMode = qualityState.physicsProbeMode ?? 0;
         
         // MODE 2: Manual Distance - no calculation needed
@@ -105,12 +107,33 @@ export const usePhysicsProbe = (
         // MODE 0 & 1: Read from depth buffer (previous frame - no stall)
         // The depth buffer is written during the main render pass (MRT location 1)
         // We read from the PREVIOUS frame's buffer which is already complete
-        
+
         const renderer = engine.renderer;
-        if (!renderer) return;
-        
+
+        // Worker mode: depth readback happens in worker, shadow state carries lastMeasuredDistance
+        if (!renderer) {
+            const shadowDist = engine.lastMeasuredDistance;
+            if (shadowDist !== distAverageRef.current) {
+                processDepthData(shadowDist);
+                // Focus Lock: sync dofFocus when distance changes meaningfully (>1%)
+                // Small threshold filters accumulation noise that would cause infinite reset loops
+                const store = useFractalStore.getState();
+                if (store.focusLock && shadowDist > 0 && shadowDist < 1000) {
+                    const currentFocus = (store as any).optics?.dofFocus ?? 0;
+                    const relChange = Math.abs(shadowDist - currentFocus) / Math.max(currentFocus, 0.0001);
+                    if (relChange > 0.01) {
+                        (store as any).setOptics({ dofFocus: shadowDist });
+                    }
+                }
+            }
+            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
+                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+            }
+            return;
+        }
+
         // Get the previous frame's render target dimensions
-        const renderTarget = engine.pipeline.getPreviousRenderTarget?.();
+        const renderTarget = engine.pipeline?.getPreviousRenderTarget?.();
         if (!renderTarget) {
             // Render target not ready yet - use cached distance
             if (hudRefs.dist.current && frameCount.current % 10 === 0) {
@@ -121,7 +144,7 @@ export const usePhysicsProbe = (
             }
             return;
         }
-        
+
         // Check if render target has valid dimensions
         const width = renderTarget.width || 1;
         const height = renderTarget.height || 1;
@@ -134,16 +157,12 @@ export const usePhysicsProbe = (
             }
             return;
         }
-        
-        // Read center 4x4 pixels from depth render target
-        const centerX = Math.floor(width / 2);
-        const centerY = Math.floor(height / 2);
-        
+
         // Allocate buffer if needed (4x4 = 16 pixels, RGBA = 64 floats)
         if (!depthBuffer.current || depthBuffer.current.length !== 64) {
             depthBuffer.current = new Float32Array(64);
         }
-        
+
         // Read a small neighborhood around center pixel and average depth
         // This reduces noise when DOF is enabled
         try {
@@ -153,19 +172,19 @@ export const usePhysicsProbe = (
             const halfSize = Math.floor(sampleSize / 2);
             let validDepthSum = 0;
             let validCount = 0;
-            
+
             for (let dx = -halfSize; dx <= halfSize; dx++) {
                 for (let dy = -halfSize; dy <= halfSize; dy++) {
                     const sampleX = centerX + dx;
                     const sampleY = centerY + dy;
-                    
+
                     if (sampleX >= 0 && sampleX < width && sampleY >= 0 && sampleY < height) {
-                        const success = engine.pipeline.readPixels?.(
+                        const success = engine.pipeline?.readPixels?.(
                             renderer,
                             sampleX, sampleY, 1, 1,
                             readBuffer.current
                         );
-                        
+
                         if (success) {
                             const depth = readBuffer.current[3];
                             if (depth > 0 && depth < 1000 && Number.isFinite(depth)) {
@@ -175,20 +194,20 @@ export const usePhysicsProbe = (
                         }
                     }
                 }
-                
+
                 if (validCount > 0) {
                     const averageDepth = validDepthSum / validCount;
                     processDepthData(averageDepth);
                 }
             }
-            
+
             if (validCount > 0) {
                 const averageDepth = validDepthSum / validCount;
                 // If average depth is >= 1000.0, treat it as sky (miss)
                 if (averageDepth >= 1000.0) {
                     // Sky or invalid - use cached distance
                     const cachedDist = distAverageRef.current > 0 ? distAverageRef.current : 10.0;
-                    
+
                     if (hudRefs.dist.current) {
                         hudRefs.dist.current.innerText = "DST INF";
                         hudRefs.dist.current.style.color = '#888';

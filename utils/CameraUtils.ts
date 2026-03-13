@@ -1,9 +1,11 @@
 
 import * as THREE from 'three';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { VirtualSpace } from '../engine/PrecisionMath';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { PreciseVector3 } from '../types';
+import { getViewportCamera } from '../engine/worker/ViewportRefs';
 
 /**
  * Centralized utility for handling Unified Camera Coordinates.
@@ -31,8 +33,9 @@ export const CameraUtils = {
      * Use this in non-reactive contexts (Animation loop, Export).
      */
     getUnifiedFromEngine: (): THREE.Vector3 => {
-        if (!engine.activeCamera) return new THREE.Vector3();
-        return CameraUtils.getUnifiedPosition(engine.activeCamera.position, engine.sceneOffset);
+        const cam = getViewportCamera() || engine.activeCamera;
+        if (!cam) return new THREE.Vector3();
+        return CameraUtils.getUnifiedPosition(cam.position, engine.sceneOffset);
     },
 
     /**
@@ -40,7 +43,8 @@ export const CameraUtils = {
      * Bypasses the store's debounce lag during rapid interactions.
      */
     getRotationFromEngine: (): THREE.Quaternion => {
-        if (engine.activeCamera) return engine.activeCamera.quaternion.clone();
+        const cam = getViewportCamera() || engine.activeCamera;
+        if (cam) return cam.quaternion.clone();
         return new THREE.Quaternion();
     },
 
@@ -49,8 +53,9 @@ export const CameraUtils = {
      * Returns null if camera is at origin (e.g. Fly Mode reset).
      */
     getDistanceFromEngine: (): number | null => {
-        if (engine.activeCamera) {
-             const len = engine.activeCamera.position.length();
+        const cam = getViewportCamera() || engine.activeCamera;
+        if (cam) {
+             const len = cam.position.length();
              if (len > 0.001) return len;
         }
         return null;
@@ -95,9 +100,12 @@ export const CameraUtils = {
         // 3. Preserve Rotation if not provided
         if (currentRot) {
             payload.rotation = currentRot;
-        } else if (engine.activeCamera) {
-            const q = engine.activeCamera.quaternion;
-            payload.rotation = { x: q.x, y: q.y, z: q.z, w: q.w };
+        } else {
+            const cam = getViewportCamera() || engine.activeCamera;
+            if (cam) {
+                const q = cam.quaternion;
+                payload.rotation = { x: q.x, y: q.y, z: q.z, w: q.w };
+            }
         }
         
         if (targetDistance !== undefined) {

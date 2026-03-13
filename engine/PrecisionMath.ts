@@ -119,26 +119,26 @@ export class VirtualSpace {
             // Sync offset state to prevent jumps when switching modes or shifting origin
             this.prevOffsetState = { ...this.offset };
         } else {
+            // Fly mode: smooth position only (handles offset-shift integer jumps).
+            // Quaternion and FOV are copied directly — rotation lag would desync
+            // the rendered image from the R3F camera, breaking gizmo overlays.
             const distSq = this.smoothedPos.distanceToSquared(targetCamera.position);
-            const angleDiff = this.smoothedQuat.angleTo(targetCamera.quaternion);
-            
-            if (this.isLocked) { 
-                if (distSq > 1.0e-18 || angleDiff > 1.0e-9) this.isLocked = false; 
-            } else { 
-                if (distSq < 1.0e-21 && angleDiff < 1.0e-11) this.isLocked = true; 
+
+            if (this.isLocked) {
+                if (distSq > 1.0e-18) this.isLocked = false;
+            } else {
+                if (distSq < 1.0e-21) this.isLocked = true;
             }
-            
+
             if (!this.isLocked) {
                 const lambda = 40.0;
                 const f = 1.0 - Math.exp(-lambda * delta);
                 this.smoothedPos.lerp(targetCamera.position, f);
-                this.smoothedQuat.slerp(targetCamera.quaternion, f);
-                this.smoothedFov += (targetFov - this.smoothedFov) * f;
             } else {
                 this.smoothedPos.copy(targetCamera.position);
-                this.smoothedQuat.copy(targetCamera.quaternion);
-                this.smoothedFov = targetFov;
             }
+            this.smoothedQuat.copy(targetCamera.quaternion);
+            this.smoothedFov = targetFov;
         }
     }
 

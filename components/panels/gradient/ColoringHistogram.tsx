@@ -4,7 +4,6 @@ import Histogram from '../../Histogram';
 import Slider from '../../Slider';
 import { analyzeHistogram, calculateSmartLevels } from '../../../utils/histogramUtils';
 import { ColoringState } from '../../../features/coloring';
-import AdvancedGradientEditor from '../../AdvancedGradientEditor';
 
 interface ColoringHistogramProps {
     layer: 1 | 2;

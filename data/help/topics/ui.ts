@@ -183,6 +183,50 @@ Tools for annotated screenshots, measurements, and composition planning.
 - **Hold Space**: Move the starting anchor point while drawing.
 `
     },
+    'panel.webcam': {
+        id: 'panel.webcam',
+        category: 'UI',
+        title: 'Webcam Overlay',
+        content: `
+> **REQUIRES ADVANCED MODE**
+
+Overlays a live webcam feed on top of the viewport. Useful for recording tutorials, live streaming, or picture-in-picture compositions.
+
+## Features
+- **Drag & Resize**: Move and resize the webcam window directly in the viewport.
+- **Crop**: Drag the edge handles to crop the feed.
+- **Blend Modes**: Normal, Screen, Overlay, Lighten, Difference.
+- **Opacity**: 0-3x range (values above 1 boost brightness).
+- **3D Tilt**: Applies perspective rotation for a dynamic look.
+- **CRT Scanlines**: Retro scanline effect overlay.
+
+## Input Visualization
+When enabled, also displays an overlay showing currently pressed keys (WASD, modifiers, mouse buttons, scroll) with fade animations. Useful for tutorials.
+`
+    },
+    'panel.camera_manager': {
+        id: 'panel.camera_manager',
+        category: 'UI',
+        title: 'Camera Manager',
+        content: `
+Manage camera positions, presets, and composition guides.
+
+## Quick Views
+Preset buttons for standard views: **Front, Back, Left, Right, Top, Bottom, Isometric**. Click to teleport the camera instantly.
+
+## Saved Cameras
+- **Save**: Click "New Camera" to bookmark the current position and rotation.
+- **Restore**: Click a saved camera to teleport back.
+- **Rename**: Double-click the camera label.
+- **Delete**: Click the X button on a saved camera.
+
+## Composition Guides
+Overlay guides for framing your shots:
+- **Rule of Thirds** / **Golden Ratio** / **Grid** / **Center Mark** / **Diagonal** / **Spiral** / **Safe Areas**
+- Customizable opacity, line width, and color.
+- Spiral mode includes rotation, position, scale, and ratio controls.
+`
+    },
     'ui.resolution': {
         id: 'ui.resolution',
         category: 'UI',

@@ -2,12 +2,14 @@
 import React, { useState } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
-import { TrashIcon, PlusIcon, ChevronDown, ChevronRight } from '../../components/Icons';
+import { TrashIcon, PlusIcon } from '../../components/Icons';
 import { SavedCamera, CompositionOverlayType } from '../../types';
 import { calculateDirectionalView, getDirectionName } from './logic';
 import { CameraUtils } from '../../utils/CameraUtils';
 import Slider from '../../components/Slider';
 import SmallColorPicker from '../../components/SmallColorPicker';
+import { SectionLabel } from '../../components/SectionLabel';
+import { CollapsibleSection } from '../../components/CollapsibleSection';
 
 interface CameraManagerPanelProps {
     className?: string;
@@ -37,7 +39,6 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
 
     const [editId, setEditId] = useState<string | null>(null);
     const [editName, setEditName] = useState("");
-    const [showCompositionSettings, setShowCompositionSettings] = useState(false);
 
     const handleRenameStart = (cam: SavedCamera) => {
         setEditId(cam.id);
@@ -55,46 +56,46 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
         if (e.key === 'Enter') handleRenameSubmit();
         if (e.key === 'Escape') setEditId(null);
     };
-    
+
     const handleDeselect = () => {
         selectCamera(null);
     };
-    
+
     // Logic: Calculate view using utility, then dispatch atomic actions
     const handleDirectional = (dir: 'Top' | 'Bottom' | 'Left' | 'Right' | 'Front' | 'Back' | 'Isometric') => {
         // 1. Calculate
         const result = calculateDirectionalView(dir, optics);
-        
+
         // 2. Teleport Camera (Updates position/rotation in slice + emits event)
         CameraUtils.teleportPosition(
-            result.position, 
-            result.rotation, 
+            result.position,
+            result.rotation,
             result.targetDistance
         );
-        
+
         // 3. Update Optics if needed
         if (result.optics && setOptics) {
             setOptics(result.optics);
         }
-        
+
         // 4. Deselect active camera to prevent overwriting saved one
         selectCamera(null);
     };
-    
+
     const handleAddCamera = () => {
         // Generate smart name
         const rot = CameraUtils.getRotationFromEngine();
         let name = `Camera ${savedCameras.length + 1}`;
         const opticsNow = useFractalStore.getState().optics;
-        
+
         if (opticsNow && Math.abs(opticsNow.camType - 1.0) < 0.1) {
              const dirName = getDirectionName(rot);
              if (dirName) name = dirName;
         }
-        
+
         addCamera(name);
     };
-    
+
     const handleReset = () => {
         resetCamera();
         if (setOptics) {
@@ -110,15 +111,15 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                  <button onClick={() => handleDirectional('Back')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">BACK</button>
                  <button onClick={() => handleDirectional('Left')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">LEFT</button>
                  <button onClick={() => handleDirectional('Right')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">RIGHT</button>
-                 
+
                  <button onClick={() => handleDirectional('Top')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">TOP</button>
                  <button onClick={() => handleDirectional('Bottom')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">BTM</button>
                  <button onClick={() => handleDirectional('Isometric')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">ISO</button>
                  <button onClick={handleReset} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">RESET</button>
-                 
-                 <button 
+
+                 <button
                      onClick={handleAddCamera}
-                     className="col-span-4 bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold uppercase flex items-center justify-center gap-1 mt-1"
+                     className="col-span-4 bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1 mt-1"
                  >
                      <PlusIcon /> New Camera
                  </button>
@@ -129,25 +130,25 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                  {savedCameras.length === 0 && (
                      <div className="text-center text-gray-600 text-[10px] italic py-4">No saved cameras</div>
                  )}
-                 
+
                  {savedCameras.map(cam => {
                      const isActive = activeCameraId === cam.id;
                      return (
-                         <div 
+                         <div
                             key={cam.id}
                             className={`flex items-center justify-between p-2 rounded border transition-all group ${
-                                isActive 
-                                ? 'bg-cyan-900/20 border-cyan-500/50' 
+                                isActive
+                                ? 'bg-cyan-900/20 border-cyan-500/50'
                                 : 'bg-white/5 border-transparent hover:border-white/10'
                             }`}
                             onClick={() => selectCamera(cam.id)}
                          >
                              <div className="flex items-center gap-2 flex-1 min-w-0">
                                  <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-cyan-400 shadow-[0_0_5px_cyan]' : 'bg-gray-600'}`} />
-                                 
+
                                  {editId === cam.id ? (
-                                     <input 
-                                        type="text" 
+                                     <input
+                                        type="text"
                                         value={editName}
                                         onChange={(e) => setEditName(e.target.value)}
                                         onBlur={handleRenameSubmit}
@@ -157,7 +158,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                         onClick={(e) => e.stopPropagation()}
                                      />
                                  ) : (
-                                     <span 
+                                     <span
                                         className={`text-xs font-bold truncate cursor-text ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-300'}`}
                                         onDoubleClick={(e) => { e.stopPropagation(); handleRenameStart(cam); }}
                                         title="Double-click to rename"
@@ -166,8 +167,8 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                      </span>
                                  )}
                              </div>
-                             
-                             <button 
+
+                             <button
                                 onClick={(e) => { e.stopPropagation(); deleteCamera(cam.id); }}
                                 className="p-1.5 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                                 title="Delete"
@@ -178,15 +179,15 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                      );
                  })}
              </div>
-             
+
              {/* Footer / Active Settings */}
              <div className="border-t border-white/10 bg-black/40 p-2 space-y-2">
                  <div className="flex items-center justify-between">
-                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                     <SectionLabel>
                          {activeCameraId ? 'Active Settings' : 'Free Camera'}
-                     </span>
+                     </SectionLabel>
                      {activeCameraId && (
-                         <button 
+                         <button
                             onClick={handleDeselect}
                             className="text-[9px] text-gray-500 hover:text-white px-2 py-0.5 rounded border border-white/10 hover:bg-white/5 transition-colors"
                          >
@@ -194,29 +195,18 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                          </button>
                      )}
                  </div>
-                 
+
                  <div className="bg-white/5 rounded p-1">
                      <AutoFeaturePanel featureId="optics" />
                  </div>
-                 
+
                  {/* Composition Overlays - Under camera settings */}
                  <div className="border-t border-white/10 pt-2">
-                     {/* Header - Clickable to expand/collapse */}
-                     <button
-                         onClick={() => setShowCompositionSettings(!showCompositionSettings)}
-                         className="w-full flex items-center justify-between hover:bg-white/5 transition-colors rounded"
+                     <CollapsibleSection
+                         label="Composition Guide"
+                         defaultOpen={false}
+                         rightContent={compositionOverlay !== 'none' ? <span className="text-[8px] text-cyan-400">{OVERLAY_OPTIONS.find(o => o.type === compositionOverlay)?.label}</span> : null}
                      >
-                         <div className="flex items-center gap-2">
-                             {showCompositionSettings ? <ChevronDown /> : <ChevronRight />}
-                             <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Composition Guide</span>
-                         </div>
-                         {compositionOverlay !== 'none' && (
-                             <span className="text-[8px] text-cyan-400 uppercase">{OVERLAY_OPTIONS.find(o => o.type === compositionOverlay)?.label}</span>
-                         )}
-                     </button>
-                     
-                     {/* Content - Collapsible */}
-                     {showCompositionSettings && (
                          <div className="mt-2 space-y-2">
                              {/* Overlay Type Dropdown */}
                              <div className="flex items-center gap-2">
@@ -224,14 +214,14 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                  <select
                                      value={compositionOverlay}
                                      onChange={(e) => setCompositionOverlay(e.target.value as CompositionOverlayType)}
-                                     className="flex-1 bg-black/40 border border-white/10 rounded px-2 py-1 text-[10px] text-gray-300 outline-none focus:border-cyan-500/50"
+                                     className="flex-1 t-select"
                                  >
                                      {OVERLAY_OPTIONS.map(opt => (
                                          <option key={opt.type} value={opt.type}>{opt.label}</option>
                                      ))}
                                  </select>
                              </div>
-                             
+
                               {/* Settings - only show when overlay is active */}
                               {compositionOverlay !== 'none' && (
                                   <>
@@ -243,7 +233,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                           step={0.1}
                                           onChange={(v) => setCompositionOverlaySettings({ opacity: v })}
                                       />
-                                      
+
                                       <Slider
                                           label="Line Width"
                                           value={compositionOverlaySettings.lineThickness}
@@ -252,16 +242,16 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                           step={0.5}
                                           onChange={(v) => setCompositionOverlaySettings({ lineThickness: v })}
                                       />
-                                      
+
                                       {/* Color Picker */}
                                        <div className="flex items-center gap-2">
                                            <label className="text-[9px] text-gray-500 w-16">Color</label>
-                                           <SmallColorPicker 
+                                           <SmallColorPicker
                                                color={compositionOverlaySettings.color}
                                                onChange={(c: string) => setCompositionOverlaySettings({ color: c })}
                                            />
                                        </div>
-                                      
+
                                       {/* Grid-specific settings */}
                                       {compositionOverlay === 'grid' && (
                                           <>
@@ -283,7 +273,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                               />
                                           </>
                                       )}
-                                      
+
                                        {/* Spiral-specific settings */}
                                        {compositionOverlay === 'spiral' && (
                                            <>
@@ -329,7 +319,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                                />
                                            </>
                                        )}
-                                      
+
                                       {/* Toggle Options */}
                                       <div className="flex items-center gap-3 pt-1">
                                           <label className="flex items-center gap-1 cursor-pointer">
@@ -354,7 +344,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                  </>
                              )}
                          </div>
-                     )}
+                     </CollapsibleSection>
                  </div>
              </div>
         </div>

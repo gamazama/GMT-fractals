@@ -64,14 +64,18 @@ export const Quaternion: FractalDefinition = {
         loopInit: `
         // Spherical Inversion pre-transform (Kosalos variant)
         // Inverts space around a center point, creating inside-out shapes
-        if (uParamD > 0.01) {
+        // Smooth blend: mix between original and inverted based on radius
+        if (uParamD > 0.001) {
             vec3 invCenter = uVec3A;
             float invRadius = uParamD;
             float invAngle = uParamE;
             vec3 offset = z.xyz - invCenter;
             float r = length(offset);
-            float r2 = r * r;
-            z.xyz = (invRadius * invRadius / r2) * offset + invCenter;
+            float r2 = max(r * r, 1.0e-8);
+            vec3 inverted = (invRadius * invRadius / r2) * offset + invCenter;
+            // Smooth blend: ramp from 0..1 over radius 0..1 to avoid hard pop
+            float blend = smoothstep(0.0, 1.0, invRadius);
+            z.xyz = mix(z.xyz, inverted, blend);
             // Optional angular twist
             if (abs(invAngle) > 0.001) {
                 float an = atan(z.y, z.x) + invAngle;
@@ -85,13 +89,13 @@ export const Quaternion: FractalDefinition = {
     },
 
     parameters: [
-        { label: 'Julia C (W)', id: 'paramA', min: -1.0, max: 1.0, step: 0.001, default: -0.5 },
-        { label: 'Slice W', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: 0.0 },
+        { label: 'Julia C (W)', id: 'paramA', min: -1.0, max: 1.0, step: 0.001, default: -0.252 },
+        { label: 'Slice W', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: -0.222 },
         { label: 'Damping', id: 'paramC', min: 0.0, max: 5.0, step: 0.01, default: 0.0 },
         { label: 'Inversion Radius', id: 'paramD', min: 0.0, max: 10.0, step: 0.01, default: 0.0 },
         { label: 'Inversion Angle', id: 'paramE', min: -10.0, max: 10.0, step: 0.01, default: 0.0 },
-        { label: 'Rot 3D (XY, XZ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 } },
-        { label: 'Rot 4D (XW, YW)', id: 'vec2B', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 } },
+        { label: 'Rot 3D (XY, XZ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -6.44, y: 0.29 } },
+        { label: 'Rot 4D (XW, YW)', id: 'vec2B', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -0.21, y: 0.05 } },
         { label: 'Inversion Center', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 0.612, y: 0.381, z: 0.786 } },
     ],
 

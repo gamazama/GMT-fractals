@@ -7,7 +7,7 @@ import { OpticsState } from '../../features/optics';
 import { LightingState } from '../../features/lighting';
 import { MAX_LIGHTS } from '../../data/constants';
 import { EngineRenderState } from '../FractalEngine';
-import { useFractalStore } from '../../store/fractalStore';
+import type { GeometryState } from '../../features/geometry';
 
 export class UniformManager {
     private uniforms: { [key: string]: THREE.IUniform };
@@ -49,14 +49,15 @@ export class UniformManager {
     }
 
     public syncFrame(
-        camera: THREE.Camera, 
-        state: any, 
+        camera: THREE.Camera,
+        state: any,
         renderer: THREE.WebGLRenderer | null,
         runtimeState: EngineRenderState,
         optics: OpticsState,
         lighting: LightingState,
         modulations: Record<string, number>,
-        materials: any
+        materials: any,
+        geometry: GeometryState | null
     ) {
         const cam = camera as THREE.PerspectiveCamera;
         
@@ -184,6 +185,25 @@ export class UniformManager {
             this.uniforms[Uniforms.EnvRotationMatrix].value = [c, s, -s, c];
         }
 
+        // Derive linear fog color from sRGB fog color (InverseACESFilm on CPU)
+        const fogColorUniform = this.uniforms['uFogColor'];
+        if (fogColorUniform) {
+            const fc = fogColorUniform.value;
+            const fogLinear = this.uniforms[Uniforms.FogColorLinear].value;
+            // InverseACESFilm: solve ACES tonemap quadratic per-channel
+            const a = 2.51, b = 0.03, c2 = 2.43, d2 = 0.59, e = 0.14;
+            const channels = [fc.r ?? fc.x ?? 0, fc.g ?? fc.y ?? 0, fc.b ?? fc.z ?? 0];
+            for (let ch = 0; ch < 3; ch++) {
+                const y = Math.min(Math.max(channels[ch], 0), 0.99);
+                const A = c2 * y - a;
+                const B = d2 * y - b;
+                const C = e * y;
+                const D = Math.sqrt(Math.max(0, B * B - 4 * A * C));
+                const comp = ch === 0 ? 'x' : ch === 1 ? 'y' : 'z';
+                fogLinear[comp] = (-B - D) / (2 * A);
+            }
+        }
+
         if (lighting && Array.isArray(lighting.lights)) {
             const typeArr = this.uniforms[Uniforms.LightType].value as Float32Array;
             const posArr = this.uniforms[Uniforms.LightPos].value;
@@ -254,37 +274,29 @@ export class UniformManager {
 
         // --- LOCAL ROTATION MATRIX UPDATE ---
         // Calculate and update uPreRotMatrix when geometry rotation params change
-        // This was previously only done in VideoExporter.ts during video export
-        try {
-            const storeState = useFractalStore.getState();
-            const geom = (storeState as any).geometry;
-            
-            if (geom && geom.preRotMaster && geom.preRotEnabled) {
-                // Apply modulation offsets if present (matches VideoExporter logic)
-                const rotX = (geom.preRotX ?? 0) + (modulations['geometry.preRotX'] || 0);
-                const rotY = (geom.preRotY ?? 0) + (modulations['geometry.preRotY'] || 0);
-                const rotZ = (geom.preRotZ ?? 0) + (modulations['geometry.preRotZ'] || 0);
-                
-                // Build rotation matrix: Z * X * Y order (matches VideoExporter)
-                this.preRotMatrixX.makeRotationX(rotX);
-                this.preRotMatrixY.makeRotationY(rotY);
-                this.preRotMatrixZ.makeRotationZ(rotZ);
-                
-                this.preRotMatrix4.identity()
-                    .multiply(this.preRotMatrixZ)
-                    .multiply(this.preRotMatrixX)
-                    .multiply(this.preRotMatrixY);
-                
-                this.preRotMatrix3.setFromMatrix4(this.preRotMatrix4);
-                
-                // Update the uniform
-                const preRotUniform = this.uniforms[Uniforms.PreRotMatrix];
-                if (preRotUniform) {
-                    preRotUniform.value.copy(this.preRotMatrix3);
-                }
+        if (geometry && geometry.preRotMaster && geometry.preRotEnabled) {
+            // Apply modulation offsets if present (matches VideoExporter logic)
+            const rotX = (geometry.preRotX ?? 0) + (modulations['geometry.preRotX'] || 0);
+            const rotY = (geometry.preRotY ?? 0) + (modulations['geometry.preRotY'] || 0);
+            const rotZ = (geometry.preRotZ ?? 0) + (modulations['geometry.preRotZ'] || 0);
+
+            // Build rotation matrix: Z * X * Y order (matches VideoExporter)
+            this.preRotMatrixX.makeRotationX(rotX);
+            this.preRotMatrixY.makeRotationY(rotY);
+            this.preRotMatrixZ.makeRotationZ(rotZ);
+
+            this.preRotMatrix4.identity()
+                .multiply(this.preRotMatrixZ)
+                .multiply(this.preRotMatrixX)
+                .multiply(this.preRotMatrixY);
+
+            this.preRotMatrix3.setFromMatrix4(this.preRotMatrix4);
+
+            // Update the uniform
+            const preRotUniform = this.uniforms[Uniforms.PreRotMatrix];
+            if (preRotUniform) {
+                preRotUniform.value.copy(this.preRotMatrix3);
             }
-        } catch (e) {
-            // Store may not be available during initialization
         }
     }
 }

@@ -158,7 +158,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
         >
             {/* Fixed Sidebar Header */}
             <div 
-                className="sticky left-0 z-30 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 text-[9px] text-gray-500 font-bold uppercase tracking-widest"
+                className="sticky left-0 z-30 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 text-[9px] text-gray-500 font-bold"
                 style={{ width: TIMELINE_SIDEBAR_WIDTH }}
             >
                 Tracks

@@ -12,6 +12,9 @@ import { ContextMenuItem } from '../../types/help';
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
 
+// Indexed access helper for THREE.Vector2/Vector3 axis access by string key
+type VecIndexable = Record<'x' | 'y' | 'z', number>;
+
 // --- Direction mode helpers ---
 // Converts a vec3 to (azimuth, pitch) in radians.
 // Convention: az=0,pitch=0 → (0,0,1); az=π/2,pitch=0 → (1,0,0); pitch=π/2 → (0,1,0)
@@ -110,8 +113,8 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
         
         // Only update if values are significantly different (prevents jitter)
         const threshold = 0.0001;
-        const xDiff = Math.abs((value as any).x - localValue.x);
-        const yDiff = Math.abs((value as any).y - localValue.y);
+        const xDiff = Math.abs(value.x - localValue.x);
+        const yDiff = Math.abs(value.y - localValue.y);
         const zDiff = isVec3 ? Math.abs((value as THREE.Vector3).z - (localValue as THREE.Vector3).z) : 0;
         
         if (xDiff > threshold || yDiff > threshold || zDiff > threshold) {
@@ -187,15 +190,15 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
         
         if (isLinked && !isRotationMode) {
             // In linked mode, all axes change by the same delta
-            const currentVal = (base as any)[axis];
+            const currentVal = (base as VecIndexable)[axis];
             const delta = scalar - currentVal;
-            (next as any).x = (base as any).x + delta;
-            (next as any).y = (base as any).y + delta;
+            (next as VecIndexable).x = base.x + delta;
+            (next as VecIndexable).y = base.y + delta;
             if (isVec3) {
-                (next as any).z = (base as any).z + delta;
+                (next as VecIndexable).z = (base as VecIndexable).z + delta;
             }
         } else {
-            (next as any)[axis] = scalar;
+            (next as VecIndexable)[axis] = scalar;
         }
         
         setLocalValue(next); 
@@ -205,8 +208,8 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     const updateDualAxis = (primary: 'x'|'y'|'z', secondary: 'x'|'y'|'z', primaryVal: number, secondaryVal: number) => {
         const base = dragStartSnapshot.current || localValue;
         const next = base.clone();
-        (next as any)[primary] = primaryVal;
-        (next as any)[secondary] = secondaryVal;
+        (next as VecIndexable)[primary] = primaryVal;
+        (next as VecIndexable)[secondary] = secondaryVal;
         
         setLocalValue(next);
         onChange(next);
@@ -220,13 +223,13 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     // Get live value per axis if provided
     const getLiveValue = (axis: 'x' | 'y' | 'z'): number | undefined => {
         if (!liveValue) return undefined;
-        return (liveValue as any)[axis];
+        return (liveValue as VecIndexable)[axis];
     };
 
     // Get default value per axis if provided
     const getDefaultValue = (axis: 'x' | 'y' | 'z'): number | undefined => {
         if (!defaultValue) return undefined;
-        return (defaultValue as any)[axis];
+        return (defaultValue as VecIndexable)[axis];
     };
 
     const vec3Value = localValue as THREE.Vector3;
@@ -352,7 +355,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                         <>
                             {/* Toggle mode: clickable on/off buttons per axis */}
                             {(['x', 'y', 'z'] as const).slice(0, isVec3 ? 3 : 2).map((axis, i) => {
-                                const val = (localValue as any)[axis];
+                                const val = (localValue as VecIndexable)[axis];
                                 const isOn = val > 0.5;
                                 const colors = [
                                     { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
@@ -362,14 +365,14 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                                 return (
                                     <button
                                         key={axis}
-                                        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-bold tracking-wider transition-all border ${
+                                        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-bold transition-all border ${
                                             isOn ? colors[i].on : colors[i].off
                                         } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'}`}
                                         onClick={() => updateAxis(axis, isOn ? 0 : 1)}
                                         disabled={disabled}
                                     >
-                                        <span className="uppercase">{axis}</span>
-                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-40'}`}>{isOn ? 'ON' : 'OFF'}</span>
+                                        <span>{axis}</span>
+                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-70'}`}>{isOn ? 'ON' : 'OFF'}</span>
                                     </button>
                                 );
                             })}
@@ -381,13 +384,13 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                                 const isOn = localValue.x > 0.5;
                                 return (
                                     <button
-                                        className={`w-14 flex-shrink-0 flex items-center justify-center gap-1 text-[10px] font-bold tracking-wider transition-all border ${
-                                            isOn ? 'bg-red-500/30 text-red-300 border-red-500/40' : 'bg-white/[0.04] text-gray-600 border-white/5'
+                                        className={`w-14 flex-shrink-0 flex items-center justify-center gap-1 text-[10px] font-bold transition-all border ${
+                                            isOn ? 'bg-red-500/30 text-red-300 border-red-500/40' : 'bg-white/[0.10] text-gray-400 border-white/10'
                                         } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'}`}
                                         onClick={() => updateAxis('x', isOn ? 0 : 1)}
                                         disabled={disabled}
                                     >
-                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-40'}`}>{isOn ? 'ON' : 'OFF'}</span>
+                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-70'}`}>{isOn ? 'ON' : 'OFF'}</span>
                                     </button>
                                 );
                             })()}
@@ -499,8 +502,8 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                                     pitch={localValue.y}
                                     onChange={(newAz, newPitch) => {
                                         const next = localValue.clone();
-                                        (next as any).x = newAz;
-                                        (next as any).y = newPitch;
+                                        (next as VecIndexable).x = newAz;
+                                        (next as VecIndexable).y = newPitch;
                                         setLocalValue(next);
                                         onChange(next);
                                     }}

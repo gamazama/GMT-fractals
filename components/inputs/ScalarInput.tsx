@@ -137,7 +137,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         // Compact variant - like VectorAxisCell (no header, inline track)
         return (
             <div 
-                className={`relative flex-1 h-9 md:h-[26px] overflow-hidden group transition-all duration-150 ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
+                className={`relative flex-1 h-9 md:h-[26px] overflow-hidden group transition-all duration-150 ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
                 onContextMenu={onContextMenu}
                 data-help-id={dataHelpId}
             >
@@ -197,7 +197,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     
     return (
         <div 
-            className={`mb-px animate-slider-entry ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
+            className={`mb-px animate-slider-entry ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
             data-help-id={dataHelpId}
             onContextMenu={onContextMenu}
         >
@@ -269,7 +269,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     
                     {/* Background track */}
                     <div className="absolute inset-0 bg-white/10 pointer-events-none">
-                        <div className={`absolute top-0 bottom-0 left-0 transition-[width] duration-75 ease-out ${disabled ? 'bg-gray-500/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
+                        <div className={`absolute top-0 bottom-0 left-0 transition-[width] duration-75 ease-out ${disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
                         
                         {/* Live value indicator */}
                         {showLiveIndicator && liveValue !== undefined && !disabled && (

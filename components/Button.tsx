@@ -6,13 +6,14 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     label?: string;
     active?: boolean;
     variant?: 'primary' | 'danger' | 'success' | 'warning';
+    size?: 'default' | 'small';
     icon?: React.ReactNode;
     fullWidth?: boolean;
     toggled?: boolean; // Visual "pressed" state separate from active functional state if needed
 }
 
-export const Button: React.FC<ButtonProps> = ({ 
-    label, active, variant = 'primary', icon, fullWidth, className, children, onClick, ...props 
+export const Button: React.FC<ButtonProps> = ({
+    label, active, variant = 'primary', size = 'default', icon, fullWidth, className, children, onClick, ...props
 }) => {
     const openGlobalMenu = useFractalStore(s => s.openContextMenu);
 
@@ -30,9 +31,11 @@ export const Button: React.FC<ButtonProps> = ({
     if (variant === 'success') activeClass = 'bg-green-900 text-green-200 border-green-700 shadow-inner';
     if (variant === 'warning') activeClass = 'bg-amber-900 text-amber-200 border-amber-700 shadow-inner';
 
+    const sizeClass = size === 'small' ? 't-btn-sm' : 't-btn';
+
     return (
-        <button 
-            className={`t-btn ${active ? activeClass : 't-btn-default'} ${fullWidth ? 'w-full' : 'flex-1'} ${className || ''}`}
+        <button
+            className={`${sizeClass} ${active ? activeClass : 't-btn-default'} ${fullWidth ? 'w-full' : 'flex-1'} ${className || ''}`}
             onClick={onClick}
             onContextMenu={handleContextMenu}
             {...props}

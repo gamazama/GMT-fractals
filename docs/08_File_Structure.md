@@ -26,11 +26,20 @@ The imperative WebGL system.
 *   `MaterialController.ts`: Manages Three.js materials (Direct, PT, Physics).
 *   `SceneController.ts`: Manages Three.js scenes/cameras.
 *   `AnimationEngine.ts`: Handles timeline playback and value interpolation.
-*   `VideoExporter.ts`: Offline rendering pipeline (Seek -> Accumulate -> Encode). Uses `mediabunny` library.
+*   `codec/VideoExportTypes.ts`: Shared `VideoExportConfig` interface for export pipeline.
+*   `codec/H264Converter.ts`: H264 AnnexB → AVCC conversion + Halton sequence for TAA jitter.
 *   `BucketRenderer.ts`: Tiled high-res rendering logic.
 *   `LoadingRenderer.ts`: Standalone raw WebGL renderer for the splash screen.
+*   `LoadingRendererCPU.ts`: CPU-based fallback loading renderer.
+*   `TickRegistry.ts`: Phase-based tick orchestrator (SNAPSHOT → ANIMATE → OVERLAY → UI).
 *   `NodeRegistry.ts`: Database of Modular Graph nodes.
 *   `BezierMath.ts`: Cubic Bezier curve solving for animation.
+*   **`worker/`**: Web Worker rendering subsystem.
+    *   `renderWorker.ts`: Worker entry point — boots FractalEngine on OffscreenCanvas.
+    *   `WorkerProxy.ts`: Main-thread proxy for posting messages to the worker.
+    *   `WorkerProtocol.ts`: Message type definitions and protocol constants.
+    *   `WorkerExporter.ts`: Worker-side video export coordination.
+    *   `ViewportRefs.ts`: Shared viewport dimension/canvas references.
 *   **`controllers/`**:
     *   `CameraController.ts`: Physics for Fly/Orbit movement.
     *   `PickingController.ts`: Handles depth-buffer reading for focus/interaction.
@@ -46,17 +55,34 @@ The imperative WebGL system.
 Self-contained modules defining State, UI, and Shaders.
 *   `features/index.ts`: Registration entry point.
 *   `features/types.ts`: Aggregate state types.
-*   **`fragmentarium_import/`**: Fragmentarium .frag file importer (AST-based V2)
-    *   `FragmentariumParser.ts`: Original V1 parser — single-file regex-based; kept for reference.
-    *   `GenericFragmentariumParser.ts`: V1 generic parser — regex extraction, auto-param mapping.
-    *   `GenericFragmentariumParserV2.ts`: **Active parser** — AST-based via `@shaderfrog/glsl-parser`. Fixes `z.z→z_local.z_local` variable renaming bug. Precise loop/helper extraction. `FormulaImporter.tsx` uses V2 as primary, V1 as fallback for pre-parsing context.
-    *   `FormulaImporter.tsx`: UI dialog for importing formulas; drives the full parse → map → transform pipeline.
-    *   `index.ts`: Barrel export (V1 and V2).
+*   **`fragmentarium_import/`**: Fragmentarium .frag file importer (AST-based)
+    *   `FormulaWorkshop.tsx`: UI dialog for importing formulas; drives the full parse → map → transform pipeline.
+    *   `index.ts`: Barrel export.
+    *   `types.ts`: Shared type definitions.
+    *   `TESTING_GUIDE.md`: Test suite documentation.
     *   `reference/`: Sample .frag files and expected GMF outputs for regression testing.
-    *   `test-v2-parser.ts`: V2 test suite (Menger, Mandelbox, pattern detection, auto-mapping).
-    *   `test-glsl-parser.ts`: Proof-of-concept for `@shaderfrog/glsl-parser` integration.
+    *   **`parsers/`**: GLSL parsing subsystem.
+        *   `ast-parser.ts`: AST-based parser via `@shaderfrog/glsl-parser`.
+        *   `preprocessor.ts`: GLSL preprocessor (#define, #include handling).
+        *   `dec-detector.ts`: DEC (Distance Estimated Coloring) pattern detection.
+        *   `dec-preprocessor.ts`: DEC-specific preprocessing transforms.
+        *   `uniform-parser.ts`: Uniform extraction from GLSL source.
+        *   `builtins.ts`: Built-in GLSL function/type definitions.
+    *   **`transform/`**: Code transformation pipeline.
+        *   `code-generator.ts`: GLSL code generation from AST.
+        *   `init-generator.ts`: Initialization code generation.
+        *   `loop-extractor.ts`: Fractal iteration loop extraction.
+        *   `pattern-detector.ts`: Formula pattern recognition.
+        *   `variable-renamer.ts`: Safe variable renaming (avoids z.z→z_local.z_local bugs).
+    *   **`workshop/`**: Formula workshop UI helpers.
+        *   `detection.ts`: Formula type auto-detection.
+        *   `param-builder.ts`: Parameter mapping builder.
+        *   `preview.ts`: Live preview generation.
 *   **`core_math`**: Iterations, Params A-F.
-*   **`geometry`**: Julia, Hybrid (Box), Pre-Rotation.
+*   **`geometry/`**: Julia, Hybrid (Box), Pre-Rotation, and modular fold system.
+    *   `index.ts`: Feature definition and fold registration.
+    *   `types.ts`: Geometry type definitions.
+    *   **`folds/`**: Modular fold implementations (tetra, standard, half, decoupled, mirror, octa, icosa, menger, kali).
 *   **`lighting`**: Light studio, Shadows, Falloff. Includes `LightGizmo.tsx`, `LightPanel.tsx` (in `features/lighting/`).
 *   **`materials`**: PBR Surface, Emission, Environment.
 *   **`atmosphere`**: Fog, Volumetric Glow.
@@ -74,8 +100,8 @@ Self-contained modules defining State, UI, and Shaders.
 *   **`debug_tools`**: Shader/State debuggers. Includes `DebugToolsOverlay.tsx`.
 *   **`ao`**: Ambient Occlusion logic.
 *   **`reflections`**: Raymarched reflections logic.
-*   **`water_plane`**: Infinite ocean plane logic.
-*   **`sonification`**: FHBT audio feedback from fractal data. Includes `SonificationEngine.ts`, `FHBTProbe.tsx`.
+*   **`water_plane.ts`**: Infinite ocean plane logic.
+*   **`volumetric/`**: Volumetric rendering effects (fog density, scatter).
 *   **`camera_manager`**: Camera position management and keyframing.
 *   **`engine`**: Master configuration profiles (Lite/Balanced/Ultra).
 
@@ -95,8 +121,8 @@ Self-contained modules defining State, UI, and Shaders.
     *   `types.ts`: Animation type definitions.
 
 ## 5. Components (`components/`)
-*   **Core**: `ViewportArea`, `Controls`, `Timeline`, `TopBar`, `MobileControls`, `App`.
-*   **Primitives**: `Slider`, `Knob`, `ToggleSwitch`, `Button`, `Dropdown`.
+*   **Core**: `ViewportArea`, `Controls`, `Timeline`, `TopBar`, `MobileControls`.
+*   **Primitives**: `Slider`, `Knob`, `ToggleSwitch`, `Button`, `Dropdown`, `CollapsibleSection`, `PanelHeader`, `Popover`, `SectionLabel`, `StatusDot`, `TabBar`.
 *   **`inputs/`**: Unified scalar/vector input primitives.
     *   `ScalarInput.tsx`: Core draggable-number primitive (replaces inline `RawDraggableNumber` in `Slider.tsx`).
     *   `VectorInput.tsx`: Thin wrapper that delegates to `vector-input/` components.
@@ -110,7 +136,8 @@ Self-contained modules defining State, UI, and Shaders.
     *   `index.tsx`, `types.ts`: Public API and types.
 *   **Pickers**: `SmallColorPicker`, `EmbeddedColorPicker`, `AdvancedGradientEditor`.
 *   **Panels**: `FormulaPanel`, `ScenePanel`, `LightPanel`, `RenderPanel`, `QualityPanel`, `EnginePanel`.
-*   **Visuals**: `MandelbulbScene`, `HudOverlay`, `CompilingIndicator`, `PerformanceMonitor`, `LoadingScreen`.
+*   **Visuals**: `HudOverlay`, `CompilingIndicator`, `PerformanceMonitor`, `LoadingScreen`.
+*   **Worker**: `WorkerDisplay`, `WorkerTickScene`, `StandaloneTickLoop`.
 *   **Timeline**: `DopeSheet`, `GraphEditor`, `TimeNavigator`, `TimelineRuler`, `KeyframeInspector`, `TimelineToolbar`, `RenderPopup`, `KeyframeContextMenu`.
 *   **Flow**: `FlowEditor`, `ShaderNode` (Modular Graph).
 *   **Registry**: `ComponentRegistry` (Maps strings to React components for DDFS).
@@ -143,6 +170,7 @@ Self-contained modules defining State, UI, and Shaders.
         *   `shading.ts`: Shading calculations.
         *   `shadows.ts`: Shadow computation.
         *   `volumetric_scatter.ts`: Henyey-Greenstein single-scatter GLSL body, injected into the march loop when `PT_VOLUMETRIC` is defined.
+        *   `shared.ts`: Shared lighting utilities and constants.
 
 ## 7. Utils (`utils/`)
 *   `CameraUtils.ts`: Unified coordinate math.
@@ -151,8 +179,8 @@ Self-contained modules defining State, UI, and Shaders.
 *   `GraphCompiler.ts`: Modular graph to GLSL transpiler.
 *   `GraphRenderer.ts`: Graph rendering utilities.
 *   `GraphUtils.ts`: Graph utility functions.
-*   `graphAlg.ts`: Graph algorithms.
-*   `GraphAlgorithms.ts`: Additional graph algorithms.
+*   `graphAlg.ts`: Graph algorithms (cycle detection, topological sort).
+*   `keyframeViewBounds.ts`: Keyframe dope sheet view bounds calculation.
 *   `PresetLogic.ts`: State hydration/sanitization.
 *   `Sharing.ts` / `UrlStateEncoder.ts`: URL compression.
 *   `fileUtils.ts`: Filename generation.

@@ -12,6 +12,7 @@ float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale
 // The 'getMappingValue' function is now injected dynamically by ColoringFeature.
 // See features/coloring/MappingModes.ts for logic.
 
+// Blend modes (float uniform → int via thresholds): 0=Mix, 1=Add, 2=Multiply, 3=Overlay, 4+=Screen
 vec3 blendColors(vec3 c1, vec3 c2, float opacity, float mode) {
     vec3 col = c1;
     
@@ -70,7 +71,7 @@ vec3 getGlowColor(vec3 p_fractal, vec4 result) {
     } else {
         vec3 n = vec3(0.0, 1.0, 0.0); 
         float val1 = getMappingValue(uColorMode, p_fractal, result, n, uColorScale);
-        float twistAngle = (abs(uColorTwist) > 0.001) ? atan(p_fractal.y, p_fractal.x) * 0.15915 : 0.0;
+        float twistAngle = (abs(uColorTwist) > 0.001) ? atan(p_fractal.y, p_fractal.x) * INV_TAU : 0.0;
         
         float t1Raw = val1 * uColorScale + uColorOffset + (length(p_fractal) + twistAngle) * uColorTwist;
         float t1Wrapped = fract(t1Raw);

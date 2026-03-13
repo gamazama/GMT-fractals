@@ -16,10 +16,10 @@ The app runs two distinct loops to handle the performance gap between React and 
 - **Updates:** React only re-renders when UI needs to change. It does **not** drive the render loop.
 
 ### B. The Engine Layer (WebGL)
-- **Singleton:** `engine/FractalEngine.ts`.
-- **Loop:** Runs continuously via `useFrame`.
-- **Independence:** Does NOT import the Store directly (avoids circular dependencies).
-- **Runtime State:** Maintains a local cache (`runtimeState`) of critical data pushed from the store via the Bridge.
+- **Singleton:** `engine/FractalEngine.ts` — runs on a Web Worker with OffscreenCanvas.
+- **Loop:** Runs via `TickRegistry` (phase-based: SNAPSHOT → ANIMATE → OVERLAY → UI). Driven by `WorkerTickScene.tsx` on main thread.
+- **Independence:** Does NOT import the Store directly (decoupled via `connect()` injection and message passing).
+- **State flow:** Zustand → EngineBridge → RENDER_TICK message → worker's FractalEngine.
 
 ### C. The Bridge
 - **Sync:** `bindStoreToEngine` (in `fractalStore.ts`) subscribes to store changes and pushes them to the Engine.

@@ -1,137 +1,152 @@
 
-export const LIGHTING_PBR = `
-// ------------------------------------------------------------------
-// PBR HELPERS
-// ------------------------------------------------------------------
+// Shared light loop infrastructure (shadows, attenuation, light types).
+// Each BRDF variant gets its own complete function to avoid dead-code overhead.
 
-// Simplified PBR Integration (Cook-Torrance / Blinn-Phong Hybrid)
-// Returns the accumulated radiance from all direct lights.
+const LOOP_OPEN = `
 vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughness, float metallic, float stochasticSeed, bool calcShadows) {
-    // F0: Surface reflection at 0 degrees.
-    // Dielectric: 0.04 (Linear). Metal: Albedo.
-    vec3 F0 = mix(vec3(0.04), albedo, metallic);
-    
     vec3 Lo = vec3(0.0);
-    
-    // Pixel size estimate for shadow bias
+
     float pixelSizeScale = uPixelSizeBase / uInternalScale;
-    
-    // Bias: Push start point away from surface
     float biasAmount = uShadowBias + pixelSizeScale * 2.0;
     vec3 shadowRo = p + n * biasAmount;
 
-    // Stochastic Shadows: Allow them even when moving
     bool useStochasticShadows = (uPTStochasticShadows > 0.5);
-    
+
     // COMPILER OPTIMIZATION: Prevent unrolling of light loop
     int lightCount = uLightCount;
-    
-    #ifndef MAX_LIGHTS
-    #define MAX_LIGHTS 8
-    #endif
 
     for (int i = 0; i < MAX_LIGHTS; i++) {
         if (i >= lightCount) break;
-        
+
         float intensity = uLightIntensity[i];
         if (intensity < 0.01) continue;
-        
-        float type = uLightType[i]; // 0=Point, 1=Directional
+
+        float type = uLightType[i];
         bool isDirectional = type > 0.5;
-        
+
         vec3 lVec;
         float distToLight;
-        
+
         if (isDirectional) {
-             lVec = -uLightDir[i]; // Negate: uLightDir points toward surface, we need toward light
-             distToLight = 100.0; // Effectively infinite for fractals (structure < bailout radius)
+             lVec = -uLightDir[i];
+             distToLight = DIR_LIGHT_DIST;  // Directional: treat as infinitely far (> BOUNDING_RADIUS)
         } else {
              lVec = uLightPos[i] - p;
              distToLight = length(lVec);
-             if (distToLight < 0.0001) continue; // Singularity check
+             if (distToLight < 0.0001) continue;  // Skip degenerate (light inside surface)
         }
 
-        // Optimization: Reuse distance for normalization if point light
         vec3 l = isDirectional ? normalize(lVec) : lVec / distToLight;
-        
-        vec3 h = normalize(l + v);
-        
-        float NdotL = max(0.0, dot(n, l));
-        
-        // BACKFACE CULLING
-        if (NdotL <= 0.0) continue; 
 
-        float HdotV = max(0.0, dot(h, v));
-        float NdotH = max(0.0, dot(n, h));
-        
+        float NdotL = max(0.0, dot(n, l));
+        if (NdotL <= 0.0) continue;
+
         float shadow = 1.0;
         if (calcShadows && uShadows > 0.5 && uLightShadows[i] > 0.5) {
             float s = 1.0;
-            
+
             if (useStochasticShadows) {
-                 // --- VOGEL DISK SAMPLING (GOLDEN RATIO) ---
                  float samplingSeed = fract(stochasticSeed + float(i) * 1.618);
-                 
-                 vec3 w = l;
-                 vec3 helperUp = abs(w.y) > 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
-                 vec3 u = normalize(cross(w, helperUp));
-                 vec3 v = cross(w, u);
-                 
+
+                 vec3 u, v;
+                 buildTangentBasis(l, u, v);
+
                  float r_jitter = sqrt(samplingSeed);
-                 float theta = samplingSeed * 6.283185 * 1.618033;
-                 
-                 // Radius scaling
-                 float spread = 2.0 / max(uShadowSoftness, 0.1); 
-                 
+                 float theta = samplingSeed * TAU * 1.618033;
+                 float spread = 2.0 / max(uShadowSoftness, 0.1);
+
                  vec3 offset = (u * cos(theta) + v * sin(theta)) * r_jitter * spread;
-                 
-                 // Apply jitter to direction
+
                  vec3 jitteredLDir = normalize(l + offset);
                  float jitteredDist = distToLight;
-                 
-                 // For Point lights, offset affects origin, not just angle
+
                  if (!isDirectional) {
-                      vec3 jitteredTarget = uLightPos[i] + offset * distToLight; // Approximate sphere
+                      vec3 jitteredTarget = uLightPos[i] + offset * distToLight;
                       vec3 jVec = jitteredTarget - p;
                       jitteredDist = length(jVec);
                       jitteredLDir = jVec / jitteredDist;
                  }
-                 
+
                  s = GetHardShadow(shadowRo, jitteredLDir, jitteredDist);
             } else {
-                 // Standard SDF Soft Shadows
                  s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
             }
             shadow = mix(1.0, s, uShadowIntensity);
         }
-        
-        // Attenuation
+
         float att = 1.0;
         if (!isDirectional && uLightFalloff[i] > 0.001) {
             float k = uLightFalloff[i];
             if (uLightFalloffType[i] < 0.5) att = 1.0 / (1.0 + k * distToLight * distToLight);
             else att = 1.0 / (1.0 + k * distToLight);
         }
-        
-        // Specular (Blinn-Phong adapted for PBR look)
-        vec3 F = F0 + (1.0 - F0) * pow(1.0 - HdotV, 5.0);
-        float specPower = 2.0 / (max(roughness * roughness, 0.0001)) - 2.0;
-        float spec = pow(NdotH, max(0.001, specPower)) * (specPower + 8.0) / (8.0 * 3.14159);
-        
-        // Energy Conservation
-        vec3 kS = F;
-        vec3 kD = vec3(1.0) - kS;
-        
-        // CORRECTION: Enforce physical metallic properties
-        // Metals absorb refracted light (no diffuse).
-        kD *= (1.0 - metallic);
-        
+
         vec3 radiance = uLightColor[i] * intensity * att * shadow;
-        
-        // Combine Diffuse + Specular
-        Lo += (kD * albedo * uDiffuse / 3.14159 + kS * spec * uSpecular) * radiance * NdotL;
+`;
+
+const LOOP_CLOSE = `
     }
-    
+
     return Lo;
 }
 `;
+
+// Simple Blinn-Phong (fast compile, good visual quality)
+export const LIGHTING_PBR_SIMPLE = `
+// ------------------------------------------------------------------
+// PBR HELPERS (Blinn-Phong)
+// ------------------------------------------------------------------
+${LOOP_OPEN}
+        // Blinn-Phong specular
+        vec3 h = normalize(l + v);
+        float NdotH = max(0.0, dot(n, h));
+        float shininess = max(2.0, 2.0 / (roughness * roughness + 0.001) - 2.0);
+        float spec = pow(NdotH, shininess) * (shininess + 2.0) / (8.0 * PI);
+        vec3 specular = mix(vec3(1.0), albedo, metallic) * spec;
+
+        float kD = (1.0 - metallic);
+        Lo += (kD * albedo * uDiffuse / PI + specular * uSpecular) * radiance * NdotL;
+${LOOP_CLOSE}
+`;
+
+// Full Cook-Torrance (GGX + Smith-GGX + Schlick — slower compile)
+export const LIGHTING_PBR_FULL = `
+// ------------------------------------------------------------------
+// PBR HELPERS (Cook-Torrance GGX)
+// ------------------------------------------------------------------
+${LOOP_OPEN}
+        vec3 F0 = mix(vec3(0.04), albedo, metallic);
+        float NdotV = max(0.001, dot(n, v));
+
+        vec3 h = normalize(l + v);
+        float HdotV = max(0.0, dot(h, v));
+        float NdotH = max(0.0, dot(n, h));
+
+        // Fresnel (Schlick)
+        vec3 F = fresnelSchlick(HdotV, F0);
+
+        // Distribution (GGX / Trowbridge-Reitz)
+        float a = roughness * roughness;
+        float a2 = a * a;
+        float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+        float D = a2 / (PI * denom * denom + GGX_EPSILON);
+
+        // Geometry (Smith-GGX)
+        float kG = a * 0.5;
+        float G1V = NdotV / (NdotV * (1.0 - kG) + kG);
+        float G1L = NdotL / (NdotL * (1.0 - kG) + kG);
+        float G = G1V * G1L;
+
+        // Cook-Torrance specular BRDF
+        vec3 specular = (D * F * G) / (4.0 * NdotV * NdotL + GGX_EPSILON);
+
+        // Energy Conservation
+        vec3 kS = F;
+        vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+
+        Lo += (kD * albedo * uDiffuse / PI + specular * uSpecular) * radiance * NdotL;
+${LOOP_CLOSE}
+`;
+
+// Default export for backwards compat
+export const LIGHTING_PBR = LIGHTING_PBR_SIMPLE;

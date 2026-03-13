@@ -14,7 +14,7 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
     
     // Wrapper for DDFS action
     const updateRule = (id: string, update: Partial<ModulationRule>) => {
-        // @ts-ignore
+        // @ts-expect-error — DDFS dynamic store action
         store.updateModulation({ id, update });
     };
 
@@ -39,7 +39,7 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
             <div className="flex flex-col items-center justify-center py-6 text-gray-500 gap-3 border-t border-white/5">
                 <span className="text-xs italic">Select a box to edit params</span>
                 <button onClick={handleAdd} className="px-4 py-2 bg-cyan-900/50 border border-cyan-500/30 rounded text-xs font-bold text-cyan-300 hover:bg-cyan-900 transition-colors">
-                    + ADD NEW LINK
+                    + Add New Link
                 </button>
             </div>
         );
@@ -61,7 +61,7 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
             {/* Header: Target & Delete */}
             <div className="flex justify-between items-center bg-white/5 p-2 rounded border border-white/5">
                 <div className="flex-1 mr-2">
-                    <label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Target Parameter</label>
+                    <label className="text-[9px] text-gray-500 font-bold block mb-1">Target Parameter</label>
                     <ParameterSelector 
                         value={rule.target}
                         onChange={(v) => updateRule(rule.id, { target: v })}
@@ -81,11 +81,11 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
             
             {/* Source Selector (Generic Mixer Logic) */}
             <div className="flex gap-2 items-center">
-                 <label className="text-[9px] text-gray-500 font-bold uppercase">Source:</label>
+                 <label className="text-[9px] text-gray-500 font-bold">Source:</label>
                  <select 
                     value={rule.source}
                     onChange={(e) => updateRule(rule.id, { source: e.target.value as any })}
-                    className="bg-black border border-white/10 text-[9px] text-cyan-300 rounded px-2 py-1"
+                    className="t-select text-cyan-300"
                  >
                      <option value="audio">Audio Spectrum</option>
                      <option value="lfo-1">LFO 1</option>
@@ -96,12 +96,12 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
             
             {isAudio && (
                 <div>
-                    <label className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Quick Frequency Bands</label>
+                    <label className="text-[9px] text-gray-500 font-bold block mb-1">Quick Frequency Bands</label>
                     <div className="flex gap-1">
-                        <button onClick={() => setBand(0, 0.1)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] uppercase font-bold text-gray-400 rounded border border-white/5">Bass</button>
-                        <button onClick={() => setBand(0.1, 0.5)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] uppercase font-bold text-gray-400 rounded border border-white/5">Mids</button>
-                        <button onClick={() => setBand(0.5, 1.0)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] uppercase font-bold text-gray-400 rounded border border-white/5">Treble</button>
-                        <button onClick={() => setBand(0, 1.0)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] uppercase font-bold text-gray-400 rounded border border-white/5">Full</button>
+                        <button onClick={() => setBand(0, 0.1)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] font-bold text-gray-400 rounded border border-white/5">Bass</button>
+                        <button onClick={() => setBand(0.1, 0.5)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] font-bold text-gray-400 rounded border border-white/5">Mids</button>
+                        <button onClick={() => setBand(0.5, 1.0)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] font-bold text-gray-400 rounded border border-white/5">Treble</button>
+                        <button onClick={() => setBand(0, 1.0)} className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-[9px] font-bold text-gray-400 rounded border border-white/5">Full</button>
                     </div>
                 </div>
             )}
@@ -147,7 +147,7 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
                         />
                     </div>
                  </div>
-                 <div className="grid grid-cols-5 text-[8px] text-gray-500 text-center mt-1 uppercase font-bold">
+                 <div className="grid grid-cols-5 text-[8px] text-gray-500 text-center mt-1 font-bold">
                      <div>Rise</div>
                      <div>Fall</div>
                      <div>Lerp</div>

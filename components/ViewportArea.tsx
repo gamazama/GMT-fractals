@@ -1,6 +1,6 @@
 
-import React, { useRef, useState, useLayoutEffect } from 'react';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
+import { Canvas } from '@react-three/fiber';
 import { useFractalStore } from '../store/fractalStore';
 import HistogramProbe from './HistogramProbe';
 import HudOverlay from './HudOverlay';
@@ -13,11 +13,10 @@ import { componentRegistry } from './registry/ComponentRegistry';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 import { FixedResolutionControls } from './viewport/FixedResolutionControls';
 import { CompositionOverlay } from './viewport/CompositionOverlay';
-import { engine } from '../engine/FractalEngine';
 import Navigation from './Navigation';
 import { CompilingIndicator } from './CompilingIndicator';
-import MandelbulbScene from './MandelbulbScene';
-import * as THREE from 'three';
+import WorkerTickScene from './WorkerTickScene';
+import { WorkerDisplay } from './WorkerDisplay';
 
 // Layout Constants
 const LAYOUT_PADDING = 12;
@@ -46,12 +45,12 @@ const DomOverlays = () => {
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-[20]">
             {overlays.map(config => {
                 const Component = componentRegistry.get(config.componentId);
-                if (Component) {
-                    const featureId = config.id;
-                    const sliceState = (state as any)[featureId];
+                const featureId = config.id;
+                const sliceState = (state as any)[featureId];
+                if (Component && sliceState) {
                     return (
-                        <Component 
-                            key={config.id} 
+                        <Component
+                            key={config.id}
                             featureId={featureId}
                             sliceState={sliceState}
                             actions={actions}
@@ -74,12 +73,12 @@ const SceneOverlays = () => {
         <>
             {overlays.map(config => {
                 const Component = componentRegistry.get(config.componentId);
-                if (Component) {
-                    const featureId = config.id;
-                    const sliceState = (state as any)[featureId];
+                const featureId = config.id;
+                const sliceState = (state as any)[featureId];
+                if (Component && sliceState) {
                     return (
-                        <Component 
-                            key={config.id} 
+                        <Component
+                            key={config.id}
                             featureId={featureId}
                             sliceState={sliceState}
                             actions={actions}
@@ -91,53 +90,6 @@ const SceneOverlays = () => {
         </>
     );
 };
-
-// Syncs the R3F overlay camera to match the Main Engine camera
-const CameraSync = () => {
-    const { camera } = useThree();
-    const lastPosition = useRef(new THREE.Vector3());
-    const lastQuaternion = useRef(new THREE.Quaternion());
-    const lastFov = useRef(0);
-    
-    useFrame(() => {
-        if (engine.activeCamera) {
-            let hasChanged = false;
-            
-            // Check if camera position changed
-            if (!lastPosition.current.equals(camera.position)) {
-                engine.activeCamera.position.copy(camera.position);
-                lastPosition.current.copy(camera.position);
-                hasChanged = true;
-            }
-            
-            // Check if camera rotation changed
-            if (!lastQuaternion.current.equals(camera.quaternion)) {
-                engine.activeCamera.quaternion.copy(camera.quaternion);
-                lastQuaternion.current.copy(camera.quaternion);
-                hasChanged = true;
-            }
-            
-            // Sync Projection props if perspective (and changed)
-            if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera && (engine.activeCamera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-                const engCam = engine.activeCamera as THREE.PerspectiveCamera;
-                const r3fCam = camera as THREE.PerspectiveCamera;
-                
-                if (engCam.fov !== r3fCam.fov) {
-                    engCam.fov = r3fCam.fov;
-                    engCam.updateProjectionMatrix();
-                    lastFov.current = r3fCam.fov;
-                    hasChanged = true;
-                }
-            }
-            
-            // Only update matrix world if anything changed
-            if (hasChanged) {
-                engine.activeCamera.updateMatrixWorld();
-            }
-        }
-    });
-    return null;
-}
 
 export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneReady }) => {
     const state = useFractalStore();
@@ -221,7 +173,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
             
             <div ref={canvasContainerRef} style={wrapperStyle} className="relative bg-[#111] group z-0">
                 {(isSelectingRegion || isDrawingToolActive) && <div className="absolute inset-0 z-50 cursor-crosshair bg-transparent pointer-events-none" />}
-                
+
                 {activeRegion && !isSelectingRegion && !isCleanFeed && (
                     <div className={`absolute border-2 z-40 group/box region-box cursor-move transition-opacity duration-75 ${isGhostDragging ? 'border-cyan-400 border-dashed opacity-80' : 'border-cyan-500 opacity-100'}`} style={{ left: `${activeRegion.minX * 100}%`, bottom: `${activeRegion.minY * 100}%`, right: `${(1 - activeRegion.maxX) * 100}%`, top: `${(1 - activeRegion.maxY) * 100}%`, }} >
                         <div className="absolute top-0 right-0 bg-cyan-600 text-white text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-2 pointer-events-auto shadow-md">
@@ -230,38 +182,42 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
                         </div>
                     </div>
                 )}
-                
-                {/* Single Consolidated R3F Canvas */}
-                <Canvas 
-                    gl={{ 
-                        alpha: false, 
-                        depth: false, 
-                        antialias: false, 
+
+                {/* 2D canvas receives ImageBitmaps from render worker */}
+                {viewportSize.w > 0 && viewportSize.h > 0 && (
+                    <WorkerDisplay
+                        width={isFixed ? w : viewportSize.w}
+                        height={isFixed ? h : viewportSize.h}
+                    />
+                )}
+
+                {/* R3F Canvas — transparent overlay for gizmos, navigation, scene overlays */}
+                <Canvas
+                    gl={{
+                        alpha: true,
+                        depth: false,
+                        antialias: false,
                         powerPreference: "high-performance",
-                        // CRITICAL: Prevent auto-clear to allow manual loop control in MandelbulbScene
-                        preserveDrawingBuffer: true 
-                    }} 
-                    camera={{ position: [0,0,0], fov: 60 }} 
+                        preserveDrawingBuffer: false
+                    }}
+                    camera={{ position: [0,0,0], fov: 60 }}
                     style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}
                     dpr={state.dpr}
                     onPointerDown={(e) => (e.target as Element).setPointerCapture(e.pointerId)}
                     onPointerMove={handleInput}
                     onWheel={handleInput}
                 >
-                    <Navigation 
-                        mode={state.cameraMode} 
+                    <Navigation
+                        mode={state.cameraMode}
                         hudRefs={hudRefs}
                         onStart={(s) => state.handleInteractionStart(s)}
                         onEnd={() => state.handleInteractionEnd()}
                         setSceneOffset={state.setSceneOffset}
-                        fitScale={fitScale} 
+                        fitScale={fitScale}
                     />
-                    
-                    {/* The Scene renders the Fractal Quad in a portal */}
-                    <MandelbulbScene onLoaded={onSceneReady} />
-                    
-                    {/* Overlays render on top in the main scene */}
-                    <CameraSync />
+
+                    {/* WorkerTickScene drives animation/UI ticks and posts render data to worker */}
+                    <WorkerTickScene onLoaded={onSceneReady} />
                     <SceneOverlays />
                 </Canvas>
 

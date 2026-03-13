@@ -85,6 +85,49 @@ Due to the "Infinite Zoom" engine, this value combines the **Offset** (the posit
 Editing these values directly allows for precise teleportation, but be careful: large jumps may land you inside solid geometry (black screen).
 `
     },
+    'scene.geometry': {
+        id: 'scene.geometry',
+        category: 'UI',
+        title: 'Geometry & Transforms',
+        parentId: 'panel.scene',
+        content: `
+Controls the spatial transformations and geometric modifications applied to the fractal before or during iteration.
+
+## Julia Mode
+Switches from **Mandelbrot** mode (where C = position) to **Julia** mode (where C = constant).
+- **Julia X/Y/Z**: The 3D Julia constant. Changing these morphs the fractal shape smoothly.
+- **Tip**: Find an interesting area in Mandelbrot mode, then toggle Julia and adjust the constant to "freeze" that region.
+
+## Pre-Rotation
+Rotates the entire coordinate space before the fractal iteration begins.
+- **Rot X / Y / Z**: Euler angles (degrees). Creates tilted, diagonal versions of the fractal.
+- **Master Toggle**: Enables/disables all pre-rotation at once.
+
+## Burning Mode
+Applies absolute value (\`abs()\`) to coordinates before iteration, creating the "Burning Ship" variant of any formula. Produces sharp, angular structures.
+
+## Hybrid Box (Fold System)
+Injects a geometric folding operation into the fractal iteration loop. The fold runs *before* the main formula step each iteration.
+
+### Fold Types
+- **Standard**: Classic Mandelbox box fold + sphere fold.
+- **Half**: One-sided fold (reflects only positive side).
+- **Tetra**: Tetrahedral reflection folds (Sierpinski-like).
+- **Octa**: Octahedral reflection folds.
+- **Icosa**: Icosahedral/dodecahedral folds (golden ratio reflections).
+- **Menger**: Axis-sorting Menger sponge fold.
+- **Mirror**: Simple axis-aligned mirror.
+- **Decoupled**: Independent per-axis fold limits.
+- **Kali**: Kali's abs-inversion fold.
+
+### Hybrid Controls
+- **Fold Iterations**: How many fold passes per formula iteration.
+- **Scale / MinR / FixedR**: Standard Mandelbox-type fold parameters.
+- **Skip / Swap**: Skip the first N iterations, or swap fold/formula order.
+- **Add C**: Whether to add the constant C after folding (affects convergence).
+- **Shift / Rotation**: Per-fold spatial offsets and rotations.
+`
+    },
     'dof.settings': {
         id: 'dof.settings',
         category: 'Rendering',

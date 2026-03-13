@@ -1,7 +1,7 @@
 
 # Data I/O & Export
 
-## 1. Video Export (`VideoExporter.ts`)
+## 1. Video Export (`WorkerExporter.ts`)
 
 GMT features a client-side render farm.
 

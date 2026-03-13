@@ -16,7 +16,7 @@ Standard 32-bit floats (`float32`) have 7 digits of precision. This limits zoom 
 
 ### A. Direct Rendering (SDF)
 *   **Technique:** Sphere Tracing.
-*   **Lighting:** Phong/Blinn approximation with Soft Shadows (SDF-based).
+*   **Lighting:** Cook-Torrance PBR (GGX distribution + Smith-GGX geometry + Schlick Fresnel) with Soft Shadows (SDF-based). Single-bounce reflection tracing with roughness-gated cutoff.
 *   **Performance:** 60 FPS.
 *   **Use Case:** Exploration, Animation, Editing.
 
@@ -32,21 +32,23 @@ Lights can optionally be rendered as physical emissive spheres visible in the vi
 
 ### Sphere Intersection
 
-A `sphereLoop` code block is inlined in the `!hit` branch of both render modes in `shaders/chunks/main.ts`. For each active light with `radius > 0`:
+A shared `intersectLightSphere(ro, rd)` function in `shaders/chunks/lighting/shared.ts` tests a ray against all visible light spheres. Returns `vec2(fade, lightIndex)` where `fade <= 0` means no hit. Used by both Direct (via `sampleLightSphereOrEnv`) and Path Tracing (bounce `!hit` branch) modes.
 
-1. Compute perpendicular distance `_dPerp` from the ray to the sphere centre.
-2. **Soft edge**: `smoothstep(_fadeMin, _fadeMax, _dPerp)` fades the sphere over a band controlled by `uLightSoftness[i]`.
+For each active point light with `radius > 0`:
+
+1. Compute perpendicular distance `dPerp` from the ray to the sphere centre.
+2. **Soft edge**: `smoothstep(innerR, outerR, dPerp)` fades the sphere over a band controlled by `uLightSoftness[i]`.
    - `softness = 0`: hard-edge sphere (classic billboard look).
    - `softness = 1`: edge fades over a band equal to the radius (smooth disc).
-3. If `_fade > 0.001`: intersect the sphere analytically (`-b ± sqrt(r²-d_perp²)`) to get hit distance `d`, then blend `col = mix(col, lightColor * intensity, _fade)`.
-4. The same `sphereLoop` runs in the PT bounce `!hit` branch so light spheres are visible in reflections and indirect paths.
+3. Fade is squared for a smoother visual falloff.
 
 ### Key Files
 
 | File | Role |
 |------|------|
-| `shaders/chunks/main.ts` | `sphereLoop` const, inlined in Direct and PT `!hit` branches |
-| `shaders/chunks/pathtracer.ts` | Same sphere code in bounce `!hit` |
+| `shaders/chunks/lighting/shared.ts` | `intersectLightSphere()` — shared geometry test |
+| `shaders/chunks/lighting/shading.ts` | `sampleLightSphereOrEnv()` — wraps intersection with env map fallback |
+| `shaders/chunks/pathtracer.ts` | Calls `intersectLightSphere()` in bounce `!hit` branch |
 | `engine/UniformNames.ts` | `LightRadius`, `LightSoftness` uniforms |
 | `engine/managers/UniformManager.ts` | Uploads `sofArr` per light |
 | `types/graphics.ts` | `softness?: number` on `LightParams` |
@@ -59,7 +61,61 @@ A `sphereLoop` code block is inlined in the `!hit` branch of both render modes i
 | Sphere Radius | `uLightRadius[i]` | 0 = light is invisible |
 | Edge Softness | `uLightSoftness[i]` | 0 = hard edge, 1 = full fade band |
 
-## 2.2 Path Tracer Quality Modes
+## 2.2 Direct Lighting Pipeline
+
+The direct renderer's shading pipeline (`shaders/chunks/lighting/shading.ts`) evaluates per-pixel:
+
+### PBR Specular Model (`shaders/chunks/lighting/pbr.ts`)
+
+Uses full Cook-Torrance microfacet BRDF:
+- **Distribution (D):** GGX / Trowbridge-Reitz — tighter highlight core with natural long tail.
+- **Geometry (G):** Schlick-GGX (`k = a/2`) — consistent across Direct and Path Tracing modes.
+- **Fresnel (F):** `fresnelSchlick()` from shared helpers — per-light using `HdotV`.
+- **NdotV** is hoisted outside the light loop (constant per-pixel).
+
+### Reflection Tracing (`features/reflections/`)
+
+Single-bounce raymarched reflections, conditionally compiled via `REFLECTIONS_ENABLED`:
+
+1. **Adaptive bias:** Reflection ray origin offset scales with `pixelSizeScale * d` (not hardcoded), preventing self-intersection at all zoom levels.
+2. **Roughness jitter:** Blue noise (B/A/R channels) jitters the reflection ray proportional to roughness. Skipped when camera is moving (`uBlendFactor >= 0.99`).
+3. **Roughness cutoff:** `uReflRoughnessCutoff` (default 0.62) skips the trace for rough surfaces — falls back to env map lookup.
+4. **Throughput early-out:** `dot(F * uSpecular, ...) < 0.01` skips the trace when Fresnel contribution is negligible.
+5. **Normal orientation:** `if (dot(r_n, -currRd) < 0.0) r_n = -r_n` — flips the SDF gradient normal to face the incoming reflection ray, fixing back-face lighting in concave fractal geometry.
+6. **Bounce shadows:** Shadow computation on reflected surfaces is gated by `!isMoving` — full shadow quality accumulates when still, skipped during interaction for performance.
+7. **Hit refinement:** On hit, the tracer retreats by `d * 0.5` before evaluating full orbit traps, reducing color noise at glancing angles.
+8. **Miss path:** `sampleLightSphereOrEnv()` tests against visible light spheres, then falls back to environment map.
+9. **Raymarch Mix:** `uReflStrength` blends between raymarched reflections (1.0) and simple env map lookup (0.0). Both paths use matched Fresnel weighting.
+
+### Fresnel — Two Variants
+
+The codebase uses two intentionally different Schlick formulas:
+- **Per-light (shared.ts → pbr.ts, pathtracer.ts):** `fresnelSchlick(cosTheta, F0)` = `F0 + (1-F0) * pow(1-cosTheta, 5)` — standard Schlick, defined once in `shaders/chunks/lighting/shared.ts` and used by all integrators.
+- **Reflection throughput (shading.ts):** `F0 + (max(1-roughness, F0) - F0) * pow(1-NdotV, 5)` — Schlick-Roughness, which clamps grazing Fresnel so rough surfaces don't produce unrealistically strong reflections. Intentionally inline (not shared) because it uses a different formula.
+
+### Fog System
+
+Fog color is pre-linearized on the CPU as `uFogColorLinear` (InverseACESFilm applied once per frame in `UniformManager.ts`), eliminating a per-pixel quadratic solve (`sqrt` + clamp) at every fog evaluation.
+
+Two fog helpers in `shading.ts`:
+- `applyEnvFog(env)` — treats environment as at the fog far plane via `smoothstep(uFogNear, uFogFar, uFogFar)`. Replaces the former hardcoded 0.8 blend factor.
+- `applyDistanceFog(col, dist)` — standard distance-based smoothstep for geometry hits.
+
+Reflection hits do **not** apply their own fog — `post.ts` applies a single primary-distance fog pass to the composed pixel, avoiding double-fogging.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `shaders/chunks/lighting/shared.ts` | `buildTangentBasis()`, `fresnelSchlick()`, `intersectLightSphere()` — shared helpers injected before all integrators |
+| `shaders/chunks/lighting/pbr.ts` | Cook-Torrance PBR with GGX + Schlick-GGX |
+| `shaders/chunks/lighting/shading.ts` | Direct lighting integrator, reflection composition, fog helpers |
+| `features/reflections/index.ts` | DDFS definition: bounces, steps, roughness cutoff, mix strength |
+| `features/reflections/shader.ts` | `traceReflectionRay()` — lightweight SDF marcher with hit refinement |
+| `engine/UniformNames.ts` | `uFogColorLinear` derived uniform |
+| `engine/managers/UniformManager.ts` | CPU-side InverseACESFilm derivation |
+
+## 2.3 Path Tracer Quality Modes
 
 Four compile-time options in the `LightingFeature` / `EngineSettingsFeature` control PT quality vs cost trade-offs. All are `onUpdate: 'compile'` — toggling any one triggers a full shader rebuild.
 
@@ -72,16 +128,16 @@ Four compile-time options in the `LightingFeature` / `EngineSettingsFeature` con
 
 ### PT_ENV_NEE (`ptEnvNEE`)
 
-**Default off.** Adds a direct-sample of the environment map as an additional NEE contributor each bounce. One extra `traceScene` call is issued per bounce to shadow-test the env sample.
+**Default off.** Adds a direct-sample of the environment map as an additional NEE contributor each bounce. One extra `traceSceneLean` call is issued per bounce to shadow-test the env sample.
 
 - Large noise reduction for open, sky-dominated scenes.
-- Cost: +1 shadow trace per bounce.
+- Cost: +1 shadow trace per bounce (lean variant, no volume accumulation).
 
 ### PT_VOLUMETRIC (`ptVolumetric`)
 
 **Default off.** Replaces absorption-only fog in the PT bounce loop with Henyey-Greenstein single-scatter volumetric lighting. Injected via `builder.addVolumeLogic(VOLUMETRIC_SCATTER_BODY)` in `features/lighting/index.ts`.
 
-See **Section 2.5** for full technical details.
+See **Section 2.6** for full technical details.
 
 ### Firefly Clamp (`ptMaxLuminance`)
 
@@ -91,15 +147,21 @@ See **Section 2.5** for full technical details.
 
 The rim-light contribution (`uRim * pow(1 - NdotV, uRimExponent)`) is now guarded by `if (bounce == 0)`. Prior to this fix, rim light was added on every bounce, causing incorrectly bright rim halos in indirect lighting paths (visible as light-colored fringing on reflective surfaces).
 
+### Lean Bounce Tracer (`traceSceneLean`)
+
+In PT mode, the shader emits a second `traceSceneLean()` function alongside the full `traceScene()`. The lean variant is generated by `getTraceGLSL()` with empty volume body/finalize code and a custom `functionName` parameter. Bounce rays and env NEE visibility tests call `traceSceneLean()`, skipping per-step volume accumulation (density sampling, glow, scatter) that would be discarded anyway. The primary camera ray still uses the full `traceScene()`.
+
 ### Key Files
 
 | File | Role |
 |------|------|
-| `features/lighting/index.ts` | Defines and injects `PT_NEE_ALL_LIGHTS`, `PT_ENV_NEE`, `PT_VOLUMETRIC` defines |
-| `shaders/chunks/pathtracer.ts` | Compile-gated branches for each define |
+| `features/lighting/index.ts` | Defines and injects `PT_NEE_ALL_LIGHTS`, `PT_ENV_NEE`, `PT_VOLUMETRIC` defines; injects `LIGHTING_SHARED` |
+| `shaders/chunks/pathtracer.ts` | Compile-gated branches for each define; calls `traceSceneLean` for bounces |
+| `shaders/chunks/trace.ts` | `getTraceGLSL()` — parameterized `functionName` for lean variant |
+| `engine/ShaderBuilder.ts` | Emits `traceSceneLean` alongside `traceScene` in PT mode |
 | `engine/UniformSchema.ts` | `uPTMaxLuminance` uniform definition |
 
-## 2.5 Volumetric Scatter (God Rays)
+## 2.6 Volumetric Scatter (God Rays)
 
 Primary-ray single-scatter volumetric lighting. Injected into `traceScene`'s march loop via `builder.addVolumeLogic()`. Active in both Direct and Path Tracing modes. Controlled via **Scene → Fog → Volumetric Density**.
 
@@ -124,7 +186,7 @@ At each march step, a stochastic gate fires with probability 1/8 (spatially dist
 | `shaders/chunks/lighting/volumetric_scatter.ts` | Full GLSL body, injected into march loop |
 | `shaders/chunks/trace.ts` | `traceScene` accumulates `accScatter`, outputs `fogScatter` |
 | `shaders/chunks/main.ts` | `applyPostProcessing` adds `fogScatter` additively to final color |
-| `shaders/chunks/pathtracer.ts` | PT bounce fog uses `exp(-uFogDensity·d)` Beer-Lambert |
+| `shaders/chunks/pathtracer.ts` | PT bounce fog uses `exp(-uFogDensity·d)` Beer-Lambert; bounce traces use `traceSceneLean` (no volume) |
 | `features/atmosphere/index.ts` | UI params: Density, Anisotropy, Surface Color Scatter |
 | `features/lighting/index.ts` | Injects `#define PT_VOLUMETRIC` and `addVolumeLogic()` when enabled |
 
@@ -150,6 +212,71 @@ Two bugs in `shaders/chunks/pathtracer.ts` were fixed alongside the volumetric s
 1. **Bounce fog Beer-Lambert**: The PT bounce loop previously applied `exp(-volumetric * 2.0)` where `2.0` was an arbitrary artistic constant. Changed to `exp(-uFogDensity * d)` — proper Beer-Lambert using the actual march distance `d` and the same density uniform as the primary scatter, giving physically consistent fog attenuation across all bounces.
 
 2. **envNEE traceScene call**: The `PT_ENV_NEE` branch called `traceScene` with 7 arguments after the signature was extended to 8 (`out vec3 fogScatter`). Fixed by adding the missing `vec3 envScatter = vec3(0.0)` output argument.
+
+## 2.7 Two-Stage Shader Compilation
+
+Formula changes trigger a full shader rebuild. On Windows/Chrome, the `fxc` compiler inlines the formula 10+ times, causing 14-19s compile blocks. Two-stage compilation solves this.
+
+### How It Works
+
+1. **Preview shader** (<1s compile): `MaterialController.compilePreview()` builds a stub shader with simplified lighting (colored N·L shading tuned for ACES pipeline, not flat gray). This renders immediately while the full shader compiles in the background.
+2. **Full shader** (async): `MaterialController.buildFullMaterial()` builds the real shader on a separate `ShaderMaterial`. Uses `compileAsync` + `KHR_parallel_shader_compile` on a dummy scene with a dedicated 1x1 FBO (`getCompileTarget()`) to match the MRT program hash.
+3. **Hot-swap**: Once compiled, `swapFullMaterial()` replaces the preview material seamlessly.
+
+### Three Compilation Paths
+
+`performCompilation()` in `FractalEngine` chooses:
+
+| Path | Trigger | Behavior |
+|------|---------|----------|
+| Two-stage | Formula change | Preview → async full → swap |
+| keepCurrent | Same formula, engine setting change | Keep current material visible, compile new one async |
+| Single-stage | Fallback (first boot, errors) | Traditional blocking compile |
+
+### Stale Compile Cancellation
+
+A generation counter (`_compileGeneration`) increments on each compile request. If a user rapidly switches formulas, stale compiles are detected and discarded when they complete.
+
+### UI Feedback
+
+`CompilingIndicator.tsx` shows status centered under the top bar:
+- "Compiling Lighting..." — two-stage (preview is rendering)
+- "Compiling Shader..." — keepCurrent path
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `engine/MaterialController.ts` | `compilePreview()`, `buildFullMaterial()`, `swapFullMaterial()` |
+| `engine/FractalEngine.ts` | `performCompilation()` — three-path dispatch |
+| `features/lighting/index.ts` | Preview shader stub (colored N·L) |
+| `components/CompilingIndicator.tsx` | Compile status UI |
+
+## 2.8 TickRegistry — Frame Orchestration
+
+The main-thread frame loop is organized by `engine/TickRegistry.ts`, a phase-based tick orchestrator.
+
+### Phases (Fixed Order)
+
+```
+SNAPSHOT → ANIMATE → OVERLAY → UI
+```
+
+1. **SNAPSHOT**: Capture display camera state (`getDisplayCamera()`), sync R3F camera FOV
+2. **ANIMATE**: Animation engine updates, parameter interpolation
+3. **OVERLAY**: Drawing overlay, light gizmo updates
+4. **UI**: UI-driven per-frame updates
+
+### Integration
+
+- `WorkerTickScene.tsx` registers all ticks at module level, calls `runTicks(delta)` in its `useFrame` hook
+- **DISPATCH** (`sendRenderTick`) runs inline after `runTicks()` — it needs R3F camera serialization that's only available in the R3F frame callback
+- `Navigation.tsx` has a separate `useFrame` at **priority 0** (camera physics) — runs before TickRegistry
+- Light gizmos read `getDisplayCamera()` (snapshotted in SNAPSHOT phase) + worker shadow offset (preferred over store offset, which is stale during fly mode)
+
+### Debugging
+
+`getTickManifest()` returns the full execution order for console inspection.
 
 ## 3. The Pipeline (`RenderPipeline.ts`)
 

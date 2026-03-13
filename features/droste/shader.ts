@@ -7,9 +7,11 @@ export const DROSTE_MATH = `
 
 #define DROSTE_PI 3.141592653
 #define DROSTE_TWOPI 6.283185307
+#define DROSTE_EPS 1.0e-9
 
 // Complex Math Helpers
-vec2 cAdd(vec2 a, vec2 b) { return vec2(a.x + b.x, a.y + b.y); }
+// NOTE: Droste always compiles into the post-processing shader (not the formula shader),
+// so cMult/cDiv/cExp/cLog won't collide with Frag builtins (cMul/cPow) which live in the formula shader.
 vec2 cMult(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
 vec2 cDiv(vec2 a, vec2 b) { float d = dot(b,b); return vec2(dot(a,b), a.y*b.x - a.x*b.y) / d; }
 vec2 cExp(vec2 z) { return vec2(exp(z.x) * cos(z.y), exp(z.x) * sin(z.y)); }
@@ -26,16 +28,14 @@ vec2 cTan(vec2 z) {
     float r = 2.0 * z.x;
     float i = 2.0 * z.y;
     float div = cos(r) + d_cosh(i);
-    // Prevent division by zero
-    if (abs(div) < 1.0e-9) div = 1.0e-9;
+    if (abs(div) < DROSTE_EPS) div = DROSTE_EPS;
     return vec2(sin(r)/div, d_sinh(i)/div);
 }
 
 // Complex Power: z^p
 vec2 cPower(vec2 z, float p) {
     float r = length(z);
-    // Avoid log(0) issues
-    if (r < 1.0e-9) return vec2(0.0);
+    if (r < DROSTE_EPS) return vec2(0.0);
     float a = atan(z.y, z.x);
     float newR = pow(r, p);
     float newA = a * p;
@@ -105,16 +105,14 @@ vec3 applyDroste(
         float theta = radians(rotatePolar);
         float cT = cos(theta);
         float sT = sin(theta);
-        
-        float x2 = z.x * z.x;
-        float y2 = z.y * z.y;
-        
-        float div = (1.0 + x2 + y2 + ((1.0 - x2 - y2) * cT) - (2.0 * z.x * sT)) / 2.0;
-        
-        // Prevent div by zero
-        if (abs(div) < 1.0e-9) div = 1.0e-9;
-        
-        float numX = z.x * cT + ((1.0 - x2 - y2) * sT / 2.0);
+
+        float zz = dot(z, z); // x^2 + y^2
+
+        float div = (1.0 + zz + (1.0 - zz) * cT - 2.0 * z.x * sT) * 0.5;
+
+        if (abs(div) < DROSTE_EPS) div = DROSTE_EPS;
+
+        float numX = z.x * cT + (1.0 - zz) * sT * 0.5;
         
         // Complex division: (numX + i*y) / (div + 0i) = numX/div + i*y/div
         z.x = numX / div;

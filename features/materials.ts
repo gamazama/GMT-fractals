@@ -137,17 +137,17 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvBackgroundStrength',
             min: 0.0, max: 2.0, step: 0.01,
             group: 'env',
+            parentId: 'envStrength',
             condition: { gt: 0.0, param: 'envStrength' }
         },
         envSource: {
-            type: 'float', 
-            default: 1.0, 
+            type: 'float',
+            default: 1.0,
             label: 'Source',
             shortId: 'eo',
             uniform: 'uEnvSource',
             group: 'env',
-            // Visible only if light is active (Needed for IBL) or if background is visible?
-            // User requested: visible only when environment light > 0
+            parentId: 'envStrength',
             condition: { gt: 0.0, param: 'envStrength' },
             options: [
                 { label: 'Sky Image', value: 0.0 },

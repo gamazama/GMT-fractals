@@ -111,7 +111,7 @@ export const NodeParams: React.FC<NodeParamsProps> = ({ node, index, updateParam
                 <div className="flex items-center justify-between">
                     <button 
                         onClick={() => setShowLogic(!showLogic)}
-                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-white uppercase tracking-widest font-bold"
+                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-white font-bold"
                     >
                         <LogicIcon active={!!node.condition?.active} />
                         Logic / Condition

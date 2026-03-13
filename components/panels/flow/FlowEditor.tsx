@@ -297,10 +297,10 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                 <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-2 max-w-[90%]">
                     {/* Add Node Dropdown */}
                     <div className="flex items-center bg-gray-900 border border-gray-700 rounded shadow-lg overflow-hidden">
-                        <span className="px-2 text-[10px] text-gray-500 font-bold uppercase select-none">Add:</span>
+                        <span className="px-2 text-[10px] text-gray-500 font-bold select-none">Add:</span>
                         <select 
                             onChange={(e) => { if(e.target.value) addNode(e.target.value as NodeType); e.target.value=""; }}
-                            className="bg-gray-900 text-xs text-white px-2 py-1.5 outline-none cursor-pointer hover:text-cyan-400 border-l border-gray-800"
+                            className="t-select text-white hover:text-cyan-400 border-l border-gray-800"
                         >
                             <option value="" className="bg-gray-900 text-gray-500">Select Node...</option>
                             {Object.entries(groups).map(([category, ids]) => {
@@ -321,10 +321,10 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
 
                     {/* Presets Dropdown */}
                     <div className="flex items-center bg-gray-900 border border-gray-700 rounded shadow-lg overflow-hidden">
-                        <span className="px-2 text-[10px] text-gray-500 font-bold uppercase select-none">Load:</span>
+                        <span className="px-2 text-[10px] text-gray-500 font-bold select-none">Load:</span>
                         <select 
                             onChange={(e) => { if(e.target.value) loadPreset(e.target.value); e.target.value=""; }}
-                            className="bg-gray-900 text-xs text-white px-2 py-1.5 outline-none cursor-pointer hover:text-purple-400 border-l border-gray-800"
+                            className="t-select text-white hover:text-purple-400 border-l border-gray-800"
                         >
                             <option value="" className="bg-gray-900 text-gray-500">Select Preset...</option>
                             {MODULAR_PRESETS.map(p => (
@@ -334,11 +334,11 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                     </div>
 
                     {/* Toggles */}
-                    <label className="flex items-center gap-1.5 bg-gray-900 border border-gray-700 rounded px-2 shadow-lg cursor-pointer text-[10px] text-gray-400 font-bold uppercase hover:border-gray-500 hover:text-gray-300 transition-colors select-none">
+                    <label className="flex items-center gap-1.5 bg-gray-900 border border-gray-700 rounded px-2 shadow-lg cursor-pointer text-[10px] text-gray-400 font-bold hover:border-gray-500 hover:text-gray-300 transition-colors select-none">
                         <input type="checkbox" checked={state.autoCompile} onChange={(e) => actions.setAutoCompile(e.target.checked)} className="cursor-pointer accent-cyan-500" />
                         Auto Compile
                     </label>
-                    <label className={`flex items-center gap-1.5 rounded px-2 shadow-lg cursor-pointer text-[10px] font-bold uppercase border transition-colors select-none ${state.previewMode ? 'bg-amber-900/40 border-amber-500/50 text-amber-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500'}`}>
+                    <label className={`flex items-center gap-1.5 rounded px-2 shadow-lg cursor-pointer text-[10px] font-bold border transition-colors select-none ${state.previewMode ? 'bg-amber-900/40 border-amber-500/50 text-amber-300' : 'bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500'}`}>
                         <input type="checkbox" checked={state.previewMode} onChange={(e) => actions.setPreviewMode(e.target.checked)} className="cursor-pointer accent-amber-500" />
                         Preview Mode
                     </label>

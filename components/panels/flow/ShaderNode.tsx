@@ -38,7 +38,7 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
             {/* Input Handles */}
             {isCSG ? (
                 <>
-                    <div className="absolute -top-3 left-8 text-[9px] text-gray-500 font-bold uppercase">A</div>
+                    <div className="absolute -top-3 left-8 text-[9px] text-gray-500 font-bold">A</div>
                     <Handle 
                         type="target" 
                         position={Position.Top} 
@@ -46,7 +46,7 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
                         className="!bg-cyan-500 !w-3 !h-3 !border-none -mt-1.5 !left-8" 
                     />
                     
-                    <div className="absolute -top-3 right-8 text-[9px] text-gray-500 font-bold uppercase">B</div>
+                    <div className="absolute -top-3 right-8 text-[9px] text-gray-500 font-bold">B</div>
                     <Handle 
                         type="target" 
                         position={Position.Top} 
@@ -65,7 +65,7 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
             {/* Header */}
             <div className={`flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 rounded-t-lg handle cursor-move ${headerBg}`}>
                 <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold uppercase tracking-wider ${headerColor}`}>
+                    <span className={`text-xs font-bold ${headerColor}`}>
                         {def?.label || node.type}
                     </span>
                 </div>
@@ -101,7 +101,7 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
 export const StartNode = memo(() => {
     return (
         <div className="px-4 py-2 bg-green-900/20 border border-green-500/50 rounded-full shadow-[0_0_15px_rgba(34,197,94,0.2)]">
-            <span className="text-xs font-bold text-green-400 uppercase tracking-widest">Input (Z)</span>
+            <span className="text-xs font-bold text-green-400">Input (Z)</span>
             <Handle type="source" position={Position.Bottom} className="!bg-green-500 !w-3 !h-3 !border-none -mb-1.5" />
         </div>
     );
@@ -111,7 +111,7 @@ export const EndNode = memo(() => {
     return (
         <div className="px-4 py-2 bg-pink-900/20 border border-pink-500/50 rounded-full shadow-[0_0_15px_rgba(236,72,153,0.2)]">
             <Handle type="target" position={Position.Top} className="!bg-pink-500 !w-3 !h-3 !border-none -mt-1.5" />
-            <span className="text-xs font-bold text-pink-400 uppercase tracking-widest">Output (Distance)</span>
+            <span className="text-xs font-bold text-pink-400">Output (Distance)</span>
         </div>
     );
 });

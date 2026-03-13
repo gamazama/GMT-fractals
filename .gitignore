@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Debug shader dumps
+fractal_generator_*.glsl
+
+# Claude Code personal config
+.claude/

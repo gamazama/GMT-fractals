@@ -33,7 +33,7 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     // Fixed: Converted from getter to simple value to prevent init crash.
     // Syncing is handled via subscriptions in fractalStore.ts
     renderMode: 'Direct',
-    
+
     isPaused: false,
     sampleCap: 256, // Default stop after 256 samples
 

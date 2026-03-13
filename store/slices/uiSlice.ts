@@ -22,7 +22,7 @@ export type UISlice = Pick<FractalStoreState,
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
     'isTimelineHovered' | 
-    'interactionMode' |
+    'interactionMode' | 'focusLock' |
     'isBroadcastMode' |
     'isUserInteracting' |
     'tabSwitchCount' |
@@ -40,7 +40,7 @@ export type UISlice = Pick<FractalStoreState,
     'setResolutionMode' | 'setFixedResolution' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
-    'setInteractionMode' |
+    'setInteractionMode' | 'setFocusLock' |
     'setIsBroadcastMode' |
     'openHelp' | 'closeHelp' | 'openContextMenu' | 'closeContextMenu' |
     'incrementTabSwitchCount' |
@@ -79,13 +79,13 @@ const DEFAULT_PANELS: Record<string, PanelState> = {
     'Light': { id: 'Light', location: 'right', order: 6, isCore: false, isOpen: false },
     'Audio': { id: 'Audio', location: 'right', order: 7, isCore: false, isOpen: false },
     'Drawing': { id: 'Drawing', location: 'right', order: 8, isCore: false, isOpen: false },
-    'Sonification': { id: 'Sonification', location: 'right', order: 9, isCore: false, isOpen: false },
 };
 
 export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
     showLightGizmo: true, 
     isGizmoDragging: false, 
     interactionMode: 'none',
+    focusLock: false,
 
     histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0, histogramActiveCount: 0,
     sceneHistogramData: null, sceneHistogramTrigger: 0, sceneHistogramActiveCount: 0,
@@ -153,6 +153,7 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setShowLightGizmo: (v) => set({ showLightGizmo: v }),
     setGizmoDragging: (v) => set({ isGizmoDragging: v }),
     setInteractionMode: (mode) => set({ interactionMode: mode }),
+    setFocusLock: (v) => set({ focusLock: v }),
 
     setHistogramData: (d) => set({ histogramData: d }),
     setHistogramAutoUpdate: (v) => set({ histogramAutoUpdate: v }),

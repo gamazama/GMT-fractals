@@ -2,8 +2,10 @@
 import React, { useRef, useState } from 'react';
 import * as THREE from 'three';
 import { LightParams } from '../../../types';
-import { engine } from '../../../engine/FractalEngine';
+import { getProxy } from '../../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { useFractalStore } from '../../../store/fractalStore';
+import { getViewportCamera, getViewportCanvas, getDisplayCamera } from '../../../engine/worker/ViewportRefs';
 import { LightSettingsPopup } from './LightControls';
 import { AnchorIcon, UnanchoredIcon } from '../../../components/Icons';
 import { 
@@ -33,40 +35,60 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
     const handleUnhover = () => setHoverState(null);
 
     const toggleAnchor = () => {
-        if (!engine.activeCamera) return;
         const wasFixed = light.fixed;
-        const newPos = engine.virtualSpace.resolveRealWorldPosition(light.position, wasFixed, engine.activeCamera);
+        let newPos = light.position;
+        const cam = getViewportCamera();
+        if (cam) {
+            const o = engine.sceneOffset;
+            if (wasFixed) {
+                const worldPos = new THREE.Vector3(newPos.x, newPos.y, newPos.z);
+                worldPos.applyQuaternion(cam.quaternion);
+                worldPos.add(cam.position);
+                newPos = { x: worldPos.x + o.x + (o.xL ?? 0), y: worldPos.y + o.y + (o.yL ?? 0), z: worldPos.z + o.z + (o.zL ?? 0) };
+            } else {
+                const worldPos = new THREE.Vector3(newPos.x - o.x - (o.xL ?? 0), newPos.y - o.y - (o.yL ?? 0), newPos.z - o.z - (o.zL ?? 0));
+                worldPos.sub(cam.position);
+                worldPos.applyQuaternion(cam.quaternion.clone().invert());
+                newPos = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+            }
+        }
         updateLight({ index, params: { fixed: !wasFixed, position: newPos } });
     };
 
     // Expose update method to parent component
     React.useImperativeHandle(ref, () => ({
         update: () => {
+            // Read fresh light state from store — React props may be stale
+            // during timeline scrubbing (store updates synchronously, React re-renders async)
+            const storeState = useFractalStore.getState();
+            const currentLight = storeState.lighting?.lights?.[index] ?? light;
+
             // Optimization: Don't update if directional (no gizmo) or not visible
-            if (light.type === 'Directional' || !light.visible) {
+            if (currentLight.type === 'Directional' || !currentLight.visible) {
                 if (containerRef.current) {
                     containerRef.current.style.display = 'none';
                 }
                 return;
             }
 
-            const camera = engine.activeCamera;
-            const renderer = engine.renderer;
+            // Use display camera — snapshotted at start of frame in WorkerTickScene
+            const camera = getDisplayCamera();
+            const canvasEl = getViewportCanvas();
             const el = containerRef.current;
-            
-            if (!camera || !renderer || !el) {
+
+            if (!camera || !canvasEl || !el) {
                 return;
             }
 
             // Use getBoundingClientRect for accurate CSS dimensions on all devices
             // This fixes mobile offset issues where internal resolution may differ from CSS size
-            const rect = renderer.domElement.getBoundingClientRect();
+            const rect = canvasEl.getBoundingClientRect();
             const width = rect.width;
             const height = rect.height;
             const sceneOffset = engine.sceneOffset;
 
             // 1. Calculate World Position
-            const worldPos = getLightWorldPosition(light, camera, sceneOffset);
+            const worldPos = getLightWorldPosition(currentLight, camera, sceneOffset);
 
             // 2. Project Origin
             const screenPos = projectToScreen(worldPos, camera, width, height);
@@ -90,7 +112,7 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
             const axisY = new THREE.Vector3(0, 1, 0);
             const axisZ = new THREE.Vector3(0, 0, 1);
 
-            if (light.fixed) {
+            if (currentLight.fixed) {
                 axisX.applyQuaternion(camera.quaternion);
                 axisY.applyQuaternion(camera.quaternion);
                 axisZ.applyQuaternion(camera.quaternion);
@@ -144,7 +166,7 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
 
 
     const handlePointerDown = (e: React.PointerEvent, part: string) => {
-        const camera = engine.activeCamera;
+        const camera = getViewportCamera();
         if (!camera) return;
         const origin = getLightWorldPosition(light, camera, engine.sceneOffset);
         onDragStart(e, index, part, origin);
@@ -233,7 +255,7 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
 
             {/* Label Tag */}
             <div className="absolute top-[50px] left-0 transform -translate-x-1/2 flex items-center gap-1 bg-black/80 backdrop-blur px-1.5 py-0.5 rounded border border-white/20 select-none z-20 pointer-events-auto transition-transform hover:scale-105" onClick={handleLabelClick}>
-                <span className="text-[9px] font-bold text-white uppercase">L{index+1}</span>
+                <span className="text-[9px] font-bold text-white">L{index+1}</span>
                 <button 
                     className="anchor-btn p-0.5 hover:text-cyan-400 transition-colors text-[9px]"
                     onPointerDown={(e) => e.stopPropagation()} 

@@ -7,6 +7,8 @@ import { KeyframeButton } from '../KeyframeButton';
 import { KeyStatus } from '../Icons';
 import { BaseVectorInput } from './BaseVectorInput';
 import { ConnectedVectorInputProps } from './types';
+import { evaluateTrackValue } from '../../utils/timelineUtils';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import type { Track, Keyframe } from '../../types/animation';
 
 // --- CONNECTED VECTOR2 INPUT ---
@@ -62,58 +64,73 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
         props.onChange(new THREE.Vector2(val.x, val.y));
     };
 
-    // Determine keyframe status
+    // Determine keyframe status (with dirty detection matching useTrackAnimation)
     const getStatus = (): KeyStatus => {
         if (!trackKeys || trackKeys.length === 0) return 'none';
         const frame = Math.round(useAnimationStore.getState().currentFrame);
-        
+        const axes = ['x', 'y'] as const;
+
         // Check if any track has keyframes at current frame
-        const hasKey = trackKeys.some(tid => {
-            if (!tid) return false;
+        let hasKey = false;
+        let anyKeyDirty = false;
+        trackKeys.forEach((tid, i) => {
+            if (!tid) return;
             const track = sequence.tracks[tid] as Track | undefined;
-            return track && track.keyframes.some((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
+            if (track) {
+                const kf = track.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
+                if (kf) {
+                    hasKey = true;
+                    if (Math.abs(kf.value - lastValueRef.current[axes[i]]) > 0.0001) anyKeyDirty = true;
+                }
+            }
         });
-        
-        if (hasKey) return 'keyed';
-        
-        // Check if any track exists
+
+        if (hasKey) return anyKeyDirty ? 'keyed-dirty' : 'keyed';
+
+        // Check if any track exists — compare interpolated vs current
         const hasTrack = trackKeys.some(tid => tid && sequence.tracks[tid]);
-        return hasTrack ? 'partial' : 'none';
+        if (hasTrack) {
+            const anyInterpolatedDirty = trackKeys.some((tid, i) => {
+                if (!tid) return false;
+                const track = sequence.tracks[tid] as Track | undefined;
+                if (!track || track.keyframes.length === 0) return false;
+                const interpolated = evaluateTrackValue(track.keyframes, frame, false);
+                return Math.abs(interpolated - lastValueRef.current[axes[i]]) > 0.001;
+            });
+            return anyInterpolatedDirty ? 'dirty' : 'partial';
+        }
+        return 'none';
     };
 
     // Construct Header Right with Keyframe Button
     const headerRight = (!props.disabled) ? (
-        <KeyframeButton 
-            status={getStatus()} 
+        <KeyframeButton
+            status={getStatus()}
             onClick={() => {
                 const frame = Math.round(useAnimationStore.getState().currentFrame);
                 const axes = ['x', 'y'] as const;
-                
-                // Check if we should add or remove
-                const track = trackKeys?.[0] ? sequence.tracks[trackKeys[0]] as Track | undefined : undefined;
-                const hasKey = track && track.keyframes.some((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
-                
-                trackKeys?.forEach((tid, i) => {
-                    if (!tid) return;
-                    if (hasKey) {
-                        // Remove keyframe
+                const currentStatus = getStatus();
+                snapshot();
+
+                // Mirror useTrackAnimation: only remove when exactly 'keyed', otherwise add/overwrite
+                if (currentStatus === 'keyed') {
+                    trackKeys?.forEach((tid) => {
+                        if (!tid) return;
                         const t = sequence.tracks[tid] as Track | undefined;
                         if (t) {
-                            const keyframe = t.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
-                            if (keyframe) {
-                                useAnimationStore.getState().removeKeyframe(tid, keyframe.id);
-                            }
+                            const kf = t.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
+                            if (kf) useAnimationStore.getState().removeKeyframe(tid, kf.id);
                         }
-                    } else {
-                        // Add keyframe
-                        if (!sequence.tracks[tid]) {
-                            const label = trackLabels ? trackLabels[i] : tid;
-                            addTrack(tid, label);
-                        }
+                    });
+                } else {
+                    trackKeys?.forEach((tid, i) => {
+                        if (!tid) return;
+                        if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
                         addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
-                    }
-                });
-            }} 
+                    });
+                    if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
+                }
+            }}
         />
     ) : undefined;
 
@@ -183,58 +200,73 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
         props.onChange(new THREE.Vector3(val.x, val.y, (val as THREE.Vector3).z ?? 0));
     };
 
-    // Determine keyframe status
+    // Determine keyframe status (with dirty detection matching useTrackAnimation)
     const getStatus = (): KeyStatus => {
         if (!trackKeys || trackKeys.length === 0) return 'none';
         const frame = Math.round(useAnimationStore.getState().currentFrame);
-        
+        const axes = ['x', 'y', 'z'] as const;
+
         // Check if any track has keyframes at current frame
-        const hasKey = trackKeys.some(tid => {
-            if (!tid) return false;
+        let hasKey = false;
+        let anyKeyDirty = false;
+        trackKeys.forEach((tid, i) => {
+            if (!tid) return;
             const track = sequence.tracks[tid] as Track | undefined;
-            return track && track.keyframes.some((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
+            if (track) {
+                const kf = track.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
+                if (kf) {
+                    hasKey = true;
+                    if (Math.abs(kf.value - lastValueRef.current[axes[i]]) > 0.0001) anyKeyDirty = true;
+                }
+            }
         });
-        
-        if (hasKey) return 'keyed';
-        
-        // Check if any track exists
+
+        if (hasKey) return anyKeyDirty ? 'keyed-dirty' : 'keyed';
+
+        // Check if any track exists — compare interpolated vs current
         const hasTrack = trackKeys.some(tid => tid && sequence.tracks[tid]);
-        return hasTrack ? 'partial' : 'none';
+        if (hasTrack) {
+            const anyInterpolatedDirty = trackKeys.some((tid, i) => {
+                if (!tid) return false;
+                const track = sequence.tracks[tid] as Track | undefined;
+                if (!track || track.keyframes.length === 0) return false;
+                const interpolated = evaluateTrackValue(track.keyframes, frame, false);
+                return Math.abs(interpolated - lastValueRef.current[axes[i]]) > 0.001;
+            });
+            return anyInterpolatedDirty ? 'dirty' : 'partial';
+        }
+        return 'none';
     };
 
     // Construct Header Right with Keyframe Button
     const headerRight = (!props.disabled) ? (
-        <KeyframeButton 
-            status={getStatus()} 
+        <KeyframeButton
+            status={getStatus()}
             onClick={() => {
                 const frame = Math.round(useAnimationStore.getState().currentFrame);
                 const axes = ['x', 'y', 'z'] as const;
-                
-                // Check if we should add or remove
-                const track = trackKeys?.[0] ? sequence.tracks[trackKeys[0]] as Track | undefined : undefined;
-                const hasKey = track && track.keyframes.some((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
-                
-                trackKeys?.forEach((tid, i) => {
-                    if (!tid) return;
-                    if (hasKey) {
-                        // Remove keyframe
+                const currentStatus = getStatus();
+                snapshot();
+
+                // Mirror useTrackAnimation: only remove when exactly 'keyed', otherwise add/overwrite
+                if (currentStatus === 'keyed') {
+                    trackKeys?.forEach((tid) => {
+                        if (!tid) return;
                         const t = sequence.tracks[tid] as Track | undefined;
                         if (t) {
-                            const keyframe = t.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
-                            if (keyframe) {
-                                useAnimationStore.getState().removeKeyframe(tid, keyframe.id);
-                            }
+                            const kf = t.keyframes.find((k: Keyframe) => Math.abs(k.frame - frame) < 0.5);
+                            if (kf) useAnimationStore.getState().removeKeyframe(tid, kf.id);
                         }
-                    } else {
-                        // Add keyframe
-                        if (!sequence.tracks[tid]) {
-                            const label = trackLabels ? trackLabels[i] : tid;
-                            addTrack(tid, label);
-                        }
+                    });
+                } else {
+                    trackKeys?.forEach((tid, i) => {
+                        if (!tid) return;
+                        if (!sequence.tracks[tid]) addTrack(tid, trackLabels ? trackLabels[i] : tid);
                         addKeyframe(tid, frame, lastValueRef.current[axes[i]]);
-                    }
-                });
-            }} 
+                    });
+                    if (trackKeys?.[0]) FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, trackKeys[0]);
+                }
+            }}
         />
     ) : undefined;
 

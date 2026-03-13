@@ -1,15 +1,16 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
-import { registry } from '../../engine/FractalRegistry';
 import { featureRegistry } from '../../engine/FeatureSystem'; 
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FractalEvents } from '../../engine/FractalEvents';
-import { MenuIcon, SaveIcon, LoadIcon, ResetIcon, CodeIcon, HelpIcon, InfoIcon, FullscreenIcon, SmileyIcon, CubeIcon, LinkIcon } from '../Icons';
+import { MenuIcon, SaveIcon, LoadIcon, CodeIcon, HelpIcon, InfoIcon, FullscreenIcon, SmileyIcon, LinkIcon } from '../Icons';
 import { extractMetadata } from '../../utils/pngMetadata';
 import { getExportFileName } from '../../utils/fileUtils';
 import { detectEngineProfile } from '../../features/engine/profiles';
 import Dropdown from '../Dropdown';
+import { Popover } from '../Popover';
 
 interface SystemMenuProps {
     isMobileMode: boolean;
@@ -23,8 +24,6 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
     const state = useFractalStore();
     // Dynamic access to all feature slices
     const fullState = state as any; 
-    const { handleInteractionStart, handleInteractionEnd } = state;
-    
     const [showSystemMenu, setShowSystemMenu] = useState(false);
     const [showAbout, setShowAbout] = useState(false);
     const [gpuInfo, setGpuInfo] = useState<string>("");
@@ -42,11 +41,16 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
     const currentProfileLabel = currentProfile.charAt(0).toUpperCase() + currentProfile.slice(1);
 
     useEffect(() => {
-        if (engine.renderer) {
-            const gl = engine.renderer.getContext();
-            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-            if (debugInfo) setGpuInfo(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL));
-            else setGpuInfo("Generic WebGL Device");
+        // GPU info is available in both passthrough and worker mode via the proxy
+        const info = engine.gpuInfo;
+        if (info) {
+            setGpuInfo(info);
+        } else {
+            // Worker may not have booted yet — retry after a short delay
+            const timer = setTimeout(() => {
+                setGpuInfo(engine.gpuInfo || 'Generic WebGL Device');
+            }, 3000);
+            return () => clearTimeout(timer);
         }
     }, []);
 
@@ -116,12 +120,12 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
             vibrate(50);
             
             setShowSystemMenu(false);
-        } catch (err: any) {
+        } catch (err) {
             console.error("Load Failed:", err);
             FractalEvents.emit('is_compiling', false);
             setLoadStatus("Error!");
             setTimeout(() => setLoadStatus(null), 2000);
-            alert("Could not load preset. " + err.message);
+            alert("Could not load preset. " + (err instanceof Error ? err.message : String(err)));
         }
         e.target.value = '';
     };
@@ -149,56 +153,22 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
         });
     };
     
-    const handleResetFormula = () => {
-        vibrate(20);
-        const current = state.getPreset();
-        const def = registry.get(state.formula);
-        if (!def || !def.defaultPreset) return;
-        const d = def.defaultPreset;
-        const mixedPreset = {
-            ...d,
-            cameraPos: current.cameraPos, cameraRot: current.cameraRot, sceneOffset: current.sceneOffset,
-            targetDistance: current.targetDistance, cameraMode: current.cameraMode, lights: current.lights,
-            features: {
-                ...(d.features || {}),
-                atmosphere: current.features?.atmosphere, lighting: current.features?.lighting,
-                optics: current.features?.optics, materials: current.features?.materials, 
-                coreMath: d.features?.coreMath, geometry: d.features?.geometry,
-                coloring: d.features?.coloring, texturing: d.features?.texturing, quality: d.features?.quality
-            }
-        };
-        handleInteractionStart('param');
-        state.loadPreset(mixedPreset as any);
-        handleInteractionEnd();
-        setShowSystemMenu(false);
-    };
-
-    const handleResetScene = () => {
-        vibrate(20);
-        const current = state.getPreset();
-        handleInteractionStart('camera');
-        state.resetCamera();
-        const def = registry.get('Mandelbulb')?.defaultPreset;
-        if(def) {
-             const mixed = {
-                 ...current, cameraPos: def.cameraPos, cameraRot: def.cameraRot, sceneOffset: def.sceneOffset, targetDistance: def.targetDistance,
-                 features: { ...current.features, atmosphere: def.features?.atmosphere, lighting: def.features?.lighting, optics: def.features?.optics, materials: def.features?.materials }
-             };
-             state.loadPreset(mixed as any);
-        }
-        handleInteractionEnd();
-        setShowSystemMenu(false);
-    };
-    
     const handleFeatureToggle = (featureId: string, paramKey: string, val: boolean) => {
+        const feat = featureRegistry.get(featureId);
+
+        // Route compile-mode toggles to Engine Panel pending queue
+        if (feat?.engineConfig?.mode === 'compile' && feat.params[paramKey]?.onUpdate === 'compile') {
+            state.movePanel('Engine', 'left');
+            setTimeout(() => FractalEvents.emit('engine_queue', { featureId, param: paramKey, value: val }), 50);
+            return;
+        }
+
         const setterName = `set${featureId.charAt(0).toUpperCase() + featureId.slice(1)}`;
         const setter = (state as any)[setterName];
         if (setter) {
             setter({ [paramKey]: val });
-            const feat = featureRegistry.get(featureId);
             if (feat?.tabConfig) {
                  const tabId = feat.tabConfig.label as any;
-                 // Engine panel goes to left dock, others float
                  if (featureId === 'engineSettings') {
                      if (val) state.movePanel(tabId, 'left');
                  } else {
@@ -230,14 +200,15 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                 </button>
              );
         }
+        const btnColor = isEnabled
+            ? (feat.id === 'audio' ? 'bg-green-500/30 text-green-300 border-green-500/40' : 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40')
+            : 'bg-white/[0.04] text-gray-600 border-white/5';
         return (
-            <label key={feat.id} className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer animate-fade-in-left">
+            <div key={feat.id} className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer animate-fade-in-left"
+                 onClick={() => { vibrate(5); handleFeatureToggle(feat.id, feat.toggleParam, !isEnabled); }}>
                 <span className={`text-xs font-bold ${isEnabled ? textColor : 'text-gray-300'}`}>{feat.label}</span>
-                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${isEnabled ? color : 'bg-gray-700'}`}>
-                    <div className={`w-3 h-3 bg-white rounded-full transition-transform ${isEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                </div>
-                <input type="checkbox" className="hidden" checked={isEnabled} onChange={(e) => handleFeatureToggle(feat.id, feat.toggleParam, e.target.checked)} />
-            </label>
+                <span className={`px-2 py-0.5 text-[8px] font-bold rounded-sm border transition-all ${btnColor}`}>{isEnabled ? 'ON' : 'OFF'}</span>
+            </div>
         );
     };
 
@@ -245,7 +216,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
         vibrate(10);
         FractalEvents.emit('is_compiling', "Switching Profile...");
         setTimeout(() => {
-            // @ts-ignore
+            // @ts-expect-error — DDFS dynamic store action
             state.applyPreset({ mode: val.toLowerCase(), actions: state });
         }, 10);
     };
@@ -260,14 +231,14 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                 <>
                     <button onClick={handleShareLink} className={`${btnBase} ${btnInactive} relative`} title="Copy Share Link">
                         <LinkIcon />
-                        {linkStatus && <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-green-600 text-white text-[9px] font-bold uppercase rounded whitespace-nowrap animate-fade-in">{linkStatus}</div>}
+                        {linkStatus && <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-green-600 text-white text-[9px] font-bold rounded whitespace-nowrap animate-fade-in">{linkStatus}</div>}
                     </button>
                     <button onClick={handleSavePreset} className={`${btnBase} ${btnInactive}`} title="Save Preset (JSON)">
                         <SaveIcon />
                     </button>
                     <button onClick={handleLoadPreset} className={`${btnBase} ${btnInactive} relative`} title="Load Preset (JSON or PNG)">
                         <LoadIcon />
-                        {loadStatus && <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-blue-600 text-white text-[9px] font-bold uppercase rounded whitespace-nowrap animate-fade-in">{loadStatus}</div>}
+                        {loadStatus && <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-blue-600 text-white text-[9px] font-bold rounded whitespace-nowrap animate-fade-in">{loadStatus}</div>}
                     </button>
                 </>
             )}
@@ -277,8 +248,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
             <div className="relative" ref={menuRef}>
                 <button onClick={toggleSystemMenu} className={`${btnBase} ${showSystemMenu ? btnActive : btnInactive}`}><MenuIcon /></button>
                 {showSystemMenu && (
-                    <div className="absolute top-full right-0 mt-2 w-64 bg-black border border-white/20 rounded-xl p-2 shadow-2xl z-[70] animate-fade-in origin-top-right custom-scroll overflow-y-auto max-h-[85vh]">
-                        <div className="absolute -top-1.5 right-4 w-3 h-3 bg-black border-t border-l border-white/20 transform rotate-45" />
+                    <Popover width="w-64" align="end" className="p-2 custom-scroll overflow-y-auto max-h-[85vh]" onClose={toggleSystemMenu}>
                         <div className="space-y-1">
                             <button onClick={(e) => { e.stopPropagation(); handleShareLink(); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
                                 <span className={`text-xs font-bold ${linkStatus ? 'text-green-400' : 'group-hover:text-white'}`}>{linkStatus || "Copy Share Link"}</span>
@@ -292,11 +262,6 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                     <div className="h-px bg-white/10 my-1" />
                                 </>
                             )}
-                            <button onClick={(e) => { e.stopPropagation(); handleResetFormula(); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 hover:text-white transition-colors group"><span className="text-xs font-bold">Reset Formula</span><ResetIcon /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleResetScene(); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 hover:text-white transition-colors group"><span className="text-xs font-bold">Reset Scene</span><CubeIcon /></button>
-                            
-                            <div className="h-px bg-white/10 my-1" />
-                            
                             {standardFeatures.map(feat => renderFeatureToggle(feat))}
 
                             {/* CLEAN ENGINE SETTINGS UI */}
@@ -322,46 +287,49 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                 />
                             </div>
 
+                            <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.openWorkshop(); setShowSystemMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
+                                <span className="text-xs font-bold group-hover:text-purple-400">Formula Workshop</span>
+                                <CodeIcon />
+                            </button>
+
                             <button onClick={(e) => { e.stopPropagation(); state.setIsBroadcastMode(true); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
                                 <span className="text-xs font-bold group-hover:text-cyan-400">Hide Interface <span className="text-gray-500 font-normal">[B]</span></span>
                                 <FullscreenIcon />
                             </button>
 
-                            <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer">
+                            <div className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer"
+                                 onClick={() => { vibrate(5); state.setInvertY(!state.invertY); }}>
                                 <span className="text-xs text-gray-300 font-bold">Invert Look Y</span>
-                                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${state.invertY ? 'bg-cyan-600' : 'bg-gray-700'}`}><div className={`w-3 h-3 bg-white rounded-full transition-transform ${state.invertY ? 'translate-x-4' : 'translate-x-0'}`} /></div>
-                                <input type="checkbox" className="hidden" checked={state.invertY} onChange={(e) => { vibrate(5); state.setInvertY(e.target.checked); }} />
-                            </label>
+                                <span className={`px-2 py-0.5 text-[8px] font-bold rounded-sm border transition-all ${state.invertY ? 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40' : 'bg-white/[0.04] text-gray-600 border-white/5'}`}>{state.invertY ? 'ON' : 'OFF'}</span>
+                            </div>
                             
                             <div className="h-px bg-white/10 my-1" />
                             
-                            <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer" title="Keyboard: ` (tilde)">
+                            <div className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer" title="Keyboard: ` (tilde)"
+                                 onClick={() => state.setAdvancedMode(!state.advancedMode)}>
                                 <span className="text-xs text-gray-300 font-bold">Advanced Mode <span className="text-gray-500 font-normal">[`]</span></span>
-                                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${state.advancedMode ? 'bg-purple-600' : 'bg-gray-700'}`}>
-                                    <div className={`w-3 h-3 bg-white rounded-full transition-transform ${state.advancedMode ? 'translate-x-4' : 'translate-x-0'}`} />
-                                </div>
-                                <input type="checkbox" className="hidden" checked={state.advancedMode} onChange={(e) => state.setAdvancedMode(e.target.checked)} />
-                            </label>
+                                <span className={`px-2 py-0.5 text-[8px] font-bold rounded-sm border transition-all ${state.advancedMode ? 'bg-purple-500/30 text-purple-300 border-purple-500/40' : 'bg-white/[0.04] text-gray-600 border-white/5'}`}>{state.advancedMode ? 'ON' : 'OFF'}</span>
+                            </div>
 
                             {state.advancedMode && (
                                 <div className="mt-1 pl-2 border-l border-white/10 ml-2">
                                     {advancedFeatures.map(feat => renderFeatureToggle(feat))}
                                     {extraAdvanced.map(item => renderFeatureToggle(item, true))}
-                                    <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer">
+                                    <div className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer"
+                                         onClick={() => state.setDebugMobileLayout(!state.debugMobileLayout)}>
                                         <span className="text-xs text-gray-300 font-bold">Force Mobile UI</span>
-                                        <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${state.debugMobileLayout ? 'bg-purple-600' : 'bg-gray-700'}`}><div className={`w-3 h-3 bg-white rounded-full transition-transform ${state.debugMobileLayout ? 'translate-x-4' : 'translate-x-0'}`} /></div>
-                                        <input type="checkbox" className="hidden" checked={state.debugMobileLayout} onChange={(e) => state.setDebugMobileLayout(e.target.checked)} />
-                                    </label>
+                                        <span className={`px-2 py-0.5 text-[8px] font-bold rounded-sm border transition-all ${state.debugMobileLayout ? 'bg-purple-500/30 text-purple-300 border-purple-500/40' : 'bg-white/[0.04] text-gray-600 border-white/5'}`}>{state.debugMobileLayout ? 'ON' : 'OFF'}</span>
+                                    </div>
                                 </div>
                             )}
                             
                             <div className="h-px bg-white/10 my-1" />
                             
-                            <label className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer" title="Keyboard: H">
+                            <div className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer" title="Keyboard: H"
+                                 onClick={() => { vibrate(5); state.setShowHints(!state.showHints); }}>
                                 <span className="text-xs text-gray-300 font-bold">Show Hints <span className="text-gray-500 font-normal">[H]</span></span>
-                                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors ${state.showHints ? 'bg-green-600' : 'bg-gray-700'}`}><div className={`w-3 h-3 bg-white rounded-full transition-transform ${state.showHints ? 'translate-x-4' : 'translate-x-0'}`} /></div>
-                                <input type="checkbox" className="hidden" checked={state.showHints} onChange={(e) => { vibrate(5); state.setShowHints(e.target.checked); }} />
-                            </label>
+                                <span className={`px-2 py-0.5 text-[8px] font-bold rounded-sm border transition-all ${state.showHints ? 'bg-green-500/30 text-green-300 border-green-500/40' : 'bg-white/[0.04] text-gray-600 border-white/5'}`}>{state.showHints ? 'ON' : 'OFF'}</span>
+                            </div>
                             
                             <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.openHelp('general.shortcuts'); setShowSystemMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-cyan-400 transition-colors group">
                                 <span className="text-xs font-bold group-hover:text-cyan-200">Help</span>
@@ -378,12 +346,18 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                     <div className="text-[10px] text-gray-400 leading-relaxed space-y-2">
                                         {gpuInfo && (
                                             <div className="mb-2 pb-2 border-b border-white/10">
-                                                <div className="text-[8px] text-gray-500 uppercase font-bold tracking-widest mb-1">Active Renderer</div>
+                                                <div className="text-[8px] text-gray-500 font-bold mb-1">Active Renderer</div>
                                                 <div className="text-[9px] text-green-400 font-mono break-all">{gpuInfo}</div>
                                             </div>
                                         )}
-                                        <p>GMT was crafted with ❤️ by <span className="text-white font-bold">Guy Zack</span> using <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Gemini</a>.</p>
+                                        <p className="text-[9px] text-gray-500 font-mono mb-1">v0.8.9</p>
+                                        <p>GMT was crafted with ❤️ by <span className="text-white font-bold">Guy Zack</span> using <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Gemini</a> and <a href="https://claude.ai" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Claude</a>.</p>
                                         
+                                        <div className="pt-2 border-t border-white/10">
+                                            <div className="text-[8px] text-gray-500 font-bold mb-1">Tech Stack</div>
+                                            <div className="text-[9px] text-gray-500 font-mono">React + TypeScript + Three.js + GLSL + Zustand + Vite</div>
+                                        </div>
+
                                         <div className="flex flex-col gap-1 pt-2 border-t border-white/10">
                                             <a href="https://www.reddit.com/r/GMT_fractals/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-white transition-colors">
                                                 <span>Community:</span>
@@ -398,7 +372,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                 </div>
                             )}
                         </div>
-                    </div>
+                    </Popover>
                 )}
             </div>
         </>

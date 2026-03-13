@@ -1,6 +1,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { FeatureComponentProps } from '../../components/registry/ComponentRegistry';
+import { SectionLabel } from '../../components/SectionLabel';
 
 const BOTTOM_LABELS = [
     'TAB', 'CTRL', 'ALT', 'SHIFT', 'SPACE', 
@@ -93,14 +94,14 @@ export const WebcamOverlay: React.FC<FeatureComponentProps> = ({ sliceState, act
                         setErrorMsg("Video blocked. Check browser privacy settings.");
                     });
                 }
-            } catch (err: any) {
+            } catch (err) {
                 console.error("Webcam access denied:", err);
-                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
                     setErrorMsg("Camera Blocked: Check browser permissions or HTTPS.");
-                } else if (err.name === 'NotFoundError') {
+                } else if (err instanceof DOMException && err.name === 'NotFoundError') {
                     setErrorMsg("No camera found.");
                 } else {
-                    setErrorMsg("Camera Error: " + err.message);
+                    setErrorMsg("Camera Error: " + (err instanceof Error ? err.message : String(err)));
                 }
             }
         };
@@ -364,8 +365,8 @@ export const WebcamOverlay: React.FC<FeatureComponentProps> = ({ sliceState, act
                     <div className="settings-panel absolute top-10 right-2 w-48 bg-[#151515] border border-white/20 rounded p-2 shadow-2xl z-50 animate-fade-in" onMouseDown={(e) => e.stopPropagation()}>
                          <div className="space-y-2 text-[10px]">
                             <div>
-                                <label className="text-gray-500 font-bold uppercase block mb-1">Blend Mode</label>
-                                <select value={Math.floor(blendIdx)} onChange={(e) => setWebcam({ blendMode: Number(e.target.value) })} className="w-full bg-black border border-gray-700 rounded px-1 py-1 text-white outline-none cursor-pointer">
+                                <SectionLabel className="block mb-1">Blend Mode</SectionLabel>
+                                <select value={Math.floor(blendIdx)} onChange={(e) => setWebcam({ blendMode: Number(e.target.value) })} className="t-select">
                                     <option value={0}>Normal</option>
                                     <option value={1}>Screen</option>
                                     <option value={2}>Overlay</option>
@@ -374,20 +375,20 @@ export const WebcamOverlay: React.FC<FeatureComponentProps> = ({ sliceState, act
                                 </select>
                             </div>
                             <div>
-                                <div className="flex justify-between text-gray-500 font-bold uppercase mb-1"><span>Opacity</span><span>{Math.round(opacity*100)}%</span></div>
+                                <div className="flex justify-between text-gray-500 font-bold mb-1"><span>Opacity</span><span>{Math.round(opacity*100)}%</span></div>
                                 <input type="range" min="0" max="3" step="0.05" value={opacity} onChange={(e) => setWebcam({ opacity: parseFloat(e.target.value) })} className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
                             </div>
                             <div>
-                                <div className="flex justify-between text-gray-500 font-bold uppercase mb-1"><span>3D Tilt</span><span>{tilt}°</span></div>
+                                <div className="flex justify-between text-gray-500 font-bold mb-1"><span>3D Tilt</span><span>{tilt}°</span></div>
                                 <input type="range" min="-45" max="45" step="1" value={tilt} onChange={(e) => setWebcam({ tilt: parseInt(e.target.value) })} className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
                             </div>
                             <div>
-                                <div className="flex justify-between text-gray-500 font-bold uppercase mb-1"><span>Font Size</span><span>{fontSize}px</span></div>
+                                <div className="flex justify-between text-gray-500 font-bold mb-1"><span>Font Size</span><span>{fontSize}px</span></div>
                                 <input type="range" min="8" max="32" step="1" value={fontSize} onChange={(e) => setWebcam({ fontSize: parseInt(e.target.value) })} className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
                             </div>
                             <label className="flex items-center gap-2 cursor-pointer mt-1 pt-1 border-t border-white/10">
                                 <input type="checkbox" checked={crtMode} onChange={(e) => setWebcam({ crtMode: e.target.checked })} className="cursor-pointer" />
-                                <span className="text-gray-400 font-bold uppercase">CRT Scanlines</span>
+                                <span className="text-gray-400 font-bold">CRT Scanlines</span>
                             </label>
                          </div>
                     </div>

@@ -43,10 +43,7 @@ export const Mandelbulb: FractalDefinition = {
             // Applied AFTER iteration to affect the triplex structure, not the world bounding box.
             // vec2B.x = toggle (on/off), vec2B.y = limit value
             if (uVec2B.x > 0.5) {
-                float limit = uVec2B.y;
-                if (z3.y > limit) {
-                    z3.y = limit;
-                }
+                z3.y = min(z3.y, uVec2B.y);
             }
             
             z.xyz = z3;

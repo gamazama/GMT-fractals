@@ -401,13 +401,29 @@ export function generateFormulaCode(
         }
     }
 
-    // ── Scope check: does getDist reference any out-of-scope locals? ──────────
-    // If so, fall back to full-DE mode where the entire DE runs as a helper.
+    // ── Full-DE fallback checks ───────────────────────────────────────────────
+    // Fall back to full-DE mode when per-iteration splitting would break rendering.
+
+    // Check 1: getDist references out-of-scope locals.
     if (getDistCode && hasOutOfScopeRefs(getDistCode, doc, renameMap, mappings)) {
         const fullDE = generateFullDEMode(doc, name, mappings, renameMap, helpersCode, uniformsCode, warnings);
         if (fullDE) return fullDE;
-        // If full-DE generation failed, fall through with the decomposed result (getDist may be broken)
         warnings.push('Full-DE fallback failed; getDist may reference out-of-scope variables');
+    }
+
+    // Check 2: Unbounded vec4 inversion pattern.
+    // Formulas like `p *= factor/dot(p.xyz, p.xyz)` produce huge dr values on intermediate
+    // iterations when dot→0. The engine's `dr > 1e10` bailout prematurely exits the loop,
+    // leaving getDist with incomplete state (renders as a ball). Mandelbox-style formulas
+    // avoid this by clamping: `clamp(dot, minRad, 1.0)`. When unclamped, use full-DE mode.
+    if (vec4Tracker && getDistCode) {
+        const rawBody = doc.deFunction.loopInfo?.body ?? doc.deFunction.body;
+        const hasDotDivision = /\/\s*dot\s*\(/.test(rawBody);
+        const hasClamped = /clamp\s*\(\s*dot\s*\(/.test(rawBody);
+        if (hasDotDivision && !hasClamped) {
+            const fullDE = generateFullDEMode(doc, name, mappings, renameMap, helpersCode, uniformsCode, warnings);
+            if (fullDE) return fullDE;
+        }
     }
 
     return {
@@ -439,7 +455,7 @@ const GLSL_SCOPE = new Set([
     'uint','uvec2','uvec3','uvec4','vec2','vec3','vec4',
     'true','false','return','if','else','for','while',
     // GMT builtins always in scope
-    'uIterations','uJulia','uJuliaMode','g_orbitTrap','frag_pos','frag_cachedDist',
+    'uIterations','uJulia','uJuliaMode','g_orbitTrap','frag_pos','frag_cachedDist','frag_iterCount',
 ]);
 
 function hasOutOfScopeRefs(
@@ -486,8 +502,10 @@ function hasOutOfScopeRefs(
 const FULL_DE_TEMPLATE = `{{HELPERS}}
 
 float frag_cachedDist;
+float frag_iterCount;
 
 float frag_DE(vec3 f_z) {
+    frag_iterCount = 0.0;
 {{DE_BODY}}
 }
 
@@ -497,6 +515,60 @@ void formula_{{NAME}}(inout vec4 z, inout float dr, inout float trap, vec4 c) {
     // Force engine bailout after this single call
     z = vec4(1e10, 1e10, 1e10, 1.0);
 }`;
+
+/**
+ * Detect the primary position variable in a full-DE body.
+ * Looks for vec4/vec3 assigned from f_z (the DE function parameter).
+ */
+function findFullDEPositionVar(body: string): string {
+    // vec4 p = vec4(f_z, ...) → p.xyz
+    const vec4Match = body.match(/vec4\s+(\w+)\s*=\s*vec4\s*\(\s*f_z\b/);
+    if (vec4Match) return vec4Match[1] + '.xyz';
+    // vec3 p = f_z → p
+    const vec3Match = body.match(/vec3\s+(\w+)\s*=\s*f_z\b/);
+    if (vec3Match) return vec3Match[1];
+    // Fall back to f_z itself
+    return 'f_z';
+}
+
+/**
+ * Inject orbit trap tracking and iteration counting into the main loop
+ * of a full-DE function body. This enables coloring modes (orbit trap,
+ * iterations) that otherwise have no data in full-DE mode.
+ */
+function injectOrbitTracking(body: string, posExpr: string): string {
+    // Find the first for/while loop
+    const loopMatch = body.match(/(for|while)\s*\(/);
+    if (!loopMatch || loopMatch.index === undefined) return body;
+
+    // Find the opening brace of the loop body
+    let pos = loopMatch.index + loopMatch[0].length;
+    // Skip past the loop condition (balanced parens)
+    let depth = 1;
+    while (pos < body.length && depth > 0) {
+        if (body[pos] === '(') depth++;
+        else if (body[pos] === ')') depth--;
+        pos++;
+    }
+    // Skip whitespace to find the opening brace
+    while (pos < body.length && /\s/.test(body[pos])) pos++;
+    if (pos >= body.length || body[pos] !== '{') return body;
+
+    // Find the matching closing brace
+    const bodyStart = pos + 1;
+    depth = 1;
+    pos = bodyStart;
+    while (pos < body.length && depth > 0) {
+        if (body[pos] === '{') depth++;
+        else if (body[pos] === '}') depth--;
+        pos++;
+    }
+    const closingBrace = pos - 1;
+
+    const injection = `\n        g_orbitTrap = min(g_orbitTrap, abs(vec4(${posExpr}, dot(${posExpr}, ${posExpr}))));\n        frag_iterCount += 1.0;\n    `;
+
+    return body.slice(0, closingBrace) + injection + body.slice(closingBrace);
+}
 
 function generateFullDEMode(
     doc: FragDocumentV2,
@@ -562,6 +634,10 @@ function generateFullDEMode(
     renamedBody = renamedBody.replace(/\bfrag_pos\b/g, 'f_z');
     renamedBody = expandNonMonotonicSwizzleWrites(renamedBody);
 
+    // Inject orbit trap tracking + iteration counter into the formula's internal loop
+    const posVar = findFullDEPositionVar(renamedBody);
+    renamedBody = injectOrbitTracking(renamedBody, posVar);
+
     const functionCode = FULL_DE_TEMPLATE
         .replace('{{HELPERS}}', helpersCode)
         .replace('{{NAME}}', name)
@@ -573,7 +649,7 @@ function generateFullDEMode(
         function: functionCode,
         uniforms: uniformsCode,
         loopBody: `formula_${name}(z, dr, trap, c);`,
-        getDist: 'return vec2(frag_cachedDist, 1.0);',
+        getDist: 'return vec2(frag_cachedDist, frag_iterCount);',
         warnings,
     };
 }

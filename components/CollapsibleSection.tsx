@@ -1,0 +1,76 @@
+
+import React, { useState } from 'react';
+import { SectionLabel } from './SectionLabel';
+
+interface CollapsibleSectionProps {
+    label: string;
+    children: React.ReactNode;
+    defaultOpen?: boolean;
+    count?: number;
+    labelVariant?: 'primary' | 'secondary';
+    labelColor?: string;
+    rightContent?: React.ReactNode;
+    className?: string;
+    headerClassName?: string;
+    /** Controlled mode: pass open + onToggle to manage state externally */
+    open?: boolean;
+    onToggle?: () => void;
+}
+
+const ChevronIcon: React.FC<{ open: boolean }> = ({ open }) => (
+    <svg
+        className={`w-2 h-2 transition-transform ${open ? 'rotate-90' : ''}`}
+        viewBox="0 0 6 10"
+        fill="currentColor"
+    >
+        <path d="M0 0l6 5-6 5z" />
+    </svg>
+);
+
+export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
+    label,
+    children,
+    defaultOpen = true,
+    count,
+    labelVariant = 'secondary',
+    labelColor,
+    rightContent,
+    className = '',
+    headerClassName = '',
+    open: controlledOpen,
+    onToggle,
+}) => {
+    const [internalOpen, setInternalOpen] = useState(defaultOpen);
+    const isControlled = controlledOpen !== undefined;
+    const isOpen = isControlled ? controlledOpen : internalOpen;
+
+    const handleToggle = () => {
+        if (onToggle) onToggle();
+        if (!isControlled) setInternalOpen(prev => !prev);
+    };
+
+    return (
+        <div className={className}>
+            <button
+                onClick={handleToggle}
+                className={`flex items-center gap-1.5 w-full px-2 py-1 text-left select-none hover:bg-white/5 transition-colors rounded-sm ${headerClassName}`}
+            >
+                <ChevronIcon open={isOpen} />
+                <SectionLabel variant={labelVariant} color={labelColor}>{label}</SectionLabel>
+                {count !== undefined && (
+                    <span className="text-[8px] bg-white/10 text-gray-400 px-1.5 py-0.5 rounded ml-1">
+                        {count}
+                    </span>
+                )}
+                {rightContent && (
+                    <div className="ml-auto flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        {rightContent}
+                    </div>
+                )}
+            </button>
+            {isOpen && children}
+        </div>
+    );
+};
+
+export default CollapsibleSection;

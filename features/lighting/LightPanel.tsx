@@ -10,9 +10,12 @@ import { collectHelpIds } from '../../utils/helpUtils';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { getLightFromSlice } from './index';
 import { PlusIcon, TrashIcon } from '../../components/Icons';
+import { SectionLabel } from '../../components/SectionLabel';
 import { MAX_LIGHTS } from '../../data/constants';
 import * as THREE from 'three';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
+import { getViewportCamera } from '../../engine/worker/ViewportRefs';
 import { LightDirectionControl } from './components/LightDirectionControl';
 
 const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
@@ -54,30 +57,48 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
   };
 
   const handleToggleFixed = () => {
-     if (!engine.activeCamera) return;
      const current = getLightFromSlice(state.lighting, activeLight);
      const wasFixed = current.fixed;
-     
+     const cam = getViewportCamera();
+
      let newPos = current.position;
      let newRot = current.rotation;
 
-     if (current.type === 'Point') {
-        newPos = engine.virtualSpace.resolveRealWorldPosition(current.position, wasFixed, engine.activeCamera);
-     } else {
-        newRot = engine.virtualSpace.resolveRealWorldRotation(current.rotation, wasFixed, engine.activeCamera);
+     if (cam) {
+         if (current.type === 'Point') {
+             const o = engine.sceneOffset;
+             if (wasFixed) {
+                 const worldPos = new THREE.Vector3(newPos.x, newPos.y, newPos.z);
+                 worldPos.applyQuaternion(cam.quaternion);
+                 worldPos.add(cam.position);
+                 newPos = { x: worldPos.x + o.x + (o.xL ?? 0), y: worldPos.y + o.y + (o.yL ?? 0), z: worldPos.z + o.z + (o.zL ?? 0) };
+             } else {
+                 const worldPos = new THREE.Vector3(newPos.x - o.x - (o.xL ?? 0), newPos.y - o.y - (o.yL ?? 0), newPos.z - o.z - (o.zL ?? 0));
+                 worldPos.sub(cam.position);
+                 worldPos.applyQuaternion(cam.quaternion.clone().invert());
+                 newPos = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+             }
+         } else {
+             // Directional: convert rotation direction between camera-local and world space
+             const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(newRot.x, newRot.y, newRot.z, 'YXZ'));
+             dir.applyQuaternion(wasFixed ? cam.quaternion : cam.quaternion.clone().invert());
+             const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+             const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+             newRot = { x: e.x, y: e.y, z: e.z };
+         }
      }
-     
+
      actions.updateLight({ index: activeLight, params: { fixed: !wasFixed, position: newPos, rotation: newRot } });
   };
   
   const handleTypeChange = (newType: 'Point' | 'Directional') => {
-      if (!engine.activeCamera) {
+      const cam = getViewportCamera();
+      if (!cam) {
           actions.updateLight({ index: activeLight, params: { type: newType } });
           return;
       }
-      
+
       const current = getLightFromSlice(state.lighting, activeLight);
-      const cam = engine.activeCamera;
       
       let targetOrigin = new THREE.Vector3(0,0,0);
       
@@ -142,7 +163,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
               <button
                 key={i}
                 onClick={() => setActiveLight(i)}
-                className={`flex-1 min-w-[60px] py-1.5 px-2 text-[9px] font-bold uppercase rounded border transition-all relative ${
+                className={`flex-1 min-w-[60px] py-1.5 px-2 text-[9px] font-bold rounded border transition-all relative ${
                     activeLight === i 
                     ? 'bg-cyan-900/50 border-cyan-500/50 text-cyan-200 shadow-sm' 
                     : 'bg-transparent border-transparent text-gray-500 hover:bg-white/5 hover:text-gray-300'
@@ -330,7 +351,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
    {lighting && (
         <div className="mt-4 p-3 bg-gray-800/50 rounded-lg" data-help-id="shadows">
              <div className="flex items-center justify-between mb-2">
-                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shadows (Global)</label>
+                 <SectionLabel>Shadows (Global)</SectionLabel>
                  <div className="w-[60px]">
                      <ToggleSwitch 
                         value={lighting.shadows}

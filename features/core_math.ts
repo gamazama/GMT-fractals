@@ -35,6 +35,7 @@ const generateGetDist = (estimatorType: number) => {
         // d = 0.5 * r * log(r) / dr
         mathLine = `
         float logR2 = log2(m2);
+        // 0.5 * ln(2) / 2 ≈ 0.17328679 — converts log2(r²) to 0.5*r*ln(r) for DE formula
         d = 0.17328679 * logR2 * r / dr_safe;
         `;
     } else if (estimatorType < 1.5) {
@@ -50,6 +51,7 @@ const generateGetDist = (estimatorType: number) => {
         // d = 0.5 * r * log(r) / (dr + K)
         mathLine = `
         float logR2 = log2(m2);
+        // 0.5 * ln(2) ≈ 0.34657359 — converts log2(r²) to r*ln(r), then halved by dampening term
         d = 0.34657359 * logR2 * r / (dr_safe + 8.0);
         `;
     } else {

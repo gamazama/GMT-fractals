@@ -7,8 +7,6 @@ export interface TexturingState {
     layer1Data: string | null;
     mapU: number;
     mapV: number;
-    scaleX: number;
-    scaleY: number;
     textureScale: THREE.Vector2;
     offset: THREE.Vector2;
     colorSpace: number; // 0=sRGB, 1=Linear, 2=ACES
@@ -99,26 +97,6 @@ export const TexturingFeature: FeatureDefinition = {
                 { label: 'Potential (Log-Log)', value: 8.0 },
                 { label: "Green's Flow", value: 9.0 }
             ]
-        },
-        scaleX: {
-            type: 'float',
-            default: 1.0,
-            label: 'Scale U',
-            shortId: 'su',
-            min: 0.1, max: 500.0, step: 0.1,
-            scale: 'log',
-            group: 'transform',
-            layout: 'half'
-        },
-        scaleY: {
-            type: 'float',
-            default: 1.0,
-            label: 'Scale V',
-            shortId: 'sv',
-            min: 0.1, max: 500.0, step: 0.1,
-            scale: 'log',
-            group: 'transform',
-            layout: 'half'
         },
         textureScale: {
             type: 'vec2',

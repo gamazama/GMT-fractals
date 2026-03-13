@@ -5,7 +5,7 @@ import { PanelRouter } from '../PanelRouter';
 import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
 import { collectHelpIds } from '../../utils/helpUtils';
-import { AudioState, DrawingState, SonificationState } from '../../features/types';
+import { AudioState, DrawingState } from '../../features/types';
 
 // Mobile detection helper
 const checkIsMobile = () => {
@@ -37,7 +37,6 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
     // Access Feature States for Visibility Logic
     const audioState = (useFractalStore.getState() as any).audio as AudioState;
     const drawingState = (useFractalStore.getState() as any).drawing as DrawingState;
-    const sonificationState = (useFractalStore.getState() as any).sonification as SonificationState;
 
     const activeTabId = side === 'left' ? activeLeftTab : activeRightTab;
     const isCollapsed = side === 'left' ? isLeftDockCollapsed : isRightDockCollapsed;
@@ -63,7 +62,6 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             // Feature Switches
             if (p.id === 'Audio' && !audioState?.isEnabled) return false;
             if (p.id === 'Drawing' && !drawingState?.enabled) return false;
-            if (p.id === 'Sonification' && !sonificationState?.isEnabled) return false;
             
             return true;
         })
@@ -158,7 +156,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                                     endPanelDrag();
                                 }
                             }}
-                            className={`flex items-center gap-0.5 px-1 py-1 text-[9px] font-bold uppercase tracking-normal transition-colors group relative rounded-t-sm
+                            className={`flex items-center gap-0.5 px-1 py-1 text-[9px] font-bold transition-colors group relative rounded-t-sm
                                 ${isActive 
                                     ? 'bg-[#080808] text-cyan-400 border-x border-t border-white/10 z-10 -mb-px pb-2' 
                                     : 'text-gray-500 hover:bg-white/5 hover:text-gray-300 border border-transparent'

@@ -94,7 +94,7 @@ export const Bristorbrot: FractalDefinition = {
             },
             geometry: {
                 juliaMode: true, juliaX: 1.04, juliaY: 0.21, juliaZ: 0.81,
-                hybridMode: true, hybridIter: 1, hybridScale: 1, hybridMinR: 0.79, hybridFixedR: 1.08, hybridFoldLimit: 0.87, hybridSwap: false
+                hybridCompiled: true, hybridMode: true, hybridIter: 1, hybridScale: 1, hybridMinR: 0.79, hybridFixedR: 1.08, hybridFoldLimit: 0.87, hybridSwap: false
             },
             lighting: { shadows: true, shadowSoftness: 2, shadowIntensity: 0.92, shadowBias: 0.015 },
             // Lowered fudgeFactor to 0.6 to fix slicing artifacts

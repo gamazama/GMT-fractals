@@ -2,6 +2,7 @@
 import { StateCreator } from 'zustand';
 import * as THREE from 'three';
 import { featureRegistry } from '../engine/FeatureSystem';
+import { registerFeatures } from '../features';
 import { FractalEvents } from '../engine/FractalEvents';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 
@@ -12,6 +13,9 @@ export interface FeatureSlice {
 
 export const createFeatureSlice: StateCreator<any> = (set, get) => {
     const slice: any = {};
+    // Ensure features are registered before building slices —
+    // module evaluation order can vary due to circular dependencies
+    registerFeatures();
     const features = featureRegistry.getAll();
 
     features.forEach(feat => {
@@ -83,8 +87,13 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                     if (config) {
                         if (!config.noReset) shouldReset = true;
 
-                        // CRITICAL FIX: Detect 'compile' params and queue for engine config update
-                        if (config.onUpdate === 'compile') {
+                        // Sync ALL changed params to ConfigManager via CONFIG event.
+                        // ConfigManager.update() only triggers recompile for onUpdate:'compile'
+                        // params — runtime params are merged without rebuild. This ensures
+                        // configManager.config is always the source of truth (e.g. gradient
+                        // stop arrays survive through syncConfigUniforms after recompilation).
+                        // Skip images (large data URLs handled via separate texture channel).
+                        if (config.type !== 'image') {
                             if (!configUpdates[feat.id]) configUpdates[feat.id] = {};
                             configUpdates[feat.id][paramKey] = next[paramKey];
                         }
@@ -93,18 +102,13 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                             const val = next[paramKey];
                             
                             if (config.type === 'image') {
+                                // Determine texture type from uniform name
+                                const textureType: 'color' | 'env' = config.uniform!.toLowerCase().includes('env') ? 'env' : 'color';
+
                                 if (val && typeof val === 'string') {
-                                    const loader = new THREE.TextureLoader();
-                                    loader.load(val, (tex) => {
-                                        const s = config.textureSettings || {};
-                                        if (s.wrapS) tex.wrapS = s.wrapS;
-                                        if (s.wrapT) tex.wrapT = s.wrapT;
-                                        if (s.minFilter) tex.minFilter = s.minFilter;
-                                        if (s.magFilter) tex.magFilter = s.magFilter;
-                                        tex.needsUpdate = true;
-                                        FractalEvents.emit('uniform', { key: config.uniform!, value: tex, noReset: !!config.noReset });
-                                    });
-                                    
+                                    // Send data URL to worker — it handles ImageBitmap conversion + texture creation
+                                    FractalEvents.emit('texture', { textureType, dataUrl: val });
+
                                     // Auto-enable environment map when image is loaded
                                     if (paramKey === 'envMapData' && next['useEnvMap'] === false) {
                                         next['useEnvMap'] = true;
@@ -116,8 +120,8 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                         FractalEvents.emit('uniform', { key: 'uUseTexture', value: 1.0, noReset: false });
                                     }
                                 } else {
-                                    FractalEvents.emit('uniform', { key: config.uniform!, value: null, noReset: !!config.noReset });
-                                    
+                                    FractalEvents.emit('texture', { textureType, dataUrl: null });
+
                                     // Auto-disable environment map when image is cleared
                                     if (paramKey === 'envMapData' && next['useEnvMap'] === true) {
                                         next['useEnvMap'] = false;

@@ -26,12 +26,14 @@ export class CameraController {
     
     // Smoothed distance for speed calculation (lerp when increasing)
     private smoothedDistEstimate = 10.0;
-    
+
     // Config
     private readonly ROTATION_SMOOTHING = 20.0;
     private readonly ROLL_SMOOTHING = 3.0; // Decay rate
     private readonly SENSITIVITY = 2.5;
-    private readonly DIST_INCREASE_LERP_RATE = 8.0; // Lerp speed when DST increases
+    // Lerp rate when DST increases — lower = slower speed ramp-up (prevents sudden 100x jumps when panning to open space)
+    // At 2.0: ~1.5s to reach 95% of target distance. Immediate on decrease (safety).
+    private readonly DIST_INCREASE_LERP_RATE = 2.0;
 
     public reset() {
         this.currentRotVelocity.set(0, 0, 0);

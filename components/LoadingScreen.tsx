@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { LoadingRenderer } from '../engine/LoadingRenderer';
+import { LoadingRendererCPU } from '../engine/LoadingRendererCPU';
 import { useFractalStore } from '../store/fractalStore';
 import { registry } from '../engine/FractalRegistry';
 import { ChevronDown, UploadIcon, CubeIcon, NetworkIcon } from './Icons';
@@ -8,75 +8,122 @@ import { extractMetadata } from '../utils/pngMetadata';
 import { Preset } from '../types';
 import { QualityState } from '../features/quality';
 import { FractalEvents } from '../engine/FractalEvents';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
+
+const GMT_NAMES = [
+  // Serious / poetic
+  'Generative Math Tracer',
+  'GPU Manifold Tracer',
+  'Geometric Morphology Toolkit',
+  'GLSL Marching Toolkit',
+  'Generative Morphology Theater',
+  'Grand Mathematical Topography',
+  'Geometric Manifold Traversal',
+  'Gradient Mapped Topology',
+  'Generalized Mesh Tracer',
+  'Gravitational Manifold Theory',
+  // Evocative / artistic
+  'Glass Mountain Telescope',
+  'Ghost Manifold Terminal',
+  'Garden of Mathematical Terrain',
+  'Glimpse Machine Terminal',
+  'Grey Matter Telescope',
+  'Grotesque Math Theater',
+  'Geometry Mutation Terminal',
+  'Galactic Morphology Telescope',
+  'Grand Mythos Terminal',
+  'Glowing Mathematical Topologies',
+  // Playful / fun
+  "God's Math Toy",
+  'Gnarly Math Thing',
+  'Generally Mesmerizing Thingamajig',
+  'Give Me Tentacles',
+  'Gloriously Melted Teapots',
+  'Gaze into Mathematical Twilight',
+  'Geometrically Mangled Tesseracts',
+  'Gratuitous Mandelbulb Torture',
+  'Got More Tentacles',
+  'Groovy Morphing Thingamabob',
+];
+
+const pickRandomName = () => GMT_NAMES[Math.floor(Math.random() * GMT_NAMES.length)];
 
 const getThumbPath = (id: string) => `thumbnails/fractal_${id}.jpg`;
+
 
 interface LoadingScreenProps {
   isReady: boolean;
   onFinished: () => void;
   startupMode: 'default' | 'url';
-  onPresetLoaded?: (p: Preset) => void;
-  bootEngine: () => void;
+  bootEngine: (force?: boolean) => void;
 }
 
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinished, startupMode, onPresetLoaded, bootEngine }) => {
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinished, startupMode, bootEngine }) => {
   const fgCanvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<LoadingRenderer | null>(null);
-  
+  const rendererRef = useRef<LoadingRendererCPU | null>(null);
+
   // Refs for loop state
-  const isReadyRef = useRef(isReady);
   const isMenuOpenRef = useRef(false);
+  const isReadyRef = useRef(isReady);
   const bootEngineRef = useRef(bootEngine);
+  const hasBootedRef = useRef(false);
 
   // Sync refs
   useEffect(() => { isReadyRef.current = isReady; }, [isReady]);
   useEffect(() => { bootEngineRef.current = bootEngine; }, [bootEngine]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const activeFormula = useFractalStore(s => s.formula);
   const setFormula = useFractalStore(s => s.setFormula);
   const loadPreset = useFractalStore(s => s.loadPreset);
-  
-  const state = useFractalStore();
-  const quality = (state as any).quality as QualityState;
+  const applyPreset = useFractalStore(s => (s as any).applyPreset);
+
+  const quality = useFractalStore(s => (s as any).quality) as QualityState;
   const isLiteRender = quality?.precisionMode === 1;
 
   const [progress, setProgress] = useState(0);
+  const progressRef = useRef(0);
   const [opacity, setOpacity] = useState(1);
   const [isVisible, setIsVisible] = useState(true);
-  
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  
+
   // Sync menu state to ref
   useEffect(() => { isMenuOpenRef.current = isMenuOpen; }, [isMenuOpen]);
-  
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  // Auto-boot if URL mode
-  useEffect(() => {
-      if (startupMode === 'url' && bootEngine) {
-          // Force boot immediately for shared links
-          bootEngine();
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [subtitle] = useState(pickRandomName);
+
+  const triggerBoot = () => {
+      if (!hasBootedRef.current) {
+          hasBootedRef.current = true;
+          if (bootEngineRef.current) bootEngineRef.current();
       }
-  }, [startupMode, bootEngine]);
+  };
 
   const handleSelectFormula = (formulaId: string) => {
+      const def = registry.get(formulaId as any);
+      if (def && def.defaultPreset) {
+          // Load preset into store immediately — the force reboot below will
+          // pick up the new config via getShaderConfigFromState().
+          loadPreset(def.defaultPreset as Preset);
+      }
       setFormula(formulaId as any);
       setIsMenuOpen(false);
       setProgress(0);
-      
-      if (onPresetLoaded) {
-          const def = registry.get(formulaId as any);
-          if (def && def.defaultPreset) {
-              onPresetLoaded(def.defaultPreset as Preset);
-          }
+      progressRef.current = 0;
+
+      // If boot already happened (Chrome, or Firefox after bar completed),
+      // force restart to pick up the new formula. If boot hasn't happened yet
+      // (Firefox, bar still running), just let the store update — the deferred
+      // boot will pick up the new config when it fires.
+      if (hasBootedRef.current && bootEngineRef.current) {
+          bootEngineRef.current(true);
       }
-      
-      if (bootEngineRef.current) bootEngineRef.current();
   };
-  
+
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -92,118 +139,105 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
           }
           const preset = JSON.parse(jsonString);
           loadPreset(preset);
-          
-          if (onPresetLoaded) {
-              onPresetLoaded(preset);
-          }
+
+          // Don't queue via onPresetLoaded — loadPreset already applied the
+          // preset to the store, and the force reboot reads getShaderConfigFromState().
+          // Queuing would cause a redundant loadPreset + recompile after boot.
 
           setIsMenuOpen(false);
           setProgress(0);
-          
-          if (bootEngineRef.current) bootEngineRef.current();
-      } catch (err: any) {
-          alert("Load failed: " + err.message);
+          progressRef.current = 0;
+
+          if (hasBootedRef.current && bootEngineRef.current) bootEngineRef.current(true);
+      } catch (err) {
+          alert("Load failed: " + (err instanceof Error ? err.message : String(err)));
       }
   };
-  
+
   const handleLiteToggle = () => {
       const mode = isLiteRender ? 'balanced' : 'lite';
       FractalEvents.emit('is_compiling', `Switching to ${mode} mode...`);
-      // @ts-ignore
-      if (state.applyPreset) {
-          // @ts-ignore
-          state.applyPreset({ mode, actions: state });
+      if (applyPreset) {
+          const actions = useFractalStore.getState();
+          applyPreset({ mode, actions });
       }
   };
-  
+
   const formulas = useMemo(() => registry.getAll(), []);
 
   useEffect(() => {
     if (!fgCanvasRef.current) return;
-    
-    // Safely attempt to create the loading renderer. 
-    // If it fails (e.g. context limit), we just proceed without visual flair.
-    try {
-        rendererRef.current = new LoadingRenderer(fgCanvasRef.current);
-    } catch(e) {
-        console.warn("LoadingScreen: WebGL context creation failed for spinner.", e);
-    }
-    
+
+    // CPU-based Julia set spinner — no GPU contention on any browser.
+    rendererRef.current = new LoadingRendererCPU(fgCanvasRef.current);
+
     let frameId = 0;
     let currentProgress = 0;
     let lastFrameTime = performance.now();
-    const TARGET_DURATION = 2500; 
+    const TARGET_DURATION = 2500;
 
     const loop = (time: number) => {
       const now = performance.now();
       const dt = Math.min(now - lastFrameTime, 60);
       lastFrameTime = now;
-      
-      const ready = isReadyRef.current;
+
       const menuOpen = isMenuOpenRef.current;
 
-      // Logic: If not waiting for menu, progress automatically.
-      // If we hit 60%, trigger boot.
-      
-      const shouldBoot = currentProgress > 60 && !engine.isBooted && !menuOpen && startupMode !== 'url';
-      if (shouldBoot && bootEngineRef.current) {
-          bootEngineRef.current();
-      }
-
+      // Linear progress over TARGET_DURATION — purely cosmetic
       if (currentProgress < 100) {
-          if (currentProgress > 95 && !ready) {
-              // Stall at 95% if engine isn't ready
-              currentProgress += dt * (1 / 1000); 
-          } else if (ready && currentProgress > 95) {
-              // Accelerate to finish if ready
-              currentProgress += dt * (100 / 300);
-          } else {
-              // Normal loading speed
-              currentProgress += dt * (100 / TARGET_DURATION);
-          }
+          currentProgress += dt * (100 / TARGET_DURATION);
       }
-      
       if (currentProgress > 100) currentProgress = 100;
 
       // Only update React state if integer value changes to reduce renders
-      if (Math.floor(currentProgress) > Math.floor(progress)) {
+      if (Math.floor(currentProgress) > Math.floor(progressRef.current)) {
+         progressRef.current = currentProgress;
          setProgress(currentProgress);
       }
 
-      // Render spinner
       if (rendererRef.current) {
           rendererRef.current.render(time, currentProgress / 100.0);
       }
 
       if (currentProgress >= 100 && !menuOpen) {
-        // Double check boot
-        if (!engine.isBooted && bootEngineRef.current) {
-             bootEngineRef.current();
-        }
+        triggerBoot();
 
-        // Fade out
-        setTimeout(() => {
+        if (isReadyRef.current) {
+            if (rendererRef.current) {
+                rendererRef.current.dispose();
+                rendererRef.current = null;
+            }
             setOpacity(0);
             setTimeout(() => {
                 setIsVisible(false);
-                if (rendererRef.current) rendererRef.current.dispose();
                 onFinished();
-            }, 800); 
-        }, 200);
+            }, 800);
+        } else {
+            frameId = requestAnimationFrame(loop);
+        }
       } else {
         frameId = requestAnimationFrame(loop);
       }
     };
-    
+
     frameId = requestAnimationFrame(loop);
 
-    return () => cancelAnimationFrame(frameId);
-  }, []); 
+    return () => {
+        cancelAnimationFrame(frameId);
+        if (rendererRef.current) {
+            rendererRef.current.dispose();
+            rendererRef.current = null;
+        }
+    };
+  }, []);
+
+  // Boot immediately — CPU spinner has no GPU contention.
+  useEffect(() => { triggerBoot(); }, []);
 
   if (!isVisible) return null;
 
   return (
-    <div 
+    <div
         className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black transition-opacity duration-1000"
         style={{ opacity: opacity }}
     >
@@ -212,16 +246,16 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
             G<span className="text-cyan-400">M</span>T
          </h1>
          <div className="text-xs text-gray-400 font-mono uppercase tracking-[0.4em]">
-             GPU Mandelbulb Tracer
+             {subtitle}
          </div>
       </div>
 
       <div className="relative z-10 w-[500px] h-16 bg-gray-900/80 rounded-full border border-gray-700/50 overflow-hidden shadow-[0_0_50px_rgba(0,255,255,0.1)] backdrop-blur-sm">
-        <div 
+        <div
             className="absolute top-0 left-0 h-full overflow-hidden will-change-[width] transition-[width] duration-75 ease-linear"
             style={{ width: `${progress}%` }}
         >
-            <canvas 
+            <canvas
                 ref={fgCanvasRef}
                 className="absolute top-0 left-0 w-[500px] h-16"
             />
@@ -231,64 +265,64 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
 
       <div className="mt-6 font-mono text-sm text-cyan-500/80 z-20 flex flex-col items-center h-10">
         {startupMode === 'url' ? (
-             <span className="animate-pulse tracking-wide">LOADING SHARED SCENE... {Math.floor(progress)}%</span>
+             <span className="animate-pulse">LOADING SHARED SCENE... {Math.floor(progress)}%</span>
         ) : (
             <div className="relative flex flex-col items-center">
                  <div className="flex items-center gap-2">
                      <span className="text-cyan-600/80">LOADING</span>
-                     <button 
+                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
                         className="flex items-center gap-1 text-cyan-400 hover:text-white transition-colors border-b border-dashed border-cyan-500/30 hover:border-cyan-400 pb-0.5 outline-none"
                      >
-                         <span className="font-bold tracking-wide uppercase">[{activeFormula}]</span>
+                         <span className="font-bold">[{activeFormula}]</span>
                          <span className={`text-[10px] transform transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}><ChevronDown /></span>
                      </button>
                      <span className="text-cyan-600/80">{Math.floor(progress)}%</span>
                  </div>
-                 
-                 <button 
+
+                 <button
                     onClick={handleLiteToggle}
-                    className={`mt-4 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest rounded border transition-all ${
-                        isLiteRender 
+                    className={`mt-4 px-3 py-1.5 text-[9px] font-bold rounded border transition-all ${
+                        isLiteRender
                         ? 'bg-orange-900/40 text-orange-200 border-orange-500/40 hover:bg-orange-800/50'
                         : 'bg-white/5 text-gray-500 border-white/5 hover:text-white hover:border-white/20'
                     }`}
                  >
                     {isLiteRender ? "Lite Render Active" : "Enable Lite Render"}
                  </button>
-                 
+
                  {isMenuOpen && (
-                     <div 
+                     <div
                         className="absolute bottom-full mb-4 w-[340px] bg-black/95 border border-white/20 rounded-xl shadow-[0_10px_60px_rgba(0,0,0,0.9)] backdrop-blur-xl animate-fade-in text-xs z-[110]"
                         onMouseLeave={() => setHoveredId(null)}
                      >
                          {hoveredId && hoveredId !== 'Modular' && (
                              <div className="absolute left-[350px] bottom-0 w-[256px] h-[256px] bg-black border border-cyan-500/50 rounded-lg shadow-[0_0_50px_rgba(0,0,0,1)] overflow-hidden animate-fade-in pointer-events-none">
-                                 <img 
-                                    src={getThumbPath(hoveredId)} 
-                                    className="w-full h-full object-cover" 
-                                    alt="Preview" 
+                                 <img
+                                    src={getThumbPath(hoveredId)}
+                                    className="w-full h-full object-cover"
+                                    alt="Preview"
                                     onError={e => {
                                         e.currentTarget.style.display='none';
-                                    }} 
+                                    }}
                                  />
                                  <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.03),rgba(0,255,0,0.01),rgba(0,0,255,0.03))] bg-[length:100%_4px,4px_100%] pointer-events-none" />
-                                 <div className="absolute bottom-0 left-0 right-0 p-3 bg-black/60 text-cyan-300 font-bold uppercase text-[9px] tracking-widest border-t border-white/5">
+                                 <div className="absolute bottom-0 left-0 right-0 p-3 bg-black/60 text-cyan-300 font-bold text-[9px] border-t border-white/5">
                                      {registry.get(hoveredId as any)?.name}
                                  </div>
                              </div>
                          )}
 
                          <div className="p-1 max-h-[400px] overflow-y-auto custom-scroll">
-                             <button 
+                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className="w-full flex items-center gap-2 px-3 py-2 text-left text-gray-300 hover:bg-white/10 hover:text-white rounded transition-colors mb-1 border-b border-white/10"
                              >
-                                <UploadIcon /> <span className="font-bold uppercase tracking-wider text-[10px]">Load From File...</span>
+                                <UploadIcon /> <span className="font-bold text-[10px]">Load From File...</span>
                              </button>
                              <input type="file" ref={fileInputRef} className="hidden" accept=".json,.png" onChange={handleFile} />
-                             
-                             <div className="px-3 py-1.5 text-[9px] font-black text-gray-500 uppercase tracking-widest bg-white/5 mb-1">Select Engine</div>
+
+                             <div className="px-3 py-1.5 text-[9px] font-bold text-gray-500 bg-white/5 mb-1">Select Engine</div>
                              {formulas.map(f => (
                                  <button
                                     key={f.id}
@@ -300,16 +334,16 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                                  >
                                      <div className="w-16 h-10 shrink-0 bg-black rounded border border-white/10 overflow-hidden relative">
                                         {f.id !== 'Modular' ? (
-                                            <img 
-                                                src={getThumbPath(f.id)} 
-                                                alt={f.name} 
-                                                className="w-full h-full object-cover" 
+                                            <img
+                                                src={getThumbPath(f.id)}
+                                                alt={f.name}
+                                                className="w-full h-full object-cover"
                                                 onError={e => {
                                                     e.currentTarget.style.display='none';
                                                     if (e.currentTarget.nextElementSibling) {
                                                         (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
                                                     }
-                                                }} 
+                                                }}
                                             />
                                         ) : null}
                                         <div className={`w-full h-full items-center justify-center text-gray-700 bg-gray-900 ${f.id !== 'Modular' ? 'hidden' : 'flex'}`}>

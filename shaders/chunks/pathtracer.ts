@@ -1,39 +1,33 @@
 
 
-export const getPathTracerGLSL = (isMobile: boolean) => {
-    
+export const getPathTracerGLSL = (isMobile: boolean, maxLights: number) => {
+
     const loopLimit = isMobile ? '2' : 'maxBounces';
      const shadowLogic = isMobile ? `
         shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
     ` : `
         if (uPTStochasticShadows > 0.5) {
-            // Use blue noise for shadow jitter to ensure good distribution
-            vec2 jitter = blueNoise.gb; // Use green and blue channels for decorrelation
-            vec3 w = lDir;
-            vec3 u = normalize(cross(w, abs(w.y) > 0.9 ? vec3(1,0,0) : vec3(0,1,0)));
-            vec3 v = cross(w, u);
-            
-            // Softness acts as spread. For Directional: Angle. For Point: Size.
+            vec2 jitter = blueNoise.gb;
+            vec3 sT, sB;
+            buildTangentBasis(lDir, sT, sB);
+
             float spread = 2.0 / max(uShadowSoftness, 0.1);
-            
             float r = sqrt(jitter.x) * spread;
-            float theta = jitter.y * 6.283185;
-            
-            vec3 offsetDir = u * cos(theta) * r + v * sin(theta) * r;
+            float theta = jitter.y * TAU;
+
+            vec3 offsetDir = sT * cos(theta) * r + sB * sin(theta) * r;
             vec3 shadowDir = normalize(lDir + offsetDir);
             float shadowDist = distToLight;
-            
+
             if (!isDirectional) {
-                 // For point lights, we jitter the target position
-                 // Approximate sphere radius = spread * distance
                  float radius = spread * distToLight;
-                 vec3 jitterOffset = (u * cos(theta) + v * sin(theta)) * sqrt(jitter.x) * radius;
+                 vec3 jitterOffset = (sT * cos(theta) + sB * sin(theta)) * sqrt(jitter.x) * radius;
                  vec3 targetPos = uLightPos[lightIdx] + jitterOffset;
                  vec3 tVec = targetPos - p_ray;
                  shadowDist = length(tVec);
                  shadowDir = tVec / max(1.0e-5, shadowDist);
             }
-            
+
             shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
         } else {
             shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
@@ -50,29 +44,28 @@ float luminance(vec3 c) {
 }
 
 vec3 cosineSampleHemisphere(vec3 n, vec2 seedVec) {
-    float r = fract(seedVec.x * 1.61803398875); 
-    float angle = seedVec.y * 6.283185; 
+    float r = fract(seedVec.x * phi);
+    float angle = seedVec.y * TAU;
     vec2 p = vec2(sqrt(r) * cos(angle), sqrt(r) * sin(angle));
-    vec3 u = normalize(cross(abs(n.z) < 0.999 ? vec3(0,0,1) : vec3(1,0,0), n));
-    vec3 v = cross(n, u);
+    vec3 t, b;
+    buildTangentBasis(n, t, b);
     float rz = sqrt(max(0.0, 1.0 - dot(p, p)));
-    return normalize(u * p.x + v * p.y + n * rz);
+    return normalize(t * p.x + b * p.y + n * rz);
 }
 
 vec3 importanceSampleGGX(vec3 n, float roughness, vec2 seedVec) {
     vec2 xi = vec2(
-        fract(seedVec.x * 1.61803398875),
-        fract(seedVec.y * 1.61803398875 + 0.5)
+        fract(seedVec.x * phi),
+        fract(seedVec.y * phi + 0.5)
     );
     float a = roughness * roughness;
-    float phi = 2.0 * 3.14159 * xi.x;
+    float azimuth = TAU * xi.x;
     float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a*a - 1.0) * xi.y));
     float sinTheta = sqrt(max(0.0, 1.0 - cosTheta*cosTheta));
-    vec3 h = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-    vec3 up = abs(n.z) < 0.999 ? vec3(0,0,1) : vec3(1,0,0);
-    vec3 tangent = normalize(cross(up, n));
-    vec3 bitangent = cross(n, tangent);
-    return normalize(tangent * h.x + bitangent * h.y + n * h.z);
+    vec3 h = vec3(cos(azimuth) * sinTheta, sin(azimuth) * sinTheta, cosTheta);
+    vec3 t, b;
+    buildTangentBasis(n, t, b);
+    return normalize(t * h.x + b * h.y + n * h.z);
 }
 
 vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) {
@@ -85,44 +78,32 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
     bool hit = true;
     int maxBounces = uPTBounces;
     float pixelSizeScale = uPixelSizeBase / uInternalScale;
-    
+
     for (int bounce = 0; bounce < 8; bounce++) {
         if (bounce >= ${loopLimit}) break;
-        
+
+        // Coprime decorrelation: irrational constants shift the blue noise texture lookup by a different
+        // amount each bounce, ensuring samples from different bounces land on uncorrelated texels.
+        // 17.123 and 23.456 are mutually irrational (no integer ratio) — same principle as Halton sequences.
+        // 7.31 / 11.17 used for secondary env noise lookup below (also mutually irrational).
         vec2 bounceOffset = vec2(float(bounce) * 17.123, float(bounce) * 23.456);
         vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy + bounceOffset);
 
         if (!hit) {
-            // Check for visible light sphere intersection before falling back to sky
-            bool hitLightSphere = false;
-            for (int li = 0; li < MAX_LIGHTS; li++) {
-                if (li >= uLightCount) break;
-                if (uLightIntensity[li] < 0.01 || uLightType[li] > 0.5 || uLightRadius[li] < 0.001) continue;
-                vec3 _oc = currentRo - uLightPos[li];
-                float _b = dot(currentRd, _oc);
-                if (-_b < 0.001) continue;
-                float _dPerp2 = max(0.0, dot(_oc, _oc) - _b * _b);
-                float _r = uLightRadius[li];
-                float _s = max(0.0, uLightSoftness[li]);
-                float _fadeMax = _r * (1.0 + _s) + 0.001;
-                if (_dPerp2 < _fadeMax * _fadeMax) {
-                    float _dPerp = sqrt(_dPerp2);
-                    float _fadeMin = _r * max(0.0, 1.0 - _s);
-                    float _fade = 1.0 - smoothstep(_fadeMin, _fadeMax, _dPerp);
-                    if (_fade > 0.001) {
-                        radiance += uLightColor[li] * uLightIntensity[li] * _fade * throughput;
-                        hitLightSphere = true;
-                        break;
-                    }
-                }
-            }
-            if (!hitLightSphere) {
+            #ifdef LIGHT_SPHERES
+            vec2 lsHit = intersectLightSphere(currentRo, currentRd);
+            if (lsHit.x > 0.0) {
+                int li = int(lsHit.y);
+                radiance += uLightColor[li] * uLightIntensity[li] * lsHit.x * throughput;
+            } else
+            #endif
+            {
                 float skyIntensity = (bounce == 0) ? uEnvBackgroundStrength : uEnvStrength;
                 vec3 env = GetEnvMap(currentRd, 0.0);
-                if (bounce == 0) {
-                    float fogFactor = smoothstep(uFogNear, uFogFar, 100.0);
-                    vec3 safeFog = InverseACESFilm(uFogColor);
-                    vec3 sky = mix(env * skyIntensity, safeFog, fogFactor * 0.5);
+                if (bounce == 0 && uFogFar < 1000.0) {
+                    // Fog blend for primary-ray sky miss (sky treated as being at fog far plane)
+                    float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar * 0.95);
+                    vec3 sky = mix(env * skyIntensity, uFogColorLinear, fogFactor * 0.5);
                     radiance += sky * throughput;
                 } else {
                     radiance += env * skyIntensity * throughput;
@@ -130,28 +111,38 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             }
             break;
         }
-        
+
         vec3 p_ray = currentRo + currentRd * d;
         vec3 p_fractal = p_ray + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
         vec3 albedo, n, emission;
         float roughness;
         getSurfaceMaterial(p_ray, p_fractal, result, d, albedo, n, emission, roughness, bounce == 0);
-        
+
         float ao = 1.0;
         if (uAOIntensity > 0.01 && bounce == 0) {
             ao = GetAO(p_ray, n, seed + float(bounce) * 13.37);
         }
-        
+
         if (bounce == 0 && uRim > 0.01) {
             float NdotV_rim = max(0.0, dot(n, -currentRd));
             float rimFactor = pow(1.0 - NdotV_rim, uRimExponent) * uRim;
             emission += vec3(0.5, 0.7, 1.0) * rimFactor;
         }
 
-        roughness = max(roughness, 0.04);
+        roughness = max(roughness, 0.04);  // Minimum roughness — prevents NaN in GGX distribution denominator
         float emissionMult = (bounce == 0) ? 1.0 : uPTEmissionMult;
         radiance += (emission * ao * emissionMult) * throughput;
-        
+
+        // --- Shared state for NEE and bounce selection ---
+        vec3 viewDir = -currentRd;
+        float NdotV = max(0.001, dot(n, viewDir));
+        vec3 F0 = mix(vec3(0.04) * uSpecular, albedo, uReflection);  // 0.04 = standard dielectric F0 (4% reflectance at normal incidence)
+        vec3 F_surface = fresnelSchlick(NdotV, F0);
+
+        // Schlick-GGX geometry term parameters (shared by NEE and IS weight)
+        float a_ggx = roughness * roughness;
+        float kG = a_ggx * 0.5;
+
         // --- NEXT EVENT ESTIMATION ---
         // Active light list — hoisted so PT_VOLUMETRIC can reuse it
         int activeCount = 0;
@@ -162,7 +153,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
 
         // Bias epsilon — hoisted so PT_ENV_NEE can reuse it
         float distFromFractalOrigin = length(p_fractal);
-        float floatLimitNEE = max(1.0e-20, distFromFractalOrigin * 5.0e-7);
+        float floatLimitNEE = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
         float visualLimitNEE = pixelSizeScale * d * (1.0 / uDetail);
         float biasEps = max(floatLimitNEE, visualLimitNEE);
 
@@ -193,8 +184,8 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 vec3 lVec;
                 float distToLight;
                 if (isDirectional) {
-                    lVec = -uLightDir[lightIdx]; // Negate: uLightDir points toward surface, we need toward light
-                    distToLight = 100.0; // Effectively infinite for fractals (structure < bailout radius)
+                    lVec = -uLightDir[lightIdx];
+                    distToLight = DIR_LIGHT_DIST;
                 } else {
                     lVec = uLightPos[lightIdx] - p_ray;
                     distToLight = length(lVec);
@@ -209,10 +200,9 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 }
 
                 if (shadow > 0.01) {
-                    vec3 v = -currentRd;
-                    vec3 h = normalize(lDir + v);
+                    vec3 h = normalize(lDir + viewDir);
                     float ndotl = max(0.0, dot(n, lDir));
-                    float hdotv = max(0.0, dot(h, v));
+                    float hdotv = max(0.0, dot(h, viewDir));
                     float ndoth = max(0.0, dot(n, h));
 
                     float att = 1.0;
@@ -221,22 +211,20 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                         else att = 1.0 / (1.0 + uLightFalloff[lightIdx] * distToLight);
                     }
 
-                    vec3 F0 = mix(vec3(0.04) * uSpecular, albedo, uReflection);
-                    vec3 F = F0 + (1.0 - F0) * pow(1.0 - hdotv, 5.0);
+                    vec3 F_nee = fresnelSchlick(hdotv, F0);
 
-                    // GGX Cook-Torrance specular
-                    float NdotV_nee = max(0.001, dot(n, v));
+                    // GGX Cook-Torrance specular (Schlick-GGX geometry, matches pbr.ts)
                     float ndotl_s = max(0.001, ndotl);
-                    float a_nee = max(0.001, roughness * roughness);
-                    float a2_nee = a_nee * a_nee;
+                    float a2_nee = a_ggx * a_ggx;
                     float denom_nee = ndoth * ndoth * (a2_nee - 1.0) + 1.0;
-                    float D_nee = a2_nee / (3.14159 * denom_nee * denom_nee);
-                    float G_l_nee = 2.0 * ndotl_s / (ndotl_s + sqrt(a2_nee + (1.0 - a2_nee) * ndotl_s * ndotl_s));
-                    float G_v_nee = 2.0 * NdotV_nee / (NdotV_nee + sqrt(a2_nee + (1.0 - a2_nee) * NdotV_nee * NdotV_nee));
-                    vec3 spec = F * D_nee * G_l_nee * G_v_nee / max(0.001, 4.0 * ndotl_s * NdotV_nee);
+                    float D_nee = a2_nee / (PI * denom_nee * denom_nee + GGX_EPSILON);
+                    float G1V_nee = NdotV / (NdotV * (1.0 - kG) + kG);
+                    float G1L_nee = ndotl_s / (ndotl_s * (1.0 - kG) + kG);
+                    float G_nee = G1V_nee * G1L_nee;
+                    vec3 spec = (D_nee * F_nee * G_nee) / max(0.001, 4.0 * NdotV * ndotl_s);
 
-                    vec3 kS = F;
-                    vec3 kD = (vec3(1.0) - kS) * (1.0 - uReflection);
+                    vec3 kS_nee = F_nee;
+                    vec3 kD_nee = (vec3(1.0) - kS_nee) * (1.0 - uReflection);
 
                     // PDF: 1 when sampling all lights, activeCount when sampling 1 randomly
                     float pdf;
@@ -246,7 +234,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                         pdf = float(activeCount);
                     #endif
 
-                    vec3 directContrib = (kD * albedo * uDiffuse / 3.14159 + spec) * uLightColor[lightIdx] * uLightIntensity[lightIdx] * ndotl * shadow * att * ao * pdf;
+                    vec3 directContrib = (kD_nee * albedo * uDiffuse / PI + spec) * uLightColor[lightIdx] * uLightIntensity[lightIdx] * ndotl * shadow * att * ao * pdf;
 
                     // Firefly clamp: suppress outlier samples (runtime, raise uPTMaxLuminance to disable)
                     float dcLum = luminance(directContrib);
@@ -268,12 +256,11 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             if (envNdotL > 0.001) {
                 vec3 envOrigin = p_ray + n * (biasEps * 2.0);
                 float envD; vec4 envResult; vec3 envGlow = vec3(0.0); float envVol = 0.0; vec3 envScatter = vec3(0.0);
-                bool envHit = traceScene(envOrigin, envDir, envD, envResult, envGlow, seed + float(bounce) * 5.31, envVol, envScatter);
+                bool envHit = traceSceneLean(envOrigin, envDir, envD, envResult, envGlow, seed + float(bounce) * 5.31, envVol, envScatter);
                 if (!envHit) {
                     // Cosine-weighted PDF = NdotL/PI cancels with Lambertian BRDF = kD*albedo/PI
                     // → weight = kD * albedo (clean, no NdotL needed)
-                    vec3 envF0 = mix(vec3(0.04) * uSpecular, albedo, uReflection);
-                    vec3 envF = envF0 + (1.0 - envF0) * pow(1.0 - envNdotL, 5.0);
+                    vec3 envF = fresnelSchlick(envNdotL, F0);
                     vec3 envKD = (vec3(1.0) - envF) * (1.0 - uReflection);
                     vec3 envColor = GetEnvMap(envDir, 0.0) * uEnvStrength;
                     radiance += envKD * albedo * uDiffuse * envColor * throughput;
@@ -282,67 +269,67 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         }
         #endif
 
-        float NdotV = max(0.0, dot(n, -currentRd));
-        vec3 F0 = mix(vec3(0.04) * uSpecular, albedo, uReflection);
-        vec3 F = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
-        vec3 kS = F;
+        // --- BOUNCE DIRECTION SELECTION ---
+        vec3 kS = F_surface;
         vec3 kD = (vec3(1.0) - kS) * (1.0 - uReflection);
         vec3 weightSpec = kS;
-        vec3 weightDiff = kD * albedo * uDiffuse; 
+        vec3 weightDiff = kD * albedo * uDiffuse;
         float lumSpec = luminance(weightSpec);
         float lumDiff = luminance(weightDiff);
         float probSpec = lumSpec / max(0.0001, lumSpec + lumDiff);
-        float smoothness = 1.0 - roughness; 
-        probSpec = mix(probSpec, 1.0, smoothness * 0.4);
-        probSpec = clamp(probSpec, 0.05, 0.95);
-        float randType = fract(blueNoise.a * 1.618);
+        float smoothness = 1.0 - roughness;
+        probSpec = mix(probSpec, 1.0, smoothness * 0.4);  // Bias smooth surfaces toward specular bounces
+        probSpec = clamp(probSpec, 0.05, 0.95);  // Ensure both bounce types always have non-zero probability
+        float randType = fract(blueNoise.a * 1.618);  // Golden ratio decorrelation for bounce type selection
         vec2 dirSeed = blueNoise.gb;
 
         if (randType < probSpec) {
             vec3 H = importanceSampleGGX(n, roughness, dirSeed);
             vec3 newDir = reflect(currentRd, H);
-            // GGX IS weight: BRDF/PDF = G * F * HdotV / (NdotV * NdotH)
+            // GGX IS weight: BRDF/PDF ≈ F * G * HdotV / (NdotV * NdotH)
             float HdotV_sp = max(0.001, dot(H, -currentRd));
             float NdotH_sp = max(0.001, dot(n, H));
             float NdotL_sp = max(0.001, dot(n, newDir));
             float NdotV_sp = max(0.001, NdotV);
-            float a_sp = max(0.001, roughness * roughness);
-            float a2_sp = a_sp * a_sp;
-            float G_l_sp = 2.0 * NdotL_sp / (NdotL_sp + sqrt(a2_sp + (1.0 - a2_sp) * NdotL_sp * NdotL_sp));
-            float G_v_sp = 2.0 * NdotV_sp / (NdotV_sp + sqrt(a2_sp + (1.0 - a2_sp) * NdotV_sp * NdotV_sp));
+            // Schlick-GGX geometry (matches NEE and pbr.ts)
+            float G1L_sp = NdotL_sp / (NdotL_sp * (1.0 - kG) + kG);
+            float G1V_sp = NdotV_sp / (NdotV_sp * (1.0 - kG) + kG);
             currentRd = newDir;
-            throughput *= F * G_l_sp * G_v_sp * HdotV_sp / (NdotV_sp * NdotH_sp) / probSpec;
+            throughput *= F_surface * G1L_sp * G1V_sp * HdotV_sp / (NdotV_sp * NdotH_sp) / probSpec;
             if (dot(currentRd, n) < 0.0) currentRd = cosineSampleHemisphere(n, dirSeed);
         } else {
             currentRd = cosineSampleHemisphere(n, dirSeed);
-            // AO removed from throughput — the bounced path already captures occlusion implicitly
             throughput *= weightDiff / (1.0 - probSpec);
         }
-        
+
         throughput *= uPTGIStrength;
-        // biasEps already computed above (hoisted for NEE reuse)
         currentRo = p_ray + n * (biasEps * 2.0);
-        float volumetric = 0.0;
-        vec3 dummyGlow = vec3(0.0);
-        vec3 dummyScatter = vec3(0.0);
-        hit = traceScene(currentRo, currentRd, d, result, dummyGlow, seed + float(bounce), volumetric, dummyScatter);
+        float bounceVol = 0.0;
+        vec3 bounceGlow = vec3(0.0);
+        vec3 bounceScatter = vec3(0.0);
+        hit = traceSceneLean(currentRo, currentRd, d, result, bounceGlow, seed + float(bounce), bounceVol, bounceScatter);
 
         // Absorption-only fog on bounce paths (Beer-Lambert with actual march distance).
         // Primary-ray scatter (god rays) is accumulated in traceScene on the camera ray.
         if (uFogDensity > 0.001) {
             float trans = exp(-uFogDensity * d);
-            radiance += InverseACESFilm(uFogColor) * (1.0 - trans) * throughput;
+            radiance += uFogColorLinear * (1.0 - trans) * throughput;
             throughput *= trans;
         }
-        
+
+        // Russian roulette termination (decorrelated from bounce type selection)
+        // Start after bounce 2 to guarantee primary + 1st indirect are always evaluated
         if (bounce > 2) {
             float maxThroughput = max(throughput.r, max(throughput.g, throughput.b));
-            if (maxThroughput < 0.05) { 
-                if (randType > maxThroughput * 10.0) break;
-                throughput /= (maxThroughput * 10.0);
+            if (maxThroughput < 0.05) {  // Below 5% contribution — candidate for termination
+                // Use a separate noise sample for termination to avoid correlation with randType
+                float rrRand = fract(blueNoise.r * 1.618 + 0.7);  // 1.618 = golden ratio decorrelation
+                float survivalProb = maxThroughput * 10.0;  // Scale: 5% throughput → 50% survival
+                if (rrRand > survivalProb) break;
+                throughput /= survivalProb;  // Energy-conserving boost for surviving paths
             }
         }
-        throughput = min(throughput, vec3(4.0)); 
+        throughput = min(throughput, vec3(4.0));  // Firefly suppression clamp
     }
     return radiance;
 }

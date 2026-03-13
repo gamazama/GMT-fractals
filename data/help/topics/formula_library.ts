@@ -356,30 +356,6 @@ The iteration process:
 
     // --- HYBRIDS & VARIANTS ---
 
-    'formula.arisbrot': {
-        id: 'formula.arisbrot',
-        category: 'Formulas',
-        title: 'ArisBrot (Hybrid)',
-        parentId: 'formula.active',
-        content: `
-## The Math
-A powerful hybrid discovered by **Dr. Aris** on Fractal Forums. It combines three distinct operations:
-1. **Domain Warping:** Twists space based on Z-depth ("Reality Warp").
-2. **Kaleidoscopic Fold:** Folds space diagonally (KIFS).
-3. **Bulb Power:** Applies the Mandelbulb power function.
-
-## Parameters
-- **Param A (Scale)**: Scale of the KIFS fold.
-- **Param B (Power)**: The exponent of the Mandelbulb finish.
-- **Param C (Reality Warp)**: Strength of the domain twisting.
-- **Param D (Void Radius)**: Size of the central spherical clearing.
-- **Param E (Offset/Shear)**: Shifts the folding planes.
-- **Param F (Warp Phase)**: Rotates the domain warp.
-
-## Visuals
-Known for creating "Sci-Fi Portal" looks with a smooth, twisted tunnel leading to a complex geometric center.
-`
-    },
     'formula.phoenix': {
         id: 'formula.phoenix',
         category: 'Formulas',
@@ -665,6 +641,77 @@ Instead of a single constant $C$, the value of $C$ interpolates from a Start val
 This formula is often used with "Slice Thickness" to create disjointed, floating layers (like MRI scans or topographic maps).
 `
     },
+    'formula.borromean': {
+        id: 'formula.borromean',
+        category: 'Formulas',
+        title: 'Borromean (Cyclic)',
+        parentId: 'formula.active',
+        content: `
+## The Math
+Treats 3D space as three coupled 2D complex planes (XY, YZ, ZX). The output of one plane feeds into the next, creating a cyclic "Rock-Paper-Scissors" feedback loop. This produces tetrahedral symmetries and solid, non-spherical shapes without using spherical coordinates.
+
+## Parameters
+- **Param A (Power)**: Exponent applied to each axis component. Default 2.0.
+- **Param B (Connection)**: The "Link Strength" — controls coupling between planes via cross-terms. Higher values create more interlocking geometry.
+- **Param C (Repulsion)**: The "Subtractive Force" — how much adjacent axis power is subtracted. Creates voids and cavities.
+- **Param D (Balance)**: "Mixing Force" — adds a third axis into each equation, breaking bilateral symmetry.
+- **Param E (Phase)**: Phase shift rotation applied per iteration.
+- **Param F (Invert)**: Sign flip toggle for the connection cross-terms. Switches between two distinct fractal families.
+
+## Visuals
+Creates unique tetrahedral and cubic symmetries that look fundamentally different from spherical-coordinate fractals like the Mandelbulb. Good for crystalline, mineral-like structures.
+`
+    },
+    'formula.kalibox': {
+        id: 'formula.kalibox',
+        category: 'Formulas',
+        title: 'Kali Box',
+        parentId: 'formula.active',
+        content: `
+## The Math
+A Mandelbox variant by **Kali** (fractalforums.com), optimized by **Rrrola**. The iteration combines:
+1. **Rotation** around the (1,1,0) axis
+2. **Abs-fold + Translation** (classic box fold)
+3. **Clamped Sphere Inversion** (Rrrola's optimization)
+4. **Scale and add constant**
+
+**Credits:** Original by **Kali** (fractalforums.com), sphere inversion optimization by **Rrrola**.
+
+## Parameters
+- **Param A (Scale)**: Overall scaling factor. Default 2.043.
+- **Param B (MinRad2)**: Minimum radius squared for the sphere inversion clamp. Controls "density" of detail.
+- **Translation (Vec3A)**: Added after the abs-fold. Primary shape control.
+- **Param F (Rotation)**: Axis-angle rotation around (1,1,0), applied each iteration.
+
+## Visuals
+Produces organic, cave-like structures and alien landscapes. Less "boxy" than the standard Mandelbox due to the rotation and clamped inversion.
+`
+    },
+    'formula.mandelmap': {
+        id: 'formula.mandelmap',
+        category: 'Formulas',
+        title: 'MandelMap (Unrolled)',
+        parentId: 'formula.active',
+        content: `
+## The Math
+"Unrolls" the Mandelbulb surface onto a flat plane using coordinate projection. The XZ plane maps to angles on the bulb surface, and Y maps to radius offset. Three projection modes are available.
+
+## Projections (Param D)
+- **Spherical (0)**: Mercator-like mapping. Classic look, distorts at poles.
+- **Cylindrical (1)**: Unwraps to an infinite vertical column. No polar distortion.
+- **Toroidal (2)**: Wraps around a donut. Seamless tiling in all directions.
+
+## Parameters
+- **Param A (Power)**: Mandelbulb exponent. Default 8.0.
+- **Param B (Height Amp)**: Controls how Y maps to radius offset (vertical amplitude).
+- **Param C (Map Scale)**: Scales XZ coordinates before projection (texture density).
+- **Param D (Projection)**: Dropdown — Spherical / Cylindrical / Toroidal.
+- **Phase (Vec2A)**: Phase shifts for theta and phi angles. Includes "Symmetry Shift" compensation to lock features in place as they mutate.
+
+## Visuals
+Creates infinite fractal terrains, tileable surfaces, and seamless textures. The Toroidal mode is perfect for endless tunnels and looping worlds.
+`
+    },
     'formula.mandelbolic': {
         id: 'formula.mandelbolic',
         category: 'Formulas',
@@ -692,6 +739,57 @@ Where Z is the 2D complex plane (x, y) and T is the hyperbolic height (z).
 
 ## Visuals
 Creates organic, bulbous structures with perfect spherical details. The hyperbolic extension produces unique "saddle" and "feather" filaments that differ from standard Mandelbulb fractals.
+`
+    },
+
+    // --- HARMONIC / GOLDEN RATIO ---
+
+    'formula.claude': {
+        id: 'formula.claude',
+        category: 'Formulas',
+        title: 'Claude',
+        parentId: 'formula.active',
+        content: `
+## Origin
+This formula was designed by **Claude** (Anthropic's AI) as a self-portrait in mathematics. Given the prompt *"create a fractal that embodies Claude,"* it chose the golden ratio $\\phi$ as the unifying principle — a constant that appears in nature, art, and geometry as the archetype of harmony emerging from simple rules. The result is a fractal where every structural element traces back to $\\phi$: the fold planes, the rotation axis, and the default parameters.
+
+## The Math
+A harmonic resonance fractal built entirely on the golden ratio $\\phi = (1+\\sqrt{5})/2$.
+
+The iteration combines four operations:
+
+1. **Icosahedral Fold** — Three reflections across planes whose normals are constructed from $\\phi$:
+   - $n_1 = \\text{normalize}(-1,\\; \\phi\\!-\\!1,\\; 1/(\\phi\\!-\\!1))$
+   - $n_2 = \\text{normalize}(\\phi\\!-\\!1,\\; 1/(\\phi\\!-\\!1),\\; -1)$
+   - $n_3 = \\text{normalize}(1/(\\phi\\!-\\!1),\\; -1,\\; \\phi\\!-\\!1)$
+   These create partial icosahedral (5-fold) symmetry in a single pass of 3 reflections.
+
+2. **Harmonic Fold** — A 4th reflection plane whose normal is $n_3$ rotated around the **golden axis** $(1, \\phi, 0)$ by the Harmonic angle, using the Rodrigues formula. This is unique to this formula — no other IFS fractal has a continuously-variable fold normal direction.
+
+3. **Sphere Inversion** — Clamped Mandelbox-style: points inside Inner R² are scaled by $\\text{Fix}/\\text{Inner}$, points between Inner R² and Fix R² are inverted by $\\text{Fix}/r^2$. Creates recursive depth.
+
+4. **IFS Scale + Offset** — Standard $z = S \\cdot z - \\text{offset} \\cdot (S-1)$, centering the attractor at the Offset position.
+
+## Parameters
+- **Param A (Scale)**: Main IFS expansion factor. Default 2.0.
+- **Param B (Harmonic)**: Angle (radians) that sweeps the 4th fold plane around the golden axis. Like an overtone enriching a fundamental frequency.
+  - **0.0**: 4th fold coincides with $n_3$ (redundant — pure icosahedral base).
+  - **0.61**: Default. Creates rich structural variation.
+  - **±π**: Maximum deviation from base symmetry.
+- **Param C (Inner R²)**: Sphere fold inner radius squared. Smaller = more recursive detail.
+- **Param D (Fix R²)**: Sphere fold fixed radius squared. Controls where inversion activates.
+- **Offset (Vec3A)**: 3D IFS center. The fractal attractor converges at this point.
+- **Rotation (Vec3B)**: Pre-fold 3D rotation (azimuth/pitch/angle, Rodrigues formula). Changes which region of space enters each fold sector.
+- **Param F (Twist)**: Position-dependent rotation along the Y-axis. Creates spiraling arms.
+
+## The Golden Ratio Connection
+$\\phi$ appears at every level of this fractal:
+- **Fold normals** $n_1, n_2, n_3$ — constructed from $\\phi$ and $1/\\phi$
+- **Golden axis** $(1, \\phi, 0)$ — an icosahedral vertex direction, used as the harmonic sweep axis
+- **Default harmonic angle** 0.61 $\\approx 1/\\phi$ — the golden ratio conjugate
+
+## Visuals
+Produces organic, layered structures with pentagonal symmetry undertones. The harmonic fold creates smooth structural transitions as you sweep through the parameter — like zooming through different "perspectives" of the same golden-ratio geometry. Best explored with the Rotation control to find different viewpoints of the fold structure.
 `
     }
 };

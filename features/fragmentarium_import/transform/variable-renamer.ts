@@ -118,7 +118,7 @@ export function buildDERenameMap(
             renameMap[uniform.name] = '(uJuliaMode > 0.5)';
         } else if (!slot.startsWith('(')) {
             const uniformName = slotToUniform(slot);
-            if (uniform.type === 'int' && slot !== 'uIterations') {
+            if (uniform.type === 'int') {
                 // int uniforms mapped to float slots need int(...) wrapping
                 renameMap[uniform.name] = `int(${uniformName})`;
             } else if (uniform.type === 'bool') {

@@ -10,20 +10,16 @@ export const BoxBulb: FractalDefinition = {
     shader: {
         function: `
     void DE_Bulb(inout vec3 z, inout float dr, inout float trap, float power) {
-        float r = length(z);
-        if (r > 1.0e-4) {
-            float rp1 = pow(r, power - 1.0);
-            dr = rp1 * power * dr + 1.0;
-            float theta = acos(clamp(z.z / r, -1.0, 1.0));
-            float phi = atan(z.y, z.x);
-            theta *= power;
-            phi *= power;
-            float zr = rp1 * r;
-            z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
-            trap = min(trap, r);
-        } else {
-            dr = 1.0;
-        }
+        float r = max(length(z), 1.0e-9);
+        float rp1 = pow(r, power - 1.0);
+        dr = rp1 * power * dr + 1.0;
+        float theta = acos(clamp(z.z / r, -1.0, 1.0));
+        float phi = atan(z.y, z.x);
+        theta *= power;
+        phi *= power;
+        float zr = rp1 * r;
+        z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+        trap = min(trap, r);
     }
 
     void formula_BoxBulb(inout vec4 z, inout float dr, inout float trap, vec4 c) {

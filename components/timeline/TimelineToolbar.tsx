@@ -89,7 +89,7 @@ const KeyCamButton = () => {
             title="Keyframe Camera (Position + Rotation)"
         >
             <KeyframeButton status={status} onClick={handleKeyCam} />
-            <span className="text-[10px] font-bold tracking-wide">KEY CAM</span>
+            <span className="text-[10px] font-bold">Key Cam</span>
         </div>
     );
 };
@@ -260,12 +260,12 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 
                 <button
                     onClick={() => setShowRender(!showRender)}
-                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors text-[10px] uppercase ${showRender ? 'bg-cyan-900 border-cyan-500 text-white' : 'bg-transparent border-gray-700 text-gray-400 hover:text-white hover:bg-white/5'}`}
+                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors text-[10px] ${showRender ? 'bg-cyan-900 border-cyan-500 text-white' : 'bg-transparent border-gray-700 text-gray-400 hover:text-white hover:bg-white/5'}`}
                     title="Render Video"
                     data-help-id="export.video"
                 >
                     <CheckeredFlagIcon />
-                    <span className="font-bold">RENDER</span>
+                    <span className="font-bold">Render</span>
                 </button>
             </div>
             

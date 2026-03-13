@@ -265,11 +265,11 @@ const Histogram: React.FC<HistogramProps> = ({
         <div className="py-2 bg-gray-900/40" data-help-id="ui.histogram" onContextMenu={handleContextMenu}>
             <div className="flex justify-between items-center mb-2 px-3">
                 <div className="flex items-center gap-2">
-                    <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{labelTitle}</label>
+                    <label className="text-[10px] text-gray-500 font-bold">{labelTitle}</label>
                     {/* Stale Indicator */}
                     {isStale && !autoUpdate && (
                         <span className="text-[8px] text-amber-400 bg-amber-900/30 px-1.5 py-0.5 rounded border border-amber-500/30">
-                            STALE
+                            Stale
                         </span>
                     )}
                     {onToggleAuto && (
@@ -283,7 +283,7 @@ const Histogram: React.FC<HistogramProps> = ({
                     )}
                     {onRefresh && !autoUpdate && (
                          <button onClick={onRefresh} className="text-[9px] text-cyan-500 hover:text-white ml-1">
-                              REFRESH
+                              Refresh
                          </button>
                     )}
                 </div>
@@ -291,7 +291,7 @@ const Histogram: React.FC<HistogramProps> = ({
                     {/* 0-1 Range Button */}
                     <button 
                         onClick={() => onChange({ min: 0, max: 1, gamma: 1.0 })}
-                        className="px-2 py-0.5 bg-gray-800/50 hover:bg-gray-700 text-gray-400 hover:text-white text-[8px] rounded border border-gray-600 transition-colors uppercase font-bold"
+                        className="px-2 py-0.5 bg-gray-800/50 hover:bg-gray-700 text-gray-400 hover:text-white text-[8px] rounded border border-gray-600 transition-colors font-bold"
                         title="Reset to 0-1 range"
                     >
                         0-1
@@ -299,7 +299,7 @@ const Histogram: React.FC<HistogramProps> = ({
                     {onToggleAuto && (
                         <button 
                             onClick={handleAuto}
-                            className="px-2 py-0.5 bg-cyan-900/40 hover:bg-cyan-700 text-cyan-400 text-[9px] rounded border border-cyan-800 transition-colors uppercase font-bold"
+                            className="px-2 py-0.5 bg-cyan-900/40 hover:bg-cyan-700 text-cyan-400 text-[9px] rounded border border-cyan-800 transition-colors font-bold"
                             title="Fit range to current data"
                         >
                             Fit
@@ -377,7 +377,7 @@ const Histogram: React.FC<HistogramProps> = ({
             {/* Numeric Inputs */}
             <div className="flex justify-between items-center mt-2 px-3">
                 <div className="flex flex-col items-start w-16">
-                    <span className="text-[8px] text-gray-600 uppercase tracking-widest">{labelLeft}</span>
+                    <span className="text-[8px] text-gray-600">{labelLeft}</span>
                     <DraggableNumber 
                         value={min} 
                         onChange={(v) => onChange({ min: v, max, gamma })}
@@ -388,7 +388,7 @@ const Histogram: React.FC<HistogramProps> = ({
                 </div>
                 
                 <div className="flex flex-col items-center w-16">
-                    <span className="text-[8px] text-gray-600 uppercase tracking-widest">{labelMid}</span>
+                    <span className="text-[8px] text-gray-600">{labelMid}</span>
                     <DraggableNumber 
                         value={gamma} 
                         onChange={(v) => onChange({ min, max, gamma: v })}
@@ -399,7 +399,7 @@ const Histogram: React.FC<HistogramProps> = ({
                 </div>
                 
                 <div className="flex flex-col items-end w-16">
-                    <span className="text-[8px] text-gray-600 uppercase tracking-widest">{labelRight}</span>
+                    <span className="text-[8px] text-gray-600">{labelRight}</span>
                     <DraggableNumber 
                         value={max} 
                         onChange={(v) => onChange({ min, max: v, gamma })}

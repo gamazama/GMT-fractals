@@ -107,7 +107,7 @@ export class GenericFragmentariumParser {
     }
 
     public static hasDEFunction(source: string): boolean {
-        return /float\s+DE\s*\(\s*vec3/.test(source);
+        return /float\s+(?:DE|de|dist|sdf|map)\s*\(\s*vec3/.test(source);
     }
 
     public static parse(source: string): GenericFragDocument {
@@ -281,8 +281,10 @@ export class GenericFragmentariumParser {
     }
 
     private static extractDEFunction(source: string): string {
-        const deRegex = /float\s+DE\s*\(\s*vec3\s+\w+\s*\)\s*\{/g;
-        const match = deRegex.exec(source);
+        // Prefer standard Fragmentarium names (DE, dist) over DEC names (de, sdf, map)
+        const fragRegex = /float\s+(?:DE|dist)\s*\(\s*vec3\s+\w+\s*\)\s*\{/g;
+        const decRegex = /float\s+(?:de|sdf|map)\s*\(\s*vec3\s+\w+\s*\)\s*\{/g;
+        const match = fragRegex.exec(source) || decRegex.exec(source);
         if (!match) return '';
         const startIndex = match.index + match[0].length;
         let braceCount = 1, endIndex = startIndex;

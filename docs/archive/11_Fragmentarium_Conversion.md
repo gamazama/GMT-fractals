@@ -267,9 +267,11 @@ See `public/gmf/fragmentarium/BuffaloBulb.gmf` for a complete example that:
 ### Importer Files
 | File | Purpose |
 |------|---------|
-| `features/fragmentarium_import/FragmentariumParser.ts` | Parser for .frag file format |
-| `features/fragmentarium_import/FormulaImporter.tsx` | UI component for the import dialog |
-| `features/fragmentarium_import/reference/` | Sample .frag files and expected GMF outputs |
+| `features/fragmentarium_import/parsers/ast-parser.ts` | AST-based parser (V2, active) |
+| `features/fragmentarium_import/parsers/uniform-parser.ts` | V1 uniform extraction (fallback) |
+| `features/fragmentarium_import/parsers/dec-preprocessor.ts` | DEC format preprocessor |
+| `features/fragmentarium_import/transform/` | Code generation, variable renaming, init generation |
+| `features/fragmentarium_import/FormulaWorkshop.tsx` | UI workshop for import pipeline |
 
 ### Parser Phases
 1. **Phase 1 - Skeleton**: Initialize empty document structure
@@ -371,7 +373,7 @@ The Fragmentarium importer should:
 4. AutoFeaturePanel will render Vector3Input for the vec3 param
 
 **Implementation Plan:**
-- Modify `FormulaImporter.tsx` to handle vec3 params specially
+- Modify `FormulaWorkshop.tsx` to handle vec3 params specially
 - Instead of creating 3 separate uiParams, create:
   - 3 float params with hidden=true (for GLSL uniform access)
   - 1 vec3 param with composeFrom (for UI rendering)
@@ -424,7 +426,7 @@ p *= rot;                         // Rotation AFTER everything
 - `generateGLSL()` - Creates GMT-compatible formula function
 - Slot assignment happens in the parse loop
 
-**UI:** `features/fragmentarium_import/FormulaImporter.tsx`
+**UI:** `features/fragmentarium_import/FormulaWorkshop.tsx`
 - Displays parameter mapping table
 - Applies preset values to default preset
 - Handles Julia mode enablement

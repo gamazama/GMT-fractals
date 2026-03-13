@@ -1,12 +1,12 @@
 
 import * as THREE from 'three';
-import { engine } from './FractalEngine';
-import { useAnimationStore } from '../store/animationStore';
-import { useFractalStore } from '../store/fractalStore';
+import { getProxy } from './worker/WorkerProxy';
+const engine = getProxy();
 import { Track, Keyframe } from '../types';
 import { solveBezierY } from './BezierMath';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
+import { getViewportCamera } from './worker/ViewportRefs';
 import { VirtualSpace } from './PrecisionMath';
 import { AnimationMath } from './math/AnimationMath';
 
@@ -21,13 +21,23 @@ interface PendingCameraState {
 
 type ValueSetter = (val: number) => void;
 
+/** Minimal store accessor shape — matches Zustand's getState/setState API. */
+interface StoreAccessor {
+    getState(): any;
+    setState(partial: any): void;
+}
+
 export class AnimationEngine {
     private pendingCam: PendingCameraState;
     private binders: Map<string, ValueSetter> = new Map();
     private overriddenTracks: Set<string> = new Set();
-    
+
     // Track previous active camera to prevent redundant switching
     private lastCameraIndex: number = -1;
+
+    // Injected store accessors — set via connect() from bridge layer
+    private animStore: StoreAccessor | null = null;
+    private fractalStore: StoreAccessor | null = null;
 
     constructor() {
         this.pendingCam = {
@@ -36,6 +46,12 @@ export class AnimationEngine {
             rotDirty: false,
             unifiedDirty: false
         };
+    }
+
+    /** Connect store accessors. Called from bindStoreToEngine() after stores are initialized. */
+    public connect(animStore: StoreAccessor, fractalStore: StoreAccessor) {
+        this.animStore = animStore;
+        this.fractalStore = fractalStore;
     }
     
     public setOverriddenTracks(ids: Set<string>) {
@@ -54,7 +70,7 @@ export class AnimationEngine {
             binder = (v) => {
                 const index = Math.round(v);
                 if (index !== this.lastCameraIndex) {
-                    const store = useFractalStore.getState();
+                    const store = this.fractalStore!.getState();
                     const cameras = store.savedCameras;
                     if (cameras && cameras[index]) {
                          store.selectCamera(cameras[index].id);
@@ -103,14 +119,14 @@ export class AnimationEngine {
             if (match) {
                 const index = parseInt(match[1]);
                 const prop = match[2];
-                const actions = useFractalStore.getState();
+                const actions = this.fractalStore!.getState();
 
                 if (prop === 'intensity') binder = (v) => actions.updateLight({ index, params: { intensity: v } });
                 else if (prop === 'falloff') binder = (v) => actions.updateLight({ index, params: { falloff: v } });
                 else if (prop.startsWith('pos')) {
                     const axis = prop.replace('pos', '').toLowerCase(); // X, Y, Z -> x, y, z
                     binder = (v) => {
-                        const state = useFractalStore.getState();
+                        const state = this.fractalStore!.getState();
                         const l = state.lighting?.lights[index];
                         if (l) {
                             const newPos = { ...l.position, [axis]: v };
@@ -120,7 +136,7 @@ export class AnimationEngine {
                 } else if (prop.startsWith('rot')) {
                     const axis = prop.replace('rot', '').toLowerCase(); // X, Y, Z -> x, y, z
                     binder = (v) => {
-                        const state = useFractalStore.getState();
+                        const state = this.fractalStore!.getState();
                         const l = state.lighting?.lights[index];
                         if (l) {
                             const newRot = { ...l.rotation, [axis]: v };
@@ -139,7 +155,7 @@ export class AnimationEngine {
             const feature = featureRegistry.get(parent);
             
             if (feature) {
-                const actions = useFractalStore.getState();
+                const actions = this.fractalStore!.getState();
                 const setterName = `set${parent.charAt(0).toUpperCase() + parent.slice(1)}`;
                 const setter = (actions as any)[setterName];
                 
@@ -151,7 +167,7 @@ export class AnimationEngine {
                         const axis = vectorMatch[2] as 'x' | 'y' | 'z'; // x, y, or z
                         
                         binder = (v) => {
-                            const state = useFractalStore.getState() as any;
+                            const state = this.fractalStore!.getState() as any;
                             const currentVector = state[parent]?.[vectorName];
                             if (currentVector) {
                                 const newVector = currentVector.clone();
@@ -170,7 +186,7 @@ export class AnimationEngine {
         }
         // 5. Direct Store Properties (Root level fallback)
         else {
-            const actions = useFractalStore.getState();
+            const actions = this.fractalStore!.getState();
             const setterName = 'set' + id.charAt(0).toUpperCase() + id.slice(1);
             if (typeof (actions as any)[setterName] === 'function') {
                 binder = (v) => (actions as any)[setterName](v);
@@ -182,7 +198,8 @@ export class AnimationEngine {
     }
 
     public tick(dt: number) {
-        const store = useAnimationStore.getState();
+        if (!this.animStore) return;
+        const store = this.animStore.getState();
         if (!store.isPlaying) return;
 
         const fps = store.fps;
@@ -196,7 +213,8 @@ export class AnimationEngine {
         if (nextFrame >= duration) {
             if (loopMode === 'Once' || store.isRecordingModulation) {
                 nextFrame = duration;
-                useAnimationStore.setState({ isPlaying: false, currentFrame: duration });
+                this.scrub(duration); // Commit final frame camera state before stopping
+                this.animStore!.setState({ isPlaying: false, currentFrame: duration });
                 if (store.isRecordingModulation) {
                     store.stopModulationRecording();
                 }
@@ -206,12 +224,13 @@ export class AnimationEngine {
             }
         }
         
-        useAnimationStore.setState({ currentFrame: nextFrame });
+        this.animStore!.setState({ currentFrame: nextFrame });
         this.scrub(nextFrame);
     }
 
     public scrub(frame: number) {
-        const { sequence, isPlaying, isRecording, recordCamera } = useAnimationStore.getState();
+        if (!this.animStore) return;
+        const { sequence, isPlaying, isRecording, recordCamera } = this.animStore.getState();
         const tracks = Object.values(sequence.tracks) as Track[];
         
         this.syncBuffersFromEngine();
@@ -240,7 +259,7 @@ export class AnimationEngine {
     }
 
     private syncBuffersFromEngine() {
-        const cam = engine.activeCamera;
+        const cam = getViewportCamera() || engine.activeCamera;
         if (cam) {
             this.pendingCam.rot.setFromQuaternion(cam.quaternion);
             const eo = engine.sceneOffset;
@@ -349,7 +368,7 @@ export class AnimationEngine {
                 }
             });
 
-            useFractalStore.setState({ cameraRot: rot });
+            this.fractalStore!.setState({ cameraRot: rot });
         }
     }
 }

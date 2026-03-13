@@ -8,8 +8,8 @@ vec3 applyPostProcessing(vec3 col, float d, vec3 glow, float volumetric, vec3 fo
     // Scale smoothstep by intensity slider
     float fogFactor = smoothstep(uFogNear, uFogFar, d_norm) * uFogIntensity;
     
-    // Inverse ACES on Fog Color to match UI selection after Tone Mapping
-    vec3 fogColor = InverseACESFilm(uFogColor);
+    // Fog color pre-linearized on CPU (avoids per-pixel InverseACESFilm)
+    vec3 fogColor = uFogColorLinear;
     
     // Volumetric Fog
     // 'volumetric' is the accumulated optical density along the ray
@@ -23,12 +23,12 @@ vec3 applyPostProcessing(vec3 col, float d, vec3 glow, float volumetric, vec3 fo
     // Distance Fog (Mix)
     if (uEnvBackgroundStrength > 0.001) {
         // If "Background Visibility" is ON:
-        // Only apply fog to GEOMETRY (d < MAX_DIST).
+        // Only apply fog to GEOMETRY (d < MISS_DIST).
         // Leave the background (infinity) untouched so the EnvMap shows through.
-        if (d < 990.0) {
+        if (d < MISS_DIST - 10.0) {  // geometry threshold; misses report d = MISS_DIST
             col = mix(col, fogColor, fogFactor);
         }
-        // If d > 990.0 (Miss), we skip the mix, preserving the EnvMap in 'col'.
+        // If d >= MISS_DIST - 10.0 (Miss), we skip the mix, preserving the EnvMap in 'col'.
     } else {
         // Standard Mode: Everything fades to Fog Color
         col = mix(col, fogColor, fogFactor);
@@ -44,7 +44,7 @@ vec3 applyPostProcessing(vec3 col, float d, vec3 glow, float volumetric, vec3 fo
         col += glow * uGlowIntensity;
     }
     
-    // Tone Mapping is handled in the Display Shader (MandelbulbScene.tsx)
+    // Tone Mapping is handled in the Display Shader
     
     return col;
 }

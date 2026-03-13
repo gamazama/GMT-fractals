@@ -1,11 +1,23 @@
 
 import * as THREE from 'three';
-import { engine } from './FractalEngine';
 import { Uniforms } from './UniformNames';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { injectMetadata } from '../utils/pngMetadata';
 import { getExportFileName } from '../utils/fileUtils';
 import { Preset } from '../types';
+import type { RenderPipeline } from './RenderPipeline';
+import type { MaterialController } from './MaterialController';
+// Note: BucketEngineRef is implemented by FractalEngine - avoids circular import
+
+/** Minimal interface for the engine dependency — avoids circular import */
+export interface BucketEngineRef {
+    renderer: THREE.WebGLRenderer | null;
+    pipeline: RenderPipeline;
+    mainUniforms: { [key: string]: THREE.IUniform };
+    materials: MaterialController;
+    resetAccumulation(): void;
+    pipelineRender(renderer: THREE.WebGLRenderer): void;
+}
 
 export interface BucketRenderConfig {
     bucketSize: number;
@@ -32,6 +44,7 @@ export interface BucketRenderConfig {
  * - Otherwise: uses convergence threshold to determine when bucket is done
  */
 export class BucketRenderer {
+    private engine!: BucketEngineRef;
     private isRunning: boolean = false;
     private isExporting: boolean = false;
     
@@ -65,6 +78,11 @@ export class BucketRenderer {
     private projectName: string = "Fractal";
     private projectVersion: number = 0;
 
+    /** Bind to engine instance (called once from FractalEngine constructor) */
+    public init(engineRef: BucketEngineRef) {
+        this.engine = engineRef;
+    }
+
     /**
      * Start a bucket render session
      * @param exportImage Whether to save the final image to disk
@@ -72,19 +90,18 @@ export class BucketRenderer {
      * @param exportData Optional preset data to embed in the exported image
      */
     public start(exportImage: boolean, config: BucketRenderConfig, exportData?: { preset: Preset, name: string, version: number }) {
-        if (!engine.renderer || this.isRunning) return;
-        
+        const gl = this.engine.renderer;
+        if (!gl || this.isRunning) return;
+
         this.isExporting = exportImage;
         this.config = { ...config };
         this.activeUpscale = config.bucketUpscale || 1.0;
-        
+
         if (exportData) {
             this.exportPreset = exportData.preset;
             this.projectName = exportData.name;
             this.projectVersion = exportData.version;
         }
-        
-        const gl = engine.renderer;
         
         // Store current size to restore later
         gl.getSize(this.originalSize);
@@ -95,8 +112,8 @@ export class BucketRenderer {
         this.targetResolution.set(targetW, targetH);
         
         // Resize pipeline to target resolution
-        engine.pipeline.resize(targetW, targetH);
-        engine.mainUniforms.uResolution.value.set(targetW, targetH);
+        this.engine.pipeline.resize(targetW, targetH);
+        this.engine.mainUniforms.uResolution.value.set(targetW, targetH);
         
         // Initialize composite buffer for storing final image
         this.initCompositeBuffer(targetW, targetH);
@@ -203,12 +220,13 @@ export class BucketRenderer {
      * Clear the composite buffer to black
      */
     private clearCompositeBuffer() {
-        if (!this.compositeTarget || !engine.renderer) return;
-        
-        const currentTarget = engine.renderer.getRenderTarget();
-        engine.renderer.setRenderTarget(this.compositeTarget);
-        engine.renderer.clear();
-        engine.renderer.setRenderTarget(currentTarget);
+        const gl = this.engine.renderer;
+        if (!this.compositeTarget || !gl) return;
+
+        const currentTarget = gl.getRenderTarget();
+        gl.setRenderTarget(this.compositeTarget);
+        gl.clear();
+        gl.setRenderTarget(currentTarget);
     }
     
     /**
@@ -241,13 +259,13 @@ export class BucketRenderer {
         // Reset bucket region to full screen
         const min = new THREE.Vector2(0, 0);
         const max = new THREE.Vector2(1, 1);
-        engine.materials.setUniform(Uniforms.RegionMin, min);
-        engine.materials.setUniform(Uniforms.RegionMax, max);
+        this.engine.materials.setUniform(Uniforms.RegionMin, min);
+        this.engine.materials.setUniform(Uniforms.RegionMax, max);
         
         // Restore original resolution
-        engine.pipeline.resize(this.originalSize.x, this.originalSize.y);
-        engine.mainUniforms.uResolution.value.set(this.originalSize.x, this.originalSize.y);
-        engine.resetAccumulation();
+        this.engine.pipeline.resize(this.originalSize.x, this.originalSize.y);
+        this.engine.mainUniforms.uResolution.value.set(this.originalSize.x, this.originalSize.y);
+        this.engine.resetAccumulation();
         
         // Dispose composite resources
         this.disposeCompositeBuffer();
@@ -270,12 +288,12 @@ export class BucketRenderer {
         const min = new THREE.Vector2(b.minX, b.minY);
         const max = new THREE.Vector2(b.maxX, b.maxY);
         
-        engine.materials.setUniform(Uniforms.RegionMin, min);
-        engine.materials.setUniform(Uniforms.RegionMax, max);
+        this.engine.materials.setUniform(Uniforms.RegionMin, min);
+        this.engine.materials.setUniform(Uniforms.RegionMax, max);
         
         // Reset accumulation for the new bucket
         // This is necessary to start fresh accumulation for this bucket
-        engine.pipeline.resetAccumulation();
+        this.engine.pipeline.resetAccumulation();
         
         // DO NOT clear targets - the shader handles preserving history for non-bucket regions
         // The accumulation blend will correctly blend new samples in the bucket region
@@ -287,38 +305,38 @@ export class BucketRenderer {
      * Copy the current bucket from the render output to the composite buffer
      */
     private compositeCurrentBucket() {
-        if (!this.compositeTarget || !this.compositeMaterial || !this.compositeScene || 
-            !this.compositeCamera || !engine.renderer) return;
-        
-        const outputTex = engine.pipeline.getOutputTexture();
+        const gl = this.engine.renderer;
+        if (!this.compositeTarget || !this.compositeMaterial || !this.compositeScene ||
+            !this.compositeCamera || !gl) return;
+
+        const outputTex = this.engine.pipeline.getOutputTexture();
         if (!outputTex) return;
-        
+
         const b = this.buckets[this.currentBucketIndex];
-        
+
         // Setup composite material
         this.compositeMaterial.uniforms.map.value = outputTex;
         this.compositeMaterial.uniforms.bucketMin.value.set(b.minX, b.minY);
         this.compositeMaterial.uniforms.bucketMax.value.set(b.maxX, b.maxY);
-        
+
         // Render to composite target with additive blending
-        const currentTarget = engine.renderer.getRenderTarget();
+        const currentTarget = gl.getRenderTarget();
         const currentViewport = new THREE.Vector4();
-        engine.renderer.getViewport(currentViewport);
-        
-        engine.renderer.setRenderTarget(this.compositeTarget);
-        engine.renderer.setViewport(0, 0, this.targetResolution.x, this.targetResolution.y);
-        
-        // Enable scissor test to only write to the bucket region
-        const x = Math.floor(b.minX * this.targetResolution.x);
-        const y = Math.floor(b.minY * this.targetResolution.y);
-        const w = Math.ceil((b.maxX - b.minX) * this.targetResolution.x);
-        const h = Math.ceil((b.maxY - b.minY) * this.targetResolution.y);
-        
-        // Render the bucket region to composite
-        engine.renderer.render(this.compositeScene, this.compositeCamera);
-        
-        engine.renderer.setRenderTarget(currentTarget);
-        engine.renderer.setViewport(currentViewport);
+        gl.getViewport(currentViewport);
+
+        gl.setRenderTarget(this.compositeTarget);
+        gl.setViewport(0, 0, this.targetResolution.x, this.targetResolution.y);
+
+        // Disable autoClear so previous buckets aren't wiped.
+        // The composite shader discards fragments outside the bucket region,
+        // so only the current bucket's pixels get written.
+        const prevAutoClear = gl.autoClear;
+        gl.autoClear = false;
+        gl.render(this.compositeScene, this.compositeCamera);
+        gl.autoClear = prevAutoClear;
+
+        gl.setRenderTarget(currentTarget);
+        gl.setViewport(currentViewport);
     }
     
     private finish() {
@@ -326,28 +344,22 @@ export class BucketRenderer {
             this.saveImage();
         } else {
             // For non-export renders, hold the composite result
-            engine.pipeline.setHold(true);
+            this.engine.pipeline.setHold(true);
         }
         this.cleanup();
     }
     
     /**
-     * Save the composite buffer to a PNG file
-     * Uses the export material for proper post-processing (ACES, color grading, etc.)
+     * Read the post-processed composite buffer into a flipped Uint8ClampedArray.
+     * Shared by both DOM save and worker transfer paths.
      */
-    private saveImage() {
-        if (!this.compositeTarget || !engine.renderer) return;
-        
-        // --- WORKER GUARD ---
-        if (typeof document === 'undefined') {
-            console.warn("BucketRenderer: Cannot save image in Worker context (DOM missing).");
-            return;
-        }
+    private readCompositePixels(): { pixels: Uint8ClampedArray; width: number; height: number } | null {
+        const gl = this.engine.renderer;
+        if (!this.compositeTarget || !gl) return null;
 
         const w = this.targetResolution.x;
         const h = this.targetResolution.y;
-        
-        // Create an export target for post-processed output
+
         const exportTarget = new THREE.WebGLRenderTarget(w, h, {
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter,
@@ -356,15 +368,12 @@ export class BucketRenderer {
             stencilBuffer: false,
             depthBuffer: false
         });
-        
-        // Use the export material which has proper post-processing
-        const exportMat = engine.materials.exportMaterial;
-        const displayMat = engine.materials.displayMaterial;
-        
-        // Copy uniforms from display material (color grading settings)
+
+        const exportMat = this.engine.materials.exportMaterial;
+        const displayMat = this.engine.materials.displayMaterial;
+
         exportMat.uniforms.map.value = this.compositeTarget.texture;
         exportMat.uniforms.uResolution.value.set(w, h);
-        // Copy color grading active flag and parameters
         if (displayMat.uniforms.uGradingActive) {
             exportMat.uniforms.uGradingActive.value = displayMat.uniforms.uGradingActive.value;
         }
@@ -372,31 +381,29 @@ export class BucketRenderer {
         exportMat.uniforms.uLevelsMin.value = displayMat.uniforms.uLevelsMin.value;
         exportMat.uniforms.uLevelsMax.value = displayMat.uniforms.uLevelsMax.value;
         exportMat.uniforms.uLevelsGamma.value = displayMat.uniforms.uLevelsGamma.value;
-        exportMat.uniforms.uEncodeOutput.value = 1.0; // Apply sRGB gamma
-        
-        // Render through post-process shader
-        const currentTarget = engine.renderer.getRenderTarget();
-        const currentViewport = new THREE.Vector4();
-        engine.renderer.getViewport(currentViewport);
+        exportMat.uniforms.uEncodeOutput.value = 1.0;
 
-        engine.renderer.setRenderTarget(exportTarget);
-        engine.renderer.setViewport(0, 0, w, h);
-        engine.renderer.clear();
-        
+        const currentTarget = gl.getRenderTarget();
+        const currentViewport = new THREE.Vector4();
+        gl.getViewport(currentViewport);
+
+        gl.setRenderTarget(exportTarget);
+        gl.setViewport(0, 0, w, h);
+        gl.clear();
+
         const scene = new THREE.Scene();
-        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
         const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), exportMat);
         scene.add(quad);
-        engine.renderer.render(scene, camera);
-        
-        // Read pixels (already in Uint8 format)
+        gl.render(scene, cam);
+
         const buffer = new Uint8Array(w * h * 4);
-        engine.renderer.readRenderTargetPixels(exportTarget, 0, 0, w, h, buffer);
-        
-        engine.renderer.setRenderTarget(currentTarget);
-        engine.renderer.setViewport(currentViewport);
+        gl.readRenderTargetPixels(exportTarget, 0, 0, w, h, buffer);
+
+        gl.setRenderTarget(currentTarget);
+        gl.setViewport(currentViewport);
         exportTarget.dispose();
-        
+
         // Flip Y (WebGL reads bottom-up, PNG is top-down)
         const flipped = new Uint8ClampedArray(w * h * 4);
         const stride = w * 4;
@@ -405,35 +412,49 @@ export class BucketRenderer {
             const destRowStart = (h - 1 - y) * stride;
             flipped.set(buffer.subarray(srcRowStart, srcRowStart + stride), destRowStart);
         }
-        // Ensure alpha is 255
         for (let i = 3; i < flipped.length; i += 4) flipped[i] = 255;
-        
+
+        return { pixels: flipped, width: w, height: h };
+    }
+
+    private saveImage() {
+        // In worker context (no DOM), emit pixel data for main thread to handle
+        if (typeof document === 'undefined') {
+            const result = this.readCompositePixels();
+            if (!result) return;
+            const presetStr = this.exportPreset ? JSON.stringify(this.exportPreset) : "{}";
+            const filename = getExportFileName(this.projectName, this.projectVersion, 'png', `${result.width}x${result.height}`);
+            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_IMAGE, {
+                pixels: result.pixels,
+                width: result.width,
+                height: result.height,
+                presetJson: presetStr,
+                filename
+            });
+            return;
+        }
+
+        // DOM path — main thread only (legacy / non-worker fallback)
+        const result = this.readCompositePixels();
+        if (!result) return;
+
+        const { pixels: flipped, width: w, height: h } = result;
         const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-            const imageData = new ImageData(flipped, w, h);
+            const imageData = new ImageData(flipped as unknown as Uint8ClampedArray<ArrayBuffer>, w, h);
             ctx.putImageData(imageData, 0, 0);
-            
+
             const presetStr = this.exportPreset ? JSON.stringify(this.exportPreset) : "{}";
-            
-            // Construct Filename
-            const filename = getExportFileName(
-                this.projectName,
-                this.projectVersion,
-                'png',
-                `${w}x${h}`
-            );
+            const filename = getExportFileName(this.projectName, this.projectVersion, 'png', `${w}x${h}`);
 
             canvas.toBlob(async (blob) => {
                 if (!blob) return;
-                
                 try {
-                    // Inject Metadata
                     const taggedBlob = await injectMetadata(blob, "FractalData", presetStr);
                     const url = URL.createObjectURL(taggedBlob);
-                    
                     const link = document.createElement('a');
                     link.download = filename;
                     link.href = url;
@@ -441,7 +462,6 @@ export class BucketRenderer {
                     URL.revokeObjectURL(url);
                 } catch (e) {
                     console.error("Failed to inject metadata", e);
-                    // Fallback to simple save
                     const link = document.createElement('a');
                     link.download = filename;
                     link.href = canvas.toDataURL('image/png');
@@ -468,7 +488,7 @@ export class BucketRenderer {
         }
 
         // Ensure resolution is correct
-        const uRes = engine.mainUniforms.uResolution.value;
+        const uRes = this.engine.mainUniforms.uResolution.value;
         if (uRes.x !== this.targetResolution.x || uRes.y !== this.targetResolution.y) {
             uRes.set(this.targetResolution.x, this.targetResolution.y);
         }
@@ -494,7 +514,7 @@ export class BucketRenderer {
         
         // Get convergence measurement (max pixel difference between last two frames)
         const delta = this.config.accumulation 
-            ? engine.pipeline.measureConvergence(gl, min, max)
+            ? this.engine.pipeline.measureConvergence(gl, min, max)
             : 1.0;
         
         // Convert threshold from percentage to raw value

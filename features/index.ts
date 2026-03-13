@@ -21,8 +21,8 @@ import { EngineSettingsFeature } from './engine/index';
 import { AOFeature } from './ao/index';
 import { ReflectionsFeature } from './reflections/index';
 import { WaterPlaneFeature } from './water_plane';
-import { SonificationFeature } from './sonification/index';
 import { CameraManagerFeature } from './camera_manager/index';
+import { VolumetricFeature } from './volumetric/index';
 
 // --- REGISTER FEATURES ---
 export const registerFeatures = () => {
@@ -35,6 +35,7 @@ export const registerFeatures = () => {
     featureRegistry.register(AOFeature);
     featureRegistry.register(ReflectionsFeature);
     featureRegistry.register(AtmosphereFeature);
+    featureRegistry.register(VolumetricFeature);
     featureRegistry.register(MaterialFeature);
     featureRegistry.register(WaterPlaneFeature);
     featureRegistry.register(ColoringFeature);
@@ -52,7 +53,6 @@ export const registerFeatures = () => {
     
     // Systems
     featureRegistry.register(AudioFeature);
-    featureRegistry.register(SonificationFeature); 
     featureRegistry.register(DrawingFeature);
     featureRegistry.register(ModulationFeature);
     featureRegistry.register(WebcamFeature);
@@ -77,9 +77,9 @@ export type { ColoringState } from './coloring';
 export type { TexturingState } from './texturing';
 export type { ColorGradingState } from './color_grading';
 export type { MaterialState } from './materials';
-export type { AtmosphereState } from './atmosphere/index'; 
+export type { AtmosphereState } from './atmosphere/index';
+export type { VolumetricState } from './volumetric/index';
 export type { DrosteState } from './droste';
 export type { LightingState } from './lighting/index';
 export type { CoreMathState } from './core_math';
 export type { WaterPlaneState } from './water_plane';
-export type { SonificationState } from './sonification/types';

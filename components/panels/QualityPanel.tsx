@@ -10,13 +10,15 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { LightingState } from '../../features/lighting';
 import { AOState } from '../../features/ao';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+import { SectionLabel } from '../SectionLabel';
+const engine = getProxy();
 
 const QualityPanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
     const openGlobalMenu = useFractalStore(s => s.openContextMenu);
     const quality = state.quality;
-    const lighting = state.lighting as LightingState;
-    const ao = (state as any).ao as AOState;
+    const lighting = (state as any).lighting as LightingState | undefined;
+    const ao = (state as any).ao as AOState | undefined;
     
     // Resolution Management
     const [w, h] = state.fixedResolution;
@@ -85,23 +87,23 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
     return (
         <div className="animate-fade-in -mx-4 -mt-4 flex flex-col">
              {/* Render Engine Selector */}
-             <div className="bg-gray-900 border-b border-white/5 py-3 px-3" data-help-id="render.engine">
-                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Render Engine</label>
+             <div className="py-3 px-3" data-help-id="render.engine">
+                <SectionLabel className="block mb-1">Render Engine</SectionLabel>
                 <div className="flex bg-black/40 rounded p-0.5 border border-white/10">
-                    <button 
+                    <button
                         onClick={() => handleModeSwitch('Direct')}
-                        className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded transition-colors ${state.renderMode === 'Direct' ? 'bg-cyan-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                        className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-colors ${state.renderMode === 'Direct' ? 'bg-cyan-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}
                     >
                         Direct (Fast)
                     </button>
-                    <button 
+                    <button
                         onClick={() => ptEnabled && handleModeSwitch('PathTracing')}
                         disabled={!ptEnabled}
-                        className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded transition-colors ${
-                            !ptEnabled 
+                        className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-colors ${
+                            !ptEnabled
                             ? 'text-gray-700 cursor-not-allowed opacity-50 bg-transparent'
-                            : state.renderMode === 'PathTracing' 
-                                ? 'bg-purple-700 text-white' 
+                            : state.renderMode === 'PathTracing'
+                                ? 'bg-purple-700 text-white'
                                 : 'text-gray-500 hover:text-gray-300'
                         }`}
                         title={!ptEnabled ? "Path Tracer Disabled in Engine Panel" : "Switch to Path Tracer (GI)"}
@@ -114,7 +116,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                 {state.renderMode === 'PathTracing' && lighting && (
                     <div className="mt-3 pt-2 border-t border-white/5 animate-fade-in" data-help-id="pt.global">
                          <div className="flex items-center justify-between mb-1.5">
-                             <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Max Bounces</label>
+                             <SectionLabel variant="secondary">Max Bounces</SectionLabel>
                              <div className="w-12 h-4 bg-black/40 rounded border border-white/10 relative">
                                  <DraggableNumber
                                     value={lighting.ptBounces}
@@ -135,9 +137,13 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                 )}
              </div>
 
+             {/* Rounded divider */}
+             <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
+             <div className="h-1" />
+
              {/* Viewport Mode */}
-             <div className="bg-gray-800/20 border-b border-white/5 py-3 px-3" onContextMenu={handleHeaderContextMenu} data-help-id="panel.quality">
-                <ToggleSwitch 
+             <div className="py-3 px-3" onContextMenu={handleHeaderContextMenu} data-help-id="panel.quality">
+                <ToggleSwitch
                     label="Resolution"
                     value={state.resolutionMode}
                     onChange={actions.setResolutionMode}
@@ -150,7 +156,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                 {/* Internal Scale */}
                 <div className="mt-3 bg-black/20 rounded border border-white/5 p-2" data-help-id="quality.scale">
                     <div className="flex items-center justify-between mb-2">
-                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Internal Scale</label>
+                        <SectionLabel>Internal Scale</SectionLabel>
                         <span className="text-[10px] font-mono text-cyan-400 font-bold">{`${state.aaLevel.toFixed(2)}x`}</span>
                     </div>
                     <div className="grid grid-cols-5 gap-px bg-white/5 border border-white/5 rounded overflow-hidden">
@@ -158,7 +164,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                             <button
                                 key={level}
                                 onClick={() => actions.setAALevel(level)}
-                                className={`py-1.5 text-[9px] font-black transition-all ${
+                                className={`py-1.5 text-[9px] font-bold transition-all ${
                                     state.aaLevel === level
                                     ? 'bg-cyan-600/40 text-cyan-300 shadow-[inset_0_0_10px_rgba(34,211,238,0.1)]'
                                     : 'bg-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'
@@ -168,17 +174,17 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                             </button>
                         ))}
                     </div>
-                    
+
                     {/* Performance / Dynamic Res Settings (AutoFeaturePanel) */}
                     <div className="mt-2 pt-2 border-t border-white/5">
                         <AutoFeaturePanel featureId="quality" groupFilter="performance" />
                     </div>
                 </div>
-                
+
                 {/* Resolution Controls (Only if Fixed) */}
                 {state.resolutionMode === 'Fixed' && (
                     <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-white/5 animate-fade-in">
-                        <Dropdown 
+                        <Dropdown
                             label="Preset"
                             value={currentPreset}
                             options={[
@@ -205,33 +211,33 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
 
                         <div className="flex gap-2">
                             <div className="flex-1">
-                                <label className="text-[9px] text-gray-500 font-bold block mb-0.5">Width</label>
+                                <SectionLabel variant="secondary" className="block mb-0.5">Width</SectionLabel>
                                 <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber 
-                                        value={w} 
-                                        onChange={(v) => handleDimensionChange('w', v)} 
-                                        step={8} min={64} max={8192} 
+                                    <DraggableNumber
+                                        value={w}
+                                        onChange={(v) => handleDimensionChange('w', v)}
+                                        step={8} min={64} max={8192}
                                         overrideText={`${w}`}
                                     />
                                 </div>
                             </div>
                             <div className="flex-1">
-                                <label className="text-[9px] text-gray-500 font-bold block mb-0.5">Height</label>
+                                <SectionLabel variant="secondary" className="block mb-0.5">Height</SectionLabel>
                                 <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber 
-                                        value={h} 
-                                        onChange={(v) => handleDimensionChange('h', v)} 
-                                        step={8} min={64} max={8192} 
+                                    <DraggableNumber
+                                        value={h}
+                                        onChange={(v) => handleDimensionChange('h', v)}
+                                        step={8} min={64} max={8192}
                                         overrideText={`${h}`}
                                     />
                                 </div>
                             </div>
-                            
+
                             {/* Ratio Dropdown */}
                             <div className="w-[35%]">
-                                <label className="text-[9px] text-gray-500 font-bold block mb-0.5">Ratio</label>
+                                <SectionLabel variant="secondary" className="block mb-0.5">Ratio</SectionLabel>
                                 <div className="h-6">
-                                    <Dropdown 
+                                    <Dropdown
                                         value={aspectLock}
                                         options={[
                                             { label: 'Free', value: 'Free' },
@@ -258,40 +264,44 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                 )}
              </div>
 
-             {/* TSS Section */}
-             <div className="bg-gray-800/10 border-b border-white/5 py-3 px-3" data-help-id="quality.tss">
-                <ToggleSwitch 
+             {/* Rounded divider */}
+             <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
+             <div className="h-1" />
+
+             {/* TSS & Shadows */}
+             <div className="flex flex-col" data-help-id="quality.tss">
+                <ToggleSwitch
                     label="Temporal AA (Remove Noise)"
                     value={state.accumulation}
                     onChange={actions.setAccumulation}
                     color="bg-green-500"
                     helpId="quality.tss"
                 />
-                
-                {/* Copied from Lighting Engine Panel: Area Lights (Stochastic Shadows) */}
+
+                {/* Area Lights (Stochastic Shadows) */}
                 {ptEnabled && (
-                    <div className="mt-2 pt-2 border-t border-white/5">
-                        <ToggleSwitch
-                            label="Area Lights (Soft Shadows)"
-                            value={lighting.ptStochasticShadows}
-                            onChange={(v) => setLighting && setLighting({ ptStochasticShadows: v })}
-                            helpId="pt.global"
-                        />
-                    </div>
+                    <ToggleSwitch
+                        label="Area Lights (Soft Shadows)"
+                        value={lighting?.ptStochasticShadows}
+                        onChange={(v) => setLighting && setLighting({ ptStochasticShadows: v })}
+                        helpId="pt.global"
+                    />
                 )}
              </div>
-             
+
              {/* Shadow Quality Settings */}
              {(lighting?.shadowsCompile && lighting?.shadows) && (
-                 <div className="bg-gray-800/10 border-b border-white/5 py-2 px-3" data-help-id="shadows">
-                     {/* Removed Heading per Director request */}
+                 <div className="flex flex-col" data-help-id="shadows">
                      <AutoFeaturePanel featureId="lighting" groupFilter="shadow_quality" />
                  </div>
              )}
 
+             {/* Rounded divider */}
+             <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
+             <div className="h-1" />
+
              {/* Raymarching Controls - Runtime */}
              <div className="flex flex-col">
-                {/* Removed Heading per Director request */}
                 {quality && (
                     <AutoFeaturePanel featureId="quality" groupFilter="kernel" />
                 )}

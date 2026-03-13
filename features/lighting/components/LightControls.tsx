@@ -1,9 +1,12 @@
 
 import React, { useState } from 'react';
+import * as THREE from 'three';
 import { useFractalStore } from '../../../store/fractalStore';
 import { useAnimationStore } from '../../../store/animationStore';
 import { getLightFromSlice } from '../index';
-import { engine } from '../../../engine/FractalEngine';
+import { getProxy } from '../../../engine/worker/WorkerProxy';
+const engine = getProxy();
+import { getViewportCamera } from '../../../engine/worker/ViewportRefs';
 import Slider from '../../../components/Slider';
 import EmbeddedColorPicker from '../../../components/EmbeddedColorPicker';
 import { KeyIcon, TrashIcon, KeyStatus } from '../../../components/Icons';
@@ -12,6 +15,8 @@ import { evaluateTrackValue } from '../../../utils/timelineUtils';
 import { LightType } from '../../../types';
 import { LightDirectionControl } from './LightDirectionControl';
 import { kelvinToHex, COLOR_TEMPERATURE_PRESETS } from '../../../utils/colorUtils';
+import { SectionLabel } from '../../../components/SectionLabel';
+import { Popover } from '../../../components/Popover';
 
 export const LightOrb = ({ index, color, active, type, rotation, onClick, onDragStart }: { index: number, color: string, active: boolean, type?: LightType, rotation?: {x:number, y:number, z:number}, onClick: () => void, onDragStart: () => void }) => {
     
@@ -114,9 +119,9 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
                 )}
             </div>
             
-            <span className="absolute -bottom-4 text-[8px] font-bold text-gray-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <SectionLabel variant="tiny" className="absolute -bottom-4 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                 L{index + 1}
-            </span>
+            </SectionLabel>
         </div>
     );
 };
@@ -137,16 +142,32 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
     if (!light.visible) return null;
 
     const handleToggleFixed = () => {
-         if (!engine.activeCamera) return;
          const wasFixed = light.fixed;
-         
          let newPos = light.position;
          let newRot = light.rotation;
+         const cam = getViewportCamera();
 
-         if (light.type === 'Point') {
-            newPos = engine.virtualSpace.resolveRealWorldPosition(light.position, wasFixed, engine.activeCamera);
-         } else {
-            newRot = engine.virtualSpace.resolveRealWorldRotation(light.rotation, wasFixed, engine.activeCamera);
+         if (cam) {
+             if (light.type === 'Point') {
+                 const o = engine.sceneOffset;
+                 if (wasFixed) {
+                     const worldPos = new THREE.Vector3(newPos.x, newPos.y, newPos.z);
+                     worldPos.applyQuaternion(cam.quaternion);
+                     worldPos.add(cam.position);
+                     newPos = { x: worldPos.x + o.x + (o.xL ?? 0), y: worldPos.y + o.y + (o.yL ?? 0), z: worldPos.z + o.z + (o.zL ?? 0) };
+                 } else {
+                     const worldPos = new THREE.Vector3(newPos.x - o.x - (o.xL ?? 0), newPos.y - o.y - (o.yL ?? 0), newPos.z - o.z - (o.zL ?? 0));
+                     worldPos.sub(cam.position);
+                     worldPos.applyQuaternion(cam.quaternion.clone().invert());
+                     newPos = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+                 }
+             } else {
+                 const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(newRot.x, newRot.y, newRot.z, 'YXZ'));
+                 dir.applyQuaternion(wasFixed ? cam.quaternion : cam.quaternion.clone().invert());
+                 const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+                 const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+                 newRot = { x: e.x, y: e.y, z: e.z };
+             }
          }
 
          updateLight({ index, params: { fixed: !wasFixed, position: newPos, rotation: newRot } });
@@ -157,8 +178,7 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
         axes.forEach(axis => {
             const id = `lighting.light${index}_pos${axis}`; // e.g. lighting.light0_posX
             if (!sequence.tracks[id]) addTrack(id, `Light ${index+1} Pos ${axis}`);
-            // @ts-ignore
-            addKeyframe(id, currentFrame, light.position[axis.toLowerCase()]);
+            addKeyframe(id, currentFrame, light.position[axis.toLowerCase() as 'x' | 'y' | 'z']);
         });
     };
 
@@ -217,14 +237,12 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
     };
 
     return (
-        <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 w-52 bg-black border border-white/20 rounded-xl p-3 shadow-2xl z-[70] animate-fade-in origin-top" onClick={e => e.stopPropagation()}>
-            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-black border-t border-l border-white/20 transform rotate-45" />
-            
+        <Popover width="w-52">
             <div className="relative space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2">
                     <div className="flex items-center gap-2">
                         {light.type === 'Point' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Light {index + 1}</span>
+                        <SectionLabel>Light {index + 1}</SectionLabel>
                     </div>
                     <div className="flex items-center gap-1">
                         <button 
@@ -430,6 +448,6 @@ export const LightSettingsPopup = ({ index }: { index: number }) => {
                     </div>
                 </div>
             </div>
-        </div>
+        </Popover>
     );
 };
