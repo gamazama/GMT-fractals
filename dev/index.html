@@ -99,8 +99,9 @@
       input[type=range].precision-slider:focus { outline: none; }
       input[type=range].precision-slider::-webkit-slider-runnable-track { background: transparent; border: none; height: 100%; }
       input[type=range].precision-slider::-moz-range-track { background: transparent; border: none; height: 100%; }
-      input[type=range].precision-slider::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 24px; background: transparent; cursor: ew-resize; background-image: linear-gradient(to right, transparent 11px, white 1px, transparent 12px), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='10' viewBox='0 0 6 10'%3E%3Cpath d='M5 2L1 5L5 8' fill='none' stroke='white' stroke-opacity='0.4' stroke-width='1'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='10' viewBox='0 0 6 10'%3E%3Cpath d='M1 2L5 5L1 8' fill='none' stroke='white' stroke-opacity='0.4' stroke-width='1'/%3E%3C/svg%3E"); background-position: center center, center left, center right; background-repeat: no-repeat; border: none; margin-top: 0; }
-      input[type=range].precision-slider::-moz-range-thumb { height: 20px; width: 24px; background: transparent; cursor: ew-resize; border: none; }
+      input[type=range].precision-slider::-webkit-slider-thumb { -webkit-appearance: none; height: 100%; width: 16px; cursor: ew-resize; border: none; margin-top: 0; background: transparent; border-left: 1px solid rgba(255,255,255,0.25); border-right: 1px solid rgba(255,255,255,0.25); box-sizing: border-box; transition: border-color 0.15s; }
+      input[type=range].precision-slider::-webkit-slider-thumb:hover { border-left-color: rgba(255,255,255,0.5); border-right-color: rgba(255,255,255,0.5); }
+      input[type=range].precision-slider::-moz-range-thumb { height: 100%; width: 16px; cursor: ew-resize; border: none; background: transparent; border-left: 1px solid rgba(255,255,255,0.25); border-right: 1px solid rgba(255,255,255,0.25); box-sizing: border-box; border-radius: 0; }
       
       @keyframes slider-entry { from { max-height: 0; opacity: 0; transform: translateY(-4px); } to { max-height: 1000px; opacity: 1; transform: translateY(0); } }
       .animate-slider-entry { animation: slider-entry 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; overflow: hidden; }
@@ -158,7 +159,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="./assets/index-B_PTOi0M.js"></script>
+  <script type="module" crossorigin src="./assets/index-CwSFigCc.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/three-jTU4HbbO.js">
   <link rel="modulepreload" crossorigin href="./assets/three-fiber-JXSTQjJZ.js">
   <link rel="modulepreload" crossorigin href="./assets/three-drei-CUJowOh9.js">
