@@ -302,7 +302,7 @@ export class FractalEngine {
         this.markInteraction(); 
         this.pipeline?.resetAccumulation(); 
     }
-    public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); this.resetAccumulation(); }
+    public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); }
     
     public registerCamera(camera: THREE.Camera) { 
         this.sceneCtrl.registerCamera(camera); 
@@ -336,12 +336,12 @@ export class FractalEngine {
              return;
         }
 
-        const { rebuildNeeded, uniformUpdate, modeChanged } = this.configManager.update(newConfig, this.state);
+        const { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset } = this.configManager.update(newConfig, this.state);
 
         if (newConfig.maxSteps !== undefined) {
              this.setUniform('uMaxSteps', newConfig.maxSteps);
         }
-        
+
         if (modeChanged && !rebuildNeeded) {
             // Only do immediate mode swap if no rebuild is needed.
             // If rebuildNeeded, performCompilation handles the mode switch via async path.
@@ -366,8 +366,13 @@ export class FractalEngine {
                 if (this.configManager.config.pipeline) {
                     this.materials.syncModularUniforms(this.configManager.config.pipeline);
                 }
-                this.resetAccumulation();
-            } else if (Object.keys(newConfig).length > 0) {
+                // Only reset accumulation if a non-noReset param actually changed.
+                // Post-process params (bloom, CA, color grading) are noReset and should
+                // not disrupt the accumulated buffer.
+                if (needsAccumReset) {
+                    this.resetAccumulation();
+                }
+            } else if (Object.keys(newConfig).length > 0 && needsAccumReset) {
                 this.resetAccumulation();
             }
         }

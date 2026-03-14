@@ -124,7 +124,7 @@ export const Phoenix: FractalDefinition = {
         { label: 'Twist', id: 'paramC', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
         { label: 'History Depth', id: 'paramD', min: 0.0, max: 1.0, step: 0.01, default: 0.0 },
         { label: 'Distortion (Re, Im)', id: 'vec2A', type: 'vec2', min: -1.5, max: 1.5, step: 0.001, default: { x: 0.503, y: 0.961 } },
-        { label: 'Phase (θ, φ)', id: 'vec2B', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 } },
+        { label: 'Phase (θ, φ)', id: 'vec2B', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
         { label: 'Stretch', id: 'vec3A', type: 'vec3', min: 0.1, max: 3.0, step: 0.01, default: { x: 1.0, y: 1.0, z: 1.0 }, linkable: true },
         { label: 'Abs Fold', id: 'vec3B', type: 'vec3', min: 0.0, max: 1.0, step: 1.0, default: { x: 0.0, y: 0.0, z: 0.0 }, mode: 'toggle' },
         { label: 'Pre-Rotation', id: 'vec3C', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0, z: 0.0 }, mode: 'rotation' },

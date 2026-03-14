@@ -16,6 +16,7 @@ import { WorkerExporter } from './WorkerExporter';
 import { bucketRenderer } from '../BucketRenderer';
 import { handleHistogramReadback } from './WorkerHistogram';
 import { WorkerDepthReadback } from './WorkerDepthReadback';
+import { BloomPass } from '../BloomPass';
 
 let engine: FractalEngine | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -29,6 +30,7 @@ let displayCamera: THREE.OrthographicCamera | null = null;
 let displayMesh: THREE.Mesh | null = null;
 
 const depthReadback = new WorkerDepthReadback();
+let bloomPass: BloomPass | null = null;
 
 function postMsg(msg: WorkerToMainMessage, transfer?: Transferable[]) {
     if (transfer) {
@@ -164,6 +166,12 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
         postMsg({ type: 'BUCKET_IMAGE', ...data }, [data.pixels.buffer as ArrayBuffer]);
     });
 
+    // Initialize bloom pass
+    bloomPass = new BloomPass();
+    const initPhysW = Math.floor(initMsg.width * initMsg.dpr);
+    const initPhysH = Math.floor(initMsg.height * initMsg.dpr);
+    bloomPass.resize(initPhysW, initPhysH);
+
     // Resize pipeline
     engine.mainUniforms.uResolution.value.set(initMsg.width, initMsg.height);
     engine.pipeline.resize(initMsg.width, initMsg.height);
@@ -229,6 +237,17 @@ function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK
             );
             displayMesh.frustumCulled = false;
             displayScene.add(displayMesh);
+        }
+
+        // ── Multi-pass bloom (skipped when intensity = 0) ──
+        const bloomIntensity = engine.mainUniforms.uBloomIntensity?.value ?? 0;
+        if (bloomIntensity > 0.001 && bloomPass) {
+            const threshold = engine.mainUniforms.uBloomThreshold?.value ?? 0.5;
+            const radius = engine.mainUniforms.uBloomRadius?.value ?? 1.5;
+            bloomPass.render(outputTex, renderer, threshold, radius);
+            engine.materials.displayMaterial.uniforms.uBloomTexture.value = bloomPass.getOutput();
+        } else {
+            engine.materials.displayMaterial.uniforms.uBloomTexture.value = null;
         }
 
         engine.materials.displayMaterial.uniforms.map.value = outputTex;
@@ -317,6 +336,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     engine.mainUniforms.uResolution.value.set(pW, pH);
                     engine.mainUniforms.uInternalScale.value = pr.dpr;
                     engine.pipeline.resize(pW, pH);
+                    bloomPass?.resize(pW, pH);
                 }
                 break;
 
@@ -336,6 +356,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     curRes.set(physW, physH);
                     engine.mainUniforms.uInternalScale.value = msg.dpr;
                     engine.pipeline.resize(physW, physH);
+                    bloomPass?.resize(physW, physH);
                     if (sizeChanged) engine.resetAccumulation();
                 } else {
                     // Engine not ready yet — store for application after BOOT
@@ -449,6 +470,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 if (engine && msg.bitmap) {
                     // Create THREE.Texture from ImageBitmap (transferred from main thread)
                     const tex = new THREE.Texture(msg.bitmap as any);
+                    tex.flipY = false; // Already flipped via createImageBitmap imageOrientation
                     tex.needsUpdate = true;
                     if (msg.textureType === 'color') {
                         tex.wrapS = THREE.RepeatWrapping;
@@ -482,6 +504,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         hdrTex.mapping = THREE.EquirectangularReflectionMapping;
                         hdrTex.minFilter = THREE.LinearMipmapLinearFilter;
                         hdrTex.generateMipmaps = true;
+                        hdrTex.flipY = true;
                         hdrTex.needsUpdate = true;
                         if (msg.textureType === 'color') {
                             hdrTex.wrapS = THREE.RepeatWrapping;

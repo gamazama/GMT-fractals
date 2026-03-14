@@ -4,7 +4,7 @@ import { LfoTarget, AnimationParams } from './animation';
 import { FractalGraph, PipelineNode } from './graph';
 import { Preset } from './fractal';
 import { ContextMenuItem } from './help';
-import { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
+import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
 import { LightParams } from './graphics';
 import { OpticsState } from '../features/optics';
 
@@ -33,7 +33,7 @@ export interface CompositionOverlaySettings {
 }
 
 // Export helper types for components
-export { DrawnShape, ModulationRule }; 
+export type { DrawnShape, ModulationRule }; 
 
 // --- AUTO GENERATED ACTIONS ---
 type FeatureSetters = {
@@ -124,7 +124,7 @@ export interface FractalStoreState extends FeatureStateMap {
   
   showLightGizmo: boolean;
   isGizmoDragging: boolean;
-  draggedLightIndex: number | null;
+  draggedLightIndex: string | null;
   
   // Consolidated Interaction State
   interactionMode: InteractionMode;

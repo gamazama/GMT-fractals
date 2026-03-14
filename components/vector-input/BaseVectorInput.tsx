@@ -64,12 +64,15 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
     showDualAxisPads = true,
     // Link feature for scale controls
     linkable = false,
+    // Display scale mode
+    scale,
 }) => {
     // Local state for immediate visual feedback during drag
     const [localValue, setLocalValue] = useState(value.clone());
     const [hoveredPad, setHoveredPad] = useState<'xy' | 'zy' | null>(null);
     const [currentMode, setCurrentMode] = useState(mode);
     const [rotationDisplayMode, setRotationDisplayMode] = useState<'degrees' | 'radians'>('degrees');
+    const [piDisplayMode, setPiDisplayMode] = useState<'pi' | 'degrees'>('degrees');
     const [isLinked, setIsLinked] = useState(linkable); // Linked by default when linkable is true
     const isDragging = useRef(false);
     const dragStartSnapshot = useRef<THREE.Vector2 | THREE.Vector3 | null>(null);
@@ -140,18 +143,12 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
             // Use degrees by default, allow toggle to radians (π units)
             return rotationDisplayMode === 'degrees' ? degreesMapping : piMapping;
         }
-        // Use convertRadToDeg as fallback for backward compatibility
-        if (convertRadToDeg) {
-            return {
-                toDisplay: (v: number) => v * R2D,
-                fromDisplay: (v: number) => v * D2R,
-                format: (v: number) => `${(v * R2D).toFixed(1)}°`,
-                parseInput: (s: string) => {
-                    const num = parseFloat(s);
-                    return isNaN(num) ? null : num * D2R;
-                }
-            };
+        // Pi scale mode: show as π units by default, allow toggle to degrees
+        if (scale === 'pi') {
+            return piDisplayMode === 'pi' ? piMapping : degreesMapping;
         }
+        // Legacy prop — identical to degreesMapping
+        if (convertRadToDeg) return degreesMapping;
         return undefined;
     };
 
@@ -175,10 +172,13 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
         const axisMaxs = axisMax || { x: max, y: max, z: max };
         const axisSteps = axisStep || { x: step, y: step, z: step };
 
+        // When scale='pi' in degrees mode, scale the step so drag speed feels equivalent
+        const stepScale = (scale === 'pi' && piDisplayMode === 'degrees') ? R2D : 1;
+
         return {
             min: axisMins[axis],
             max: axisMaxs[axis],
-            step: axisSteps[axis],
+            step: axisSteps[axis] * stepScale,
             hardMin,
             hardMax,
         };
@@ -234,6 +234,49 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
 
     const vec3Value = localValue as THREE.Vector3;
     const vec2Value = localValue as THREE.Vector2;
+
+    // Common props builder for VectorAxisCell — eliminates duplication across modes
+    const axisIndexMap = { x: 0, y: 1, z: 2 } as const;
+    const highlightMap = { x: xHighlighted, y: yHighlighted, z: zHighlighted };
+    const axisCellProps = (axis: 'x' | 'y' | 'z') => ({
+        axisIndex: axisIndexMap[axis],
+        value: (localValue as VecIndexable)[axis],
+        ...getAxisBounds(axis),
+        onUpdate: (v: number) => updateAxis(axis, v),
+        onDragStart: handleStart,
+        onDragEnd: handleEnd,
+        disabled,
+        highlight: highlightMap[axis],
+        mapping: getAxisMapping(axis),
+        mapTextInput: isRotationMode || scale === 'pi',
+        liveValue: showLiveIndicator ? getLiveValue(axis) : undefined,
+        defaultValue: getDefaultValue(axis),
+    });
+
+    // Shared toggle button colors per axis
+    const toggleColors = [
+        { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+        { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+        { on: 'bg-blue-500/30 text-blue-300 border-blue-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+    ];
+    const renderToggleButton = (axis: 'x' | 'y' | 'z', axisIdx: number, className?: string) => {
+        const val = (localValue as VecIndexable)[axis];
+        const isOn = val > 0.5;
+        const colors = toggleColors[axisIdx];
+        return (
+            <button
+                key={axis}
+                className={`flex items-center justify-center gap-1 text-[10px] font-bold transition-all border ${
+                    isOn ? colors.on : colors.off
+                } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'} ${className || 'flex-1'}`}
+                onClick={() => updateAxis(axis, isOn ? 0 : 1)}
+                disabled={disabled}
+            >
+                {className ? null : <span>{axis}</span>}
+                <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-70'}`}>{isOn ? 'ON' : 'OFF'}</span>
+            </button>
+        );
+    };
 
     // Render mode toggle button if needed
     const renderModeToggle = () => {
@@ -297,6 +340,23 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
             );
         }
 
+        // Pi scale display options (for non-rotation pi-unit params like Phase)
+        if (!isRotationMode && scale === 'pi') {
+            items.push(
+                { label: 'Display Units', action: () => {}, isHeader: true },
+                {
+                    label: 'Radians (π)',
+                    checked: piDisplayMode === 'pi',
+                    action: () => setPiDisplayMode('pi')
+                },
+                {
+                    label: 'Degrees (°)',
+                    checked: piDisplayMode === 'degrees',
+                    action: () => setPiDisplayMode('degrees')
+                },
+            );
+        }
+
         // Mode switching for vec3 rotation-type controls
         if (isVec3 && (mode === 'rotation' || mode === 'axes')) {
             // Add spacing between sections
@@ -354,58 +414,15 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                     {isToggleMode ? (
                         <>
                             {/* Toggle mode: clickable on/off buttons per axis */}
-                            {(['x', 'y', 'z'] as const).slice(0, isVec3 ? 3 : 2).map((axis, i) => {
-                                const val = (localValue as VecIndexable)[axis];
-                                const isOn = val > 0.5;
-                                const colors = [
-                                    { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-                                    { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-                                    { on: 'bg-blue-500/30 text-blue-300 border-blue-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
-                                ];
-                                return (
-                                    <button
-                                        key={axis}
-                                        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-bold transition-all border ${
-                                            isOn ? colors[i].on : colors[i].off
-                                        } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'}`}
-                                        onClick={() => updateAxis(axis, isOn ? 0 : 1)}
-                                        disabled={disabled}
-                                    >
-                                        <span>{axis}</span>
-                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-70'}`}>{isOn ? 'ON' : 'OFF'}</span>
-                                    </button>
-                                );
-                            })}
+                            {(['x', 'y', 'z'] as const).slice(0, isVec3 ? 3 : 2).map((axis, i) =>
+                                renderToggleButton(axis, i)
+                            )}
                         </>
                     ) : isMixedMode ? (
                         <>
                             {/* Mixed mode: toggle button for X, normal slider for Y */}
-                            {(() => {
-                                const isOn = localValue.x > 0.5;
-                                return (
-                                    <button
-                                        className={`w-14 flex-shrink-0 flex items-center justify-center gap-1 text-[10px] font-bold transition-all border ${
-                                            isOn ? 'bg-red-500/30 text-red-300 border-red-500/40' : 'bg-white/[0.10] text-gray-400 border-white/10'
-                                        } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'}`}
-                                        onClick={() => updateAxis('x', isOn ? 0 : 1)}
-                                        disabled={disabled}
-                                    >
-                                        <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-70'}`}>{isOn ? 'ON' : 'OFF'}</span>
-                                    </button>
-                                );
-                            })()}
-                            <VectorAxisCell
-                                axisIndex={1}
-                                value={localValue.y}
-                                {...getAxisBounds('y')}
-                                onUpdate={(v) => updateAxis('y', v)}
-                                onDragStart={handleStart}
-                                onDragEnd={handleEnd}
-                                disabled={disabled || localValue.x < 0.5}
-                                mapping={getAxisMapping('y')}
-                                liveValue={showLiveIndicator ? getLiveValue('y') : undefined}
-                                defaultValue={getDefaultValue('y')}
-                            />
+                            {renderToggleButton('x', 0, 'w-14 flex-shrink-0')}
+                            <VectorAxisCell {...axisCellProps('y')} disabled={disabled || localValue.x < 0.5} />
                         </>
                     ) : isDirectionMode ? (
                         <>
@@ -478,21 +495,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                         <>
                             {/* Z Axis (Angle) - FIRST in rotation mode */}
                             {isVec3 && (
-                                <VectorAxisCell
-                                    axisIndex={2}
-                                    value={vec3Value.z}
-                                    {...getAxisBounds('z')}
-                                    onUpdate={(v) => updateAxis('z', v)}
-                                    onDragStart={handleStart}
-                                    onDragEnd={handleEnd}
-                                    disabled={disabled}
-                                    highlight={zHighlighted}
-                                    mapping={getAxisMapping('z')}
-                                    mapTextInput={true}
-                                    liveValue={showLiveIndicator ? getLiveValue('z') : undefined}
-                                    defaultValue={getDefaultValue('z')}
-                                    customLabel="∠"
-                                />
+                                <VectorAxisCell {...axisCellProps('z')} customLabel="∠" />
                             )}
                             
                             {/* Rotation Heliotrope - direction visualizer */}
@@ -516,58 +519,18 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                             
                             {/* X Axis (Azimuth) */}
                             <div className="contents">
-                                <VectorAxisCell
-                                    axisIndex={0}
-                                    value={localValue.x}
-                                    {...getAxisBounds('x')}
-                                    onUpdate={(v) => updateAxis('x', v)}
-                                    onDragStart={handleStart}
-                                    onDragEnd={handleEnd}
-                                    disabled={disabled}
-                                    highlight={xHighlighted}
-                                    mapping={getAxisMapping('x')}
-                                    mapTextInput={true}
-                                    liveValue={showLiveIndicator ? getLiveValue('x') : undefined}
-                                    defaultValue={getDefaultValue('x')}
-                                    customLabel="A"
-                                />
+                                <VectorAxisCell {...axisCellProps('x')} customLabel="A" />
                             </div>
-                            
+
                             {/* Y Axis (Pitch) */}
-                            <VectorAxisCell
-                                axisIndex={1}
-                                value={localValue.y}
-                                {...getAxisBounds('y')}
-                                onUpdate={(v) => updateAxis('y', v)}
-                                onDragStart={handleStart}
-                                    onDragEnd={handleEnd}
-                                disabled={disabled}
-                                highlight={yHighlighted}
-                                mapping={getAxisMapping('y')}
-                                mapTextInput={true}
-                                liveValue={showLiveIndicator ? getLiveValue('y') : undefined}
-                                defaultValue={getDefaultValue('y')}
-                                customLabel="P"
-                            />
+                            <VectorAxisCell {...axisCellProps('y')} customLabel="P" />
                         </>
                     ) : (
                         <>
                             {/* Normal/Translation mode - original order */}
                             {/* X Axis */}
                             <div className="contents">
-                                <VectorAxisCell
-                                    axisIndex={0}
-                                    value={localValue.x}
-                                    {...getAxisBounds('x')}
-                                    onUpdate={(v) => updateAxis('x', v)}
-                                    onDragStart={handleStart}
-                                    onDragEnd={handleEnd}
-                                    disabled={disabled}
-                                    highlight={xHighlighted}
-                                    mapping={getAxisMapping('x')}
-                                    liveValue={showLiveIndicator ? getLiveValue('x') : undefined}
-                                    defaultValue={getDefaultValue('x')}
-                                />
+                                <VectorAxisCell {...axisCellProps('x')} />
                             </div>
                             
                             {/* XY Dual Axis Pad */}
@@ -591,20 +554,8 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                             )}
                             
                             {/* Y Axis */}
-                            <VectorAxisCell
-                                axisIndex={1}
-                                value={localValue.y}
-                                {...getAxisBounds('y')}
-                                onUpdate={(v) => updateAxis('y', v)}
-                                onDragStart={handleStart}
-                                onDragEnd={handleEnd}
-                                disabled={disabled}
-                                highlight={yHighlighted}
-                                mapping={getAxisMapping('y')}
-                                liveValue={showLiveIndicator ? getLiveValue('y') : undefined}
-                                defaultValue={getDefaultValue('y')}
-                            />
-                            
+                            <VectorAxisCell {...axisCellProps('y')} />
+
                             {/* ZY Dual Axis Pad - only for vec3 */}
                             {isVec3 && showDualAxisPads && (
                                 <DualAxisPad
@@ -627,19 +578,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
                             
                             {/* Z Axis - only for vec3 */}
                             {isVec3 && (
-                                <VectorAxisCell
-                                    axisIndex={2}
-                                    value={vec3Value.z}
-                                    {...getAxisBounds('z')}
-                                    onUpdate={(v) => updateAxis('z', v)}
-                                    onDragStart={handleStart}
-                                    onDragEnd={handleEnd}
-                                    disabled={disabled}
-                                    highlight={zHighlighted}
-                                    mapping={getAxisMapping('z')}
-                                    liveValue={showLiveIndicator ? getLiveValue('z') : undefined}
-                                    defaultValue={getDefaultValue('z')}
-                                />
+                                <VectorAxisCell {...axisCellProps('z')} />
                             )}
                         </>
                     )}

@@ -184,7 +184,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 vec3 lVec;
                 float distToLight;
                 if (isDirectional) {
-                    lVec = -uLightDir[lightIdx];
+                    lVec = uLightDir[lightIdx]; // Already "toward light" from uniform manager
                     distToLight = DIR_LIGHT_DIST;
                 } else {
                     lVec = uLightPos[lightIdx] - p_ray;

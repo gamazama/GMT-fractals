@@ -24,7 +24,15 @@ export interface GradientConfig {
 
 export type LightType = 'Point' | 'Directional';
 
+// Monotonic counter for generating stable light IDs
+let _lightIdCounter = 0;
+export function generateLightId(): string {
+    return `l${++_lightIdCounter}`;
+}
+
 export interface LightParams {
+    /** Stable identity — survives array reorder, used for React keys & gizmo refs */
+    id: string;
     type: LightType;
     position: { x: number, y: number, z: number };
     rotation: { x: number, y: number, z: number };

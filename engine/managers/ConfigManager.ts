@@ -9,6 +9,7 @@ export interface ConfigUpdateResult {
     rebuildNeeded: boolean;
     uniformUpdate: boolean;
     modeChanged: boolean;
+    needsAccumReset: boolean;
 }
 
 export class ConfigManager {
@@ -144,6 +145,7 @@ export class ConfigManager {
         let rebuildNeeded = false;
         let uniformUpdate = false;
         let modeChanged = false;
+        let needsAccumReset = false;
         const compileChanges: string[] = []; // Collect all compile-trigger changes for grouped log
 
         // --- GENERIC DDFS DIFFING ---
@@ -163,7 +165,7 @@ export class ConfigManager {
                     }
                 }
 
-                // Check for compile-triggers BEFORE merging
+                // Check for compile-triggers and accumulation reset BEFORE merging
                 for (const paramKey in newFeatData) {
                     const paramConfig = feat.params[paramKey];
                     if (paramConfig && paramConfig.onUpdate === 'compile') {
@@ -177,6 +179,14 @@ export class ConfigManager {
                                 compileChanges.push(`${feat.id}.${paramKey}: ${oldVal} → ${newVal}`);
                             }
                             rebuildNeeded = true;
+                        }
+                    }
+                    // Track whether any non-noReset param actually changed
+                    if (paramConfig && !paramConfig.noReset) {
+                        const newVal = newFeatData[paramKey];
+                        const oldVal = oldFeatData[paramKey] !== undefined ? oldFeatData[paramKey] : paramConfig.default;
+                        if (!this.areValuesEqual(newVal, oldVal)) {
+                            needsAccumReset = true;
                         }
                     }
                 }
@@ -241,6 +251,6 @@ export class ConfigManager {
             uniformUpdate = true;
         }
         
-        return { rebuildNeeded, uniformUpdate, modeChanged };
+        return { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset };
     }
 }

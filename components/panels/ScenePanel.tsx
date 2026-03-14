@@ -95,6 +95,16 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
         <AutoFeaturePanel featureId="colorGrading" groupFilter="grading" />
      </div>
 
+     {/* Rounded divider */}
+     <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
+     <div className="h-1" />
+
+     {/* --- SECTION 6: POST EFFECTS (Bloom & Lens) --- */}
+     <div className="flex flex-col" data-help-id="post.effects">
+        <AutoFeaturePanel featureId="postEffects" groupFilter="bloom" />
+        <AutoFeaturePanel featureId="postEffects" groupFilter="lens" />
+     </div>
+
      {/* --- DROSTE --- */}
      {droste && (
         <>

@@ -54,7 +54,7 @@ export const Mandelbulb: FractalDefinition = {
 
     parameters: [
         { label: 'Power', id: 'paramA', min: 2.0, max: 16.0, step: 0.001, default: 8.0 },
-        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 } },
+        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
         { label: 'Z Twist', id: 'paramD', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
         { label: 'Radiolaria', id: 'vec2B', type: 'vec2', min: -2.0, max: 2.0, step: 0.01, default: { x: 0, y: 0.5 }, mode: 'mixed' },
     ],

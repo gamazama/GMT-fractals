@@ -1,6 +1,6 @@
 
 import { FeatureDefinition } from '../../engine/FeatureSystem';
-import { LightParams } from '../../types';
+import { LightParams, generateLightId } from '../../types';
 import { MAX_LIGHTS } from '../../data/constants';
 import { getShadowsGLSL } from '../../shaders/chunks/lighting/shadows';
 import { LIGHTING_PBR_SIMPLE, LIGHTING_PBR_FULL } from '../../shaders/chunks/lighting/pbr';
@@ -37,12 +37,24 @@ export interface LightingActions {
     updateLight: (payload: { index: number, params: Partial<LightParams> }) => void;
     addLight: () => void;
     removeLight: (index: number) => void;
+    duplicateLight: (index: number) => void;
+}
+
+/** Ensures all lights in the array have a stable `id`. Migrates legacy state that lacks IDs. */
+export function ensureLightIds(lights: LightParams[]): LightParams[] {
+    let mutated = false;
+    const out = lights.map(l => {
+        if (l.id) return l;
+        mutated = true;
+        return { ...l, id: generateLightId() };
+    });
+    return mutated ? out : lights;
 }
 
 export const getLightFromSlice = (slice: LightingState | undefined, i: number): LightParams => {
     if (!slice || !slice.lights || i >= slice.lights.length) {
         return {
-            type: 'Point',
+            id: '', type: 'Point',
             position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
             color: '#ffffff', intensity: 0, falloff: 0,
             falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0
@@ -52,9 +64,9 @@ export const getLightFromSlice = (slice: LightingState | undefined, i: number): 
 };
 
 const DEFAULT_LIGHTS: LightParams[] = [
-    { type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ffffff', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0, softness: 0.0 },
-    { type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ff8800', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0, softness: 0.0 },
-    { type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#0088ff', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true, radius: 0.0, softness: 0.0 }
+    { id: generateLightId(), type: 'Point', position: { x: -2.0, y: 1.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ffffff', intensity: 1.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0, softness: 0.0 },
+    { id: generateLightId(), type: 'Point', position: { x: 2.0, y: -1.0, z: 1.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#ff8800', intensity: 0.5, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0, softness: 0.0 },
+    { id: generateLightId(), type: 'Point', position: { x: 0.0, y: -5.0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 }, color: '#0088ff', intensity: 0.25, falloff: 0, falloffType: 'Quadratic', fixed: true, visible: false, castShadow: true, radius: 0.0, softness: 0.0 }
 ];
 
 export const LightingFeature: FeatureDefinition = {
@@ -332,6 +344,7 @@ export const LightingFeature: FeatureDefinition = {
         addLight: (state: LightingState) => {
             if (state.lights.length >= MAX_LIGHTS) return {};
             const newLight: LightParams = {
+                id: generateLightId(),
                 type: 'Point',
                 position: { x: 0, y: 0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 },
                 color: '#ffffff', intensity: 1.0, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0
@@ -342,6 +355,13 @@ export const LightingFeature: FeatureDefinition = {
             if (index < 0 || index >= state.lights.length) return {};
             const newLights = [...state.lights];
             newLights.splice(index, 1);
+            return { lights: newLights };
+        },
+        duplicateLight: (state: LightingState, index: number) => {
+            if (index < 0 || index >= state.lights.length || state.lights.length >= MAX_LIGHTS) return {};
+            const clone = { ...state.lights[index], id: generateLightId() };
+            const newLights = [...state.lights];
+            newLights.splice(index + 1, 0, clone);
             return { lights: newLights };
         }
     }

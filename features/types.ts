@@ -1,25 +1,25 @@
 
-import { CoreMathState } from './core_math';
-import { GeometryState } from './geometry';
-import { AtmosphereState } from './atmosphere';
-import { MaterialState } from './materials';
-import { TexturingState } from './texturing';
-import { ColoringState } from './coloring';
-import { QualityState } from './quality';
-import { LightingState, LightingActions } from './lighting/index';
-import { DrosteState } from './droste';
-import { ColorGradingState } from './color_grading';
-import { OpticsState } from './optics';
-import { NavigationState } from './navigation';
-import { AOState } from './ao/index'; 
-import { WaterPlaneState } from './water_plane';
+import type { CoreMathState } from './core_math';
+import type { GeometryState } from './geometry';
+import type { AtmosphereState } from './atmosphere';
+import type { MaterialState } from './materials';
+import type { TexturingState } from './texturing';
+import type { ColoringState } from './coloring';
+import type { QualityState } from './quality';
+import type { LightingState, LightingActions } from './lighting/index';
+import type { DrosteState } from './droste';
+import type { ColorGradingState } from './color_grading';
+import type { OpticsState } from './optics';
+import type { NavigationState } from './navigation';
+import type { AOState } from './ao/index';
+import type { WaterPlaneState } from './water_plane';
 
 // Import Feature-Specific Types
-import { AudioState } from './audioMod';
-import { DrawingState, DrawingActions, DrawnShape } from './drawing';
-import { ModulationState, ModulationActions, ModulationRule } from './modulation';
-import { WebcamState } from './webcam';
-import { DebugToolsState } from './debug_tools';
+import type { AudioState } from './audioMod';
+import type { DrawingState, DrawingActions, DrawnShape } from './drawing';
+import type { ModulationState, ModulationActions, ModulationRule } from './modulation';
+import type { WebcamState } from './webcam';
+import type { DebugToolsState } from './debug_tools';
 
 // 1. The Master State Map
 export interface FeatureStateMap {

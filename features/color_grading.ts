@@ -3,6 +3,7 @@ import { FeatureDefinition } from '../engine/FeatureSystem';
 
 export interface ColorGradingState {
     active: boolean;
+    toneMapping: number;
     saturation: number;
     levelsMin: number;
     levelsMax: number;
@@ -22,10 +23,26 @@ export const ColorGradingFeature: FeatureDefinition = {
         }
     ],
     params: {
+        toneMapping: {
+            type: 'float',
+            default: 0.0,
+            label: 'Tone Mapping',
+            shortId: 'tm',
+            uniform: 'uToneMapping',
+            group: 'grading',
+            noReset: true,
+            options: [
+                { label: 'ACES', value: 0.0 },
+                { label: 'AgX', value: 1.0 },
+                { label: 'Reinhard', value: 2.0 },
+                { label: 'Neutral', value: 3.0 },
+                { label: 'None', value: 4.0 }
+            ]
+        },
         active: {
             type: 'boolean',
             default: false,
-            label: 'Color Correction', 
+            label: 'Color Correction',
             shortId: 'ac',
             uniform: 'uGradingActive',
             group: 'grading',

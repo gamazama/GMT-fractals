@@ -98,7 +98,7 @@ export const Mandelorus: FractalDefinition = {
         { label: 'Ring Radius', id: 'paramA', min: 0.1, max: 5.0, step: 0.01, default: 1.0 },
         { label: 'Twist (Sym)', id: 'paramB', min: -8.0, max: 8.0, step: 0.1, default: 0.0 },
         { label: 'Power', id: 'paramC', min: 1.0, max: 16.0, step: 0.01, default: 8.0 },
-        { label: 'Phase (Ring, Cross)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 } },
+        { label: 'Phase (Ring, Cross)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
         { label: 'Vert Scale', id: 'paramF', min: -0.9, max: 2.0, step: 0.01, default: 0.0 },
     ],
 

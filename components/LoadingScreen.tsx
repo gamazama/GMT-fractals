@@ -15,6 +15,7 @@ const GMT_NAMES = [
   // Serious / poetic
   'Generative Math Tracer',
   'GPU Manifold Tracer',
+  'GPU Mandelorus Tracer',
   'Geometric Morphology Toolkit',
   'GLSL Marching Toolkit',
   'Generative Morphology Theater',
@@ -40,7 +41,8 @@ const GMT_NAMES = [
   'Generally Mesmerizing Thingamajig',
   'Give Me Tentacles',
   'Gloriously Melted Teapots',
-  'Gaze into Mathematical Twilight',
+  'Gaze-into Mathematical Twilight',
+  'Greenwich Mean Time',
   'Geometrically Mangled Tesseracts',
   'Gratuitous Mandelbulb Torture',
   'Got More Tentacles',

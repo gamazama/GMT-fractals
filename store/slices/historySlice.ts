@@ -90,6 +90,13 @@ const applyStateRestore = (data: Partial<FractalStoreState>, set: any, get: any)
     engine.resetAccumulation();
 };
 
+// Minimum interval between camera undo pushes (ms).
+// Prevents micro-pauses during a single orbit/fly gesture from creating
+// multiple undo entries.  If a new snapshot arrives within this window,
+// the previous entry is *replaced* rather than a new one pushed.
+const CAMERA_UNDO_DEBOUNCE_MS = 1500;
+let lastCameraUndoPush = 0;
+
 export const createHistorySlice: StateCreator<FractalStoreState & FractalActions & HistorySlice, [["zustand/subscribeWithSelector", never]], [], HistorySlice> = (set, get) => ({
     paramUndoStack: [],
     paramRedoStack: [],
@@ -102,10 +109,23 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
         // Case 1: Camera Snapshot
         if (mode && typeof mode === 'object' && (mode as any).position) {
             const camState = mode as unknown as CameraState;
-            set((state) => ({
-                undoStack: [...state.undoStack, camState],
-                redoStack: []
-            }));
+            const now = Date.now();
+            const elapsed = now - lastCameraUndoPush;
+
+            if (elapsed < CAMERA_UNDO_DEBOUNCE_MS && get().undoStack.length > 0) {
+                // Within debounce window — replace the last entry instead of
+                // pushing a new one.  The last entry already holds the "before"
+                // state from the original gesture start; the user hasn't had
+                // time to settle, so we keep that original snapshot.
+                // (no-op: the existing top-of-stack is already correct)
+            } else {
+                // New gesture — push a fresh undo entry
+                set((state) => ({
+                    undoStack: [...state.undoStack, camState],
+                    redoStack: []
+                }));
+                lastCameraUndoPush = now;
+            }
             return;
         }
 

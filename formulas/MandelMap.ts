@@ -138,7 +138,7 @@ export const MandelMap: FractalDefinition = {
             { label: 'Cylindrical', value: 1.0 },
             { label: 'Toroidal', value: 2.0 }
         ]},
-        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 } },
+        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
     ],
 
     defaultPreset: {

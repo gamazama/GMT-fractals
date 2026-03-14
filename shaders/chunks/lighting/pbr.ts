@@ -28,7 +28,7 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
         float distToLight;
 
         if (isDirectional) {
-             lVec = -uLightDir[i];
+             lVec = uLightDir[i]; // Already "toward light" from uniform manager
              distToLight = DIR_LIGHT_DIST;  // Directional: treat as infinitely far (> BOUNDING_RADIUS)
         } else {
              lVec = uLightPos[i] - p;

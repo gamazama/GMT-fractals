@@ -152,7 +152,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 {/* Fill bar */}
                 {showTrack && hasBounds && (
                     <div 
-                        className={`absolute top-0 bottom-0 left-0 transition-[width] duration-75 ease-out pointer-events-none ${disabled ? 'bg-gray-500/20' : isActive ? 'bg-cyan-500/30' : 'bg-cyan-500/20'}`}
+                        className={`absolute top-0 bottom-0 left-0 pointer-events-none ${disabled ? 'bg-gray-500/20' : isActive ? 'bg-cyan-500/30' : 'bg-cyan-500/20'}`}
                         style={{ width: `${valuePct}%` }} 
                     />
                 )}
@@ -269,7 +269,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     
                     {/* Background track */}
                     <div className="absolute inset-0 bg-white/10 pointer-events-none">
-                        <div className={`absolute top-0 bottom-0 left-0 transition-[width] duration-75 ease-out ${disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
+                        <div className={`absolute top-0 bottom-0 left-0 ${disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
                         
                         {/* Live value indicator */}
                         {showLiveIndicator && liveValue !== undefined && !disabled && (

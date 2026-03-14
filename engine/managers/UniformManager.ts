@@ -231,25 +231,30 @@ export class UniformManager {
                 const dRotY = modulations[`lighting.light${i}_rotY`] || 0;
                 const dRotZ = modulations[`lighting.light${i}_rotZ`] || 0;
 
-                typeArr[i] = l.type === 'Directional' ? 1.0 : 0.0;
+                const isDirectional = l.type === 'Directional';
+                typeArr[i] = isDirectional ? 1.0 : 0.0;
                 intArr[i] = l.visible ? Math.max(0, l.intensity + dIntensity) : 0.0;
-                falArr[i] = Math.max(0, l.falloff + dFalloff);
-                typArr[i] = l.falloffType === 'Linear' ? 1.0 : 0.0;
                 shaArr[i] = l.castShadow ? 1.0 : 0.0;
-                radArr[i] = l.radius ?? 0.0;
-                sofArr[i] = l.softness ?? 0.0;
 
                 if ((colArr[i] as any).isColor) {
                     (colArr[i] as THREE.Color).set(l.color);
                 }
-                
-                const effectivePos = {
-                    x: l.position.x + dX,
-                    y: l.position.y + dY,
-                    z: l.position.z + dZ
-                };
-                
-                this.virtualSpace.getLightShaderVector(effectivePos, l.fixed, cam, (posArr[i] as THREE.Vector3));
+
+                // Point-light only uniforms — directional lights ignore these in shader
+                if (!isDirectional) {
+                    falArr[i] = Math.max(0, l.falloff + dFalloff);
+                    typArr[i] = l.falloffType === 'Linear' ? 1.0 : 0.0;
+                    radArr[i] = l.radius ?? 0.0;
+                    sofArr[i] = l.softness ?? 0.0;
+
+                    const effectivePos = {
+                        x: l.position.x + dX,
+                        y: l.position.y + dY,
+                        z: l.position.z + dZ
+                    };
+
+                    this.virtualSpace.getLightShaderVector(effectivePos, l.fixed, cam, (posArr[i] as THREE.Vector3));
+                }
                 
                 // Calculate Direction
                 // Base: (0, 0, -1) [Forward]
@@ -268,7 +273,9 @@ export class UniformManager {
                     this.lightDir.applyQuaternion(cam.quaternion);
                 }
                 
-                (dirArr[i] as THREE.Vector3).copy(this.lightDir).normalize();
+                // Negate: store "toward light" in uniform so shaders use it directly
+                // without per-consumer negation (NdotL, shadows, volumetrics all need toward-light)
+                (dirArr[i] as THREE.Vector3).copy(this.lightDir).negate().normalize();
             }
         }
 

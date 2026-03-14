@@ -432,7 +432,7 @@ export class WorkerProxy {
                 // LDR: convert to ImageBitmap and transfer
                 fetch(dataUrl)
                     .then(r => r.blob())
-                    .then(blob => createImageBitmap(blob, { premultiplyAlpha: 'none' }))
+                    .then(blob => createImageBitmap(blob, { premultiplyAlpha: 'none', imageOrientation: 'flipY' }))
                     .then(bitmap => {
                         this.post({ type: 'TEXTURE', textureType: type, bitmap }, [bitmap]);
                     })

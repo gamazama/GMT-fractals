@@ -45,7 +45,7 @@ Before working on any subsystem, read the relevant docs. Start with `docs/DOCS_I
 | `components/WorkerTickScene.tsx` | Worker frame loop + TickRegistry runner |
 
 ### Shader Conventions
-- `uLightDir[i]` stores direction light travels TOWARD scene; shadow/NdotL need negated (toward-light) vector
+- `uLightDir[i]` stores direction TOWARD LIGHT (negated at boundary in UniformManager). Shaders use directly for NdotL/shadows — no per-consumer negation needed.
 - Features with `engineConfig.toggleParam` are conditionally compiled; `mode: 'compile'` = full rebuild, `'runtime'` = uniform toggle
 - Two-stage compilation: preview shader (<1s) renders while full shader compiles async. Generation counter cancels stale compiles.
 

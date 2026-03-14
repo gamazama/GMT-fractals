@@ -2,6 +2,30 @@
 
 Chronological log of significant changes during the v0.8.9 development cycle (uncommitted on `dev` branch).
 
+## 2026-03-14
+
+### Light Gizmo Improvements
+
+**Bug fixes:**
+- **Headlamp mode flip during drag:** `useInteractionManager.ts` unconditionally set `fixed: false` on every pointermove during CenterHUD panel drag, overriding headlamp mode for already-visible lights. Now only forces world-space when placing an inactive light for the first time.
+- **Anchor icon lag:** Gizmo label read `fixed` from React props (potentially stale during drag). Now subscribes directly to the store via `useFractalStore` selector.
+- **DrawnShape SyntaxError:** `features/types.ts` and `types/store.ts` used value imports for type-only symbols, causing esbuild to emit missing exports. All type-only imports/re-exports now use `import type` / `export type`.
+
+**Architecture:**
+- **Stable light IDs:** Added `id: string` to `LightParams` with monotonic `generateLightId()` counter. Gizmo refs keyed by ID instead of array index. `draggedLightIndex` changed from `number` to `string` (light ID) across store, CenterHUD, and useInteractionManager. One-time migration via `ensureLightIds()` for legacy state.
+- **uLightDir sign convention:** Direction negated once at boundary in `UniformManager.ts` (now stores "toward light"). Removed per-consumer negation from `pbr.ts`, `pathtracer.ts`, and `volumetric_scatter.ts`. Updated CLAUDE.md shader conventions.
+- **Skip unused uniforms:** `UniformManager.ts` skips falloff/falloffType/position/radius/softness for directional lights (shader ignores them).
+
+**Performance:**
+- **Visibility culling in tick:** `LightGizmo.tick()` reads lights once and skips hidden/directional lights entirely (no function call overhead). Added `hide()` method to SingleLightGizmo imperative handle.
+
+**UX:**
+- **Gizmo visibility outside canvas:** Removed `overflow-hidden` from LightGizmo container and DomOverlays wrapper in `ViewportArea.tsx`.
+- **Snap/grid support:** Shift-drag snaps light position to 0.25 world-unit grid increments.
+- **Light duplication:** New `duplicateLight(index)` action. Duplicate button (copy icon) added to light settings popup header.
+
+- Files: `features/lighting/LightGizmo.tsx`, `features/lighting/components/SingleLightGizmo.tsx`, `features/lighting/components/LightControls.tsx`, `features/lighting/index.ts`, `types/graphics.ts`, `types/store.ts`, `store/slices/uiSlice.ts`, `hooks/useInteractionManager.ts`, `components/topbar/CenterHUD.tsx`, `components/ViewportArea.tsx`, `engine/managers/UniformManager.ts`, `shaders/chunks/lighting/pbr.ts`, `shaders/chunks/pathtracer.ts`, `shaders/chunks/lighting/volumetric_scatter.ts`, `features/types.ts`, `CLAUDE.md`
+
 ## 2026-03-13
 
 ### Code Splitting (React.lazy)

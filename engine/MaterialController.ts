@@ -150,7 +150,8 @@ export class MaterialController {
         const uniforms: { [key: string]: THREE.IUniform } = {
             map: { value: null },
             uResolution: { value: new THREE.Vector2(1,1) },
-            uEncodeOutput: { value: encodeSRGB }
+            uEncodeOutput: { value: encodeSRGB },
+            uBloomTexture: { value: null }  // Set by BloomPass in worker
         };
 
         // SHARED REFERENCE OPTIMIZATION:

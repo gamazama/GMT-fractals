@@ -94,8 +94,8 @@ export const Quaternion: FractalDefinition = {
         { label: 'Damping', id: 'paramC', min: 0.0, max: 5.0, step: 0.01, default: 0.0 },
         { label: 'Inversion Radius', id: 'paramD', min: 0.0, max: 10.0, step: 0.01, default: 0.0 },
         { label: 'Inversion Angle', id: 'paramE', min: -10.0, max: 10.0, step: 0.01, default: 0.0 },
-        { label: 'Rot 3D (XY, XZ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -6.44, y: 0.29 } },
-        { label: 'Rot 4D (XW, YW)', id: 'vec2B', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -0.21, y: 0.05 } },
+        { label: 'Rot 3D (XY, XZ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -6.44, y: 0.29 }, scale: 'pi' },
+        { label: 'Rot 4D (XW, YW)', id: 'vec2B', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -0.21, y: 0.05 }, scale: 'pi' },
         { label: 'Inversion Center', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 0.612, y: 0.381, z: 0.786 } },
     ],
 

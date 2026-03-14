@@ -44,7 +44,7 @@ export const VOLUMETRIC_SCATTER_BODY = `
                         if (_li >= uLightCount || _li >= _volLightMax) break;
                         if (uLightIntensity[_li] < 0.01) continue;
                         bool _dir = uLightType[_li] > 0.5;
-                        vec3  _lv  = _dir ? -uLightDir[_li] : (uLightPos[_li] - p);
+                        vec3  _lv  = _dir ? uLightDir[_li] : (uLightPos[_li] - p);
                         float _ld  = _dir ? 10000.0 : length(_lv);
                         if (!_dir && _ld < 0.001) continue;
                         vec3 _l = _dir ? normalize(_lv) : (_lv / _ld);

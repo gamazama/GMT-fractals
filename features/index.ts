@@ -2,6 +2,7 @@
 import { featureRegistry } from '../engine/FeatureSystem';
 import { AtmosphereFeature } from './atmosphere/index'; 
 import { DrosteFeature } from './droste';
+import { PostEffectsFeature } from './post_effects';
 import { MaterialFeature } from './materials';
 import { ColorGradingFeature } from './color_grading';
 import { TexturingFeature } from './texturing';
@@ -44,6 +45,7 @@ export const registerFeatures = () => {
     
     // Post & Effects
     featureRegistry.register(DrosteFeature);
+    featureRegistry.register(PostEffectsFeature);
     featureRegistry.register(ColorGradingFeature);
     
     // Scene
@@ -76,6 +78,7 @@ export type { GeometryState } from './geometry';
 export type { ColoringState } from './coloring';
 export type { TexturingState } from './texturing';
 export type { ColorGradingState } from './color_grading';
+export type { PostEffectsState } from './post_effects';
 export type { MaterialState } from './materials';
 export type { AtmosphereState } from './atmosphere/index';
 export type { VolumetricState } from './volumetric/index';

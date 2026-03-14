@@ -6,7 +6,6 @@ import { getProxy } from '../../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { useFractalStore } from '../../../store/fractalStore';
 import { getViewportCamera, getViewportCanvas, getDisplayCamera } from '../../../engine/worker/ViewportRefs';
-import { LightSettingsPopup } from './LightControls';
 import { AnchorIcon, UnanchoredIcon } from '../../../components/Icons';
 import { 
     getLightWorldPosition, 
@@ -27,16 +26,22 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
     const { index, light, onDragStart } = props;
     const containerRef = useRef<HTMLDivElement>(null);
     const [hoverState, setHoverState] = useState<{ part: string } | null>(null);
-    const [menuOpen, setMenuOpen] = useState(false);
     
     const updateLight = useFractalStore(s => s.updateLight);
-    
+    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    // Subscribe to fixed directly from store — props may lag during drag interactions
+    const isFixed = useFractalStore(s => s.lighting?.lights?.[index]?.fixed ?? light.fixed);
+
     const handleHover = (part: string) => setHoverState({ part });
     const handleUnhover = () => setHoverState(null);
 
     const toggleAnchor = () => {
-        const wasFixed = light.fixed;
-        let newPos = light.position;
+        // Read fresh state from store — React props may be stale during rapid interactions
+        const currentLight = useFractalStore.getState().lighting?.lights?.[index];
+        if (!currentLight) return;
+
+        const wasFixed = currentLight.fixed;
+        let newPos = currentLight.position;
         const cam = getViewportCamera();
         if (cam) {
             const o = engine.sceneOffset;
@@ -52,24 +57,20 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
                 newPos = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
             }
         }
+        handleInteractionStart('param');
         updateLight({ index, params: { fixed: !wasFixed, position: newPos } });
+        handleInteractionEnd();
     };
 
-    // Expose update method to parent component
+    // Expose update/hide methods to parent component
     React.useImperativeHandle(ref, () => ({
+        hide: () => {
+            if (containerRef.current) containerRef.current.style.display = 'none';
+        },
         update: () => {
             // Read fresh light state from store — React props may be stale
             // during timeline scrubbing (store updates synchronously, React re-renders async)
-            const storeState = useFractalStore.getState();
-            const currentLight = storeState.lighting?.lights?.[index] ?? light;
-
-            // Optimization: Don't update if directional (no gizmo) or not visible
-            if (currentLight.type === 'Directional' || !currentLight.visible) {
-                if (containerRef.current) {
-                    containerRef.current.style.display = 'none';
-                }
-                return;
-            }
+            const currentLight = useFractalStore.getState().lighting?.lights?.[index] ?? light;
 
             // Use display camera — snapshotted at start of frame in WorkerTickScene
             const camera = getDisplayCamera();
@@ -172,11 +173,6 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
         onDragStart(e, index, part, origin);
     };
     
-    const handleLabelClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setMenuOpen(!menuOpen);
-    };
-
     // --- CONDITIONAL RETURN ---
     // Directional lights have no position gizmo, but we must return AFTER all hooks
     if (light.type === 'Directional') return null;
@@ -254,39 +250,17 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
             </svg>
 
             {/* Label Tag */}
-            <div className="absolute top-[50px] left-0 transform -translate-x-1/2 flex items-center gap-1 bg-black/80 backdrop-blur px-1.5 py-0.5 rounded border border-white/20 select-none z-20 pointer-events-auto transition-transform hover:scale-105" onClick={handleLabelClick}>
+            <div className="absolute top-[50px] left-0 transform -translate-x-1/2 flex items-center gap-1 bg-black/80 backdrop-blur px-1.5 py-0.5 rounded border border-white/20 select-none z-20 pointer-events-auto transition-transform hover:scale-105">
                 <span className="text-[9px] font-bold text-white">L{index+1}</span>
-                <button 
+                <button
                     className="anchor-btn p-0.5 hover:text-cyan-400 transition-colors text-[9px]"
-                    onPointerDown={(e) => e.stopPropagation()} 
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => { e.stopPropagation(); toggleAnchor(); }}
-                    title={light.fixed ? "Attached to Camera" : "World Anchored"}
+                    title={isFixed ? "Attached to Camera" : "World Anchored"}
                 >
-                    {light.fixed ? <UnanchoredIcon /> : <AnchorIcon />}
+                    {isFixed ? <UnanchoredIcon /> : <AnchorIcon />}
                 </button>
             </div>
-
-            {/* Settings Menu Popup */}
-            {menuOpen && (
-                    <div 
-                    className="absolute left-6 top-10 ml-2 pointer-events-auto z-[100]" 
-                    onPointerDown={(e) => e.stopPropagation()}
-                >
-                        <div className="bg-black/90 border border-white/20 rounded-xl p-2 w-56 shadow-2xl relative">
-                            <div className="absolute top-4 -left-1.5 w-3 h-3 bg-black border-l border-b border-white/20 transform rotate-45" />
-                            <LightSettingsPopup index={index} />
-                        </div>
-                    </div>
-            )}
-            
-            {/* Click outside listener for menu */}
-            {menuOpen && (
-                <div 
-                    className="fixed inset-0 z-50" 
-                    onClick={() => setMenuOpen(false)}
-                    onPointerDown={(e) => e.stopPropagation()}
-                />
-            )}
         </div>
     );
 });

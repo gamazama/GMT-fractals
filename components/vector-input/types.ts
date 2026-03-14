@@ -92,6 +92,8 @@ export interface BaseVectorInputProps {
     axisStep?: { x?: number; y?: number; z?: number };
     /** Allow axis linking (e.g., for uniform scale) */
     linkable?: boolean;
+    /** Display scale mode — 'pi' shows values in π units with right-click toggle to degrees */
+    scale?: 'linear' | 'log' | 'pi';
 }
 
 export interface ConnectedVectorInputProps extends Omit<BaseVectorInputProps, 'onDragStart' | 'onDragEnd' | 'headerRight'> {

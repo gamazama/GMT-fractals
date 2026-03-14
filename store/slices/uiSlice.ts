@@ -6,11 +6,11 @@ import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
 export interface UIStateLocal {
-    draggedLightIndex: number | null;
+    draggedLightIndex: string | null;
 }
 
 export interface UIActionsLocal {
-    setDraggedLight: (index: number | null) => void;
+    setDraggedLight: (id: string | null) => void;
 }
 
 export type UISlice = Pick<FractalStoreState,

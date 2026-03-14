@@ -42,7 +42,7 @@ const DomOverlays = () => {
     const actions = useFractalStore();
     
     return (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-[20]">
+        <div className="absolute inset-0 pointer-events-none z-[20]">
             {overlays.map(config => {
                 const Component = componentRegistry.get(config.componentId);
                 const featureId = config.id;

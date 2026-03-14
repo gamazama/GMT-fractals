@@ -330,7 +330,7 @@ const Navigation: React.FC<NavigationProps> = ({
                 isMovingRef.current = true;
                 const camState = engine.virtualSpace
                     ? engine.virtualSpace.getUnifiedCameraState(camera, engine.lastMeasuredDistance)
-                    : { position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, rotation: { x: camera.quaternion.x, y: camera.quaternion.y, z: camera.quaternion.z, w: camera.quaternion.w }, targetDistance: engine.lastMeasuredDistance };
+                    : { position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, rotation: { x: camera.quaternion.x, y: camera.quaternion.y, z: camera.quaternion.z, w: camera.quaternion.w }, sceneOffset: { ...engine.sceneOffset }, targetDistance: engine.lastMeasuredDistance };
                 onStart(camState);
             }
             if (isRecording && recordCamera) captureCameraFrame(currentFrame, true, isPlaying ? 'Linear' : 'Bezier');

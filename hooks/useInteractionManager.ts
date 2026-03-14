@@ -202,7 +202,9 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 const state = useFractalStore.getState();
                 if (state.draggedLightIndex !== null && !engine.isGizmoInteracting) {
                     const cam = getViewportCamera() as THREE.PerspectiveCamera;
-                    if (cam) {
+                    // Resolve light ID to array index
+                    const dragIdx = state.lighting?.lights?.findIndex(l => l.id === state.draggedLightIndex) ?? -1;
+                    if (cam && dragIdx >= 0) {
                         // Fly mode offset sync: on first drag frame, absorb camera position
                         // into offset so main thread and worker agree on coordinates.
                         if (!lightDragSyncedRef.current && state.cameraMode === 'Fly') {
@@ -225,11 +227,15 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                         const placementPos = new THREE.Vector3().copy(raycaster.ray.direction).multiplyScalar(targetDist).add(raycaster.ray.origin);
                         const so = engine.sceneOffset;
                         const absPos = { x: placementPos.x + (so.x + so.xL), y: placementPos.y + (so.y + so.yL), z: placementPos.z + (so.z + so.zL) };
-                        
-                        // When dragging from panel, light becomes world-space (not headlamp)
-                        state.updateLight({ 
-                            index: state.draggedLightIndex, 
-                            params: { fixed: false, visible: true, castShadow: true, position: absPos }
+
+                        // When placing an inactive light from the panel, make it world-space.
+                        // Don't override fixed for lights that are already visible (preserves headlamp mode).
+                        const draggedLight = state.lighting.lights[dragIdx];
+                        const placementParams: Record<string, any> = { visible: true, castShadow: true, position: absPos };
+                        if (!draggedLight.visible) placementParams.fixed = false;
+                        state.updateLight({
+                            index: dragIdx,
+                            params: placementParams
                         });
                         
                         if (!state.lighting.shadows) state.setLighting({ shadows: true });

@@ -7,20 +7,43 @@ import { FeatureComponentProps } from '../../components/registry/ComponentRegist
 import * as THREE from 'three';
 import { SingleLightGizmo } from './components/SingleLightGizmo';
 import { getViewportCamera, getViewportCanvas } from '../../engine/worker/ViewportRefs';
+import { ensureLightIds } from './index';
 
 // Global ref to store gizmo refs for orchestrated updates
-const globalGizmoRefs = { current: {} as {[key: number]: { update: () => void }} };
+const globalGizmoRefs = { current: {} as {[key: string]: { update: () => void; hide?: () => void }} };
 
 // Export tick function for orchestrated updates
+let _idsMigrated = false;
 export const tick = () => {
-    // Update all light gizmos in one loop
-    Object.values(globalGizmoRefs.current).forEach(gizmo => {
+    // Read lights once for visibility culling — avoids per-gizmo store reads
+    const lights = useFractalStore.getState().lighting?.lights;
+    if (!lights) return;
+
+    // One-time migration: ensure all lights have stable IDs (legacy state compat)
+    if (!_idsMigrated) {
+        _idsMigrated = true;
+        const migrated = ensureLightIds(lights);
+        if (migrated !== lights) {
+            (useFractalStore.getState() as any).setLighting?.({ lights: migrated });
+        }
+    }
+
+    // Build ID→light lookup for culling
+    const byId = new Map(lights.map(l => [l.id, l]));
+
+    for (const [id, gizmo] of Object.entries(globalGizmoRefs.current)) {
+        const light = byId.get(id);
+        // Skip hidden or directional lights — just ensure container is hidden
+        if (!light || !light.visible || light.type === 'Directional') {
+            gizmo.hide?.();
+            continue;
+        }
         try {
             gizmo.update();
         } catch (e) {
             console.error('Error updating light gizmo:', e);
         }
-    });
+    }
 };
 
 export const LightGizmo: React.FC<FeatureComponentProps> = () => {
@@ -62,15 +85,15 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
     const handlePointerDown = (e: React.PointerEvent, index: number, part: string, origin: THREE.Vector3) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         const light = lights[index];
         if (!light) return;
 
         handleInteractionStart('param');
         setGizmoDragging(true);
         engine.isGizmoInteracting = true;
-        setDraggedLight(index);
-        
+        setDraggedLight(light.id);
+
         (e.target as Element).setPointerCapture(e.pointerId);
 
         const camera = getViewportCamera();
@@ -92,7 +115,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         // --- PLANE DRAG ---
         if (part.startsWith('plane') || part === 'free') {
             let normal = new THREE.Vector3();
-            
+
             if (part === 'free') {
                 camera.getWorldDirection(normal);
             } else if (part === 'plane-xy') {
@@ -108,12 +131,12 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
             }
 
             _plane.setFromNormalAndCoplanarPoint(normal, origin);
-            
+
             const intersect = new THREE.Vector3();
             const hit = _raycaster.ray.intersectPlane(_plane, intersect);
-            
+
             // If ray doesn't hit plane (parallel view), use origin as fallback
-            const offsetFromIntersection = hit 
+            const offsetFromIntersection = hit
                 ? new THREE.Vector3().subVectors(origin, intersect)
                 : new THREE.Vector3(0, 0, 0);
 
@@ -131,29 +154,36 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
                 screenAxis: new THREE.Vector2(),
                 worldAxis: new THREE.Vector3()
             };
-        } 
-        
+        }
+
         // --- AXIS DRAG ---
         else if (part.startsWith('axis')) {
              let axis = new THREE.Vector3();
              if (part === 'axis-x') axis.set(1, 0, 0);
              if (part === 'axis-y') axis.set(0, 1, 0);
              if (part === 'axis-z') axis.set(0, 0, 1);
-             
+
              if (light.fixed) axis.applyQuaternion(camera.quaternion);
-             
-             // Project axis to screen to get 2D drag vector
+
+             // Project axis to screen using the gizmo's visual length for a robust delta.
+             // Use getBoundingClientRect for CSS pixel dimensions — must match
+             // the coordinate space used for gizmo positioning (SingleLightGizmo.update).
+             const gizmoLen = origin.distanceTo(camera.position) * 0.15;
+             const axisEnd = origin.clone().addScaledVector(axis, gizmoLen);
+
              const p1 = origin.clone().project(camera);
-             const p2 = origin.clone().add(axis).project(camera); // Use 1 unit for direction
-             
-             const sw = canvasEl.width / window.devicePixelRatio;
-             const sh = canvasEl.height / window.devicePixelRatio;
-             
-             const sx = (p2.x - p1.x) * sw * 0.5;
-             const sy = -(p2.y - p1.y) * sh * 0.5; // Flip Y
-             
+             const p2 = axisEnd.clone().project(camera);
+
+             const axisRect = canvasEl.getBoundingClientRect();
+             let sx = (p2.x - p1.x) * axisRect.width * 0.5;
+             let sy = -(p2.y - p1.y) * axisRect.height * 0.5;
+
+             // If the axis tip is behind the camera, projection mirrors coordinates — negate
+             const tipViewZ = axisEnd.applyMatrix4(camera.matrixWorldInverse).z;
+             if (tipViewZ > 0) { sx = -sx; sy = -sy; }
+
              let sVec = new THREE.Vector2(sx, sy);
-             if (sVec.lengthSq() < 1.0) sVec.set(1, 0); // Safety for head-on view
+             if (sVec.lengthSq() < 0.5) sVec.set(1, 0); // Safety for head-on view
              sVec.normalize();
 
              dragRef.current = {
@@ -171,7 +201,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
                  worldAxis: axis
              };
         }
-        
+
         // Add global listeners for drag operation
         window.addEventListener('pointermove', handlePointerMove as any);
         window.addEventListener('pointerup', handlePointerUp as any);
@@ -180,7 +210,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
     const handlePointerMove = (e: PointerEvent) => {
         const drag = dragRef.current;
         if (!drag || !drag.active) return;
-        
+
         e.preventDefault();
         e.stopPropagation();
 
@@ -204,37 +234,45 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
                 -((e.clientY - rect.top) / rect.height) * 2 + 1
             );
             _raycaster.setFromCamera(ndc, camera);
-            
+
             _plane.setFromNormalAndCoplanarPoint(drag.planeNormal, drag.planeOrigin);
-            
+
             const intersect = new THREE.Vector3();
             if (_raycaster.ray.intersectPlane(_plane, intersect)) {
                 newWorldPos.copy(intersect).add(drag.offsetFromIntersection);
             } else {
                 return;
             }
-        } 
-        
+        }
+
         // --- AXIS LOGIC ---
         else {
             const dx = e.clientX - drag.startX;
             const dy = e.clientY - drag.startY;
-            
+
             // Project mouse delta onto screen axis
             const dist = (dx * drag.screenAxis.x) + (dy * drag.screenAxis.y);
-            
+
             // Scale sensitivity by distance to keep movement 1:1 visually
             const camDist = drag.startPos.distanceTo(camera.position);
-            
+
             // Factor: Approx 0.002 world units per pixel at distance 1.
-            const scale = camDist * 0.0025; 
-            
+            const scale = camDist * 0.0025;
+
             newWorldPos.copy(drag.startPos).addScaledVector(drag.worldAxis, dist * scale);
+        }
+
+        // --- SNAP TO GRID (Shift held) ---
+        if (e.shiftKey) {
+            const snap = 0.25;
+            newWorldPos.x = Math.round(newWorldPos.x / snap) * snap;
+            newWorldPos.y = Math.round(newWorldPos.y / snap) * snap;
+            newWorldPos.z = Math.round(newWorldPos.z / snap) * snap;
         }
 
         // --- CONVERT BACK TO STORE SPACE ---
         let finalPos = { x: 0, y: 0, z: 0 };
-        
+
         if (light.fixed) {
             // World -> Local
             const local = newWorldPos.clone().sub(camera.position).applyQuaternion(camera.quaternion.clone().invert());
@@ -250,9 +288,9 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         }
 
         // Use store directly to avoid stale closure
-        useFractalStore.getState().updateLight({ 
-            index: drag.index, 
-            params: { position: finalPos } 
+        useFractalStore.getState().updateLight({
+            index: drag.index,
+            params: { position: finalPos }
         });
     };
 
@@ -264,7 +302,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         handleInteractionEnd();
 
         dragRef.current = null;
-        
+
         window.removeEventListener('pointermove', handlePointerMove as any);
         window.removeEventListener('pointerup', handlePointerUp as any);
     };
@@ -272,18 +310,21 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
     if (!showGizmo) return null;
 
     return (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
             {lights.map((l, i) => (
-                <SingleLightGizmo 
-                    key={i} 
-                    index={i} 
+                <SingleLightGizmo
+                    key={l.id || i}
+                    index={i}
                     light={l}
                     onDragStart={handlePointerDown}
                     ref={(el) => {
-                        if (el) {
-                            gizmoRefs.current[i] = el;
-                        } else {
-                            delete gizmoRefs.current[i];
+                        const id = l.id;
+                        if (id) {
+                            if (el) {
+                                gizmoRefs.current[id] = el;
+                            } else {
+                                delete gizmoRefs.current[id];
+                            }
                         }
                     }}
                 />

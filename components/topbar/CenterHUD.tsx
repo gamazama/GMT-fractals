@@ -132,9 +132,10 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     
     const handleDragStartLogic = (i: number) => {
         vibrate(5);
-        state.setDraggedLight(i);
+        const light = lights[i];
+        state.setDraggedLight(light?.id ?? null);
         if (!isMobileMode) {
-             setActiveMenuIndex(null); 
+             setActiveMenuIndex(null);
              setHoveredLight(null);
         }
     };
@@ -165,7 +166,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                         onClick={() => handleLightInteraction(i)}
                         onDragStart={() => handleDragStartLogic(i)}
                     />
-                    {state.draggedLightIndex !== i && (hoveredLight === i || activeMenuIndex === i) && (
+                    {state.draggedLightIndex !== l.id && (hoveredLight === i || activeMenuIndex === i) && (
                         <LightSettingsPopup index={i} />
                     )}
                 </div>

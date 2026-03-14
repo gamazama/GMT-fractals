@@ -348,7 +348,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (config.type === 'vec2') {
             const x = val?.x ?? config.default?.x ?? 0;
             const y = val?.y ?? config.default?.y ?? 0;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} /></div>;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode} scale={config.scale} linkable={config.linkable} /></div>;
         }
         if (config.type === 'vec3') {
              const x = val?.x ?? config.default?.x ?? 0;
@@ -356,13 +356,13 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
              const z = val?.z ?? config.default?.z ?? 0;
              const v3 = new THREE.Vector3(x, y, z);
              // Generate track keys for animation (x, y, z components) - using underscore format
-             const trackKeys = config.composeFrom 
+             const trackKeys = config.composeFrom
                  ? config.composeFrom.map(k => `${featureId}.${k}`)
                  : [`${featureId}.${key}_x`, `${featureId}.${key}_y`, `${featureId}.${key}_z`];
              const trackLabels = config.composeFrom
                  ? undefined
                  : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`];
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} /></div>;
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode} scale={config.scale} linkable={config.linkable} /></div>;
         }
         
         if (config.type === 'image') {

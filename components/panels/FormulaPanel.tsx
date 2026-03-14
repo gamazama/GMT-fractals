@@ -265,7 +265,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                     case 'vec3B': val = coreMath.vec3B; set = (v) => actions.setCoreMath({ vec3B: v }); break;
                     case 'vec3C': val = coreMath.vec3C; set = (v) => actions.setCoreMath({ vec3C: v }); break;
                 }
-                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec3', mode: p.mode, linkable: p.linkable };
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec3', mode: p.mode, linkable: p.linkable, scale: p.scale };
             }
             if (p.type === 'vec2') {
                 let val = coreMath.vec2A;
@@ -275,7 +275,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                     case 'vec2B': val = coreMath.vec2B; set = (v) => actions.setCoreMath({ vec2B: v }); break;
                     case 'vec2C': val = coreMath.vec2C; set = (v) => actions.setCoreMath({ vec2C: v }); break;
                 }
-                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec2', mode: p.mode, linkable: p.linkable };
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec2', mode: p.mode, linkable: p.linkable, scale: p.scale };
             }
             // Handle scalar params
             let val = 0; let set = (v: number) => {};
@@ -330,6 +330,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                       mode={vecMode === 'axes' ? 'normal' : vecMode as any}
                       defaultValue={p.def ? new THREE.Vector3((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0) : undefined}
                       linkable={p.linkable}
+                      scale={p.scale}
                   />
               </div>
           );
@@ -354,6 +355,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                       defaultValue={p.def ? new THREE.Vector2((p.def as any).x ?? 0, (p.def as any).y ?? 0) : undefined}
                       linkable={p.linkable}
                       mode={p.mode}
+                      scale={p.scale}
                   />
               </div>
           );
@@ -438,7 +440,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                             actions.setGeometry({ preRotX: v3.x, preRotY: v3.y, preRotZ: v3.z });
                             recordUpdates('geometry', { preRotX: v3.x, preRotY: v3.y, preRotZ: v3.z });
                         }}
-                        mode="rotation"
+                        scale="pi"
                         trackKeys={['geometry.preRotX', 'geometry.preRotY', 'geometry.preRotZ']}
                         trackLabels={['Spin X', 'Spin Y', 'Spin Z']}
                         defaultValue={new THREE.Vector3(0, 0, 0)}
