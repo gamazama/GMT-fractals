@@ -12,7 +12,10 @@ export const DE_MASTER = (
     distOverridePostMap: string = '',
     distOverridePostDist: string = ''
 ) => {
-    
+    // When hybridInLoop sets skipMainFormula, we need the variable and if-wrapper.
+    // Otherwise emit the formula body directly — saves a bool + branch per iteration.
+    const needsSkip = hybridInLoop.includes('skipMainFormula');
+
     return `
 ${getDistBody}
 
@@ -43,8 +46,6 @@ vec4 map(vec3 p) {
     float savedTrap = 1e10;
     float savedIter = 0.0;
 
-    bool rotated = false;
-
     ${distOverrideInit}
     ${loopInit}
     ${hybridPreLoop}
@@ -57,11 +58,11 @@ vec4 map(vec3 p) {
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
 
-        bool skipMainFormula = false;
+        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
 
         ${hybridInLoop}
 
-        if (!skipMainFormula) {
+        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
             applyLocalRotation(z.xyz);
 
             float r2_check = dot(z.xyz, z.xyz);
@@ -83,7 +84,7 @@ vec4 map(vec3 p) {
             #endif
 
             ${formulaBody}
-        }
+        ${needsSkip ? '}' : ''}
 
         // Count completed iterations. After uIterations runs iter == uIterations,
         // which matches Fragmentarium's n counter used in explicit getDist expressions.
@@ -174,8 +175,6 @@ float mapDist(vec3 p) {
     
     // Add missing iter definition for compatibility with loopInit chunks that might expect it
     float iter = 0.0;
-    
-    bool rotated = false;
 
     ${distOverrideInit}
     ${loopInit}
@@ -187,11 +186,11 @@ float mapDist(vec3 p) {
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
 
-        bool skipMainFormula = false;
+        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
 
         ${hybridInLoop}
 
-        if (!skipMainFormula) {
+        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
             applyLocalRotation(z.xyz);
 
             #ifndef SKIP_PRE_BAILOUT
@@ -199,7 +198,7 @@ float mapDist(vec3 p) {
             #endif
 
             ${formulaBody}
-        }
+        ${needsSkip ? '}' : ''}
 
         // Track completed iterations so getDist expressions that use iter
         // (e.g. r * pow(Scale, -iter)) receive the correct count for shadow marching.

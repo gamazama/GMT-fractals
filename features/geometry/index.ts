@@ -353,7 +353,7 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
         // --- BURNING MODE (Global Runtime) ---
         const formula = config.formula;
         if (formula !== 'MandelTerrain') {
-            hybridInLoop += `if (uBurningEnabled > 0.5) z.xyz = abs(z.xyz);`;
+            hybridInLoop += `z.xyz = mix(z.xyz, abs(z.xyz), step(0.5, uBurningEnabled));`;
         }
 
         if (hybridCompiled) {

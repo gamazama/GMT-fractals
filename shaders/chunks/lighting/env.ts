@@ -6,10 +6,8 @@ export const LIGHTING_ENV = `
 // ------------------------------------------------------------------
 
 vec3 GetEnvMap(vec3 dir, float roughness) {
-    // 1. Apply Rotation (CPU Optimized: uEnvRotationMatrix)
-    if (abs(uEnvRotation) > 0.001) {
-        dir.xz = uEnvRotationMatrix * dir.xz;
-    }
+    // 1. Apply Rotation (CPU Optimized: uEnvRotationMatrix, identity when rotation is 0)
+    dir.xz = uEnvRotationMatrix * dir.xz;
 
     vec3 col; // Result variable
 

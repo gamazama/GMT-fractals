@@ -144,16 +144,11 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
         }
         
         // F. Step Advance (Dynamic Step Relaxation)
-        // If uStepRelaxation > 0, we interpolate between uFudgeFactor and 1.0 based on distance.
-        // Far from surface = Fast. Close to surface = Precise.
-        float currentFudge = uFudgeFactor;
-        if (uStepRelaxation > 0.0) {
-             // 1.0 / (1.0 + 10.0 * uStepRelaxation) scales the "closeness" sensitivity.
-             // If h.x is large relative to eps, we can be aggressive.
-             float safeZone = h.x / (finalEps * 10.0); // 10x epsilon buffer
-             float relax = smoothstep(0.0, 1.0, safeZone);
-             currentFudge = mix(uFudgeFactor, 1.0, relax * uStepRelaxation);
-        }
+        // Interpolate between uFudgeFactor and 1.0 based on distance-to-surface ratio.
+        // When uStepRelaxation == 0, relax * 0 == 0 so mix returns uFudgeFactor (no-op).
+        float safeZone = h.x / (finalEps * 10.0);
+        float relax = smoothstep(0.0, 1.0, safeZone);
+        float currentFudge = mix(uFudgeFactor, 1.0, relax * uStepRelaxation);
 
         // Stochastic step jitter: break up deterministic DE banding.
         // Asymmetric [1-jitter, 1.0] — biased short to avoid overshoot.

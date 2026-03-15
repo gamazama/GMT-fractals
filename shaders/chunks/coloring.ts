@@ -12,24 +12,30 @@ float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale
 // The 'getMappingValue' function is now injected dynamically by ColoringFeature.
 // See features/coloring/MappingModes.ts for logic.
 
-// Blend modes (float uniform → int via thresholds): 0=Mix, 1=Add, 2=Multiply, 3=Overlay, 4+=Screen
+// Blend modes: 0=Mix, 1=Add, 2=Multiply, 3=Overlay, 4+=Screen
 vec3 blendColors(vec3 c1, vec3 c2, float opacity, float mode) {
     vec3 col = c1;
-    
-    if (mode < 0.5) {
-        col = mix(c1, c2, opacity); // Mix
-    } else if (mode < 1.5) {
-        col = c1 + c2 * opacity; // Add
-    } else if (mode < 2.5) {
-        col = c1 * mix(vec3(1.0), c2, opacity); // Multiply
-    } else if (mode < 3.5) { 
+
+    switch(int(mode + 0.1)) {
+    case 0: // Mix
+        col = mix(c1, c2, opacity);
+        break;
+    case 1: // Add
+        col = c1 + c2 * opacity;
+        break;
+    case 2: // Multiply
+        col = c1 * mix(vec3(1.0), c2, opacity);
+        break;
+    case 3: { // Overlay
         vec3 check = step(0.5, c1);
         vec3 res = mix(2.0 * c1 * c2, 1.0 - 2.0 * (1.0 - c1) * (1.0 - c2), check);
         col = mix(c1, res, opacity);
-    } else {
+    } break;
+    default: // Screen
         col = 1.0 - (1.0 - c1) * (1.0 - c2 * opacity);
+        break;
     }
-    
+
     return col;
 }
 

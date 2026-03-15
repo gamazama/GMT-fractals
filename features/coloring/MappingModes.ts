@@ -127,25 +127,22 @@ export const generateMappingShader = () => {
     let code = `
     float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale) {
         float v = 0.0;
-        
-        // Mode Selection Ladder
+
+        // Mode Selection (switch for jump-table codegen)
+        switch(int(mode + 0.1)) {
     `;
 
-    MAPPING_MODES.forEach((mode, index) => {
-        const isFirst = index === 0;
-        const condition = `if (mode < ${mode.value}.5)`;
-        const block = `
-        ${isFirst ? condition : 'else ' + condition} {
-            // ${mode.label}
+    MAPPING_MODES.forEach((mode) => {
+        code += `
+        case ${Math.round(mode.value)}: { // ${mode.label}
             ${mode.glsl}
-        }`;
-        code += block;
+        } break;`;
     });
 
     code += `
-        // Fallback
-        else {
+        default: // Fallback
             v = result.z;
+            break;
         }
 
         // Safety Clamp
