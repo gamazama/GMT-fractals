@@ -307,7 +307,7 @@ layout(location = 0) out vec4 pc_fragColor;
 void main() {
     vec3 ro, rd, roClean, rdClean;
     float stochasticSeed;
-    getCameraRay(vUv, 0.0, ro, rd, stochasticSeed, roClean, rdClean);
+    getCameraRay(vUv, ro, rd, stochasticSeed, roClean, rdClean);
 
     vec3 glow = vec3(0.0);
     vec3 fogScatter = vec3(0.0);

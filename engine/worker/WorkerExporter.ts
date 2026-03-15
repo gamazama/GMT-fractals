@@ -341,23 +341,22 @@ export class WorkerExporter {
         sess.encoder.encode(frameData, { keyFrame: isKey });
         frameData.close();
 
-        // 11. Blit preview to screen (letterboxed, with bloom)
-        this.engine.materials.displayMaterial.uniforms.uBloomTexture.value =
-            this.engine.materials.exportMaterial.uniforms.uBloomTexture.value;
-        this.blitPreview(lastWrite.texture);
+        // 11. Blit preview to screen (letterboxed)
+        // Pass the raw accumulated HDR texture through displayMaterial (which applies
+        // post-processing including bloom). Set the current bloom texture on displayMaterial
+        // so the preview matches the export output.
+        this.blitPreview(lastWrite.texture, sess);
 
         // 12. Send progress
         const progress = ((frameIndex + 1) / sess.totalFrames) * 100;
         this.postMsg({ type: 'EXPORT_FRAME_DONE', frameIndex, progress, measuredDistance: this.engine.lastMeasuredDistance });
     }
 
-    private blitPreview(texture: THREE.Texture) {
-        if (!this.session) return;
-
+    private blitPreview(texture: THREE.Texture, sess: ExportSession) {
         const canvas = this.renderer.domElement as OffscreenCanvas;
         const screenW = canvas.width;
         const screenH = canvas.height;
-        const imgAspect = this.session.renderWidth / this.session.renderHeight;
+        const imgAspect = sess.safeWidth / sess.safeHeight;
         const screenAspect = screenW / screenH;
 
         let vx = 0, vy = 0, vw = screenW, vh = screenH;
@@ -369,8 +368,13 @@ export class WorkerExporter {
             vy = Math.round((screenH - vh) / 2);
         }
 
+        // Sync bloom texture from export pipeline to displayMaterial so the preview
+        // matches the export output. displayMaterial's bloom was stale (set before export).
+        this.engine.materials.displayMaterial.uniforms.uBloomTexture.value =
+            this.engine.materials.exportMaterial.uniforms.uBloomTexture.value;
         this.engine.materials.displayMaterial.uniforms.map.value = texture;
-        this.engine.materials.displayMaterial.uniforms.uResolution.value.set(this.session.renderWidth, this.session.renderHeight);
+        this.engine.materials.displayMaterial.uniforms.uResolution.value.set(sess.renderWidth, sess.renderHeight);
+        this.engine.materials.displayMaterial.uniformsNeedUpdate = true;
 
         this.renderer.setRenderTarget(null);
         this.renderer.setScissor(0, 0, screenW, screenH);

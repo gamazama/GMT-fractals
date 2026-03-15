@@ -591,7 +591,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 </div>
             </div>
 
-            <div className="relative" onContextMenu={openTrackContextMenu}>
+            <div className="relative overflow-hidden" onContextMenu={openTrackContextMenu}>
                 <div 
                     className="h-8 w-full rounded-t border border-white/20 relative mb-0 cursor-pointer" 
                     style={{ background: getGradientCssString(knots) }} 

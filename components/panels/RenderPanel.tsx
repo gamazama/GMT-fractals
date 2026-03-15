@@ -42,10 +42,6 @@ const RenderPanel = ({ state, actions }: { state: FractalState, actions: Fractal
              <AutoFeaturePanel featureId="materials" groupFilter="env" />
         </div>
 
-        {/* Rounded divider */}
-        <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-        <div className="h-1" />
-
         {/* --- REFLECTIONS --- */}
         <div className="flex flex-col" data-help-id="mat.reflection">
              <AutoFeaturePanel featureId="reflections" groupFilter="shading" />
@@ -60,10 +56,6 @@ const RenderPanel = ({ state, actions }: { state: FractalState, actions: Fractal
         <div className="flex flex-col" data-help-id="mat.emission">
             <AutoFeaturePanel featureId="materials" groupFilter="emission" />
         </div>
-
-        {/* Rounded divider */}
-        <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-        <div className="h-1" />
 
         {/* --- AO (NEW FEATURE SLICE) --- */}
         <div className="flex flex-col" data-help-id="mat.ao">

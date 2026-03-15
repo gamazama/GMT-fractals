@@ -16,13 +16,14 @@ export const OpticsFeature: FeatureDefinition = {
     category: 'Scene',
     tabConfig: { label: 'Scene', componentId: 'panel-scene', order: 20 },
     customUI: [
-        { componentId: 'optics-controls', group: 'dof' }
+        { componentId: 'optics-controls', group: 'projection', parentId: 'camType', condition: { eq: 0.0 } },
+        { componentId: 'optics-dof-controls', group: 'dof', parentId: 'dofStrength', condition: { gt: 0.0 } }
     ],
     params: {
         camType: { type: 'float', default: 0.0, label: 'Projection', shortId: 'ct', uniform: 'uCamType', group: 'projection', options: [{ label: 'Perspective', value: 0.0 }, { label: 'Orthographic', value: 1.0 }, { label: '360° Skybox', value: 2.0 }] },
         // Fov is handled by custom control now, but we keep param for state
         camFov: { type: 'float', default: 60, label: 'Field of View', shortId: 'fv', min: 10, max: 150, step: 1, group: 'projection', hidden: true, condition: { param: 'camType', eq: 0.0 } },
-        orthoScale: { type: 'float', default: 2.0, label: 'Ortho Scale', shortId: 'os', min: 0.1, max: 10.0, step: 0.1, scale: 'log', group: 'projection', condition: { param: 'camType', eq: 1.0 } },
+        orthoScale: { type: 'float', default: 2.0, label: 'Ortho Scale', shortId: 'os', min: 0.1, max: 10.0, step: 0.1, scale: 'log', group: 'projection', parentId: 'camType', condition: { param: 'camType', eq: 1.0 } },
         dofStrength: { 
             type: 'float', default: 0.0, label: 'Camera Blur', shortId: 'ds', uniform: 'uDOFStrength', 
             min: 0.0, max: 1.0, step: 0.0001, scale: 'log', group: 'dof', 

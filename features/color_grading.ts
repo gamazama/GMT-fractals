@@ -19,6 +19,7 @@ export const ColorGradingFeature: FeatureDefinition = {
         {
             componentId: 'scene-histogram',
             group: 'grading',
+            parentId: 'active',
             condition: { param: 'active', bool: true }
         }
     ],

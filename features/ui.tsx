@@ -39,7 +39,7 @@ import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogr
 import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
 // Replaced JuliaPicker with InteractionPicker
 import { InteractionPicker } from '../components/InteractionPicker';
-import { ColorGradingHistogram, OpticsControls, NavigationControls } from '../components/panels/scene_widgets';
+import { ColorGradingHistogram, OpticsControls, OpticsDofControls, NavigationControls } from '../components/panels/scene_widgets';
 
 // --- 4. Define Connectors (Wrappers that need Store access) ---
 
@@ -128,6 +128,7 @@ export const registerUI = () => {
     // Scene Widgets
     componentRegistry.register('scene-histogram', ConnectedGradingHistogram);
     componentRegistry.register('optics-controls', OpticsControls);
+    componentRegistry.register('optics-dof-controls', OpticsDofControls);
     componentRegistry.register('navigation-controls', NavigationControls);
 
 };

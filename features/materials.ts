@@ -200,7 +200,7 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEnvRotation',
             min: 0.0, max: 6.28, step: 0.01,
             group: 'env',
-            // Show only if Env Strength > 0 AND Source is Image (0.0)
+            parentId: 'envSource',
             condition: [
                 { param: 'envStrength', gt: 0.0 },
                 { param: 'envSource', eq: 0.0 }

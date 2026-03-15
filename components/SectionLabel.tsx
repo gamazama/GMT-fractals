@@ -22,4 +22,12 @@ export const SectionLabel: React.FC<SectionLabelProps> = ({ children, variant = 
     return <span className={`${base} ${colorClass} select-none ${className}`}>{children}</span>;
 };
 
+/** Horizontal section divider with drop-shadow gradient */
+export const SectionDivider: React.FC = () => (
+    <>
+        <div className="h-1.5 bg-neutral-800 rounded-b-lg" />
+        <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
+    </>
+);
+
 export default SectionLabel;

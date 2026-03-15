@@ -427,30 +427,36 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         feature.customUI?.forEach((c) => {
             if (c.parentId !== id) return;
             if (groupFilter && c.group !== groupFilter) return;
-            if (!checkVisibility(c.condition, sliceState, globalState)) return;
+            if (!checkVisibility(c.condition, sliceState, globalState, c.parentId)) return;
             const Component = componentRegistry.get(c.componentId);
             if (Component) renderedChildren.push(<div key={`custom-${c.componentId}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
         });
         const containerClass = isHalfWidth ? "flex-1 min-w-0" : "flex flex-col";
+        const hasChildren = renderedChildren.length > 0;
+        const hasCustomUIChildren = feature.customUI?.some(c => c.parentId === id) ?? false;
+        const isParentSlider = childIds.length > 0 || hasCustomUIChildren;
         return (
-            <div key={id} className={`w-full ${containerClass}`}>
+            <div key={id} className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}>
+                {isParentSlider && <div className={`absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
                 {showHints && config.description && !isDisabled && variant !== 'dense' && (
                     <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
                 )}
                 {renderedChildren.length > 0 && (
-                    <div className="flex flex-col pb-1">
+                    <div className="flex flex-col">
                         {renderedChildren.map((child, i) => {
                             const isLast = i === renderedChildren.length - 1;
                             return (
                                 <div key={i} className="flex">
                                     <div className={`w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
-                                    <div className={`flex-1 min-w-0 ${isLast ? 'border-b border-b-white/20' : ''}`}>
+                                    <div className={`flex-1 min-w-0 relative ${isLast ? 'border-b border-b-white/20' : ''}`}>
+                                        <div className="absolute inset-0 bg-black/20 pointer-events-none z-10" />
                                         {child}
                                     </div>
                                 </div>
                             );
                         })}
+                        <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
                     </div>
                 )}
             </div>
@@ -550,7 +556,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                         open={!collapsedGroups.has(groupId)}
                         onToggle={() => toggleGroup(groupId)}
                         defaultOpen={true}
-                        headerClassName="px-2 py-0.5 text-[9px] font-bold text-gray-500 hover:text-gray-300"
+                        headerClassName="px-2 py-0.5 text-[9px] font-bold text-gray-500 hover:text-gray-300 bg-neutral-800 rounded-sm"
                     >
                         <div className="flex flex-col">
                             {filtered.map((item, idx) => (

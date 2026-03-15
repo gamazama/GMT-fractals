@@ -5,7 +5,7 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { useFractalStore } from '../../store/fractalStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { FeatureSection } from '../FeatureSection';
-import { SectionLabel } from '../SectionLabel';
+import { SectionLabel, SectionDivider } from '../SectionLabel';
 import { WaterPlaneState } from '../../features/water_plane';
 
 const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
@@ -29,7 +29,17 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
   return (
   <div className="animate-fade-in -mx-4 -mt-4 flex flex-col">
 
-     {/* --- SECTION 1: NAVIGATION & POSITION --- */}
+     {/* --- SECTION 1: OPTICS (DOF & LENS) --- */}
+     <div className="flex flex-col" data-help-id="dof.settings">
+        {optics && (
+            <div className="flex flex-col">
+                 <AutoFeaturePanel featureId="optics" groupFilter="dof" />
+                 <AutoFeaturePanel featureId="optics" groupFilter="projection" />
+            </div>
+        )}
+     </div>
+
+     {/* --- NAVIGATION & POSITION --- */}
      {state.advancedMode && (
          <div className="flex flex-col" data-help-id="panel.scene">
              <div className="t-section-header" onContextMenu={handleHeaderContextMenu} data-help-id="panel.scene">
@@ -39,19 +49,12 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
          </div>
      )}
 
-     {/* --- SECTION 2: ATMOSPHERE --- */}
+     {/* --- ATMOSPHERE --- */}
      <div className="flex flex-col border-t border-white/5" data-help-id="fog.settings">
         <AutoFeaturePanel featureId="atmosphere" groupFilter="fog" />
      </div>
 
-     {/* Rounded divider */}
-     <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-     <div className="h-1" />
-
-     {/* --- SECTION 3: VOLUMETRIC SCATTER --- */}
-     <div className="flex flex-col">
-        <AutoFeaturePanel featureId="volumetric" />
-     </div>
+     <SectionDivider />
 
      {/* --- WATER PLANE --- */}
      {waterPlane && waterPlane.waterEnabled && (
@@ -72,61 +75,46 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
          </div>
      )}
 
-     {/* Rounded divider */}
-     <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-     <div className="h-1" />
-
-     {/* --- SECTION 4: OPTICS (DOF & LENS) --- */}
-     <div className="flex flex-col" data-help-id="dof.settings">
-        {optics && (
-            <div className="flex flex-col">
-                 <AutoFeaturePanel featureId="optics" groupFilter="dof" />
-                 <AutoFeaturePanel featureId="optics" groupFilter="projection" />
-            </div>
-        )}
-     </div>
-
-     {/* Rounded divider */}
-     <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-     <div className="h-1" />
-
-     {/* --- SECTION 5: COLOR CORRECTION --- */}
+     {/* --- COLOR CORRECTION --- */}
      <div className="flex flex-col" data-help-id="scene.grading">
         <AutoFeaturePanel featureId="colorGrading" groupFilter="grading" />
      </div>
 
-     {/* Rounded divider */}
-     <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-     <div className="h-1" />
+     <SectionDivider />
 
-     {/* --- SECTION 6: POST EFFECTS (Bloom & Lens) --- */}
+     {/* --- POST EFFECTS (Bloom & Lens) --- */}
      <div className="flex flex-col" data-help-id="post.effects">
         <AutoFeaturePanel featureId="postEffects" groupFilter="bloom" />
         <AutoFeaturePanel featureId="postEffects" groupFilter="lens" />
      </div>
 
+     <SectionDivider />
+
      {/* --- DROSTE --- */}
      {droste && (
         <>
-            <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-            <div className="h-1" />
             <div className="flex flex-col" data-help-id="effect.droste">
                 <AutoFeaturePanel featureId="droste" groupFilter="main" />
 
                 {droste.active && (
                     <div className="animate-fade-in flex flex-col">
                         <AutoFeaturePanel featureId="droste" groupFilter="geometry" />
-
-                        <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-                        <div className="h-1" />
-
+                        <SectionDivider />
                         <AutoFeaturePanel featureId="droste" groupFilter="structure" />
+                        <SectionDivider />
                         <AutoFeaturePanel featureId="droste" groupFilter="transform" />
                     </div>
                 )}
             </div>
         </>
      )}
+
+     <SectionDivider />
+
+     {/* --- VOLUMETRIC SCATTER --- */}
+     <div className="flex flex-col">
+        <AutoFeaturePanel featureId="volumetric" />
+     </div>
   </div>
   );
 };

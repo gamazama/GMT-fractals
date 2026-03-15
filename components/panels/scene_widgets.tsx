@@ -186,28 +186,6 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
 
     return (
         <div className="flex flex-col">
-            {(dofStrength > 0.000001) && (
-                <div className="flex">
-                    <div className="w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] border-b border-b-white/20 rounded-bl-lg" />
-                    <div className="flex-1 min-w-0 border-b border-b-white/20 bg-white/[0.12]">
-                        <div className="grid grid-cols-2 gap-px p-px">
-                            <Button
-                                active={focusLock}
-                                onClick={() => handleFocusLockToggle(!focusLock)}
-                                label={focusLock ? "Lock On" : "Focus Lock"}
-                                variant="primary"
-                            />
-                            <Button
-                                active={isPicking}
-                                onClick={() => setInteractionMode(isPicking ? 'none' : 'picking_focus')}
-                                label={isPicking ? "Picking..." : "Pick Focus"}
-                                variant="success"
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
-            
             {isPerspective && (
                 <div>
                      <Slider
@@ -221,7 +199,7 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
                          onKeyToggle={handleFovKeyToggle}
                      />
                      <div>
-                        <ToggleSwitch 
+                        <ToggleSwitch
                             label="Dolly Link"
                             icon={<LinkIcon active={dollyLocked} />}
                             value={dollyLocked}
@@ -230,6 +208,40 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
                      </div>
                 </div>
             )}
+        </div>
+    );
+};
+
+// --- WIDGET 2B: DOF FOCUS CONTROLS (Focus Lock & Pick) ---
+export const OpticsDofControls: React.FC<FeatureComponentProps> = ({ sliceState, actions }) => {
+    const setOptics = (actions as any).setOptics;
+    const interactionMode = useFractalStore(s => s.interactionMode);
+    const setInteractionMode = useFractalStore(s => s.setInteractionMode);
+    const focusLock = useFractalStore(s => s.focusLock);
+    const setFocusLock = useFractalStore(s => s.setFocusLock);
+    const isPicking = interactionMode === 'picking_focus';
+
+    const handleFocusLockToggle = (v: boolean) => {
+        setFocusLock(v);
+        if (v && engine.lastMeasuredDistance > 0) {
+            setOptics({ dofFocus: engine.lastMeasuredDistance });
+        }
+    };
+
+    return (
+        <div className="grid grid-cols-2 gap-px p-px">
+            <Button
+                active={focusLock}
+                onClick={() => handleFocusLockToggle(!focusLock)}
+                label={focusLock ? "Lock On" : "Focus Lock"}
+                variant="primary"
+            />
+            <Button
+                active={isPicking}
+                onClick={() => setInteractionMode(isPicking ? 'none' : 'picking_focus')}
+                label={isPicking ? "Picking..." : "Pick Focus"}
+                variant="success"
+            />
         </div>
     );
 };
