@@ -14,6 +14,7 @@ export interface ColoringState {
     bias: number;
     twist: number;
     escape: number;
+    colorIter: number;
     gradient2: GradientStop[] | GradientConfig;
     mode2: number;
     scale2: number;
@@ -82,6 +83,38 @@ export const ColoringFeature: FeatureDefinition = {
         phase: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p1', min: -1.0, max: 1.0, step: 0.01, group: 'layer1_hist', hidden: true },
         
         bias: { type: 'float', default: 1.0, label: 'Gamma', shortId: 'b1', uniform: 'uGradientBias', min: 0.1, max: 10.0, step: 0.01, group: 'layer1_hist', hidden: true },
+        colorIter: {
+            type: 'float',
+            default: 0.0,
+            label: 'Color Iterations',
+            shortId: 'ci',
+            uniform: 'uColorIter',
+            min: 0, max: 24, step: 1,
+            group: 'layer1_bottom',
+            description: 'Stop orbit trap capture at this iteration (0 = use all iterations)',
+            condition: {
+                or: [
+                    { param: 'mode', eq: 0.0 },   // Orbit Trap
+                    { param: 'mode', eq: 1.0 },   // Iterations
+                    { param: 'mode', eq: 7.0 },   // Raw Iterations
+                    { param: 'mode', eq: 8.0 },   // Potential
+                    { param: 'mode', eq: 9.0 },   // Flow
+                    { param: 'mode', eq: 10.0 },  // Orbit X
+                    { param: 'mode', eq: 11.0 },  // Orbit Y
+                    { param: 'mode', eq: 12.0 },  // Orbit Z
+                    { param: 'mode', eq: 13.0 },  // Orbit W
+                    { param: 'mode2', eq: 0.0 },
+                    { param: 'mode2', eq: 1.0 },
+                    { param: 'mode2', eq: 7.0 },
+                    { param: 'mode2', eq: 8.0 },
+                    { param: 'mode2', eq: 9.0 },
+                    { param: 'mode2', eq: 10.0 },
+                    { param: 'mode2', eq: 11.0 },
+                    { param: 'mode2', eq: 12.0 },
+                    { param: 'mode2', eq: 13.0 }
+                ]
+            }
+        },
         twist: {
             type: 'float',
             default: 0.0,

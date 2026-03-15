@@ -89,9 +89,9 @@ export class ConfigManager {
 
         // Handle Three.js Types (Color, Vector)
         if (typeof a === 'object' && typeof b === 'object') {
-            // Color
+            // Color — compare raw r/g/b to handle deserialized plain objects
             if (a.isColor && b.isColor) {
-                return a.getHex() === b.getHex();
+                return Math.abs(a.r - b.r) < 1e-6 && Math.abs(a.g - b.g) < 1e-6 && Math.abs(a.b - b.b) < 1e-6;
             }
             // Vector3
             if (a.isVector3 && b.isVector3) {
@@ -115,7 +115,7 @@ export class ConfigManager {
             if (a.isColor || b.isColor) {
                 const ca = a.isColor ? a : new THREE.Color(a);
                 const cb = b.isColor ? b : new THREE.Color(b);
-                return ca.getHex() === cb.getHex();
+                return Math.abs(ca.r - cb.r) < 1e-6 && Math.abs(ca.g - cb.g) < 1e-6 && Math.abs(ca.b - cb.b) < 1e-6;
             }
             // Array (Simple shallow check for now)
             if (Array.isArray(a) && Array.isArray(b)) {

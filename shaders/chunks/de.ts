@@ -30,14 +30,19 @@ vec4 map(vec3 p) {
     float dr = 1.0;
     float trap = 1e10;
     g_orbitTrap = vec4(1e10);
-    
-    float iter = 0.0; 
+
+    float iter = 0.0;
     float smoothIter = 0.0;
-    
+
     float decomp = 0.0;
     float lastLength = 0.0;
     bool decompCaptured = false;
-    
+
+    // Color iteration limit: snapshot coloring state at boundary (branchless)
+    vec4 savedOrbitTrap = vec4(1e10);
+    float savedTrap = 1e10;
+    float savedIter = 0.0;
+
     bool rotated = false;
 
     ${distOverrideInit}
@@ -87,6 +92,12 @@ vec4 map(vec3 p) {
         float r2 = dot(z.xyz, z.xyz);
         g_orbitTrap = min(g_orbitTrap, abs(vec4(z.xyz, r2)));
 
+        // Branchless color iteration snapshot: keep updating until iter exceeds limit
+        float colorGate = step(iter, uColorIter);  // 1.0 while iter <= uColorIter, 0.0 after
+        savedOrbitTrap = mix(savedOrbitTrap, g_orbitTrap, colorGate);
+        savedTrap = mix(savedTrap, trap, colorGate);
+        savedIter = mix(savedIter, iter, colorGate);
+
         if (!decompCaptured && r2 > uEscapeThresh) {
             decomp = atan(z.y, z.x) * INV_TAU + 0.5;
             lastLength = sqrt(r2);
@@ -116,6 +127,12 @@ vec4 map(vec3 p) {
 
     ${distOverridePostMap}
     
+    // Restore saved coloring state if color iteration limit was active
+    // When uColorIter > 0, use the frozen snapshot; otherwise keep full-iteration values
+    float useColorSnap = step(0.5, uColorIter);
+    g_orbitTrap = mix(g_orbitTrap, savedOrbitTrap, useColorSnap);
+    trap = mix(trap, savedTrap, useColorSnap);
+
     // Color mode 8 = LLI (Last Length Iteration) decomposition — needs lastLength from escape check
     bool useLLI = (abs(uColorMode - 8.0) < 0.1) || (abs(uColorMode2 - 8.0) < 0.1);
     if (uUseTexture > 0.5) {
@@ -137,7 +154,9 @@ vec4 map(vec3 p) {
     }
     #endif
 
-    return vec4(finalD, outTrap, smoothIter / max(1.0, uIterations), decomp);
+    // When color iteration limit is active, use capped iter for normalized coloring value
+    float colorIterNorm = mix(smoothIter / max(1.0, uIterations), savedIter / max(1.0, uColorIter), useColorSnap);
+    return vec4(finalD, outTrap, colorIterNorm, decomp);
 }
 
 // --- OPTIMIZED GEOMETRY-ONLY ESTIMATOR ---
