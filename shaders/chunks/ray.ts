@@ -16,7 +16,7 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
 // STAGE 1: RAY GENERATION
 // Handles Camera Basis and Depth of Field
 // ------------------------------------------------------------------
-void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float stochasticSeed, out vec3 roClean, out vec3 rdClean) {
+void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSeed, out vec3 roClean, out vec3 rdClean) {
     vec2 uv = uvCoord * 2.0 - 1.0;
     
     // Store original UV for stable noise lookup (before jitter)

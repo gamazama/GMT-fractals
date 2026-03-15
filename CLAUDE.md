@@ -4,8 +4,10 @@
 **GMT (GPU Mandelbulb Tracer)** - Real-time 3D fractal renderer in the browser.
 Stack: React 18 + TypeScript + Zustand + Vite + Three.js + GLSL shaders | Version 0.8.9 | License GPL-3.0
 
-## Documentation
-Before working on any subsystem, read the relevant docs. Start with `docs/DOCS_INDEX.md` for the full index.
+## Critical Rules
+
+### Read Docs Before Coding (MANDATORY)
+Before making ANY code changes, you MUST read the relevant documentation using the table below. Do NOT skip this — the docs contain architecture decisions, patterns, and constraints that are not obvious from code alone. Start with `docs/DOCS_INDEX.md` for the full index.
 
 | Working on... | Read first |
 |---------------|-----------|
@@ -21,7 +23,7 @@ Before working on any subsystem, read the relevant docs. Start with `docs/DOCS_I
 | Frag importer | `docs/21_Frag_Importer_Current_Status.md` (start here) |
 | Formula conversion | `docs/22_Frag_to_Native_Formula_Conversion.md` |
 
-## Critical Rules
+After making changes, update the relevant docs if you discovered new patterns, quirks, or undocumented behavior. Check `docs/06_Troubleshooting_and_Quirks.md` for known issues when debugging.
 
 ### TypeScript
 - `tsconfig` has `isolatedModules: true` — type-only cross-module re-exports MUST use `export type { X }` and `import type { X }`, otherwise Vite/esbuild leaves the export in JS output causing runtime SyntaxError.

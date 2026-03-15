@@ -34,7 +34,6 @@ export const Uniforms = {
     // Accumulation & History
     HistoryTexture: 'uHistoryTexture',
     BlendFactor: 'uBlendFactor',
-    ExtraSeed: 'uExtraSeed',
     Jitter: 'uJitter',
     BlueNoiseTexture: 'uBlueNoiseTexture',
     BlueNoiseResolution: 'uBlueNoiseResolution', // Added

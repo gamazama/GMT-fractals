@@ -381,7 +381,6 @@ export class RenderPipeline {
         if (uniforms) {
             uniforms[Uniforms.BlendFactor].value = blend;
             uniforms[Uniforms.HistoryTexture].value = readTarget.texture;
-            uniforms[Uniforms.ExtraSeed].value = Math.random() * 100.0;
         }
 
         const currentTarget = renderer.getRenderTarget();

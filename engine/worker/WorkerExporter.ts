@@ -249,17 +249,15 @@ export class WorkerExporter {
 
             const blend = 1.0 / (s + 1);
             this.engine.mainUniforms.uBlendFactor.value = blend;
-            this.engine.mainUniforms.uExtraSeed.value = Math.random() * 100.0;
             this.engine.mainUniforms.uHistoryTexture.value = readBuffer.texture;
 
             sess.internalFrameCounter++;
             this.engine.mainUniforms.uFrameCount.value = sess.internalFrameCounter;
 
-            // TAA jitter
+            // TAA jitter — use full Halton sequence (not wrapped at 16)
             if (s > 0) {
-                const idx = (s % 16) + 1;
-                const jX = halton(idx, 2);
-                const jY = halton(idx, 3);
+                const jX = halton(s, 2);
+                const jY = halton(s, 3);
                 this.engine.mainUniforms.uJitter.value.set(jX * 2.0 - 1.0, jY * 2.0 - 1.0);
             } else {
                 this.engine.mainUniforms.uJitter.value.set(0, 0);

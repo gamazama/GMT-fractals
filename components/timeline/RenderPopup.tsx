@@ -670,10 +670,10 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                                 />
 
                                 {/* FLUSH SLIDER - SAMPLES */}
-                                <Slider 
-                                    label="Samples (Quality)" 
-                                    value={vidSamples} 
-                                    min={1} max={64} step={1} 
+                                <Slider
+                                    label="Samples (Quality)"
+                                    value={vidSamples}
+                                    min={1} max={256} step={1}
                                     onChange={setVidSamples}
                                     overrideInputText={vidSamples.toFixed(0)}
                                 />

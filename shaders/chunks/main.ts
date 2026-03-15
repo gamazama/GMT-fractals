@@ -83,7 +83,7 @@ vec3 renderPixel(vec2 uvCoord, float seedOffset, out float outDepth) {
     float stochasticSeed = 0.0;
     vec3 roClean, rdClean;
 
-    getCameraRay(uvCoord, uExtraSeed + seedOffset, ro, rd, stochasticSeed, roClean, rdClean);
+    getCameraRay(uvCoord, ro, rd, stochasticSeed, roClean, rdClean);
 
     // Background Logic (Direct Mode Miss)
     vec3 bgCol = vec3(0.0);
