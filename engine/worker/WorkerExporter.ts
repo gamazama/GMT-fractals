@@ -341,7 +341,9 @@ export class WorkerExporter {
         sess.encoder.encode(frameData, { keyFrame: isKey });
         frameData.close();
 
-        // 11. Blit preview to screen (letterboxed)
+        // 11. Blit preview to screen (letterboxed, with bloom)
+        this.engine.materials.displayMaterial.uniforms.uBloomTexture.value =
+            this.engine.materials.exportMaterial.uniforms.uBloomTexture.value;
         this.blitPreview(lastWrite.texture);
 
         // 12. Send progress
