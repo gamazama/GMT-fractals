@@ -12,6 +12,7 @@ import type { EngineRenderState } from '../FractalEngine';
 import { VIDEO_CONFIG, VIDEO_FORMATS } from '../../data/constants';
 import * as Mediabunny from 'mediabunny';
 import { H264Converter, halton } from '../codec/H264Converter';
+import { BloomPass } from '../BloomPass';
 
 // ─── Export Session State ────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export class WorkerExporter {
     private renderer: THREE.WebGLRenderer;
     private camera: THREE.PerspectiveCamera;
     private postMsg: ExportPostFn;
+    private bloomPass: BloomPass;
 
     // Saved state for restoration
     private savedResolution = { w: 0, h: 0 };
@@ -66,6 +68,7 @@ export class WorkerExporter {
         this.renderer = renderer;
         this.camera = camera;
         this.postMsg = postMsg;
+        this.bloomPass = new BloomPass();
     }
 
     get active() {
@@ -115,6 +118,9 @@ export class WorkerExporter {
             depthBuffer: false
         });
         const pixelBuffer = new Uint8Array(safeWidth * safeHeight * 4);
+
+        // Bloom pass sized to render resolution
+        this.bloomPass.resize(renderW, renderH);
 
         // Post-processing scene (tone mapping + sRGB via exportMaterial)
         const ppScene = new THREE.Scene();
@@ -280,6 +286,17 @@ export class WorkerExporter {
         if (measuredDist > 0 && measuredDist < 1000 && Number.isFinite(measuredDist)) {
             this.engine.lastMeasuredDistance = measuredDist;
         }
+        // 8c. Bloom pass (matches preview pipeline)
+        const bloomIntensity = this.engine.mainUniforms.uBloomIntensity?.value ?? 0;
+        if (bloomIntensity > 0.001) {
+            const threshold = this.engine.mainUniforms.uBloomThreshold?.value ?? 0.5;
+            const radius = this.engine.mainUniforms.uBloomRadius?.value ?? 1.5;
+            this.bloomPass.render(lastWrite.texture, this.renderer, threshold, radius);
+            this.engine.materials.exportMaterial.uniforms.uBloomTexture.value = this.bloomPass.getOutput();
+        } else {
+            this.engine.materials.exportMaterial.uniforms.uBloomTexture.value = null;
+        }
+
         this.engine.materials.exportMaterial.uniforms.map.value = lastWrite.texture;
         this.engine.materials.exportMaterial.uniforms.uResolution.value.set(sess.safeWidth, sess.safeHeight);
 
