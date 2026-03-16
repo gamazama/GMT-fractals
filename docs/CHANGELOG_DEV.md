@@ -2,6 +2,26 @@
 
 Chronological log of significant changes during the v0.8.9 development cycle (uncommitted on `dev` branch).
 
+## 2026-03-16
+
+### Gradient Editor Improvements
+
+**Bug fixes:**
+- **Step interpolation mismatch:** GPU texture generation used `t < 0.5 ? 0 : 1` (midpoint switch) while the CSS preview held the left color until the boundary. Texture now uses `t = 0` to match the preview — step mode holds each stop's color for its full segment.
+- **Histogram phase preview broken:** `backgroundPosition: ${phase * 100}%` used CSS percentage semantics (relative to `container - tile`) which gives zero shift for `repeats=1` and wrong values for all other repeat counts. Replaced with a clipped inner div using `translateX` for correct phase visualization at all repeat values.
+- **Undo flooding on gradient sliders:** Position and Bias sliders called `handleInteractionStart`/`End` on every onChange tick, but the Slider component already manages its own drag lifecycle snapshots. Removed the redundant wrapping so only one undo snapshot is created per drag operation.
+
+**UX:**
+- **Gradient section padding:** Added horizontal padding so edge knot handles and drag selections aren't clipped.
+- **Step-aware knot creation:** Clicking to add a knot in a Step segment now inherits the held color instead of interpolating.
+- **Ctrl+Drag to duplicate:** Ctrl+drag a knot handle or the multi-selection drag area to duplicate knots.
+- **Multi-selection redesign:** Replaced the bottom-hanging purple bracket with inline cyan selection: tinted background with dashed bottom edge for drag affordance, and `[` `]` bracket handles for scaling. Dragging a bracket past the opposite side inverts knot positions.
+- **Bias handles hidden for Step:** Diamond bias handles are suppressed for step-interpolated segments where they have no effect.
+- **Distinct cursor for selection drag:** Selection drag area uses `cursor-move` (four-way arrows) to differentiate from individual knot handles (`cursor-grab`).
+- **Presets button visibility:** Presets button now has a visible border and text label ("Presets") instead of just an icon.
+
+- Files: `components/AdvancedGradientEditor.tsx`, `components/Histogram.tsx`, `utils/colorUtils.ts`, `data/help/topics/ui.ts`
+
 ## 2026-03-14
 
 ### Light Gizmo Improvements

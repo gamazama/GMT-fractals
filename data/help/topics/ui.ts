@@ -74,17 +74,34 @@ The application uses a compact, high-precision **HSV Slider** system.
 A spline-based color ramp editor used for surface coloring.
 
 ## Interaction
-- **Add Knot**: Click anywhere on the bottom track.
+- **Add Knot**: Click anywhere on the bottom track. In **Step** mode, new knots inherit the held color instead of interpolating.
 - **Move Knot**: Drag a knot left/right.
-- **Remove Knot**: Drag a knot down (off the track) or press Delete.
-- **Select Multiple**: Drag a selection box or Shift+Click knots.
-- **Bias**: Drag the small diamond handle between knots to adjust the interpolation curve (Gamma).
+- **Remove Knot**: Drag a knot away from the track or press Delete.
+- **Select Multiple**: Drag a selection box or **Shift+Click** knots.
+- **Duplicate Knot**: **Ctrl+Drag** a knot to duplicate it.
+- **Bias**: Drag the diamond handle between knots to shift the interpolation midpoint. Hidden in **Step** mode (no effect).
+
+## Interpolation Modes
+Each knot controls how color transitions to the next knot:
+- **Linear**: Straight RGB blend (default).
+- **Step**: Hard color switch at the next knot boundary — no blending.
+- **Smooth**: Smoothstep easing (ease-in/ease-out).
+
+## Multi-Selection
+Select 2+ knots to reveal **bracket handles**:
+- **Drag the selection area** to move all selected knots together.
+- **Drag the [ ] brackets** on either side to scale/compress the selection. Dragging a bracket past the opposite side inverts the knot order.
+- **Ctrl+Drag the selection area** to duplicate the selected knots.
+
+## Presets
+Click the **Presets** button (top-right) to load predefined gradients, or Copy/Paste gradients as JSON.
 
 ## Context Menu
 Right-click the track to:
 - **Distribute**: Evenly space selected knots.
 - **Invert**: Flip the gradient.
 - **Double Knots**: Increase resolution.
+- **Output Mode**: Switch color space (sRGB, Linear, Inverse ACES).
 `
     },
     'ui.histogram': {

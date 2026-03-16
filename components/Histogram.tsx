@@ -252,13 +252,22 @@ const Histogram: React.FC<HistogramProps> = ({
     }, [gradientStops, gamma]);
     
     // Dynamic Gradient Style for Repeats/Phase
-    const gradientStyle: React.CSSProperties = {
-        left: `${leftPct}%`, 
+    // Phase uses translateX on an extended inner div to avoid CSS background-position
+    // percentage semantics (which are relative to container-minus-tile, not container).
+    const safeRepeats = Math.max(0.1, repeats);
+    const gradientContainerStyle: React.CSSProperties = {
+        left: `${leftPct}%`,
         width: `${Math.max(0, rightPct - leftPct)}%`,
+    };
+    // Extend inner div by 1 tile on each side so phase shift doesn't leave gaps
+    const factor = 1 + 2 / safeRepeats;
+    const gradientInnerStyle: React.CSSProperties = {
         backgroundImage: backgroundGradient,
-        backgroundSize: `${(100 / Math.max(0.1, repeats))}% 100%`,
-        backgroundPosition: `${phase * 100}% 0%`, 
-        backgroundRepeat: 'repeat-x'
+        backgroundSize: `${100 / (safeRepeats * factor)}% 100%`,
+        backgroundRepeat: 'repeat-x',
+        width: `${100 * factor}%`,
+        marginLeft: `${-100 / safeRepeats}%`,
+        transform: `translateX(${phase * 100 / (safeRepeats * factor)}%)`,
     };
 
     return (
@@ -319,10 +328,12 @@ const Histogram: React.FC<HistogramProps> = ({
                     <canvas ref={canvasRef} width={320} height={height} className="w-full h-full opacity-40 absolute inset-0" />
                     
                     {/* Active Range Overlay with Gradient */}
-                    <div 
-                        className="absolute top-0 bottom-0 opacity-40 pointer-events-none"
-                        style={gradientStyle}
-                    />
+                    <div
+                        className="absolute top-0 bottom-0 overflow-hidden pointer-events-none opacity-40"
+                        style={gradientContainerStyle}
+                    >
+                        <div className="h-full" style={gradientInnerStyle} />
+                    </div>
 
                     {/* Left Handle (Min) */}
                     <div 
