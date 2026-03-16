@@ -9,6 +9,7 @@ import { featureRegistry } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
 import { VirtualSpace } from '../engine/PrecisionMath'; // Added Import
 import * as THREE from 'three';
+import { ensureLightIds } from '../features/lighting/index';
 
 // Helper to clean up Three.js objects for JSON serialization
 export const sanitizeFeatureState = (state: Record<string, unknown>) => {
@@ -149,12 +150,12 @@ export const applyPresetState = (p: Partial<Preset>, set: (partial: Record<strin
             // Consolidated Lighting Migration
             if (feat.id === 'lighting' && incomingData) {
                 if (incomingData.lights) {
-                    // Populate missing new fields (type, rotation)
-                    nextState.lights = incomingData.lights.map((l: Record<string, unknown>) => ({
+                    // Populate missing new fields (type, rotation) and ensure stable IDs
+                    nextState.lights = ensureLightIds(incomingData.lights.map((l: Record<string, unknown>) => ({
                         ...l,
                         type: l.type || 'Point',
                         rotation: l.rotation || { x: 0, y: 0, z: 0 }
-                    }));
+                    })) as any);
                 } else if (incomingData.light0_posX !== undefined) {
                     // V2 Legacy Migration
                     const newLights = [];
@@ -196,11 +197,11 @@ export const applyPresetState = (p: Partial<Preset>, set: (partial: Record<strin
     // Root Legacy Lights Array Migration
     if (p.lights && p.lights.length > 0) {
         if (actions.setLighting) {
-             const migratedLights = p.lights.map((l: Record<string, unknown>) => ({
+             const migratedLights = ensureLightIds(p.lights.map((l: Record<string, unknown>) => ({
                  ...l,
                  type: l.type || 'Point',
                  rotation: l.rotation || { x: 0, y: 0, z: 0 }
-             }));
+             })) as any);
              actions.setLighting({ lights: migratedLights });
         }
     }

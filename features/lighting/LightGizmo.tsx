@@ -13,19 +13,15 @@ import { ensureLightIds } from './index';
 const globalGizmoRefs = { current: {} as {[key: string]: { update: () => void; hide?: () => void }} };
 
 // Export tick function for orchestrated updates
-let _idsMigrated = false;
 export const tick = () => {
     // Read lights once for visibility culling — avoids per-gizmo store reads
     const lights = useFractalStore.getState().lighting?.lights;
     if (!lights) return;
 
-    // One-time migration: ensure all lights have stable IDs (legacy state compat)
-    if (!_idsMigrated) {
-        _idsMigrated = true;
-        const migrated = ensureLightIds(lights);
-        if (migrated !== lights) {
-            (useFractalStore.getState() as any).setLighting?.({ lights: migrated });
-        }
+    // Ensure all lights have stable IDs (handles legacy state, preset loads, formula changes)
+    const migrated = ensureLightIds(lights);
+    if (migrated !== lights) {
+        (useFractalStore.getState() as any).setLighting?.({ lights: migrated });
     }
 
     // Build ID→light lookup for culling
