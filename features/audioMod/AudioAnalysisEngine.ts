@@ -52,7 +52,7 @@ export class AudioAnalysisEngine {
     private decks: [Deck | null, Deck | null] = [null, null];
     private masterGain: GainNode | null = null;
 
-    private dataArray: Uint8Array | null = null;
+    private dataArray: Uint8Array<ArrayBuffer> | null = null;
     
     // State
     public isMicActive: boolean = false;
@@ -119,7 +119,6 @@ export class AudioAnalysisEngine {
         this.init();
         if (!this.audioContext) return;
         try {
-            // @ts-expect-error — getDisplayMedia audio option not in all TS lib targets
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             stream.getVideoTracks().forEach(track => track.stop());
             

@@ -6,14 +6,13 @@ import { registry } from '../../engine/FractalRegistry';
 import { FormulaSelect } from './formula/FormulaSelect';
 import { LfoList } from './formula/LfoList';
 import { useFractalStore } from '../../store/fractalStore';
-import { useAnimationStore } from '../../store/animationStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { buildFormulaContextMenu } from './formula/FormulaSelect';
-import { DiceIcon, AlertIcon } from '../Icons';
+import { AlertIcon } from '../Icons';
 import { nodeRegistry } from '../../engine/NodeRegistry';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
-import ToggleSwitch from '../ToggleSwitch';
-import { SectionLabel } from '../SectionLabel';
+import { FeatureSection } from '../FeatureSection';
+import { SectionLabel, SectionDivider } from '../SectionLabel';
 import { StatusDot } from '../StatusDot';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { getProxy } from '../../engine/worker/WorkerProxy';
@@ -67,34 +66,28 @@ const HybridBoxSection: React.FC<{ state: FractalState }> = ({ state }) => {
         }, 50);
     }, [localPending, isCompiled]);
 
-    return (
-        <div className="border-t border-white/5" data-help-id="hybrid.mode">
-            {/* Main Header — non-collapsible */}
-            <div
-                className={`flex items-center justify-between px-3 py-1 select-none ${!isOn ? 'cursor-pointer hover:bg-white/5' : ''}`}
-                onClick={!isOn ? () => handleToggle(true) : undefined}
-            >
-                <div className="flex items-center gap-1.5">
-                    <SectionLabel color={isOn ? 'text-gray-300' : 'text-gray-600'}>Hybrid Box Fold</SectionLabel>
-                    {!isOn && <SectionLabel variant="tiny" className="ml-1">off</SectionLabel>}
-                    {isOn && isCompiled && !hasPendingChanges && (
-                        <StatusDot status="active" />
-                    )}
-                    {isOn && needsCompile && (
-                        <StatusDot status="pending" />
-                    )}
-                </div>
-                <div className="w-10" onClick={e => e.stopPropagation()}>
-                    <ToggleSwitch value={isOn} onChange={handleToggle} />
-                </div>
-            </div>
+    const statusDots = (
+        <>
+            {isOn && isCompiled && !hasPendingChanges && <StatusDot status="active" />}
+            {isOn && needsCompile && <StatusDot status="pending" />}
+        </>
+    );
 
-            {/* Sub-sections (only when hybrid is on) */}
-            {isOn && (
-                <div className="pb-1">
+    return (
+        <div data-help-id="hybrid.mode">
+            <FeatureSection
+                label="Hybrid Box Fold"
+                featureId="geometry"
+                toggleParam="hybridMode"
+                enabled={isOn}
+                onToggle={handleToggle}
+                statusContent={statusDots}
+                headerClassName={isCompiled ? '' : 'bg-transparent'}
+            >
+                <div className="bg-white/[0.02]">
                     {/* --- Compile Settings sub-section --- */}
-                    <CollapsibleSection label="Compile Settings" defaultOpen={false}>
-                        <div className="ml-1 px-1">
+                    <CollapsibleSection label="Compile Settings" defaultOpen={false} variant="panel">
+                        <div>
                             <AutoFeaturePanel
                                 featureId="geometry"
                                 whitelistParams={['hybridFoldType', 'hybridComplex', 'hybridSwap', 'hybridPermute']}
@@ -122,8 +115,8 @@ const HybridBoxSection: React.FC<{ state: FractalState }> = ({ state }) => {
 
                     {/* --- Parameters sub-section (only when compiled) --- */}
                     {isCompiled && (
-                        <CollapsibleSection label="Parameters" defaultOpen={true}>
-                            <div className="ml-1 px-1">
+                        <CollapsibleSection label="Parameters" defaultOpen={true} variant="panel">
+                            <div>
                                 <AutoFeaturePanel
                                     featureId="geometry"
                                     groupFilter="hybrid"
@@ -133,7 +126,7 @@ const HybridBoxSection: React.FC<{ state: FractalState }> = ({ state }) => {
                         </CollapsibleSection>
                     )}
                 </div>
-            )}
+            </FeatureSection>
         </div>
     );
 };
@@ -159,8 +152,6 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
   const openGlobalMenu = useFractalStore(s => s.openContextMenu);
   const [loadTime, setLoadTime] = useState<string | null>(null);
 
-  // Animation Store Access for Auto-Keying
-  const { isRecording, currentFrame, addKeyframe, addTrack, sequence } = useAnimationStore();
 
   useEffect(() => {
     // 1. Subscribe to new events
@@ -182,29 +173,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
   const coreMath = state.coreMath;
   if (!coreMath || !state.formula) return null;
 
-  // Helper to batch record updates
-  const recordUpdates = (prefix: string, updates: Record<string, number>) => {
-      if (!isRecording) return;
-      Object.entries(updates).forEach(([key, val]) => {
-          const tid = `${prefix}.${key}`;
-          if (!sequence.tracks[tid]) {
-              // Try to find a nice label from registry or just use ID
-              let label = key;
-              if (prefix === 'coreMath') {
-                 const def = registry.get(state.formula);
-                 const p = def?.parameters.find(param => param?.id === key);
-                 if (p) label = p.label;
-              } else if (prefix === 'geometry') {
-                 if (key === 'juliaX') label = 'Julia X';
-                 else if (key === 'juliaY') label = 'Julia Y';
-                 else if (key === 'juliaZ') label = 'Julia Z';
-                 else if (key === 'hybridScale') label = 'Box Scale';
-              }
-              addTrack(tid, label);
-          }
-          addKeyframe(tid, currentFrame, val);
-      });
-  };
+
 
 
 
@@ -406,7 +375,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
   const switchFormula = (f: FormulaType) => { actions.setFormula(f); if (f === 'Modular' && onSwitchTab) onSwitchTab('Graph'); };
 
   return (
-    <div className="animate-fade-in -mx-4 -mt-4 min-h-full" onContextMenu={handlePanelContextMenu}>
+    <div className="animate-fade-in -mx-4 -mt-4 min-h-full flex flex-col" onContextMenu={handlePanelContextMenu}>
        <div className="bg-gray-800/20 border-b border-white/5 p-4 pb-3" data-help-id="formula.active">
            <div className="flex justify-between items-baseline mb-1">
                 <SectionLabel color="text-gray-500">Active Formula</SectionLabel>
@@ -421,83 +390,27 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
              <>{params.map(p => renderControl(p))}</>
         </div>
 
-        {/* Rounded divider: grey cap with rounded bottom, then black gap */}
-        <div className="bg-white/[0.06] h-1.5 rounded-b-lg" />
-        <div className="h-1" />
+        <SectionDivider />
 
         <div className="border-t border-white/5" data-help-id="formula.transform">
             <AutoFeaturePanel featureId="geometry" groupFilter="transform" />
-            {state.geometry.preRotEnabled && state.geometry.preRotMaster && (
-                <div className="ml-2 mb-px">
-                    <Vector3Input
-                        label="Local Rotation"
-                        value={new THREE.Vector3(state.geometry.preRotX, state.geometry.preRotY, state.geometry.preRotZ)}
-                        min={-Math.PI}
-                        max={Math.PI}
-                        step={0.01}
-                        onChange={(v) => {
-                            const v3 = v as THREE.Vector3;
-                            actions.setGeometry({ preRotX: v3.x, preRotY: v3.y, preRotZ: v3.z });
-                            recordUpdates('geometry', { preRotX: v3.x, preRotY: v3.y, preRotZ: v3.z });
-                        }}
-                        scale="pi"
-                        trackKeys={['geometry.preRotX', 'geometry.preRotY', 'geometry.preRotZ']}
-                        trackLabels={['Spin X', 'Spin Y', 'Spin Z']}
-                        defaultValue={new THREE.Vector3(0, 0, 0)}
-                    />
-                </div>
-            )}
        </div>
+
+       <div className="border-t border-white/5">
+           <AutoFeaturePanel featureId="geometry" groupFilter="burning" />
+       </div>
+
+       <SectionDivider />
 
        <div className="border-t border-white/5" data-help-id="julia.mode">
-           {/* Toggle only — whitelistParams suppresses customUI */}
-           <AutoFeaturePanel featureId="geometry" whitelistParams={['juliaMode']} />
-           {state.geometry.juliaMode && (
-               <div className="ml-2 flex flex-col">
-                   <div className="mb-px">
-                       <Vector3Input
-                           label="Julia Coordinate"
-                           value={new THREE.Vector3(state.geometry.juliaX, state.geometry.juliaY, state.geometry.juliaZ)}
-                           min={-2.0}
-                           max={2.0}
-                           step={0.01}
-                           onChange={(v) => {
-                               const v3 = v as THREE.Vector3;
-                               actions.setGeometry({ juliaX: v3.x, juliaY: v3.y, juliaZ: v3.z });
-                               recordUpdates('geometry', { juliaX: v3.x, juliaY: v3.y, juliaZ: v3.z });
-                           }}
-                           trackKeys={['geometry.juliaX', 'geometry.juliaY', 'geometry.juliaZ']}
-                           trackLabels={['Julia X', 'Julia Y', 'Julia Z']}
-                           defaultValue={new THREE.Vector3(0, 0, 0)}
-                       />
-                   </div>
-                   {/* Pick Coordinate rendered via customUI + randomize button */}
-                   <div className="flex gap-px">
-                       <div className="flex-1">
-                           <AutoFeaturePanel featureId="geometry" groupFilter="julia" excludeParams={['juliaMode']} />
-                       </div>
-                       <button
-                           onClick={() => {
-                               const s = useFractalStore.getState();
-                               s.handleInteractionStart('param');
-                               s.setGeometry({
-                                   juliaX: s.geometry.juliaX + (Math.random() * 2 - 1) * 0.5,
-                                   juliaY: s.geometry.juliaY + (Math.random() * 2 - 1) * 0.5,
-                                   juliaZ: s.geometry.juliaZ + (Math.random() * 2 - 1) * 0.5,
-                               });
-                               s.handleInteractionEnd();
-                           }}
-                           className="w-8 flex items-center justify-center bg-gray-900 border border-gray-700 hover:border-cyan-500/50 hover:bg-cyan-500/10 text-gray-400 hover:text-cyan-300 rounded transition-colors"
-                           title="Randomize Julia coordinate"
-                       >
-                           <DiceIcon />
-                       </button>
-                   </div>
-               </div>
-           )}
+           <AutoFeaturePanel featureId="geometry" groupFilter="julia" />
        </div>
 
+       <SectionDivider />
+
        <HybridBoxSection state={state} />
+
+       <SectionDivider />
 
        <LfoList state={state} actions={actions} />
 

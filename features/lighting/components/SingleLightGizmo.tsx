@@ -81,11 +81,12 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
                 return;
             }
 
-            // Use getBoundingClientRect for accurate CSS dimensions on all devices
-            // This fixes mobile offset issues where internal resolution may differ from CSS size
-            const rect = canvasEl.getBoundingClientRect();
-            const width = rect.width;
-            const height = rect.height;
+            // Use clientWidth/clientHeight (pre-transform layout dimensions) for positioning.
+            // The gizmo container lives inside the CSS-scaled parent, so translate3d operates
+            // in pre-transform space. getBoundingClientRect would give post-transform visual
+            // size, causing positions to be wrong when fitScale < 1.
+            const width = canvasEl.clientWidth;
+            const height = canvasEl.clientHeight;
             const sceneOffset = engine.sceneOffset;
 
             // 1. Calculate World Position
@@ -167,9 +168,12 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
 
 
     const handlePointerDown = (e: React.PointerEvent, part: string) => {
-        const camera = getViewportCamera();
+        // Use display camera — matches what update() uses for gizmo positioning
+        const camera = getDisplayCamera();
         if (!camera) return;
-        const origin = getLightWorldPosition(light, camera, engine.sceneOffset);
+        // Read fresh from store — props may lag behind store updates
+        const currentLight = useFractalStore.getState().lighting?.lights?.[index] ?? light;
+        const origin = getLightWorldPosition(currentLight, camera, engine.sceneOffset);
         onDragStart(e, index, part, origin);
     };
     

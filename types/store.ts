@@ -87,7 +87,10 @@ export interface FractalStoreState extends FeatureStateMap {
   isUserInteracting: boolean; // Global flag for slider/gizmo interaction
 
   // Active Viewport State
-  cameraPos: { x: number, y: number, z: number };
+  // NOTE: cameraPos was removed — it was always (0,0,0) at runtime.
+  // World position lives exclusively in sceneOffset. The field still exists
+  // in the Preset type (types/fractal.ts) for backwards-compatible serialization;
+  // PresetLogic absorbs it into sceneOffset on load.
   cameraRot: { x: number, y: number, z: number, w: number };
   targetDistance: number;
 
@@ -231,7 +234,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     
     setShowLightGizmo: (v: boolean) => void;
     setGizmoDragging: (v: boolean) => void;
-    setDraggedLight: (index: number | null) => void;
+    setDraggedLight: (id: string | null) => void;
     
     setInteractionMode: (mode: InteractionMode) => void;
     setFocusLock: (v: boolean) => void;
@@ -286,11 +289,18 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
 
     resetCamera: () => void;
     
-    // Camera Manager Actions
-    addCamera: (nameOverride?: string) => void;
+    // Camera Primitives (generic store mutations)
+    setActiveCameraId: (id: string | null) => void;
+    applyCameraState: (state: CameraState) => void;
+    addSavedCamera: (cam: SavedCamera) => void;
     updateCamera: (id: string, updates: Partial<SavedCamera>) => void;
     deleteCamera: (id: string) => void;
+    reorderCameras: (fromIndex: number, toIndex: number) => void;
+
+    // Camera Manager (orchestration — composes primitives + events + optics)
+    addCamera: (nameOverride?: string) => void;
     selectCamera: (id: string | null) => void;
+    duplicateCamera: (id: string) => void;
 
     handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
     handleInteractionEnd: () => void;

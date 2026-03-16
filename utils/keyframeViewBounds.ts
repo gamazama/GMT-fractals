@@ -17,7 +17,7 @@ export const calculateViewBounds = (trackIds: string[], sequence: any, selectedI
 
     trackIds.forEach(tid => {
         const track = sequence.tracks[tid];
-        if (track) track.keyframes.forEach(k => checkKey(k, tid));
+        if (track) track.keyframes.forEach((k: Keyframe) => checkKey(k, tid));
     });
 
     if (!hasKeys) return null;

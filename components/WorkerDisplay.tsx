@@ -53,8 +53,7 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
         const isMobile = window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 768;
 
         const proxy = getProxy();
-        // Pass initial camera position so the first preview frame isn't rendered from origin
-        const camPos = state.cameraPos || { x: 0, y: 0, z: 3 };
+        // Camera is always at origin; world position is in sceneOffset (sent below).
         const camRot = state.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
         const camFov = (state as any).optics?.camFov ?? 60;
         proxy.initWorkerMode(
@@ -64,7 +63,7 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
             height,
             dpr,
             isMobile,
-            { position: [camPos.x, camPos.y, camPos.z], quaternion: [camRot.x, camRot.y, camRot.z, camRot.w], fov: camFov }
+            { position: [0, 0, 0], quaternion: [camRot.x, camRot.y, camRot.z, camRot.w], fov: camFov }
         );
 
         // Send initial offset so the worker starts at the correct position

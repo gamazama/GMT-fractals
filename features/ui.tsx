@@ -26,19 +26,20 @@ function lazify<P extends object>(
     factory: () => Promise<{ default: React.ComponentType<P> }>
 ): React.FC<P> {
     const LazyComp = React.lazy(factory);
-    return (props: P) => <Suspense fallback={null}><LazyComp {...props} /></Suspense>;
+    return (props: P) => <Suspense fallback={null}><LazyComp {...(props as any)} /></Suspense>;
 }
 
 const LazyFlowEditor = lazify(() => import('../components/panels/flow/FlowEditor'));
-const LazyAudioPanel = lazify(() => import('./audioMod/AudioPanel').then(m => ({ default: m.AudioPanel })));
-const LazyAudioSpectrum = lazify(() => import('./audioMod/AudioSpectrum').then(m => ({ default: m.AudioSpectrum })));
-const LazyDebugToolsOverlay = lazify(() => import('./debug_tools/DebugToolsOverlay').then(m => ({ default: m.DebugToolsOverlay })));
+const LazyAudioPanel = lazify(() => import('./audioMod/AudioPanel').then(m => ({ default: m.AudioPanel })) as Promise<{ default: React.ComponentType<any> }>);
+const LazyAudioSpectrum = lazify(() => import('./audioMod/AudioSpectrum').then(m => ({ default: m.AudioSpectrum })) as Promise<{ default: React.ComponentType<any> }>);
+const LazyDebugToolsOverlay = lazify(() => import('./debug_tools/DebugToolsOverlay').then(m => ({ default: m.DebugToolsOverlay })) as Promise<{ default: React.ComponentType<any> }>);
 
 // --- 3. Import Widget Components ---
 import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogram';
 import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
 // Replaced JuliaPicker with InteractionPicker
 import { InteractionPicker } from '../components/InteractionPicker';
+import { JuliaRandomize } from '../components/widgets/JuliaRandomize';
 import { ColorGradingHistogram, OpticsControls, OpticsDofControls, NavigationControls } from '../components/panels/scene_widgets';
 
 // --- 4. Define Connectors (Wrappers that need Store access) ---
@@ -122,6 +123,7 @@ export const registerUI = () => {
     componentRegistry.register('coloring-histogram', ConnectedColoringHistogram);
     componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock);
     componentRegistry.register('interaction-picker', InteractionPicker);
+    componentRegistry.register('julia-randomize', JuliaRandomize);
     componentRegistry.register('audio-spectrum', LazyAudioSpectrum);
     componentRegistry.register('audio-link-controls', AudioLinkControls);
     

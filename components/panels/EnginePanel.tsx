@@ -28,7 +28,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
 
         relevantFeatures.forEach(fid => {
             // Shallow copy slice if it exists
-            const slice = (store as Record<string, unknown>)[fid];
+            const slice = (store as unknown as Record<string, unknown>)[fid];
             if (slice && typeof slice === 'object') {
                 vState[fid] = { ...(slice as Record<string, unknown>) };
             }
@@ -154,7 +154,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
         // Populate pending changes based on diffs between Profile and Store
         Object.entries(profile).forEach(([featId, params]) => {
             Object.entries(params as Record<string, unknown>).forEach(([param, val]) => {
-                const storeVal = (store as Record<string, Record<string, unknown>>)[featId]?.[param];
+                const storeVal = (store as unknown as Record<string, Record<string, unknown>>)[featId]?.[param];
                 
                 let isDiff = storeVal !== val;
                 // Fuzzy match for floats

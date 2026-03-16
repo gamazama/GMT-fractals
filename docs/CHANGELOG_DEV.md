@@ -4,6 +4,49 @@ Chronological log of significant changes during the v0.8.9 development cycle (un
 
 ## 2026-03-16
 
+### Unified Camera Coordinate System
+
+**Architecture:**
+- **Canonical camera state:** `cameraPos` has been removed from the store entirely — it was always `(0,0,0)`. All world position lives in `sceneOffset` (high-precision `PreciseVector3`). The field remains in the `Preset` type for backwards-compatible serialization; `applyPresetState()` absorbs it into `sceneOffset` on load. Navigation's debounced store write normalizes by folding `camera.position` into `sceneOffset` after every interaction.
+- **`targetDistance` unified:** Always means physics-based surface distance (from raymarching probe), never orbit radius. Removed the orbit-mode override that wrote `camera.position.length()` to `targetDistance`.
+- **`isOrbit` removed from VirtualSpace:** `updateSmoothing()` in `PrecisionMath.ts` no longer takes an `isOrbit` parameter. Both modes use the same lerp-based smoothing path. Removed from `FractalEngine.ts` call site as well.
+- **Shadow unified offset:** Navigation computes `sceneOffset + camera.position` every frame as a shadow ref, so canonical world position is always available for reads regardless of orbit interaction state.
+- **`initOrbitPivot()` helper:** Unified orbit setup used on initial load, mode switch, camera unlock, teleport, and animation stop. Sets orbit target at `camera.position + forward * surfaceDistance` without manipulating `sceneOffset` (avoids `OFFSET_SET` to worker which resets accumulation).
+- **Mode-agnostic engine:** `cameraMode` in `renderState` is informational only (HUD display). Zero engine-level branching on camera mode in VirtualSpace, FractalEngine, renderWorker, animation, camera manager, or preset system.
+- **Simplified mode switching:** `absorbOrbitPosition()` folds residual orbit position into offset on Orbit→Fly switch. Fly→Orbit just calls `initOrbitPivot()`. Removed `syncOrbitTargetToCamera()` and forced OrbitControls remount (`orbitControlsKey`).
+- **Mode-agnostic `useInteractionManager`:** Light drag position absorption now checks `cam.position.lengthSq() > 1e-8` instead of `state.cameraMode === 'Fly'`.
+
+**Impact:**
+- Animation timeline, camera manager, preset system, and undo/redo no longer need to know about Orbit vs Fly mode.
+- Camera saves from Orbit mode load correctly in Fly mode (and vice versa) with consistent surface distance.
+- No visual jumps or accumulation resets during orbit interactions.
+
+- Files: `components/Navigation.tsx`, `engine/PrecisionMath.ts`, `engine/FractalEngine.ts`, `hooks/useInteractionManager.ts`, `types/common.ts`
+
+### Camera Manager Overhaul
+
+**New features:**
+- **Drag-to-reorder:** Saved cameras can be reordered via drag handles in the camera list.
+- **Update camera button:** Active cameras show an amber overwrite button when the view has drifted from the saved state, with a `*` modified indicator.
+- **Smooth transitions:** Switching between saved cameras now lerps position (smoothstep) and slerps rotation over 0.5s. User input cancels the transition instantly.
+- **Thumbnails:** New cameras auto-capture a 128x128 thumbnail from the current render. Displayed in the camera list for visual identification.
+- **Duplicate camera:** Copy button clones a saved camera with all state (position, rotation, optics) and "(copy)" suffix.
+- **Keyboard shortcuts:** `Ctrl+1` through `Ctrl+9` instantly switch to saved camera slots 1-9. Shortcut hints shown in the camera list.
+- **Unified position display:** Collapsible section showing live XYZ position and rotation in unified coordinates (high-precision).
+- **Export/Import cameras:** Export saved cameras as JSON, import from file. Cameras are also persisted in presets and PNG snapshot metadata.
+- **Frame fractal button:** Auto-adjusts camera distance based on the physics probe's distance estimate for comfortable framing.
+- **Delete confirmation:** Delete now requires a second click within 3s to confirm, preventing accidental camera loss.
+
+**Store fixes:**
+- **Undo stack cap:** Camera undo/redo stacks now capped at 50 entries (was unbounded).
+- **Clear undo on formula change:** Camera undo/redo stacks cleared when switching formulas (old positions are meaningless for new fractals).
+- **Typed optics accessor:** Replaced `as any` casts for `setOptics` with a typed helper function `getSetOptics()` in cameraSlice.
+
+**Architecture:**
+- New `camera_transition` event in FractalEvents for smooth animated camera moves (distinct from instant `camera_teleport`).
+- `duplicateCamera` and `reorderCameras` actions added to cameraSlice and FractalActions interface.
+- `savedCameras` field added to `Preset` type — cameras now persist in presets, share strings, and PNG snapshots.
+
 ### Gradient Editor Improvements
 
 **Bug fixes:**

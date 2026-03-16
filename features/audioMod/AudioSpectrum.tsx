@@ -17,8 +17,7 @@ export const AudioSpectrum: React.FC = () => {
     
     // DDFS Wrapper for Modulation
     const updateModulation = (id: string, update: Partial<ModulationRule>) => {
-        // @ts-expect-error — DDFS dynamic store action
-        store.updateModulation({ id, update });
+        (store as any).updateModulation({ id, update });
     };
 
     const rules = modulation.rules.filter(r => r.source === 'audio');

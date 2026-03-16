@@ -18,25 +18,15 @@ export const Layer2Tab = ({ state, actions }: { state: FractalState, actions: Fr
 
     return (
         <div className="flex flex-col" data-help-id="grad.layer2">
-             {/* 1. Gradient */}
-             <AutoFeaturePanel featureId="coloring" groupFilter="layer2_grad" />
-            
-             {/* 2. Mode */}
              <AutoFeaturePanel featureId="coloring" groupFilter="layer2_top" />
+             <AutoFeaturePanel featureId="coloring" groupFilter="layer2_grad" />
+             <AutoFeaturePanel featureId="coloring" groupFilter="layer2_hist" />
 
-             {/* 3. Histogram + Sliders (Custom UI) */}
-             <div className="mb-2">
-                 <AutoFeaturePanel featureId="coloring" groupFilter="layer2_hist" />
-             </div>
-             
-             {/* 4.1 Extra: Escape Radius (Visible only if relevant to Layer 2 Mode) */}
+             {/* Escape Radius — only relevant for certain Layer 2 modes */}
              {(mode2 === 6.0 || mode2 === 8.0) && (
-                 <div className="mb-1">
-                     <AutoFeaturePanel featureId="coloring" whitelistParams={['escape']} />
-                 </div>
+                 <AutoFeaturePanel featureId="coloring" whitelistParams={['escape']} />
              )}
-            
-            {/* 4. Controls (Twist, Blend Mode) */}
+
             <AutoFeaturePanel featureId="coloring" groupFilter="layer2_bottom" />
         </div>
     );

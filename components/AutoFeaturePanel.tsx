@@ -8,6 +8,7 @@ import SmallColorPicker from './SmallColorPicker';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import Dropdown from './Dropdown';
 import { Vector2Input, Vector3Input } from './vector-input';
+import type { BaseVectorInputProps } from './vector-input/types';
 import { Knob } from './Knob';
 import { collectHelpIds } from '../utils/helpUtils';
 import { componentRegistry } from './registry/ComponentRegistry';
@@ -175,7 +176,18 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
              return;
         }
         const setter = (actions as any)[setterName];
-        if (setter) setter({ [key]: value });
+        if (setter) {
+            // Decompose composed vec3/vec2 back into individual scalar fields
+            if (config?.composeFrom && value && typeof value === 'object') {
+                const components = config.composeFrom;
+                const vals = 'z' in value
+                    ? { [components[0]]: value.x, [components[1]]: value.y, [components[2]]: value.z }
+                    : { [components[0]]: value.x, [components[1]]: value.y };
+                setter(vals);
+            } else {
+                setter({ [key]: value });
+            }
+        }
     };
 
     const handleConfirmedUpdate = () => {
@@ -215,7 +227,15 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     if (!feature || !sliceState) return null;
     
     const renderControl = (key: string, config: ParamConfig) => {
-        const val = sliceState[key] ?? config.default;
+        // For composed vec3/vec2, always assemble from individual scalar fields
+        let val;
+        if (config.composeFrom) {
+            const c = config.composeFrom;
+            if (c.length === 3) val = new THREE.Vector3(sliceState[c[0]] ?? 0, sliceState[c[1]] ?? 0, sliceState[c[2]] ?? 0);
+            else if (c.length === 2) val = new THREE.Vector2(sliceState[c[0]] ?? 0, sliceState[c[1]] ?? 0);
+        } else {
+            val = sliceState[key] ?? config.default;
+        }
         const isParamDisabled = isDisabled || disabledParams.includes(key);
         
         // Engine Panel Dense Rendering Logic
@@ -348,7 +368,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (config.type === 'vec2') {
             const x = val?.x ?? config.default?.x ?? 0;
             const y = val?.y ?? config.default?.y ?? 0;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode} scale={config.scale} linkable={config.linkable} /></div>;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
         }
         if (config.type === 'vec3') {
              const x = val?.x ?? config.default?.x ?? 0;
@@ -362,7 +382,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
              const trackLabels = config.composeFrom
                  ? undefined
                  : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`];
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode} scale={config.scale} linkable={config.linkable} /></div>;
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
         }
         
         if (config.type === 'image') {
@@ -432,14 +452,26 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             if (Component) renderedChildren.push(<div key={`custom-${c.componentId}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
         });
         const containerClass = isHalfWidth ? "flex-1 min-w-0" : "flex flex-col";
-        const hasChildren = renderedChildren.length > 0;
         const hasCustomUIChildren = feature.customUI?.some(c => c.parentId === id) ?? false;
         const isParentSlider = childIds.length > 0 || hasCustomUIChildren;
+
+        // For parent params, inject description as first indented child
+        const showDescription = showHints && config.description && !isDisabled && variant !== 'dense'
+            && (config.type !== 'boolean' || sliceState?.[id]);
+        if (showDescription && isParentSlider) {
+            renderedChildren.unshift(
+                <div key={`desc-${id}`}>
+                    <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
+                </div>
+            );
+        }
+
+        const hasChildren = renderedChildren.length > 0;
         return (
             <div key={id} className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}>
                 {isParentSlider && <div className={`absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
-                {showHints && config.description && !isDisabled && variant !== 'dense' && (
+                {showDescription && !isParentSlider && (
                     <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
                 )}
                 {renderedChildren.length > 0 && (
@@ -556,7 +588,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                         open={!collapsedGroups.has(groupId)}
                         onToggle={() => toggleGroup(groupId)}
                         defaultOpen={true}
-                        headerClassName="px-2 py-0.5 text-[9px] font-bold text-gray-500 hover:text-gray-300 bg-neutral-800 rounded-sm"
+                        variant="panel"
                     >
                         <div className="flex flex-col">
                             {filtered.map((item, idx) => (

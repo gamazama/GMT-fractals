@@ -22,11 +22,12 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
     
     // UNIFIED CAMERA SUPPORT
     if (trackId.startsWith('camera.unified')) {
-        // Use the new CameraUtils to ensure math consistency with Scene Panel
-        // We fallback to Engine for camera local pos as Store might lag during high-speed fly
+        // Camera is always at origin; world position lives in sceneOffset.
+        // We read cam.position (Three.js local) only for the brief moment it's
+        // non-zero during orbit drag — store never has this, engine camera does.
         const cam0 = getViewportCamera() || engine.activeCamera;
-        const camPos = cam0 ? cam0.position : fs.cameraPos;
-        const unified = CameraUtils.getUnifiedPosition(camPos, fs.sceneOffset);
+        const localPos = cam0 ? cam0.position : { x: 0, y: 0, z: 0 };
+        const unified = CameraUtils.getUnifiedPosition(localPos, fs.sceneOffset);
 
         if (trackId === 'camera.unified.x') return unified.x;
         if (trackId === 'camera.unified.y') return unified.y;

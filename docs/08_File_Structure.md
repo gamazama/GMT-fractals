@@ -102,7 +102,7 @@ Self-contained modules defining State, UI, and Shaders.
 *   **`reflections`**: Raymarched reflections logic.
 *   **`water_plane.ts`**: Infinite ocean plane logic.
 *   **`volumetric/`**: Volumetric rendering effects (fog density, scatter).
-*   **`camera_manager`**: Camera position management and keyframing.
+*   **`camera_manager`**: Camera position management — saved cameras with thumbnails, drag-to-reorder, duplicate, smooth transitions, Ctrl+1-9 shortcuts, export/import, composition overlays. Persists into presets/PNG snapshots.
 *   **`engine`**: Master configuration profiles (Lite/Balanced/Ultra).
 
 ## 4. State Management (`store/`)

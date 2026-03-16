@@ -51,7 +51,8 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     // Matches trace.ts precision floor — PRECISION_RATIO_HIGH of distance from fractal origin
     float floatLimit = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
     
-    float visualLimit = pixelSizeScale * d * (1.0 / uDetail);
+    float orthoPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
+    float visualLimit = orthoPixelFootprint * (1.0 / uDetail);
     
     float eps = max(floatLimit, visualLimit);
 

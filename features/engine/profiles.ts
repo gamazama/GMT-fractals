@@ -200,8 +200,7 @@ export const detectEngineProfile = (state: any): string => {
             if (!slice) { match = false; break; }
             
             for (const [key, val] of Object.entries(params)) {
-                // @ts-expect-error — DDFS dynamic profile param access
-                const currentVal = slice[key];
+                const currentVal = (slice as Record<string, unknown>)[key];
                 if (typeof val === 'number' && typeof currentVal === 'number') {
                      // Fuzzy match for floats
                      if (Math.abs(val - currentVal) > 0.001) { match = false; break; }

@@ -217,7 +217,7 @@ export function buildFractalParams(mappings: WorkshopParam[], formulaName: strin
         const maxVal = Math.pow(2, bools.length) - 1;
         let defaultVal = 0;
         for (let i = 0; i < bools.length; i++) {
-            const raw = Array.isArray(bools[i].uiDefault) ? bools[i].uiDefault[0] : bools[i].uiDefault;
+            const raw = Array.isArray(bools[i].uiDefault) ? (bools[i].uiDefault as number[])[0] : bools[i].uiDefault;
             if (raw) defaultVal |= (1 << i);
         }
         const label = bools.map(b => b.name).join(' | ');

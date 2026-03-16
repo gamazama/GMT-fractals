@@ -2,7 +2,7 @@
 
 ## 🎯 Introduction to GMT
 
-**GMT (GPU Mandelbulb Tracer)** is a professional-grade, real-time 3D fractal engineering tool running entirely in the browser. It combines high-performance GPU Raymarching with a reactive, data-driven UI to render complex mathematical structures (Mandelbulbs, Mandelboxes, IFS) with photorealistic lighting, Path Tracing, and infinite zoom capabilities.
+**GMT (Fractal Explorer)** is a professional-grade, real-time 3D fractal engineering tool running entirely in the browser. It combines high-performance GPU Raymarching with a reactive, data-driven UI to render complex mathematical structures (Mandelbulbs, Mandelboxes, IFS) with photorealistic lighting, Path Tracing, and infinite zoom capabilities.
 
 This documentation system provides comprehensive information for developers working on GMT. Whether you're fixing bugs, adding features, or understanding the architecture, this index will guide you to the right resources.
 

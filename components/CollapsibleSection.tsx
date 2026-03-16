@@ -2,6 +2,15 @@
 import React, { useState } from 'react';
 import { SectionLabel } from './SectionLabel';
 
+/** Header style presets */
+const headerVariants = {
+    default: '',
+    /** Standard panel sub-section: grey background, matching AutoFeaturePanel collapsible groups */
+    panel: 'px-2 py-0.5 text-[9px] font-bold text-gray-500 hover:text-gray-300 bg-neutral-800 rounded-sm',
+} as const;
+
+type HeaderVariant = keyof typeof headerVariants;
+
 interface CollapsibleSectionProps {
     label: string;
     children: React.ReactNode;
@@ -11,7 +20,10 @@ interface CollapsibleSectionProps {
     labelColor?: string;
     rightContent?: React.ReactNode;
     className?: string;
+    /** Raw class overrides for the header button. Overrides variant if provided. */
     headerClassName?: string;
+    /** Preset header style. Defaults to 'default'. */
+    variant?: HeaderVariant;
     /** Controlled mode: pass open + onToggle to manage state externally */
     open?: boolean;
     onToggle?: () => void;
@@ -37,9 +49,11 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     rightContent,
     className = '',
     headerClassName = '',
+    variant = 'default',
     open: controlledOpen,
     onToggle,
 }) => {
+    const resolvedHeaderClass = headerClassName || headerVariants[variant];
     const [internalOpen, setInternalOpen] = useState(defaultOpen);
     const isControlled = controlledOpen !== undefined;
     const isOpen = isControlled ? controlledOpen : internalOpen;
@@ -53,7 +67,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         <div className={className}>
             <button
                 onClick={handleToggle}
-                className={`flex items-center gap-1.5 w-full px-2 py-1 text-left select-none hover:bg-white/5 transition-colors rounded-sm ${headerClassName}`}
+                className={`flex items-center gap-1.5 w-full px-2 py-1 text-left select-none hover:bg-white/5 transition-colors rounded-sm ${resolvedHeaderClass}`}
             >
                 <ChevronIcon open={isOpen} />
                 <SectionLabel variant={labelVariant} color={labelColor}>{label}</SectionLabel>

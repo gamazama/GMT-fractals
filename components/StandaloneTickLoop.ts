@@ -65,6 +65,7 @@ function tick(time: number) {
     const renderState = {
         cameraMode: storeState.cameraMode,
         isCameraInteracting: useAnimationStore.getState().isCameraInteracting,
+        isGizmoInteracting: proxy.isGizmoInteracting,
         optics: (storeState as any).optics ?? null,
         lighting: (storeState as any).lighting ?? null,
         quality: (storeState as any).quality ?? null,

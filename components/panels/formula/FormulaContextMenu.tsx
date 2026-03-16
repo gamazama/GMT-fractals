@@ -109,14 +109,14 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
             if (!p) return;
             const range = p.max - p.min;
             if (p.type === 'vec3') {
-                const cv = (cur as Record<string, unknown>)[p.id] as { x: number; y: number; z: number } || { x: 0, y: 0, z: 0 };
+                const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number; z: number } || { x: 0, y: 0, z: 0 };
                 updates[p.id] = {
                     x: Math.max(p.min, Math.min(p.max, cv.x + (Math.random() * 2 - 1) * range * pct)),
                     y: Math.max(p.min, Math.min(p.max, cv.y + (Math.random() * 2 - 1) * range * pct)),
                     z: Math.max(p.min, Math.min(p.max, cv.z + (Math.random() * 2 - 1) * range * pct)),
                 };
             } else if (p.type === 'vec2') {
-                const cv = (cur as Record<string, unknown>)[p.id] as { x: number; y: number } || { x: 0, y: 0 };
+                const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number } || { x: 0, y: 0 };
                 updates[p.id] = {
                     x: Math.max(p.min, Math.min(p.max, cv.x + (Math.random() * 2 - 1) * range * pct)),
                     y: Math.max(p.min, Math.min(p.max, cv.y + (Math.random() * 2 - 1) * range * pct)),
@@ -126,7 +126,7 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
                     const r = Math.random() * range + p.min;
                     updates[p.id] = p.step > 0 ? Math.round(r / p.step) * p.step : r;
                 } else {
-                    const cv = ((cur as Record<string, unknown>)[p.id] as number) ?? ((p.min + p.max) / 2);
+                    const cv = ((cur as unknown as Record<string, unknown>)[p.id] as number) ?? ((p.min + p.max) / 2);
                     const r = cv + (Math.random() * 2 - 1) * range * pct;
                     const clamped = Math.max(p.min, Math.min(p.max, r));
                     updates[p.id] = p.step > 0 ? Math.round(clamped / p.step) * p.step : clamped;

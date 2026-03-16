@@ -119,11 +119,14 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
                 // time to settle, so we keep that original snapshot.
                 // (no-op: the existing top-of-stack is already correct)
             } else {
-                // New gesture — push a fresh undo entry
-                set((state) => ({
-                    undoStack: [...state.undoStack, camState],
-                    redoStack: []
-                }));
+                // New gesture — push a fresh undo entry (capped at 50)
+                set((state) => {
+                    const newStack = [...state.undoStack, camState];
+                    return {
+                        undoStack: newStack.length > 50 ? newStack.slice(-50) : newStack,
+                        redoStack: []
+                    };
+                });
                 lastCameraUndoPush = now;
             }
             return;

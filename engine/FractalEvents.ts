@@ -9,9 +9,11 @@ export const FRACTAL_EVENTS = {
     RESET_ACCUM: 'reset_accum',
     OFFSET_SHIFT: 'offset_shift',
     OFFSET_SET: 'offset_set',
+    OFFSET_SILENT: 'offset_silent',
     CAMERA_ABSORB: 'camera_absorb',
     CAMERA_SNAP: 'camera_snap',
     CAMERA_TELEPORT: 'camera_teleport',
+    CAMERA_TRANSITION: 'camera_transition',
     SHADER_CODE: 'shader_code',
     IS_COMPILING: 'is_compiling',
     COMPILE_TIME: 'compile_time',
@@ -30,9 +32,11 @@ type EventMap = {
     [FRACTAL_EVENTS.RESET_ACCUM]: void;
     [FRACTAL_EVENTS.OFFSET_SHIFT]: { x: number; y: number; z: number };
     [FRACTAL_EVENTS.OFFSET_SET]: PreciseVector3;
+    [FRACTAL_EVENTS.OFFSET_SILENT]: PreciseVector3;
     [FRACTAL_EVENTS.CAMERA_ABSORB]: { camera: THREE.Camera };
     [FRACTAL_EVENTS.CAMERA_SNAP]: void;
     [FRACTAL_EVENTS.CAMERA_TELEPORT]: CameraState;
+    [FRACTAL_EVENTS.CAMERA_TRANSITION]: CameraState;
     [FRACTAL_EVENTS.SHADER_CODE]: string;
     [FRACTAL_EVENTS.IS_COMPILING]: boolean | string; 
     [FRACTAL_EVENTS.COMPILE_TIME]: number;

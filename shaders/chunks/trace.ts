@@ -91,7 +91,13 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
         // Note: uDetail is divided by uInternalScale because at higher internal resolutions,
         // each output pixel covers more render pixels, so we need less precision per output pixel
         float effectiveDetail = uDetail / uInternalScale;
-        float threshold = pixelSizeScale * d * (uPixelThreshold / effectiveDetail);
+        // Perspective: pixel footprint grows with distance (cone) → scale by d
+        // Ortho: pixel footprint is constant (parallel rays) → pixelSizeScale already
+        // contains the full world-space pixel size, don't multiply by d
+        float pixelFootprint = (uCamType > 0.5 && uCamType < 1.5)
+            ? pixelSizeScale   // Ortho: constant pixel size
+            : pixelSizeScale * d;  // Perspective/360: cone tracing
+        float threshold = pixelFootprint * (uPixelThreshold / effectiveDetail);
         float finalEps = max(threshold, floatPrecision);
         
         // D. Hit Detection

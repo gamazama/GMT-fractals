@@ -78,7 +78,7 @@ function createBlueNoiseWorker(): THREE.Texture {
 
             // Update the placeholder texture with real data
             // UniformManager auto-syncs resolution from tex.image each frame
-            placeholder.image = { data: new Uint8Array(imageData.data.buffer), width: w, height: h };
+            placeholder.image = { data: new Uint8ClampedArray(imageData.data.buffer), width: w, height: h };
             placeholder.needsUpdate = true;
         })
         .catch((err) => {

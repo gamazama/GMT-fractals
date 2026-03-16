@@ -353,7 +353,7 @@ export class WorkerExporter {
     }
 
     private blitPreview(texture: THREE.Texture, sess: ExportSession) {
-        const canvas = this.renderer.domElement as OffscreenCanvas;
+        const canvas = this.renderer.domElement as unknown as OffscreenCanvas;
         const screenW = canvas.width;
         const screenH = canvas.height;
         const imgAspect = sess.safeWidth / sess.safeHeight;
@@ -519,7 +519,7 @@ export class WorkerExporter {
         this.engine.pipeline.resize(this.savedResolution.w, this.savedResolution.h);
 
         // Reset renderer state
-        const canvas = this.renderer.domElement as OffscreenCanvas;
+        const canvas = this.renderer.domElement as unknown as OffscreenCanvas;
         this.renderer.setRenderTarget(null);
         this.renderer.setViewport(0, 0, canvas.width, canvas.height);
         this.renderer.setScissor(0, 0, canvas.width, canvas.height);

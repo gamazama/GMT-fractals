@@ -178,7 +178,7 @@ export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({
         return {
             min: axisMins[axis],
             max: axisMaxs[axis],
-            step: axisSteps[axis] * stepScale,
+            step: (axisSteps[axis] ?? step) * stepScale,
             hardMin,
             hardMax,
         };

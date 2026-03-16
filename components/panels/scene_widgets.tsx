@@ -246,40 +246,18 @@ export const OpticsDofControls: React.FC<FeatureComponentProps> = ({ sliceState,
     );
 };
 
-// --- WIDGET 3: NAVIGATION CONTROLS ---
-export const NavigationControls: React.FC<FeatureComponentProps> = () => {
-    // Connect to Root Store State
-    const cameraMode = useFractalStore(s => s.cameraMode);
+// --- SHARED: CAMERA POSITION/ROTATION DISPLAY ---
+// Used by both NavigationControls (Scene tab) and CameraManagerPanel
+export const CameraPositionDisplay: React.FC = () => {
     const sceneOffset = useFractalStore(s => s.sceneOffset);
-    const cameraPos = useFractalStore(s => s.cameraPos);
     const cameraRot = useFractalStore(s => s.cameraRot);
-    
-    const setCameraMode = useFractalStore(s => s.setCameraMode);
-    const optics = useFractalStore(s => s.optics);
-    const isOrtho = optics && Math.abs(optics.camType - 1.0) < 0.1;
 
-    // Use Utility to calculate Unified Coords and Rotations for display
-    const unified = CameraUtils.getUnifiedPosition(cameraPos, sceneOffset);
+    // World position lives entirely in sceneOffset (camera is always at origin)
+    const unified = CameraUtils.getUnifiedPosition({ x: 0, y: 0, z: 0 }, sceneOffset);
     const rotDeg = CameraUtils.getRotationDegrees(cameraRot);
 
     return (
-        <div className="flex flex-col gap-3">
-             <div className={isOrtho ? 'opacity-50 pointer-events-none' : ''}>
-                <ToggleSwitch 
-                    value={cameraMode}
-                    onChange={(v) => setCameraMode(v as any)}
-                    options={[
-                        { label: 'Orbit', value: 'Orbit' },
-                        { label: 'Fly', value: 'Fly' }
-                    ]}
-                />
-                {isOrtho && <p className="text-[9px] text-gray-500 mt-1 text-center">Fly Mode disabled in Orthographic view</p>}
-            </div>
-            
-            {cameraMode === 'Fly' && (
-                <AutoFeaturePanel featureId="navigation" groupFilter="movement" />
-            )}
-
+        <>
             <div data-help-id="cam.position">
                 <Vector3Input
                     label="Absolute Position"
@@ -293,7 +271,7 @@ export const NavigationControls: React.FC<FeatureComponentProps> = () => {
                     trackLabels={['Position X', 'Position Y', 'Position Z']}
                 />
             </div>
-            
+
             <div data-help-id="cam.rotation">
                 <Vector3Input
                     label="Rotation (Degrees)"
@@ -303,13 +281,41 @@ export const NavigationControls: React.FC<FeatureComponentProps> = () => {
                     min={-180}
                     max={180}
                     interactionMode="camera"
-                    // Pass the track keys for recording
                     trackKeys={['camera.rotation.x', 'camera.rotation.y', 'camera.rotation.z']}
                     trackLabels={['Rotation X', 'Rotation Y', 'Rotation Z']}
-                    // Critical: Enable conversion so UI shows Degrees but Store gets Radians
                     convertRadToDeg={true}
                 />
             </div>
+        </>
+    );
+};
+
+// --- WIDGET 3: NAVIGATION CONTROLS ---
+export const NavigationControls: React.FC<FeatureComponentProps> = () => {
+    const cameraMode = useFractalStore(s => s.cameraMode);
+    const setCameraMode = useFractalStore(s => s.setCameraMode);
+    const optics = useFractalStore(s => s.optics);
+    const isOrtho = optics && Math.abs(optics.camType - 1.0) < 0.1;
+
+    return (
+        <div className="flex flex-col gap-3">
+             <div className={isOrtho ? 'opacity-50 pointer-events-none' : ''}>
+                <ToggleSwitch
+                    value={cameraMode}
+                    onChange={(v) => setCameraMode(v as any)}
+                    options={[
+                        { label: 'Orbit', value: 'Orbit' },
+                        { label: 'Fly', value: 'Fly' }
+                    ]}
+                />
+                {isOrtho && <p className="text-[9px] text-gray-500 mt-1 text-center">Fly Mode disabled in Orthographic view</p>}
+            </div>
+
+            {cameraMode === 'Fly' && (
+                <AutoFeaturePanel featureId="navigation" groupFilter="movement" />
+            )}
+
+            <CameraPositionDisplay />
         </div>
     );
 };

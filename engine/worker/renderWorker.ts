@@ -208,7 +208,12 @@ function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
 
-    // NOTE: VirtualSpace offset is updated via OFFSET_SHIFT/OFFSET_SET messages only.
+    // Atomic offset sync: when the main thread absorbs orbit camera.position into offset,
+    // both arrive together in this RENDER_TICK — no 1-frame mismatch.
+    if (msg.syncOffset && engine) {
+        engine.virtualSpace.state = msg.offset;
+    }
+    // Otherwise: VirtualSpace offset is updated via OFFSET_SHIFT/OFFSET_SET messages only.
     // Do NOT override from RENDER_TICK — the store's sceneOffset lags behind real-time
     // offset_shift events from fly mode / orbit pivot, causing frame jumping.
 
@@ -405,9 +410,14 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
             case 'OFFSET_SET':
                 if (engine) {
                     engine.virtualSpace.state = msg.offset;
-                    engine.resetAccumulation();
+                    if (!msg.noReset) {
+                        engine.resetAccumulation();
+                    }
                 }
-                // Discard any buffered tick — its camera/offset data is stale
+                // Always discard buffered tick — its camera/offset data is stale.
+                // noReset preserves accumulated samples (inflate/absorb don't change
+                // unified position), but the pending tick would render with the old
+                // camera at the new offset, producing a wrong frame.
                 _pendingTick = null;
                 break;
 
@@ -500,7 +510,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     rgbeLoader.setDataType(THREE.HalfFloatType);
                     const hdrData = rgbeLoader.parse(msg.buffer);
                     if (hdrData) {
-                        const hdrTex = new THREE.DataTexture(hdrData.data, hdrData.width, hdrData.height, THREE.RGBAFormat, hdrData.type);
+                        const hdrTex = new THREE.DataTexture(hdrData.data as any, hdrData.width, hdrData.height, THREE.RGBAFormat, hdrData.type);
                         hdrTex.mapping = THREE.EquirectangularReflectionMapping;
                         hdrTex.minFilter = THREE.LinearMipmapLinearFilter;
                         hdrTex.generateMipmaps = true;

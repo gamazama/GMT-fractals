@@ -110,7 +110,7 @@ export const useGraphTools = ({
         simplifyTargetsRef.current.forEach(id => { if (id) trackIdsToProcess.add(id.split('::')[0]); });
 
         trackIdsToProcess.forEach(tid => {
-            const origTrack = originalSequenceRef.current.tracks[tid];
+            const origTrack = originalSequenceRef.current!.tracks[tid];
             if(!origTrack) return;
             const selectedKeys = origTrack.keyframes.filter((k: Keyframe) => targetSet.has(`${tid}::${k.id}`));
             if (selectedKeys.length < 2) return;

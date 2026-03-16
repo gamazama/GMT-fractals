@@ -31,11 +31,11 @@ export const useAppStartup = (isSceneReady: boolean) => {
             setTimeout(() => {
                 const currentStore = useFractalStore.getState();
                 const startConfig = getShaderConfigFromState(currentStore);
-                const camPos = currentStore.cameraPos || { x: 0, y: 0, z: 3 };
+                // Camera is always at origin; world position lives in sceneOffset.
                 const camRot = currentStore.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
                 const camFov = (currentStore as any).optics?.camFov ?? 60;
                 const initialCamera = {
-                    position: [camPos.x, camPos.y, camPos.z] as [number, number, number],
+                    position: [0, 0, 0] as [number, number, number],
                     quaternion: [camRot.x, camRot.y, camRot.z, camRot.w] as [number, number, number, number],
                     fov: camFov
                 };

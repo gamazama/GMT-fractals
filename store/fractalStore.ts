@@ -49,6 +49,8 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         
         if (!options.skipDefaultPreset) {
             get().resetParamHistory();
+            // Clear camera undo/redo — old positions make no sense for new formula
+            set({ undoStack: [], redoStack: [] });
         }
 
         const currentName = s.projectSettings.name;
@@ -213,7 +215,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         }
         
         set({ projectSettings: { name: newName, version: 0 }, lastSavedHash: null });
-        applyPresetState(p, set, get);
+        applyPresetState(p, set as (partial: Record<string, unknown>) => void, get as unknown as () => Record<string, unknown>);
         
         setTimeout(() => {
              const loadedState = get().getPreset({ includeScene: true });
@@ -233,14 +235,15 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         };
 
         if (options?.includeScene !== false) {
+             // cameraPos is always (0,0,0) — world position lives in sceneOffset.
+             // We write it to the preset for backwards compatibility with older versions.
+             p.cameraPos = { x: 0, y: 0, z: 0 };
              if (engine.activeCamera && engine.virtualSpace) {
                  const u = engine.virtualSpace.getUnifiedCameraState(engine.activeCamera, s.targetDistance);
-                 p.cameraPos = u.position;
                  p.cameraRot = u.rotation;
                  p.sceneOffset = u.sceneOffset;
                  p.targetDistance = u.targetDistance;
              } else {
-                 p.cameraPos = s.cameraPos;
                  p.cameraRot = s.cameraRot;
                  p.sceneOffset = s.sceneOffset;
                  p.targetDistance = s.targetDistance;
@@ -261,6 +264,19 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         });
         
         p.animations = s.animations;
+
+        // Save camera library (strip thumbnails to keep size manageable in presets)
+        if (s.savedCameras.length > 0) {
+            p.savedCameras = s.savedCameras.map(c => ({
+                id: c.id,
+                label: c.label,
+                position: c.position,
+                rotation: c.rotation,
+                sceneOffset: c.sceneOffset,
+                targetDistance: c.targetDistance,
+                optics: c.optics
+            }));
+        }
         
         if (s.formula === 'Modular') {
             p.graph = s.graph;
@@ -344,7 +360,7 @@ export const bindStoreToEngine = () => {
     const s = useFractalStore.getState();
 
     // Connect AnimationEngine to stores (decoupled injection — engine never imports stores directly)
-    animationEngine.connect(window.useAnimationStore, useFractalStore);
+    animationEngine.connect((window as any).useAnimationStore, useFractalStore);
 
     // Push initial state via proxy methods
     engine.isPaused = s.isPaused;
@@ -376,54 +392,8 @@ export const bindStoreToEngine = () => {
     useFractalStore.subscribe(state => state.isPaused, (v) => { engine.isPaused = v; });
     useFractalStore.subscribe(state => state.sampleCap, (v) => { engine.setPreviewSampleCap(v); });
 
-    // Auto-Save Camera Subscription
-    useFractalStore.subscribe(
-        (state) => [state.cameraPos, state.cameraRot, state.sceneOffset, state.targetDistance, state.optics] as const,
-        (data) => {
-            const [pos, rot, off, dist, optics] = data;
-            const current = useFractalStore.getState();
-            // @ts-expect-error — window global for cross-store access without import cycle
-            const isPlaying = window.useAnimationStore?.getState?.().isPlaying;
-
-            if (current.activeCameraId && !isPlaying) {
-                current.updateCamera(current.activeCameraId, {
-                    position: pos,
-                    rotation: rot,
-                    sceneOffset: off,
-                    targetDistance: dist,
-                    optics: optics
-                });
-            }
-        },
-        { fireImmediately: false, equalityFn: (a,b) => JSON.stringify(a) === JSON.stringify(b) }
-    );
-
-    // Force-save camera to camera manager when animation stops.
-    // The auto-save subscription above skips saves during playback (isPlaying=true),
-    // so the camera manager's saved position can be stale after animation.
-    // @ts-expect-error — window global for cross-store access without import cycle
-    const animStore = window.useAnimationStore;
-    if (animStore) {
-        let wasPlaying = false;
-        animStore.subscribe(
-            (s: { isPlaying: boolean }) => s.isPlaying,
-            (isPlaying: boolean) => {
-                if (!isPlaying && wasPlaying) {
-                    const s = useFractalStore.getState();
-                    if (s.activeCameraId) {
-                        s.updateCamera(s.activeCameraId, {
-                            position: s.cameraPos,
-                            rotation: s.cameraRot,
-                            sceneOffset: s.sceneOffset,
-                            targetDistance: s.targetDistance,
-                            optics: s.optics
-                        });
-                    }
-                }
-                wasPlaying = isPlaying;
-            }
-        );
-    }
+    // Camera saves are explicit — user clicks "Update Camera" in the Camera Manager panel.
+    // No auto-sync subscription: saved cameras preserve their original state until manually updated.
 
     // Sync renderMode UI state when lighting.renderMode changes (compile-time toggle)
     useFractalStore.subscribe(state => (state as any).lighting?.renderMode, (val) => {
@@ -431,6 +401,34 @@ export const bindStoreToEngine = () => {
         if (useFractalStore.getState().renderMode !== mode) {
             useFractalStore.setState({ renderMode: mode });
         }
+    });
+
+    // Auto-adjust orthoScale when switching from Perspective → Ortho
+    // so the fractal stays roughly the same size on screen.
+    // orthoScale = surfaceDist * tan(fov/2)  matches the perspective vertical extent.
+    // Skip when restoring a saved camera (activeCameraId is set) — saved cameras
+    // have their own orthoScale that should be preserved.
+    let prevCamType: number | undefined;
+    useFractalStore.subscribe(state => state.optics?.camType, (camType) => {
+        if (camType === undefined) return;
+        const wasPerspective = prevCamType !== undefined && prevCamType < 0.5;
+        const isNowOrtho = camType > 0.5 && camType < 1.5;
+
+        if (wasPerspective && isNowOrtho) {
+            const s = useFractalStore.getState();
+            // Don't auto-adjust when restoring a saved camera — it has its own orthoScale
+            if (!s.activeCameraId) {
+                const fov = s.optics?.camFov || 60;
+                let dist = engine.lastMeasuredDistance;
+                if (!dist || dist >= 1000 || dist <= 0) dist = s.targetDistance || 3.5;
+                const scale = dist * Math.tan(fov * Math.PI / 360);
+                const setOptics = (s as any).setOptics;
+                if (typeof setOptics === 'function') {
+                    setOptics({ orthoScale: scale });
+                }
+            }
+        }
+        prevCamType = camType;
     });
 
     FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, ({ isRendering }) => {

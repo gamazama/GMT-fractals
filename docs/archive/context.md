@@ -2,7 +2,7 @@
 # GMT Project Context & Architecture
 
 ## 1. Project Identity
-**Name:** GMT (GPU Mandelbulb Tracer)
+**Name:** GMT (Fractal Explorer)
 **Goal:** Real-time, 60FPS, GPU-accelerated 3D Fractal Explorer in the browser.
 **Stack:** React 18, TypeScript, Three.js (R3F), Zustand, Raw WebGL (GLSL), Vite.
 

@@ -22,6 +22,14 @@ let _onWorkerFrame: (() => void) | null = null;
 export function registerWorkerFrameCounter(cb: () => void) { _onWorkerFrame = cb; }
 
 export class WorkerProxy {
+    // ─── Stub properties ─────────────────────────────────────────────
+    // These exist on FractalEngine but not on WorkerProxy.  UI code guards
+    // access with `if (engine.activeCamera && ...)` so they are always falsy here.
+    readonly activeCamera: THREE.PerspectiveCamera | null = null;
+    readonly virtualSpace: import('../PrecisionMath').VirtualSpace | null = null;
+    readonly renderer: THREE.WebGLRenderer | null = null;
+    readonly pipeline: import('../RenderPipeline').RenderPipeline | null = null;
+
     private _worker: Worker | null = null;
     private _shadow: WorkerShadowState = {
         isBooted: false, isCompiling: false, hasCompiledShader: false,
@@ -369,8 +377,9 @@ export class WorkerProxy {
     set isPaused(v: boolean) { this.post({ type: 'PAUSE', paused: v }); }
     get shouldSnapCamera() { return false; }
     set shouldSnapCamera(v: boolean) { if (v) this.post({ type: 'SNAP_CAMERA' }); }
-    get isGizmoInteracting() { return false; }
-    set isGizmoInteracting(_v: boolean) { /* handled via RENDER_TICK renderState */ }
+    private _isGizmoInteracting = false;
+    get isGizmoInteracting() { return this._isGizmoInteracting; }
+    set isGizmoInteracting(v: boolean) { this._isGizmoInteracting = v; }
     get isCameraInteracting() { return false; }
     set isCameraInteracting(v: boolean) { if (v) this.post({ type: 'MARK_INTERACTION' }); }
 
@@ -444,6 +453,20 @@ export class WorkerProxy {
     }
 
     /**
+     * Queue an offset to be sent atomically with the next RENDER_TICK.
+     * Used by orbit absorb: camera.position is zeroed immediately on the main thread,
+     * and the absorbed offset is embedded in the next RENDER_TICK so the worker sees
+     * camera=(0,0,0) + new offset in the same message — no 1-frame mismatch.
+     */
+    private _pendingOffsetSync: SerializedOffset | null = null;
+
+    queueOffsetSync(offset: { x: number; y: number; z: number; xL: number; yL: number; zL: number }) {
+        this._pendingOffsetSync = { x: offset.x, y: offset.y, z: offset.z, xL: offset.xL, yL: offset.yL, zL: offset.zL };
+        // Update local offset immediately so gizmo overlays are correct
+        this.setShadowOffset(offset);
+    }
+
+    /**
      * Replace the offset immediately (for OFFSET_SET events — teleports, mode switches).
      * Sets guard to prevent FRAME_READY from overwriting until the worker catches up.
      */
@@ -478,7 +501,7 @@ export class WorkerProxy {
 
     pickWorldPosition(x: number, y: number): THREE.Vector3 | null;
     pickWorldPosition(x: number, y: number, async: true): Promise<THREE.Vector3 | null>;
-    pickWorldPosition(x: number, y: number, async?: true) {
+    pickWorldPosition(x: number, y: number, async?: boolean): THREE.Vector3 | null | Promise<THREE.Vector3 | null> {
         if (!async) return null;
         const id = crypto.randomUUID();
         return new Promise<THREE.Vector3 | null>((resolve) => {
@@ -578,7 +601,15 @@ export class WorkerProxy {
     // ─── Worker communication ────────────────────────────────────────────
 
     sendRenderTick(camera: SerializedCamera, offset: SerializedOffset, delta: number, renderState: Partial<EngineRenderState>) {
-        this.post({ type: 'RENDER_TICK', camera, offset, delta, timestamp: performance.now(), renderState });
+        // If an offset sync is queued (from orbit absorb), embed it in this tick
+        // so camera and offset arrive atomically — no 1-frame mismatch.
+        if (this._pendingOffsetSync) {
+            const syncOffset = this._pendingOffsetSync;
+            this._pendingOffsetSync = null;
+            this.post({ type: 'RENDER_TICK', camera, offset: syncOffset, delta, timestamp: performance.now(), renderState, syncOffset: true });
+        } else {
+            this.post({ type: 'RENDER_TICK', camera, offset, delta, timestamp: performance.now(), renderState });
+        }
     }
 
     resizeWorker(width: number, height: number, dpr: number) {
@@ -712,7 +743,7 @@ export class WorkerProxy {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const imageData = new ImageData(new Uint8ClampedArray(pixels.buffer), width, height);
+        const imageData = new ImageData(new Uint8ClampedArray(pixels.buffer as ArrayBuffer), width, height);
         ctx.putImageData(imageData, 0, 0);
 
         canvas.toBlob(async (blob) => {

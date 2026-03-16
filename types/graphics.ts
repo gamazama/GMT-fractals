@@ -31,8 +31,9 @@ export function generateLightId(): string {
 }
 
 export interface LightParams {
-    /** Stable identity — survives array reorder, used for React keys & gizmo refs */
-    id: string;
+    /** Stable identity — survives array reorder, used for React keys & gizmo refs.
+     *  Optional in formula defaults — generated at runtime by ensureLightIds(). */
+    id?: string;
     type: LightType;
     position: { x: number, y: number, z: number };
     rotation: { x: number, y: number, z: number };

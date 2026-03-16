@@ -1,4 +1,4 @@
-import { FormulaType, CameraMode, PreciseVector3 } from './common';
+import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LightParams } from './graphics';
 import { AnimationParams, AnimationSequence } from './animation';
 import { FractalGraph, PipelineNode } from './graph';
@@ -9,6 +9,7 @@ export interface Preset {
   formula: FormulaType;
   
   // --- CORE SYSTEMS ---
+  /** Serialization-only. Absorbed into sceneOffset on load — NOT a runtime store field. */
   cameraPos?: { x: number, y: number, z: number };
   cameraRot?: { x: number, y: number, z: number, w: number }; 
   cameraFov?: number; // Kept for Scene restoration
@@ -41,9 +42,12 @@ export interface Preset {
       [key: string]: any;
   };
 
+  // Camera Manager — saved camera library
+  savedCameras?: Array<CameraState & { id: string; label: string; optics?: any; thumbnail?: string }>;
+
   // --- GENERIC FEATURE STORAGE (Primary) ---
   // All module state lives here.
-  features?: Record<string, any>; 
+  features?: Record<string, any>;
 }
 
 export interface FractalParameter {

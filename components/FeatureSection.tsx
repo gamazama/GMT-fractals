@@ -11,9 +11,20 @@ interface FeatureSectionProps {
     toggleParam?: string; // Optional: If missing, tries to guess from EngineConfig
     children: React.ReactNode;
     description?: string;
+    /** Extra content rendered between label and toggle (e.g. StatusDots) */
+    statusContent?: React.ReactNode;
+    /** Additional classes on the header row */
+    headerClassName?: string;
+    /** Override the auto-detected enabled state */
+    enabled?: boolean;
+    /** Override the auto-detected toggle handler */
+    onToggle?: (val: boolean) => void;
 }
 
-export const FeatureSection: React.FC<FeatureSectionProps> = ({ label, featureId, toggleParam, children, description }) => {
+export const FeatureSection: React.FC<FeatureSectionProps> = ({
+    label, featureId, toggleParam, children, description,
+    statusContent, headerClassName = '', enabled, onToggle,
+}) => {
     const store = useFractalStore();
     const feature = featureRegistry.get(featureId);
 
@@ -22,9 +33,12 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({ label, featureId
 
     // Access state
     const sliceState = (store as any)[featureId];
-    const isEnabled = effectiveToggleParam ? !!sliceState?.[effectiveToggleParam] : true;
+    const autoEnabled = effectiveToggleParam ? !!sliceState?.[effectiveToggleParam] : true;
+    const isEnabled = enabled !== undefined ? enabled : autoEnabled;
 
     const handleToggle = (val: boolean) => {
+        if (onToggle) { onToggle(val); return; }
+
         const setterName = `set${featureId.charAt(0).toUpperCase() + featureId.slice(1)}`;
         const action = (store as any)[setterName];
 
@@ -46,15 +60,18 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({ label, featureId
         <div className="flex flex-col border-t border-white/5">
             {/* Header — clicking when disabled enables the feature */}
             <div
-                className={`flex items-center justify-between px-3 py-1 ${!isEnabled ? 'cursor-pointer hover:bg-white/5' : ''}`}
+                className={`flex items-center justify-between px-3 py-1 ${isEnabled ? 'bg-neutral-800' : 'bg-neutral-800/50 cursor-pointer hover:bg-white/5'} ${headerClassName}`}
                 onClick={!isEnabled ? () => handleToggle(true) : undefined}
             >
-                <span className={`text-[10px] font-bold ${isEnabled ? 'text-gray-300' : 'text-gray-600'}`}>
-                    {label}
-                    {!isEnabled && <span className="text-[8px] text-gray-600 ml-1.5">off</span>}
-                </span>
+                <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-bold ${isEnabled ? 'text-gray-300' : 'text-gray-600'}`}>
+                        {label}
+                    </span>
+                    {!isEnabled && <span className="text-[8px] text-gray-600">off</span>}
+                    {statusContent}
+                </div>
 
-                <div className="w-10">
+                <div className="w-10" onClick={e => e.stopPropagation()}>
                     <ToggleSwitch
                         value={isEnabled}
                         onChange={handleToggle}
@@ -64,9 +81,9 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({ label, featureId
 
             {/* Content */}
             {isEnabled && (
-                <div className="px-1">
+                <div>
                     {description && (
-                        <p className="px-3 pb-1 text-[9px] text-gray-500 leading-tight italic">{description}</p>
+                        <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{description}</p>
                     )}
                     {children}
                 </div>

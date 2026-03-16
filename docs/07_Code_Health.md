@@ -97,7 +97,7 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 ### Low Priority
 | Issue | Location | Impact | Recommendation |
 |-------|----------|--------|----------------|
-| **Camera State Duplication** | ✅ Animation stop sync fixed; offset guard timeout added (see Section 10.4) | ✅ `targetDistance` sky/miss sentinel guard fixed; stale presets fixed | Remaining: rapid teleport collision (MEDIUM) |
+| **Camera State Duplication** | ✅ Unified coordinate system (Section 10). Canonical form: `cameraPos=(0,0,0)`, all position in `sceneOffset`, `targetDistance`=surface distance. Mode-agnostic engine. | ✅ `isOrbit` branching removed from VirtualSpace; animation/camera manager/presets fully mode-agnostic | Remaining: rapid teleport collision (MEDIUM) |
 | **Boot Timing Heuristic** | `useAppStartup.ts:31` — 50ms setTimeout | Fragile assumption; works in practice | Replace with explicit ready signal if issues arise |
 | **Mobile UI** | Auto-generated panels | Cramped layout on vertical screens | CSS tuning needed |
 | **Duplicate JSX Types** | `types.ts` lines 14-75 | Maintenance overhead | Consider using `@react-three/fiber` types |
@@ -484,67 +484,50 @@ The worker communication layer has **good error propagation**:
 3. ✅ **`WorkerProxy` constructor** — `worker.onerror` handler already existed (lines 113-116, 175-178)
 4. ✅ **`WorkerTickScene.tsx:69`** — Added 30s timeout (300 iterations × 100ms) to boot-polling loop
 
-## 10. Camera State & Initialization Audit (2026-03-13)
+## 10. Camera State & Initialization Audit (2026-03-16)
 
-### 10.1 Camera State Duplication
+### 10.1 Unified Camera Coordinate System (Completed)
 
-Camera state is stored in **four** independent locations with no single authoritative source:
+As of 2026-03-16, the camera coordinate system has been **unified across Orbit and Fly modes**. See `docs/01_System_Architecture.md` Section 6 for the full architecture.
+
+**Key invariants established:**
+- `cameraPos` in store is always `{0, 0, 0}` — all world position lives in `sceneOffset`
+- `targetDistance` always means physics-based surface distance (never orbit radius)
+- `VirtualSpace.updateSmoothing()` has no `isOrbit` parameter — unified path
+- Engine, animation, camera manager, and preset system are fully mode-agnostic
+- `cameraMode` in `renderState` is informational only — zero engine-level branching
+
+**Camera state locations (post-unification):**
 
 | State | Zustand Store | Engine (VirtualSpace) | WorkerProxy Shadow | R3F Camera |
 |-------|--------------|----------------------|-------------------|------------|
-| Position | `cameraPos` | `activeCamera.position` | — | `camera.position` |
-| Rotation | `cameraRot` | `activeCamera.quaternion` | — | `camera.quaternion` |
-| Scene Offset | `sceneOffset` | `virtualSpace.offset` | `_shadow.sceneOffset` | (implicit) |
-| Target Distance | `targetDistance` | `lastMeasuredDistance` | `_shadow.lastMeasuredDistance` | `distAverageRef` |
-| Optics | `optics` | — (uniforms only) | — | — |
+| Position | `cameraPos` (always 0,0,0) | — | — | `camera.position` (0 between orbit interactions) |
+| Rotation | `cameraRot` | — | — | `camera.quaternion` |
+| Scene Offset | `sceneOffset` | `virtualSpace.offset` | `_localOffset` | (implicit via shadow unified ref) |
+| Target Distance | `targetDistance` (surface) | `lastMeasuredDistance` | `_shadow.lastMeasuredDistance` | `distAverageRef` |
 
-**Source of truth varies by operation:**
-- **Interactive orbit/fly:** R3F camera → engine (via RENDER_TICK) → store (only if `activeCameraId` set)
+**Source of truth (unchanged):**
+- **Interactive orbit/fly:** R3F camera → engine (via RENDER_TICK) → store (debounced, normalized)
 - **Teleport (undo/preset/camera switch):** Store → `camera_teleport` event → R3F + engine simultaneously
-- **Animation playback:** Engine updates directly, store NOT updated → stale on stop
-- **Export/preset save:** Reads engine if available, falls back to (potentially stale) store
+- **Animation playback:** Engine updates directly, store synced on stop
 
-### 10.2 Identified Issues
+### 10.2 Remaining Issues
 
-#### HIGH — Stale store state during animation
+#### ✅ RESOLVED — Stale store state during animation
 
-**Location:** [fractalStore.ts:232-244](store/fractalStore.ts#L232-L244)
+Fixed: `AnimationEngine.tick()` scrubs final frame; `bindStoreToEngine()` force-saves camera on animation stop.
 
-During animation playback, `AnimationEngine` drives the engine camera directly. Store `cameraPos`/`cameraRot` are NOT updated (auto-save subscription at line 385-404 skips when `isPlaying`). When animation stops, store holds the pre-animation position.
+#### ✅ RESOLVED — `targetDistance` semantic ambiguity
 
-**Impact:** `getPreset()` uses a fallback path in worker mode (`engine.activeCamera` is null on main thread) which reads the stale store values. Saving a preset mid-animation or right after stopping captures the wrong camera position.
+Fixed: `targetDistance` is now **always** physics-based surface distance. The orbit-radius override (`if (mode === 'Orbit') dist = camera.position.length()`) has been removed from Navigation.tsx. The debounced store write always uses `engine.lastMeasuredDistance` with a sky/miss sentinel guard (`>= 1000.0`). `orbitRadiusRef` tracks orbit radius as a local Navigation ref, never persisted to store.
 
-```ts
-// fractalStore.ts:233-244
-if (engine.activeCamera && engine.virtualSpace) {
-    // Uses engine state (FRESH) — but null in worker mode
-} else {
-    p.cameraPos = s.cameraPos;        // STALE after animation
-    p.cameraRot = s.cameraRot;
-    p.sceneOffset = s.sceneOffset;
-}
-```
+#### ✅ RESOLVED — `isOrbit` branching in VirtualSpace
 
-**Fix:** After animation stops, sync engine camera state back to store. Or: request camera state from worker via RPC for `getPreset()`.
+Fixed: `updateSmoothing()` in `PrecisionMath.ts` no longer takes an `isOrbit` parameter. Both modes use the unified lerp path. The `isOrbit` argument was also removed from the call site in `FractalEngine.ts`.
 
-#### HIGH — `targetDistance` three-way split
+#### ✅ RESOLVED — `cameraPos` store field was always (0,0,0)
 
-**Locations:**
-- Store: [cameraSlice.ts:36](store/slices/cameraSlice.ts#L36) — `targetDistance: 3.5`
-- Engine: [FractalEngine.ts:99](engine/FractalEngine.ts#L99) — `lastMeasuredDistance: 10.0`
-- Navigation: [Navigation.tsx:110](components/Navigation.tsx#L110) — `distAverageRef.current`
-
-Store `targetDistance` is only set by camera manager actions (selectCamera, resetCamera, undoCamera). Interactive orbit/fly changes `distAverageRef` and `engine.lastMeasuredDistance` but NOT `store.targetDistance`. After orbiting for a while, they diverge significantly.
-
-**Impact:** Undo/reset uses store value (3.5) instead of actual orbit distance (could be 15.2). The `syncOrbitTargetToCamera()` fallback at [Navigation.tsx:77-80](components/Navigation.tsx#L77-L80) tries to read engine distance first but falls back to store:
-```ts
-let dist = overrideDistance || engine.lastMeasuredDistance;
-if (dist <= 1e-7 || dist > 1000.0) {
-    dist = useFractalStore.getState().targetDistance || 3.5;  // May be stale
-}
-```
-
-**Fix:** Periodically sync `engine.lastMeasuredDistance` → `store.targetDistance` (e.g., on interaction end).
+Fixed: Removed `cameraPos` from `FractalStoreState`. World position lives exclusively in `sceneOffset`. The field remains in the `Preset` type (`types/fractal.ts`) for backwards-compatible serialization — formula defaults carry non-zero `cameraPos` which `applyPresetState()` absorbs into `sceneOffset` on load. All runtime consumers (scene_widgets, CameraManagerPanel, timelineUtils, Navigation, WorkerDisplay, useAppStartup) were updated to use `sceneOffset` directly.
 
 #### MEDIUM — Offset guard has no timeout
 
@@ -640,9 +623,11 @@ Both send `OFFSET_SET` to the worker during initialization. If they read differe
 | # | Severity | Issue | Impact | Fix Effort |
 |---|----------|-------|--------|------------|
 | 1 | ✅ | Store camera stale after animation | Fixed: `AnimationEngine.tick()` scrubs final frame; `bindStoreToEngine()` force-saves camera on animation stop | Done |
-| 2 | ✅ | `targetDistance` three-way split | Fixed: sky/miss sentinel guard (`>= 1000.0`) in syncOrbitTargetToCamera + stopTimeout; usePhysicsProbe consistency fix | Done |
+| 2 | ✅ | `targetDistance` semantic ambiguity | Fixed: always surface distance, orbit-radius override removed, debounced write uses `engine.lastMeasuredDistance` | Done |
 | 3 | ✅ | Offset guard no timeout | Fixed: `WorkerProxy.setShadowOffset()` auto-clears after 2s | Done |
-| 4 | MEDIUM | Rapid teleport collision | 1-frame camera jump on preset load | Low — debounce or coalesce teleport events |
+| 4 | ✅ | `isOrbit` branching in VirtualSpace | Fixed: `updateSmoothing()` unified, no mode parameter | Done |
+| 5 | ✅ | Unified canonical state | Fixed: store always writes `cameraPos=(0,0,0)`, all position in `sceneOffset` | Done |
+| 6 | MEDIUM | Rapid teleport collision | 1-frame camera jump on preset load | Low — debounce or coalesce teleport events |
 | 5 | LOW | Subscriptions before worker | Messages lost silently | Already mitigated — BOOT carries config |
 | 6 | LOW | loadPreset vs initWorkerMode order | Worker INIT with stale config | Already mitigated — BOOT is authoritative |
 | 7 | LOW | 50ms setTimeout assumption | Fragile but practically safe | Low — add explicit ready signal |
@@ -651,14 +636,14 @@ Both send `OFFSET_SET` to the worker during initialization. If they read differe
 
 ### 10.5 Architectural Observation
 
-The codebase uses **event-driven synchronization** (via `FractalEvents`) rather than a single-owner model. The `camera_teleport` event is the primary sync mechanism, consumed by three independent listeners (Engine, Navigation, Store). This works well for the teleport case but leaves a gap for continuous state (animation playback, interactive orbiting) where no sync events are emitted.
-
-**Long-term recommendation:** Establish clear ownership rules:
-- **R3F camera** = truth during interactive input
+The codebase uses **event-driven synchronization** (via `FractalEvents`) with clear ownership rules:
+- **R3F camera** = truth during interactive input (orbit or fly)
 - **Engine/worker** = truth during animation playback and export
 - **Store** = truth for persistence (presets, undo, camera manager)
 
-Add explicit sync-back events when ownership transfers (e.g., `animation_stopped` → engine camera → store).
+The unified coordinate system ensures all three agree on canonical form: `position=(0,0,0)`, world position in `sceneOffset`, `targetDistance` = surface distance. Navigation's debounced store write normalizes on every interaction end. Teleport events propagate canonical state to all consumers simultaneously.
+
+**Remaining gap:** During orbit interactions, `camera.position` is temporarily non-zero. The store is not updated until the debounced write fires (~100ms after interaction end). Code reading `store.cameraPos` during an orbit drag will see stale `(0,0,0)`. This is acceptable because the shadow unified offset in Navigation and `VirtualSpace.getUnifiedCameraState()` always return the correct live position.
 
 ## 11. Shader Magic Numbers Audit (2026-03-13)
 

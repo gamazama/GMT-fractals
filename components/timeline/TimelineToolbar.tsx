@@ -21,7 +21,7 @@ const KeyCamButton = () => {
     const { sequence, currentFrame, isPlaying, captureCameraFrame } = useAnimationStore();
     
     // Subscribe to scene changes to update "Dirty" state when camera moves
-    useFractalStore(s => [s.cameraPos, s.cameraRot, s.sceneOffset]);
+    useFractalStore(s => [s.cameraRot, s.sceneOffset]);
 
     const handleKeyCam = () => {
         captureCameraFrame(currentFrame);

@@ -69,7 +69,8 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
         // --- RAYMARCHED REFLECTIONS ---
         // Adaptive bias: scales with pixel size and distance to avoid self-intersection
         float pixelSizeScale = uPixelSizeBase / uInternalScale;
-        float reflBias = max(0.001, pixelSizeScale * d * 2.0);
+        float reflPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
+        float reflBias = max(0.001, reflPixelFootprint * 2.0);
         vec3 currRo = p_ray + n * reflBias;
         vec3 currRd = reflDir;
 

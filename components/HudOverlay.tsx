@@ -9,11 +9,11 @@ interface HudOverlayProps {
     actions: FractalActions;
     isMobile: boolean;
     hudRefs: {
-        container: React.RefObject<HTMLDivElement | null>;
-        speed: React.RefObject<HTMLSpanElement | null>;
-        dist: React.RefObject<HTMLSpanElement | null>;
-        reset: React.RefObject<HTMLButtonElement | null>;
-        reticle: React.RefObject<HTMLDivElement | null>;
+        container: React.RefObject<HTMLDivElement>;
+        speed: React.RefObject<HTMLSpanElement>;
+        dist: React.RefObject<HTMLSpanElement>;
+        reset: React.RefObject<HTMLButtonElement>;
+        reticle: React.RefObject<HTMLDivElement>;
     };
 }
 

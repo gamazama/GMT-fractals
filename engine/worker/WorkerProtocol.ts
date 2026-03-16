@@ -47,9 +47,9 @@ export type MainToWorkerMessage =
     | { type: 'CONFIG'; config: Partial<ShaderConfig> }
     | { type: 'BOOT'; config: ShaderConfig; camera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number } }
     | { type: 'UNIFORM'; key: string; value: unknown; noReset?: boolean }
-    | { type: 'RENDER_TICK'; camera: SerializedCamera; offset: SerializedOffset; delta: number; timestamp: number; renderState: Partial<EngineRenderState> }
+    | { type: 'RENDER_TICK'; camera: SerializedCamera; offset: SerializedOffset; delta: number; timestamp: number; renderState: Partial<EngineRenderState>; syncOffset?: boolean }
     | { type: 'RESET_ACCUM' }
-    | { type: 'OFFSET_SET'; offset: SerializedOffset }
+    | { type: 'OFFSET_SET'; offset: SerializedOffset; noReset?: boolean }
     | { type: 'OFFSET_SHIFT'; x: number; y: number; z: number }
     | { type: 'SET_SAMPLE_CAP'; n: number }
     | { type: 'PAUSE'; paused: boolean }

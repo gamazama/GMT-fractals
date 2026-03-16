@@ -3,7 +3,7 @@ import { useEffect, RefObject, useRef } from 'react';
 import * as THREE from 'three';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
-import { getViewportCamera } from '../engine/worker/ViewportRefs';
+import { getDisplayCamera } from '../engine/worker/ViewportRefs';
 import { useFractalStore } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
 
@@ -17,9 +17,6 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     // Focus Drag State
     const isDraggingFocusRef = useRef(false);
     
-    // Light drag-in sync (fly mode offset absorption)
-    const lightDragSyncedRef = useRef(false);
-
     // Shared Loop Refs
     const rafRef = useRef<number | null>(null);
     const mousePosRef = useRef({ x: 0, y: 0 });
@@ -196,48 +193,43 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                     mousePosRef.current = { x, y };
                 }
 
-                // Existing Light Gizmo Drag Logic
-                // NOTE: This is for dragging lights from the panel list, NOT from the 3D gizmo
-                // The LightGizmo component sets engine.isGizmoInteracting when handling drag
+                // Light drag-from-panel: place light at ray intersection with depth plane
                 const state = useFractalStore.getState();
                 if (state.draggedLightIndex !== null && !engine.isGizmoInteracting) {
-                    const cam = getViewportCamera() as THREE.PerspectiveCamera;
-                    // Resolve light ID to array index
+                    // Use display camera — matches gizmo rendering
+                    const cam = getDisplayCamera() as THREE.PerspectiveCamera;
                     const dragIdx = state.lighting?.lights?.findIndex(l => l.id === state.draggedLightIndex) ?? -1;
                     if (cam && dragIdx >= 0) {
-                        // Fly mode offset sync: on first drag frame, absorb camera position
-                        // into offset so main thread and worker agree on coordinates.
-                        if (!lightDragSyncedRef.current && state.cameraMode === 'Fly') {
-                            lightDragSyncedRef.current = true;
-                            const so = engine.sceneOffset;
-                            const absorbed = {
-                                x: so.x, y: so.y, z: so.z,
-                                xL: (so.xL ?? 0) + cam.position.x,
-                                yL: (so.yL ?? 0) + cam.position.y,
-                                zL: (so.zL ?? 0) + cam.position.z
-                            };
-                            cam.position.set(0, 0, 0);
-                            cam.updateMatrixWorld();
-                            state.setSceneOffset(absorbed);
-                        }
-
                         const raycaster = new THREE.Raycaster();
                         raycaster.setFromCamera(new THREE.Vector2(x, y), cam);
-                        const targetDist = Math.max(0.0002, Math.min(20.0, engine.lastMeasuredDistance * 0.5));
-                        const placementPos = new THREE.Vector3().copy(raycaster.ray.direction).multiplyScalar(targetDist).add(raycaster.ray.origin);
-                        const so = engine.sceneOffset;
-                        const absPos = { x: placementPos.x + (so.x + so.xL), y: placementPos.y + (so.y + so.yL), z: placementPos.z + (so.z + so.zL) };
 
-                        // When placing an inactive light from the panel, make it world-space.
-                        // Don't override fixed for lights that are already visible (preserves headlamp mode).
+                        // Place at half the measured surface distance along the ray
+                        const targetDist = Math.max(0.0002, Math.min(20.0, engine.lastMeasuredDistance * 0.5));
+                        const worldPos = raycaster.ray.direction.clone().multiplyScalar(targetDist).add(raycaster.ray.origin);
+
+                        // Convert world → store space
+                        const so = engine.sceneOffset;
                         const draggedLight = state.lighting.lights[dragIdx];
-                        const placementParams: Record<string, any> = { visible: true, castShadow: true, position: absPos };
+
+                        let finalPos: { x: number; y: number; z: number };
+                        if (draggedLight.fixed && draggedLight.visible) {
+                            // Headlamp: world → camera-local
+                            const local = worldPos.clone().sub(cam.position)
+                                .applyQuaternion(cam.quaternion.clone().invert());
+                            finalPos = { x: local.x, y: local.y, z: local.z };
+                        } else {
+                            // World-anchored: world → absolute store coords
+                            finalPos = {
+                                x: worldPos.x + so.x + (so.xL ?? 0),
+                                y: worldPos.y + so.y + (so.yL ?? 0),
+                                z: worldPos.z + so.z + (so.zL ?? 0)
+                            };
+                        }
+
+                        const placementParams: Record<string, any> = { visible: true, castShadow: true, position: finalPos };
                         if (!draggedLight.visible) placementParams.fixed = false;
-                        state.updateLight({
-                            index: dragIdx,
-                            params: placementParams
-                        });
-                        
+                        state.updateLight({ index: dragIdx, params: placementParams });
+
                         if (!state.lighting.shadows) state.setLighting({ shadows: true });
                         if (!state.showLightGizmo) state.setShowLightGizmo(true);
                     }
@@ -246,7 +238,6 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
         };
 
         const handlePointerUp = () => {
-            lightDragSyncedRef.current = false;
             const state = useFractalStore.getState();
             if (state.draggedLightIndex !== null) state.setDraggedLight(null);
             

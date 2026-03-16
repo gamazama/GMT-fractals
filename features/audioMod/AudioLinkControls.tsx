@@ -14,8 +14,7 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
     
     // Wrapper for DDFS action
     const updateRule = (id: string, update: Partial<ModulationRule>) => {
-        // @ts-expect-error — DDFS dynamic store action
-        store.updateModulation({ id, update });
+        (store as any).updateModulation({ id, update });
     };
 
     const selectedId = modulation.selectedRuleId;

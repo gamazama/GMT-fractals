@@ -1,6 +1,6 @@
 # Fractal Path Tracing: State of the Art Research (2024-2026)
 
-Compiled for GMT (GPU Mandelbulb Tracer) -- practical techniques for browser-based fractal rendering.
+Compiled for GMT (Fractal Explorer) -- practical techniques for browser-based fractal rendering.
 
 ---
 

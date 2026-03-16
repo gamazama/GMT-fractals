@@ -1,7 +1,7 @@
 # GMT - Claude Code Instructions
 
 ## Project Overview
-**GMT (GPU Mandelbulb Tracer)** - Real-time 3D fractal renderer in the browser.
+**GMT (Fractal Explorer)** - Real-time 3D fractal renderer in the browser.
 Stack: React 18 + TypeScript + Zustand + Vite + Three.js + GLSL shaders | Version 0.8.9 | License GPL-3.0
 
 ## Critical Rules

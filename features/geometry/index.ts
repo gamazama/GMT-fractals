@@ -159,7 +159,8 @@ export const GeometryFeature: FeatureDefinition = {
         {
             componentId: 'interaction-picker',
             group: 'julia',
-            condition: { param: 'juliaMode', bool: true },
+            parentId: 'juliaMode',
+            condition: { bool: true },
             props: {
                 targetMode: 'picking_julia',
                 label: 'Pick Coordinate',
@@ -167,6 +168,12 @@ export const GeometryFeature: FeatureDefinition = {
                 helpText: 'Click any point on the fractal surface to set Julia coordinates.',
                 variant: 'primary'
             }
+        },
+        {
+            componentId: 'julia-randomize',
+            group: 'julia',
+            parentId: 'juliaMode',
+            condition: { bool: true },
         }
     ],
     engineConfig: {
@@ -244,7 +251,7 @@ export const GeometryFeature: FeatureDefinition = {
 
         // --- GLOBAL MODIFIERS (Runtime) ---
         burningEnabled: {
-            type: 'boolean', default: false, label: 'Burning Mode', shortId: 'bm', group: 'transform',
+            type: 'boolean', default: false, label: 'Burning Mode', shortId: 'bm', group: 'burning',
             description: 'Applies absolute value to coordinates every iteration. Creates "Burning Ship" variations.',
             uniform: 'uBurningEnabled'
         },
@@ -303,14 +310,27 @@ export const GeometryFeature: FeatureDefinition = {
         preRotX: { type: 'float', default: 0.0, label: 'Spin X', shortId: 'rx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
         preRotZ: { type: 'float', default: 0.0, label: 'Spin Z', shortId: 'rz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
 
-        preRot: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Pre Rotation', composeFrom: ['preRotX', 'preRotY', 'preRotZ'], hidden: true },
+        preRot: {
+            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Local Rotation',
+            composeFrom: ['preRotX', 'preRotY', 'preRotZ'],
+            min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi',
+            group: 'transform', parentId: 'preRotEnabled', condition: { bool: true },
+        },
 
         // --- JULIA SET ---
-        juliaMode: { type: 'boolean', default: false, label: 'Julia Mode', shortId: 'jm', uniform: 'uJuliaMode', group: 'julia' },
+        juliaMode: {
+            type: 'boolean', default: false, label: 'Julia Mode', shortId: 'jm', uniform: 'uJuliaMode', group: 'julia',
+            description: 'Replaces the iterating variable with a fixed coordinate, producing connected Julia set slices.',
+        },
         juliaX: { type: 'float', default: 0.0, label: 'Julia X', shortId: 'jx', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true }, hidden: true },
         juliaY: { type: 'float', default: 0.0, label: 'Julia Y', shortId: 'jy', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true }, hidden: true },
         juliaZ: { type: 'float', default: 0.0, label: 'Julia Z', shortId: 'jz', min: -2.0, max: 2.0, step: 0.01, group: 'julia_params', condition: { param: 'juliaMode', bool: true }, hidden: true },
-        julia: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Julia Vector', uniform: 'uJulia', composeFrom: ['juliaX', 'juliaY', 'juliaZ'], hidden: true },
+        julia: {
+            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Julia Coordinate',
+            uniform: 'uJulia', composeFrom: ['juliaX', 'juliaY', 'juliaZ'],
+            min: -2.0, max: 2.0, step: 0.01,
+            group: 'julia', parentId: 'juliaMode', condition: { bool: true },
+        },
     },
     inject: (builder, config) => {
         const state = config.geometry as GeometryState;

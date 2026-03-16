@@ -170,7 +170,7 @@ export const AnimationMath = {
                  }
                  // Prevent handle crossing to future
                  if (key.leftTangent.x > 0) {
-                     updates.leftTangent = { ...updates.leftTangent, x: 0 };
+                     updates.leftTangent = { x: 0, y: updates.leftTangent?.y ?? key.leftTangent.y };
                  }
             }
         }
@@ -188,7 +188,7 @@ export const AnimationMath = {
                 }
                  // Prevent handle crossing to past
                  if (key.rightTangent.x < 0) {
-                     updates.rightTangent = { ...updates.rightTangent, x: 0 };
+                     updates.rightTangent = { x: 0, y: updates.rightTangent?.y ?? key.rightTangent.y };
                  }
             }
         }

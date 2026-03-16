@@ -58,14 +58,18 @@ export interface ParamConfig {
     isAdvanced?: boolean;       
     isCollapsible?: boolean;    
     ui?: 'slider' | 'knob' | 'numeric' | 'checkbox'; 
-    scale?: ScaleType;          
-    format?: (value: unknown) => string;
-    options?: ParamOption[];    
-    layout?: 'full' | 'half' | 'embedded';   
-    parentId?: string;          
-    condition?: ParamCondition | ParamCondition[]; 
-    composeFrom?: string[]; 
+    scale?: ScaleType;
+    format?: (value: number) => string;
+    options?: ParamOption[];
+    layout?: 'full' | 'half' | 'embedded';
+    parentId?: string;
+    condition?: ParamCondition | ParamCondition[];
+    composeFrom?: string[];
     textureSettings?: TextureConfig;
+    /** Vector input interaction mode (e.g. 'angle') */
+    mode?: string;
+    /** Whether vector components can be linked */
+    linkable?: boolean;
     
     // Links to other parameters (e.g., an image param linking to its color profile param)
     linkedParams?: {
@@ -226,7 +230,7 @@ class FeatureRegistry {
     public getDictionary() {
         const dict: any = {
             'formula': 'f',
-            'cameraPos': 'cp',
+            'cameraPos': 'cp', // Preset-format-only; absorbed into sceneOffset on load
             'cameraRot': 'cr',
             'sceneOffset': 'so',
             'targetDistance': 'td',

@@ -596,9 +596,8 @@ export class FractalEngine {
         }
         
         const targetFov = this.state.optics?.camFov ?? 60.0;
-        const isOrbit = this.state.cameraMode === 'Orbit';
 
-        this.virtualSpace.updateSmoothing(camera, targetFov, delta, isOrbit, this.shouldSnapCamera, isInteracting);
+        this.virtualSpace.updateSmoothing(camera, targetFov, delta, this.shouldSnapCamera, isInteracting);
         
         if (this.shouldSnapCamera) {
             this.shouldSnapCamera = false;

@@ -13,6 +13,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { getProxy } from '../engine/worker/WorkerProxy';
 import { useFractalStore } from '../store/fractalStore';
@@ -113,6 +114,7 @@ const WorkerTickScene: React.FC<WorkerTickSceneProps> = ({ onLoaded }) => {
                 proxy.setShadowOffset(offset);
                 proxy.post({ type: 'OFFSET_SET', offset });
             }),
+            // OFFSET_SILENT removed — orbit absorb now uses atomic queueOffsetSync via RENDER_TICK
             FractalEvents.on(FRACTAL_EVENTS.OFFSET_SHIFT, ({ x, y, z }) => {
                 proxy.applyOffsetShift(x, y, z);
                 proxy.post({ type: 'OFFSET_SHIFT', x, y, z });
@@ -186,6 +188,7 @@ const WorkerTickScene: React.FC<WorkerTickSceneProps> = ({ onLoaded }) => {
         const renderState = {
             cameraMode: storeState.cameraMode,
             isCameraInteracting: useAnimationStore.getState().isCameraInteracting,
+            isGizmoInteracting: proxy.isGizmoInteracting,
             optics: (storeState as any).optics ?? null,
             lighting: (storeState as any).lighting ?? null,
             quality: (storeState as any).quality ?? null,

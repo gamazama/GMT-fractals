@@ -248,7 +248,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
             <div className="relative" ref={menuRef}>
                 <button onClick={toggleSystemMenu} className={`${btnBase} ${showSystemMenu ? btnActive : btnInactive}`}><MenuIcon /></button>
                 {showSystemMenu && (
-                    <Popover width="w-64" align="end" className="p-2 custom-scroll overflow-y-auto max-h-[85vh]" onClose={toggleSystemMenu}>
+                    <Popover width="w-64" align="end" className="p-2 custom-scroll overflow-y-auto max-h-[85vh]" onClose={() => toggleSystemMenu({} as React.MouseEvent)}>
                         <div className="space-y-1">
                             <button onClick={(e) => { e.stopPropagation(); handleShareLink(); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
                                 <span className={`text-xs font-bold ${linkStatus ? 'text-green-400' : 'group-hover:text-white'}`}>{linkStatus || "Copy Share Link"}</span>

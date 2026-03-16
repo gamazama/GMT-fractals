@@ -154,7 +154,8 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         // Bias epsilon — hoisted so PT_ENV_NEE can reuse it
         float distFromFractalOrigin = length(p_fractal);
         float floatLimitNEE = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
-        float visualLimitNEE = pixelSizeScale * d * (1.0 / uDetail);
+        float orthoPixelFootprintNEE = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
+        float visualLimitNEE = orthoPixelFootprintNEE * (1.0 / uDetail);
         float biasEps = max(floatLimitNEE, visualLimitNEE);
 
         if (activeCount > 0) {
