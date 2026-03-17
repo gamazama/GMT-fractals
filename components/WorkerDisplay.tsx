@@ -37,16 +37,24 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
         if (initRef.current || !containerRef.current) return;
         initRef.current = true;
 
+        const container = containerRef.current;
         const dpr = window.devicePixelRatio || 1;
 
+        // Measure the actual container size — the props may reflect a stale layout
+        // (e.g. before dock panels finish CSS transitions). Fall back to props if
+        // the container hasn't been laid out yet.
+        const rect = container.getBoundingClientRect();
+        const initW = rect.width > 0 ? rect.width : width;
+        const initH = rect.height > 0 ? rect.height : height;
+
         // Create the canvas and insert it into the DOM BEFORE transferring control.
-        // After transferControlToOffscreen(), the browser auto-presents whatever
+        // After transferControlToOffscreen() the browser auto-presents whatever
         // the worker renders — no transferToImageBitmap needed.
         const canvas = document.createElement('canvas');
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
+        canvas.width = initW * dpr;
+        canvas.height = initH * dpr;
         canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
-        containerRef.current.appendChild(canvas);
+        container.appendChild(canvas);
 
         const state = useFractalStore.getState();
         const config = getShaderConfigFromState(state);
@@ -59,8 +67,8 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
         proxy.initWorkerMode(
             canvas,
             config,
-            width,
-            height,
+            initW,
+            initH,
             dpr,
             isMobile,
             { position: [0, 0, 0], quaternion: [camRot.x, camRot.y, camRot.z, camRot.w], fov: camFov }
@@ -77,6 +85,21 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
             proxy.post({ type: 'OFFSET_SET', offset: precise });
         }
 
+        // Watch container for post-init layout shifts (dock transitions, panel
+        // opening, etc.) and push the corrected size to the worker so the very
+        // first rendered frame has the right aspect ratio.
+        const observer = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                const w = Math.max(1, entry.contentRect.width);
+                const h = Math.max(1, entry.contentRect.height);
+                proxy.resizeWorker(w, h, window.devicePixelRatio || 1);
+            }
+        });
+        observer.observe(container);
+
+        // Cleanup — the canvas lives for the app lifetime so we only disconnect
+        // the observer.
+        return () => observer.disconnect();
     }, []);
 
     return (
