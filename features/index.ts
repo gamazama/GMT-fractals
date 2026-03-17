@@ -11,6 +11,7 @@ import { GeometryFeature } from './geometry';
 import { QualityFeature } from './quality';
 import { CoreMathFeature } from './core_math';
 import { LightingFeature } from './lighting/index';
+import { LightSpheresFeature } from './lighting/light_spheres';
 import { OpticsFeature } from './optics';
 import { NavigationFeature } from './navigation';
 import { AudioFeature } from './audioMod';
@@ -33,6 +34,7 @@ export const registerFeatures = () => {
     
     // Rendering & Shading
     featureRegistry.register(LightingFeature);
+    featureRegistry.register(LightSpheresFeature); // dependsOn: ['lighting'] — order enforced by registry
     featureRegistry.register(AOFeature);
     featureRegistry.register(ReflectionsFeature);
     featureRegistry.register(AtmosphereFeature);
@@ -84,5 +86,6 @@ export type { AtmosphereState } from './atmosphere/index';
 export type { VolumetricState } from './volumetric/index';
 export type { DrosteState } from './droste';
 export type { LightingState } from './lighting/index';
+export type { LightSpheresState } from './lighting/light_spheres';
 export type { CoreMathState } from './core_math';
 export type { WaterPlaneState } from './water_plane';

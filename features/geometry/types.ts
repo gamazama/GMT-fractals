@@ -15,4 +15,7 @@ export interface FoldDefinition {
     extraParams?: Record<string, ParamConfig>;
     /** Suggested default values for common hybrid params when this fold is selected */
     defaults?: Record<string, any>;
+    /** When true, foldOperation handles scaling + offset + DR internally.
+     *  formula_Hybrid will skip sphereFold and the outer scale/DR step. */
+    selfContained?: boolean;
 }

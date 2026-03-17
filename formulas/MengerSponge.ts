@@ -32,27 +32,21 @@ export const MengerSponge: FractalDefinition = {
         z3.x = max(max(s.x, s.y), s.z);
         z3.z = min(min(s.x, s.y), s.z);
         z3.y = s.x + s.y + s.z - z3.x - z3.z;
-        
+
         float scale = (abs(uParamA - 1.0) < 0.001) ? 1.001 : uParamA;
-        float offset = uParamB;
-        
-        // IFS Shift: offset * (scale - 1.0)
-        float shift = offset * (scale - 1.0);
-        
-        z3 = z3 * scale - vec3(shift);
-        
-        // Param D: Center Z (The "Full Sponge" Correction)
+        vec3 offset = uVec3B;
+
+        // IFS Shift: offset * (scale - 1.0) — per-axis
+        vec3 shift = offset * (scale - 1.0);
+
+        z3 = z3 * scale - shift;
+
+        // Param C: Center Z (The "Full Sponge" Correction)
         // If active, this conditional shift restores the full cubic symmetry
-        if (uParamD > 0.5) {
-            z3.z += shift * step(z3.z, -0.5 * shift);
+        if (uParamC > 0.5) {
+            z3.z += shift.z * step(z3.z, -0.5 * shift.z);
         }
 
-        // Param C: Manual Z Shift (Axis Shift)
-        if (abs(uParamC) > 0.001) {
-            z3.z += uParamC * scale;
-        }
-
-        if (uJuliaMode > 0.5) z3 += c.xyz * 0.1;
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, length(z3 - c.xyz));
@@ -62,10 +56,9 @@ export const MengerSponge: FractalDefinition = {
 
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 3.0 },
-        { label: 'Offset', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
+        { label: 'Offset', id: 'vec3B', type: 'vec3', min: 0.0, max: 2.0, step: 0.001, default: { x: 1, y: 1, z: 1 }, linkable: true },
         { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
-        { label: 'Z Shift (Man)', id: 'paramC', min: -1.0, max: 1.0, step: 0.01, default: 0.0 },
-        { label: 'Center Z', id: 'paramD', min: 0.0, max: 1.0, step: 1.0, default: 1.0 },
+        { label: 'Center Z', id: 'paramC', min: 0.0, max: 1.0, step: 1.0, default: 1.0 },
     ],
 
     defaultPreset: {
@@ -73,8 +66,9 @@ export const MengerSponge: FractalDefinition = {
         features: {
             coreMath: {
                 iterations: 10,
-                paramA: 3, paramB: 1.013, paramC: 0.02, paramD: 1,
-                vec3A: { x: 0.031, y: 0, z: 0 }
+                paramA: 3, paramC: 1,
+                vec3A: { x: 0.031, y: 0, z: 0 },
+                vec3B: { x: 1.013, y: 1.013, z: 1.043 }
             },
             coloring: {
                 gradient: [

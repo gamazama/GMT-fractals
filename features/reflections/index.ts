@@ -3,10 +3,91 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { getReflectionsGLSL } from './shader';
 
 // Reflection modes (compile-time)
+// Values are stable for preset compatibility — do not renumber.
 export const REFL_MODE_OFF = 0.0;
 export const REFL_MODE_ENV = 1.0;       // Environment map only (Fresnel-weighted)
-export const REFL_MODE_SSR = 2.0;       // Screen-space reflections (no DE calls)
+// 2.0 was SSR (removed — fell back to ENV). Legacy presets with 2.0 map to ENV.
 export const REFL_MODE_RAYMARCH = 3.0;  // Full raymarched reflections
+
+// ---------------------------------------------------------------------------
+// REFLECTION SHADING INTEGRATION GLSL
+// Injected into calculateShading() via addShadingLogic().
+// Variables in scope: p_ray, p_fractal, v, n, albedo, roughness, F, NdotV,
+//   reflDir, reflectionLighting (output), stochasticSeed, d, uReflection, uSpecular
+// ---------------------------------------------------------------------------
+
+/** Environment map only — Fresnel-weighted env sampling with fog. Zero extra cost. */
+const REFL_ENV_SHADING = `
+    // --- REFLECTIONS: ENVIRONMENT MAP ---
+    vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
+    reflectionLighting = envColor * F * uSpecular;
+`;
+
+/** Full raymarched reflections — traces a reflection ray, shades the hit point. */
+const REFL_RAYMARCH_SHADING = `
+    // --- REFLECTIONS: RAYMARCHED ---
+    {
+        // Adaptive bias: scales with pixel size and distance to avoid self-intersection
+        float pixelSizeScale = uPixelSizeBase / uInternalScale;
+        float reflPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
+        float reflBias = max(0.001, reflPixelFootprint * 2.0);
+        vec3 currRo = p_ray + n * reflBias;
+        vec3 currRd = reflDir;
+
+        // Jitter first bounce based on roughness using Blue Noise
+        bool isMoving = uBlendFactor >= 0.99;
+        if (roughness > 0.05 && !isMoving) {
+             vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
+             vec3 randomVec = vec3(blueNoise.b, blueNoise.a, blueNoise.r) * 2.0 - 1.0;
+
+             if (dot(randomVec, randomVec) > 0.001) {
+                 vec3 jittered = normalize(currRd + normalize(randomVec) * (roughness * 0.8));
+                 if (dot(jittered, n) > 0.05) currRd = jittered;
+             }
+        }
+
+        vec3 currentThroughput = F * uSpecular;
+
+        if (roughness <= uReflRoughnessCutoff && dot(currentThroughput, currentThroughput) >= 0.01) {
+
+            vec4 refHit = traceReflectionRay(currRo, currRd);
+
+            if (refHit.x > 0.0) {
+                float hitD = refHit.x;
+                vec3 p_next = currRo + currRd * hitD;
+                vec3 p_next_fractal = p_next + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
+
+                vec3 r_albedo, r_n, r_emission;
+                float r_rough;
+
+                getSurfaceMaterial(p_next, p_next_fractal, vec4(0.0, refHit.yzw), hitD, r_albedo, r_n, r_emission, r_rough, false);
+
+                if (dot(r_n, -currRd) < 0.0) r_n = -r_n;
+
+                vec3 hitColor = r_emission;
+                #ifdef REFL_BOUNCE_SHADOWS
+                    // Always compute shadows when enabled — avoids brightness pop
+                    // between navigation (no shadows) and accumulation (shadows).
+                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1, true);
+                #else
+                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1, false);
+                #endif
+
+                reflectionLighting += hitColor * currentThroughput;
+
+            } else {
+                reflectionLighting += sampleMissEnv(currRo, currRd, roughness, currentThroughput);
+            }
+        } else {
+            reflectionLighting += applyEnvFog(GetEnvMap(currRd, roughness) * uEnvStrength) * currentThroughput;
+        }
+
+        vec3 simpleEnv = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
+        simpleEnv *= currentThroughput;
+
+        reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);
+    }
+`;
 
 export interface ReflectionsState {
     enabled: boolean; // Master compile-time switch
@@ -37,7 +118,6 @@ export const ReflectionsFeature: FeatureDefinition = {
             options: [
                 { label: 'Off', value: REFL_MODE_OFF, estCompileMs: 0 },
                 { label: 'Environment Map', value: REFL_MODE_ENV, estCompileMs: 0 },
-                { label: 'Screen-Space (SSR)', value: REFL_MODE_SSR, estCompileMs: 0 },
                 { label: 'Raymarched (Quality)', value: REFL_MODE_RAYMARCH, estCompileMs: 7500 }
             ],
             description: 'Reflection technique. Higher quality = longer compile time. Raymarched adds ~9s.',
@@ -109,34 +189,28 @@ export const ReflectionsFeature: FeatureDefinition = {
         const mode = state.reflectionMode ?? REFL_MODE_ENV;
 
         if (mode === REFL_MODE_OFF) {
-            // No reflection code at all
+            // No reflection code — shading.ts default fallback handles basic env-map
             return;
         }
 
-        if (mode === REFL_MODE_ENV) {
-            // Environment map only — no extra code needed, shading.ts handles via #else branch
-            builder.addDefine('REFLECTIONS_ENV', '1');
-            return;
-        }
-
-        if (mode === REFL_MODE_SSR) {
-            // Screen-space reflections — no DE calls
-            builder.addDefine('REFLECTIONS_SSR', '1');
+        if (mode !== REFL_MODE_RAYMARCH) {
+            // ENV mode (or legacy SSR=2.0) — Fresnel-weighted env sampling with fog
+            builder.addShadingLogic(REFL_ENV_SHADING);
             return;
         }
 
         if (mode === REFL_MODE_RAYMARCH) {
-            // Full raymarched reflections
-            builder.addDefine('REFLECTIONS_ENABLED', '1');
+            // Full raymarched reflections — trace function + shading integration
             builder.addPostDEFunction(getReflectionsGLSL());
 
             const bounces = Math.max(1, Math.min(3, state.bounces ?? 1));
             builder.addDefine('MAX_REFL_BOUNCES', bounces.toString());
 
-            // Bounce shadows control
             if (state.bounceShadows) {
                 builder.addDefine('REFL_BOUNCE_SHADOWS', '1');
             }
+
+            builder.addShadingLogic(REFL_RAYMARCH_SHADING);
         }
     }
 };

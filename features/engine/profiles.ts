@@ -43,6 +43,7 @@ export const ENGINE_PROFILES = {
             shadowAlgorithm: 2.0,   // Hard Only (fastest shadow)
             shadowSteps: 32,
             ptStochasticShadows: false,
+            areaLights: true,
             shadowSoftness: 16.0,
             ptEnabled: false,
             specularModel: 0.0,     // Blinn-Phong
@@ -76,9 +77,10 @@ export const ENGINE_PROFILES = {
         lighting: {
             shadows: true,
             shadowsCompile: true,
-            shadowAlgorithm: 1.0,   // Lite Soft
+            shadowAlgorithm: 0.0,   // Robust Soft
             shadowSoftness: 16.0,
-            ptStochasticShadows: false,
+            ptStochasticShadows: true,  // Area lights compiled
+            areaLights: true,
             shadowSteps: 64,
             ptEnabled: false,
             specularModel: 0.0,     // Blinn-Phong
@@ -115,6 +117,7 @@ export const ENGINE_PROFILES = {
             shadowAlgorithm: 0.0,   // Robust Soft
             shadowSoftness: 64.0,
             ptStochasticShadows: true,
+            areaLights: true,
             shadowSteps: 256,
             ptEnabled: true,
             specularModel: 1.0,     // Cook-Torrance

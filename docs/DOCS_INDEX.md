@@ -84,6 +84,7 @@ Historical design docs, completed reports, and superseded references are in [`do
 | Animation Timeline | `engine/AnimationEngine.ts` |
 | Video Export | `engine/worker/WorkerExporter.ts` |
 | Auto-Generated UI | `components/AutoFeaturePanel.tsx` |
+| Compilable Feature UI | `components/CompilableFeatureSection.tsx` |
 
 ### User Documentation
 The in-app help system is located in `data/help/`. Topics include:

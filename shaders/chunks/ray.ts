@@ -8,7 +8,7 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
         // Always apply DOF noise for blur preview - even during navigation
         if (uDOFStrength > 0.00001) needNoise = true;
         if (!isMoving) needNoise = true;  // Other effects need noise when stationary
-        if (uPTStochasticShadows > 0.5) needNoise = true;
+        if (uAreaLights > 0.5) needNoise = true;
         `;
 
     return `

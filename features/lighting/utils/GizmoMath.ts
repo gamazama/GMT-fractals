@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { LightParams } from '../../../types';
 import { PreciseVector3 } from '../../../types/common';
 
+/** Which light index currently has its settings popup open (-1 = none).
+ *  Written by CenterHUD, read by SingleLightGizmo for range circle gating. */
+export const activeLightPopup = { index: -1 };
+
 export const MIN_GIZMO_DISTANCE = 0.00005;
 export const GIZMO_SCALE_FACTOR = 0.15;
 export const PLANE_SCALE = 0.4;

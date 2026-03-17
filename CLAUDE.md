@@ -43,6 +43,7 @@ After making changes, update the relevant docs if you discovered new patterns, q
 | `engine/MaterialController.ts` | Two-stage shader compilation, preview/full swap |
 | `store/fractalStore.ts` | Main Zustand store |
 | `components/AutoFeaturePanel.tsx` | Auto-generated UI from feature defs |
+| `components/CompilableFeatureSection.tsx` | Reusable compile/runtime split UI (reads DDFS `panelConfig`) |
 | `components/EngineBridge.tsx` | React <-> Engine mediator |
 | `components/WorkerTickScene.tsx` | Worker frame loop + TickRegistry runner |
 

@@ -158,6 +158,20 @@ export interface FeatureDefinition {
     interactionConfig?: FeatureInteractionConfig;
     customUI?: CustomUIConfig[];            // Inserts a named React component into the auto-generated panel
 
+    // --- Compilable Section UI ---
+    // panelConfig: describes how to render this feature as a compilable section with compile/runtime split.
+    // Used by CompilableFeatureSection component. If absent, feature uses default AutoFeaturePanel rendering.
+    panelConfig?: {
+        compileParam: string;               // compile gate param (onUpdate: 'compile')
+        runtimeToggleParam?: string;        // runtime on/off param (uniform-backed, instant toggle)
+        compileSettingsParams?: string[];    // compile-time params to show in settings sub-section
+        runtimeGroup?: string;              // groupFilter for runtime params
+        runtimeExcludeParams?: string[];    // params to hide from runtime section
+        label?: string;                     // section label (falls back to feature name)
+        compileMessage?: string;            // "Compiling X..." message
+        helpId?: string;                    // data-help-id for context help
+    };
+
     // --- Engine Integration ---
     // engineConfig: declares a master enable/disable toggle for ShaderFactory to conditionally skip injection.
     // mode 'compile' = toggling triggers a full shader rebuild; 'runtime' = handled in-shader via uniforms.
@@ -165,6 +179,12 @@ export interface FeatureDefinition {
 
     // extraUniforms: complex uniforms (arrays, structs) that aren't 1:1 with a param entry
     extraUniforms?: UniformDefinition[];
+
+    // --- Dependencies ---
+    // dependsOn: feature IDs that must be registered (and injected) before this feature.
+    // Used for satellite features that rely on uniforms/functions from another feature.
+    // The registry enforces this order via topological sort in getAll().
+    dependsOn?: string[];
 
     // --- Shader Injection ---
     // inject(): injects GLSL into the RAYMARCHING shader (main render pass).
@@ -185,13 +205,31 @@ export interface FeatureDefinition {
 
 class FeatureRegistry {
     private features = new Map<string, FeatureDefinition>();
+    private sortedCache: FeatureDefinition[] | null = null;
 
     public register(def: FeatureDefinition) {
+        // Validate dependencies exist (if any registered so far are referenced)
+        if (def.dependsOn) {
+            for (const dep of def.dependsOn) {
+                if (!this.features.has(dep)) {
+                    console.warn(`[FeatureRegistry] "${def.id}" depends on "${dep}" which is not yet registered. Ensure registration order is correct.`);
+                }
+            }
+        }
         this.features.set(def.id, def);
+        this.sortedCache = null; // Invalidate cache
     }
 
     public get(id: string) { return this.features.get(id); }
-    public getAll() { return Array.from(this.features.values()); }
+
+    /** Returns all features in dependency-safe order (topological sort).
+     *  Features without dependencies maintain their registration order.
+     *  Throws if a dependency cycle is detected. */
+    public getAll() {
+        if (this.sortedCache) return this.sortedCache;
+        this.sortedCache = this.topologicalSort();
+        return this.sortedCache;
+    }
     
     public getTabs() {
         return Array.from(this.features.values())
@@ -288,6 +326,63 @@ class FeatureRegistry {
             }
         });
         return defs;
+    }
+
+    /** Stable topological sort — respects registration order except where
+     *  dependsOn requires reordering. Features without dependencies keep
+     *  their relative registration position. */
+    private topologicalSort(): FeatureDefinition[] {
+        const all = Array.from(this.features.values());
+        const idToIndex = new Map<string, number>();
+        all.forEach((f, i) => idToIndex.set(f.id, i));
+
+        // Build adjacency: for each feature, which features must come before it
+        const inDegree = new Map<string, number>();
+        const dependents = new Map<string, string[]>(); // dep -> features that depend on it
+
+        for (const f of all) {
+            inDegree.set(f.id, 0);
+            if (!dependents.has(f.id)) dependents.set(f.id, []);
+        }
+
+        for (const f of all) {
+            if (f.dependsOn) {
+                for (const dep of f.dependsOn) {
+                    if (!this.features.has(dep)) continue; // Skip unknown deps (warned at register)
+                    inDegree.set(f.id, (inDegree.get(f.id) || 0) + 1);
+                    dependents.get(dep)!.push(f.id);
+                }
+            }
+        }
+
+        // Kahn's algorithm with stable ordering (prefer registration order)
+        const queue: string[] = [];
+        for (const f of all) {
+            if (inDegree.get(f.id) === 0) queue.push(f.id);
+        }
+
+        const sorted: FeatureDefinition[] = [];
+        while (queue.length > 0) {
+            // Pick the feature with the lowest registration index (stable sort)
+            queue.sort((a, b) => (idToIndex.get(a) || 0) - (idToIndex.get(b) || 0));
+            const id = queue.shift()!;
+            sorted.push(this.features.get(id)!);
+
+            for (const depId of (dependents.get(id) || [])) {
+                const deg = (inDegree.get(depId) || 1) - 1;
+                inDegree.set(depId, deg);
+                if (deg === 0) queue.push(depId);
+            }
+        }
+
+        if (sorted.length !== all.length) {
+            const missing = all.filter(f => !sorted.includes(f)).map(f => f.id);
+            console.error(`[FeatureRegistry] Dependency cycle detected involving: ${missing.join(', ')}`);
+            // Fallback: return registration order to avoid breaking the app
+            return all;
+        }
+
+        return sorted;
     }
 }
 

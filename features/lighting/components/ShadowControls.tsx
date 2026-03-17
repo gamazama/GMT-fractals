@@ -7,6 +7,8 @@ import { Popover } from '../../../components/Popover';
 
 const ShadowSettingsPopup = () => {
     const shadows = useFractalStore(s => s.lighting?.shadows);
+    const areaLightsCompiled = useFractalStore(s => s.lighting?.ptStochasticShadows);
+    const areaLights = useFractalStore(s => s.lighting?.areaLights);
     const setLighting = useFractalStore(s => s.setLighting);
     const handleInteractionStart = useFractalStore(s => s.handleInteractionStart);
     const handleInteractionEnd = useFractalStore(s => s.handleInteractionEnd);
@@ -16,16 +18,31 @@ const ShadowSettingsPopup = () => {
             <div className="relative space-y-2">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2 px-1">
                     <SectionLabel>Shadows</SectionLabel>
-                    <button
-                        onClick={() => {
-                            handleInteractionStart('param');
-                            setLighting({ shadows: !shadows });
-                            handleInteractionEnd();
-                        }}
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${shadows ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50' : 'bg-gray-800 text-gray-500 border-gray-600'}`}
-                    >
-                        {shadows ? 'Enabled' : 'Disabled'}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                        {areaLightsCompiled && (
+                            <button
+                                onClick={() => {
+                                    handleInteractionStart('param');
+                                    setLighting({ areaLights: !areaLights });
+                                    handleInteractionEnd();
+                                }}
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${areaLights ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : 'bg-gray-800 text-gray-500 border-gray-600'}`}
+                                title="Toggle stochastic area light shadows"
+                            >
+                                Area
+                            </button>
+                        )}
+                        <button
+                            onClick={() => {
+                                handleInteractionStart('param');
+                                setLighting({ shadows: !shadows });
+                                handleInteractionEnd();
+                            }}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${shadows ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50' : 'bg-gray-800 text-gray-500 border-gray-600'}`}
+                        >
+                            {shadows ? 'ON' : 'OFF'}
+                        </button>
+                    </div>
                 </div>
 
                 {shadows && (

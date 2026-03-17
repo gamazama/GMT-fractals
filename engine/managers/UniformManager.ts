@@ -26,12 +26,13 @@ export class UniformManager {
     private lightDir = new THREE.Vector3();
     private defaultForward = new THREE.Vector3(0, 0, -1); 
 
-    // Local Rotation Matrix Cache
-    private preRotMatrixX = new THREE.Matrix4();
-    private preRotMatrixY = new THREE.Matrix4();
-    private preRotMatrixZ = new THREE.Matrix4();
-    private preRotMatrix4 = new THREE.Matrix4();
-    private preRotMatrix3 = new THREE.Matrix3();
+    // Local Rotation Matrix Cache (3-stage: pre/post/world)
+    private rotScratchX = new THREE.Matrix4();
+    private rotScratchY = new THREE.Matrix4();
+    private rotScratchZ = new THREE.Matrix4();
+    private rotScratch4 = new THREE.Matrix4();
+    private rotScratch3 = new THREE.Matrix3();
+    private identityMat3 = new THREE.Matrix3(); // Cached identity for disabled state
 
     // Track previous resolution state to avoid redundant updates
     private lastWidth: number = -1;
@@ -233,7 +234,9 @@ export class UniformManager {
 
                 const isDirectional = l.type === 'Directional';
                 typeArr[i] = isDirectional ? 1.0 : 0.0;
-                intArr[i] = l.visible ? Math.max(0, l.intensity + dIntensity) : 0.0;
+                // EV→linear conversion: 2^ev. Raw mode passes through unchanged.
+                const baseIntensity = (l.intensityUnit === 'ev') ? Math.pow(2, l.intensity + dIntensity) : (l.intensity + dIntensity);
+                intArr[i] = l.visible ? Math.max(0, baseIntensity) : 0.0;
                 shaArr[i] = l.castShadow ? 1.0 : 0.0;
 
                 if ((colArr[i] as any).isColor) {
@@ -242,8 +245,22 @@ export class UniformManager {
 
                 // Point-light only uniforms — directional lights ignore these in shader
                 if (!isDirectional) {
-                    falArr[i] = Math.max(0, l.falloff + dFalloff);
-                    typArr[i] = l.falloffType === 'Linear' ? 1.0 : 0.0;
+                    // Pack falloff into branchless polynomial coefficients:
+                    // falArr = d² coefficient, typArr = d coefficient
+                    // Power+Range model: if range > 0, compute k from range; else use raw falloff
+                    const range = l.range ?? 0;
+                    const ft = l.falloffType;
+                    if (ft === 'Linear') {
+                        // att = 1/(1 + k·d) → k = 99/range for 1% at range
+                        const k = range > 0.001 ? 99.0 / range : Math.max(0, l.falloff + dFalloff);
+                        falArr[i] = 0;
+                        typArr[i] = k;
+                    } else {
+                        // Quadratic: d² term — att = 1/(1 + k·d²) → k = 99/range² for 1% at range
+                        const k = range > 0.001 ? 99.0 / (range * range) : Math.max(0, l.falloff + dFalloff);
+                        falArr[i] = k;
+                        typArr[i] = 0;
+                    }
                     radArr[i] = l.radius ?? 0.0;
                     sofArr[i] = l.softness ?? 0.0;
 
@@ -279,31 +296,57 @@ export class UniformManager {
             }
         }
 
-        // --- LOCAL ROTATION MATRIX UPDATE ---
-        // Calculate and update uPreRotMatrix when geometry rotation params change
+        // --- 3-STAGE ROTATION MATRIX UPDATE (Branchless via mix) ---
+        // Each stage: mix(p, mat*p, amount). amount=0 → identity, no branch.
+        // Amounts are DDFS-driven uniforms; we override to 0 when rotation is disabled.
+
         if (geometry && geometry.preRotMaster && geometry.preRotEnabled) {
-            // Apply modulation offsets if present (matches VideoExporter logic)
-            const rotX = (geometry.preRotX ?? 0) + (modulations['geometry.preRotX'] || 0);
-            const rotY = (geometry.preRotY ?? 0) + (modulations['geometry.preRotY'] || 0);
-            const rotZ = (geometry.preRotZ ?? 0) + (modulations['geometry.preRotZ'] || 0);
-
-            // Build rotation matrix: Z * X * Y order (matches VideoExporter)
-            this.preRotMatrixX.makeRotationX(rotX);
-            this.preRotMatrixY.makeRotationY(rotY);
-            this.preRotMatrixZ.makeRotationZ(rotZ);
-
-            this.preRotMatrix4.identity()
-                .multiply(this.preRotMatrixZ)
-                .multiply(this.preRotMatrixX)
-                .multiply(this.preRotMatrixY);
-
-            this.preRotMatrix3.setFromMatrix4(this.preRotMatrix4);
-
-            // Update the uniform
-            const preRotUniform = this.uniforms[Uniforms.PreRotMatrix];
-            if (preRotUniform) {
-                preRotUniform.value.copy(this.preRotMatrix3);
-            }
+            // Pre-rotation matrix
+            this.buildRotMatrix(
+                (geometry.preRotX ?? 0) + (modulations['geometry.preRotX'] || 0),
+                (geometry.preRotY ?? 0) + (modulations['geometry.preRotY'] || 0),
+                (geometry.preRotZ ?? 0) + (modulations['geometry.preRotZ'] || 0),
+                Uniforms.PreRotMatrix
+            );
+            // Post-rotation matrix
+            this.buildRotMatrix(
+                (geometry.postRotX ?? 0) + (modulations['geometry.postRotX'] || 0),
+                (geometry.postRotY ?? 0) + (modulations['geometry.postRotY'] || 0),
+                (geometry.postRotZ ?? 0) + (modulations['geometry.postRotZ'] || 0),
+                Uniforms.PostRotMatrix
+            );
+            // World-rotation matrix
+            this.buildRotMatrix(
+                (geometry.worldRotX ?? 0) + (modulations['geometry.worldRotX'] || 0),
+                (geometry.worldRotY ?? 0) + (modulations['geometry.worldRotY'] || 0),
+                (geometry.worldRotZ ?? 0) + (modulations['geometry.worldRotZ'] || 0),
+                Uniforms.WorldRotMatrix
+            );
+        } else {
+            // Rotation disabled — identity matrices (I*p = p, branchless)
+            const preU = this.uniforms[Uniforms.PreRotMatrix];
+            const postU = this.uniforms[Uniforms.PostRotMatrix];
+            const worldU = this.uniforms[Uniforms.WorldRotMatrix];
+            if (preU) preU.value.copy(this.identityMat3);
+            if (postU) postU.value.copy(this.identityMat3);
+            if (worldU) worldU.value.copy(this.identityMat3);
         }
+    }
+
+    /** Build a rotation matrix from euler angles (Z*X*Y order) and write to uniform */
+    private buildRotMatrix(rx: number, ry: number, rz: number, uniformKey: string) {
+        this.rotScratchX.makeRotationX(rx);
+        this.rotScratchY.makeRotationY(ry);
+        this.rotScratchZ.makeRotationZ(rz);
+
+        this.rotScratch4.identity()
+            .multiply(this.rotScratchZ)
+            .multiply(this.rotScratchX)
+            .multiply(this.rotScratchY);
+
+        this.rotScratch3.setFromMatrix4(this.rotScratch4);
+
+        const u = this.uniforms[uniformKey];
+        if (u) u.value.copy(this.rotScratch3);
     }
 }

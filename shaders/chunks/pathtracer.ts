@@ -1,12 +1,12 @@
 
 
-export const getPathTracerGLSL = (isMobile: boolean, maxLights: number) => {
+export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochasticShadows: boolean = true) => {
 
     const loopLimit = isMobile ? '2' : 'maxBounces';
-     const shadowLogic = isMobile ? `
+     const shadowLogic = (!stochasticShadows || isMobile) ? `
         shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
     ` : `
-        if (uPTStochasticShadows > 0.5) {
+        if (uAreaLights > 0.5) {
             vec2 jitter = blueNoise.gb;
             vec3 sT, sB;
             buildTangentBasis(lDir, sT, sB);
@@ -90,25 +90,13 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy + bounceOffset);
 
         if (!hit) {
-            #ifdef LIGHT_SPHERES
-            vec2 lsHit = intersectLightSphere(currentRo, currentRd);
-            if (lsHit.x > 0.0) {
-                int li = int(lsHit.y);
-                radiance += uLightColor[li] * uLightIntensity[li] * lsHit.x * throughput;
-            } else
-            #endif
-            {
-                float skyIntensity = (bounce == 0) ? uEnvBackgroundStrength : uEnvStrength;
-                vec3 env = GetEnvMap(currentRd, 0.0);
-                if (bounce == 0 && uFogFar < 1000.0) {
-                    // Fog blend for primary-ray sky miss (sky treated as being at fog far plane)
-                    float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar * 0.95);
-                    vec3 sky = mix(env * skyIntensity, uFogColorLinear, fogFactor * 0.5);
-                    radiance += sky * throughput;
-                } else {
-                    radiance += env * skyIntensity * throughput;
-                }
+            float skyIntensity = (bounce == 0) ? uEnvBackgroundStrength : uEnvStrength;
+            vec3 env = sampleMiss(currentRo, currentRd, 0.0) * skyIntensity;
+            if (bounce == 0 && uFogFar < 1000.0) {
+                float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar * 0.95);
+                env = mix(env, uFogColorLinear, fogFactor * 0.5);
             }
+            radiance += env * throughput;
             break;
         }
 
@@ -206,10 +194,11 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     float hdotv = max(0.0, dot(h, viewDir));
                     float ndoth = max(0.0, dot(n, h));
 
+                    // Branchless attenuation (see pbr.ts LOOP_OPEN)
                     float att = 1.0;
-                    if (!isDirectional && uLightFalloff[lightIdx] > 0.001) {
-                        if (uLightFalloffType[lightIdx] < 0.5) att = 1.0 / (1.0 + uLightFalloff[lightIdx] * distToLight * distToLight);
-                        else att = 1.0 / (1.0 + uLightFalloff[lightIdx] * distToLight);
+                    if (!isDirectional && (uLightFalloff[lightIdx] + uLightFalloffType[lightIdx]) > 0.001) {
+                        float d2_att = distToLight * distToLight;
+                        att = 1.0 / (1.0 + uLightFalloff[lightIdx] * d2_att + uLightFalloffType[lightIdx] * distToLight);
                     }
 
                     vec3 F_nee = fresnelSchlick(hdotv, F0);

@@ -20,19 +20,35 @@ The shader architecture refactoring has been completed. The codebase now uses a 
 ## 2. Current Architecture
 
 ### 2.1 The Builder Interface
-The `ShaderBuilder` maintains structured lists of code blocks, handling deduplication and ordering.
+The `ShaderBuilder` maintains structured lists of code blocks, handling deduplication and ordering. See `docs/01_System_Architecture.md` Section 2.2b for the full hook reference table.
 
 ```typescript
 class ShaderBuilder {
+    // --- Core ---
     addDefine(name: string, value: string = '1'): void;
-    addUniform(name: string, type: string, precision?: string): void;
-    addFunction(code: string): void;
-    
-    // Hooks into specific parts of the Raymarch Loop
-    addPreDELogic(code: string): void;  // Before map() calls
-    addPostDELogic(code: string): void; // After map(), for coloring/lighting
-    
-    buildVertex(): string;
+    addUniform(name: string, type: string, arraySize?: number): void;
+    addHeader(code: string): void;
+    addPreamble(code: string): void;
+    addFunction(code: string): void;          // Pre-DE (position 8)
+    addPostDEFunction(code: string): void;    // Post-DE, can call map() (position 10)
+    addIntegrator(code: string): void;        // After trace (position 15)
+
+    // --- DE Configuration ---
+    setFormula(loopBody, init, distFunc): void;
+    setDistOverride(opts: { init?, inLoopFull?, inLoopGeom?, postFull?, postGeom? }): void;
+    addHybridFold(init, preLoop, inLoop): void;
+    addPostMapCode(code: string): void;       // Inside map(), accumulative (position 9)
+    addPostDistCode(code: string): void;      // Inside mapDist(), accumulative (position 9)
+
+    // --- Logic Injection ---
+    addMaterialLogic(code: string): void;     // Inside getSurfaceMaterial() (position 11)
+    addMissLogic(code: string): void;         // Inside sampleMiss() (position 12)
+    addVolumeTracing(marchCode, finalizeCode): void;  // Inside trace loop (position 14)
+    requestShading(): void;                   // Deferred calculateShading() generation
+    addShadingLogic(code: string): void;      // Inside calculateShading() reflection block
+    addPostProcessLogic(code: string): void;  // Inside applyPostProcessing() (position 16)
+    addCompositeLogic(code: string): void;    // Inside renderPixel() (position 17)
+
     buildFragment(): string;
 }
 ```
@@ -77,11 +93,17 @@ inject: (builder, config, variant) => {
 
 ---
 
-## 4. Remaining Work
+## 4. DDFS Overhaul (Completed v0.8.9+)
 
-### Optional Optimizations
-- **Dead Code Elimination:** Could optimize to exclude unused feature chunks when features are disabled (currently all chunks are included).
-- **Legacy `shaderLibrary` Removal:** Some features still use the legacy `shader` property; these could be migrated to `inject()` for consistency.
+The shader architecture was further refined via a comprehensive DDFS overhaul:
 
-### Backward Compatibility
-The Factory maintains backward-compatible fallbacks for legacy `shaderLibrary` entries. This is safe but could be cleaned up in a future refactor.
+- **API cleanup:** `setDistOverride` uses named object params; `addVolumeTracing`/`addHybridFold` use named params.
+- **Accumulative DE hooks:** `addPostMapCode()`/`addPostDistCode()` enable features to modify distance field inside `map()`/`mapDist()` without touching `de.ts`.
+- **Deferred shading:** `requestShading()` + `addShadingLogic()` solve feature ordering — shading GLSL is generated in `buildFragment()` after all features have injected.
+- **Post-processing hook:** `addPostProcessLogic()` injects into `applyPostProcessing()` after fog/glow.
+- **Feature dependencies:** `dependsOn` field with topological sort in `FeatureRegistry`.
+- **Core extraction:** Water plane, light spheres, and reflections fully extracted from core shader files into self-contained features.
+
+### Remaining Optional Work
+- **Dead Code Elimination:** Could exclude unused feature chunks when features are disabled.
+- **Lighting monolith split:** Shadows and Path Tracer could be extracted as satellite features. High risk — shared uniforms/state. Defer until concrete pain point.

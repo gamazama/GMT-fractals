@@ -3,9 +3,8 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { LightParams, generateLightId } from '../../types';
 import { MAX_LIGHTS } from '../../data/constants';
 import { getShadowsGLSL } from '../../shaders/chunks/lighting/shadows';
-import { LIGHTING_PBR_SIMPLE, LIGHTING_PBR_FULL } from '../../shaders/chunks/lighting/pbr';
+import { getLightingPBRSimple, getLightingPBRFull } from '../../shaders/chunks/lighting/pbr';
 import { LIGHTING_SHARED, LIGHTING_SHARED_CORE } from '../../shaders/chunks/lighting/shared';
-import { getShadingGLSL } from '../../shaders/chunks/lighting/shading';
 import { getPathTracerGLSL } from '../../shaders/chunks/pathtracer';
 
 import { QualityState } from '../quality';
@@ -26,6 +25,7 @@ export interface LightingState {
     ptBounces: number;
     ptGIStrength: number;
     ptStochasticShadows: boolean;
+    areaLights: boolean;
     ptNEEAllLights: boolean;
     ptEnvNEE: boolean;
     ptMaxLuminance: number;
@@ -57,7 +57,8 @@ export const getLightFromSlice = (slice: LightingState | undefined, i: number): 
             id: '', type: 'Point',
             position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
             color: '#ffffff', intensity: 0, falloff: 0,
-            falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0
+            falloffType: 'Quadratic', fixed: false, visible: false, castShadow: true, radius: 0.0,
+            range: 0, intensityUnit: 'raw'
         };
     }
     return slice.lights[i];
@@ -166,7 +167,7 @@ export const LightingFeature: FeatureDefinition = {
             estCompileMs: 1500 // Base cost of having shadow engine enabled (measured: ~1.5s)
         },
         shadowAlgorithm: {
-            type: 'float', default: 1.0, label: 'Shadow Quality', shortId: 'sa',
+            type: 'float', default: 0.0, label: 'Shadow Quality', shortId: 'sa',
             group: 'engine_settings',
             parentId: 'shadowsCompile',
             options: [
@@ -179,11 +180,14 @@ export const LightingFeature: FeatureDefinition = {
             noReset: true
         },
         ptStochasticShadows: {
-            type: 'boolean', default: false, label: 'Area Lights (Stochastic)', shortId: 'ps', uniform: 'uPTStochasticShadows',
+            type: 'boolean', default: true, label: 'Area Lights', shortId: 'ps',
             group: 'engine_settings',
             parentId: 'shadowsCompile',
             ui: 'checkbox',
-            description: 'Treats lights as physical spheres. Creates realistic penumbras. Requires Accumulation.'
+            onUpdate: 'compile',
+            noReset: true,
+            estCompileMs: 800,
+            description: 'Compiles stochastic area light shadow code. Creates realistic penumbras via accumulation.'
         },
 
         // --- PATH TRACING QUALITY (Engine Panel) ---
@@ -212,6 +216,13 @@ export const LightingFeature: FeatureDefinition = {
             uniform: 'uShadows', 
             ui: 'checkbox',
             condition: { param: 'shadowsCompile', bool: true }
+        },
+        areaLights: {
+            type: 'boolean', default: false, label: 'Area Lights', shortId: 'al', uniform: 'uAreaLights',
+            group: 'shadows',
+            hidden: true,
+            condition: { param: 'ptStochasticShadows', bool: true },
+            description: 'Stochastic area light shadows. Disable for sharp analytical shadows.'
         },
         shadowIntensity: {
             type: 'float', default: 1.0, label: 'Opacity', shortId: 'si', uniform: 'uShadowIntensity',
@@ -292,7 +303,7 @@ export const LightingFeature: FeatureDefinition = {
 
         const shadowsCompiled = state?.shadowsCompile !== false;
         // Map UI values to quality levels: 2.0=Hard(3), 1.0=Lite(1), 0.0=Robust(2)
-        const alg = state?.shadowAlgorithm ?? 1.0;
+        const alg = state?.shadowAlgorithm ?? 0.0;
         const shadowQuality = alg === 2.0 ? 3 : alg === 1.0 ? 1 : 2;
 
         builder.addPostDEFunction(getShadowsGLSL(shadowsCompiled, shadowQuality));
@@ -303,11 +314,7 @@ export const LightingFeature: FeatureDefinition = {
             builder.addDefine('SHADOW_QUALITY', '2');
         }
 
-        // Only compile light sphere intersection code when a light actually has radius > 0
-        const hasLightSpheres = state?.lights?.some(l => (l.radius ?? 0) > 0 && l.intensity > 0);
-        if (hasLightSpheres) {
-            builder.addDefine('LIGHT_SPHERES', '1');
-        }
+        // Light spheres: extracted to LightSpheresFeature (features/lighting/light_spheres.ts)
 
         if (state?.ptEnabled !== false) {
             builder.addDefine('PT_ENABLED', '1');
@@ -315,6 +322,8 @@ export const LightingFeature: FeatureDefinition = {
             if (state?.ptEnvNEE)      builder.addDefine('PT_ENV_NEE', '1');
             // PT_VOLUMETRIC moved to features/volumetric
         }
+
+        const stochasticShadows = state?.ptStochasticShadows === true && shadowsCompiled;
 
         const isPathTracing = config.renderMode === 'PathTracing' || state?.renderMode === 1.0;
         const quality = config.quality as QualityState;
@@ -324,14 +333,18 @@ export const LightingFeature: FeatureDefinition = {
             builder.addIntegrator(LIGHTING_SHARED); // PT needs fresnelSchlick
             builder.setRenderMode('PathTracing');
             builder.addDefine('RENDER_MODE_PATHTRACING', '1');
-            builder.addIntegrator(getPathTracerGLSL(isLite, MAX_LIGHTS));
+            builder.addIntegrator(getPathTracerGLSL(isLite, MAX_LIGHTS, stochasticShadows));
         } else {
             const useCookTorrance = state?.specularModel === 1.0;
             builder.addIntegrator(useCookTorrance ? LIGHTING_SHARED : LIGHTING_SHARED_CORE);
             builder.setRenderMode('Direct');
-            builder.addIntegrator(useCookTorrance ? LIGHTING_PBR_FULL : LIGHTING_PBR_SIMPLE);
-            builder.addIntegrator(getShadingGLSL());
+            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows) : getLightingPBRSimple(stochasticShadows));
+            // Shading integrator (calculateShading) is deferred to buildFragment() via requestShading()
+            // so that reflection code from ReflectionsFeature is available at generation time.
+            builder.requestShading();
         }
+
+        // Light sphere GLSL injection handled by LightSpheresFeature
     },
     actions: {
         updateLight: (state: LightingState, payload: { index: number, params: Partial<LightParams> }) => {
@@ -347,7 +360,8 @@ export const LightingFeature: FeatureDefinition = {
                 id: generateLightId(),
                 type: 'Point',
                 position: { x: 0, y: 0, z: 2.0 }, rotation: { x: 0, y: 0, z: 0 },
-                color: '#ffffff', intensity: 1.0, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0
+                color: '#ffffff', intensity: 1.0, falloff: 0, falloffType: 'Quadratic', fixed: false, visible: true, castShadow: true, radius: 0.0,
+                range: 0, intensityUnit: 'raw'
             };
             return { lights: [...state.lights, newLight] };
         },

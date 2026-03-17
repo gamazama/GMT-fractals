@@ -1,5 +1,12 @@
 
-export const getShadingGLSL = () => {
+export const getShadingGLSL = (reflectionCode: string = '') => {
+    // If no feature injects reflection code, use simple env-map fallback
+    const reflectionBlock = reflectionCode || `
+        // --- REFLECTIONS OFF (default) ---
+        vec3 envColor = GetEnvMap(reflDir, roughness) * uEnvStrength;
+        reflectionLighting = envColor * F * uSpecular;
+    `;
+
     return `
 // ------------------------------------------------------------------
 // DIRECT LIGHTING INTEGRATOR (Multi-Bounce)
@@ -19,18 +26,9 @@ vec3 applyDistanceFog(vec3 col, float dist) {
     return mix(col, uFogColorLinear, fogFactor);
 }
 
-// Test reflection ray against visible light spheres, fallback to environment
-vec3 sampleLightSphereOrEnv(vec3 ro, vec3 rd, float roughness, vec3 throughput) {
-    vec3 env = applyEnvFog(GetEnvMap(rd, roughness) * uEnvStrength);
-    #ifdef LIGHT_SPHERES
-    vec2 lsHit = intersectLightSphere(ro, rd);
-    if (lsHit.x > 0.0) {
-        int li = int(lsHit.y);
-        vec3 lc = uLightColor[li] * uLightIntensity[li];
-        return mix(env, lc, lsHit.x) * throughput;
-    }
-    #endif
-    return env * throughput;
+// Sample environment for a miss ray (reflection/bounce), with fog and feature overrides
+vec3 sampleMissEnv(vec3 ro, vec3 rd, float roughness, vec3 throughput) {
+    return applyEnvFog(sampleMiss(ro, rd, roughness) * uEnvStrength) * throughput;
 }
 
 vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSeed) {
@@ -58,97 +56,19 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
     // (distinct from per-light Schlick in PBR which uses HdotV for specular response)
     vec3 F = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - NdotV, 5.0);
 
-    // 5. Reflection (Single Bounce - Flattened Loop)
+    // 5. Reflection
     vec3 reflectionLighting = vec3(0.0);
     vec3 ambient = vec3(0.0);
 
-    // Cache un-jittered reflection direction (reused for simpleEnv fallback)
+    // Cache un-jittered reflection direction (reused for env fallback)
     vec3 reflDir = reflect(-v, n);
 
-    #ifdef REFLECTIONS_ENABLED
-        // --- RAYMARCHED REFLECTIONS ---
-        // Adaptive bias: scales with pixel size and distance to avoid self-intersection
-        float pixelSizeScale = uPixelSizeBase / uInternalScale;
-        float reflPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
-        float reflBias = max(0.001, reflPixelFootprint * 2.0);
-        vec3 currRo = p_ray + n * reflBias;
-        vec3 currRd = reflDir;
-
-        // Jitter first bounce based on roughness using Blue Noise
-        bool isMoving = uBlendFactor >= 0.99;
-        if (roughness > 0.05 && !isMoving) {
-             vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
-             vec3 randomVec = vec3(blueNoise.b, blueNoise.a, blueNoise.r) * 2.0 - 1.0;
-
-             if (dot(randomVec, randomVec) > 0.001) {
-                 vec3 jittered = normalize(currRd + normalize(randomVec) * (roughness * 0.8));
-                 if (dot(jittered, n) > 0.05) currRd = jittered;
-             }
-        }
-
-        vec3 currentThroughput = F * uSpecular;
-
-        if (roughness <= uReflRoughnessCutoff && dot(currentThroughput, currentThroughput) >= 0.01) {
-
-            vec4 refHit = traceReflectionRay(currRo, currRd);
-
-            if (refHit.x > 0.0) {
-                float hitD = refHit.x;
-                vec3 p_next = currRo + currRd * hitD;
-                vec3 p_next_fractal = p_next + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
-
-                vec3 r_albedo, r_n, r_emission;
-                float r_rough;
-
-                getSurfaceMaterial(p_next, p_next_fractal, vec4(0.0, refHit.yzw), hitD, r_albedo, r_n, r_emission, r_rough, false);
-
-                if (dot(r_n, -currRd) < 0.0) r_n = -r_n;
-
-                vec3 hitColor = r_emission;
-                // REFL_BOUNCE_SHADOWS: compile-time control over shadow cost in reflections
-                #ifdef REFL_BOUNCE_SHADOWS
-                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1, !isMoving);
-                #else
-                    hitColor += calculatePBRContribution(p_next, r_n, -currRd, r_albedo, r_rough, uReflection, stochasticSeed + 0.1, false);
-                #endif
-
-                reflectionLighting += hitColor * currentThroughput;
-
-            } else {
-                reflectionLighting += sampleLightSphereOrEnv(currRo, currRd, roughness, currentThroughput);
-            }
-        } else {
-            reflectionLighting += applyEnvFog(GetEnvMap(currRd, roughness) * uEnvStrength) * currentThroughput;
-        }
-
-        vec3 simpleEnv = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
-        simpleEnv *= currentThroughput;
-
-        reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);
-
-    #elif defined(REFLECTIONS_SSR)
-        // --- SCREEN-SPACE REFLECTIONS ---
-        // TODO: Requires uProjectionMatrix, uViewMatrix, uPrevColorBuffer, uPrevDepthBuffer
-        // Currently falls back to enhanced env map until pipeline plumbing is added
-        {
-            vec3 currentThroughput = F * uSpecular;
-
-            // Enhanced env map: use roughness-aware sampling with Fresnel
-            vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
-            reflectionLighting = envColor * currentThroughput;
-        }
-
-    #elif defined(REFLECTIONS_ENV)
-        // --- ENVIRONMENT MAP ONLY ---
-        // Fresnel-weighted environment sampling, zero extra cost
-        vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength);
-        reflectionLighting = envColor * F * uSpecular;
-
-    #else
-        // --- REFLECTIONS OFF ---
-        vec3 envColor = GetEnvMap(reflDir, roughness) * uEnvStrength;
-        reflectionLighting = envColor * F * uSpecular;
-    #endif
+    // --- FEATURE INJECTION: REFLECTION EVALUATION ---
+    // Variables in scope: p_ray, p_fractal, v, n, albedo, roughness, F, NdotV,
+    //   reflDir, reflectionLighting (output), stochasticSeed, d, uReflection, uSpecular
+    // Functions available: GetEnvMap, applyEnvFog, sampleMissEnv, getSurfaceMaterial,
+    //   calculatePBRContribution, getBlueNoise4, traceReflectionRay (if injected)
+    ${reflectionBlock}
 
     // 6. Rim
     float fresnelTerm = pow(1.0 - NdotV, uRimExponent);

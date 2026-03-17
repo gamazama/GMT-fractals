@@ -35,7 +35,8 @@ const DEFAULT_SCRIPT = `// ── GMT Formula Workshop — Quick Reference ─�
 //   float getLength(vec3 p)           — respects distance metric setting
 //   void sphereFold(inout vec3, inout float, float minR, float fixedR)
 //   void boxFold(inout vec3, inout float, float foldLimit)
-//   void applyLocalRotation(inout vec3) — applies pre-rotation if enabled
+//   void applyPreRotation(inout vec3)  — local rotation before formula (branchless)
+//   void applyPostRotation(inout vec3) — local rotation after formula (branchless)
 //
 // ── Loop context variables (inout) ──
 //   vec4 z   — current position (.xyz) + derivative (.w)

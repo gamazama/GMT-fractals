@@ -1,16 +1,16 @@
 
 // Shared light loop infrastructure (shadows, attenuation, light types).
 // Each BRDF variant gets its own complete function to avoid dead-code overhead.
+// stochasticShadows: compile-time gate — when false, the stochastic jitter block
+// and its GetHardShadow dependency are stripped, saving significant compile time.
 
-const LOOP_OPEN = `
+const getLoopOpen = (stochasticShadows: boolean) => `
 vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughness, float metallic, float stochasticSeed, bool calcShadows) {
     vec3 Lo = vec3(0.0);
 
     float pixelSizeScale = uPixelSizeBase / uInternalScale;
     float biasAmount = uShadowBias + pixelSizeScale * 2.0;
     vec3 shadowRo = p + n * biasAmount;
-
-    bool useStochasticShadows = (uPTStochasticShadows > 0.5);
 
     // COMPILER OPTIMIZATION: Prevent unrolling of light loop
     int lightCount = uLightCount;
@@ -44,7 +44,8 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
         float shadow = 1.0;
         if (calcShadows && uShadows > 0.5 && uLightShadows[i] > 0.5) {
             float s = 1.0;
-
+${stochasticShadows ? `
+            bool useStochasticShadows = (uAreaLights > 0.5);
             if (useStochasticShadows) {
                  float samplingSeed = fract(stochasticSeed + float(i) * 1.618);
 
@@ -71,14 +72,18 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
             } else {
                  s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
             }
+` : `
+                 s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
+`}
             shadow = mix(1.0, s, uShadowIntensity);
         }
 
+        // Branchless attenuation: CPU packs coefficients into uLightFalloff (d² term) and uLightFalloffType (d term)
+        // Quadratic: (k, 0) → 1/(1+k·d²)   Linear: (0, k) → 1/(1+k·d)   InvSq: (k_from_range, 0)
         float att = 1.0;
-        if (!isDirectional && uLightFalloff[i] > 0.001) {
-            float k = uLightFalloff[i];
-            if (uLightFalloffType[i] < 0.5) att = 1.0 / (1.0 + k * distToLight * distToLight);
-            else att = 1.0 / (1.0 + k * distToLight);
+        if (!isDirectional && (uLightFalloff[i] + uLightFalloffType[i]) > 0.001) {
+            float d2 = distToLight * distToLight;
+            att = 1.0 / (1.0 + uLightFalloff[i] * d2 + uLightFalloffType[i] * distToLight);
         }
 
         vec3 radiance = uLightColor[i] * intensity * att * shadow;
@@ -92,11 +97,11 @@ const LOOP_CLOSE = `
 `;
 
 // Simple Blinn-Phong (fast compile, good visual quality)
-export const LIGHTING_PBR_SIMPLE = `
+export const getLightingPBRSimple = (stochasticShadows: boolean) => `
 // ------------------------------------------------------------------
 // PBR HELPERS (Blinn-Phong)
 // ------------------------------------------------------------------
-${LOOP_OPEN}
+${getLoopOpen(stochasticShadows)}
         // Blinn-Phong specular
         vec3 h = normalize(l + v);
         float NdotH = max(0.0, dot(n, h));
@@ -110,11 +115,11 @@ ${LOOP_CLOSE}
 `;
 
 // Full Cook-Torrance (GGX + Smith-GGX + Schlick — slower compile)
-export const LIGHTING_PBR_FULL = `
+export const getLightingPBRFull = (stochasticShadows: boolean) => `
 // ------------------------------------------------------------------
 // PBR HELPERS (Cook-Torrance GGX)
 // ------------------------------------------------------------------
-${LOOP_OPEN}
+${getLoopOpen(stochasticShadows)}
         vec3 F0 = mix(vec3(0.04), albedo, metallic);
         float NdotV = max(0.001, dot(n, v));
 
@@ -148,5 +153,7 @@ ${LOOP_OPEN}
 ${LOOP_CLOSE}
 `;
 
-// Default export for backwards compat
+// Backwards compat constants (stochastic enabled — full codepath)
+export const LIGHTING_PBR_SIMPLE = getLightingPBRSimple(true);
+export const LIGHTING_PBR_FULL = getLightingPBRFull(true);
 export const LIGHTING_PBR = LIGHTING_PBR_SIMPLE;

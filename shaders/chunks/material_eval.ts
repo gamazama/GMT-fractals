@@ -154,13 +154,7 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     
     // --- FEATURE INJECTION: MATERIAL PROPERTIES ---
     // Inject Emission, Roughness, and other surface logic here.
+    // Features use builder.addMaterialLogic() to inject code at this point.
+    // Variables in scope: albedo, n, emission, roughness, p_fractal, result
     ${injectedCode}
-    
-    // --- HOOK: Water Plane Material ---
-    // Overrides albedo/normal/roughness if water ID is detected
-    // Safe to call even if water disabled (stub will be empty)
-    if (result.w >= 5.0) {
-        applyWaterMaterial(albedo, roughness, n, p_fractal);
-        emission = vec3(0.0);
-    }
 }`;

@@ -11,10 +11,18 @@ export interface GeometryState {
     applyTransformLogic: boolean;
 
     preRotEnabled: boolean;
-    preRotY: number;
     preRotX: number;
+    preRotY: number;
     preRotZ: number;
     preRot: THREE.Vector3;
+    postRotX: number;
+    postRotY: number;
+    postRotZ: number;
+    postRot: THREE.Vector3;
+    worldRotX: number;
+    worldRotY: number;
+    worldRotZ: number;
+    worldRot: THREE.Vector3;
 
     // Global Modifiers
     burningEnabled: boolean;
@@ -53,6 +61,8 @@ export interface GeometryState {
     // Fold-type-specific
     hybridFoldingValue: THREE.Vector3;
     hybridKaliConstant: THREE.Vector3;
+    hybridMengerOffset: THREE.Vector3;
+    hybridMengerCenterZ: boolean;
 
     preRotMaster: boolean;
 }
@@ -67,7 +77,7 @@ function buildPermuteGLSL(mode: number): string {
 }
 
 // --- Build the shared formula_Hybrid GLSL ---
-function buildHybridFunctions(permuteCode: string, rotMode: 'wrap' | 'post'): string {
+function buildHybridFunctions(permuteCode: string, rotMode: 'wrap' | 'post', selfContained = false): string {
     // 'wrap': rotate z before fold, un-rotate after (plane-reflection folds)
     // 'post': rotation applied after fold+sphereFold (translation-based folds like Kali)
     const rotPre = rotMode === 'wrap'
@@ -112,19 +122,20 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {
     z3 -= uHybridShift;
     ${rotPostFold}
 
+    ${selfContained ? '// selfContained fold — scaling + DR handled inside foldOperation' : `
     sphereFold(z3, dr, uHybridMinR, uHybridFixedR);
     ${rotPostSphere}
 
     // Dynamic scale variation (Mandelbulber ABoxVaryScale)
     float s = uHybridScale + uHybridScaleVary * (abs(uHybridScale) - 1.0);
-    z3 *= s;
+    z3 *= s;`}
 
     // C-axis permutation
     ${permuteCode}
     if (uHybridAddC > 0.5) z3 += c_perm;
 
     z.xyz = z3;
-    dr = dr * abs(s) + 1.0;
+    ${selfContained ? '' : 'dr = dr * abs(s) + 1.0;'}
     trap = min(trap, getLength(z3));
 }
 `;
@@ -302,17 +313,37 @@ export const GeometryFeature: FeatureDefinition = {
             default: false,
             label: 'Local Rotation',
             shortId: 're',
-            uniform: 'uPreRotEnabled',
             group: 'transform',
             condition: { param: 'preRotMaster', bool: true }
         },
-        preRotY: { type: 'float', default: 0.0, label: 'Spin Y', shortId: 'ry', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        preRotX: { type: 'float', default: 0.0, label: 'Spin X', shortId: 'rx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        preRotZ: { type: 'float', default: 0.0, label: 'Spin Z', shortId: 'rz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
 
+        // Pre-rotation (before formula, inside loop)
+        preRotX: { type: 'float', default: 0.0, label: 'Pre X', shortId: 'rx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        preRotY: { type: 'float', default: 0.0, label: 'Pre Y', shortId: 'ry', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        preRotZ: { type: 'float', default: 0.0, label: 'Pre Z', shortId: 'rz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
         preRot: {
-            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Local Rotation',
+            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Pre Rotation',
             composeFrom: ['preRotX', 'preRotY', 'preRotZ'],
+            min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi',
+            group: 'transform', parentId: 'preRotEnabled', condition: { bool: true },
+        },
+        // Post-rotation (after formula, inside loop)
+        postRotX: { type: 'float', default: 0.0, label: 'Post X', shortId: 'qx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        postRotY: { type: 'float', default: 0.0, label: 'Post Y', shortId: 'qy', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        postRotZ: { type: 'float', default: 0.0, label: 'Post Z', shortId: 'qz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        postRot: {
+            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Post Rotation',
+            composeFrom: ['postRotX', 'postRotY', 'postRotZ'],
+            min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi',
+            group: 'transform', parentId: 'preRotEnabled', condition: { bool: true },
+        },
+        // World-space rotation (outside loop, applied to p before iteration)
+        worldRotX: { type: 'float', default: 0.0, label: 'World X', shortId: 'wx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        worldRotY: { type: 'float', default: 0.0, label: 'World Y', shortId: 'wy', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        worldRotZ: { type: 'float', default: 0.0, label: 'World Z', shortId: 'wz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        worldRot: {
+            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'World Rotation',
+            composeFrom: ['worldRotX', 'worldRotY', 'worldRotZ'],
             min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi',
             group: 'transform', parentId: 'preRotEnabled', condition: { bool: true },
         },
@@ -364,7 +395,7 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
             // Build and inject formula_Hybrid with permutation
             const permuteIndex = state?.hybridPermute ?? 0;
             const permuteCode = buildPermuteGLSL(permuteIndex);
-            builder.addFunction(buildHybridFunctions(permuteCode, fold.rotMode ?? 'wrap'));
+            builder.addFunction(buildHybridFunctions(permuteCode, fold.rotMode ?? 'wrap', fold.selfContained ?? false));
         }
 
         let hybridPreLoop = "";
@@ -416,6 +447,6 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
             }
         }
 
-        builder.addHybrid("", hybridPreLoop, hybridInLoop);
+        builder.addHybridFold("", hybridPreLoop, hybridInLoop);
     }
 };

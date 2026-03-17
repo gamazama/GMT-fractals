@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { FractalState, FractalActions, FormulaType, LfoTarget, PanelId } from '../../types';
 import Slider from '../Slider';
@@ -8,128 +8,15 @@ import { LfoList } from './formula/LfoList';
 import { useFractalStore } from '../../store/fractalStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { buildFormulaContextMenu } from './formula/FormulaSelect';
-import { AlertIcon } from '../Icons';
 import { nodeRegistry } from '../../engine/NodeRegistry';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
-import { FeatureSection } from '../FeatureSection';
+import { CompilableFeatureSection } from '../CompilableFeatureSection';
 import { SectionLabel, SectionDivider } from '../SectionLabel';
-import { StatusDot } from '../StatusDot';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import Dropdown from '../Dropdown';
 import { Vector2Input, Vector3Input } from '../vector-input';
-
-// --- Hybrid Box Fold Section (two collapsible sub-sections: Compile Settings + Parameters) ---
-import { CollapsibleSection } from '../CollapsibleSection';
-
-const HybridBoxSection: React.FC<{ state: FractalState }> = ({ state }) => {
-    const [localPending, setLocalPending] = useState<Record<string, any>>({});
-    const geom = state.geometry;
-    const isOn = geom.hybridMode;
-    const isCompiled = geom.hybridCompiled;
-
-    // Merge store state with local pending for compile-time params display
-    const mergedState = useMemo(() => ({
-        ...geom,
-        ...localPending,
-        // Force these true so compile-time param conditions pass in the whitelist panel
-        hybridCompiled: true,
-        hybridMode: true,
-    }), [geom, localPending]);
-
-    const hasPendingChanges = Object.keys(localPending).length > 0;
-    const needsCompile = isOn && (!isCompiled || hasPendingChanges);
-
-    // Toggle hybrid on/off — instant via runtime uniform
-    const handleToggle = useCallback((val: boolean) => {
-        useFractalStore.getState().setGeometry({ hybridMode: val });
-    }, []);
-
-    // Handle compile-time param changes (stored locally until compile)
-    const handleCompileParamChange = useCallback((key: string, value: any) => {
-        setLocalPending(prev => {
-            const next = { ...prev, [key]: value };
-            if ((geom as any)[key] === value) delete next[key];
-            return next;
-        });
-    }, [geom]);
-
-    // Compile: apply local pending changes + ensure hybridCompiled is true
-    const handleCompile = useCallback(() => {
-        FractalEvents.emit('is_compiling', "Compiling Hybrid Shader...");
-        setTimeout(() => {
-            const updates: Record<string, any> = { ...localPending };
-            if (!isCompiled) updates.hybridCompiled = true;
-            useFractalStore.getState().setGeometry(updates);
-            setLocalPending({});
-        }, 50);
-    }, [localPending, isCompiled]);
-
-    const statusDots = (
-        <>
-            {isOn && isCompiled && !hasPendingChanges && <StatusDot status="active" />}
-            {isOn && needsCompile && <StatusDot status="pending" />}
-        </>
-    );
-
-    return (
-        <div data-help-id="hybrid.mode">
-            <FeatureSection
-                label="Hybrid Box Fold"
-                featureId="geometry"
-                toggleParam="hybridMode"
-                enabled={isOn}
-                onToggle={handleToggle}
-                statusContent={statusDots}
-                headerClassName={isCompiled ? '' : 'bg-transparent'}
-            >
-                <div className="bg-white/[0.02]">
-                    {/* --- Compile Settings sub-section --- */}
-                    <CollapsibleSection label="Compile Settings" defaultOpen={false} variant="panel">
-                        <div>
-                            <AutoFeaturePanel
-                                featureId="geometry"
-                                whitelistParams={['hybridFoldType', 'hybridComplex', 'hybridSwap', 'hybridPermute']}
-                                forcedState={mergedState}
-                                onChangeOverride={handleCompileParamChange}
-                            />
-                            {needsCompile && (
-                                <div className="flex items-center justify-between px-2 py-1 mt-1 bg-amber-900/20 border border-amber-500/20 rounded">
-                                    <div className="flex items-center gap-1.5 text-amber-400">
-                                        <AlertIcon />
-                                        <SectionLabel variant="secondary" color="text-amber-400">
-                                            {!isCompiled ? 'Not compiled' : 'Settings changed'}
-                                        </SectionLabel>
-                                    </div>
-                                    <button
-                                        onClick={handleCompile}
-                                        className="px-3 py-0.5 bg-amber-600 hover:bg-amber-500 text-black text-[9px] font-bold rounded transition-colors"
-                                    >
-                                        {!isCompiled ? 'Compile' : 'Recompile'}
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </CollapsibleSection>
-
-                    {/* --- Parameters sub-section (only when compiled) --- */}
-                    {isCompiled && (
-                        <CollapsibleSection label="Parameters" defaultOpen={true} variant="panel">
-                            <div>
-                                <AutoFeaturePanel
-                                    featureId="geometry"
-                                    groupFilter="hybrid"
-                                    excludeParams={['hybridMode']}
-                                />
-                            </div>
-                        </CollapsibleSection>
-                    )}
-                </div>
-            </FeatureSection>
-        </div>
-    );
-};
 
 interface FormulaParam {
     label: string;
@@ -408,7 +295,17 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
 
        <SectionDivider />
 
-       <HybridBoxSection state={state} />
+       <CompilableFeatureSection
+           featureId="geometry"
+           label="Hybrid Box Fold"
+           compileParam="hybridCompiled"
+           runtimeToggleParam="hybridMode"
+           compileSettingsParams={['hybridFoldType', 'hybridComplex', 'hybridSwap', 'hybridPermute']}
+           runtimeGroup="hybrid"
+           runtimeExcludeParams={['hybridMode']}
+           compileMessage="Compiling Hybrid Shader..."
+           helpId="hybrid.mode"
+       />
 
        <SectionDivider />
 

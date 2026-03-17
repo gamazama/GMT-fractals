@@ -7,10 +7,12 @@ export const DE_MASTER = (
     hybridPreLoop: string = '',
     hybridInLoop: string = '',
     distOverrideInit: string = '',
-    distOverrideInLoopMap: string = '',
-    distOverrideInLoopDist: string = '',
-    distOverridePostMap: string = '',
-    distOverridePostDist: string = ''
+    distOverrideInLoopFull: string = '',
+    distOverrideInLoopGeom: string = '',
+    distOverridePostFull: string = '',
+    distOverridePostGeom: string = '',
+    postMapCode: string = '',
+    postDistCode: string = ''
 ) => {
     // When hybridInLoop sets skipMainFormula, we need the variable and if-wrapper.
     // Otherwise emit the formula body directly — saves a bool + branch per iteration.
@@ -19,13 +21,13 @@ export const DE_MASTER = (
     return `
 ${getDistBody}
 
-#define MATERIAL_WATER 10.0
-
 // --- CORE ESTIMATOR (Coloring & Geometry) ---
 // Returns: vec4(distance, trap_distance, iteration_count, decomposition_angle)
 vec4 map(vec3 p) {
     // 1. Apply Precision Offset
     vec3 p_fractal = applyPrecisionOffset(p, uSceneOffsetLow, uSceneOffsetHigh);
+
+    applyWorldRotation(p_fractal);
 
     vec4 z = vec4(p_fractal, uParamB);
     vec4 c = mix(z, vec4(uJulia, uParamA), step(0.5, uJuliaMode));
@@ -63,7 +65,7 @@ vec4 map(vec3 p) {
         ${hybridInLoop}
 
         ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
-            applyLocalRotation(z.xyz);
+            applyPreRotation(z.xyz);
 
             float r2_check = dot(z.xyz, z.xyz);
 
@@ -84,6 +86,8 @@ vec4 map(vec3 p) {
             #endif
 
             ${formulaBody}
+
+            applyPostRotation(z.xyz);
         ${needsSkip ? '}' : ''}
 
         // Count completed iterations. After uIterations runs iter == uIterations,
@@ -110,7 +114,7 @@ vec4 map(vec3 p) {
             break;
         }
 
-        ${distOverrideInLoopMap}
+        ${distOverrideInLoopFull}
     }
 
     float r = getLength(z.xyz);
@@ -126,8 +130,8 @@ vec4 map(vec3 p) {
     float finalD = distRes.x;
     smoothIter = distRes.y;
 
-    ${distOverridePostMap}
-    
+    ${distOverridePostFull}
+
     // Restore saved coloring state if color iteration limit was active
     // When uColorIter > 0, use the frozen snapshot; otherwise keep full-iteration values
     float useColorSnap = step(0.5, uColorIter);
@@ -141,19 +145,10 @@ vec4 map(vec3 p) {
         if (abs(uTextureModeV - 8.0) < 0.1) useLLI = true;
     }
     float outTrap = useLLI ? lastLength : trap;
-    
-    // --- HOOK: Water Plane ---
-    // Wrapped in ifdef to ensure it is optimized out if feature disabled
-    #ifdef WATER_ENABLED
-    float dWater = mapWater(p_fractal);
-    if (dWater < finalD) {
-        finalD = dWater;
-        // Signal Water material via named sentinel (fractal decomp is in [0,1]; MATERIAL_WATER > 1)
-        decomp = MATERIAL_WATER;
-        smoothIter = 0.0;
-        outTrap = 0.0;
-    }
-    #endif
+
+    // --- FEATURE INJECTION: POST-MAP (accumulative) ---
+    // Variables in scope: p_fractal, finalD, decomp, smoothIter, outTrap
+    ${postMapCode}
 
     // When color iteration limit is active, use capped iter for normalized coloring value
     float colorIterNorm = mix(smoothIter / max(1.0, uIterations), savedIter / max(1.0, uColorIter), useColorSnap);
@@ -165,8 +160,9 @@ vec4 map(vec3 p) {
 // Used for Shadows, AO, and Normals.
 float mapDist(vec3 p) {
     vec3 p_fractal = applyPrecisionOffset(p, uSceneOffsetLow, uSceneOffsetHigh);
-    
-    vec4 z = vec4(p_fractal, uParamB); 
+    applyWorldRotation(p_fractal);
+
+    vec4 z = vec4(p_fractal, uParamB);
     vec4 c = mix(z, vec4(uJulia, uParamA), step(0.5, uJuliaMode));
     
     float dr = 1.0;
@@ -191,13 +187,15 @@ float mapDist(vec3 p) {
         ${hybridInLoop}
 
         ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
-            applyLocalRotation(z.xyz);
+            applyPreRotation(z.xyz);
 
             #ifndef SKIP_PRE_BAILOUT
             if (dot(z.xyz, z.xyz) > bailout) break;
             #endif
 
             ${formulaBody}
+
+            applyPostRotation(z.xyz);
         ${needsSkip ? '}' : ''}
 
         // Track completed iterations so getDist expressions that use iter
@@ -206,7 +204,7 @@ float mapDist(vec3 p) {
 
         if (dr > 1.0e10 || dot(z.xyz, z.xyz) > bailout) break;
 
-        ${distOverrideInLoopDist}
+        ${distOverrideInLoopGeom}
     }
 
     float r = getLength(z.xyz);
@@ -216,15 +214,10 @@ float mapDist(vec3 p) {
 
     float finalD = distRes.x;
 
-    ${distOverridePostDist}
-    
-    // --- HOOK: Water Plane ---
-    #ifdef WATER_ENABLED
-    float dWater = mapWater(p_fractal);
-    if (dWater < finalD) {
-        finalD = dWater;
-    }
-    #endif
+    ${distOverridePostGeom}
+
+    // --- FEATURE INJECTION: POST-DIST (accumulative) ---
+    ${postDistCode}
 
     return finalD;
 }

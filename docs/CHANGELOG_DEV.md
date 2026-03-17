@@ -2,6 +2,33 @@
 
 Chronological log of significant changes during the v0.8.9 development cycle (uncommitted on `dev` branch).
 
+## 2026-03-17
+
+### Area Lights Compile/Runtime Split
+
+- **Two-level control:** `ptStochasticShadows` (compile-time, `onUpdate: 'compile'`) gates stochastic shadow code generation. `areaLights` (runtime, `uAreaLights` uniform) toggles stochastic path at runtime.
+- **Defaults:** Compiled on init (`ptStochasticShadows: true`), but turned off (`areaLights: false`). Balanced preset enables both; Lite disables compile.
+- **UI:** Runtime "Area" toggle button in shadow popup (top bar), hidden when not compiled. Compile toggle in Engine panel.
+- **Removed:** Area lights switch from Quality panel (now controlled by compile toggle + runtime toggle).
+- Files: `features/lighting/index.ts`, `features/lighting/components/ShadowControls.tsx`, `features/engine/profiles.ts`, `shaders/chunks/lighting/pbr.ts`, `shaders/chunks/pathtracer.ts`, `shaders/chunks/ray.ts`, `components/panels/QualityPanel.tsx`
+
+### CompilableFeatureSection Component
+
+- **New reusable component** (`components/CompilableFeatureSection.tsx`): DDFS-driven UI for features with compile/runtime split. Reads `panelConfig` from feature registry or accepts explicit props.
+- **Pattern:** Runtime toggle (instant on/off) + compile gate (shader rebuild) + compile settings sub-section + runtime params. Status dots (active/pending). Compile bar with Compile button + engine icon button.
+- **Engine queue integration:** Engine icon opens Engine panel and queues compile flag + any pending compile settings via `engine_queue` event pattern.
+- **`panelConfig` added to `FeatureDefinition`:** Declarative UI configuration for compilable sections.
+- **Applied to:** Volumetric Scatter (via `panelConfig`), Hybrid Box Fold (via explicit props).
+- Files: `components/CompilableFeatureSection.tsx`, `engine/FeatureSystem.ts`, `features/volumetric/index.ts`, `components/panels/ScenePanel.tsx`, `components/panels/FormulaPanel.tsx`
+
+### DDFS Overhaul (P1-P2)
+
+- **P1 — ShaderBuilder assembly order:** Added comprehensive assembly order comment block (positions 1-17) and JSDoc comments on all injection API methods with scope variables and usage examples.
+- **P2 — Named params:** `setDistOverride()` now takes a named object (`init`, `inLoopFull`, `inLoopGeom`, `postFull`, `postGeom`). `addVolumeTracing(marchCode, finalizeCode)` and `addHybridFold(init, preLoop, inLoop)` use named params. Internal field names updated to match.
+- **P3 — Accumulative hooks:** `addPostMapCode()` and `addPostDistCode()` added for accumulative injection inside `map()`/`mapDist()`.
+- **P4 — Water plane extraction:** All water-specific code removed from `de.ts` and `material_eval.ts`. Water feature now injects via `addPostMapCode`, `addPostDistCode`, `addMaterialLogic`, and `addDefine`.
+- Files: `engine/ShaderBuilder.ts`, `features/core_math.ts`, `features/volumetric/index.ts`, `features/geometry/index.ts`, `features/water_plane.ts`, `shaders/chunks/de.ts`, `shaders/chunks/material_eval.ts`
+
 ## 2026-03-16
 
 ### Unified Camera Coordinate System

@@ -32,34 +32,48 @@ Lights can optionally be rendered as physical emissive spheres visible in the vi
 
 ### Sphere Intersection
 
-A shared `intersectLightSphere(ro, rd)` function in `shaders/chunks/lighting/shared.ts` tests a ray against all visible light spheres. Returns `vec2(fade, lightIndex)` where `fade <= 0` means no hit. Used by both Direct (via `sampleLightSphereOrEnv`) and Path Tracing (bounce `!hit` branch) modes.
+Light spheres are a **compile-time feature** (`lightSpheres` param, `onUpdate: 'compile'`, ~150ms). When enabled, the `LIGHT_SPHERES` define is set and all sphere GLSL is injected via DDFS — no light sphere code exists in core shader files.
 
-For each active point light with `radius > 0`:
+`intersectLightSphere(ro, rd, radiusJitter)` in `shaders/chunks/lighting/shared.ts` tests a ray against all active point lights with `radius > 0`. Returns `vec3(fade, lightIndex, insideFlag)`.
 
-1. Compute perpendicular distance `dPerp` from the ray to the sphere centre.
-2. **Soft edge**: `smoothstep(innerR, outerR, dPerp)` fades the sphere over a band controlled by `uLightSoftness[i]`.
-   - `softness = 0`: hard-edge sphere (classic billboard look).
-   - `softness = 1`: edge fades over a band equal to the radius (smooth disc).
-3. Fade is squared for a smoother visual falloff.
+**Chord-based thickness** — uses actual ray-sphere intersection, not perpendicular distance. The chord length through the sphere determines opacity: rays through the center are brightest, edges taper naturally in 3D.
+
+**Softness curve** — `pow(thickness, 0.15 + soft * 1.4)`:
+- `softness = 0`: solid orb, sharp edge (exponent 0.15 flattens brightness).
+- `softness = 0-1`: edge gradient widens inward, sphere size stays at radius `r`.
+- `softness > 1`: halo extends beyond `r` with energy conservation (`fade *= r/testR`) so it reads as "softer" not "bigger".
+
+**Inside-sphere behavior** — when the camera enters the sphere, the view is tinted with the light color (60% max blend, Hermite S-curve falloff).
+
+**Stochastic AA** — primary ray compositing (`compositeLightSpheres`) jitters the radius ±2% per frame using `stochasticSeed`. Disabled during navigation (`uBlendFactor >= 0.99`). Accumulation averages into smooth anti-aliased edges.
+
+### DDFS Injection (satellite feature)
+
+Light spheres are a **satellite feature** (`features/lighting/light_spheres.ts`) with `dependsOn: ['lighting']`. All GLSL is self-contained — zero sphere code exists in core shader files. The feature depends on Lighting's uniform arrays (`uLightPos`, `uLightColor`, etc.) and per-light UI controls (radius/softness sliders embedded in `LightControls.tsx`).
+
+| GLSL Constant | Injection Hook | Purpose |
+|--------------|----------------|---------|
+| `LIGHT_SPHERE_INTERSECTION_GLSL` | `addPostDEFunction()` | `intersectLightSphere()` definition |
+| `getLightSphereCompositeGLSL()` | `addIntegrator()` | `compositeLightSpheres()` for primary ray depth compositing |
+| `LIGHT_SPHERE_MISS_GLSL` | `addMissLogic()` | Override env map with sphere color on ray miss |
+| call site string | `addCompositeLogic()` | Invokes composite in `renderPixel()` |
 
 ### Key Files
 
 | File | Role |
 |------|------|
-| `shaders/chunks/lighting/shared.ts` | `intersectLightSphere()` — shared geometry test |
-| `shaders/chunks/lighting/shading.ts` | `sampleLightSphereOrEnv()` — wraps intersection with env map fallback |
-| `shaders/chunks/pathtracer.ts` | Calls `intersectLightSphere()` in bounce `!hit` branch |
+| `features/lighting/light_spheres.ts` | DDFS satellite feature definition + `lightSpheres` compile-time param |
+| `shaders/chunks/lighting/shared.ts` | All light sphere GLSL (intersection, miss, composite) |
+| `features/lighting/components/LightControls.tsx` | Sphere Radius / Edge Softness sliders |
 | `engine/UniformNames.ts` | `LightRadius`, `LightSoftness` uniforms |
-| `engine/managers/UniformManager.ts` | Uploads `sofArr` per light |
-| `types/graphics.ts` | `softness?: number` on `LightParams` |
-| `features/lighting/components/LightControls.tsx` | Edge Softness slider (shown when sphere visible) |
 
 ### Parameters
 
 | Param | Uniform | Notes |
 |-------|---------|-------|
-| Sphere Radius | `uLightRadius[i]` | 0 = light is invisible |
-| Edge Softness | `uLightSoftness[i]` | 0 = hard edge, 1 = full fade band |
+| Light Spheres | compile-time | Engine panel toggle, default on, ~150ms compile cost |
+| Sphere Radius | `uLightRadius[i]` | 0 = light is invisible. Slider: 0.001–1.0 |
+| Edge Softness | `uLightSoftness[i]` | 0 = hard edge, 0-1 = gradient inward, >1 = halo with energy conservation |
 
 ## 2.2 Direct Lighting Pipeline
 
@@ -75,16 +89,25 @@ Uses full Cook-Torrance microfacet BRDF:
 
 ### Reflection Tracing (`features/reflections/`)
 
-Single-bounce raymarched reflections, conditionally compiled via `REFLECTIONS_ENABLED`:
+Reflections are a fully self-contained DDFS feature. Two modes are available:
+
+- **Environment Map** (default): Fresnel-weighted env sampling with fog. Zero extra shader cost.
+- **Raymarched (Quality)**: Single-bounce raymarched reflections. ~7-9s compile time.
+
+All reflection evaluation GLSL is owned by `features/reflections/index.ts` and injected into `calculateShading()` via `builder.addShadingLogic()`. The trace function (`traceReflectionRay`) is injected via `addPostDEFunction()`. Zero reflection code exists in core shader files — `shading.ts` provides a `${reflectionBlock}` injection point with a simple env-map fallback when no feature injects.
+
+**Deferred generation pattern:** Lighting calls `builder.requestShading()` (not `getShadingGLSL()` directly). Reflections, registered later, calls `builder.addShadingLogic()`. In `buildFragment()`, the collected shading logic is passed to `getShadingGLSL(reflectionCode)` which generates the final `calculateShading()` function.
+
+#### Raymarched mode details:
 
 1. **Adaptive bias:** Reflection ray origin offset scales with `pixelSizeScale * d` (not hardcoded), preventing self-intersection at all zoom levels.
 2. **Roughness jitter:** Blue noise (B/A/R channels) jitters the reflection ray proportional to roughness. Skipped when camera is moving (`uBlendFactor >= 0.99`).
 3. **Roughness cutoff:** `uReflRoughnessCutoff` (default 0.62) skips the trace for rough surfaces — falls back to env map lookup.
 4. **Throughput early-out:** `dot(F * uSpecular, ...) < 0.01` skips the trace when Fresnel contribution is negligible.
 5. **Normal orientation:** `if (dot(r_n, -currRd) < 0.0) r_n = -r_n` — flips the SDF gradient normal to face the incoming reflection ray, fixing back-face lighting in concave fractal geometry.
-6. **Bounce shadows:** Shadow computation on reflected surfaces is gated by `!isMoving` — full shadow quality accumulates when still, skipped during interaction for performance.
+6. **Bounce shadows:** When enabled (`REFL_BOUNCE_SHADOWS` define), shadows are always computed on reflected surfaces for visual consistency between navigation and accumulation.
 7. **Hit refinement:** On hit, the tracer retreats by `d * 0.5` before evaluating full orbit traps, reducing color noise at glancing angles.
-8. **Miss path:** `sampleLightSphereOrEnv()` tests against visible light spheres, then falls back to environment map.
+8. **Miss path:** `sampleMissEnv()` calls the builder-generated `sampleMiss()` (which includes any feature-injected miss logic, e.g. light spheres), then applies env fog.
 9. **Raymarch Mix:** `uReflStrength` blends between raymarched reflections (1.0) and simple env map lookup (0.0). Both paths use matched Fresnel weighting.
 
 ### Fresnel — Two Variants
@@ -101,16 +124,18 @@ Two fog helpers in `shading.ts`:
 - `applyEnvFog(env)` — treats environment as at the fog far plane via `smoothstep(uFogNear, uFogFar, uFogFar)`. Replaces the former hardcoded 0.8 blend factor.
 - `applyDistanceFog(col, dist)` — standard distance-based smoothstep for geometry hits.
 
-Reflection hits do **not** apply their own fog — `post.ts` applies a single primary-distance fog pass to the composed pixel, avoiding double-fogging.
+Reflection hits do **not** apply their own fog — `applyPostProcessing()` applies a single primary-distance fog pass to the composed pixel, avoiding double-fogging.
+
+All fog, glow, and volumetric scatter compositing is feature-injected into `applyPostProcessing()` via `addPostProcessLogic()`. The `post.ts` core file is a minimal shell — Atmosphere injects fog + glow, Volumetric injects scatter. Registration order controls execution order.
 
 ### Key Files
 
 | File | Role |
 |------|------|
-| `shaders/chunks/lighting/shared.ts` | `buildTangentBasis()`, `fresnelSchlick()`, `intersectLightSphere()` — shared helpers injected before all integrators |
+| `shaders/chunks/lighting/shared.ts` | `buildTangentBasis()`, `fresnelSchlick()` — shared helpers; light sphere GLSL (feature-injected) |
 | `shaders/chunks/lighting/pbr.ts` | Cook-Torrance PBR with GGX + Schlick-GGX |
-| `shaders/chunks/lighting/shading.ts` | Direct lighting integrator, reflection composition, fog helpers |
-| `features/reflections/index.ts` | DDFS definition: bounces, steps, roughness cutoff, mix strength |
+| `shaders/chunks/lighting/shading.ts` | Direct lighting integrator (`calculateShading`), fog helpers, `${reflectionBlock}` injection point |
+| `features/reflections/index.ts` | DDFS definition + all reflection evaluation GLSL (env map, raymarched modes) |
 | `features/reflections/shader.ts` | `traceReflectionRay()` — lightweight SDF marcher with hit refinement |
 | `engine/UniformNames.ts` | `uFogColorLinear` derived uniform |
 | `engine/managers/UniformManager.ts` | CPU-side InverseACESFilm derivation |
@@ -135,7 +160,7 @@ Four compile-time options in the `LightingFeature` / `EngineSettingsFeature` con
 
 ### PT_VOLUMETRIC (`ptVolumetric`)
 
-**Default off.** Replaces absorption-only fog in the PT bounce loop with Henyey-Greenstein single-scatter volumetric lighting. Injected via `builder.addVolumeLogic(VOLUMETRIC_SCATTER_BODY)` in `features/lighting/index.ts`.
+**Default off.** Replaces absorption-only fog in the PT bounce loop with Henyey-Greenstein single-scatter volumetric lighting. Injected via `builder.addVolumeTracing(VOLUMETRIC_SCATTER_BODY)` in `features/lighting/index.ts`.
 
 See **Section 2.6** for full technical details.
 
@@ -163,7 +188,7 @@ In PT mode, the shader emits a second `traceSceneLean()` function alongside the 
 
 ## 2.6 Volumetric Scatter (God Rays)
 
-Primary-ray single-scatter volumetric lighting. Injected into `traceScene`'s march loop via `builder.addVolumeLogic()`. Active in both Direct and Path Tracing modes. Controlled via **Scene → Fog → Volumetric Density**.
+Primary-ray single-scatter volumetric lighting. Injected into `traceScene`'s march loop via `builder.addVolumeTracing()`. Active in both Direct and Path Tracing modes. Controlled via **Scene → Fog → Volumetric Density**.
 
 ### Technique
 
@@ -185,10 +210,10 @@ At each march step, a stochastic gate fires with probability 1/8 (spatially dist
 |------|------|
 | `shaders/chunks/lighting/volumetric_scatter.ts` | Full GLSL body, injected into march loop |
 | `shaders/chunks/trace.ts` | `traceScene` accumulates `accScatter`, outputs `fogScatter` |
-| `shaders/chunks/main.ts` | `applyPostProcessing` adds `fogScatter` additively to final color |
+| `shaders/chunks/main.ts` | `renderPixel` calls `applyPostProcessing` for final compositing |
 | `shaders/chunks/pathtracer.ts` | PT bounce fog uses `exp(-uFogDensity·d)` Beer-Lambert; bounce traces use `traceSceneLean` (no volume) |
 | `features/atmosphere/index.ts` | UI params: Density, Anisotropy, Surface Color Scatter |
-| `features/lighting/index.ts` | Injects `#define PT_VOLUMETRIC` and `addVolumeLogic()` when enabled |
+| `features/volumetric/index.ts` | Injects `#define PT_VOLUMETRIC`, `addVolumeTracing()`, and scatter compositing via `addPostProcessLogic()` |
 
 ### Parameters
 

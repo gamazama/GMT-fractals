@@ -21,7 +21,6 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
     const [aspectLock, setAspectLock] = useState<number | 'Free'>('Free');
 
     const ptEnabled = lighting?.ptEnabled !== false;
-    // For Area Lights toggle copy
     const setLighting = (actions as any).setLighting;
 
     // Preset Detection
@@ -293,15 +292,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                     helpId="quality.tss"
                 />
 
-                {/* Area Lights (Stochastic Shadows) */}
-                {ptEnabled && (
-                    <ToggleSwitch
-                        label="Area Lights (Soft Shadows)"
-                        value={lighting?.ptStochasticShadows ?? false}
-                        onChange={(v) => setLighting && setLighting({ ptStochasticShadows: v })}
-                        helpId="pt.global"
-                    />
-                )}
+                {/* Area Lights: compile toggle in Engine Panel, runtime toggle in Shadow popup */}
              </div>
 
              {/* Shadow Quality Settings */}

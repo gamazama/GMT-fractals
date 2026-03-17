@@ -3,8 +3,16 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { VOLUMETRIC_SCATTER_BODY } from '../../shaders/chunks/lighting/volumetric_scatter';
 import * as THREE from 'three';
 
+/** Volumetric scatter compositing — injected via addPostProcessLogic().
+ *  Adds accumulated god ray scatter to the final color. */
+const VOLUMETRIC_SCATTER_POST = `
+    // --- VOLUMETRIC SCATTER (God Rays) ---
+    col += fogScatter;
+`;
+
 export interface VolumetricState {
     ptVolumetric: boolean;
+    volEnabled: boolean;
     volDensity: number;
     volAnisotropy: number;
     volMaxLights: number;
@@ -27,6 +35,12 @@ export const VolumetricFeature: FeatureDefinition = {
         description: 'Henyey-Greenstein single scatter. Enables god rays, colored haze, and directional fog.',
         groupFilter: 'engine_settings'
     },
+    panelConfig: {
+        compileParam: 'ptVolumetric',
+        runtimeToggleParam: 'volEnabled',
+        label: 'Volumetric Scatter',
+        compileMessage: 'Compiling Volumetric Shader...',
+    },
     groups: {
         density: { label: 'Density & Shadow Rays', collapsible: true },
         emissive: { label: 'Color Scatter', collapsible: true },
@@ -36,9 +50,15 @@ export const VolumetricFeature: FeatureDefinition = {
         // --- COMPILE-TIME TOGGLE ---
         ptVolumetric: {
             type: 'boolean', default: false, label: 'Volume Scatter', shortId: 'pvs',
-            group: 'main', noReset: true,
+            group: 'engine_settings', noReset: true,
             onUpdate: 'compile',
             estCompileMs: 5500,
+        },
+
+        // --- RUNTIME TOGGLE (instant on/off, hidden — controlled by CompilableFeatureSection) ---
+        volEnabled: {
+            type: 'boolean', default: false, label: 'Enabled', shortId: 'ven', uniform: 'uVolEnabled',
+            hidden: true,
         },
 
         // --- DENSITY SCATTER (expensive — shadow rays per light) ---
@@ -73,6 +93,12 @@ export const VolumetricFeature: FeatureDefinition = {
             condition: { param: 'ptVolumetric', bool: true },
             description: 'Orbit trap color field scattered through the volume. No shadow rays needed.'
         },
+        volStepJitter: {
+            type: 'float', default: 1.0, label: 'Step Jitter', shortId: 'vsj', uniform: 'uVolStepJitter',
+            min: 0.0, max: 1.0, step: 0.01, group: 'density',
+            parentId: 'volDensity', condition: { gt: 0.0 },
+            description: '1 = smooth (temporal accumulation removes noise). 0 = fixed slicing pattern (artistic, broken fog look).'
+        },
         volEmissiveFalloff: {
             type: 'float', default: 0.0, label: 'Surface Falloff', shortId: 'vef', uniform: 'uVolEmissiveFalloff',
             min: 0, max: 5.0, step: 0.01, scale: 'log', group: 'emissive',
@@ -100,7 +126,9 @@ export const VolumetricFeature: FeatureDefinition = {
         const state = config.volumetric as VolumetricState;
         if (state?.ptVolumetric) {
             builder.addDefine('PT_VOLUMETRIC', '1');
-            builder.addVolumeLogic(VOLUMETRIC_SCATTER_BODY, '');
+            builder.addVolumeTracing(VOLUMETRIC_SCATTER_BODY, '');
+            // Compositing: add accumulated scatter to final color in post-processing
+            builder.addPostProcessLogic(VOLUMETRIC_SCATTER_POST);
         }
     }
 };

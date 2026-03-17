@@ -1,67 +1,21 @@
 
 
-export const getFragmentMainGLSL = (enablePathTracing: boolean, maxLights: number) => {
+export const getFragmentMainGLSL = (enablePathTracing: boolean, maxLights: number, compositeCode: string = '') => {
 
-    // Light sphere depth-compositing — only compiled when a light has radius > 0.
-    // Uses intersectLightSphere() from shared.ts (single loop, no duplication).
-    const sphereCheck = `
-        float _lightD = 1.0e10;
-        vec3  _lightCol = vec3(0.0);
-        float _lightFade = 0.0;
-        #ifdef LIGHT_SPHERES
-        {
-            vec2 _lsHit = intersectLightSphere(ro, rd);
-            if (_lsHit.x > 0.001) {
-                int _li = int(_lsHit.y);
-                _lightFade = _lsHit.x;
-                _lightCol = uLightColor[_li] * uLightIntensity[_li];
-                vec3 _oc = ro - uLightPos[_li];
-                float _b = dot(rd, _oc);
-                float _r = uLightRadius[_li];
-                float _disc = _r * _r - (dot(_oc, _oc) - _b * _b);
-                _lightD = _disc > 0.0 ? max(0.001, -_b - sqrt(_disc)) : max(0.001, -_b);
-            }
+    const shadingCall = enablePathTracing
+        ? 'col = calculatePathTracedColor(ro, rd, d, result, stochasticSeed);'
+        : 'col = calculateShading(ro, rd, d, result, stochasticSeed);';
+
+    const integrator = `
+        if (hit) {
+            ${shadingCall}
+        } else {
+            if (d < 0.001) d = MISS_DIST;
         }
-        #endif
+
+        // --- FEATURE INJECTION: POST-INTEGRATOR COMPOSITING ---
+        ${compositeCode}
     `;
-
-    let integrator = '';
-
-    if (enablePathTracing) {
-        integrator = `
-        ${sphereCheck}
-        if (hit) {
-            col = calculatePathTracedColor(ro, rd, d, result, stochasticSeed);
-            if (_lightFade > 0.001 && _lightD < d) {
-                col = mix(col, _lightCol, _lightFade);
-                d = _lightD;
-            }
-        } else {
-            if (_lightFade > 0.001) {
-                col = mix(col, _lightCol, _lightFade);
-                d = _lightD;
-            }
-            if (d < 0.001) d = MISS_DIST;
-        }
-        `;
-    } else {
-        integrator = `
-        ${sphereCheck}
-        if (hit) {
-            col = calculateShading(ro, rd, d, result, stochasticSeed);
-            if (_lightFade > 0.001 && _lightD < d) {
-                col = mix(col, _lightCol, _lightFade);
-                d = _lightD;
-            }
-        } else {
-            if (_lightFade > 0.001) {
-                col = mix(col, _lightCol, _lightFade);
-                d = _lightD;
-            }
-            if (d < 0.001) d = MISS_DIST;
-        }
-        `;
-    }
 
     return `
 // ------------------------------------------------------------------

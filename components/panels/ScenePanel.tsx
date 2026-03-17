@@ -5,6 +5,7 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { useFractalStore } from '../../store/fractalStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { FeatureSection } from '../FeatureSection';
+import { CompilableFeatureSection } from '../CompilableFeatureSection';
 import { SectionLabel, SectionDivider } from '../SectionLabel';
 import { WaterPlaneState } from '../../features/water_plane';
 
@@ -112,9 +113,7 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
      <SectionDivider />
 
      {/* --- VOLUMETRIC SCATTER --- */}
-     <div className="flex flex-col">
-        <AutoFeaturePanel featureId="volumetric" />
-     </div>
+     <CompilableFeatureSection featureId="volumetric" />
   </div>
   );
 };

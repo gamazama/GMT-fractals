@@ -339,12 +339,11 @@ Simulates a physical camera lens.
         title: 'Reflections',
         parentId: 'panel.render',
         content: `
-Adds reflective surfaces to the fractal. Four modes available, from cheapest to most expensive:
+Adds reflective surfaces to the fractal. Three modes available, from cheapest to most expensive:
 
 ## Reflection Methods
 - **Off**: No reflections. Fastest.
 - **Environment Map**: Samples the environment map at the reflection angle. Cheap, adds realism to metals. Uses Fresnel weighting.
-- **Screen-Space (SSR)**: Approximates reflections using the current screen buffer. No extra DE calls. Fast but limited to visible geometry.
 - **Raymarched (Quality)**: Fires actual reflection rays through the fractal. Physically accurate but adds ~9s compile time.
 
 ## Raymarched Settings

@@ -7,13 +7,14 @@ const engine = getProxy();
 import { useFractalStore } from '../../../store/fractalStore';
 import { getViewportCamera, getViewportCanvas, getDisplayCamera } from '../../../engine/worker/ViewportRefs';
 import { AnchorIcon, UnanchoredIcon } from '../../../components/Icons';
-import { 
-    getLightWorldPosition, 
-    projectToScreen, 
-    getScreenTip, 
-    GIZMO_SCALE_FACTOR, 
-    PLANE_SCALE, 
-    GizmoColors 
+import {
+    getLightWorldPosition,
+    projectToScreen,
+    getScreenTip,
+    GIZMO_SCALE_FACTOR,
+    PLANE_SCALE,
+    GizmoColors,
+    activeLightPopup
 } from '../utils/GizmoMath';
 
 interface SingleLightGizmoProps {
@@ -162,6 +163,32 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
             updatePlane('plane-xy', px, py);
             updatePlane('plane-xz', px, pz);
             updatePlane('plane-yz', py, pz);
+
+            // --- Range circle visualization ---
+            // Shows when range > 0 and the light panel is open
+            const rangeCircle = el.querySelector('.range-circle') as SVGCircleElement | null;
+            if (rangeCircle) {
+                const lightRange = currentLight.range ?? 0;
+                const popupOpen = activeLightPopup.index === index;
+                if (lightRange > 0.001 && popupOpen) {
+                    // Use camera's right vector for a stable screen-space projection
+                    // (avoids issues with arbitrary world axes for headlamp lights)
+                    const right = new THREE.Vector3(1, 0, 0).applyMatrix4(camera.matrixWorld).sub(camera.position).normalize();
+                    const edgePoint = worldPos.clone().addScaledVector(right, lightRange);
+                    const edgeScreen = projectToScreen(edgePoint, camera, width, height);
+                    if (edgeScreen) {
+                        const dx = edgeScreen.x - screenPos.x;
+                        const dy = edgeScreen.y - screenPos.y;
+                        const screenRadius = Math.sqrt(dx * dx + dy * dy);
+                        rangeCircle.setAttribute('r', String(Math.max(8, screenRadius)));
+                        rangeCircle.style.opacity = '0.6';
+                    } else {
+                        rangeCircle.style.opacity = '0';
+                    }
+                } else {
+                    rangeCircle.style.opacity = '0';
+                }
+            }
         }
     }));
 
@@ -242,9 +269,17 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
                         <line className="axis-x-line cursor-pointer pointer-events-auto" x1="0" y1="0" x2="0" y2="0" stroke="rgba(0,0,0,0)" strokeWidth="12" onPointerDown={(e) => handlePointerDown(e, 'axis-x')} />
                 </g>
                 
+                {/* Range Circle — shown during slider interaction when range > 0 */}
+                <circle
+                    className="range-circle pointer-events-none"
+                    cx="0" cy="0" r="0"
+                    fill="none" stroke={light.color} strokeWidth="1" strokeDasharray="4 3"
+                    style={{ opacity: 0, transition: 'opacity 0.2s ease' }}
+                />
+
                 {/* Center Handle */}
-                <circle 
-                    cx="0" cy="0" r="6" 
+                <circle
+                    cx="0" cy="0" r="6"
                     fill={light.color} stroke="white" strokeWidth="2"
                     className={`cursor-move pointer-events-auto transition-all duration-150 ${hoverState?.part === 'free' ? 'stroke-cyan-400 r-[8px]' : ''}`}
                     onPointerDown={(e) => handlePointerDown(e, 'free')}

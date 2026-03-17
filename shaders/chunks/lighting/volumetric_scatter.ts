@@ -6,7 +6,7 @@
 //
 // Uniforms (from volumetric feature DDFS):
 //   uVolDensity, uVolAnisotropy, uVolMaxLights,
-//   uVolEmissive, uVolEmissiveFalloff,
+//   uVolEmissive, uVolEmissiveFalloff, uVolStepJitter,
 //   uVolScatterTint, uVolHeightFalloff, uVolHeightOrigin
 
 export const VOLUMETRIC_SCATTER_BODY = `
@@ -14,9 +14,11 @@ export const VOLUMETRIC_SCATTER_BODY = `
 {
     bool _hasDensity = uVolDensity > 0.001;
     bool _hasEmissive = uVolEmissive > 0.001;
-    if (_hasDensity || _hasEmissive) {
-        // Spatial stochastic gate: K=1.0, P=0.125 -> sample every ~8.0 world units
-        if (fract(stochasticSeed * 7.43 + d * 1.0) < 0.125) {
+    if (uVolEnabled > 0.5 && (_hasDensity || _hasEmissive)) {
+        // Spatial stochastic gate: P=0.125
+        // uVolStepJitter blends between fixed seed (persistent slicing) and temporal seed (smooth accumulation)
+        float _volSeed = mix(0.5, stochasticSeed, uVolStepJitter);
+        if (fract(_volSeed * 7.43 + d * 1.0) < 0.125) {
             float _sigma = uVolDensity;
 
             // Height fog: modulate density by Y distance from origin

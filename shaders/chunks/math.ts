@@ -4,25 +4,26 @@ export const getMathGLSL = (useRotation: boolean) => {
     
     const rotationLogic = !useRotation ? `
     // Kernel Optimization: No Rotation Code
-    void applyLocalRotation(inout vec3 p) {}
-    void unapplyLocalRotation(inout vec3 p) {}
+    void applyPreRotation(inout vec3 p) {}
+    void applyPostRotation(inout vec3 p) {}
+    void applyWorldRotation(inout vec3 p) {}
     ` : `
-    // Kernel Capability: Local Rotation
-    // CPU Optimized: Pre-calculated Matrix (mat3) to avoid 6x sin/cos per iteration
-    // uniform mat3 uPreRotMatrix; // Defined in UNIFORMS chunk
+    // Kernel Capability: 3-Stage Rotation (Branchless)
+    // CPU sends identity mat3 when angles are zero → p = I*p = p, no branch needed.
+    // Pre:   inside loop, before formula
+    // Post:  inside loop, after formula
+    // World: outside loop, applied to p before iteration
 
-    void applyLocalRotation(inout vec3 p) {
-        if (uPreRotEnabled > 0.5) {
-            // p' = M * p
-            p = uPreRotMatrix * p;
-        }
+    void applyPreRotation(inout vec3 p) {
+        p = uPreRotMatrix * p;
     }
 
-    void unapplyLocalRotation(inout vec3 p) {
-        if (uPreRotEnabled > 0.5) {
-            // Inverse of a rotation matrix is its Transpose
-            p = transpose(uPreRotMatrix) * p;
-        }
+    void applyPostRotation(inout vec3 p) {
+        p = uPostRotMatrix * p;
+    }
+
+    void applyWorldRotation(inout vec3 p) {
+        p = uWorldRotMatrix * p;
     }
     `;
 

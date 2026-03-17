@@ -37,6 +37,83 @@ At runtime:
 
 **Benefit:** Adding a new feature usually requires editing **only one file** (the feature definition file), and the rest of the engine adapts automatically.
 
+### 2.2b ShaderBuilder Injection Hooks
+
+Features inject GLSL into the shader pipeline via `ShaderBuilder` hooks. Each hook targets a specific stage in the shader assembly order:
+
+| Hook | Assembly Position | Scope / Available Variables | Example Usage |
+|------|-------------------|---------------------------|---------------|
+| `addDefine(name, val)` | 1. Top of shader | Preprocessor | `LIGHT_SPHERES`, `PT_ENABLED` |
+| `addUniform(name, type)` | 2. After defines | Global | Feature-specific uniforms |
+| `addHeader(code)` | 3. After uniforms | Global | Precision qualifiers, extensions |
+| `addPreamble(code)` | 7. Before functions | Global scope | Pre-calculated constants |
+| `addFunction(code)` | 8. Pre-DE | Global | Formula functions, utilities |
+| `setDistOverride(opts)` | 9. DE loop | `init`, `inLoopFull/Geom`, `postFull/Geom` | Modular formula custom DE |
+| `addHybridFold(init, preLoop, inLoop)` | 9. DE loop | Hybrid fractal injection | Multi-formula hybrid fractals |
+| `addPostMapCode(code)` | 9. Inside `map()` | `p_fractal`, `finalD`, `outTrap` | Water plane, ground plane |
+| `addPostDistCode(code)` | 9. Inside `mapDist()` | `p_fractal`, `finalD` | Shadow/AO distance override |
+| `addPostDEFunction(code)` | 10. Post-DE | Can call `map()` | Shadows, AO, reflection trace |
+| `addMaterialLogic(code)` | 11. Inside `getSurfaceMaterial()` | `albedo`, `n`, `emission`, `roughness`, `result` | Water material, emission modes |
+| `addMissLogic(code)` | 12. Inside `sampleMiss()` | `ro`, `rd`, `roughness`, `env` (modifiable) | Light spheres, portals, custom sky |
+| `addVolumeTracing(march, finalize)` | 14. Inside trace loop | Per-step + post-loop | Volumetric scatter, god rays |
+| `addIntegrator(code)` | 15. After trace | Can call all above | Lighting PBR, path tracer |
+| `requestShading()` | 15. Deferred | Generates `calculateShading()` at build time | Lighting feature (direct mode) |
+| `addShadingLogic(code)` | 15. Inside `calculateShading()` | `p_ray`, `n`, `v`, `albedo`, `roughness`, `F`, `reflDir`, `reflectionLighting` | Reflection evaluation modes |
+| `addPostProcessLogic(code)` | 16. Inside `applyPostProcessing()` | `col`, `d`, `glow`, `volumetric`, `fogScatter` | Fog, glow, volumetric scatter (fully feature-injected) |
+| `addCompositeLogic(code)` | 17. Inside `renderPixel()` | `ro`, `rd`, `col`, `d`, `hit`, `stochasticSeed` | Light sphere compositing |
+
+**Assembly order:** Defines → Uniforms → Headers → Math → BlueNoise → Coloring → Preambles → Functions → DE → PostDE → MaterialEval → MissHandler → Ray → Trace → Integrators(+Shading) → Post → Main
+
+**Key patterns:**
+- Features define GLSL functions via `addPostDEFunction`/`addIntegrator`, then inject call sites via logic hooks (`addMaterialLogic`, `addMissLogic`, `addCompositeLogic`). This keeps core shader files feature-agnostic.
+- `requestShading()` + `addShadingLogic()` enable deferred generation: Lighting calls `requestShading()`, then Reflections (registered later) injects its evaluation code via `addShadingLogic()`. The shading GLSL is generated in `buildFragment()` after all features have injected.
+- `addPostMapCode()` / `addPostDistCode()` are accumulative hooks that inject inside the DE functions, enabling features like water plane to modify the distance field without touching core `de.ts`.
+
+### 2.2c Feature Dependencies
+
+Features can declare `dependsOn: string[]` to specify other features that must be registered and injected before them. The `FeatureRegistry` enforces this via topological sort (Kahn's algorithm with stable ordering — features without dependencies preserve their registration order).
+
+**Satellite feature pattern:** A feature that owns its own GLSL injection but depends on another feature's uniforms/UI. Example: `LightSpheresFeature` (`dependsOn: ['lighting']`) owns all sphere rendering GLSL but relies on Lighting's uniform arrays (`uLightPos`, `uLightColor`, etc.) and per-light UI controls.
+
+### 2.2d Compilable Feature Sections
+
+Features that require shader compilation can declare a `panelConfig` in their DDFS definition to get a standardized UI with compile/runtime split:
+
+```typescript
+panelConfig: {
+    compileParam: 'ptVolumetric',        // compile gate (onUpdate: 'compile')
+    runtimeToggleParam: 'volEnabled',    // runtime on/off (uniform, instant)
+    compileSettingsParams?: ['foldType'], // compile-time params shown in settings sub-section
+    label: 'Volumetric Scatter',
+    compileMessage: 'Compiling Volumetric Shader...',
+}
+```
+
+The `CompilableFeatureSection` component (`components/CompilableFeatureSection.tsx`) reads this config and renders:
+- **Runtime toggle** — instant on/off via uniform (or falls back to compile toggle if no `runtimeToggleParam`)
+- **Status dots** — active (green) when compiled and on, pending (amber) when needs compile
+- **Compile settings sub-section** — only if `compileSettingsParams` is specified; shows compile-time params with local pending state until user clicks Compile
+- **Compile bar** — amber bar with Compile button + engine icon button (opens Engine panel and queues compile flag + any pending settings via `engine_queue` event)
+- **Runtime params** — shown only when compiled, excludes compile params
+
+**Two-level control pattern:** Compile-time param gates shader code generation (`onUpdate: 'compile'`), runtime param controls a uniform for instant on/off. Examples:
+- **Volumetric**: `ptVolumetric` (compile) + `volEnabled` (runtime `uVolEnabled`)
+- **Area Lights**: `ptStochasticShadows` (compile) + `areaLights` (runtime `uAreaLights`)
+- **Hybrid Box**: `hybridCompiled` (compile) + `hybridMode` (runtime)
+
+The component can be used purely via `panelConfig` or with explicit props for sub-section cases (e.g., hybrid box is a sub-section of geometry, so it passes explicit props rather than using panelConfig).
+
+### 2.2e Reference Features
+
+These features demonstrate the full DDFS pattern and serve as templates for new development:
+
+| Feature | Demonstrates |
+|---------|-------------|
+| **Water Plane** (`features/water_plane.ts`) | `addPostMapCode`/`addPostDistCode` (DE override), `addMaterialLogic` (sentinel-based material), `addDefine`, compile-time toggle |
+| **Light Spheres** (`features/lighting/light_spheres.ts`) | Satellite feature (`dependsOn`), `addPostDEFunction`, `addMissLogic`, `addCompositeLogic`, stochastic AA |
+| **Reflections** (`features/reflections/index.ts`) | `addShadingLogic` (deferred injection), `addPostDEFunction` (trace function), compile-time mode switching |
+| **Volumetric** (`features/volumetric/index.ts`) | `panelConfig` (compilable section UI), two-level control, `addVolumeTracing`, `addPostProcessLogic` |
+
 ### 2.3 Meta-Features (Orchestration)
 Some features, like **Engine Settings**, do not own shader code directly but orchestrate other features.
 *   **Example:** `EngineSettingsFeature` defines the "Lite Mode" vs "Ultra Mode" presets.

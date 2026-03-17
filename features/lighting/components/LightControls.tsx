@@ -225,8 +225,6 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
 
     const posStatus = getPosKeyStatus();
 
-    const safeIntensity = Math.max(0.01, light.intensity);
-    const currentFalloffFactor = light.falloff / safeIntensity;
     const prefix = `lighting.light${index}`;
     
     // Smart 5-digit formatter for UI
@@ -298,38 +296,46 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         </div>
                     )}
 
-                    <Slider
-                        label="Intensity"
-                        value={light.intensity}
-                        min={0} max={100} step={0.1}
-                        onChange={(v) => updateLight({ index, params: { intensity: v } })}
-                        customMapping={{
-                            min: 0, max: 100,
-                            // Square curve for better control at low intensities (0-10 range)
-                            toSlider: (val) => Math.sqrt(val / 100) * 100,
-                            fromSlider: (val) => (val * val) / 100
-                        }}
-                        mapTextInput={false}
-                        overrideInputText={formatValue(light.intensity)}
-                        trackId={`${prefix}_intensity`}
-                    />
-                    
-                    {light.type !== 'Directional' && (
+                    {light.intensityUnit === 'ev' ? (
                         <Slider
-                            label="Falloff"
-                            value={currentFalloffFactor}
-                            min={0} max={10.0} step={0.01}
-                            onChange={(factor) => {
-                                const newRawFalloff = factor * light.intensity;
-                                updateLight({ index, params: { falloff: newRawFalloff } });
-                            }}
+                            label="Power (EV)"
+                            value={light.intensity}
+                            min={-4} max={10} step={0.1}
+                            onChange={(v) => updateLight({ index, params: { intensity: v } })}
+                            mapTextInput={false}
+                            overrideInputText={`${formatValue(light.intensity)} EV`}
+                            trackId={`${prefix}_intensity`}
+                        />
+                    ) : (
+                        <Slider
+                            label="Power"
+                            value={light.intensity}
+                            min={0} max={100} step={0.1}
+                            onChange={(v) => updateLight({ index, params: { intensity: v } })}
                             customMapping={{
                                 min: 0, max: 100,
-                                toSlider: (val) => Math.pow(val / 10, 1/1.5) * 100,
-                                fromSlider: (val) => Math.pow(val / 100, 1.5) * 10
+                                toSlider: (val) => Math.sqrt(val / 100) * 100,
+                                fromSlider: (val) => (val * val) / 100
                             }}
                             mapTextInput={false}
-                            overrideInputText={currentFalloffFactor < 0.0001 ? "Infinite" : formatValue(currentFalloffFactor)}
+                            overrideInputText={formatValue(light.intensity)}
+                            trackId={`${prefix}_intensity`}
+                        />
+                    )}
+
+                    {light.type !== 'Directional' && (
+                        <Slider
+                            label="Range"
+                            value={light.range ?? 0}
+                            min={0} max={100} step={0.1}
+                            onChange={(v) => updateLight({ index, params: { range: v } })}
+                            customMapping={{
+                                min: 0, max: 100,
+                                toSlider: (val) => (Math.log10(val + 1) / Math.log10(101)) * 100,
+                                fromSlider: (val) => Math.pow(101, val / 100) - 1
+                            }}
+                            mapTextInput={false}
+                            overrideInputText={(light.range ?? 0) < 0.01 ? 'Infinite' : formatValue(light.range ?? 0)}
                             trackId={`${prefix}_falloff`}
                         />
                     )}
@@ -358,7 +364,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                                 <Slider
                                     label="Sphere Radius"
                                     value={light.radius ?? 0.1}
-                                    min={0.01} max={5.0} step={0.01}
+                                    min={0.001} max={1.0} step={0.001}
                                     onChange={(v) => updateLight({ index, params: { radius: v } })}
                                     trackId={`${prefix}_radius`}
                                 />

@@ -49,8 +49,10 @@ export const Uniforms = {
     // Debug Tools
     HistogramLayer: 'uHistogramLayer',
     
-    // Geometry Transforms (CPU Optimization)
+    // Geometry Transforms (CPU Optimization — branchless 3-stage rotation)
     PreRotMatrix: 'uPreRotMatrix',
+    PostRotMatrix: 'uPostRotMatrix',
+    WorldRotMatrix: 'uWorldRotMatrix',
     
     // Export/Render Scale
     InternalScale: 'uInternalScale',

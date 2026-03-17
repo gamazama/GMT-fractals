@@ -136,13 +136,13 @@ export const CoreMathFeature: FeatureDefinition = {
             const modularCode = compileGraph(config.pipeline || [], config.graph?.edges || []);
             functions += modularCode + "\n";
             loopBody = `formula_Modular(z, dr, trap, distOverride, c, i);`;
-            builder.setDistOverride(
-                'float distOverride = 1e10;',
-                'if (distOverride < 999.0) { escaped = true; break; }',
-                'if (distOverride < 999.0) break;',
-                'if (distOverride < 999.0) { finalD = distOverride; smoothIter = iter; }',
-                'if (distOverride < 999.0) finalD = distOverride;'
-            );
+            builder.setDistOverride({
+                init: 'float distOverride = 1e10;',
+                inLoopFull: 'if (distOverride < 999.0) { escaped = true; break; }',
+                inLoopGeom: 'if (distOverride < 999.0) break;',
+                postFull: 'if (distOverride < 999.0) { finalD = distOverride; smoothIter = iter; }',
+                postGeom: 'if (distOverride < 999.0) finalD = distOverride;',
+            });
             // Modular also uses Dynamic DE Logic
         } else if (def) {
             functions += def.shader.function + "\n";

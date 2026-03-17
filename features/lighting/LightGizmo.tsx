@@ -133,7 +133,6 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
                 active: true, index, mode: part,
                 startPos: origin.clone(),
                 planeNormal: normal, planeOrigin: origin, offsetFromIntersection,
-                constraintAxes: [],
                 startX: e.clientX, startY: e.clientY,
                 screenAxis: new THREE.Vector2(), worldAxis: new THREE.Vector3()
             };

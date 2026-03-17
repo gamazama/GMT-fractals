@@ -3,6 +3,42 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import * as THREE from 'three';
 import { ATMOSPHERE_VOLUME_BODY, ATMOSPHERE_VOLUME_FINALIZE } from './shader';
 
+// ---------------------------------------------------------------------------
+// POST-PROCESSING GLSL — injected via addPostProcessLogic()
+// Variables in scope: col, d, glow, volumetric, fogScatter
+// ---------------------------------------------------------------------------
+
+/** Distance fog + volumetric density fog. Always injected (fog is independent of glow toggle). */
+const FOG_POST_PROCESS = `
+    // --- FOG (Atmosphere Feature) ---
+    float fogFactor = smoothstep(uFogNear, uFogFar, d) * uFogIntensity;
+    vec3 fogColor = uFogColorLinear;
+
+    // Volumetric fog absorption
+    if (uFogDensity > 0.0001) {
+        float volAlpha = clamp(volumetric * uFogIntensity, 0.0, 1.0);
+        col = mix(col, fogColor, volAlpha);
+    }
+
+    // Distance fog
+    if (uEnvBackgroundStrength > 0.001) {
+        // Background visible: only fog geometry, preserve env map on miss
+        if (d < MISS_DIST - 10.0) {
+            col = mix(col, fogColor, fogFactor);
+        }
+    } else {
+        col = mix(col, fogColor, fogFactor);
+    }
+`;
+
+/** Glow compositing. Always injected — guarded by uGlowIntensity uniform at runtime. */
+const GLOW_POST_PROCESS = `
+    // --- GLOW (Atmosphere Feature) ---
+    if (uGlowIntensity > 0.0001) {
+        col += glow * uGlowIntensity;
+    }
+`;
+
 export interface AtmosphereState {
     fogIntensity: number;
     fogNear: number;
@@ -91,24 +127,27 @@ export const AtmosphereFeature: FeatureDefinition = {
         }
     },
     inject: (builder, config, variant) => {
-        // OPTIMIZATION: Only inject volume logic for Main Render
+        // OPTIMIZATION: Only inject for Main Render
         if (variant !== 'Main') return;
 
+        // Fog post-processing: always injected (independent of glow toggle)
+        builder.addPostProcessLogic(FOG_POST_PROCESS);
+        builder.addPostProcessLogic(GLOW_POST_PROCESS);
+
         const state = config.atmosphere as AtmosphereState;
-        
-        // CONDITIONAL COMPILATION:
-        // Only inject volume logic if enabled in Engine Config.
+
+        // Glow volume tracing: conditionally compiled
         if (state && state.glowEnabled) {
             if (state.glowQuality > 0.5) {
                 builder.addDefine('GLOW_FAST', '1');
                 // GLOW_FAST needs finalize code (tints accumulated scalar glow using hit color)
-                builder.addVolumeLogic(ATMOSPHERE_VOLUME_BODY, ATMOSPHERE_VOLUME_FINALIZE);
+                builder.addVolumeTracing(ATMOSPHERE_VOLUME_BODY, ATMOSPHERE_VOLUME_FINALIZE);
             } else {
                 // Quality mode: finalize is dead code (#ifdef GLOW_FAST won't fire).
                 // Pass empty string so Phase 4.1 miss optimization (skip map() on miss) activates.
-                builder.addVolumeLogic(ATMOSPHERE_VOLUME_BODY, '');
+                builder.addVolumeTracing(ATMOSPHERE_VOLUME_BODY, '');
             }
         }
-        // If disabled, we do nothing. The 'accColor' variables in traceScene will default to 0.0 and be unused.
+        // If glow disabled, no volume tracing. The 'accColor' variables in traceScene default to 0.0.
     }
 };
