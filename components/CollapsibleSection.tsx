@@ -65,23 +65,25 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
 
     return (
         <div className={className}>
-            <button
-                onClick={handleToggle}
-                className={`flex items-center gap-1.5 w-full px-2 py-1 text-left select-none hover:bg-white/5 transition-colors rounded-sm ${resolvedHeaderClass}`}
-            >
-                <ChevronIcon open={isOpen} />
-                <SectionLabel variant={labelVariant} color={labelColor}>{label}</SectionLabel>
-                {count !== undefined && (
-                    <span className="text-[8px] bg-white/10 text-gray-400 px-1.5 py-0.5 rounded ml-1">
-                        {count}
-                    </span>
-                )}
+            <div className={`flex items-center gap-1.5 w-full px-2 py-1 text-left select-none hover:bg-white/5 transition-colors rounded-sm ${resolvedHeaderClass}`}>
+                <button
+                    onClick={handleToggle}
+                    className="flex items-center gap-1.5 flex-1 min-w-0"
+                >
+                    <ChevronIcon open={isOpen} />
+                    <SectionLabel variant={labelVariant} color={labelColor}>{label}</SectionLabel>
+                    {count !== undefined && (
+                        <span className="text-[8px] bg-white/10 text-gray-400 px-1.5 py-0.5 rounded ml-1">
+                            {count}
+                        </span>
+                    )}
+                </button>
                 {rightContent && (
-                    <div className="ml-auto flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                    <div className="ml-auto flex items-center gap-1">
                         {rightContent}
                     </div>
                 )}
-            </button>
+            </div>
             {isOpen && children}
         </div>
     );

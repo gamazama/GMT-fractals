@@ -77,6 +77,21 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 *   **Dynamic Max for Ray Steps:** Added `dynamicMaxRef` property to ParamConfig interface. Max Ray Steps slider now dynamically uses the Hard Loop Cap value as its maximum.
 *   **Overstep Fix Visibility:** Removed `isAdvanced: true` from Overstep Fix parameter - now visible without enabling advanced mode.
 
+## 2.7 Recent Fixes (2026-03-20) ✅
+
+### Input Drag Responsiveness — Direct DOM Updates
+*   **Problem:** Vector/scalar input displays (text and fill bars) lagged during drag because updates went through React's render cycle (`setState` → reconciliation → DOM commit).
+*   **Solution:** Three-layer direct DOM update pattern:
+    1. **DraggableNumber** updates its own `displayRef.textContent` on every pointer move using `immediateValueRef` from `useDragValue`.
+    2. **ScalarInput** receives `onImmediateChange(value)` callback, updates fill bar refs (`fillBarRef`, `fullTrackFillRef`, `rangeInputRef`) synchronously.
+    3. **BaseVectorInput** uses `pushAxisToDOM(axisIndex, value)` for cases where the drag source isn't the DraggableNumber itself (DualAxisPad, linked mode, rotation heliotrope). Queries by `data-axis-index` / `data-role` attributes.
+*   **Shared utility:** `computePercentage()` extracted to `FormatUtils.ts` — used by both ScalarInput and BaseVectorInput for fill bar width calculation.
+*   **React state still updated** alongside DOM push for consistency (next React render overwrites DOM with same values).
+*   **Quirk:** `pushAxisToDOM` uses `querySelector` on the slider row container — acceptable because the subtree has only 4–8 elements. If axis cell count grows significantly, consider caching refs.
+
+### Vec4 Type Fix
+*   Added `vec4A/B/C` to `FractalParameter.id` union and `'vec4'` to `type` union in `types/fractal.ts`. Resolves 4 TS errors in `FormulaPanel.tsx`.
+
 ## 3. Technical Debt
 
 ### High Priority

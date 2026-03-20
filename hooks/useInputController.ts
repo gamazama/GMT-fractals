@@ -58,10 +58,11 @@ export const useInputController = (
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+            const t = e.target as HTMLElement;
+            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.cm-editor')) return;
             if ((e.ctrlKey || e.metaKey) && (e.key === 'w' || e.code === 'KeyW')) e.preventDefault();
-            
-            // Prevent Spacebar scrolling
+
+            // Prevent Spacebar scrolling (only when not in a text editor)
             if (e.code === 'Space') e.preventDefault();
 
             // Prevent Alt menu
@@ -91,7 +92,8 @@ export const useInputController = (
         
         const handleKeyUp = (e: KeyboardEvent) => {
             if (e.key === 'Alt') e.preventDefault();
-            
+            const t = e.target as HTMLElement;
+            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.cm-editor')) return;
             switch(e.code) {
                 case 'KeyW': moveState.current.forward = false; break;
                 case 'KeyS': moveState.current.backward = false; break;

@@ -1,15 +1,16 @@
 /**
  * DraggableNumber - Core primitive for numeric input
- * 
+ *
  * Combines drag-to-adjust and click-to-edit functionality.
  * This is the foundation for both Slider and Vector inputs.
- * 
+ *
  * Features:
  * - Drag horizontally to adjust value
  * - Click to enter edit mode
  * - Shift/Alt modifiers for speed control
  * - Optional value mapping (pi units, log scale)
  * - Configurable bounds and step
+ * - Immediate display during drag (direct DOM update, bypasses React render cycle)
  */
 
 import React from 'react';
@@ -35,12 +36,23 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
     highlight = false,
     liveValue,
     defaultValue,
+    onImmediateChange,
 }) => {
+    const displayRef = React.useRef<HTMLDivElement>(null);
+
+    // Format a value for display
+    const formatValue = React.useCallback((v: number): string => {
+        if (format) return format(v);
+        if (mapping?.format) return mapping.format(v);
+        return formatDisplay(v);
+    }, [format, mapping]);
+
     // Use the drag hook for drag-to-adjust
     const {
         isDragging,
+        immediateValueRef,
         handlePointerDown,
-        handlePointerMove,
+        handlePointerMove: baseDragMove,
         handlePointerUp,
         handleClick,
     } = useDragValue({
@@ -55,7 +67,20 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
         mapping,
         disabled,
     });
-    
+
+    // Wrap pointer move to also do direct DOM update for instant display
+    const handlePointerMove = React.useCallback((e: React.PointerEvent) => {
+        baseDragMove(e);
+        // After baseDragMove updates immediateValueRef, push it to DOM directly
+        const iv = immediateValueRef.current;
+        if (iv !== null) {
+            if (displayRef.current) {
+                displayRef.current.textContent = formatValue(iv);
+            }
+            onImmediateChange?.(iv);
+        }
+    }, [baseDragMove, immediateValueRef, formatValue, onImmediateChange]);
+
     // Use the edit mode hook for click-to-edit
     const {
         isEditing,
@@ -74,25 +99,23 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
         disabled,
         mapTextInput,
     });
-    
-    // Format the display value
+
+    // Format the display value (used when not dragging)
     const displayValue = React.useMemo(() => {
-        if (format) return format(value);
-        if (mapping?.format) return mapping.format(value);
-        return formatDisplay(value);
-    }, [value, format, mapping]);
-    
+        return formatValue(value);
+    }, [value, formatValue]);
+
     // Handle focus - enter edit mode
     const handleFocus = React.useCallback(() => {
         if (!disabled && !isEditing) {
             startEditing();
         }
     }, [disabled, isEditing, startEditing]);
-    
+
     // Handle click - enter edit mode if not dragging
     const handleClickInternal = React.useCallback((e: React.MouseEvent) => {
         if (disabled) return;
-        
+
         // Check if it was a drag or a click
         const wasClick = handleClick();
         if (wasClick) {
@@ -100,10 +123,10 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
             startEditing();
         }
     }, [disabled, handleClick, startEditing]);
-    
+
     // Determine visual state
     const isActive = isDragging || highlight || (liveValue !== undefined && !disabled);
-    
+
     // CSS classes based on state
     const containerClasses = `
         w-full h-full flex items-center justify-center
@@ -111,7 +134,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
         ${disabled ? 'cursor-not-allowed opacity-50 text-gray-600' : 'cursor-ew-resize focus:ring-1 focus:ring-cyan-500/50'}
         ${isDragging ? 'bg-cyan-500/20 text-cyan-300' : (isActive && !disabled ? 'text-cyan-400' : (disabled ? '' : 'text-gray-300 hover:text-white'))}
     `;
-    
+
     if (isEditing) {
         return (
             <input
@@ -127,9 +150,11 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
             />
         );
     }
-    
+
     return (
         <div
+            ref={displayRef}
+            data-role="value"
             tabIndex={disabled ? -1 : 0}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}

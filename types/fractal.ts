@@ -52,12 +52,12 @@ export interface Preset {
 
 export interface FractalParameter {
     label: string;
-    id: 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF' | 'vec2A' | 'vec2B' | 'vec2C' | 'vec3A' | 'vec3B' | 'vec3C';
-    type?: 'float' | 'vec2' | 'vec3';
+    id: 'paramA' | 'paramB' | 'paramC' | 'paramD' | 'paramE' | 'paramF' | 'vec2A' | 'vec2B' | 'vec2C' | 'vec3A' | 'vec3B' | 'vec3C' | 'vec4A' | 'vec4B' | 'vec4C';
+    type?: 'float' | 'vec2' | 'vec3' | 'vec4';
     min: number;
     max: number;
     step: number;
-    default: number | { x: number; y: number } | { x: number; y: number; z: number };
+    default: number | { x: number; y: number } | { x: number; y: number; z: number } | { x: number; y: number; z: number; w: number };
     scale?: 'linear' | 'log' | 'pi'; // Explicit UI scaling mode
     options?: { label: string; value: number }[];
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed'; // 'rotation' = Rodrigues (A/P/∠), 'direction' = azimuth/pitch, 'axes' = per-axis angles, 'toggle' = bool on/off, 'mixed' = toggle X + slider Y

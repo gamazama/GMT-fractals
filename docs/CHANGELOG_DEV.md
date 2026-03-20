@@ -2,6 +2,119 @@
 
 Chronological log of significant changes during the v0.8.9 development cycle (uncommitted on `dev` branch).
 
+## 2026-03-21
+
+### GMF as Primary Save Format
+
+- **GMF replaces JSON for all scene saves.** System Menu "Save Scene" now produces `.gmf` files containing formula shader code + full scene state (camera, lighting, features, animations). JSON is retained for backward-compatible loading only.
+- **PNG metadata now embeds GMF** instead of JSON. Snapshots and bucket renders embed the full GMF string, so imported/custom formulas survive PNG roundtrips.
+- **Formula-only GMF loading improved.** FormulaGallery and FormulaSelect now use `loadGMFScene()` with full scene preset application (camera, features) instead of formula-switch-only.
+- **URL sharing disabled for imported formulas.** Share button shows "N/A (Imported)" tooltip for Workshop-imported formulas (shader code too large for URL).
+- **Legacy support preserved.** Old `.json` presets, old formula-only `.gmf` files, and old PNGs with JSON metadata all load correctly.
+- **Worker registration.** Loading a GMF with an unknown formula now emits `REGISTER_FORMULA` to sync the worker thread's registry.
+- **GMF API docs updated.** The embedded shader API reference now documents vec2/3/4 params, distance metrics, and rotation helpers.
+- Files: `utils/FormulaFormat.ts`, `components/topbar/SystemMenu.tsx`, `components/topbar/CameraTools.tsx`, `components/LoadingScreen.tsx`, `components/panels/formula/FormulaGallery.tsx`, `components/panels/formula/FormulaSelect.tsx`, `engine/BucketRenderer.ts`, `engine/worker/WorkerProxy.ts`, `store/fractalStore.ts`
+
+### Bucket Rendering: Offline Post-Processing & SSAA
+
+- **Offline post-processing pipeline:** Each bucket accumulates raw linear HDR without tone mapping or bloom. After all buckets complete, the full post-processing chain (Bloom → Chromatic Aberration → Color Grading → Tone Mapping) runs once on the composited image. Ensures spatial effects work correctly across the full image rather than per-bucket.
+- **SSAA pixelSizeBase override:** During supersampled bucket renders (upscale > 1×), `FractalEngine` overrides `uPixelSizeBase` each frame to keep trace precision, normals, and shadow computation at viewport resolution. Prevents double-precision artifacts from inflated render targets.
+- **Center-first spiral bucket order:** Buckets now render in a spiral from the center outward instead of bottom-left to top-right, giving faster visual feedback on the important region.
+- **Bucket-aware frame count:** During bucket rendering, `uFrameCount` uses per-bucket `accumulationCount` for deterministic R2 noise sequences. `resetAccumulation()` is skipped during bucket rendering (managed by BucketRenderer).
+- Files: `engine/BucketRenderer.ts`, `engine/FractalEngine.ts`, `engine/RenderPipeline.ts`
+
+### Async Convergence Measurement
+
+- **GPU fence-based readback:** New `startAsyncConvergence()` method renders the convergence diff pass and inserts a GL sync fence. `pollConvergenceResult()` checks fence status without blocking the GPU pipeline. Cached `lastConvergenceResult` returned on subsequent frames.
+- **Legacy path preserved:** `measureConvergence()` kept for non-bucket paths where synchronous readback is acceptable.
+- Files: `engine/RenderPipeline.ts`
+
+### Formula Library & Runtime Discovery
+
+- **`public/formulas/` directory:** Runtime formula library with `manifest.json`, `dec.json` (316 DEC formulas), and 178 passing `.frag` files organized by author folder.
+- **Build pipeline:** `build-formula-manifest.mts` generates the manifest; `build-passing-lists.mts` generates `passing-formulas.ts` from validator JSONL results.
+- **`formula-library.ts`:** Curated registry with category inference, author attribution, and random formula picker. Used by FormulaGallery and Workshop "Random" buttons.
+- **Shader validator:** `debug/shader-validator.mts` — live GLSL + WebGL GPU validation tool with web dashboard. Tests all frag + DEC sources through the V3 pipeline with an ENGINE_SCAFFOLD mirroring the real GMT shader context. Results: 238/271 frag GLSL pass, 316/333 DEC pass, 181 WebGL GPU verified.
+- Files: `features/fragmentarium_import/formula-library.ts`, `features/fragmentarium_import/passing-formulas.ts`, `features/fragmentarium_import/random-formulas.ts`, `public/formulas/`, `debug/shader-validator.mts`, `debug/build-formula-manifest.mts`, `debug/build-passing-lists.mts`
+
+### Frag Importer V3 Rewrite (V2 Removed)
+
+- **V3 pipeline:** New `features/fragmentarium_import/v3/` with `analyze/` (globals, params, preprocess, functions, init) and `generate/` (full-de, get-dist, init, loop-body, patterns, rename, slots, uniforms) modules.
+- **V3 improvements:** HLSL alias handling, multi-line global declarations, literal inits at file scope, engine function collision rename, deterministic slot assignment, scalar DR accumulator detection, for-loop increment extraction, paren-aware comma splitting.
+- **V2 removed:** Deleted `ast-parser.ts`, `uniform-parser.ts`, `code-generator.ts`, `init-generator.ts`, `loop-extractor.ts`, `pattern-detector.ts`, `detection.ts`, `preview.ts`. V3 compat adapter (`v3/compat.ts`) bridges to the Workshop.
+- **Test suites:** `test-frag-integration.mts` (full pipeline), `test-frag-v3-analysis.mts`, `test-frag-v3-generation.mts`, `test-dec-formulas.mts` (339 DEC functions).
+- Files: `features/fragmentarium_import/v3/`, `features/fragmentarium_import/types.ts`, `features/fragmentarium_import/index.ts`, `features/fragmentarium_import/transform/variable-renamer.ts`, `debug/test-frag-*.mts`
+
+### UI Component Library
+
+- **`CategoryPickerMenu.tsx`:** Generic two-column portal dropdown with viewport-aware positioning (smart flipping, spillover handling). Supports categorized items with disabled/selected states. Used by ParameterSelector and LFO target picker.
+- **`DynamicList.tsx`:** Reusable list component family (container, item, group, search) with accent theme system (cyan/purple/amber). Used by LfoList.
+- **`data/theme.ts`:** Centralized semantic theme tokens for Tailwind classes — accent, secondary, warning, danger, surface, text, borders. Composite tokens for common patterns (tabActive, nestedContainer, etc.). Enables single-file theme changes.
+- **ParameterSelector refactor:** Extracted `buildCategories()` helper, uses CategoryPickerMenu, proper feature ordering (priority list then alphabetical), `MAX_LIGHTS` instead of hardcoded 3.
+- **LfoList refactor:** Converted to DynamicList + DynamicListItem with purple accent. Declarative layout replaces manual div nesting.
+- Files: `components/CategoryPickerMenu.tsx`, `components/DynamicList.tsx`, `data/theme.ts`, `components/ParameterSelector.tsx`, `components/panels/formula/LfoList.tsx`
+
+### Drawing Overlay Projection Refactor
+
+- **`OverlayProjection.ts`:** Shared 3D→2D projection utilities for overlays (light gizmos, drawing tools). Pre-allocated temp vectors eliminate per-frame GC pressure. Consistent behind-camera culling, view-depth calculation, screen coordinate safety clamping.
+- **DrawingOverlay.tsx:** Refactored to use centralized projection via `getOverlayViewport`, `projectWorldToXY`, `preciseToWorld`. Removed duplicated projection math and per-frame Vector3/Quaternion allocations.
+- Files: `engine/overlay/OverlayProjection.ts`, `features/drawing/DrawingOverlay.tsx`
+
+### Misc Cleanup
+
+- **Deleted stray files:** `LICENSE.txt` (GPL-3.0 defined in package.json), `googlef57afa274804ba8c.html` (Google verification), `debug/trace-dec.mts` (replaced by test-dec-formulas.mts).
+- **Theme token integration:** `CollapsibleSection`, `SectionLabel`, `ToggleSwitch`, `Icons`, `LoadingScreen`, `GradientContextMenu` updated to use `data/theme.ts` tokens.
+- **GizmoMath refactor:** Consolidated gizmo math utilities in `features/lighting/utils/GizmoMath.ts`.
+- **Legacy preset support:** `fractalStore.ts` now registers embedded `_formulaDef` from old JSON presets into the runtime formula registry.
+- **ReSTIR GI prototype:** `prototype/restir-gi/` — WIP global illumination prototype (not integrated).
+
+## 2026-03-20
+
+### Formula Workshop Cleanup & Degree/Radian Fix
+
+- **Degree/radian bug fixed:** `param-builder.ts` was converting isDegrees params to radians (dividing by π), but Fragmentarium GLSL expects degrees. Introduced `scale: 'degrees'` mode — keeps internal values in degrees, displays π notation in UI (`360° → "2.00π"`). Distinct from DDFS `scale: 'pi'` where internal values are radians.
+- **Workshop UI touchup:** Toolbar (Browse Library, Random Frag, Random DEC, Load File) moved outside source section so buttons are always visible. Source editor now resizable via drag handle (100–800px). Preview button restored (was defined but missing from JSX — regression).
+- **Workshop code cleanup:** Extracted `runTransform()` helper deduplicating 3× V3→V2 fallback patterns. Extracted `ParamTable` component with memoized grouping. All handlers wrapped in `useCallback`. Removed debug console.logs and dead code.
+- **formula-library.ts cleanup:** Imports moved to top, regex fix (`2\.0?` → `2(?:\.0)?`), array spread optimization in `inferDECCategory`.
+- **FormulaPanel degrees scale:** New `scale: 'degrees'` handler with `customMapping` (toSlider/fromSlider using 1/180 factor) and `overrideInputText` for π display.
+- Files: `features/fragmentarium_import/FormulaWorkshop.tsx`, `features/fragmentarium_import/workshop/param-builder.ts`, `components/panels/FormulaPanel.tsx`, `features/fragmentarium_import/formula-library.ts`, `components/vector-input/types.ts`
+
+### Canvas Resolution Fix on Initial Load
+
+- **Physical pixel mismatch:** `setupEngine()` in `renderWorker.ts` was setting `uResolution` and `pipeline.resize()` with CSS pixels instead of physical pixels (CSS × DPR). The bloom pass already used the correct `initPhysW`/`initPhysH` values — now the pipeline and uniforms do too.
+- **Stale closure in post-compile resize:** `WorkerTickScene`'s `checkReady` effect captured `size` and `dpr` at mount time (empty deps `[]`). During the long async shader compilation, the viewport could change (layout shifts, dock panels). The post-compile re-push then overwrote correct dimensions with stale values. Fixed by tracking the latest size in a `useRef`.
+- Files: `engine/worker/renderWorker.ts`, `components/WorkerTickScene.tsx`
+
+### Distance Probe Sky Threshold & Cleanup
+
+- **Sky threshold capped at 10.0:** Depth values ≥ 10 are now treated as sky hits (was 1000). Prevents navigation speed explosions when looking at open space.
+- **Sky fallback behavior:** When looking at sky with no prior valid measurement, defaults to DST 1.0. When a valid measurement exists, keeps it unchanged. HUD shows `DST X.XXXX (sky)` instead of `DST INF`.
+- **Consistent threshold:** Updated in `usePhysicsProbe.ts`, `WorkerDepthReadback.ts`, and `WorkerExporter.ts`.
+- **usePhysicsProbe cleanup:** Removed unused imports (`useEffect`, `THREE`), unused refs (`camera`, `shaderCompiledRef`, `depthBuffer`), dead `distMinRef` (always mirrored `distAverageRef`, never consumed). Extracted HUD helpers (`formatDist`, `updateDistHud`, `updateResetButton`, `updateSpeedHud`). ~247 → ~160 lines.
+- Files: `hooks/usePhysicsProbe.ts`, `engine/worker/WorkerDepthReadback.ts`, `engine/worker/WorkerExporter.ts`
+
+### Instant Drag Feedback (Direct DOM Updates)
+
+- **DraggableNumber instant display:** During drag, the display text is updated via direct DOM manipulation (`displayRef.textContent`) on every pointer move, bypassing the React render cycle. The `onImmediateChange` callback propagates the raw value to the parent for fill bar updates.
+- **ScalarInput fill bar sync:** Fill bars (`fillBarRef`, `fullTrackFillRef`) and range input track are updated synchronously during drag via `handleImmediateChange`. Uses refs attached to the compact fill bar (`data-role="fill"`) and full track bar.
+- **BaseVectorInput `pushAxisToDOM`:** For DualAxisPad drag, linked-mode drag, direction mode, and rotation heliotrope — where the drag source isn't the DraggableNumber itself — BaseVectorInput queries the container (`sliderRowRef`) for axis cells by `data-axis-index` attribute, then updates `[data-role="value"]` text and `[data-role="fill"]` width directly.
+- **`computePercentage` utility:** Extracted to `FormatUtils.ts` — shared percentage calculation (value → 0-100% with optional mapping) used by both ScalarInput and BaseVectorInput's DOM push.
+- **`useDragValue` hook:** Now exposes `immediateValueRef` (a ref updated synchronously during drag) so DraggableNumber can read the latest value without waiting for React state.
+- **Type fix:** Added `vec4A/B/C` to `FractalParameter.id` union and `'vec4'` to `type` union in `types/fractal.ts`.
+- Files: `components/inputs/primitives/DraggableNumber.tsx`, `components/inputs/ScalarInput.tsx`, `components/inputs/hooks/useDragValue.ts`, `components/vector-input/BaseVectorInput.tsx`, `components/vector-input/VectorAxisCell.tsx`, `components/inputs/primitives/FormatUtils.ts`, `types/fractal.ts`
+
+## 2026-03-19
+
+### Vec4 Input Support
+
+- **Vector input components now support vec4 (XYZW):** Both `BaseVectorInput` (THREE.Vector4) and `VectorInput` (plain object `{x,y,z,w}`) detect a W component and render a fourth axis.
+- **W axis styling:** Purple (`#a855f7`) following the X=red, Y=green, Z=blue convention. Added to `AXIS_CONFIG` in both type files.
+- **WZ dual axis pad:** Draggable 2D pad between Z and W sliders for simultaneous manipulation.
+- **`Vector4Input` connected component:** Full animation/keyframe support matching `Vector2Input`/`Vector3Input` pattern.
+- **AutoFeaturePanel `vec4` case:** Features declaring `type: 'vec4'` params in DDFS now auto-render with 4 axes, track keys, and `composeFrom` decomposition.
+- **Type updates:** `VectorInputProps`, `BaseVectorInputProps`, axis bounds/mapping/update functions, toggle mode, and linked mode all extended to accept `'w'` axis.
+- Files: `components/inputs/types.ts`, `components/inputs/VectorInput.tsx`, `components/vector-input/types.ts`, `components/vector-input/BaseVectorInput.tsx`, `components/vector-input/index.tsx`, `components/AutoFeaturePanel.tsx`
+
 ## 2026-03-17
 
 ### Area Lights Compile/Runtime Split

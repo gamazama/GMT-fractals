@@ -89,16 +89,27 @@ While rigorous verification processes are in place:
         category: 'General',
         title: 'File Import & Export',
         content: `
+## GMF Files (.gmf) — Primary Save Format
+GMT saves scenes as **.gmf** files (GPU Mandelbulb Format). These are human-readable text files containing both the formula shader code and the full scene state (camera, lighting, features, animations).
+- **Save**: System Menu → Save Scene (saves as \`.gmf\`)
+- **Load**: System Menu → Load Scene, or drag and drop into the browser window
+- **Self-contained**: Imported/custom formulas are embedded in the file, so they work in any session
+- **AI-editable**: The GLSL shader code is plain text with an API reference — LLMs can read and modify formulas directly
+
 ## Smart PNGs (Steganography)
-When you save a **Snapshot** (via the Camera Menu), the application embeds the full scene data into the image metadata.
+When you save a **Snapshot** (via the Camera Menu), the application embeds the full scene data (in GMF format) into the image metadata.
 - **Load**: Simply **drag and drop** the PNG file back into the browser window to restore the scene instantly.
-- **Safety**: The visual image is standard PNG. The data is hidden in a \`tEXt\` chunk.
+- **Safety**: The visual image is standard PNG. The data is hidden in an \`iTXt\` chunk.
 - **Warning**: Social media platforms (Twitter, Facebook, etc.) strip this metadata. Share the file directly (Discord, Drive, Email) to preserve the data.
 
 ## Shareable URLs
 You can share your scene via the URL bar.
 - **Copy Link**: Use the link icon in the System Menu.
+- **Imported formulas**: URL sharing is not available for Workshop-imported formulas (the shader code is too large for URLs). The tooltip will show "N/A (Imported)".
 - **Limits**: Browsers have a URL limit (approx 4096 characters). If your scene is too complex (e.g., thousands of keyframes), the app will automatically **strip animation data** to generate a working link. A warning "(Anims Removed)" will appear.
+
+## Legacy JSON (.json)
+Older \`.json\` preset files can still be loaded for backward compatibility, but GMT no longer saves in this format.
 `
     }
 };

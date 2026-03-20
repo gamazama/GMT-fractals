@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
+import { EditorState, type Extension } from '@codemirror/state';
 import { cpp } from '@codemirror/lang-cpp';
 import { oneDark } from '@codemirror/theme-one-dark';
 
@@ -46,7 +46,9 @@ export const GlslEditor: React.FC<GlslEditorProps> = ({
                         onChangeRef.current(update.state.doc.toString());
                     }
                 }),
-                EditorView.editable.of(!readOnly),
+                // Use EditorState.readOnly (not EditorView.editable) so text remains
+                // selectable and copyable in read-only mode.
+                ...(readOnly ? [EditorState.readOnly.of(true)] : [] as Extension[]),
                 EditorView.theme({
                     '&': {
                         fontSize: '11px',
@@ -102,9 +104,16 @@ export const GlslEditor: React.FC<GlslEditorProps> = ({
         externalUpdateRef.current = false;
     }, [value]);
 
+    // Prevent keyboard events from bubbling to camera/navigation handlers.
+    // CodeMirror uses contentEditable divs, not <input>/<textarea>, so many
+    // global listeners don't recognise it as a text editing context.
+    const stopPropagation = (e: React.KeyboardEvent) => e.stopPropagation();
+
     return (
         <div
             ref={containerRef}
+            onKeyDown={stopPropagation}
+            onKeyUp={stopPropagation}
             className="w-full border border-white/10 rounded-lg overflow-hidden focus-within:border-white/30 transition-colors"
             style={{ height }}
         />

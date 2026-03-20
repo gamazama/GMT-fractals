@@ -247,6 +247,8 @@ export const ColoringFeature: FeatureDefinition = {
         // Per-component orbit trap global — must be declared before getMappingValue (which reads it)
         // and before DE_MASTER (which writes it). Preambles come before both.
         builder.addPreamble('vec4 g_orbitTrap = vec4(1e10);');
+        // Float accumulator used by some imported DEC formulas for orbit trap coloring
+        builder.addPreamble('float escape = 0.0;');
 
         // Histogram variant needs the mapping logic to show meaningful data distributions
         if (variant === 'Main' || variant === 'Histogram') {

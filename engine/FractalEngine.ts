@@ -589,7 +589,12 @@ export class FractalEngine {
         if (isInteracting) this.markInteraction();
 
         this._totalFrames++;
-        this.mainUniforms[Uniforms.FrameCount].value = this._totalFrames;
+        // During bucket rendering, use per-bucket accumulation count for frame count.
+        // This gives each bucket a deterministic R2 noise sequence starting from 1,
+        // making DoF and stochastic sampling reproducible regardless of bucket order.
+        this.mainUniforms[Uniforms.FrameCount].value = this.state.isBucketRendering
+            ? this.pipeline.accumulationCount
+            : this._totalFrames;
 
         if (this.renderer && this.state.isBucketRendering) {
             bucketRenderer.update(this.renderer, this.state.bucketConfig);
@@ -601,23 +606,28 @@ export class FractalEngine {
         
         if (this.shouldSnapCamera) {
             this.shouldSnapCamera = false;
-            this.pipeline.resetAccumulation();
+            if (!this.state.isBucketRendering) this.pipeline.resetAccumulation();
         }
 
         const currentOffsetState = this.sceneOffset;
         const prevRenderOffset = this.lastRenderState.offset;
         const offsetChanged = Math.abs(currentOffsetState.x - prevRenderOffset.x) > 1e-9 || Math.abs(currentOffsetState.y - prevRenderOffset.y) > 1e-9 || Math.abs(currentOffsetState.z - prevRenderOffset.z) > 1e-9;
-        
+
         const sPos = this.virtualSpace.smoothedPos;
         const sQuat = this.virtualSpace.smoothedQuat;
         const sFov = this.virtualSpace.smoothedFov;
 
-        if (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged || this.dirty) {
+        // During bucket rendering, do NOT reset accumulation on camera drift —
+        // the bucket renderer manages its own per-bucket accumulation cycle.
+        if (!this.state.isBucketRendering && (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged || this.dirty)) {
             this.pipeline.resetAccumulation(); this.dirty = false;
+        }
+        if (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged) {
             this.lastRenderState.pos.copy(sPos); this.lastRenderState.quat.copy(sQuat);
             this.lastRenderState.offset = { ...currentOffsetState };
             this.lastRenderState.fov = sFov;
         }
+        if (!this.state.isBucketRendering && this.dirty) this.dirty = false;
 
         const cam = camera as THREE.PerspectiveCamera;
         this.sceneCtrl.updateFallback(sPos, sQuat, sFov, cam.aspect);
@@ -640,11 +650,12 @@ export class FractalEngine {
 
         // Hold accumulation during camera interaction ONLY if DOF is disabled
         // If DOF is enabled, continue rendering to show blur preview (with stable per-pixel noise)
+        // During bucket rendering, never hold — the bucket renderer drives the pipeline.
         const dofEnabled = (this.state.optics?.dofStrength ?? 0) > 0.0001;
         const wasHolding = this.pipeline.isHolding;
-        const shouldHold = !dofEnabled && (this.state.isCameraInteracting || this.state.isGizmoInteracting);
+        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (this.state.isCameraInteracting || this.state.isGizmoInteracting);
         this.pipeline.setHold(shouldHold);
-        
+
         // If we just started holding, reset accumulation for clean frame
         if (shouldHold && !wasHolding) {
             this.pipeline.resetAccumulation();
@@ -658,6 +669,13 @@ export class FractalEngine {
             this.mainUniforms.uJitter.value.copy(this.jitterVec);
         } else {
             this.mainUniforms.uJitter.value.set(0,0);
+        }
+
+        // SSAA: During bucket rendering at upscale > 1x, override uPixelSizeBase to viewport value.
+        // UniformManager recomputes it from the upscaled resolution each frame, but we want the
+        // same trace precision/normal epsilon/shadow bias as the viewport for true supersampling.
+        if (this.state.isBucketRendering && bucketRenderer.savedPixelSizeBase > 0) {
+            this.mainUniforms[Uniforms.PixelSizeBase].value = bucketRenderer.savedPixelSizeBase;
         }
 
         // Execute Render Pipeline

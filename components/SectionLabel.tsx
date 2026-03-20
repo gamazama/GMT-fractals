@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { text as themeText, surface } from '../data/theme';
 
 type SectionLabelVariant = 'primary' | 'secondary' | 'tiny';
 
@@ -11,9 +12,9 @@ interface SectionLabelProps {
 }
 
 const variantClasses: Record<SectionLabelVariant, string> = {
-    primary:   'text-[10px] font-bold text-gray-400',
-    secondary: 'text-[9px] font-bold text-gray-500',
-    tiny:      'text-[8px] text-gray-600',
+    primary:   `text-[10px] font-bold ${themeText.label}`,
+    secondary: `text-[9px] font-bold ${themeText.dimLabel}`,
+    tiny:      `text-[8px] ${themeText.faint}`,
 };
 
 export const SectionLabel: React.FC<SectionLabelProps> = ({ children, variant = 'primary', className = '', color }) => {
@@ -25,7 +26,7 @@ export const SectionLabel: React.FC<SectionLabelProps> = ({ children, variant = 
 /** Horizontal section divider with drop-shadow gradient */
 export const SectionDivider: React.FC = () => (
     <>
-        <div className="h-1.5 bg-neutral-800 rounded-b-lg" />
+        <div className={`h-1.5 ${surface.divider} rounded-b-lg`} />
         <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
     </>
 );

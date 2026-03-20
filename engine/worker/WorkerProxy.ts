@@ -15,6 +15,7 @@ import type { VideoExportConfig } from '../codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, SerializedCamera, SerializedOffset } from './WorkerProtocol';
 import { injectMetadata } from '../../utils/pngMetadata';
+import { saveGMFScene } from '../../utils/FormulaFormat';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 
 // Worker frame counter callback — registered lazily to avoid circular imports
@@ -34,7 +35,7 @@ export class WorkerProxy {
     private _shadow: WorkerShadowState = {
         isBooted: false, isCompiling: false, hasCompiledShader: false,
         isPaused: false, dirty: false, lastCompileDuration: 0,
-        lastMeasuredDistance: 10, accumulationCount: 0, frameCount: 0,
+        lastMeasuredDistance: 1, accumulationCount: 0, frameCount: 0,
         sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
     };
 
@@ -154,7 +155,7 @@ export class WorkerProxy {
         this._shadow = {
             isBooted: false, isCompiling: false, hasCompiledShader: false,
             isPaused: false, dirty: false, lastCompileDuration: 0,
-            lastMeasuredDistance: 10, accumulationCount: 0, frameCount: 0,
+            lastMeasuredDistance: 1, accumulationCount: 0, frameCount: 0,
             sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
         };
 
@@ -722,7 +723,7 @@ export class WorkerProxy {
             exportImage,
             config,
             exportData: exportData ? {
-                preset: JSON.stringify(exportData.preset),
+                preset: saveGMFScene(exportData.preset as any),
                 name: exportData.name,
                 version: exportData.version
             } : undefined

@@ -1,3 +1,6 @@
+// STYLE: Do not use inline formatting or hardcoded layout for feature params.
+// Use DDFS (parentId, condition, group, hidden) to control visibility and nesting.
+// Import theme tokens from 'data/theme' instead of raw Tailwind color classes.
 
 import React, { useRef } from 'react';
 import { FractalState, FractalActions } from '../../types';

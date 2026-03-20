@@ -629,6 +629,36 @@ function renameDEFunction(source: string, oldName: string): string {
 }
 
 // ============================================================================
+// Common helper function injection
+// ============================================================================
+
+const ROTATE2D_DEF = `mat2 rotate2D(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }`;
+const ROTATE3D_DEF = `mat3 rotate3D(float a, vec3 v) { v = normalize(v); float c = cos(a), s = sin(a), k = 1.0 - c; return mat3(v.x*v.x*k+c, v.x*v.y*k+v.z*s, v.x*v.z*k-v.y*s, v.y*v.x*k-v.z*s, v.y*v.y*k+c, v.y*v.z*k+v.x*s, v.z*v.x*k+v.y*s, v.z*v.y*k-v.x*s, v.z*v.z*k+c); }`;
+
+/**
+ * Detect usage of common helpers (rotate2D, rotate3D) without a local definition
+ * and prepend the standard implementations.
+ */
+function injectMissingHelpers(source: string, warnings: string[]): string {
+    const helpers: string[] = [];
+
+    // rotate2D: used but not defined
+    if (/\brotate2D\s*\(/.test(source) && !/mat2\s+rotate2D\s*\(/.test(source)) {
+        helpers.push(ROTATE2D_DEF);
+        warnings.push('Injected missing rotate2D() helper');
+    }
+
+    // rotate3D: used but not defined
+    if (/\brotate3D\s*\(/.test(source) && !/mat3\s+rotate3D\s*\(/.test(source)) {
+        helpers.push(ROTATE3D_DEF);
+        warnings.push('Injected missing rotate3D() helper');
+    }
+
+    if (helpers.length === 0) return source;
+    return helpers.join('\n') + '\n' + source;
+}
+
+// ============================================================================
 // Main preprocessor
 // ============================================================================
 
@@ -663,6 +693,9 @@ export function preprocessDEC(source: string): DECPreprocessResult {
 
     // Step 2: Extract promotable constants
     const constants = extractPromotableConstants(expanded, funcName);
+
+    // Step 2b: Inject common utility functions if used but not defined
+    expanded = injectMissingHelpers(expanded, warnings);
 
     // Step 3: Replace constants in source and rename DE function
     let processed = replaceConstants(expanded, constants, funcName);

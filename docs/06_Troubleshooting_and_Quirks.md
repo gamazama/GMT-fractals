@@ -115,7 +115,35 @@ This ensures:
 *   **Fix:** These panels now automatically redirect to the right dock on mobile devices.
 *   **Detection:** Uses `window.matchMedia("(pointer: coarse)")` and `window.innerWidth < 768`
 
-## 7. Performance Issues
+## 7. Canvas Resolution Wrong on Initial Load
+
+### Low Resolution Until Manual Resize
+*   **Cause:** Two issues combined:
+    1.  `setupEngine()` in `renderWorker.ts` set `uResolution` and `pipeline.resize()` with CSS pixels instead of physical pixels (CSS × DPR). The bloom pass was already using the correct physical pixel values, but the pipeline/uniforms were not.
+    2.  `WorkerTickScene`'s post-compile resize re-push captured `size` and `dpr` in a `useEffect([], [])` closure at mount time. During the long async shader compilation, the viewport could change (layout shifts, dock panels loading). When compilation finished, the stale mount-time dimensions overwrote the correct values.
+*   **Fix:**
+    1.  Use the already-computed `initPhysW`/`initPhysH` (CSS × DPR) for `uResolution` and `pipeline.resize()` in `setupEngine()`.
+    2.  Track the latest viewport size in a `useRef` and read from it in the post-compile callback instead of using stale closure values.
+*   **Locations:** `engine/worker/renderWorker.ts` (setupEngine), `components/WorkerTickScene.tsx` (checkReady)
+*   **Pattern:**
+    ```typescript
+    // Wrong: useEffect closure captures stale values
+    useEffect(() => {
+        // ...long async wait...
+        proxy.resizeWorker(size.width, size.height, dpr); // stale!
+    }, []);
+
+    // Correct: Track latest size in a ref
+    const sizeRef = useRef({ width: size.width, height: size.height, dpr });
+    sizeRef.current = { width: size.width, height: size.height, dpr };
+    useEffect(() => {
+        // ...long async wait...
+        const s = sizeRef.current; // always current
+        proxy.resizeWorker(s.width, s.height, s.dpr);
+    }, []);
+    ```
+
+## 8. Performance Issues
 
 ### FPS Drops During Interaction
 *   **Cause:** Creating new typed arrays every frame causes garbage collection pressure.
@@ -139,7 +167,7 @@ This ensures:
 *   **Fix:** Call `clearTargets()` before each bucket render pass.
 *   **Location:** `engine/BucketRenderer.ts`
 
-## 8. HalfFloat16 Buffer Handling
+## 9. HalfFloat16 Buffer Handling
 
 ### Reading Depth from HalfFloat16 Buffers
 *   **Issue:** Cannot read HalfFloat16 values directly as floats - must convert.
@@ -155,7 +183,7 @@ This ensures:
     const depth = halfToFloat(rawPixels[0]);  // Use conversion function
     ```
 
-## 9. Environment Light Sky Image Not Loading
+## 10. Environment Light Sky Image Not Loading
 
 ### Issue
 The environment light sky image loads correctly for some formulas (e.g., Mandelbulb) but not for others (e.g., MixPinski, PseudoKleinian, etc.).

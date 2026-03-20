@@ -283,7 +283,7 @@ export class WorkerExporter {
         const cy = Math.floor(sess.renderHeight / 2);
         this.renderer.readRenderTargetPixels(lastWrite, cx, cy, 1, 1, depthBuf);
         const measuredDist = depthBuf[3]; // alpha = distance
-        if (measuredDist > 0 && measuredDist < 1000 && Number.isFinite(measuredDist)) {
+        if (measuredDist > 0 && measuredDist < 10.0 && Number.isFinite(measuredDist)) {
             this.engine.lastMeasuredDistance = measuredDist;
         }
         // 8c. Bloom pass (matches preview pipeline)

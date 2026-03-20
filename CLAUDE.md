@@ -58,10 +58,12 @@ After making changes, update the relevant docs if you discovered new patterns, q
 - Don't use `engine.renderer` or `engine.pipeline` checks in worker mode — they're null. Use `engine.isBooted` or shadow state.
 - No test suite exists yet — be careful with refactors, test manually
 
-## Formulas
+## Formulas & File I/O
 - 30 formula files in `formulas/` (.ts with embedded GLSL)
-- GMF format files in `public/gmf/` (JSON+GLSL)
+- GMF format files in `public/gmf/` (formula library)
 - Frag importer test suite: `npx tsx debug/test-frag-importer.mts` (40/40 passing)
+- **GMF is the primary save format** — all scenes save as `.gmf` (formula shader + full scene state). JSON is load-only for backward compat. PNG snapshots embed GMF in metadata. See `docs/05_Data_and_Export.md`.
+- Key functions: `saveGMFScene()` / `loadGMFScene()` in `utils/FormulaFormat.ts`
 
 ## Build & Run
 ```bash

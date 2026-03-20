@@ -5,6 +5,7 @@ import { useFractalStore } from '../store/fractalStore';
 import { registry } from '../engine/FractalRegistry';
 import { ChevronDown, UploadIcon, CubeIcon, NetworkIcon } from './Icons';
 import { extractMetadata } from '../utils/pngMetadata';
+import { loadGMFScene } from '../utils/FormulaFormat';
 import { Preset } from '../types';
 import { QualityState } from '../features/quality';
 import { FractalEvents } from '../engine/FractalEvents';
@@ -32,11 +33,11 @@ const GMT_NAMES = [
   'Grey Matter Telescope',
   'Grotesque Math Theater',
   'Geometry Mutation Terminal',
-  'Galactic Morphology Telescope',
   'Grand Mythos Terminal',
   'Glowing Mathematical Topologies',
   // Playful / fun
-  "God's Math Toy",
+  'Guy Makes Things',
+  "Guy's Math Toy",
   'Gnarly Math Thing',
   'Generally Mesmerizing Thingamajig',
   'Give Me Tentacles',
@@ -131,15 +132,23 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
       if (!file) return;
 
       try {
-          let jsonString = "";
+          let content = "";
           if (file.type === "image/png") {
               const meta = await extractMetadata(file, "FractalData");
-              if (meta) jsonString = meta;
+              if (meta) content = meta;
               else throw new Error("No Fractal Data found in PNG.");
           } else {
-              jsonString = await file.text();
+              content = await file.text();
           }
-          const preset = JSON.parse(jsonString);
+
+          // Detect GMF vs legacy JSON format
+          const { def, preset } = loadGMFScene(content);
+
+          // Register formula if it came from GMF and isn't already known
+          if (def && !registry.get(def.id)) {
+              registry.register(def);
+          }
+
           loadPreset(preset);
 
           // Don't queue via onPresetLoaded — loadPreset already applied the
@@ -322,7 +331,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                              >
                                 <UploadIcon /> <span className="font-bold text-[10px]">Load From File...</span>
                              </button>
-                             <input type="file" ref={fileInputRef} className="hidden" accept=".json,.png" onChange={handleFile} />
+                             <input type="file" ref={fileInputRef} className="hidden" accept=".gmf,.json,.png" onChange={handleFile} />
 
                              <div className="px-3 py-1.5 text-[9px] font-bold text-gray-500 bg-white/5 mb-1">Select Engine</div>
                              {formulas.map(f => (

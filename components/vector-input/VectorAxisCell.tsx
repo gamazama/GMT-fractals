@@ -32,7 +32,7 @@ export const VectorAxisCell: React.FC<VectorAxisCellProps> = ({
     const label = customLabel || config.label;
     
     return (
-        <div className={`relative flex-1 h-9 md:h-[26px] overflow-hidden group transition-all duration-150 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div data-axis-index={axisIndex} className={`relative flex-1 h-9 md:h-[26px] overflow-hidden group transition-all duration-150 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Axis label - double-click to reset to default */}
             <div
                 className={`

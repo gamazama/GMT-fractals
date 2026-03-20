@@ -1,20 +1,24 @@
-// Types
+// Compat-layer types (used by V3 compat adapter, Workshop UI, and debug scripts)
 export type {
-    FragUniform, FragPreset, FragDocument,
-    GenericFragDocument, ParamMapping, TransformedFormula,
-    FragDocumentV2, ParamMappingV2, TransformedFormulaV2,
+    FragUniform, FragPreset,
+    FragDocumentV2, TransformedFormulaV2,
     DEFunctionInfo, HelperFunctionInfo, LoopInfo, FunctionCandidate,
     WorkshopParam, WorkshopDetection,
 } from './types';
 
+// V3 types
+export type {
+    ImportedParam, FormulaAnalysis, GeneratedFormula, FunctionAnalysis,
+} from './v3/types';
+
 // Main UI component
 export { FormulaWorkshop } from './FormulaWorkshop';
 
-// Workshop utilities
-export { detectFormula } from './workshop/detection';
-export { PREVIEW_ID, buildTransformResult } from './workshop/preview';
-export { buildWorkshopParams, buildFractalParams } from './workshop/param-builder';
+// V3 pipeline
+export { detectFormulaV3, transformFormulaV3 } from './v3/compat';
+export { analyzeSource } from './v3/analyze/index';
+export { generateFormula } from './v3/generate/index';
 
-// Parsers
-export { parseFragmentariumSource, getAllFunctionCandidates, autoMapParams, analyzeAsDE } from './parsers/ast-parser';
-export { GenericFragmentariumParser } from './parsers/uniform-parser';
+// Workshop utilities (shared)
+export { buildWorkshopParams, buildFractalParams, filterDeadParams } from './workshop/param-builder';
+

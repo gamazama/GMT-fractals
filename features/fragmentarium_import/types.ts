@@ -4,7 +4,7 @@
  */
 
 // ============================================================================
-// Legacy V0 types (FragmentariumParser)
+// Shared base types
 // ============================================================================
 
 export interface FragUniform {
@@ -24,59 +24,8 @@ export interface FragPreset {
     values: Record<string, string | number | number[] | boolean>;
 }
 
-export interface FragGlobalVar {
-    type: string;
-    name: string;
-    expression: string;
-}
-
-export interface FragFunction {
-    signature: string;
-    body: string;
-}
-
-export interface FragDocument {
-    uniforms: FragUniform[];
-    presets: FragPreset[];
-    globalVars: FragGlobalVar[];
-    functions: FragFunction[];
-    rawGLSL: string;
-    iterations: number;
-}
-
 // ============================================================================
-// V1 types (GenericFragmentariumParser)
-// ============================================================================
-
-export interface GenericFragDocument {
-    uniforms: FragUniform[];
-    presets: FragPreset[];
-    deFunction: string;
-    deFunctionName: string;
-    helperFunctions: string[];
-    includes: string[];
-    rawGLSL: string;
-    iterations: number;
-}
-
-export interface ParamMapping {
-    name: string;
-    type: 'float' | 'int' | 'vec2' | 'vec3' | 'vec4' | 'bool';
-    mappedSlot: string;
-    fixedValue?: string;
-    isDegrees?: boolean;
-}
-
-export interface TransformedFormula {
-    function: string;
-    loopBody: string;
-    getDist: string;
-    uniforms: string;
-    warnings: string[];
-}
-
-// ============================================================================
-// V2 types (GenericFragmentariumParserV2)
+// Compat-layer types (used by V3 compat adapter and Workshop UI)
 // ============================================================================
 
 export interface ComputedGlobal {
@@ -149,6 +98,8 @@ export interface ParamMappingV2 {
     mappedSlot: string;
     fixedValue?: string;
     isDegrees?: boolean;
+    /** Preset-resolved default value for baking into shader when slot is 'ignore'. */
+    bakedDefault?: number | number[];
 }
 
 export interface TransformedFormulaV2 {

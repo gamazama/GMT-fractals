@@ -76,29 +76,30 @@ export const VectorInput: React.FC<VectorInputProps> = ({
     onContextMenu,
     dataHelpId,
 }) => {
-    // Determine if this is a vec3
+    // Determine if this is a vec3 or vec4
+    const isVec4 = value.w !== undefined;
     const isVec3 = value.z !== undefined;
     
     // Local state for immediate visual feedback during drag
     const [localValue, setLocalValue] = React.useState(value);
-    const [hoveredPad, setHoveredPad] = React.useState<'xy' | 'zy' | null>(null);
+    const [hoveredPad, setHoveredPad] = React.useState<'xy' | 'zy' | 'wz' | null>(null);
     const [currentMode, setCurrentMode] = React.useState(mode);
     
     const isDragging = useRef(false);
-    const dragStartSnapshot = useRef<{ x: number; y: number; z?: number } | null>(null);
+    const dragStartSnapshot = useRef<{ x: number; y: number; z?: number; w?: number } | null>(null);
     
     // Sync local value with prop
     useEffect(() => {
         if (!isDragging.current) {
             setLocalValue(value);
         }
-    }, [value.x, value.y, value.z, isVec3]);
+    }, [value.x, value.y, value.z, value.w, isVec3, isVec4]);
     
     // Check if in rotation mode
     const isRotationMode = currentMode === 'rotation';
     
     // Get appropriate mapping for mode
-    const getModeMapping = React.useCallback((axis?: 'x' | 'y' | 'z') => {
+    const getModeMapping = React.useCallback((axis?: 'x' | 'y' | 'z' | 'w') => {
         if (isRotationMode) {
             return piMapping;
         }
@@ -106,7 +107,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
     }, [isRotationMode, axisConfig, axes]);
     
     // Get appropriate bounds for mode
-    const getModeBounds = React.useCallback((axis: 'x' | 'y' | 'z') => {
+    const getModeBounds = React.useCallback((axis: 'x' | 'y' | 'z' | 'w') => {
         if (isRotationMode) {
             // Rotation bounds: -2π to +2π
             return { min: -2 * Math.PI, max: 2 * Math.PI };
@@ -135,7 +136,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
     }, []);
     
     // Update single axis
-    const updateAxis = React.useCallback((axis: 'x' | 'y' | 'z', newValue: number) => {
+    const updateAxis = React.useCallback((axis: 'x' | 'y' | 'z' | 'w', newValue: number) => {
         const next = { ...localValue, [axis]: newValue };
         setLocalValue(next);
         onChange(next);
@@ -143,8 +144,8 @@ export const VectorInput: React.FC<VectorInputProps> = ({
     
     // Update dual axis (from pad)
     const updateDualAxis = React.useCallback((
-        primary: 'x' | 'y' | 'z', 
-        secondary: 'x' | 'y' | 'z', 
+        primary: 'x' | 'y' | 'z' | 'w',
+        secondary: 'x' | 'y' | 'z' | 'w',
         primaryVal: number, 
         secondaryVal: number
     ) => {
@@ -157,10 +158,11 @@ export const VectorInput: React.FC<VectorInputProps> = ({
     // Determine which sliders should be highlighted
     const xHighlighted = hoveredPad === 'xy';
     const yHighlighted = hoveredPad === 'xy' || hoveredPad === 'zy';
-    const zHighlighted = hoveredPad === 'zy';
+    const zHighlighted = hoveredPad === 'zy' || hoveredPad === 'wz';
+    const wHighlighted = hoveredPad === 'wz';
     
     // Axis-specific props builder
-    const buildAxisProps = (axisIndex: number, axisKey: 'x' | 'y' | 'z') => {
+    const buildAxisProps = (axisIndex: number, axisKey: 'x' | 'y' | 'z' | 'w') => {
         const config = AXIS_CONFIG[axisIndex];
         const bounds = getModeBounds(axisKey);
         const mapping = getModeMapping(axisKey);
@@ -170,7 +172,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
             variant: 'compact' as const,
             showTrack: true,
             disabled,
-            highlight: axisIndex === 0 ? xHighlighted : axisIndex === 1 ? yHighlighted : zHighlighted,
+            highlight: axisIndex === 0 ? xHighlighted : axisIndex === 1 ? yHighlighted : axisIndex === 2 ? zHighlighted : wHighlighted,
             mapping,
             min: bounds.min,
             max: bounds.max,
@@ -292,7 +294,7 @@ export const VectorInput: React.FC<VectorInputProps> = ({
                         />
                     )}
                     
-                    {/* Z Axis - only for vec3 */}
+                    {/* Z Axis - only for vec3/vec4 */}
                     {isVec3 && (
                         <div className="flex-1 flex items-center relative group">
                             <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-white/10 bg-white/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[2].text}`}>
@@ -305,6 +307,42 @@ export const VectorInput: React.FC<VectorInputProps> = ({
                                     onDragStart={handleDragStart}
                                     onDragEnd={handleDragEnd}
                                     {...buildAxisProps(2, 'z')}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* WZ Dual Axis Pad - only for vec4 */}
+                    {isVec4 && showDualAxisPads && (
+                        <DualAxisPad
+                            primaryAxis="x"
+                            secondaryAxis="z"
+                            primaryValue={localValue.w ?? 0}
+                            secondaryValue={localValue.z ?? 0}
+                            min={axisConfig?.min}
+                            max={axisConfig?.max}
+                            step={axisConfig?.step}
+                            onUpdate={(pw, sz) => updateDualAxis('w', 'z', pw, sz)}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                            disabled={disabled}
+                            onHover={(isHovering) => setHoveredPad(isHovering ? 'wz' : null)}
+                        />
+                    )}
+
+                    {/* W Axis - only for vec4 */}
+                    {isVec4 && (
+                        <div className="flex-1 flex items-center relative group">
+                            <div className={`absolute top-0 bottom-0 left-0 w-5 flex items-center justify-center border-r border-white/10 bg-white/[0.05] pointer-events-none select-none z-10 ${AXIS_CONFIG[3].text}`}>
+                                <span className="text-[10px] font-bold">W</span>
+                            </div>
+                            <div className="flex-1 pl-5">
+                                <ScalarInput
+                                    value={localValue.w ?? 0}
+                                    onChange={(v) => updateAxis('w', v)}
+                                    onDragStart={handleDragStart}
+                                    onDragEnd={handleDragEnd}
+                                    {...buildAxisProps(3, 'w')}
                                 />
                             </div>
                         </div>

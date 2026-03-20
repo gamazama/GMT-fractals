@@ -4,7 +4,7 @@ import { registry } from '../../../engine/FractalRegistry';
 import { FormulaType } from '../../../types';
 import { useFractalStore } from '../../../store/fractalStore';
 import { ContextMenuItem } from '../../../types/help';
-import { generateGMF, parseGMF } from '../../../utils/FormulaFormat';
+import { generateGMF, loadGMFScene } from '../../../utils/FormulaFormat';
 import { DownloadIcon, ChevronDown, CodeIcon } from '../../Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
@@ -97,10 +97,21 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                 const content = ev.target?.result as string;
                 // Emit compiling event to show spinner before parsing
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
-                const def = parseGMF(content);
-                registry.register(def);
-                FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
-                onChange(def.id as FormulaType);
+                const { def, preset } = loadGMFScene(content);
+                if (def) {
+                    if (!registry.get(def.id)) {
+                        registry.register(def);
+                        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+                    }
+                    // If preset has scene data, load full preset; otherwise just switch formula
+                    if (preset.cameraRot || preset.features) {
+                        useFractalStore.getState().loadPreset(preset);
+                    } else {
+                        onChange(def.id as FormulaType);
+                    }
+                } else {
+                    onChange(preset.formula as FormulaType);
+                }
                 if (fileRef.current) fileRef.current.value = '';
             } catch (err) {
                 console.error("Failed to import formula:", err);

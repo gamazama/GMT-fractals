@@ -49,10 +49,13 @@ export function extractGlobalDeclarations(source: string): GlobalDecl[] {
         if (braceDepth > 0) continue;
         if (/\buniform\b/.test(line)) continue;
 
-        // Uninitialized globals: "mat3 rot;"
-        const mUninit = line.match(/^\s*(mat2|mat3|mat4|vec2|vec3|vec4|float|int|bool)\s+(\w+)\s*;\s*$/);
+        // Uninitialized globals: "mat3 rot;" or "float sc, sr;"
+        const mUninit = line.match(/^\s*(mat2|mat3|mat4|vec2|vec3|vec4|float|int|bool)\s+([\w\s,]+);\s*$/);
         if (mUninit) {
-            result.push({ type: mUninit[1], name: mUninit[2] });
+            const names = mUninit[2].split(',').map(n => n.trim()).filter(n => /^\w+$/.test(n));
+            for (const name of names) {
+                result.push({ type: mUninit[1], name });
+            }
             continue;
         }
 

@@ -49,6 +49,11 @@ export class RenderPipeline {
     private convergenceScene: THREE.Scene | null = null;
     private convergenceCamera: THREE.Camera | null = null;
 
+    // Async convergence readback (fence-based, avoids GPU stall)
+    private convergenceFence: WebGLSync | null = null;
+    private convergencePending: boolean = false;
+    private lastConvergenceResult: number = 1.0;
+
     public isHolding: boolean = false;
 
     // Local State (Decoupled from Store)
@@ -319,35 +324,122 @@ export class RenderPipeline {
         return target?.texture || null;
     }
     
+    /**
+     * Synchronous convergence measurement (legacy — used by non-bucket paths).
+     * Causes a GPU stall due to immediate readRenderTargetPixels.
+     */
     public measureConvergence(
-        renderer: THREE.WebGLRenderer, 
-        boundsMin: THREE.Vector2 = new THREE.Vector2(0,0), 
+        renderer: THREE.WebGLRenderer,
+        boundsMin: THREE.Vector2 = new THREE.Vector2(0,0),
         boundsMax: THREE.Vector2 = new THREE.Vector2(1,1)
     ): number {
         if (!this.mrtTargetA || !this.mrtTargetB || !this.convergenceTarget || !this.convergenceMaterial || !this.convergenceScene || !this.convergenceCamera || !this.convergenceBuffer) return 1.0;
-        
+
         if (this.accumulationCount <= 1) return 1.0;
 
         // Bind color textures from both render targets
-            this.convergenceMaterial.uniforms.tA.value = this.mrtTargetA.texture;
-            this.convergenceMaterial.uniforms.tB.value = this.mrtTargetB.texture;
+        this.convergenceMaterial.uniforms.tA.value = this.mrtTargetA.texture;
+        this.convergenceMaterial.uniforms.tB.value = this.mrtTargetB.texture;
         this.convergenceMaterial.uniforms.uBoundsMin.value.copy(boundsMin);
         this.convergenceMaterial.uniforms.uBoundsMax.value.copy(boundsMax);
-        
+
         const currentTarget = renderer.getRenderTarget();
         renderer.setRenderTarget(this.convergenceTarget);
         renderer.render(this.convergenceScene, this.convergenceCamera);
-        
+
         renderer.readRenderTargetPixels(this.convergenceTarget, 0, 0, 64, 64, this.convergenceBuffer);
         renderer.setRenderTarget(currentTarget);
-        
+
         let maxDelta = 0;
         for(let i = 0; i < this.convergenceBuffer.length; i += 4) {
             const val = this.convergenceBuffer[i];
             if (val > maxDelta) maxDelta = val;
         }
-        
+
         return maxDelta;
+    }
+
+    /**
+     * Start an async convergence measurement. Renders the diff pass and inserts
+     * a GPU fence. Call pollConvergenceResult() on subsequent frames to check
+     * if readback data is available without stalling the GPU.
+     */
+    public startAsyncConvergence(
+        renderer: THREE.WebGLRenderer,
+        boundsMin: THREE.Vector2,
+        boundsMax: THREE.Vector2
+    ): void {
+        if (!this.mrtTargetA || !this.mrtTargetB || !this.convergenceTarget ||
+            !this.convergenceMaterial || !this.convergenceScene || !this.convergenceCamera) return;
+        if (this.convergencePending) return; // Already waiting for a result
+        if (this.accumulationCount <= 1) { this.lastConvergenceResult = 1.0; return; }
+
+        this.convergenceMaterial.uniforms.tA.value = this.mrtTargetA.texture;
+        this.convergenceMaterial.uniforms.tB.value = this.mrtTargetB.texture;
+        this.convergenceMaterial.uniforms.uBoundsMin.value.copy(boundsMin);
+        this.convergenceMaterial.uniforms.uBoundsMax.value.copy(boundsMax);
+
+        const currentTarget = renderer.getRenderTarget();
+        renderer.setRenderTarget(this.convergenceTarget);
+        renderer.render(this.convergenceScene, this.convergenceCamera);
+        renderer.setRenderTarget(currentTarget);
+
+        // Insert GPU fence after the convergence render
+        const gl2 = renderer.getContext() as WebGL2RenderingContext;
+        if (gl2.fenceSync) {
+            // Delete previous fence if it exists
+            if (this.convergenceFence) gl2.deleteSync(this.convergenceFence);
+            this.convergenceFence = gl2.fenceSync(gl2.SYNC_GPU_COMMANDS_COMPLETE, 0);
+            gl2.flush(); // Ensure fence is submitted to the GPU command queue
+            this.convergencePending = true;
+        } else {
+            // Fallback: no fence support, do synchronous readback
+            this.lastConvergenceResult = this.measureConvergence(renderer, boundsMin, boundsMax);
+        }
+    }
+
+    /**
+     * Poll for async convergence result. Returns the result if ready,
+     * or null if the GPU hasn't finished yet (no stall).
+     */
+    public pollConvergenceResult(renderer: THREE.WebGLRenderer): number | null {
+        if (!this.convergencePending || !this.convergenceFence || !this.convergenceBuffer) return null;
+
+        const gl2 = renderer.getContext() as WebGL2RenderingContext;
+        const status = gl2.clientWaitSync(this.convergenceFence, 0, 0); // Non-blocking (timeout = 0)
+
+        if (status === gl2.ALREADY_SIGNALED || status === gl2.CONDITION_SATISFIED) {
+            // GPU is done — readback is fast now (data already in driver buffer)
+            renderer.readRenderTargetPixels(this.convergenceTarget!, 0, 0, 64, 64, this.convergenceBuffer);
+
+            let maxDelta = 0;
+            for (let i = 0; i < this.convergenceBuffer.length; i += 4) {
+                const val = this.convergenceBuffer[i];
+                if (val > maxDelta) maxDelta = val;
+            }
+
+            gl2.deleteSync(this.convergenceFence);
+            this.convergenceFence = null;
+            this.convergencePending = false;
+            this.lastConvergenceResult = maxDelta;
+            return maxDelta;
+        }
+
+        if (status === gl2.WAIT_FAILED) {
+            // Fence failed — clean up and return last known result
+            gl2.deleteSync(this.convergenceFence);
+            this.convergenceFence = null;
+            this.convergencePending = false;
+            return this.lastConvergenceResult;
+        }
+
+        // TIMEOUT_EXPIRED — GPU not done yet, try again next frame
+        return null;
+    }
+
+    /** Get the last convergence result (useful when polling returns null) */
+    public getLastConvergenceResult(): number {
+        return this.lastConvergenceResult;
     }
 
     public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {

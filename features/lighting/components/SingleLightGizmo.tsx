@@ -108,7 +108,6 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
             // 4. Update SVG Axes (Imperative)
             const dist = worldPos.distanceTo(camera.position);
             const scale = dist * GIZMO_SCALE_FACTOR;
-            const viewMat = camera.matrixWorldInverse;
 
             // Axes Vectors
             const axisX = new THREE.Vector3(1, 0, 0);
@@ -121,9 +120,9 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
                 axisZ.applyQuaternion(camera.quaternion);
             }
 
-            const px = getScreenTip(worldPos, axisX, scale, camera, viewMat, screenPos, width, height);
-            const py = getScreenTip(worldPos, axisY, scale, camera, viewMat, screenPos, width, height);
-            const pz = getScreenTip(worldPos, axisZ, scale, camera, viewMat, screenPos, width, height);
+            const px = getScreenTip(worldPos, axisX, scale, camera, screenPos, width, height);
+            const py = getScreenTip(worldPos, axisY, scale, camera, screenPos, width, height);
+            const pz = getScreenTip(worldPos, axisZ, scale, camera, screenPos, width, height);
 
             // Helper to update SVG line attributes
             const updateLine = (cls: string, p: {x:number, y:number} | null) => {

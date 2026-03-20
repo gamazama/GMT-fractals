@@ -45,7 +45,7 @@ function getShadowState(): WorkerShadowState {
         return {
             isBooted: false, isCompiling: false, hasCompiledShader: false,
             isPaused: false, dirty: false, lastCompileDuration: 0,
-            lastMeasuredDistance: 10, accumulationCount: 0, frameCount: 0,
+            lastMeasuredDistance: 1, accumulationCount: 0, frameCount: 0,
             sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
         };
     }
@@ -103,6 +103,12 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
         powerPreference: 'high-performance',
         preserveDrawingBuffer: false
     });
+    // We manage sRGB encoding ourselves via uEncodeOutput in the post-process shader.
+    // Set LinearSRGBColorSpace so Three.js compiles identical shader programs for canvas
+    // and render-target rendering (avoids program hash divergence from outputColorSpace).
+    // drawingBufferColorSpace stays 'srgb' regardless, so the browser correctly interprets
+    // our sRGB-encoded output for canvas compositing.
+    renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     renderer.setSize(initMsg.width, initMsg.height, false);
     renderer.setPixelRatio(initMsg.dpr);
 
@@ -172,9 +178,16 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     const initPhysH = Math.floor(initMsg.height * initMsg.dpr);
     bloomPass.resize(initPhysW, initPhysH);
 
-    // Resize pipeline
-    engine.mainUniforms.uResolution.value.set(initMsg.width, initMsg.height);
-    engine.pipeline.resize(initMsg.width, initMsg.height);
+    // Pass BloomPass + display refs to bucket renderer for full post-processing pipeline
+    bucketRenderer.setBloomPass(bloomPass);
+    if (displayScene && displayCamera) {
+        bucketRenderer.setDisplayRefs(displayScene, displayCamera);
+    }
+
+    // Resize pipeline — use physical pixels (CSS × DPR) so the shader compiles
+    // at the correct resolution from the start (matches RESIZE handler logic).
+    engine.mainUniforms.uResolution.value.set(initPhysW, initPhysH);
+    engine.pipeline.resize(initPhysW, initPhysH);
 
     // Preload config — gradients and all uniforms are synced by
     // syncConfigUniforms() during performCompilation() after BOOT.

@@ -23,6 +23,9 @@ export interface CoreMathState {
     vec3A: { x: number; y: number; z: number } | THREE.Vector3;
     vec3B: { x: number; y: number; z: number } | THREE.Vector3;
     vec3C: { x: number; y: number; z: number } | THREE.Vector3;
+    vec4A: { x: number; y: number; z: number; w: number } | THREE.Vector4;
+    vec4B: { x: number; y: number; z: number; w: number } | THREE.Vector4;
+    vec4C: { x: number; y: number; z: number; w: number } | THREE.Vector4;
 }
 
 // Generate optimized DE logic based on compile-time estimator type
@@ -105,7 +108,10 @@ export const CoreMathFeature: FeatureDefinition = {
         vec2C: { type: 'vec2', default: { x: 0, y: 0 }, label: 'Vec2 C', shortId: 'v2c', uniform: 'uVec2C', min: -10, max: 10, step: 0.001, group: 'params' },
         vec3A: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Vec3 A', shortId: 'v3a', uniform: 'uVec3A', min: -10, max: 10, step: 0.001, group: 'params' },
         vec3B: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Vec3 B', shortId: 'v3b', uniform: 'uVec3B', min: -10, max: 10, step: 0.001, group: 'params' },
-        vec3C: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Vec3 C', shortId: 'v3c', uniform: 'uVec3C', min: -10, max: 10, step: 0.001, group: 'params' }
+        vec3C: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Vec3 C', shortId: 'v3c', uniform: 'uVec3C', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec4A: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 A', shortId: 'v4a', uniform: 'uVec4A', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec4B: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 B', shortId: 'v4b', uniform: 'uVec4B', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec4C: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 C', shortId: 'v4c', uniform: 'uVec4C', min: -10, max: 10, step: 0.001, group: 'params' }
     },
     inject: (builder, config) => {
         const formula = config.formula as FormulaType;

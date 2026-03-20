@@ -4,9 +4,11 @@ import { Uniforms } from './UniformNames';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { injectMetadata } from '../utils/pngMetadata';
 import { getExportFileName } from '../utils/fileUtils';
+import { saveGMFScene } from '../utils/FormulaFormat';
 import { Preset } from '../types';
 import type { RenderPipeline } from './RenderPipeline';
 import type { MaterialController } from './MaterialController';
+import type { BloomPass } from './BloomPass';
 // Note: BucketEngineRef is implemented by FractalEngine - avoids circular import
 
 /** Minimal interface for the engine dependency — avoids circular import */
@@ -29,16 +31,18 @@ export interface BucketRenderConfig {
 
 /**
  * BucketRenderer - Tiled High-Resolution Rendering System
- * 
+ *
  * Renders large images (4K-10K+) by dividing them into smaller tiles (buckets).
  * Each bucket is rendered and accumulated independently, then composited into
  * a final output image.
- * 
- * Key Architecture:
- * - Uses a separate composite buffer to accumulate completed buckets
- * - Does NOT clear render targets between buckets (preserves history)
- * - Supports both convergence-based and sample-count-based quality control
- * 
+ *
+ * Post-Processing Architecture (offline renderer pattern):
+ * - Each bucket accumulates raw linear HDR data (no tone mapping, no bloom)
+ * - Completed buckets are composited into a full-resolution HDR buffer
+ * - After ALL buckets complete, the full post-processing chain runs on the complete image:
+ *   Bloom (full-image) → CA → Color Grading → Tone Mapping → sRGB Encode
+ * - This ensures spatial effects (bloom, CA) operate correctly across the entire image
+ *
  * Quality Control:
  * - If samplesPerBucket is set: renders exactly N samples per bucket (predictable)
  * - Otherwise: uses convergence threshold to determine when bucket is done
@@ -47,28 +51,29 @@ export class BucketRenderer {
     private engine!: BucketEngineRef;
     private isRunning: boolean = false;
     private isExporting: boolean = false;
-    
+
     private buckets: { minX: number, minY: number, maxX: number, maxY: number }[] = [];
     private currentBucketIndex: number = 0;
-    
+
     private bucketFrameCount: number = 0;
     private readonly DEFAULT_MAX_FRAMES = 1024; // Increased for high-quality renders
-    
+    private convergenceRequested: boolean = false; // Async convergence state
+
     private originalSize = new THREE.Vector2();
     private activeUpscale: number = 1.0;
     private targetResolution = new THREE.Vector2();
-    
+
     // Composite buffer - stores the final accumulated image
     private compositeTarget: THREE.WebGLRenderTarget | null = null;
     private compositeMaterial: THREE.ShaderMaterial | null = null;
     private compositeScene: THREE.Scene | null = null;
     private compositeCamera: THREE.OrthographicCamera | null = null;
-    
+
     // Cached config
-    private config: BucketRenderConfig = { 
-        bucketSize: 128, 
-        bucketUpscale: 1.0, 
-        convergenceThreshold: 0.1, 
+    private config: BucketRenderConfig = {
+        bucketSize: 128,
+        bucketUpscale: 1.0,
+        convergenceThreshold: 0.1,
         accumulation: true,
         samplesPerBucket: 64 // Default to 64 samples for predictable quality
     };
@@ -78,9 +83,30 @@ export class BucketRenderer {
     private projectName: string = "Fractal";
     private projectVersion: number = 0;
 
+    // BloomPass for full-image bloom on the complete composite
+    private bloomPass: BloomPass | null = null;
+
+    // Display scene/camera refs for Refine View blit
+    private displayScene: THREE.Scene | null = null;
+    private displayCamera: THREE.Camera | null = null;
+
+    // SSAA: saved viewport pixelSizeBase before upscale resize
+    public savedPixelSizeBase: number = 0;
+
     /** Bind to engine instance (called once from FractalEngine constructor) */
     public init(engineRef: BucketEngineRef) {
         this.engine = engineRef;
+    }
+
+    /** Set BloomPass reference (called from renderWorker after BloomPass creation) */
+    public setBloomPass(bp: BloomPass) {
+        this.bloomPass = bp;
+    }
+
+    /** Set display scene/camera refs for Refine View blit */
+    public setDisplayRefs(scene: THREE.Scene, camera: THREE.Camera) {
+        this.displayScene = scene;
+        this.displayCamera = camera;
     }
 
     /**
@@ -102,28 +128,34 @@ export class BucketRenderer {
             this.projectName = exportData.name;
             this.projectVersion = exportData.version;
         }
-        
+
         // Store current size to restore later
         gl.getSize(this.originalSize);
-        
+
+        // SSAA: Save viewport pixelSizeBase before resolution change.
+        // FractalEngine.compute() will override uPixelSizeBase each frame to this value,
+        // keeping trace precision/normal epsilon/shadow bias at viewport levels.
+        this.savedPixelSizeBase = this.engine.mainUniforms[Uniforms.PixelSizeBase]?.value ?? 0;
+
         // Calculate Target Resolution
         const targetW = Math.floor(this.originalSize.x * this.activeUpscale);
         const targetH = Math.floor(this.originalSize.y * this.activeUpscale);
         this.targetResolution.set(targetW, targetH);
-        
+
         // Resize pipeline to target resolution
         this.engine.pipeline.resize(targetW, targetH);
         this.engine.mainUniforms.uResolution.value.set(targetW, targetH);
-        
+
         // Initialize composite buffer for storing final image
         this.initCompositeBuffer(targetW, targetH);
-        
-        // Generate bucket list (render from bottom-left to top-right)
+
+        // Generate bucket list in center-first spiral order.
+        // Renders the most visually important region first, giving faster feedback.
         this.buckets = [];
         const size = config.bucketSize;
         const cols = Math.ceil(targetW / size);
         const rows = Math.ceil(targetH / size);
-        
+
         for (let y = 0; y < rows; y++) {
             for (let x = 0; x < cols; x++) {
                 const x1 = (x * size) / targetW;
@@ -133,33 +165,42 @@ export class BucketRenderer {
                 this.buckets.push({ minX: x1, minY: y1, maxX: x2, maxY: y2 });
             }
         }
-        
+
+        // Sort by distance from center — center buckets render first
+        this.buckets.sort((a, b) => {
+            const aCx = (a.minX + a.maxX) * 0.5 - 0.5;
+            const aCy = (a.minY + a.maxY) * 0.5 - 0.5;
+            const bCx = (b.minX + b.maxX) * 0.5 - 0.5;
+            const bCy = (b.minY + b.maxY) * 0.5 - 0.5;
+            return (aCx * aCx + aCy * aCy) - (bCx * bCx + bCy * bCy);
+        });
+
         this.currentBucketIndex = 0;
         this.bucketFrameCount = 0;
         this.isRunning = true;
-        
+
         // Clear the composite buffer at start
         this.clearCompositeBuffer();
-        
+
         // Set initial bucket region
         this.applyCurrentBucket();
-        
+
         // Notify UI via Event
-        FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { 
-            isRendering: true, 
+        FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, {
+            isRendering: true,
             progress: 0,
             totalBuckets: this.buckets.length,
             currentBucket: 0
         });
     }
-    
+
     /**
      * Initialize the composite buffer and related resources
      */
     private initCompositeBuffer(width: number, height: number) {
         // Clean up existing resources
         this.disposeCompositeBuffer();
-        
+
         // Create composite render target (Float32 for HDR quality)
         this.compositeTarget = new THREE.WebGLRenderTarget(width, height, {
             minFilter: THREE.LinearFilter,
@@ -169,7 +210,7 @@ export class BucketRenderer {
             stencilBuffer: false,
             depthBuffer: false
         });
-        
+
         // Create composite shader material for copying bucket to composite
         this.compositeMaterial = new THREE.ShaderMaterial({
             uniforms: {
@@ -189,14 +230,14 @@ export class BucketRenderer {
                 uniform vec2 bucketMin;
                 uniform vec2 bucketMax;
                 varying vec2 vUv;
-                
+
                 void main() {
                     // Only render within the bucket region
-                    if (vUv.x < bucketMin.x || vUv.y < bucketMin.y || 
+                    if (vUv.x < bucketMin.x || vUv.y < bucketMin.y ||
                         vUv.x > bucketMax.x || vUv.y > bucketMax.y) {
                         discard;
                     }
-                    
+
                     // Sample from the bucket texture
                     vec4 color = texture2D(map, vUv);
                     gl_FragColor = color;
@@ -206,16 +247,16 @@ export class BucketRenderer {
             depthWrite: false,
             transparent: false
         });
-        
+
         // Create scene for compositing
         this.compositeScene = new THREE.Scene();
         const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.compositeMaterial);
         quad.frustumCulled = false;
         this.compositeScene.add(quad);
-        
+
         this.compositeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     }
-    
+
     /**
      * Clear the composite buffer to black
      */
@@ -228,7 +269,7 @@ export class BucketRenderer {
         gl.clear();
         gl.setRenderTarget(currentTarget);
     }
-    
+
     /**
      * Dispose composite buffer resources
      */
@@ -244,36 +285,45 @@ export class BucketRenderer {
         this.compositeScene = null;
         this.compositeCamera = null;
     }
-    
+
     public stop() {
         if (this.isRunning) {
             this.cleanup();
         }
     }
-    
+
     private cleanup() {
         this.isRunning = false;
         this.isExporting = false;
         this.exportPreset = null;
-        
+
         // Reset bucket region to full screen
         const min = new THREE.Vector2(0, 0);
         const max = new THREE.Vector2(1, 1);
         this.engine.materials.setUniform(Uniforms.RegionMin, min);
         this.engine.materials.setUniform(Uniforms.RegionMax, max);
-        
+
         // Restore original resolution
         this.engine.pipeline.resize(this.originalSize.x, this.originalSize.y);
         this.engine.mainUniforms.uResolution.value.set(this.originalSize.x, this.originalSize.y);
+
+        // Restore bloom pass to viewport dimensions
+        if (this.bloomPass && this.activeUpscale > 1.0) {
+            this.bloomPass.resize(this.originalSize.x, this.originalSize.y);
+        }
+
+        // Clear SSAA override — FractalEngine.compute() will stop overriding uPixelSizeBase
+        this.savedPixelSizeBase = 0;
+
         this.engine.resetAccumulation();
-        
+
         // Dispose composite resources
         this.disposeCompositeBuffer();
-        
+
         // Notify UI via Event
         FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
     }
-    
+
     /**
      * Apply the current bucket region to the shader
      * Does NOT clear render targets - this preserves history for non-bucket regions
@@ -283,24 +333,25 @@ export class BucketRenderer {
             this.finish();
             return;
         }
-        
+
         const b = this.buckets[this.currentBucketIndex];
         const min = new THREE.Vector2(b.minX, b.minY);
         const max = new THREE.Vector2(b.maxX, b.maxY);
-        
+
         this.engine.materials.setUniform(Uniforms.RegionMin, min);
         this.engine.materials.setUniform(Uniforms.RegionMax, max);
-        
+
         // Reset accumulation for the new bucket
         // This is necessary to start fresh accumulation for this bucket
         this.engine.pipeline.resetAccumulation();
-        
+
         // DO NOT clear targets - the shader handles preserving history for non-bucket regions
         // The accumulation blend will correctly blend new samples in the bucket region
-        
+
         this.bucketFrameCount = 0;
+        this.convergenceRequested = false;
     }
-    
+
     /**
      * Copy the current bucket from the render output to the composite buffer
      */
@@ -338,19 +389,92 @@ export class BucketRenderer {
         gl.setRenderTarget(currentTarget);
         gl.setViewport(currentViewport);
     }
-    
+
+    /**
+     * Run full post-processing pipeline on the complete composite HDR buffer.
+     * Called once after ALL buckets are done — ensures spatial effects (bloom, CA)
+     * operate on the complete image, matching the offline renderer pattern.
+     */
+    private runPostProcessing() {
+        const gl = this.engine.renderer;
+        if (!this.compositeTarget || !gl) return;
+
+        const w = this.targetResolution.x;
+        const h = this.targetResolution.y;
+
+        // 1. Run bloom on the full composite (spatial effect — must see entire image)
+        const bloomIntensity = this.engine.mainUniforms.uBloomIntensity?.value ?? 0;
+        const exportMat = this.engine.materials.exportMaterial;
+
+        if (bloomIntensity > 0.001 && this.bloomPass) {
+            // Bloom is a screen-space effect — run at viewport resolution so it looks
+            // identical regardless of upscale. The UV-based sampling in the post-process
+            // shader bilinearly upsamples the bloom texture to target resolution.
+            const bloomW = this.activeUpscale > 1.0 ? this.originalSize.x : w;
+            const bloomH = this.activeUpscale > 1.0 ? this.originalSize.y : h;
+            this.bloomPass.resize(bloomW, bloomH);
+            const threshold = this.engine.mainUniforms.uBloomThreshold?.value ?? 0.5;
+            const radius = this.engine.mainUniforms.uBloomRadius?.value ?? 1.5;
+            this.bloomPass.render(this.compositeTarget.texture, gl, threshold, radius);
+            exportMat.uniforms.uBloomTexture.value = this.bloomPass.getOutput();
+        } else {
+            exportMat.uniforms.uBloomTexture.value = null;
+        }
+
+        // 2. Set composite as input to post-process shader.
+        //    All other uniforms (tone mapping, color grading, CA, etc.) are already
+        //    synced via shared mainUniforms references from createPostProcessMaterial().
+        exportMat.uniforms.map.value = this.compositeTarget.texture;
+        exportMat.uniforms.uResolution.value.set(w, h);
+        exportMat.uniforms.uEncodeOutput.value = 1.0;
+    }
+
+    /**
+     * Blit the post-processed composite to the screen canvas (Refine View).
+     * Uses the displayMaterial so on-screen output matches what export would produce.
+     */
+    private blitToScreen() {
+        const gl = this.engine.renderer;
+        if (!this.compositeTarget || !gl || !this.displayScene || !this.displayCamera) return;
+
+        const displayMat = this.engine.materials.displayMaterial;
+
+        // Sync bloom texture to display material
+        const bloomIntensity = this.engine.mainUniforms.uBloomIntensity?.value ?? 0;
+        if (bloomIntensity > 0.001 && this.bloomPass) {
+            displayMat.uniforms.uBloomTexture.value = this.bloomPass.getOutput();
+        } else {
+            displayMat.uniforms.uBloomTexture.value = null;
+        }
+
+        // Set composite HDR as display input
+        displayMat.uniforms.map.value = this.compositeTarget.texture;
+
+        // Blit to screen (null render target = canvas)
+        gl.setRenderTarget(null);
+        gl.clear();
+        gl.render(this.displayScene, this.displayCamera);
+        gl.getContext().flush();
+    }
+
     private finish() {
+        // Run full post-processing on the complete composite
+        this.runPostProcessing();
+
         if (this.isExporting) {
             this.saveImage();
         } else {
-            // For non-export renders, hold the composite result
+            // Refine View: blit the post-processed composite to screen,
+            // then hold the pipeline so the canvas retains the frame.
+            this.blitToScreen();
             this.engine.pipeline.setHold(true);
         }
         this.cleanup();
     }
-    
+
     /**
      * Read the post-processed composite buffer into a flipped Uint8ClampedArray.
+     * runPostProcessing() must be called first to set up bloom + export material.
      * Shared by both DOM save and worker transfer paths.
      */
     private readCompositePixels(): { pixels: Uint8ClampedArray; width: number; height: number } | null {
@@ -370,18 +494,7 @@ export class BucketRenderer {
         });
 
         const exportMat = this.engine.materials.exportMaterial;
-        const displayMat = this.engine.materials.displayMaterial;
-
-        exportMat.uniforms.map.value = this.compositeTarget.texture;
-        exportMat.uniforms.uResolution.value.set(w, h);
-        if (displayMat.uniforms.uGradingActive) {
-            exportMat.uniforms.uGradingActive.value = displayMat.uniforms.uGradingActive.value;
-        }
-        exportMat.uniforms.uSaturation.value = displayMat.uniforms.uSaturation.value;
-        exportMat.uniforms.uLevelsMin.value = displayMat.uniforms.uLevelsMin.value;
-        exportMat.uniforms.uLevelsMax.value = displayMat.uniforms.uLevelsMax.value;
-        exportMat.uniforms.uLevelsGamma.value = displayMat.uniforms.uLevelsGamma.value;
-        exportMat.uniforms.uEncodeOutput.value = 1.0;
+        // exportMat is already configured by runPostProcessing() — map, bloom, resolution, encode
 
         const currentTarget = gl.getRenderTarget();
         const currentViewport = new THREE.Vector4();
@@ -422,7 +535,7 @@ export class BucketRenderer {
         if (typeof document === 'undefined') {
             const result = this.readCompositePixels();
             if (!result) return;
-            const presetStr = this.exportPreset ? JSON.stringify(this.exportPreset) : "{}";
+            const presetStr = this.exportPreset ? saveGMFScene(this.exportPreset as Preset) : "{}";
             const filename = getExportFileName(this.projectName, this.projectVersion, 'png', `${result.width}x${result.height}`);
             FractalEvents.emit(FRACTAL_EVENTS.BUCKET_IMAGE, {
                 pixels: result.pixels,
@@ -447,7 +560,7 @@ export class BucketRenderer {
             const imageData = new ImageData(flipped as unknown as Uint8ClampedArray<ArrayBuffer>, w, h);
             ctx.putImageData(imageData, 0, 0);
 
-            const presetStr = this.exportPreset ? JSON.stringify(this.exportPreset) : "{}";
+            const presetStr = this.exportPreset ? saveGMFScene(this.exportPreset as Preset) : "{}";
             const filename = getExportFileName(this.projectName, this.projectVersion, 'png', `${w}x${h}`);
 
             canvas.toBlob(async (blob) => {
@@ -470,14 +583,14 @@ export class BucketRenderer {
             }, 'image/png');
         }
     }
-    
+
     /**
      * Update the bucket renderer - called each frame
      * Handles convergence checking and bucket advancement
      */
     public update(gl: THREE.WebGLRenderer, config: BucketRenderConfig) {
         if (!this.isRunning) return;
-        
+
         // Update local config ref if it changed (e.g. from UI sliders during render)
         if (config) {
             this.config.convergenceThreshold = config.convergenceThreshold;
@@ -492,60 +605,71 @@ export class BucketRenderer {
         if (uRes.x !== this.targetResolution.x || uRes.y !== this.targetResolution.y) {
             uRes.set(this.targetResolution.x, this.targetResolution.y);
         }
-        
+
         // Adaptive convergence-based sampling
         // Minimum samples before checking convergence
         const minSamples = Math.min(16, (this.config.samplesPerBucket || 64) / 4);
         const maxSamples = this.config.samplesPerBucket || this.DEFAULT_MAX_FRAMES;
-        
+
         // Need minimum samples before checking convergence
         if (this.bucketFrameCount < minSamples) {
             this.bucketFrameCount++;
             return;
         }
-        
-        // Check if bucket is complete
+
+        // Check if bucket is complete using async convergence (no GPU stall)
         let bucketComplete = false;
-        
-        // Measure convergence for the current bucket region
         const currentBucket = this.buckets[this.currentBucketIndex];
         const min = new THREE.Vector2(currentBucket.minX, currentBucket.minY);
         const max = new THREE.Vector2(currentBucket.maxX, currentBucket.maxY);
-        
-        // Get convergence measurement (max pixel difference between last two frames)
-        const delta = this.config.accumulation 
-            ? this.engine.pipeline.measureConvergence(gl, min, max)
-            : 1.0;
-        
+
         // Convert threshold from percentage to raw value
-        // Lower threshold = more samples needed for convergence
         const thresholdRaw = this.config.convergenceThreshold / 100.0;
-        
-        // Bucket is complete when:
-        // 1. Convergence delta is below threshold (image is stable)
-        // 2. OR we've reached max samples (safety limit)
-        bucketComplete = delta < thresholdRaw || this.bucketFrameCount >= maxSamples;
-        
+
+        if (this.config.accumulation) {
+            // Try to poll a pending async result first
+            if (this.convergenceRequested) {
+                const result = this.engine.pipeline.pollConvergenceResult(gl);
+                if (result !== null) {
+                    this.convergenceRequested = false;
+                    bucketComplete = result < thresholdRaw;
+                }
+                // If result is null, GPU isn't ready yet — continue accumulating
+            }
+
+            // If no measurement is pending, start one (result arrives next frame)
+            if (!this.convergenceRequested && !bucketComplete) {
+                this.engine.pipeline.startAsyncConvergence(gl, min, max);
+                this.convergenceRequested = true;
+            }
+        }
+
+        // Safety limit: bucket is complete if we've hit max samples
+        if (this.bucketFrameCount >= maxSamples) {
+            bucketComplete = true;
+            this.convergenceRequested = false;
+        }
+
         if (bucketComplete) {
             // Composite the current bucket to the final buffer
             this.compositeCurrentBucket();
-            
+
             // Move to next bucket
             this.currentBucketIndex++;
-            
+
             // Check if we're done
             if (this.currentBucketIndex >= this.buckets.length) {
                 this.finish();
                 return;
             }
-            
+
             // Setup next bucket
             this.applyCurrentBucket();
-            
+
             // Emit progress
             const prog = (this.currentBucketIndex / this.buckets.length) * 100;
-            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { 
-                isRendering: true, 
+            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, {
+                isRendering: true,
                 progress: prog,
                 totalBuckets: this.buckets.length,
                 currentBucket: this.currentBucketIndex
@@ -554,12 +678,12 @@ export class BucketRenderer {
             this.bucketFrameCount++;
         }
     }
-    
+
     public getProgress() {
         if (!this.isRunning || this.buckets.length === 0) return 0;
         return (this.currentBucketIndex / this.buckets.length) * 100;
     }
-    
+
     public getIsRunning() {
         return this.isRunning;
     }

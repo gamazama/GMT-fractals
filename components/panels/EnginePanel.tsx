@@ -1,3 +1,6 @@
+// STYLE: Do not use inline formatting or hardcoded layout for feature params.
+// Use DDFS (parentId, condition, group, hidden) to control visibility and nesting.
+// Import theme tokens from 'data/theme' instead of raw Tailwind color classes.
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
@@ -9,6 +12,7 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import Dropdown from '../Dropdown';
 import { detectEngineProfile, ENGINE_PROFILES, estimateCompileTime } from '../../features/engine/profiles';
 import { SectionLabel } from '../SectionLabel';
+import { accent, warn, text as themeText, surface, border as themeBorder } from '../../data/theme';
 
 interface EnginePanelProps {
     className?: string;
@@ -188,8 +192,8 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
     };
 
     return (
-        <div className={`flex flex-col h-full bg-[#080808] min-h-0 overflow-hidden ${className}`} data-help-id="panel.engine">
-            <div className="px-3 py-2 bg-black/60 border-b border-white/10 flex items-center justify-between shrink-0">
+        <div className={`flex flex-col h-full ${surface.dock} min-h-0 overflow-hidden ${className}`} data-help-id="panel.engine">
+            <div className={`px-3 py-2 bg-black/60 border-b ${themeBorder.standard} flex items-center justify-between shrink-0`}>
                 <SectionLabel>Engine Configuration</SectionLabel>
                 <div className="w-32">
                     <Dropdown 
@@ -207,11 +211,11 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scroll p-0 min-h-0">
-                <div className="flex gap-2 items-center px-3 py-2 bg-blue-900/10 border-b border-white/5 mb-1 shrink-0">
+                <div className={`flex gap-2 items-center px-3 py-2 bg-blue-900/10 border-b ${themeBorder.subtle} mb-1 shrink-0`}>
                     <div className="text-blue-400"><InfoIcon /></div>
                     <p className="text-[9px] text-blue-200/80 leading-tight">
-                        <span className="text-green-400">●</span> Compiled &nbsp; 
-                        <span className="text-amber-400">●</span> Pending &nbsp; 
+                        <span className="text-green-400">●</span> Compiled &nbsp;
+                        <span className={`${warn.text}`}>●</span> Pending &nbsp;
                         <span className="text-blue-400">●</span> Instant
                     </p>
                 </div>
@@ -238,7 +242,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
                                     status={rowStatus}
                                 />
                                 {isEnabled && config.groupFilter && (
-                                    <div className="ml-4 pl-2 border-l border-white/10 my-0.5">
+                                    <div className={`ml-4 pl-2 border-l ${themeBorder.standard} my-0.5`}>
                                         <AutoFeaturePanel 
                                             featureId={feat.id} 
                                             groupFilter={config.groupFilter} 
@@ -256,28 +260,28 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
                 </div>
             </div>
 
-            <div className="px-3 py-2 bg-[#1a1a1a] border-t border-white/10 flex items-center justify-between min-h-[40px] shrink-0 z-10">
+            <div className={`px-3 py-2 ${surface.input} border-t ${themeBorder.standard} flex items-center justify-between min-h-[40px] shrink-0 z-10`}>
                 {isCompiling ? (
                     <>
-                        <div className="flex items-center gap-2 text-cyan-400 text-[10px] font-bold">
+                        <div className={`flex items-center gap-2 ${accent.text} text-[10px] font-bold`}>
                             <SpinnerIcon className="animate-spin h-3 w-3" />
                             <span>Compiling...</span>
                         </div>
-                        <div className="text-[9px] text-gray-500">~{estCompileSec}s</div>
+                        <div className={`text-[9px] ${themeText.dimLabel}`}>~{estCompileSec}s</div>
                     </>
                 ) : Object.keys(pendingChanges).length > 0 ? (
                     <>
                         <div className="flex items-center gap-1.5">
-                            <div className="flex items-center gap-2 text-amber-500 text-[10px] font-bold animate-pulse">
+                            <div className={`flex items-center gap-2 ${warn.text} text-[10px] font-bold animate-pulse`}>
                                 <AlertIcon />
                                 <span>Pending</span>
                             </div>
-                            <span className="text-[9px] text-gray-500 font-mono">~{estCompileSec}s</span>
+                            <span className={`text-[9px] ${themeText.dimLabel} font-mono`}>~{estCompileSec}s</span>
                         </div>
                         <button
                             onClick={applyPendingChanges}
                             disabled={isCompiling}
-                            className="px-4 py-1 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold text-[10px] rounded transition-colors flex items-center gap-1"
+                            className={`px-4 py-1 ${warn.btnBg} ${warn.btnHover} disabled:bg-gray-600 disabled:cursor-not-allowed ${warn.btnText} font-bold text-[10px] rounded transition-colors flex items-center gap-1`}
                         >
                             <CheckIcon /> Apply
                         </button>
@@ -285,8 +289,8 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
                 ) : (
                     <>
                          <div className="flex items-center gap-2">
-                             <span className="text-[10px] text-gray-600 font-medium">System Ready</span>
-                             <span className="text-[9px] text-gray-600 font-mono">~{estCompileSec}s</span>
+                             <span className={`text-[10px] ${themeText.faint} font-medium`}>System Ready</span>
+                             <span className={`text-[9px] ${themeText.faint} font-mono`}>~{estCompileSec}s</span>
                          </div>
                          {compileFeedback && (
                              <div className="text-[10px] text-green-400 font-bold animate-fade-in flex items-center gap-1">

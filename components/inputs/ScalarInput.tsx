@@ -13,6 +13,7 @@
 import React from 'react';
 import { ScalarInputProps } from './types';
 import { DraggableNumber } from './primitives';
+import { computePercentage } from './primitives/FormatUtils';
 
 export const ScalarInput: React.FC<ScalarInputProps> = ({
     // Value props
@@ -58,6 +59,11 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     disabled = false,
     highlight = false,
 }) => {
+    // Refs for direct DOM updates during drag (bypasses React render cycle)
+    const fillBarRef = React.useRef<HTMLDivElement>(null);
+    const fullTrackFillRef = React.useRef<HTMLDivElement>(null);
+    const rangeInputRef = React.useRef<HTMLInputElement>(null);
+
     // Calculate track percentage
     const hasBounds = min !== undefined && max !== undefined && min !== max;
     
@@ -85,6 +91,23 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         return ((mappedValue - mappedMin) / (mappedMax - mappedMin)) * 100;
     }, [defaultValue, min, max, mapping, hasBounds]);
     
+    // Compute fill percentage from a raw value
+    const computePct = React.useCallback((v: number): number => {
+        if (!hasBounds) return 0;
+        return computePercentage(v, min, max, mapping);
+    }, [hasBounds, min, max, mapping]);
+
+    // Direct DOM update for fill bars during drag — called synchronously from DraggableNumber
+    const handleImmediateChange = React.useCallback((v: number) => {
+        const pct = computePct(v);
+        const w = `${pct}%`;
+        if (fillBarRef.current) fillBarRef.current.style.width = w;
+        if (fullTrackFillRef.current) fullTrackFillRef.current.style.width = w;
+        if (rangeInputRef.current) {
+            rangeInputRef.current.value = String(mapping ? mapping.toDisplay(v) : v);
+        }
+    }, [computePct, mapping]);
+
     // Handle track click
     const handleTrackChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         if (disabled) return;
@@ -111,7 +134,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     const isMinimal = variant === 'minimal';
     
     if (isMinimal) {
-        // Minimal variant - just the number
+        // Minimal variant - just the number (no fill bar, but still uses immediate display)
         return (
             <div className={className}>
                 <DraggableNumber
@@ -128,6 +151,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     defaultValue={defaultValue}
                     disabled={disabled}
                     highlight={isActive}
+                    onImmediateChange={handleImmediateChange}
                 />
             </div>
         );
@@ -151,20 +175,22 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 
                 {/* Fill bar */}
                 {showTrack && hasBounds && (
-                    <div 
+                    <div
+                        ref={fillBarRef}
+                        data-role="fill"
                         className={`absolute top-0 bottom-0 left-0 pointer-events-none ${disabled ? 'bg-gray-500/20' : isActive ? 'bg-cyan-500/30' : 'bg-cyan-500/20'}`}
-                        style={{ width: `${valuePct}%` }} 
+                        style={{ width: `${valuePct}%` }}
                     />
                 )}
-                
+
                 {/* Live value indicator */}
                 {showLiveIndicator && liveValue !== undefined && !disabled && hasBounds && (
-                    <div 
+                    <div
                         className="absolute top-0 bottom-0 w-1.5 bg-purple-500 blur-[1px] transition-all duration-75 ease-out z-0"
                         style={{ left: `calc(${livePct}% - 0.75px)` }}
                     />
                 )}
-                
+
                 {/* Draggable number */}
                 <div className="absolute inset-0">
                     <DraggableNumber
@@ -181,6 +207,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                         defaultValue={defaultValue}
                         disabled={disabled}
                         highlight={isActive}
+                        onImmediateChange={handleImmediateChange}
                     />
                 </div>
                 
@@ -234,19 +261,21 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                             defaultValue={defaultValue}
                             disabled={disabled}
                             highlight={isActive}
+                            onImmediateChange={handleImmediateChange}
                         />
                     </div>
                 </div>
             )}
-            
+
             {/* Track */}
             {showTrack && hasBounds && (
-                <div 
-                    className="relative flex items-center touch-none overflow-hidden" 
+                <div
+                    className="relative flex items-center touch-none overflow-hidden"
                     style={{ touchAction: 'none', height: trackHeight }}
                 >
                     {/* Range input */}
                     <input
+                        ref={rangeInputRef}
                         type="range"
                         min={mapping ? mapping.toDisplay(min!) : min}
                         max={mapping ? mapping.toDisplay(max!) : max}
@@ -266,10 +295,10 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                         style={{ background: 'transparent', touchAction: 'none' }}
                         tabIndex={-1}
                     />
-                    
+
                     {/* Background track */}
                     <div className="absolute inset-0 bg-white/10 pointer-events-none">
-                        <div className={`absolute top-0 bottom-0 left-0 ${disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
+                        <div ref={fullTrackFillRef} className={`absolute top-0 bottom-0 left-0 ${disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
                         
                         {/* Live value indicator */}
                         {showLiveIndicator && liveValue !== undefined && !disabled && (

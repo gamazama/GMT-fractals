@@ -6,9 +6,9 @@
  * Run: npx tsx debug/test-dec-preprocessor.mts
  */
 
-import { detectDECFormat, parseMacros } from '../features/fragmentarium_import/parsers/dec-detector.js';
-import { preprocessDEC, expandMacros, extractPromotableConstants } from '../features/fragmentarium_import/parsers/dec-preprocessor.js';
-import { detectFormula } from '../features/fragmentarium_import/workshop/detection.js';
+import { detectDECFormat, parseMacros } from '../features/fragmentarium_import/parsers/dec-detector.ts';
+import { preprocessDEC, expandMacros, extractPromotableConstants } from '../features/fragmentarium_import/parsers/dec-preprocessor.ts';
+import { detectFormulaV3 as detectFormula } from '../features/fragmentarium_import/v3/compat.ts';
 
 let passed = 0;
 let failed = 0;

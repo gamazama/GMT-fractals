@@ -9,6 +9,7 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
 import { SectionLabel } from './SectionLabel';
 import { AlertIcon } from './Icons';
+import { warn, compileBar as compileBarClass } from '../data/theme';
 
 interface CompilableFeatureSectionProps {
     /** Feature ID in the DDFS registry. Reads panelConfig if available. */
@@ -217,10 +218,10 @@ const CompileBar: React.FC<{
     onCompile: () => void;
     onOpenEngine?: () => void;
 }> = ({ isCompiled, onCompile, onOpenEngine }) => (
-    <div className="flex items-center justify-between px-2 py-1 mt-1 bg-amber-900/20 border border-amber-500/20 rounded">
-        <div className="flex items-center gap-1.5 text-amber-400">
+    <div className={`flex items-center justify-between px-2 py-1 mt-1 ${compileBarClass} rounded`}>
+        <div className={`flex items-center gap-1.5 ${warn.text}`}>
             <AlertIcon />
-            <SectionLabel variant="secondary" color="text-amber-400">
+            <SectionLabel variant="secondary" color={warn.text}>
                 {!isCompiled ? 'Not compiled' : 'Settings changed'}
             </SectionLabel>
         </div>
@@ -236,7 +237,7 @@ const CompileBar: React.FC<{
             )}
             <button
                 onClick={onCompile}
-                className="px-3 py-0.5 bg-amber-600 hover:bg-amber-500 text-black text-[9px] font-bold rounded transition-colors"
+                className={`px-3 py-0.5 ${warn.btnBg} ${warn.btnHover} ${warn.btnText} text-[9px] font-bold rounded transition-colors`}
             >
                 {!isCompiled ? 'Compile' : 'Recompile'}
             </button>

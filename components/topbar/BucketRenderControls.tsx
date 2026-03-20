@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import Slider from '../Slider';
 import ToggleSwitch from '../ToggleSwitch';
@@ -9,6 +9,24 @@ import { CheckIcon, DownloadIcon } from '../Icons';
 import { Popover } from '../../components/Popover';
 
 const engine = getProxy();
+
+/** Estimate VRAM usage for bucket rendering in MB */
+function estimateVRAM(viewportW: number, viewportH: number, upscale: number): number {
+    const w = Math.floor(viewportW * upscale);
+    const h = Math.floor(viewportH * upscale);
+    const pixels = w * h;
+    // Composite buffer: RGBA Float32 (16 bytes/pixel)
+    const composite = pixels * 16;
+    // Pipeline targets (A + B): RGBA Float32 x2 (32 bytes/pixel)
+    const pipeline = pixels * 32;
+    // Bloom mip chain: ~1.33x base at HalfFloat (8 bytes/pixel), starts at half-res
+    // At upscale > 1 bloom runs at viewport res, but mips still allocate
+    const bloomPixels = upscale > 1 ? viewportW * viewportH : pixels;
+    const bloom = bloomPixels * 8 * 1.33;
+    // Export readback target (temporary RGBA Uint8, 4 bytes/pixel)
+    const exportBuf = pixels * 4;
+    return (composite + pipeline + bloom + exportBuf) / (1024 * 1024);
+}
 
 const BucketRenderSettingsPopup = () => {
     const state = useFractalStore();
@@ -20,6 +38,18 @@ const BucketRenderSettingsPopup = () => {
             setProgress(data.progress);
         });
     }, []);
+
+    // Estimate VRAM and output resolution
+    const vramInfo = useMemo(() => {
+        const dpr = state.dpr || 1;
+        const vw = Math.floor((typeof window !== 'undefined' ? window.innerWidth : 1920) * dpr);
+        const vh = Math.floor((typeof window !== 'undefined' ? window.innerHeight : 1080) * dpr);
+        const upscale = state.bucketUpscale;
+        const outW = Math.floor(vw * upscale);
+        const outH = Math.floor(vh * upscale);
+        const mb = estimateVRAM(vw, vh, upscale);
+        return { outW, outH, mb };
+    }, [state.dpr, state.bucketUpscale]);
 
     // Explicit Start/Stop handlers to avoid race conditions with state toggles
     const handleStartRefine = () => {
@@ -144,9 +174,13 @@ const BucketRenderSettingsPopup = () => {
                             overrideInputText={`${state.bucketUpscale}x`}
                             highlight={state.bucketUpscale > 1.0}
                         />
-                        <p className="text-[8px] text-gray-500 -mt-1 px-1 mb-2">
+                        <p className="text-[8px] text-gray-500 -mt-1 px-1 mb-1">
                             Resolution multiplier. 2x = 4K from 1080p, 4x = 8K, 8x = 10K+
                         </p>
+                        <div className={`text-[8px] px-1 mb-2 ${vramInfo.mb > 1500 ? 'text-red-400' : vramInfo.mb > 500 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                            {vramInfo.outW}x{vramInfo.outH} &middot; ~{vramInfo.mb < 1024 ? `${Math.round(vramInfo.mb)} MB` : `${(vramInfo.mb / 1024).toFixed(1)} GB`} VRAM
+                            {vramInfo.mb > 1500 && ' (may exceed GPU memory)'}
+                        </div>
 
                         <label className="text-[9px] font-bold text-gray-400 block mb-1">Bucket Size</label>
                         <ToggleSwitch

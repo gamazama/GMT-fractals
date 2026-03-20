@@ -33,6 +33,9 @@ interface UseDragValueOptions {
 
 interface UseDragValueReturn {
     isDragging: boolean;
+    /** Ref to the current value during drag — updated synchronously on every pointer move,
+     *  bypassing the React render cycle. Read this for instant display during drag. */
+    immediateValueRef: React.MutableRefObject<number | null>;
     handlePointerDown: (e: React.PointerEvent) => void;
     handlePointerMove: (e: React.PointerEvent) => void;
     handlePointerUp: (e: React.PointerEvent) => void;
@@ -59,7 +62,10 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
     } = options;
     
     const [isDragging, setIsDragging] = useState(false);
-    
+    // Immediate drag value — updated synchronously via ref on every pointer move.
+    // DraggableNumber reads this ref to bypass the React render cycle for display.
+    const immediateValueRef = useRef<number | null>(null);
+
     // Refs for drag state (don't trigger re-renders)
     const dragStartX = useRef(0);
     const dragStartValue = useRef(0);
@@ -153,6 +159,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         const finalValue = mapping ? mapping.fromDisplay(nextValue) : nextValue;
         
         if (!isNaN(finalValue)) {
+            immediateValueRef.current = finalValue;
             onChange(finalValue);
         }
     }, [isDragging, disabled, step, hardMin, hardMax, mapping, onChange, getSensitivity, dragThreshold]);
@@ -167,8 +174,9 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         currentPointerId.current = null;
         
         setIsDragging(false);
+        immediateValueRef.current = null;
         onDragEnd?.();
-        
+
         // Don't reset hasMoved here - let handleClick do it
         // so it can properly detect if this was a click
     }, [disabled, onDragEnd]);
@@ -185,6 +193,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
     
     return {
         isDragging,
+        immediateValueRef,
         handlePointerDown,
         handlePointerMove,
         handlePointerUp,

@@ -202,6 +202,11 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
     },
 
     loadPreset: (p) => {
+        // Legacy: handle embedded _formulaDef from old JSON presets
+        if ((p as any)._formulaDef && !registry.get(p.formula)) {
+            registry.register((p as any)._formulaDef);
+        }
+
         get().resetParamHistory();
         const def = registry.get(p.formula);
         const normalizedFormula = def ? def.id : p.formula;

@@ -38,6 +38,11 @@ interface AdvancedGradientEditorProps {
     helpId?: string;
 }
 
+const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
+    a.length === b.length && a.every((k, i) =>
+        k.id === b[i].id && k.position === b[i].position && k.color === b[i].color && k.bias === b[i].bias && k.interpolation === b[i].interpolation
+    );
+
 const getInterpolatedColor = (knots: AdvancedGradientKnot[], pos: number): string => {
     const sorted = [...knots].sort((a, b) => a.position - b.position);
     if (sorted.length === 0) return '#FFFFFF';
@@ -95,13 +100,17 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
 
     useEffect(() => {
-        setKnots(stops.map(stop => ({
-            id: stop.id, 
-            position: stop.position, 
-            color: stop.color,
-            bias: stop.bias ?? 0.5,
-            interpolation: (stop.interpolation as InterpolationMode) ?? 'linear'
-        })).sort((a, b) => a.position - b.position));
+        setKnots(prev => {
+            const incoming = stops.map(stop => ({
+                id: stop.id,
+                position: stop.position,
+                color: stop.color,
+                bias: stop.bias ?? 0.5,
+                interpolation: (stop.interpolation as InterpolationMode) ?? 'linear'
+            })).sort((a, b) => a.position - b.position);
+            if (knotsEqual(prev, incoming)) return prev;
+            return incoming;
+        });
     }, [stops]);
 
     const knotsRef = useRef(knots);
@@ -153,19 +162,19 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         }
     }, [selectedIds, emitChange]);
 
-    const handleCopy = () => {
+    const handleCopy = useCallback(() => {
         const data = JSON.stringify({
             stops: knotsRef.current.map(({ position, color, bias, interpolation }) => ({ position, color, bias, interpolation })),
             colorSpace
         });
         navigator.clipboard.writeText(data);
-    };
+    }, [colorSpace]);
 
-    const handlePaste = async () => {
+    const handlePaste = useCallback(async () => {
         try {
             const text = await navigator.clipboard.readText();
             const data = JSON.parse(text);
-            
+
             // Support pasting legacy array OR new object
             let newStops = [];
             let newSpace: ColorSpaceMode = 'srgb';
@@ -193,9 +202,9 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         } catch (e) {
             console.error(e);
         }
-    };
+    }, [emitChange, handleInteractionStart, handleInteractionEnd]);
 
-    const loadPreset = (presetStops: GradientStop[]) => {
+    const loadPreset = useCallback((presetStops: GradientStop[]) => {
         handleInteractionStart('param');
         const newKnots: AdvancedGradientKnot[] = presetStops.map((s, i) => ({
              id: `${Date.now()}_${i}`,
@@ -207,7 +216,19 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         emitChange(newKnots, 'srgb'); // Presets default to sRGB
         setSelectedIds(new Set());
         handleInteractionEnd();
-    };
+    }, [emitChange, handleInteractionStart, handleInteractionEnd]);
+
+    const presetMenuOptions = useMemo(() => [
+        { label: 'Clipboard', action: () => {}, isHeader: true },
+        { label: 'Copy Gradient', action: handleCopy },
+        { label: 'Paste Gradient', action: handlePaste },
+        { label: 'Presets', action: () => {}, isHeader: true },
+        ...GRADIENT_PRESETS.map(p => ({
+            label: p.name,
+            action: () => loadPreset(p.stops),
+            stops: p.stops
+        }))
+    ], [handleCopy, handlePaste, loadPreset]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const payload = dragPayloadRef.current;
@@ -584,21 +605,11 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     </button>
                     
                     {presetMenu && (
-                        <PresetMenu 
+                        <PresetMenu
                             x={presetMenu.x}
                             y={presetMenu.y}
                             onClose={() => setPresetMenu(null)}
-                            options={[
-                                { label: 'Clipboard', action: () => {}, isHeader: true },
-                                { label: 'Copy Gradient', action: handleCopy },
-                                { label: 'Paste Gradient', action: handlePaste },
-                                { label: 'Presets', action: () => {}, isHeader: true },
-                                ...GRADIENT_PRESETS.map(p => ({
-                                    label: p.name,
-                                    action: () => loadPreset(p.stops),
-                                    stops: p.stops 
-                                }))
-                            ]}
+                            options={presetMenuOptions}
                         />
                     )}
                 </div>

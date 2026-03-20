@@ -2,12 +2,21 @@
 import * as THREE from 'three';
 import { LightParams } from '../../../types';
 import { PreciseVector3 } from '../../../types/common';
+import {
+    projectWorldToScreen,
+    storeToWorld,
+    getScreenAxisTip,
+    MIN_OVERLAY_DEPTH,
+} from '../../../engine/overlay/OverlayProjection';
+// Re-export ScreenPoint from the shared module so existing imports keep working
+import type { ScreenPoint } from '../../../engine/overlay/OverlayProjection';
+export type { ScreenPoint };
 
 /** Which light index currently has its settings popup open (-1 = none).
  *  Written by CenterHUD, read by SingleLightGizmo for range circle gating. */
 export const activeLightPopup = { index: -1 };
 
-export const MIN_GIZMO_DISTANCE = 0.00005;
+export const MIN_GIZMO_DISTANCE = MIN_OVERLAY_DEPTH;
 export const GIZMO_SCALE_FACTOR = 0.15;
 export const PLANE_SCALE = 0.4;
 
@@ -21,99 +30,45 @@ export const GizmoColors = {
     PlaneYZ: '#ff4444'
 };
 
-const _tempVec = new THREE.Vector3();
-const _viewPos = new THREE.Vector3();
-
+/**
+ * Get a light's world-space position from its store params.
+ * Delegates to the shared storeToWorld utility.
+ */
 export const getLightWorldPosition = (light: LightParams, camera: THREE.Camera, sceneOffset: PreciseVector3): THREE.Vector3 => {
-    _tempVec.set(light.position.x, light.position.y, light.position.z);
-    
-    if (light.fixed) {
-        // Headlamp: Apply Camera Transform
-        _tempVec.applyQuaternion(camera.quaternion).add(camera.position);
-    } else {
-        // World: Subtract Scene Offset (Virtual Space)
-        _tempVec.sub({ 
-            x: sceneOffset.x + sceneOffset.xL, 
-            y: sceneOffset.y + sceneOffset.yL, 
-            z: sceneOffset.z + sceneOffset.zL 
-        } as THREE.Vector3);
-    }
-    
-    return _tempVec.clone();
+    return storeToWorld(light.position, !!light.fixed, camera, sceneOffset);
 };
 
-export interface ScreenPoint {
-    x: number;
-    y: number;
-    z: number; // View space depth
-    isBehindCamera: boolean;
-}
-
+/**
+ * Project a world position to screen-space pixel coordinates.
+ * Delegates to the shared projectWorldToScreen utility.
+ *
+ * Note: the shared utility no longer calls camera.updateMatrixWorld() —
+ * the display camera's matrix is updated once per frame in snapshotDisplayCamera().
+ */
 export const projectToScreen = (
-    worldPos: THREE.Vector3, 
-    camera: THREE.Camera, 
-    width: number, 
+    worldPos: THREE.Vector3,
+    camera: THREE.Camera,
+    width: number,
     height: number
 ): ScreenPoint | null => {
+    // Ensure matrix is current — the display camera snapshot updates this,
+    // but callers outside the tick cycle (e.g. drag handlers) may need it.
     camera.updateMatrixWorld();
-    const viewMat = camera.matrixWorldInverse;
-
-    // View Space Check
-    _viewPos.copy(worldPos).applyMatrix4(viewMat);
-    
-    // Cull if behind camera or too close
-    if (_viewPos.z > -MIN_GIZMO_DISTANCE) {
-        return null; 
-    }
-
-    _tempVec.copy(worldPos).project(camera);
-
-    const halfW = width / 2;
-    const halfH = height / 2;
-
-    const x = (_tempVec.x * halfW) + halfW;
-    const y = -(_tempVec.y * halfH) + halfH;
-    
-    // Safety clamp
-    if (Math.abs(x) > 50000 || Math.abs(y) > 50000) return null;
-
-    return { x, y, z: _viewPos.z, isBehindCamera: false };
+    return projectWorldToScreen(worldPos, camera, width, height);
 };
 
+/**
+ * Project an axis tip to screen-space and return delta from the origin.
+ * Delegates to the shared getScreenAxisTip utility.
+ */
 export const getScreenTip = (
-    origin: THREE.Vector3, 
-    axisDirection: THREE.Vector3, 
+    origin: THREE.Vector3,
+    axisDirection: THREE.Vector3,
     scale: number,
     camera: THREE.Camera,
-    viewMat: THREE.Matrix4,
     screenOrigin: {x:number, y:number},
-    width: number, 
+    width: number,
     height: number
-) => {
-    const tipWorld = origin.clone().add(axisDirection.clone().multiplyScalar(scale));
-    
-    // Check Tip Depth
-    _viewPos.copy(tipWorld).applyMatrix4(viewMat);
-    if (_viewPos.z > -MIN_GIZMO_DISTANCE) return null; // Tip is behind camera
-
-    _tempVec.copy(tipWorld).project(camera);
-    const sx = (_tempVec.x * width/2);
-    const sy = -(_tempVec.y * height/2);
-    
-    // Return delta relative to origin div center (0,0)
-    // Note: screenOrigin is absolute, sx/sy are relative to center of screen?
-    // Wait, project() returns -1..1.
-    // Screen coords calculation:
-    // x = (ndc * w/2) + w/2.
-    // We want delta from Origin. 
-    // Origin Screen X = (ndc0 * w/2) + w/2
-    // Tip Screen X    = (ndc1 * w/2) + w/2
-    // Delta           = (ndc1 - ndc0) * w/2
-    
-    // But passed screenOrigin is already pixels.
-    // Let's recalculate tip absolute pixels.
-    const tipAbsX = (_tempVec.x * width/2) + width/2;
-    const tipAbsY = -(_tempVec.y * height/2) + height/2;
-    
-    return { x: tipAbsX - screenOrigin.x, y: tipAbsY - screenOrigin.y };
+): { x: number; y: number } | null => {
+    return getScreenAxisTip(origin, axisDirection, scale, camera, screenOrigin, width, height);
 };

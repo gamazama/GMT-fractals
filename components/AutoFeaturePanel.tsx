@@ -7,7 +7,7 @@ import ToggleSwitch from './ToggleSwitch';
 import SmallColorPicker from './SmallColorPicker';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import Dropdown from './Dropdown';
-import { Vector2Input, Vector3Input } from './vector-input';
+import { Vector2Input, Vector3Input, Vector4Input } from './vector-input';
 import type { BaseVectorInputProps } from './vector-input/types';
 import { Knob } from './Knob';
 import { collectHelpIds } from '../utils/helpUtils';
@@ -177,12 +177,12 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         }
         const setter = (actions as any)[setterName];
         if (setter) {
-            // Decompose composed vec3/vec2 back into individual scalar fields
+            // Decompose composed vec4/vec3/vec2 back into individual scalar fields
             if (config?.composeFrom && value && typeof value === 'object') {
                 const components = config.composeFrom;
-                const vals = 'z' in value
-                    ? { [components[0]]: value.x, [components[1]]: value.y, [components[2]]: value.z }
-                    : { [components[0]]: value.x, [components[1]]: value.y };
+                const vals: Record<string, number> = { [components[0]]: value.x, [components[1]]: value.y };
+                if ('z' in value && components[2]) vals[components[2]] = value.z;
+                if ('w' in value && components[3]) vals[components[3]] = value.w;
                 setter(vals);
             } else {
                 setter({ [key]: value });
@@ -384,7 +384,21 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                  : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`];
              return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
         }
-        
+        if (config.type === 'vec4') {
+             const x = val?.x ?? config.default?.x ?? 0;
+             const y = val?.y ?? config.default?.y ?? 0;
+             const z = val?.z ?? config.default?.z ?? 0;
+             const w = val?.w ?? config.default?.w ?? 0;
+             const v4 = new THREE.Vector4(x, y, z, w);
+             const trackKeys = config.composeFrom
+                 ? config.composeFrom.map(k => `${featureId}.${k}`)
+                 : [`${featureId}.${key}_x`, `${featureId}.${key}_y`, `${featureId}.${key}_z`, `${featureId}.${key}_w`];
+             const trackLabels = config.composeFrom
+                 ? undefined
+                 : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`, `${config.label} W`];
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
+        }
+
         if (config.type === 'image') {
             // Check for linked colorSpace param or default to 'colorSpace'
             const colorSpaceKey = config.linkedParams?.colorSpace || 'colorSpace';

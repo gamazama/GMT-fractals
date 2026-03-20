@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReSTIR GI — Claude Fractal Path Tracer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; overflow: hidden; font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #hud {
+            position: fixed; top: 12px; left: 12px;
+            color: #e0e0e0; font-size: 12px; line-height: 1.6;
+            background: rgba(0,0,0,0.6); padding: 10px 14px; border-radius: 6px;
+            pointer-events: none; min-width: 260px;
+        }
+        #hud .title { color: #f0a060; font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+        #hud .mode { font-size: 13px; margin-bottom: 2px; }
+        #hud .mode .on { color: #5fdf5f; }
+        #hud .mode .off { color: #ff6060; }
+        #hud .stat { color: #999; }
+        #controls {
+            position: fixed; bottom: 12px; left: 12px;
+            color: #666; font-size: 11px; line-height: 1.8;
+            background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px;
+            pointer-events: none;
+        }
+        #controls kbd {
+            background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 3px;
+            color: #aaa; font-family: inherit;
+        }
+        #error {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #ff6060; font-size: 16px; text-align: center; line-height: 1.6;
+            display: none; max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div id="hud">
+        <div class="title">ReSTIR GI — <span id="fractal-label">Claude</span></div>
+        <div class="mode">Mode: <span id="mode-label" class="on">ReSTIR GI</span></div>
+        <div class="stat">Samples: <span id="sample-count">0</span></div>
+        <div class="stat">Frame: <span id="fps">0</span> ms</div>
+        <div class="mode">DOF: <span id="dof-label" class="off">OFF</span></div>
+        <div class="stat">Resolution: <span id="res-label">—</span></div>
+    </div>
+
+    <div id="controls">
+        <kbd>Drag</kbd> rotate &nbsp; <kbd>Scroll</kbd> zoom &nbsp; <kbd>Space</kbd> toggle ReSTIR &nbsp; <kbd>D</kbd> toggle DOF &nbsp; <kbd>F</kbd> fractal &nbsp; <kbd>R</kbd> reset
+    </div>
+
+    <div id="error">
+        <p>WebGPU is not available in this browser.</p>
+        <p style="margin-top:8px; font-size:13px; color:#999;">
+            Try Chrome 113+, Edge 113+, or Firefox Nightly with WebGPU enabled.
+        </p>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -88,26 +88,11 @@ export function buildDERenameMap(
 
     renameMap['orbitTrap'] = 'g_orbitTrap';
     renameMap['ColorIterations'] = 'int(uParamC)';
-    renameMap['Iterations'] = 'int(uIterations)';
+    renameMap['Iterations'] = 'MAX_HARD_ITERATIONS';
 
     // Step 1: User-explicit slot mappings take HIGHEST priority.
     // This ensures that if the user manually remaps a slot in the Workshop (e.g. Offset→vec3B),
     // the GLSL rename matches the UI — even if UNIFORM_MAP would say otherwise.
-
-    // Pre-compute bool flags: when multiple bools share the same scalar slot,
-    // each gets a bit position for bitfield extraction (mod/floor pattern).
-    const boolBitIndex = new Map<string, number>();
-    const boolsPerSlot = new Map<string, string[]>();
-    for (const uniform of allUniforms) {
-        if (uniform.type !== 'bool') continue;
-        const m = mappings.find(mp => mp.name === uniform.name);
-        const slot = m?.mappedSlot;
-        if (!slot || slot === 'ignore' || slot === 'fixed' || slot === 'uJuliaMode') continue;
-        if (!boolsPerSlot.has(slot)) boolsPerSlot.set(slot, []);
-        const names = boolsPerSlot.get(slot)!;
-        boolBitIndex.set(uniform.name, names.length);
-        names.push(uniform.name);
-    }
 
     for (const uniform of allUniforms) {
         const userMapping = mappings.find(m => m.name === uniform.name);
@@ -117,25 +102,29 @@ export function buildDERenameMap(
             // bool uniforms mapped to juliaMode must expand to a comparison expression for GLSL ES
             renameMap[uniform.name] = '(uJuliaMode > 0.5)';
         } else if (!slot.startsWith('(')) {
-            const uniformName = slotToUniform(slot);
-            if (uniform.type === 'int') {
-                // int uniforms mapped to float slots need int(...) wrapping
-                renameMap[uniform.name] = `int(${uniformName})`;
-            } else if (uniform.type === 'bool') {
-                // Bool flags: extract bit from bitfield via mod/floor
-                const bitIdx = boolBitIndex.get(uniform.name) ?? 0;
-                const boolCount = boolsPerSlot.get(slot)?.length ?? 1;
-                if (boolCount === 1) {
-                    // Single bool on slot — simple comparison
-                    renameMap[uniform.name] = `(${uniformName} > 0.5)`;
+            // Component/swizzle slot: "vec3A.x", "vec4A.xy", "vec4A.zw", etc.
+            const swizzleMatch = slot.match(/^(vec[234][ABC])\.([xyzw]+)$/);
+            if (swizzleMatch) {
+                const baseUniform = slotToUniform(swizzleMatch[1]);
+                const swizzle = swizzleMatch[2];
+                if (uniform.type === 'bool') {
+                    renameMap[uniform.name] = `(${baseUniform}.${swizzle} > 0.5)`;
+                } else if (uniform.type === 'int') {
+                    renameMap[uniform.name] = `int(${baseUniform}.${swizzle})`;
                 } else {
-                    // Multiple bools packed as flags — extract bit
-                    const divisor = Math.pow(2, bitIdx);
-                    const divExpr = divisor === 1 ? uniformName : `${uniformName} / ${divisor.toFixed(1)}`;
-                    renameMap[uniform.name] = `(mod(floor(${divExpr}), 2.0) > 0.5)`;
+                    renameMap[uniform.name] = `${baseUniform}.${swizzle}`;
                 }
             } else {
-                renameMap[uniform.name] = uniformName;
+                const uniformName = slotToUniform(slot);
+                if (uniform.type === 'int') {
+                    renameMap[uniform.name] = `int(${uniformName})`;
+                } else if (uniform.type === 'bool') {
+                    renameMap[uniform.name] = `(${uniformName} > 0.5)`;
+                } else if (uniform.type === 'vec3' && /^vec4[ABC]$/.test(slot)) {
+                    renameMap[uniform.name] = `${uniformName}.xyz`;
+                } else {
+                    renameMap[uniform.name] = uniformName;
+                }
             }
         }
     }

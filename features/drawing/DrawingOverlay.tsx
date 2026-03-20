@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { nanoid } from 'nanoid';
 import { useFractalStore } from '../../store/fractalStore';
@@ -8,36 +8,29 @@ const engine = getProxy();
 import { DrawnShape } from './index';
 import { FeatureComponentProps } from '../../components/registry/ComponentRegistry';
 import { getViewportCamera, getViewportCanvas } from '../../engine/worker/ViewportRefs';
+import {
+    getOverlayViewport,
+    projectWorldToXY,
+    preciseToWorld,
+} from '../../engine/overlay/OverlayProjection';
 
-// --- 3D-to-2D Projection Helpers ---
+// ── Pre-allocated temporaries (module-scoped, never exposed) ─────────
+
+const _localVec = new THREE.Vector3();
+const _centerVec = new THREE.Vector3();
+const _worldOriginVec = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+
+// ── Shape projection ─────────────────────────────────────────────────
 
 interface ScreenPt { x: number; y: number; behind: boolean }
-
-const _projVec = new THREE.Vector3();
-
-const project3D = (worldPos: THREE.Vector3, camera: THREE.Camera, w: number, h: number): ScreenPt => {
-    _projVec.copy(worldPos).project(camera);
-    return {
-        x: (_projVec.x * 0.5 + 0.5) * w,
-        y: (-_projVec.y * 0.5 + 0.5) * h,
-        behind: _projVec.z > 1
-    };
-};
-
-/** Compute shape's world position from its unified PreciseVector3 center + current offset */
-const shapeWorldPos = (shape: DrawnShape, offset: any): THREE.Vector3 => {
-    const dx = (shape.center.x - offset.x) + (shape.center.xL - offset.xL);
-    const dy = (shape.center.y - offset.y) + (shape.center.yL - offset.yL);
-    const dz = (shape.center.z - offset.z) + (shape.center.zL - offset.zL);
-    return new THREE.Vector3(dx, dy, dz);
-};
 
 /** Get 2D polygon points for a shape projected to screen */
 const projectShapeToScreen = (
     shape: DrawnShape, camera: THREE.Camera, canvasW: number, canvasH: number, offset: any
 ): ScreenPt[] => {
-    const center = shapeWorldPos(shape, offset);
-    const q = new THREE.Quaternion(shape.orientation.x, shape.orientation.y, shape.orientation.z, shape.orientation.w);
+    preciseToWorld(shape.center, offset, _centerVec);
+    _quat.set(shape.orientation.x, shape.orientation.y, shape.orientation.z, shape.orientation.w);
     const halfW = shape.size.x / 2;
     const halfH = shape.size.y / 2;
     const zOff = shape.zOffset || 0;
@@ -50,22 +43,21 @@ const projectShapeToScreen = (
         const N = 48;
         for (let i = 0; i <= N; i++) {
             const a = (i / N) * Math.PI * 2;
-            const local = new THREE.Vector3(Math.cos(a) * halfW, Math.sin(a) * halfH, renderZ);
-            local.applyQuaternion(q).add(center);
-            pts.push(project3D(local, camera, canvasW, canvasH));
+            _localVec.set(Math.cos(a) * halfW, Math.sin(a) * halfH, renderZ);
+            _localVec.applyQuaternion(_quat).add(_centerVec);
+            pts.push(projectWorldToXY(_localVec, camera, canvasW, canvasH));
         }
         return pts;
     }
 
     if (isCube) {
-        // Return 8 corners projected — caller renders as edges
         const corners: ScreenPt[] = [];
         for (const sx of [-1, 1]) {
             for (const sy of [-1, 1]) {
                 for (const sz of [-1, 1]) {
-                    const local = new THREE.Vector3(sx * halfW, sy * halfH, renderZ + sz * depth / 2);
-                    local.applyQuaternion(q).add(center);
-                    corners.push(project3D(local, camera, canvasW, canvasH));
+                    _localVec.set(sx * halfW, sy * halfH, renderZ + sz * depth / 2);
+                    _localVec.applyQuaternion(_quat).add(_centerVec);
+                    corners.push(projectWorldToXY(_localVec, camera, canvasW, canvasH));
                 }
             }
         }
@@ -73,40 +65,404 @@ const projectShapeToScreen = (
     }
 
     // 2D Rectangle — 4 corners
-    const corners2D: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
-    return corners2D.map(([sx, sy]) => {
-        const local = new THREE.Vector3(sx * halfW, sy * halfH, renderZ);
-        local.applyQuaternion(q).add(center);
-        return project3D(local, camera, canvasW, canvasH);
-    });
+    const corners: ScreenPt[] = [];
+    const signs: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    for (const [sx, sy] of signs) {
+        _localVec.set(sx * halfW, sy * halfH, renderZ);
+        _localVec.applyQuaternion(_quat).add(_centerVec);
+        corners.push(projectWorldToXY(_localVec, camera, canvasW, canvasH));
+    }
+    return corners;
 };
 
 // --- Cube edge pairs (index into 8-corner array) ---
-// Corners indexed as: [-x,-y,-z]=0, [-x,-y,+z]=1, [-x,+y,-z]=2, [-x,+y,+z]=3,
-//                      [+x,-y,-z]=4, [+x,-y,+z]=5, [+x,+y,-z]=6, [+x,+y,+z]=7
 const CUBE_EDGES = [
     [0, 1], [2, 3], [4, 5], [6, 7], // Z edges
     [0, 2], [1, 3], [4, 6], [5, 7], // Y edges
     [0, 4], [1, 5], [2, 6], [3, 7], // X edges
 ];
 
+// ── Global refs for tick access (same pattern as LightGizmo) ──
+
+/** Cached DOM element lookups — avoids querySelector on every frame */
+const _svgCache = new Map<string, SVGElement>();
+const _labelCache = new Map<string, HTMLDivElement>();
+
+/** Refs set by the React component, read by tick */
+let _overlayRef: {
+    svgEl: SVGSVGElement | null;
+    labelsEl: HTMLDivElement | null;
+    axesSvgEl: SVGSVGElement | null;
+    tempShapeRef: React.MutableRefObject<Partial<DrawnShape> | null> | null;
+    axesOriginRef: React.MutableRefObject<{ x: number; y: number; z: number; xL: number; yL: number; zL: number }> | null;
+} = {
+    svgEl: null,
+    labelsEl: null,
+    axesSvgEl: null,
+    tempShapeRef: null,
+    axesOriginRef: null,
+};
+
+// ── Shape list builder (shared between SVG + label updates) ─────────
+
+interface RenderableShape { shape: DrawnShape; color: string; isTemp: boolean }
+
+/** Scratch array reused each frame — never reallocated */
+let _renderShapes: RenderableShape[] = [];
+
+function collectRenderShapes(
+    shapes: DrawnShape[] | undefined,
+    tempShape: Partial<DrawnShape> | null,
+    drawingColor: THREE.Color,
+): RenderableShape[] {
+    _renderShapes.length = 0;
+    if (shapes) {
+        for (const s of shapes) {
+            _renderShapes.push({ shape: s, color: s.color, isTemp: false });
+        }
+    }
+    if (tempShape && tempShape.center && tempShape.size && tempShape.orientation) {
+        _renderShapes.push({
+            shape: tempShape as DrawnShape,
+            color: '#' + drawingColor.getHexString(),
+            isTemp: true,
+        });
+    }
+    return _renderShapes;
+}
+
+// ── SVG element management ──────────────────────────────────────────
+
+function getOrCreatePath(svgEl: SVGSVGElement, id: string): SVGPathElement {
+    let el = _svgCache.get(id) as SVGPathElement | undefined;
+    if (!el || !el.isConnected) {
+        el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        el.setAttribute('data-shape-id', id);
+        el.setAttribute('fill', 'none');
+        el.setAttribute('stroke-opacity', '0.9');
+        svgEl.appendChild(el);
+        _svgCache.set(id, el);
+    }
+    return el;
+}
+
+function getOrCreateCubeGroup(svgEl: SVGSVGElement, id: string): SVGGElement {
+    let el = _svgCache.get(id) as SVGGElement | undefined;
+    if (!el || !el.isConnected) {
+        el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        el.setAttribute('data-shape-id', id);
+        for (let i = 0; i < CUBE_EDGES.length; i++) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('stroke-opacity', '0.9');
+            el.appendChild(line);
+        }
+        svgEl.appendChild(el);
+        _svgCache.set(id, el);
+    }
+    return el;
+}
+
+function getOrCreateLabelGroup(labelsEl: HTMLDivElement, id: string): HTMLDivElement {
+    let el = _labelCache.get(id);
+    if (!el || !el.isConnected) {
+        el = document.createElement('div');
+        el.setAttribute('data-label-id', id);
+        el.style.position = 'absolute';
+        el.style.left = '0';
+        el.style.top = '0';
+        el.style.pointerEvents = 'none';
+        el.innerHTML = `<div data-role="width" class="absolute text-[10px] font-mono font-bold whitespace-nowrap text-cyan-300 opacity-90 px-1" style="pointer-events:none"></div><div data-role="height" class="absolute text-[10px] font-mono font-bold whitespace-nowrap text-cyan-300 opacity-90 px-1" style="pointer-events:none"></div><div data-role="delete" class="drawing-ui absolute cursor-pointer flex items-center justify-center w-4 h-4 bg-red-900/80 hover:bg-red-500 text-white rounded-full transition-colors shadow-sm border border-white/20" style="pointer-events:auto" title="Delete Shape"><span class="text-[10px] font-bold leading-none mb-[1px]">✕</span></div>`;
+        const deleteBtn = el.querySelector('[data-role="delete"]') as HTMLElement;
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                useFractalStore.getState().removeDrawnShape(id);
+            });
+        }
+        labelsEl.appendChild(el);
+        _labelCache.set(id, el);
+    }
+    return el;
+}
+
+// ── Tick Function (TICK_PHASE.OVERLAY) ──────────────────────────────
+
+/**
+ * Called once per frame from TickRegistry at OVERLAY phase.
+ * Imperatively updates SVG paths and label positions — no React re-render.
+ */
+export const tick = () => {
+    const vp = getOverlayViewport();
+    if (!vp) return;
+
+    const { camera, width, height } = vp;
+    const state = useFractalStore.getState();
+    const drawing = state.drawing;
+    if (!drawing) return;
+
+    const { shapes, showLabels, showAxes } = drawing;
+    const offset = engine.sceneOffset;
+    const tempShape = _overlayRef.tempShapeRef?.current ?? null;
+
+    const hasContent = (shapes && shapes.length > 0) || tempShape || showAxes;
+    if (!hasContent) return;
+
+    const svgEl = _overlayRef.svgEl;
+    const labelsEl = _overlayRef.labelsEl;
+
+    // Collect shapes once — shared by SVG and label passes
+    const allShapes = collectRenderShapes(shapes, tempShape, drawing.color);
+
+    // Build active ID set for stale-element cleanup
+    const activeIds = new Set<string>();
+    for (const { shape, isTemp } of allShapes) {
+        activeIds.add(shape.id || 'temp');
+    }
+
+    // ── Update SVG viewport + shape paths ──
+    if (svgEl) {
+        svgEl.setAttribute('width', String(width));
+        svgEl.setAttribute('height', String(height));
+
+        for (const { shape, color, isTemp } of allShapes) {
+            const id = shape.id || 'temp';
+            const isCube = shape.type === 'rect' && (shape.size.z || 0) > 0.001;
+            const pts = projectShapeToScreen(shape, camera, width, height, offset);
+            const anyBehind = pts.some(p => p.behind);
+
+            if (isCube) {
+                const groupEl = getOrCreateCubeGroup(svgEl, id);
+                if (anyBehind) {
+                    groupEl.setAttribute('visibility', 'hidden');
+                } else {
+                    groupEl.setAttribute('visibility', 'visible');
+                    const lines = groupEl.children;
+                    for (let i = 0; i < CUBE_EDGES.length; i++) {
+                        const [a, b] = CUBE_EDGES[i];
+                        const line = lines[i] as SVGLineElement;
+                        if (line) {
+                            line.setAttribute('x1', String(pts[a].x));
+                            line.setAttribute('y1', String(pts[a].y));
+                            line.setAttribute('x2', String(pts[b].x));
+                            line.setAttribute('y2', String(pts[b].y));
+                            line.setAttribute('stroke', color);
+                            line.setAttribute('stroke-width', isTemp ? '1' : '1.5');
+                        }
+                    }
+                }
+            } else {
+                const pathEl = getOrCreatePath(svgEl, id);
+                if (anyBehind) {
+                    pathEl.setAttribute('visibility', 'hidden');
+                } else {
+                    pathEl.setAttribute('visibility', 'visible');
+                    const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z';
+                    pathEl.setAttribute('d', d);
+                    pathEl.setAttribute('stroke', color);
+                    pathEl.setAttribute('stroke-width', isTemp ? '1' : '1.5');
+                }
+            }
+        }
+
+        // Remove stale SVG elements
+        for (const [cachedId, el] of _svgCache) {
+            if (!activeIds.has(cachedId)) {
+                el.remove();
+                _svgCache.delete(cachedId);
+            }
+        }
+    }
+
+    // ── Update labels ──
+    if (labelsEl) {
+        for (const { shape, isTemp } of allShapes) {
+            if (!showLabels) continue;
+
+            const id = shape.id || 'temp';
+            preciseToWorld(shape.center, offset, _centerVec);
+            _quat.set(shape.orientation.x, shape.orientation.y, shape.orientation.z, shape.orientation.w);
+            const halfW = shape.size.x / 2;
+            const halfH = shape.size.y / 2;
+            const depth = shape.size.z || 0;
+            const zOff = shape.zOffset || 0;
+            const renderZ = (shape.type === 'rect' && depth > 0.001) ? (zOff - depth / 2) : zOff;
+
+            _localVec.set(0, halfH, renderZ + depth / 2).applyQuaternion(_quat).add(_centerVec);
+            const topPt = projectWorldToXY(_localVec, camera, width, height);
+
+            _localVec.set(-halfW, 0, renderZ + depth / 2).applyQuaternion(_quat).add(_centerVec);
+            const leftPt = projectWorldToXY(_localVec, camera, width, height);
+
+            _localVec.set(halfW, halfH, renderZ + depth / 2).applyQuaternion(_quat).add(_centerVec);
+            const trPt = projectWorldToXY(_localVec, camera, width, height);
+
+            const anyBehind = topPt.behind || leftPt.behind;
+            const labelGroup = getOrCreateLabelGroup(labelsEl, id);
+
+            if (anyBehind) {
+                labelGroup.style.display = 'none';
+            } else {
+                labelGroup.style.display = '';
+
+                const widthEl = labelGroup.children[0] as HTMLElement;
+                const heightEl = labelGroup.children[1] as HTMLElement;
+                const deleteEl = labelGroup.children[2] as HTMLElement;
+
+                if (widthEl) {
+                    widthEl.style.left = `${topPt.x}px`;
+                    widthEl.style.top = `${topPt.y}px`;
+                    widthEl.style.transform = 'translate(-50%, -100%)';
+                    widthEl.textContent = shape.size.x.toFixed(4);
+                }
+
+                if (heightEl) {
+                    heightEl.style.left = `${leftPt.x}px`;
+                    heightEl.style.top = `${leftPt.y}px`;
+                    heightEl.style.transform = 'translate(-100%, -50%) rotate(90deg)';
+                    heightEl.style.transformOrigin = 'right center';
+                    heightEl.textContent = shape.size.y.toFixed(4);
+                }
+
+                if (deleteEl) {
+                    if (isTemp || trPt.behind) {
+                        deleteEl.style.display = 'none';
+                    } else {
+                        deleteEl.style.display = '';
+                        deleteEl.style.left = `${trPt.x}px`;
+                        deleteEl.style.top = `${trPt.y}px`;
+                        deleteEl.style.transform = 'translate(25%, -75%)';
+                    }
+                }
+            }
+        }
+
+        // Remove stale label groups
+        const activeLabelIds = showLabels ? activeIds : new Set<string>();
+        for (const [cachedId, el] of _labelCache) {
+            if (!activeLabelIds.has(cachedId)) {
+                el.remove();
+                _labelCache.delete(cachedId);
+            }
+        }
+    }
+
+    // ── Update axes overlay ──
+    if (showAxes && _overlayRef.axesSvgEl && _overlayRef.axesOriginRef) {
+        const axesSvg = _overlayRef.axesSvgEl;
+        axesSvg.setAttribute('width', String(width));
+        axesSvg.setAttribute('height', String(height));
+        axesSvg.style.display = '';
+
+        const u = _overlayRef.axesOriginRef.current;
+        _worldOriginVec.set(
+            (u.x - offset.x) + (u.xL - offset.xL),
+            (u.y - offset.y) + (u.yL - offset.yL),
+            (u.z - offset.z) + (u.zL - offset.zL)
+        );
+
+        const o = projectWorldToXY(_worldOriginVec, camera, width, height);
+        if (o.behind) {
+            axesSvg.style.display = 'none';
+            return;
+        }
+
+        // Update axis lines
+        const axisLen = 2;
+        const axisConfigs = [
+            { dx: axisLen, dy: 0, dz: 0 },
+            { dx: 0, dy: axisLen, dz: 0 },
+            { dx: 0, dy: 0, dz: axisLen },
+        ];
+
+        const axisLines = axesSvg.querySelectorAll('[data-axis]');
+        for (let i = 0; i < axisConfigs.length; i++) {
+            const ax = axisConfigs[i];
+            _localVec.set(_worldOriginVec.x + ax.dx, _worldOriginVec.y + ax.dy, _worldOriginVec.z + ax.dz);
+            const p = projectWorldToXY(_localVec, camera, width, height);
+            const line = axisLines[i] as SVGLineElement | undefined;
+            if (line) {
+                if (p.behind) {
+                    line.setAttribute('visibility', 'hidden');
+                } else {
+                    line.setAttribute('visibility', 'visible');
+                    line.setAttribute('x1', String(o.x));
+                    line.setAttribute('y1', String(o.y));
+                    line.setAttribute('x2', String(p.x));
+                    line.setAttribute('y2', String(p.y));
+                }
+            }
+        }
+
+        // Update grid lines
+        const gridLines = axesSvg.querySelectorAll('[data-grid]');
+        let gridIdx = 0;
+        for (let i = 0; i < 11; i++) {
+            const t = i - 5;
+            const isCenter = t === 0;
+
+            _localVec.set(_worldOriginVec.x + t, _worldOriginVec.y, _worldOriginVec.z - 5);
+            const pa1 = projectWorldToXY(_localVec, camera, width, height);
+            _localVec.set(_worldOriginVec.x + t, _worldOriginVec.y, _worldOriginVec.z + 5);
+            const pb1 = projectWorldToXY(_localVec, camera, width, height);
+
+            const line1 = gridLines[gridIdx++] as SVGLineElement | undefined;
+            if (line1) {
+                if (pa1.behind || pb1.behind) {
+                    line1.setAttribute('visibility', 'hidden');
+                } else {
+                    line1.setAttribute('visibility', 'visible');
+                    line1.setAttribute('x1', String(pa1.x)); line1.setAttribute('y1', String(pa1.y));
+                    line1.setAttribute('x2', String(pb1.x)); line1.setAttribute('y2', String(pb1.y));
+                    line1.setAttribute('stroke', isCenter ? '#ff4444' : '#444444');
+                    line1.setAttribute('stroke-width', isCenter ? '1.5' : '0.5');
+                }
+            }
+
+            _localVec.set(_worldOriginVec.x - 5, _worldOriginVec.y, _worldOriginVec.z + t);
+            const pa2 = projectWorldToXY(_localVec, camera, width, height);
+            _localVec.set(_worldOriginVec.x + 5, _worldOriginVec.y, _worldOriginVec.z + t);
+            const pb2 = projectWorldToXY(_localVec, camera, width, height);
+
+            const line2 = gridLines[gridIdx++] as SVGLineElement | undefined;
+            if (line2) {
+                if (pa2.behind || pb2.behind) {
+                    line2.setAttribute('visibility', 'hidden');
+                } else {
+                    line2.setAttribute('visibility', 'visible');
+                    line2.setAttribute('x1', String(pa2.x)); line2.setAttribute('y1', String(pa2.y));
+                    line2.setAttribute('x2', String(pb2.x)); line2.setAttribute('y2', String(pb2.y));
+                    line2.setAttribute('stroke', isCenter ? '#4444ff' : '#444444');
+                    line2.setAttribute('stroke-width', isCenter ? '1.5' : '0.5');
+                }
+            }
+        }
+    } else if (_overlayRef.axesSvgEl) {
+        _overlayRef.axesSvgEl.style.display = 'none';
+    }
+};
+
+
 // =============================================
 // Main Overlay Component (DOM-based)
 // =============================================
 
 export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
-    const { drawing, setDrawing, addDrawnShape, removeDrawnShape } = useFractalStore();
-    const { active, activeTool, originMode, color: colorHex, showLabels, showAxes, shapes: drawnShapes, refreshTrigger } = drawing;
+    const { drawing, setDrawing, addDrawnShape } = useFractalStore();
+    const { active, activeTool, originMode } = drawing;
 
     const svgRef = useRef<SVGSVGElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const labelsRef = useRef<HTMLDivElement>(null);
+    const axesSvgRef = useRef<SVGSVGElement>(null);
 
-    // Temp shape during drag
-    const [tempShape, setTempShape] = useState<Partial<DrawnShape> | null>(null);
+    // Temp shape during drag (read by tick for rendering)
     const tempShapeRef = useRef<Partial<DrawnShape> | null>(null);
     const isDragging = useRef(false);
 
-    // Geometry refs (same as original)
+    // Axes origin (updated on originMode/trigger change, read by tick)
+    const axesOriginRef = useRef({ x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 });
+
+    // Geometry refs for interaction
     const anchor3D = useRef(new THREE.Vector3());
     const currentScreen = useRef(new THREE.Vector2());
     const planeOrigin = useRef(new THREE.Vector3());
@@ -117,16 +473,53 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
     // Input state
     const keys = useRef({ space: false, x: false });
 
-    // Animation frame for rendering
-    const rafRef = useRef<number>(0);
-    // Force re-render trigger for SVG updates during drag
-    const [renderTick, setRenderTick] = useState(0);
+    // --- Register refs for tick access ---
+    useEffect(() => {
+        _overlayRef.svgEl = svgRef.current;
+        _overlayRef.labelsEl = labelsRef.current;
+        _overlayRef.axesSvgEl = axesSvgRef.current;
+        _overlayRef.tempShapeRef = tempShapeRef;
+        _overlayRef.axesOriginRef = axesOriginRef;
+        return () => {
+            _overlayRef.svgEl = null;
+            _overlayRef.labelsEl = null;
+            _overlayRef.axesSvgEl = null;
+            _overlayRef.tempShapeRef = null;
+            _overlayRef.axesOriginRef = null;
+            _svgCache.clear();
+            _labelCache.clear();
+        };
+    }, []);
 
-    // --- Camera accessor (replaces useThree) ---
+    // --- Update axes origin when mode/trigger changes ---
+    const refreshTrigger = useFractalStore(s => s.drawing?.refreshTrigger);
+    useEffect(() => {
+        const camera = getViewportCamera();
+        if (!camera) return;
+
+        const originMode = useFractalStore.getState().drawing?.originMode ?? 1;
+        let origin = new THREE.Vector3(0, 0, 0);
+        if (originMode === 1.0) {
+            const dist = Math.max(0.1, engine.lastMeasuredDistance);
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            origin.copy(camera.position).addScaledVector(forward, dist);
+        } else {
+            const off = engine.sceneOffset;
+            origin.set(-(off.x + off.xL), -(off.y + off.yL), -(off.z + off.zL));
+        }
+
+        const off = engine.sceneOffset;
+        axesOriginRef.current = {
+            x: off.x, y: off.y, z: off.z,
+            xL: off.xL + origin.x, yL: off.yL + origin.y, zL: off.zL + origin.z,
+        };
+    }, [originMode, refreshTrigger]);
+
+    // --- Camera accessor (for interaction handlers — uses live camera) ---
     const getCamera = useCallback(() => getViewportCamera() as THREE.PerspectiveCamera, []);
     const getCanvas = useCallback(() => getViewportCanvas(), []);
 
-    // --- Plane math (unchanged logic, uses getCamera()) ---
+    // --- Plane math ---
     const updatePlaneAndBasis = useCallback((snapToAxis: boolean) => {
         const camera = getCamera();
         if (!camera) return new THREE.Vector3(0, 0, -1);
@@ -210,7 +603,6 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
             const rect = canvas.getBoundingClientRect();
             currentScreen.current.set(e.clientX, e.clientY);
 
-            // Determine Origin
             if (originMode === 1.0) {
                 const dist = Math.max(0.1, engine.lastMeasuredDistance);
                 const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -226,7 +618,7 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
                 isDragging.current = true;
                 anchor3D.current.copy(hit);
 
-                const initShape = {
+                tempShapeRef.current = {
                     center: undefined,
                     size: { x: 0, y: 0 },
                     orientation: new THREE.Quaternion().setFromRotationMatrix(
@@ -234,9 +626,6 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
                     ),
                     type: activeTool
                 };
-
-                setTempShape(initShape);
-                tempShapeRef.current = initShape;
                 canvas.setPointerCapture(e.pointerId);
             }
         };
@@ -249,7 +638,6 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
             const mouse3D = raycastToPlane(e.clientX, e.clientY, rect);
             if (!mouse3D) return;
 
-            // SPACEBAR: move entire shape
             if (keys.current.space) {
                 const prev3D = raycastToPlane(currentScreen.current.x, currentScreen.current.y, rect);
                 if (prev3D) {
@@ -257,12 +645,10 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
                     anchor3D.current.add(delta);
                     if (tempShapeRef.current?.center) {
                         const c = tempShapeRef.current.center;
-                        const nextShape = {
+                        tempShapeRef.current = {
                             ...tempShapeRef.current,
                             center: { ...c, xL: c.xL + delta.x, yL: c.yL + delta.y, zL: c.zL + delta.z }
                         };
-                        setTempShape(nextShape);
-                        tempShapeRef.current = nextShape;
                     }
                 }
                 currentScreen.current.set(e.clientX, e.clientY);
@@ -271,7 +657,6 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
 
             currentScreen.current.set(e.clientX, e.clientY);
 
-            // Sizing
             const diff = new THREE.Vector3().subVectors(mouse3D, anchor3D.current);
             let w = diff.dot(basisU.current);
             let h = diff.dot(basisV.current);
@@ -297,7 +682,7 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
             }
 
             const offset = engine.sceneOffset;
-            const nextShape = {
+            tempShapeRef.current = {
                 ...tempShapeRef.current,
                 center: { x: offset.x, y: offset.y, z: offset.z, xL: offset.xL + centerLocal.x, yL: offset.yL + centerLocal.y, zL: offset.zL + centerLocal.z },
                 size: { x: Math.abs(w), y: Math.abs(h) },
@@ -305,8 +690,6 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
                     new THREE.Matrix4().makeBasis(basisU.current, basisV.current, normal)
                 )
             };
-            setTempShape(nextShape);
-            tempShapeRef.current = nextShape;
         };
 
         const handlePointerUp = (e: PointerEvent) => {
@@ -328,7 +711,6 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
                 });
                 setDrawing({ active: false });
             }
-            setTempShape(null);
             tempShapeRef.current = null;
         };
 
@@ -342,42 +724,7 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
         };
     }, [active, activeTool, originMode, getCamera, getCanvas, setDrawing, updatePlaneAndBasis, raycastToPlane, addDrawnShape]);
 
-    // --- Animation loop for rendering projected shapes ---
-    useEffect(() => {
-        let running = true;
-        const tick = () => {
-            if (!running) return;
-            setRenderTick(t => t + 1);
-            rafRef.current = requestAnimationFrame(tick);
-        };
-        // Only run the render loop when there's something to show
-        if (drawnShapes?.length > 0 || tempShape || showAxes) {
-            rafRef.current = requestAnimationFrame(tick);
-        }
-        return () => { running = false; cancelAnimationFrame(rafRef.current); };
-    }, [drawnShapes?.length, !!tempShape, showAxes]);
-
-    // --- Build projected data for rendering ---
-    const camera = getCamera();
-    const canvasEl = getCanvas();
-    const canvasW = canvasEl?.clientWidth || 1;
-    const canvasH = canvasEl?.clientHeight || 1;
-    const offset = engine.sceneOffset;
-
-    // Collect all shapes to render (committed + temp)
-    const allShapes: { shape: DrawnShape; color: string; isTemp: boolean }[] = [];
-    if (drawnShapes) {
-        for (const s of drawnShapes) {
-            allShapes.push({ shape: s, color: s.color, isTemp: false });
-        }
-    }
-    if (tempShape && tempShape.center && tempShape.size && tempShape.orientation) {
-        allShapes.push({
-            shape: tempShape as DrawnShape,
-            color: '#' + colorHex.getHexString(),
-            isTemp: true
-        });
-    }
+    // ── Render: minimal DOM structure — tick handles all positional updates ──
 
     return (
         <div
@@ -385,181 +732,28 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
             className="absolute inset-0 overflow-hidden"
             style={{ pointerEvents: 'none' }}
         >
-            {/* SVG layer for shape outlines */}
             <svg
                 ref={svgRef}
-                width={canvasW}
-                height={canvasH}
                 className="absolute inset-0"
                 style={{ pointerEvents: 'none' }}
+            />
+            <div
+                ref={labelsRef}
+                className="absolute inset-0"
+                style={{ pointerEvents: 'none' }}
+            />
+            <svg
+                ref={axesSvgRef}
+                className="absolute inset-0"
+                style={{ pointerEvents: 'none', display: 'none' }}
             >
-                {camera && allShapes.map(({ shape, color, isTemp }) => {
-                    const isCube = shape.type === 'rect' && (shape.size.z || 0) > 0.001;
-                    const pts = projectShapeToScreen(shape, camera, canvasW, canvasH, offset);
-                    if (pts.some(p => p.behind)) return null;
-
-                    if (isCube) {
-                        // Render cube edges
-                        return (
-                            <g key={shape.id || 'temp'}>
-                                {CUBE_EDGES.map(([a, b], i) => (
-                                    <line
-                                        key={i}
-                                        x1={pts[a].x} y1={pts[a].y}
-                                        x2={pts[b].x} y2={pts[b].y}
-                                        stroke={color}
-                                        strokeWidth={isTemp ? 1 : 1.5}
-                                        strokeOpacity={0.9}
-                                    />
-                                ))}
-                            </g>
-                        );
-                    }
-
-                    // Flat rect or circle — closed polygon
-                    const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z';
-                    return (
-                        <path
-                            key={shape.id || 'temp'}
-                            d={d}
-                            fill="none"
-                            stroke={color}
-                            strokeWidth={isTemp ? 1 : 1.5}
-                            strokeOpacity={0.9}
-                        />
-                    );
-                })}
+                <line data-axis="x" stroke="#ff4444" strokeWidth={2} strokeOpacity={0.7} />
+                <line data-axis="y" stroke="#44ff44" strokeWidth={2} strokeOpacity={0.7} />
+                <line data-axis="z" stroke="#4444ff" strokeWidth={2} strokeOpacity={0.7} />
+                {Array.from({ length: 22 }, (_, i) => (
+                    <line key={i} data-grid={i} strokeOpacity={0.5} />
+                ))}
             </svg>
-
-            {/* HTML labels layer */}
-            {camera && showLabels && allShapes.map(({ shape, color, isTemp }) => {
-                const center3D = shapeWorldPos(shape, offset);
-                const q = new THREE.Quaternion(shape.orientation.x, shape.orientation.y, shape.orientation.z, shape.orientation.w);
-                const halfW = shape.size.x / 2;
-                const halfH = shape.size.y / 2;
-                const depth = shape.size.z || 0;
-                const zOff = shape.zOffset || 0;
-                const renderZ = (shape.type === 'rect' && depth > 0.001) ? (zOff - depth / 2) : zOff;
-
-                // Width label — top center
-                const topCenter = new THREE.Vector3(0, halfH, renderZ + depth / 2).applyQuaternion(q).add(center3D);
-                const topPt = project3D(topCenter, camera, canvasW, canvasH);
-
-                // Height label — left center
-                const leftCenter = new THREE.Vector3(-halfW, 0, renderZ + depth / 2).applyQuaternion(q).add(center3D);
-                const leftPt = project3D(leftCenter, camera, canvasW, canvasH);
-
-                if (topPt.behind || leftPt.behind) return null;
-
-                // Delete button — top-right corner
-                const trCorner = new THREE.Vector3(halfW, halfH, renderZ + depth / 2).applyQuaternion(q).add(center3D);
-                const trPt = project3D(trCorner, camera, canvasW, canvasH);
-
-                return (
-                    <React.Fragment key={(shape.id || 'temp') + '-labels'}>
-                        {/* Width */}
-                        <div
-                            className="absolute text-[10px] font-mono font-bold whitespace-nowrap text-cyan-300 opacity-90 px-1"
-                            style={{ left: topPt.x, top: topPt.y, transform: 'translate(-50%, -100%)', pointerEvents: 'none' }}
-                        >
-                            {shape.size.x.toFixed(4)}
-                        </div>
-                        {/* Height */}
-                        <div
-                            className="absolute text-[10px] font-mono font-bold whitespace-nowrap text-cyan-300 opacity-90 px-1"
-                            style={{ left: leftPt.x, top: leftPt.y, transform: 'translate(-100%, -50%) rotate(90deg)', transformOrigin: 'right center', pointerEvents: 'none' }}
-                        >
-                            {shape.size.y.toFixed(4)}
-                        </div>
-                        {/* Delete button */}
-                        {!isTemp && !trPt.behind && (
-                            <div
-                                className="drawing-ui absolute cursor-pointer flex items-center justify-center w-4 h-4 bg-red-900/80 hover:bg-red-500 text-white rounded-full transition-colors shadow-sm border border-white/20"
-                                style={{ left: trPt.x, top: trPt.y, transform: 'translate(25%, -75%)', pointerEvents: 'auto' }}
-                                onClick={(e) => { e.stopPropagation(); removeDrawnShape(shape.id); }}
-                                title="Delete Shape"
-                            >
-                                <span className="text-[10px] font-bold leading-none mb-[1px]">✕</span>
-                            </div>
-                        )}
-                    </React.Fragment>
-                );
-            })}
-
-            {/* Axes indicator (simplified — projected axis lines) */}
-            {camera && showAxes && <AxesOverlay camera={camera} canvasW={canvasW} canvasH={canvasH} originMode={originMode} trigger={refreshTrigger} />}
         </div>
-    );
-};
-
-// --- Axes Ruler (DOM/SVG version) ---
-
-const AxesOverlay: React.FC<{ camera: THREE.Camera; canvasW: number; canvasH: number; originMode: number; trigger: number }> = ({ camera, canvasW, canvasH, originMode, trigger }) => {
-    const originRef = useRef({ x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 });
-
-    useEffect(() => {
-        let origin = new THREE.Vector3(0, 0, 0);
-        if (originMode === 1.0) {
-            const dist = Math.max(0.1, engine.lastMeasuredDistance);
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            origin.copy(camera.position).addScaledVector(forward, dist);
-        } else {
-            const offset = engine.sceneOffset;
-            origin.set(-(offset.x + offset.xL), -(offset.y + offset.yL), -(offset.z + offset.zL));
-        }
-
-        const offset = engine.sceneOffset;
-        originRef.current = {
-            x: offset.x, y: offset.y, z: offset.z,
-            xL: offset.xL + origin.x, yL: offset.yL + origin.y, zL: offset.zL + origin.z
-        };
-    }, [originMode, trigger, camera]);
-
-    const offset = engine.sceneOffset;
-    const u = originRef.current;
-    const worldOrigin = new THREE.Vector3(
-        (u.x - offset.x) + (u.xL - offset.xL),
-        (u.y - offset.y) + (u.yL - offset.yL),
-        (u.z - offset.z) + (u.zL - offset.zL)
-    );
-
-    const axisLen = 2;
-    const axes = [
-        { dir: new THREE.Vector3(axisLen, 0, 0), color: '#ff4444' },
-        { dir: new THREE.Vector3(0, axisLen, 0), color: '#44ff44' },
-        { dir: new THREE.Vector3(0, 0, axisLen), color: '#4444ff' },
-    ];
-
-    const o = project3D(worldOrigin, camera, canvasW, canvasH);
-    if (o.behind) return null;
-
-    return (
-        <svg width={canvasW} height={canvasH} className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-            {axes.map((ax, i) => {
-                const tip = worldOrigin.clone().add(ax.dir);
-                const p = project3D(tip, camera, canvasW, canvasH);
-                if (p.behind) return null;
-                return <line key={i} x1={o.x} y1={o.y} x2={p.x} y2={p.y} stroke={ax.color} strokeWidth={2} strokeOpacity={0.7} />;
-            })}
-            {/* Grid lines in XZ plane */}
-            {Array.from({ length: 11 }, (_, i) => {
-                const t = (i - 5);
-                const a1 = worldOrigin.clone().add(new THREE.Vector3(t, 0, -5));
-                const b1 = worldOrigin.clone().add(new THREE.Vector3(t, 0, 5));
-                const a2 = worldOrigin.clone().add(new THREE.Vector3(-5, 0, t));
-                const b2 = worldOrigin.clone().add(new THREE.Vector3(5, 0, t));
-                const pa1 = project3D(a1, camera, canvasW, canvasH);
-                const pb1 = project3D(b1, camera, canvasW, canvasH);
-                const pa2 = project3D(a2, camera, canvasW, canvasH);
-                const pb2 = project3D(b2, camera, canvasW, canvasH);
-                const isCenter = t === 0;
-                return (
-                    <g key={i}>
-                        {!pa1.behind && !pb1.behind && <line x1={pa1.x} y1={pa1.y} x2={pb1.x} y2={pb1.y} stroke={isCenter ? '#ff4444' : '#444444'} strokeWidth={isCenter ? 1.5 : 0.5} strokeOpacity={0.5} />}
-                        {!pa2.behind && !pb2.behind && <line x1={pa2.x} y1={pa2.y} x2={pb2.x} y2={pb2.y} stroke={isCenter ? '#4444ff' : '#444444'} strokeWidth={isCenter ? 1.5 : 0.5} strokeOpacity={0.5} />}
-                    </g>
-                );
-            })}
-        </svg>
     );
 };

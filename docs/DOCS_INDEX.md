@@ -153,6 +153,24 @@ When making changes to GMT:
 
 ## 11. Recent Changes Summary
 
+### 2026-03-21 GMF as Primary Save Format
+| Category | Change | Files |
+|----------|--------|-------|
+| **Save Format** | GMF replaces JSON for all scene saves — embeds formula shader code + full scene state | `utils/FormulaFormat.ts` |
+| **PNG Metadata** | Snapshots/bucket renders embed GMF instead of JSON — imported formulas survive roundtrips | `CameraTools.tsx`, `BucketRenderer.ts`, `WorkerProxy.ts` |
+| **Load Paths** | All load paths (SystemMenu, LoadingScreen, FormulaGallery, FormulaSelect) use `loadGMFScene()` with format detection | Multiple |
+| **URL Sharing** | Disabled for imported formulas (tooltip: "N/A (Imported)") | `SystemMenu.tsx` |
+| **Backward Compat** | Legacy `.json` presets, old GMFs, and old JSON-metadata PNGs all load correctly | `FormulaFormat.ts`, `fractalStore.ts` |
+
+### 2026-03-20 Formula Workshop & V3 Importer
+| Category | Change | Files |
+|----------|--------|-------|
+| **V3 Pipeline** | New AST-based analysis + generation pipeline (64/64 tests passing) | `v3/analyze/`, `v3/generate/`, `v3/compat.ts` |
+| **Formula Library** | Categorized index of 494 verified formulas (178 frag + 316 DEC) with artist attribution | `formula-library.ts`, `passing-formulas.ts` |
+| **Workshop UI** | Browse Library button, Random Frag/DEC, resizable source editor, Preview button restored | `FormulaWorkshop.tsx` |
+| **Coloring Fix** | Strip `vec4 g_orbitTrap` shadow declarations to fix orbit trap coloring on imports | `v3/generate/index.ts`, `v3/generate/full-de.ts` |
+| **Degree/Radian** | `isDegrees` auto-detection; new `scale: 'degrees'` keeps internal degrees, displays π notation | `v3/analyze/params.ts`, `workshop/param-builder.ts`, `FormulaPanel.tsx` |
+
 ### 2026-03-03 Vector Controls Enhancement
 | Category | Change | Files |
 |----------|--------|-------|

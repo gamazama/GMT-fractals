@@ -1,3 +1,6 @@
+// STYLE: Do not use inline formatting or hardcoded layout for feature params.
+// Use DDFS (parentId, condition, group, hidden) to control visibility and nesting.
+// Import theme tokens from 'data/theme' instead of raw Tailwind color classes.
 
 import React, { useState, useMemo } from 'react';
 import { FractalState, FractalActions } from '../../types';
@@ -10,6 +13,7 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { LightingState } from '../../features/lighting';
 import { SectionLabel, SectionDivider } from '../SectionLabel';
+import { accent, secondary, text as themeText, surface, border as themeBorder, toggleActive, toggleInactive, toggleDisabled, gridBtnActive, gridBtnInactive } from '../../data/theme';
 
 const QualityPanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
     const openGlobalMenu = useFractalStore(s => s.openContextMenu);
@@ -84,10 +88,10 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
              <div className="flex flex-col" data-help-id="render.engine">
                 <div className="px-3 py-2">
                     <SectionLabel className="block mb-1">Render Engine</SectionLabel>
-                    <div className="flex bg-black/40 rounded p-0.5 border border-white/10">
+                    <div className={`flex ${surface.tabBar} rounded p-0.5 border ${themeBorder.standard}`}>
                         <button
                             onClick={() => handleModeSwitch('Direct')}
-                            className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-colors ${state.renderMode === 'Direct' ? 'bg-cyan-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                            className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-colors ${state.renderMode === 'Direct' ? toggleActive : toggleInactive}`}
                         >
                             Direct (Fast)
                         </button>
@@ -96,10 +100,10 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                             disabled={!ptEnabled}
                             className={`flex-1 py-1.5 text-[10px] font-bold rounded transition-colors ${
                                 !ptEnabled
-                                ? 'text-gray-700 cursor-not-allowed opacity-50 bg-transparent'
+                                ? toggleDisabled
                                 : state.renderMode === 'PathTracing'
-                                    ? 'bg-purple-700 text-white'
-                                    : 'text-gray-500 hover:text-gray-300'
+                                    ? `${secondary.bgMed} ${themeText.primary}`
+                                    : toggleInactive
                             }`}
                             title={!ptEnabled ? "Path Tracer Disabled in Engine Panel" : "Switch to Path Tracer (GI)"}
                         >
@@ -240,17 +244,15 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                                 <div className="px-3 py-2">
                                     <div className="flex items-center justify-between mb-1.5">
                                         <SectionLabel variant="secondary">Internal Scale</SectionLabel>
-                                        <span className="text-[10px] font-mono text-cyan-400 font-bold">{`${state.aaLevel.toFixed(2)}x`}</span>
+                                        <span className={`text-[10px] font-mono ${accent.text} font-bold`}>{`${state.aaLevel.toFixed(2)}x`}</span>
                                     </div>
-                                    <div className="grid grid-cols-5 gap-px bg-white/5 border border-white/5 rounded overflow-hidden">
+                                    <div className={`grid grid-cols-5 gap-px ${surface.tint} border ${themeBorder.subtle} rounded overflow-hidden`}>
                                         {aaLevels.map(level => (
                                             <button
                                                 key={level}
                                                 onClick={() => actions.setAALevel(level)}
                                                 className={`py-1.5 text-[9px] font-bold transition-all ${
-                                                    state.aaLevel === level
-                                                    ? 'bg-cyan-600/40 text-cyan-300 shadow-[inset_0_0_10px_rgba(34,211,238,0.1)]'
-                                                    : 'bg-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                                                    state.aaLevel === level ? gridBtnActive : gridBtnInactive
                                                 }`}
                                             >
                                                 {level}

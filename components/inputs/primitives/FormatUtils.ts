@@ -148,3 +148,19 @@ export const getMapping = (scale?: 'linear' | 'log' | 'pi', min?: number, max?: 
     }
     return linearMapping;
 };
+
+/**
+ * Compute fill bar percentage from value and bounds, applying optional mapping.
+ * Clamps result to 0-100.
+ */
+export const computePercentage = (
+    value: number,
+    min: number,
+    max: number,
+    mapping?: ValueMapping,
+): number => {
+    const mv = mapping ? mapping.toDisplay(value) : value;
+    const mMin = mapping ? mapping.toDisplay(min) : min;
+    const mMax = mapping ? mapping.toDisplay(max) : max;
+    return Math.max(0, Math.min(100, ((mv - mMin) / (mMax - mMin)) * 100));
+};

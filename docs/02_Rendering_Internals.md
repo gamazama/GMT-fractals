@@ -323,45 +323,63 @@ vec3 final = mix(history, current, blend);
 *   **Moving:** `blend = 1.0` (History discarded, instant feedback, noisy shadows).
 *   **Still:** `blend` decreases ($1/2, 1/3, \dots$). Noise averages out to zero.
 
-## 4. Physics Distance Probe
+## 4. Distance Probe (Navigation Speed)
 
-The physics probe is used to measure the distance to the fractal surface from the camera's perspective for orbit control and UI feedback.
+The distance probe measures the distance to the fractal surface at the screen center. This drives navigation speed (closer = slower, farther = faster) and orbit controls.
 
-### 4.1 Probe Modes
+### 4.1 Depth Buffer Readback
 
-The physics probe supports three modes for distance measurement:
+Distance is read from the **alpha channel of the main render target** (MRT location 1), which stores the raymarched distance at each pixel. No separate render pass is needed.
 
-| Mode | Value | Description | Performance |
-|------|-------|-------------|-------------|
-| GPU Probe | 0 (default) | Renders to 1x1 texture, reads back to CPU | Causes 100-200ms GPU stall |
-| CPU Calc | 1 | Runs raymarching on CPU using idle cycles | No GPU stall, uses CPU |
-| Manual | 2 | Uses fixed manual distance value | Fastest, no calculation |
+**Worker mode** (`WorkerDepthReadback.ts`): Uses async PBO + fence sync to read the center pixel every 3rd frame with zero GPU stall. Falls back to synchronous `readPixels` on WebGL1.
 
-**Why CPU Calculation Works:**
-- GPU readback causes 100-200ms pipeline stalls when GPU is under heavy load
-- CPU is often 95% idle while GPU renders fractals  
-- <50 iterations is sufficient for good distance estimation
-- No GPU-CPU synchronization needed
+**Direct mode** (`usePhysicsProbe.ts`): Reads a 3×3 pixel neighborhood around center from the previous frame's render target and averages valid samples. This reduces noise when DOF is enabled.
 
-### 4.2 Optimization
-The physics probe was optimized to reduce performance impact:
+### 4.2 Sky Threshold
 
-- **Resolution Reduction:** Changed from 4x4 to 1x1 pixel probe
-- **Update Frequency:** Reduced from every 6 frames to every 20 frames
-- **Conditional Execution:** Only runs when accumulation count ≤ 1 (first frame of accumulation)
-- **Manual Override:** Added option to disable probe and use manual distance
-- **Compilation Check:** Skips probe during shader compilation
-- **Context Check:** Skips probe if WebGL context is lost or invalid
-- **Maximum Performance Mode:** When disabled, uses manual distance for orbit calculations
+`MAX_VALID_DISTANCE = 10.0` — any depth value ≥ 10 is treated as a sky hit (open space, no surface). This prevents navigation speed from exploding when the camera looks at empty space.
 
-### 4.3 Quality Panel Controls
-Added advanced quality panel options:
+**Sky hit behavior:**
+- If no valid measurement has ever been received → defaults to `1.0`
+- If a previous valid measurement exists → keeps the last valid distance (no update)
+- HUD shows `DST X.XXXX (sky)` in gray
 
-- **Distance Probe:** Mode selector (GPU Probe / CPU Calc / Manual)
-- **Manual Distance:** Manual distance value when mode is set to Manual
+The same threshold is applied consistently across: `usePhysicsProbe.ts`, `WorkerDepthReadback.ts`, and `WorkerExporter.ts`.
 
-### 4.3 Performance Impact
-Disabling the physics probe can provide significant performance improvements on low-end GPUs or when rendering complex fractals, but may affect orbit control accuracy.
+### 4.3 Asymmetric Smoothing (Two Layers)
+
+Panning from a close surface to open space can cause a 100× distance jump in one frame. Two layers of smoothing prevent this:
+
+**Layer 1 — Probe smoothing** (`usePhysicsProbe.processDepthData`):
+- **Distance increases > 1.5×**: Blends at 8% per frame (~60 frames to converge)
+- **Distance decreases**: Responds at 40% per frame (fast, for safety near surfaces)
+
+**Layer 2 — Camera controller** (`CameraController.update`):
+- **Distance increases**: Exponential lerp at rate 1.2 (~2.5s to 95% of target)
+- **Distance decreases**: Immediate response
+
+The result: approaching a surface is instant (safety), but speed ramps up gradually when looking away.
+
+### 4.4 Probe Modes
+
+| Mode | Value | Description |
+|------|-------|-------------|
+| GPU (Depth Buffer) | 0 (default) | Reads from MRT alpha, no extra render pass |
+| CPU Calc | 1 | Same depth buffer readback path |
+| Manual | 2 | Fixed user-specified distance, no calculation |
+
+### 4.5 Focus Lock
+
+When `focusLock` is enabled in the store, the probe syncs `dofFocus` to the smoothed distance whenever it changes by more than 1%. This keeps depth-of-field focus tracking the surface under the crosshair.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `hooks/usePhysicsProbe.ts` | Main-thread probe: 3×3 sampling, smoothing, HUD, focus lock |
+| `engine/worker/WorkerDepthReadback.ts` | Worker-side async PBO readback + focus pick |
+| `engine/controllers/CameraController.ts` | Second smoothing layer, speed calculation |
+| `components/Navigation.tsx` | Consumes `distAverageRef` for camera physics |
 
 ## 5. Bucket Renderer
 For resolutions higher than the GPU limit (e.g., 8K), or to prevent TDR (Timeout Detection Recovery) crashes:

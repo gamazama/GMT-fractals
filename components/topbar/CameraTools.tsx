@@ -7,6 +7,7 @@ import { CameraIcon, UndoIcon, RedoIcon, ResetIcon, LayersIcon } from '../Icons'
 import { injectMetadata } from '../../utils/pngMetadata';
 import { Popover } from '../../components/Popover';
 import { getExportFileName } from '../../utils/fileUtils';
+import { saveGMFScene } from '../../utils/FormulaFormat';
 
 export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void, btnBase: string, btnActive: string, btnInactive: string }> = ({ isMobileMode, vibrate, btnBase, btnActive, btnInactive }) => {
     const state = useFractalStore();
@@ -33,9 +34,9 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                 return;
             }
 
-            // Get Preset Data
+            // Get Preset Data — embed as GMF for full formula + scene portability
             const preset = state.getPreset({ includeScene: true });
-            const presetString = JSON.stringify(preset);
+            const presetString = saveGMFScene(preset);
             
             // Calculate smart version
             const currentVersion = state.prepareExport();

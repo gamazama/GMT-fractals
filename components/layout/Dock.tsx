@@ -6,6 +6,7 @@ import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { AudioState, DrawingState } from '../../features/types';
+import { accent, surface, text, border, tabActive, tabInactive, collapsedIconActive, collapsedIconInactive, dragHandleActive, dragHandleInactive } from '../../data/theme';
 
 // Mobile detection helper
 const checkIsMobile = () => {
@@ -114,7 +115,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                          <div 
                              key={p.id}
                              onClick={() => togglePanel(p.id, true)}
-                             className={`w-6 h-6 flex items-center justify-center rounded cursor-pointer ${p.id === activeTabId ? 'bg-cyan-900 text-cyan-400' : 'text-gray-600 hover:bg-white/10'}`}
+                             className={`w-6 h-6 flex items-center justify-center rounded cursor-pointer ${p.id === activeTabId ? collapsedIconActive : collapsedIconInactive}`}
                              title={p.id}
                          >
                              <span className="text-[10px] font-bold">{p.id.charAt(0)}</span>
@@ -127,11 +128,11 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
 
     return (
         <div 
-            className={`flex flex-col bg-[#080808] border-${side === 'left' ? 'r' : 'l'} border-white/10 z-40 shrink-0 transition-all duration-75 relative`}
+            className={`flex flex-col ${surface.dock} border-${side === 'left' ? 'r' : 'l'} ${border.standard} z-40 shrink-0 transition-all duration-75 relative`}
             style={{ width }}
         >
             {/* Header Tabs - Tighter Layout with reduced gap */}
-            <div className="flex flex-wrap gap-0.5 px-0.5 pt-1 bg-black/40 border-b border-white/10 shrink-0 relative items-end">
+            <div className={`flex flex-wrap gap-0.5 px-0.5 pt-1 ${surface.tabBar} border-b ${border.standard} shrink-0 relative items-end`}>
                 {dockPanels.map(p => {
                     const isActive = p.id === activeTabId;
                     return (
@@ -157,16 +158,13 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                                 }
                             }}
                             className={`flex items-center gap-0.5 px-1 py-1 text-[9px] font-bold transition-colors group relative rounded-t-sm
-                                ${isActive 
-                                    ? 'bg-[#080808] text-cyan-400 border-x border-t border-white/10 z-10 -mb-px pb-2' 
-                                    : 'text-gray-500 hover:bg-white/5 hover:text-gray-300 border border-transparent'
-                                }`
+                                ${isActive ? tabActive : tabInactive}`
                             }
                         >
                             {/* Drag Handle - Hidden on mobile */}
                             {!isMobile && (
                                 <div 
-                                    className={`cursor-move ${isActive ? 'text-gray-600 group-hover:text-cyan-600' : 'text-gray-700 group-hover:text-white'} transition-colors`}
+                                    className={`cursor-move ${isActive ? `${dragHandleActive} group-hover:text-cyan-600` : `${dragHandleInactive} group-hover:text-white`} transition-colors`}
                                     onMouseDown={(e) => {
                                         e.stopPropagation();
                                         startPanelDrag(p.id);
@@ -201,7 +199,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             </div>
 
             <div 
-                className={`absolute top-0 bottom-0 w-1 cursor-ew-resize hover:bg-cyan-500/50 transition-colors z-50 ${side === 'left' ? 'right-[-2px]' : 'left-[-2px]'}`}
+                className={`absolute top-0 bottom-0 w-1 cursor-ew-resize ${accent.hoverBg} transition-colors z-50 ${side === 'left' ? 'right-[-2px]' : 'left-[-2px]'}`}
                 onMouseDown={handleResizeStart}
             />
         </div>

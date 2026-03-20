@@ -1,113 +1,109 @@
 
-import React, { useRef, useEffect } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
+import { useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { useFractalStore } from '../store/fractalStore';
 
+// Maximum valid distance — anything above is treated as a sky hit
+const MAX_VALID_DISTANCE = 10.0;
+
+/** Format a distance value for the HUD */
+const formatDist = (d: number) => d < 0.001 ? d.toExponential(2) : d.toFixed(4);
+
 export const usePhysicsProbe = (
-    hudRefs: { 
+    hudRefs: {
         dist: React.RefObject<HTMLSpanElement | null>,
         speed: React.RefObject<HTMLSpanElement | null>,
         reset: React.RefObject<HTMLButtonElement | null>
     },
     speedRef: React.MutableRefObject<number>
 ) => {
-    const { camera } = useThree();
     const qualityState = useFractalStore(s => s.quality);
-    
-    // Physics State
-    const distAverageRef = useRef(10.0);
-    const distMinRef = useRef(10.0);
-    
-    // Internals
+
+    const distAverageRef = useRef(1.0);
+    const hasValidMeasurement = useRef(false);
     const frameCount = useRef(0);
-    const shaderCompiledRef = useRef(false);
-    
-    // Depth buffer readback state - reuse buffer to avoid per-frame allocation
-    const depthBuffer = useRef<Float32Array | null>(null);
     const readBuffer = useRef(new Float32Array(4));
 
-    const processDepthData = (depthValue: number) => {
-        // Check for valid depth (not sky, not invalid)
-        if (depthValue < 0 || depthValue >= 1000.0 || !Number.isFinite(depthValue)) {
-            // Sky or invalid - use cached distance
-            const cachedDist = distAverageRef.current > 0 ? distAverageRef.current : 10.0;
-            
-            if (hudRefs.dist.current) {
-                hudRefs.dist.current.innerText = "DST INF";
-                hudRefs.dist.current.style.color = '#888';
-            }
-            if (hudRefs.reset.current) {
-                hudRefs.reset.current.style.display = 'block';
-            }
-            return;
-        }
-        
-        // Valid depth
-        distAverageRef.current = depthValue;
-        distMinRef.current = depthValue;
-        engine.lastMeasuredDistance = depthValue;
-        
-        if (hudRefs.dist.current) {
-            hudRefs.dist.current.innerText = `DST ${depthValue < 0.001 ? depthValue.toExponential(2) : depthValue.toFixed(4)}`;
-            hudRefs.dist.current.style.color = depthValue < 1.0 ? '#ff4444' : '#00ffff';
-        }
-        if (hudRefs.reset.current) {
-            const isLostInSpace = depthValue > 100.0 || depthValue < 0.001;
-            hudRefs.reset.current.style.display = isLostInSpace ? 'block' : 'none';
+    const updateSpeedHud = () => {
+        if (hudRefs.speed.current && frameCount.current % 10 === 0) {
+            hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
         }
     };
 
-    useFrame((state) => {
-        frameCount.current++;
-        
-        // Skip physics probe during initial shader compilation
-        // Wait for engine to indicate shader is compiled AND for several frames to pass
-        // to ensure shader is fully compiled and buffer is ready
-        if (!engine.hasCompiledShader || frameCount.current < 15) {
-            // Just use cached distance during initial compilation
-            if (hudRefs.dist.current && frameCount.current % 10 === 0) {
-                hudRefs.dist.current.innerText = `DST ${distAverageRef.current.toFixed(4)}`;
+    const updateDistHud = (dist: number, label?: string, color?: string) => {
+        if (hudRefs.dist.current) {
+            hudRefs.dist.current.innerText = `DST ${formatDist(dist)}${label ? ` ${label}` : ''}`;
+            hudRefs.dist.current.style.color = color ?? (dist < 1.0 ? '#ff4444' : '#00ffff');
+        }
+    };
+
+    const updateResetButton = (dist: number) => {
+        if (hudRefs.reset.current) {
+            hudRefs.reset.current.style.display = (dist > MAX_VALID_DISTANCE || dist < 0.001) ? 'block' : 'none';
+        }
+    };
+
+    const processDepthData = (depthValue: number) => {
+        // Sky or invalid — keep last valid measurement, default to 1.0 if none
+        if (depthValue < 0 || depthValue >= MAX_VALID_DISTANCE || !Number.isFinite(depthValue)) {
+            if (!hasValidMeasurement.current) {
+                distAverageRef.current = 1.0;
+                engine.lastMeasuredDistance = 1.0;
             }
-            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
-                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+            updateDistHud(distAverageRef.current, '(sky)', '#888');
+            if (hudRefs.reset.current) hudRefs.reset.current.style.display = 'block';
+            return;
+        }
+
+        hasValidMeasurement.current = true;
+
+        // Asymmetric smoothing: slow ramp-up prevents speed explosion, fast decrease for safety
+        const prev = distAverageRef.current;
+        let smoothed = depthValue;
+        if (prev > 0 && depthValue > prev * 1.5) {
+            // Large increase — blend at ~8% per frame (~60 frames to converge)
+            smoothed = prev + (depthValue - prev) * 0.08;
+        } else if (depthValue < prev) {
+            // Decrease — respond quickly but smooth to avoid jitter
+            smoothed = prev + (depthValue - prev) * 0.4;
+        }
+
+        distAverageRef.current = smoothed;
+        engine.lastMeasuredDistance = smoothed;
+
+        updateDistHud(smoothed);
+        updateResetButton(smoothed);
+    };
+
+    useFrame(() => {
+        frameCount.current++;
+
+        // Skip during initial shader compilation — need compiled shader + buffer settle time
+        if (!engine.hasCompiledShader || frameCount.current < 15) {
+            if (frameCount.current % 10 === 0) {
+                updateDistHud(distAverageRef.current);
+                updateSpeedHud();
             }
             return;
         }
-        
-        // Get physics probe mode (0=GPU, 1=CPU, 2=Manual)
-        // Default to GPU (0) which now reads from depth buffer
+
         if (!qualityState) return;
         const probeMode = qualityState.physicsProbeMode ?? 0;
-        
-        // MODE 2: Manual Distance - no calculation needed
+
+        // MODE 2: Manual distance
         if (probeMode === 2) {
             const manualDistance = qualityState.manualDistance;
             distAverageRef.current = manualDistance;
-            distMinRef.current = manualDistance;
             engine.lastMeasuredDistance = manualDistance;
-            
-            if (hudRefs.dist.current) {
-                hudRefs.dist.current.innerText = `DST ${manualDistance < 0.001 ? manualDistance.toExponential(2) : manualDistance.toFixed(4)}`;
-                hudRefs.dist.current.style.color = manualDistance < 1.0 ? '#ff4444' : '#00ffff';
-            }
-            if (hudRefs.reset.current) {
-                const isLostInSpace = manualDistance > 100.0 || manualDistance < 0.001;
-                hudRefs.reset.current.style.display = isLostInSpace ? 'block' : 'none';
-            }
-            
-            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
-                 hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
-            }
+            updateDistHud(manualDistance);
+            updateResetButton(manualDistance);
+            updateSpeedHud();
             return;
         }
-        
-        // MODE 0 & 1: Read from depth buffer (previous frame - no stall)
-        // The depth buffer is written during the main render pass (MRT location 1)
-        // We read from the PREVIOUS frame's buffer which is already complete
 
+        // MODE 0 & 1: Read from depth buffer (previous frame — no stall)
         const renderer = engine.renderer;
 
         // Worker mode: depth readback happens in worker, shadow state carries lastMeasuredDistance
@@ -116,118 +112,62 @@ export const usePhysicsProbe = (
             if (shadowDist !== distAverageRef.current) {
                 processDepthData(shadowDist);
                 // Focus Lock: sync dofFocus when distance changes meaningfully (>1%)
-                // Small threshold filters accumulation noise that would cause infinite reset loops
+                const smoothedDist = distAverageRef.current;
                 const store = useFractalStore.getState();
-                if (store.focusLock && shadowDist > 0 && shadowDist < 1000) {
+                if (store.focusLock && smoothedDist > 0 && smoothedDist < MAX_VALID_DISTANCE) {
                     const currentFocus = (store as any).optics?.dofFocus ?? 0;
-                    const relChange = Math.abs(shadowDist - currentFocus) / Math.max(currentFocus, 0.0001);
+                    const relChange = Math.abs(smoothedDist - currentFocus) / Math.max(currentFocus, 0.0001);
                     if (relChange > 0.01) {
-                        (store as any).setOptics({ dofFocus: shadowDist });
+                        (store as any).setOptics({ dofFocus: smoothedDist });
                     }
                 }
             }
-            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
-                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
-            }
+            updateSpeedHud();
             return;
         }
 
-        // Get the previous frame's render target dimensions
+        // Direct mode: read from previous frame's render target
         const renderTarget = engine.pipeline?.getPreviousRenderTarget?.();
-        if (!renderTarget) {
-            // Render target not ready yet - use cached distance
-            if (hudRefs.dist.current && frameCount.current % 10 === 0) {
-                hudRefs.dist.current.innerText = `DST ${distAverageRef.current.toFixed(4)}`;
-            }
-            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
-                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
+        if (!renderTarget || renderTarget.width <= 0 || renderTarget.height <= 0) {
+            if (frameCount.current % 10 === 0) {
+                updateDistHud(distAverageRef.current);
+                updateSpeedHud();
             }
             return;
         }
 
-        // Check if render target has valid dimensions
-        const width = renderTarget.width || 1;
-        const height = renderTarget.height || 1;
-        if (width <= 0 || height <= 0) {
-            if (hudRefs.dist.current && frameCount.current % 10 === 0) {
-                hudRefs.dist.current.innerText = `DST ${distAverageRef.current.toFixed(4)}`;
-            }
-            if (hudRefs.speed.current && frameCount.current % 10 === 0) {
-                hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
-            }
-            return;
-        }
-
-        // Allocate buffer if needed (4x4 = 16 pixels, RGBA = 64 floats)
-        if (!depthBuffer.current || depthBuffer.current.length !== 64) {
-            depthBuffer.current = new Float32Array(64);
-        }
-
-        // Read a small neighborhood around center pixel and average depth
-        // This reduces noise when DOF is enabled
+        // Sample 3x3 neighborhood around center pixel to reduce DOF noise
+        const { width, height } = renderTarget;
         try {
             const centerX = Math.floor(width / 2);
             const centerY = Math.floor(height / 2);
-            const sampleSize = 3;
-            const halfSize = Math.floor(sampleSize / 2);
             let validDepthSum = 0;
             let validCount = 0;
 
-            for (let dx = -halfSize; dx <= halfSize; dx++) {
-                for (let dy = -halfSize; dy <= halfSize; dy++) {
-                    const sampleX = centerX + dx;
-                    const sampleY = centerY + dy;
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const sx = centerX + dx;
+                    const sy = centerY + dy;
+                    if (sx < 0 || sx >= width || sy < 0 || sy >= height) continue;
 
-                    if (sampleX >= 0 && sampleX < width && sampleY >= 0 && sampleY < height) {
-                        const success = engine.pipeline?.readPixels?.(
-                            renderer,
-                            sampleX, sampleY, 1, 1,
-                            readBuffer.current
-                        );
-
-                        if (success) {
-                            const depth = readBuffer.current[3];
-                            if (depth > 0 && depth < 1000 && Number.isFinite(depth)) {
-                                validDepthSum += depth;
-                                validCount++;
-                            }
+                    const success = engine.pipeline?.readPixels?.(renderer, sx, sy, 1, 1, readBuffer.current);
+                    if (success) {
+                        const depth = readBuffer.current[3];
+                        if (depth > 0 && depth < MAX_VALID_DISTANCE && Number.isFinite(depth)) {
+                            validDepthSum += depth;
+                            validCount++;
                         }
                     }
                 }
-
-                if (validCount > 0) {
-                    const averageDepth = validDepthSum / validCount;
-                    processDepthData(averageDepth);
-                }
             }
 
-            if (validCount > 0) {
-                const averageDepth = validDepthSum / validCount;
-                // If average depth is >= 1000.0, treat it as sky (miss)
-                if (averageDepth >= 1000.0) {
-                    // Sky or invalid - use cached distance
-                    const cachedDist = distAverageRef.current > 0 ? distAverageRef.current : 10.0;
-
-                    if (hudRefs.dist.current) {
-                        hudRefs.dist.current.innerText = "DST INF";
-                        hudRefs.dist.current.style.color = '#888';
-                    }
-                    if (hudRefs.reset.current) {
-                        hudRefs.reset.current.style.display = 'block';
-                    }
-                } else {
-                    processDepthData(averageDepth);
-                }
-            }
+            processDepthData(validCount > 0 ? validDepthSum / validCount : Infinity);
         } catch (e) {
-            // Depth readback failed, use cached value
             console.warn('Depth readback failed:', e);
         }
-        
-        if (hudRefs.speed.current && frameCount.current % 10 === 0) {
-            hudRefs.speed.current.innerText = `SPD ${(speedRef.current * 100).toFixed(1)}%`;
-        }
+
+        updateSpeedHud();
     });
 
-    return { distAverageRef, distMinRef };
+    return { distAverageRef };
 };

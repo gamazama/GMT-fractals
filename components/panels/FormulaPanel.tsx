@@ -1,3 +1,7 @@
+// STYLE: Do not use inline formatting or hardcoded layout for feature params.
+// Use DDFS (parentId, condition, group, hidden) to control visibility and nesting.
+// Import theme tokens from 'data/theme' instead of raw Tailwind color classes.
+
 import React, { useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { FractalState, FractalActions, FormulaType, LfoTarget, PanelId } from '../../types';
@@ -13,24 +17,25 @@ import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { CompilableFeatureSection } from '../CompilableFeatureSection';
 import { SectionLabel, SectionDivider } from '../SectionLabel';
 import { FractalEvents } from '../../engine/FractalEvents';
+import { text as themeText, border as themeBorder, surface } from '../../data/theme';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import Dropdown from '../Dropdown';
-import { Vector2Input, Vector3Input } from '../vector-input';
+import { Vector2Input, Vector3Input, Vector4Input } from '../vector-input';
 
 interface FormulaParam {
     label: string;
-    val: number | { x: number; y: number } | { x: number; y: number; z: number };
+    val: number | { x: number; y: number } | { x: number; y: number; z: number } | { x: number; y: number; z: number; w: number };
     set: (v: any) => void;
     min: number;
     max: number;
     step: number;
-    def: number | { x: number; y: number } | { x: number; y: number; z: number };
+    def: number | { x: number; y: number } | { x: number; y: number; z: number } | { x: number; y: number; z: number; w: number };
     id: LfoTarget;
     trackId: string;
-    scale?: 'linear' | 'log' | 'pi'; // Add scale to local interface
+    scale?: 'linear' | 'log' | 'pi' | 'degrees'; // Add scale to local interface
     options?: { label: string; value: number }[];
-    type?: 'float' | 'vec2' | 'vec3';
+    type?: 'float' | 'vec2' | 'vec3' | 'vec4';
     mode?: 'rotation' | 'direction' | 'axes' | 'toggle' | 'mixed' | 'normal'; // For vec3: rotation = Rodrigues (A/P/∠), direction = azimuth/pitch, axes = per-axis angles, toggle = bool on/off, mixed = toggle+slider, normal = X/Y/Z
     linkable?: boolean; // For vec3/vec2: enable axis linking for uniform scale
 }
@@ -123,6 +128,16 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                 }
                 return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec3', mode: p.mode, linkable: p.linkable, scale: p.scale };
             }
+            if (p.type === 'vec4') {
+                let val = coreMath.vec4A;
+                let set = (v: any) => actions.setCoreMath({ vec4A: v });
+                switch(p.id) {
+                    case 'vec4A': val = coreMath.vec4A; set = (v) => actions.setCoreMath({ vec4A: v }); break;
+                    case 'vec4B': val = coreMath.vec4B; set = (v) => actions.setCoreMath({ vec4B: v }); break;
+                    case 'vec4C': val = coreMath.vec4C; set = (v) => actions.setCoreMath({ vec4C: v }); break;
+                }
+                return { label: p.label, val, set, min: p.min, max: p.max, step: p.step, def: p.default, id: p.id, trackId: `coreMath.${p.id}`, type: 'vec4', mode: p.mode, linkable: p.linkable, scale: p.scale };
+            }
             if (p.type === 'vec2') {
                 let val = coreMath.vec2A;
                 let set = (v: any) => actions.setCoreMath({ vec2A: v });
@@ -185,6 +200,31 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                       trackLabels={isAngleMode ? (rotTrackLabels[vecMode] || trackLabels) : trackLabels}
                       mode={vecMode === 'axes' ? 'normal' : vecMode as any}
                       defaultValue={p.def ? new THREE.Vector3((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0) : undefined}
+                      linkable={p.linkable}
+                      scale={p.scale}
+                  />
+              </div>
+          );
+      }
+
+      // Handle vec4 type
+      if (p.type === 'vec4') {
+          const v4 = p.val as { x: number; y: number; z: number; w: number };
+          const vec = new THREE.Vector4(v4.x, v4.y, v4.z, v4.w);
+          const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`, `${p.trackId}_w`];
+          const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`, `${p.label} W`];
+          return (
+              <div key={p.id} className="mb-px">
+                  <Vector4Input
+                      label={p.label}
+                      value={vec}
+                      min={p.min}
+                      max={p.max}
+                      step={p.step}
+                      onChange={p.set}
+                      trackKeys={trackKeys}
+                      trackLabels={trackLabels}
+                      defaultValue={p.def ? new THREE.Vector4((p.def as any).x ?? 0, (p.def as any).y ?? 0, (p.def as any).z ?? 0, (p.def as any).w ?? 0) : undefined}
                       linkable={p.linkable}
                       scale={p.scale}
                   />
@@ -255,6 +295,26 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
               />
           );
       }
+      // Degrees scale: internal value is in degrees (for Fragmentarium GLSL), display as π notation.
+      // e.g. 360° displays as "2.00π", 90° as "0.50π"
+      if (p.scale === 'degrees') {
+          const D2PI = 1 / 180; // degrees → π coefficient
+          return (
+              <Slider
+                 key={p.id} label={p.label} value={val} min={p.min} max={p.max} step={p.step}
+                 onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
+                 trackId={p.trackId} liveValue={liveVal}
+                 customMapping={{
+                     min: p.min * D2PI,
+                     max: p.max * D2PI,
+                     toSlider: (v) => v * D2PI,
+                     fromSlider: (v) => v / D2PI
+                 }}
+                 mapTextInput={true}
+                 overrideInputText={`${(val * D2PI).toFixed(2)}π`}
+              />
+          );
+      }
       // Standard or Log
       return <Slider key={p.id} label={p.label} value={val} min={p.min} max={p.max} step={p.step} onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} trackId={p.trackId} liveValue={liveVal} />;
   };
@@ -263,10 +323,10 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
 
   return (
     <div className="animate-fade-in -mx-4 -mt-4 min-h-full flex flex-col" onContextMenu={handlePanelContextMenu}>
-       <div className="bg-gray-800/20 border-b border-white/5 p-4 pb-3" data-help-id="formula.active">
+       <div className={`${surface.panelHeader} border-b ${themeBorder.subtle} p-4 pb-3`} data-help-id="formula.active">
            <div className="flex justify-between items-baseline mb-1">
-                <SectionLabel color="text-gray-500">Active Formula</SectionLabel>
-                {loadTime && <span className="text-[9px] text-gray-500 animate-fade-in">{loadTime}</span>}
+                <SectionLabel color={themeText.dimLabel}>Active Formula</SectionLabel>
+                {loadTime && <span className={`text-[9px] ${themeText.dimLabel} animate-fade-in`}>{loadTime}</span>}
            </div>
            <FormulaSelect value={state.formula} onChange={switchFormula} />
        </div>
@@ -279,17 +339,17 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
 
         <SectionDivider />
 
-        <div className="border-t border-white/5" data-help-id="formula.transform">
+        <div className={`border-t ${themeBorder.subtle}`} data-help-id="formula.transform">
             <AutoFeaturePanel featureId="geometry" groupFilter="transform" />
        </div>
 
-       <div className="border-t border-white/5">
+       <div className={`border-t ${themeBorder.subtle}`}>
            <AutoFeaturePanel featureId="geometry" groupFilter="burning" />
        </div>
 
        <SectionDivider />
 
-       <div className="border-t border-white/5" data-help-id="julia.mode">
+       <div className={`border-t ${themeBorder.subtle}`} data-help-id="julia.mode">
            <AutoFeaturePanel featureId="geometry" groupFilter="julia" />
        </div>
 
@@ -312,7 +372,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
        <LfoList state={state} actions={actions} />
 
        {state.showHints && (
-            <div className="text-[9px] text-gray-600 text-center mt-6 pb-2 opacity-50 font-mono">
+            <div className={`text-[9px] ${themeText.faint} text-center mt-6 pb-2 opacity-50 font-mono`}>
                 PRESS 'H' TO HIDE HINTS
             </div>
        )}

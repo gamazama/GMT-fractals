@@ -9,10 +9,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse } from '@shaderfrog/glsl-parser';
-import { detectFormula } from '../features/fragmentarium_import/workshop/detection.js';
-import { buildTransformResult } from '../features/fragmentarium_import/workshop/preview.js';
-import type { TransformedFormulaV2 } from '../features/fragmentarium_import/types.js';
-import type { FragDocumentV2 } from '../features/fragmentarium_import/types.js';
+import { detectFormulaV3 } from '../features/fragmentarium_import/v3/compat.ts';
+import { transformFormulaV3 } from '../features/fragmentarium_import/v3/compat.ts';
+import type { TransformedFormulaV2, FragDocumentV2 } from '../features/fragmentarium_import/types.ts';
 
 const VERBOSE = process.argv.includes('--verbose');
 const FILTER  = process.argv.slice(2).find(a => !a.startsWith('-') && !a.includes('/') && !a.includes('\\') && !a.includes('.') && !a.includes('test-frag'));
@@ -42,7 +41,7 @@ const GLSL_BUILTINS = new Set([
     'true','false','return',
 ]);
 // Names always in scope inside getDist
-const GMT_GETDIST_SCOPE = new Set(['z','dr','r','iter','trap','c','frag_cachedDist','g_orbitTrap']);
+const GMT_GETDIST_SCOPE = new Set(['z','dr','r','iter','trap','c','frag_cachedDist','frag_iterCount','frag_DE','g_orbitTrap']);
 
 /**
  * Validate generated GLSL output.
@@ -52,15 +51,13 @@ function validateGLSL(result: TransformedFormulaV2, doc: FragDocumentV2): string
     const issues: string[] = [];
 
     // ── 1. Parse the formula function code with the AST parser ────────────────
-    // Build a minimal parseable wrapper: declare stubs for global uniforms so
-    // the parser doesn't choke on undeclared names.
     const uniformStubs = (result.uniforms || '')
         .split('\n')
         .filter(l => l.trim() && !l.trim().startsWith('//'))
         .join('\n');
     const fullCode = uniformStubs + '\n' + result.function;
     try {
-        parse(fullCode);
+        parse(fullCode, { quiet: true });
     } catch (e: any) {
         const msg = (e?.message ?? String(e)).split('\n')[0].slice(0, 120);
         issues.push(`GLSL parse error: ${msg}`);
@@ -68,41 +65,27 @@ function validateGLSL(result: TransformedFormulaV2, doc: FragDocumentV2): string
 
     // ── 2. getDist scope check ────────────────────────────────────────────────
     if (result.getDist) {
-        // Build set of names valid in getDist scope:
-        // - GMT scope constants
-        // - Uniform names declared in uniforms block
-        // - Helper function names
         const validInGetDist = new Set([...GLSL_BUILTINS, ...GMT_GETDIST_SCOPE]);
 
-        // Add uniform-declared names (const T u_Name = ... or // Name -> slot)
         for (const m of (result.uniforms ?? '').matchAll(/\bu_(\w+)\b/g)) {
             validInGetDist.add('u_' + m[1]);
         }
-        // Add GMT slot uniform names
         for (const m of (result.uniforms ?? '').matchAll(/\b(u(?:Param|Vec2|Vec3)[A-Z])\b/g)) {
             validInGetDist.add(m[1]);
         }
         validInGetDist.add('uIterations'); validInGetDist.add('uJulia'); validInGetDist.add('uJuliaMode');
 
-        // Add helper function names
         for (const h of doc.helperFunctions) {
             validInGetDist.add(h.name);
         }
-        // Add function candidates (DE function name, helpers called by DE)
         if (doc.deFunction) validInGetDist.add(doc.deFunction.name);
 
-        // Computed globals are inlined by getDist generation; if inlining succeeded
-        // they're gone. If it failed, still add them to avoid false positives.
         for (const cg of doc.computedGlobals) validInGetDist.add(cg.name);
         for (const gd of doc.globalDecls) validInGetDist.add(gd.name);
 
-        // Extract all word tokens from getDist that look like identifiers,
-        // EXCLUDING field selectors (.xyz, .w, etc.) and swizzle components.
         const expr = result.getDist.replace(/\breturn\s+vec2\s*\(/, '').replace(/,\s*iter\s*\)\s*;/, '');
-        const exprNoSwizzle = expr.replace(/\.\w+/g, '');  // strip .field access
+        const exprNoSwizzle = expr.replace(/\.\w+/g, '');
 
-        // Also add any PascalCase/UPPER names that look like helper function calls
-        // referenced in getDist (e.g. MM_DE, Thing2) — these are valid if callable at that scope.
         for (const m of exprNoSwizzle.matchAll(/\b([A-Z]\w*)\b/g)) {
             validInGetDist.add(m[1]);
         }
@@ -124,11 +107,8 @@ function validateGLSL(result: TransformedFormulaV2, doc: FragDocumentV2): string
     }
 
     // ── 4. Uninitialized globals must appear at global scope ──────────────────
-    // These (e.g. "mat3 rot;") must be declared before helper functions so the
-    // helpers can reference them. If they were accidentally scoped into the formula
-    // function instead, helper functions would get a compile-time undeclared error.
     for (const gd of doc.globalDecls) {
-        if (gd.expression !== undefined) continue; // literal-initialized → local is fine
+        if (gd.expression !== undefined) continue;
         const declPattern = new RegExp(`^${gd.type}\\s+${gd.name}\\s*;`, 'm');
         if (!declPattern.test(result.function)) {
             issues.push(`Uninitialized global '${gd.name}' (${gd.type}) not declared at global scope in generated code`);
@@ -153,8 +133,8 @@ function test(label: string, relPath: string) {
 
     console.log(`\n─── ${label}`);
 
-    // 1. Detect
-    const detected = detectFormula(src, label);
+    // 1. Detect (V3 only)
+    const detected = detectFormulaV3(src, label);
     if ('error' in detected) {
         console.log(err(`detect: ${detected.error}`));
         failed++; return;
@@ -162,16 +142,16 @@ function test(label: string, relPath: string) {
 
     const { doc, selectedFunction, loopMode, params } = detected;
 
-    // 2. Transform
+    // 2. Transform (V3 only)
     let result;
     try {
-        result = buildTransformResult(detected, selectedFunction, loopMode, name, params);
+        result = transformFormulaV3(detected, selectedFunction, loopMode, name, params);
     } catch (e: any) {
         console.log(err(`transform threw: ${e.message ?? e}`));
         failed++; return;
     }
     if (!result) {
-        console.log(err('buildTransformResult returned null'));
+        console.log(err('transformFormulaV3 returned null'));
         failed++; return;
     }
 
@@ -226,7 +206,7 @@ test('KaliBox',                   `${REF}/Kali's Creations/Kalibox.frag`);
 test('Treebroccoli',              `${REF}/Kali's Creations/Treebroccoli.frag`);
 test('KboxExpSmooth',             `${REF}/Kali's Creations/KboxExpSmooth.frag`);
 test('LivingKIFS',                `${REF}/Kali's Creations/LivingKIFS.frag`);
-test('RotJulia',                  `${REF}/Kali's Creations/RotJulia.frag`);
+// RotJulia: 2D Brute-Raytracer (no DE function) — not importable
 
 // Historical / classic
 test('Tutorial 12 (Mandelbulb)', `${REF}/Tutorials/12 - Faster raytracing of 3D fractals.frag`);
@@ -242,10 +222,10 @@ test('PseudoKleinianMenger',      `${REF}/Knighty Collection/PseudoKleinianMenge
 // 3DickUlus collection
 test('BuffaloBulb',               `${REF}/3DickUlus/BuffaloBulb.frag`);
 test('PetraBox',                  `${REF}/3DickUlus/PetraBox.frag`);
-test('BioMorph',                  `${REF}/3DickUlus/BioMorph.frag`);
+// BioMorph: 2D Progressive (no DE function) — not importable
 test('Pengbulb',                  `${REF}/3DickUlus/Pengbulb.frag`);
 test('LionBulb',                  `${REF}/3DickUlus/LionBulb.frag`);
-test('sinhJulia',                 `${REF}/3DickUlus/sinhJulia.frag`);
+// sinhJulia: 2D Progressive (no DE function) — not importable
 
 // DarkBeam collection
 test('BioCube',                   `${REF}/DarkBeam/BioCube.frag`);
@@ -301,7 +281,7 @@ test('MengerSmooth',             `${REF}/Benesi/MengerSmooth.frag`);
 // 3DickUlus — additional bulb variants
 test('MMM (3Dickulus)',           `${REF}/3DickUlus/MMM.frag`);
 test('BurtsBisectorBulb',        `${REF}/3DickUlus/BurtsBisectorBulb.frag`);
-test('HiddenBrotCos',            `${REF}/3DickUlus/HiddenBrotCos.frag`);
+// HiddenBrotCos: 2D Progressive (no DE function) — not importable
 
 // Kashaders — KIFS and hybrid DEs
 test('Menger11 (Kashaders)',     `${REF}/Kashaders/Fractals/KIFSandCO/Menger11.frag`);

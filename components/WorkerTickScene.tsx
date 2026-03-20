@@ -12,7 +12,7 @@
  *   SNAPSHOT → ANIMATE → OVERLAY → UI → [DISPATCH inline]
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { getProxy } from '../engine/worker/WorkerProxy';
@@ -26,6 +26,7 @@ import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 // Tick implementations
 import { tick as animationTick } from './AnimationSystem';
 import { tick as lightGizmoTick } from '../features/lighting/LightGizmo';
+import { tick as drawingOverlayTick } from '../features/drawing/DrawingOverlay';
 import { tick as fpsCounterTick } from './topbar/FpsCounter';
 import { tick as performanceMonitorTick } from './PerformanceMonitor';
 import { tick as trackRowTick } from './timeline/TrackRow';
@@ -41,6 +42,7 @@ registerTick('snapshotDisplayCamera', TICK_PHASE.SNAPSHOT, () => {
 
 registerTick('animationTick',        TICK_PHASE.ANIMATE, animationTick);
 registerTick('lightGizmoTick',       TICK_PHASE.OVERLAY, lightGizmoTick);
+registerTick('drawingOverlayTick',  TICK_PHASE.OVERLAY, drawingOverlayTick);
 registerTick('fpsCounterTick',       TICK_PHASE.UI,      fpsCounterTick);
 registerTick('performanceMonitorTick', TICK_PHASE.UI,    performanceMonitorTick);
 registerTick('trackRowTick',         TICK_PHASE.UI,      trackRowTick);
@@ -56,6 +58,11 @@ const WorkerTickScene: React.FC<WorkerTickSceneProps> = ({ onLoaded }) => {
     const [isReady, setIsReady] = useState(false);
     const proxy = getProxy();
     const dpr = useFractalStore(s => s.dpr);
+
+    // Track latest viewport size in a ref so the post-compile resize always
+    // uses current values, not stale closure captures from mount time.
+    const sizeRef = useRef({ width: size.width, height: size.height, dpr });
+    sizeRef.current = { width: size.width, height: size.height, dpr };
 
     // Register R3F camera and canvas for DOM overlays (light gizmos, etc.)
     useEffect(() => {
@@ -86,9 +93,10 @@ const WorkerTickScene: React.FC<WorkerTickSceneProps> = ({ onLoaded }) => {
 
             if (isMounted) {
                 // Re-push current viewport size after boot+compile to ensure correct
-                // dimensions. The initial RESIZE may have used stale values if it arrived
-                // before the engine existed or before layout was finalized.
-                proxy.resizeWorker(size.width, size.height, dpr);
+                // dimensions. Read from ref to get the LATEST size, not stale values
+                // captured at mount time (layout may have changed during compilation).
+                const s = sizeRef.current;
+                proxy.resizeWorker(s.width, s.height, s.dpr);
                 setIsReady(true);
                 if (onLoaded) onLoaded();
             }

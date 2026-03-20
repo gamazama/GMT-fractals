@@ -4,9 +4,10 @@ import { createPortal } from 'react-dom';
 import { registry } from '../../../engine/FractalRegistry';
 import { FormulaType } from '../../../types';
 import { PREDEFINED_CATEGORIES } from '../../../formulas';
-import { parseGMF } from '../../../utils/FormulaFormat';
+import { loadGMFScene } from '../../../utils/FormulaFormat';
 import { UploadIcon, NetworkIcon, ChevronDown, CheckIcon, CubeIcon, LoadIcon, CodeIcon } from '../../Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
+import { useFractalStore } from '../../../store/fractalStore';
 
 // --- Gallery Types ---
 interface GalleryItem {
@@ -120,10 +121,22 @@ export const PortalDropdown = ({
                 const content = await response.text();
                 // Emit compiling event to show spinner before parsing
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
-                const def = parseGMF(content);
-                registry.register(def);
-                FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
-                onSelect(def.id as FormulaType);
+                const { def, preset } = loadGMFScene(content);
+                if (def) {
+                    if (!registry.get(def.id)) {
+                        registry.register(def);
+                        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+                    }
+                    // If preset has scene data (camera, features), load the full preset
+                    if (preset.cameraRot || preset.features) {
+                        useFractalStore.getState().loadPreset(preset);
+                    } else {
+                        onSelect(def.id as FormulaType);
+                    }
+                } else {
+                    // Legacy JSON or formula-only — just switch formula
+                    onSelect(preset.formula as FormulaType);
+                }
                 onClose();
             } else {
                 console.error('Failed to load formula from gallery:', item.path);

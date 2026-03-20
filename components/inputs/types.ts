@@ -47,6 +47,9 @@ export interface DraggableNumberProps {
     liveValue?: number;
     /** Default value for reset functionality */
     defaultValue?: number;
+    /** Called synchronously during drag with the immediate value — use for direct
+     *  DOM updates (e.g., fill bar width) that bypass the React render cycle. */
+    onImmediateChange?: (v: number) => void;
 }
 
 // ============================================================================
@@ -94,10 +97,10 @@ export interface ScalarInputProps extends DraggableNumberProps {
 // ============================================================================
 
 export interface VectorInputProps {
-    /** Current value (Vector2 or Vector3) */
-    value: { x: number; y: number; z?: number };
+    /** Current value (Vector2, Vector3, or Vector4) */
+    value: { x: number; y: number; z?: number; w?: number };
     /** Called when value changes */
-    onChange: (v: { x: number; y: number; z?: number }) => void;
+    onChange: (v: { x: number; y: number; z?: number; w?: number }) => void;
     
     /** Input mode */
     mode?: 'translation' | 'rotation' | 'scale' | 'normal';
@@ -109,6 +112,7 @@ export interface VectorInputProps {
         x?: Partial<ScalarInputProps>;
         y?: Partial<ScalarInputProps>;
         z?: Partial<ScalarInputProps>;
+        w?: Partial<ScalarInputProps>;
     };
     
     /** Shared configuration for all axes */
@@ -125,9 +129,9 @@ export interface VectorInputProps {
     disabled?: boolean;
     
     /** Animation track keys for keyframe recording */
-    trackKeys?: [string, string, string?];
+    trackKeys?: [string, string, string?, string?];
     /** Animation track labels */
-    trackLabels?: [string, string, string?];
+    trackLabels?: [string, string, string?, string?];
     
     /** Interaction mode for undo history */
     interactionMode?: 'param' | 'camera';
@@ -171,13 +175,21 @@ export const AXIS_CONFIG: AxisConfig[] = [
         hoverBg: 'hover:bg-green-500/20', 
         accent: '#22c55e' 
     },
-    { 
-        label: 'Z', 
-        color: 'bg-blue-500', 
-        text: 'text-blue-400', 
-        border: 'group-focus-within:border-blue-500/50', 
-        hoverBg: 'hover:bg-blue-500/20', 
-        accent: '#3b82f6' 
+    {
+        label: 'Z',
+        color: 'bg-blue-500',
+        text: 'text-blue-400',
+        border: 'group-focus-within:border-blue-500/50',
+        hoverBg: 'hover:bg-blue-500/20',
+        accent: '#3b82f6'
+    },
+    {
+        label: 'W',
+        color: 'bg-purple-500',
+        text: 'text-purple-400',
+        border: 'group-focus-within:border-purple-500/50',
+        hoverBg: 'hover:bg-purple-500/20',
+        accent: '#a855f7'
     }
 ];
 

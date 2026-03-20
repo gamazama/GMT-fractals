@@ -65,6 +65,9 @@ export const Uniforms = {
     Vec3A: 'uVec3A',
     Vec3B: 'uVec3B',
     Vec3C: 'uVec3C',
+    Vec4A: 'uVec4A',
+    Vec4B: 'uVec4B',
+    Vec4C: 'uVec4C',
 } as const;
 
 export type UniformName = typeof Uniforms[keyof typeof Uniforms];

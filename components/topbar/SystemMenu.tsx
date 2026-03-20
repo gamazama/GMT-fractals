@@ -4,10 +4,12 @@ import { useFractalStore } from '../../store/fractalStore';
 import { featureRegistry } from '../../engine/FeatureSystem'; 
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
-import { FractalEvents } from '../../engine/FractalEvents';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { MenuIcon, SaveIcon, LoadIcon, CodeIcon, HelpIcon, InfoIcon, FullscreenIcon, SmileyIcon, LinkIcon } from '../Icons';
 import { extractMetadata } from '../../utils/pngMetadata';
 import { getExportFileName } from '../../utils/fileUtils';
+import { saveGMFScene, loadGMFScene } from '../../utils/FormulaFormat';
+import { registry } from '../../engine/FractalRegistry';
 import { detectEngineProfile } from '../../features/engine/profiles';
 import Dropdown from '../Dropdown';
 import { Popover } from '../Popover';
@@ -84,15 +86,16 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
         const currentVersion = state.prepareExport();
         const settings = state.projectSettings;
         const p = state.getPreset();
-        
-        const b = new Blob([JSON.stringify(p, null, 2)], {type: 'application/json'});
+
+        const gmfString = saveGMFScene(p);
+        const b = new Blob([gmfString], {type: 'text/plain'});
         const u = URL.createObjectURL(b);
         const a = document.createElement('a');
-        
+
         a.href = u;
-        a.download = getExportFileName(settings.name, currentVersion, 'json');
+        a.download = getExportFileName(settings.name, currentVersion, 'gmf');
         a.click();
-        
+
         URL.revokeObjectURL(u);
     };
 
@@ -104,21 +107,29 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
 
         FractalEvents.emit('is_compiling', "Processing...");
         await new Promise(r => setTimeout(r, 50));
-        
+
         try {
-            let jsonString = "";
+            let content = "";
             if (file.type === "image/png") {
                 const meta = await extractMetadata(file, "FractalData");
-                if (meta) jsonString = meta;
+                if (meta) content = meta;
                 else throw new Error("No Fractal Data found in this image.");
             } else {
-                jsonString = await file.text();
+                content = await file.text();
             }
 
-            const preset = JSON.parse(jsonString);
+            // Detect GMF vs legacy JSON format
+            const { def, preset } = loadGMFScene(content);
+
+            // Register formula if it came from GMF and isn't already known
+            if (def && !registry.get(def.id)) {
+                registry.register(def);
+                FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+            }
+
             state.loadPreset(preset);
             vibrate(50);
-            
+
             setShowSystemMenu(false);
         } catch (err) {
             console.error("Load Failed:", err);
@@ -130,7 +141,16 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
         e.target.value = '';
     };
 
+    // Check if current formula is an imported (Workshop) formula — not shareable via URL
+    const isImportedFormula = !!registry.get(state.formula)?.importSource;
+
     const handleShareLink = () => {
+        if (isImportedFormula) {
+            setLinkStatus("N/A (Imported)");
+            setTimeout(() => setLinkStatus(null), 2500);
+            return;
+        }
+
         const WARNING_LIMIT = 4096;
         let str = state.getShareString({ includeAnimations: true });
         let warning = "";
@@ -229,21 +249,21 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
         <>
             {!isMobileMode && (
                 <>
-                    <button onClick={handleShareLink} className={`${btnBase} ${btnInactive} relative`} title="Copy Share Link">
+                    <button onClick={handleShareLink} className={`${btnBase} ${btnInactive} relative`} title={isImportedFormula ? "Share unavailable for imported formulas" : "Copy Share Link"}>
                         <LinkIcon />
                         {linkStatus && <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-green-600 text-white text-[9px] font-bold rounded whitespace-nowrap animate-fade-in">{linkStatus}</div>}
                     </button>
-                    <button onClick={handleSavePreset} className={`${btnBase} ${btnInactive}`} title="Save Preset (JSON)">
+                    <button onClick={handleSavePreset} className={`${btnBase} ${btnInactive}`} title="Save Preset (GMF)">
                         <SaveIcon />
                     </button>
-                    <button onClick={handleLoadPreset} className={`${btnBase} ${btnInactive} relative`} title="Load Preset (JSON or PNG)">
+                    <button onClick={handleLoadPreset} className={`${btnBase} ${btnInactive} relative`} title="Load Preset (GMF, JSON, or PNG)">
                         <LoadIcon />
                         {loadStatus && <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-blue-600 text-white text-[9px] font-bold rounded whitespace-nowrap animate-fade-in">{loadStatus}</div>}
                     </button>
                 </>
             )}
             
-            <input ref={fileInputRef} type="file" accept=".json,.png" className="hidden" onChange={handleFileSelect} />
+            <input ref={fileInputRef} type="file" accept=".gmf,.json,.png" className="hidden" onChange={handleFileSelect} />
 
             <div className="relative" ref={menuRef}>
                 <button onClick={toggleSystemMenu} className={`${btnBase} ${showSystemMenu ? btnActive : btnInactive}`}><MenuIcon /></button>

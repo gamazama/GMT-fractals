@@ -124,15 +124,17 @@ Self-contained modules defining State, UI, and Shaders.
 *   **Core**: `ViewportArea`, `Controls`, `Timeline`, `TopBar`, `MobileControls`.
 *   **Primitives**: `Slider`, `Knob`, `ToggleSwitch`, `Button`, `Dropdown`, `CollapsibleSection`, `PanelHeader`, `Popover`, `SectionLabel`, `StatusDot`, `TabBar`.
 *   **`inputs/`**: Unified scalar/vector input primitives.
-    *   `ScalarInput.tsx`: Core draggable-number primitive (replaces inline `RawDraggableNumber` in `Slider.tsx`).
+    *   `ScalarInput.tsx`: Core draggable-number primitive with fill bar. Manages refs for direct DOM updates during drag (`fillBarRef`, `fullTrackFillRef`, `rangeInputRef`). Passes `onImmediateChange` to DraggableNumber.
     *   `VectorInput.tsx`: Thin wrapper that delegates to `vector-input/` components.
     *   `types.ts`, `index.ts`: Shared types and barrel export.
-    *   `primitives/`, `hooks/`: Internal sub-components and drag hooks.
+    *   `primitives/DraggableNumber.tsx`: Drag-to-adjust + click-to-edit number. Updates display text via direct DOM manipulation (`displayRef.textContent`) during drag for instant feedback.
+    *   `primitives/FormatUtils.ts`: Value formatting, mapping (pi/degrees/log), and `computePercentage()` utility shared by ScalarInput and BaseVectorInput.
+    *   `hooks/useDragValue.ts`: Core drag logic. Exposes `immediateValueRef` for synchronous value reads during drag.
 *   **`vector-input/`**: Rich vector controls (replaces deleted `Vector2Pad.tsx` / `Vector3Input.tsx`).
-    *   `BaseVectorInput.tsx`: Shared layout for both Vec2 and Vec3 modes.
-    *   `VectorAxisCell.tsx`: Individual axis cell (label + draggable number + reset).
+    *   `BaseVectorInput.tsx`: Shared layout for Vec2, Vec3, and Vec4 modes. Uses `pushAxisToDOM()` for direct DOM updates when drag source is DualAxisPad, rotation heliotrope, or linked mode (queries axis cells by `data-axis-index` attribute).
+    *   `VectorAxisCell.tsx`: Individual axis cell (label + draggable number + reset). Exposes `data-axis-index` attribute for parent DOM queries.
     *   `RotationHeliotrope.tsx`: Circular 3D-direction visualiser for rotation params.
-    *   `DualAxisPad.tsx`: XY manipulation pad.
+    *   `DualAxisPad.tsx`: XY/WZ manipulation pad.
     *   `index.tsx`, `types.ts`: Public API and types.
 *   **Pickers**: `SmallColorPicker`, `EmbeddedColorPicker`, `AdvancedGradientEditor`.
 *   **Panels**: `FormulaPanel`, `ScenePanel`, `LightPanel`, `RenderPanel`, `QualityPanel`, `EnginePanel`.
@@ -147,7 +149,7 @@ Self-contained modules defining State, UI, and Shaders.
 *   **Layout**: `Dock`, `DropZones`.
 *   **Gradient**: `GradientContextMenu`.
 *   **Node Editor**: `NodeParams`.
-*   **Other**: `AnimationSystem`, `DraggableWindow`, `FeatureSection`, `GlobalContextMenu`, `HelpBrowser`, `Histogram`, `HistogramProbe`, `Icons`, `InteractionPicker`, `KeyframeButton`, `ParameterSelector`, `PopupSliderSystem`, `ShaderDebugger`, `StateDebugger`.
+*   **Other**: `AnimationSystem`, `CategoryPickerMenu`, `DraggableWindow`, `FeatureSection`, `GlobalContextMenu`, `HelpBrowser`, `Histogram`, `HistogramProbe`, `Icons`, `InteractionPicker`, `KeyframeButton`, `ParameterSelector`, `PopupSliderSystem`, `ShaderDebugger`, `StateDebugger`.
 
 ## 6. Shaders (`shaders/`)
 *   `chunks/`: Reusable GLSL snippets (Math, SDFs, Lighting, Raymarching).
@@ -181,15 +183,15 @@ Self-contained modules defining State, UI, and Shaders.
 *   `GraphUtils.ts`: Graph utility functions.
 *   `graphAlg.ts`: Graph algorithms (cycle detection, topological sort).
 *   `keyframeViewBounds.ts`: Keyframe dope sheet view bounds calculation.
-*   `PresetLogic.ts`: State hydration/sanitization.
 *   `Sharing.ts` / `UrlStateEncoder.ts`: URL compression.
 *   `fileUtils.ts`: Filename generation.
-*   `pngMetadata.ts`: Steganography (Data in PNG).
+*   `pngMetadata.ts`: PNG iTXt chunk injection/extraction for embedding scene data in snapshots.
 *   `histogramUtils.ts`: Auto-levels analysis.
 *   `timelineUtils.ts`: Keyframe helpers.
 *   `colorUtils.ts`: Color utilities.
 *   `helpUtils.ts`: Help system utilities.
-*   `FormulaFormat.ts`: GMF (GPU Mandelbulb Format) parser/generator.
+*   `FormulaFormat.ts`: GMF (GPU Mandelbulb Format) — primary save format. Contains `saveGMFScene()` (save), `loadGMFScene()` (load with format detection), `generateGMF()` / `parseGMF()` (formula-level), `isGMFFormat()` (format detection). See `docs/05_Data_and_Export.md` for full format spec.
+*   `PresetLogic.ts`: State hydration/sanitization — `applyPresetState()` applies a Preset to the store (camera, features, lights, animations).
 
 ## 8. Vite Build Configuration
 **File:** `vite.config.ts`

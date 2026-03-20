@@ -1,3 +1,6 @@
+// STYLE: Do not use inline formatting or hardcoded layout for feature params.
+// Use DDFS (parentId, condition, group, hidden) to control visibility and nesting.
+// Import theme tokens from 'data/theme' instead of raw Tailwind color classes.
 
 import React from 'react';
 import { FractalState, FractalActions } from '../../types';
@@ -7,7 +10,9 @@ import { collectHelpIds } from '../../utils/helpUtils';
 import { FeatureSection } from '../FeatureSection';
 import { CompilableFeatureSection } from '../CompilableFeatureSection';
 import { SectionLabel, SectionDivider } from '../SectionLabel';
+import { CollapsibleSection } from '../CollapsibleSection';
 import { WaterPlaneState } from '../../features/water_plane';
+import { nestedContainer, border as themeBorder } from '../../data/theme';
 
 const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
   const openGlobalMenu = useFractalStore(s => s.openContextMenu);
@@ -50,25 +55,30 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
          </div>
      )}
 
+     <SectionDivider />
+
      {/* --- ATMOSPHERE --- */}
-     <div className="flex flex-col border-t border-white/5" data-help-id="fog.settings">
+     <div className={`flex flex-col border-t ${themeBorder.subtle}`} data-help-id="fog.settings">
         <AutoFeaturePanel featureId="atmosphere" groupFilter="fog" />
      </div>
+
+     {/* --- VOLUMETRIC SCATTER (under Fog) --- */}
+     <CompilableFeatureSection featureId="volumetric" />
 
      <SectionDivider />
 
      {/* --- WATER PLANE --- */}
      {waterPlane && waterPlane.waterEnabled && (
-         <div className="flex flex-col border-t border-white/5" data-help-id="water.settings">
+         <div className={`flex flex-col border-t ${themeBorder.subtle}`} data-help-id="water.settings">
             <FeatureSection label="Water Plane" featureId="waterPlane" description="Infinite ocean plane at height Y.">
                 <div className="mb-2">
                     <AutoFeaturePanel featureId="waterPlane" groupFilter="main" />
                 </div>
-                <div className="bg-black/20 p-2 rounded border border-white/5 mb-2">
+                <div className={`${nestedContainer} mb-2`}>
                      <AutoFeaturePanel featureId="waterPlane" groupFilter="geometry" />
                      <AutoFeaturePanel featureId="waterPlane" groupFilter="material" />
                 </div>
-                <div className="bg-black/20 p-2 rounded border border-white/5">
+                <div className={nestedContainer}>
                      <SectionLabel variant="secondary" className="mb-2">Waves</SectionLabel>
                      <AutoFeaturePanel featureId="waterPlane" groupFilter="waves" />
                 </div>
@@ -83,37 +93,29 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
 
      <SectionDivider />
 
-     {/* --- POST EFFECTS (Bloom & Lens) --- */}
-     <div className="flex flex-col" data-help-id="post.effects">
-        <AutoFeaturePanel featureId="postEffects" groupFilter="bloom" />
-        <AutoFeaturePanel featureId="postEffects" groupFilter="lens" />
-     </div>
+     {/* --- EFFECTS (Bloom, Chromatic Aberration, Droste) --- */}
+     <CollapsibleSection label="Effects" labelVariant="primary" variant="panel">
+        <div className="flex flex-col" data-help-id="post.effects">
+           <AutoFeaturePanel featureId="postEffects" groupFilter="bloom" />
+           <AutoFeaturePanel featureId="postEffects" groupFilter="lens" />
+        </div>
+can you check this erro        {droste && (
+           <div className="flex flex-col" data-help-id="effect.droste">
+              <AutoFeaturePanel featureId="droste" groupFilter="main" />
 
-     <SectionDivider />
+              {droste.active && (
+                 <div className="animate-fade-in flex flex-col">
+                    <AutoFeaturePanel featureId="droste" groupFilter="geometry" />
+                    <SectionDivider />
+                    <AutoFeaturePanel featureId="droste" groupFilter="structure" />
+                    <SectionDivider />
+                    <AutoFeaturePanel featureId="droste" groupFilter="transform" />
+                 </div>
+              )}
+           </div>
+        )}
+     </CollapsibleSection>
 
-     {/* --- DROSTE --- */}
-     {droste && (
-        <>
-            <div className="flex flex-col" data-help-id="effect.droste">
-                <AutoFeaturePanel featureId="droste" groupFilter="main" />
-
-                {droste.active && (
-                    <div className="animate-fade-in flex flex-col">
-                        <AutoFeaturePanel featureId="droste" groupFilter="geometry" />
-                        <SectionDivider />
-                        <AutoFeaturePanel featureId="droste" groupFilter="structure" />
-                        <SectionDivider />
-                        <AutoFeaturePanel featureId="droste" groupFilter="transform" />
-                    </div>
-                )}
-            </div>
-        </>
-     )}
-
-     <SectionDivider />
-
-     {/* --- VOLUMETRIC SCATTER --- */}
-     <CompilableFeatureSection featureId="volumetric" />
   </div>
   );
 };

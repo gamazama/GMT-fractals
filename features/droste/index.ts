@@ -31,7 +31,7 @@ export const DrosteFeature: FeatureDefinition = {
         active: {
             type: 'boolean',
             default: false,
-            label: 'Enable Droste',
+            label: 'Droste Effect',
             shortId: 'ac',
             uniform: 'uDrosteActive',
             group: 'main', 
