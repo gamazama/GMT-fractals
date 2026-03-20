@@ -1,6 +1,6 @@
 # DDFS Overhaul — COMPLETED
 
-## Status: All planned work complete (v0.8.9)
+## Status: All planned work complete (v0.9.0)
 
 This plan was drafted during the Light Sphere migration. All viable items have been implemented across multiple sessions. This file is retained as an archive.
 

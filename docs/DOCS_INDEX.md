@@ -42,7 +42,7 @@ Historical design docs, completed reports, and superseded references are in [`do
 ### Changelog
 | File | Purpose |
 |------|---------|
-| [CHANGELOG_DEV.md](CHANGELOG_DEV.md) | Development changelog for current dev branch (v0.8.9) |
+| [CHANGELOG_DEV.md](CHANGELOG_DEV.md) | Development changelog for current dev branch (v0.9.0) |
 
 ## 🚀 Getting Started
 
