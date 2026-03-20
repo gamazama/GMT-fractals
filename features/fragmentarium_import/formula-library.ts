@@ -69,8 +69,8 @@ export function loadLibrary(): Promise<void> {
 
     _loading = (async () => {
         const [manifestRes, decRes] = await Promise.all([
-            fetch('/formulas/manifest.json'),
-            fetch('/formulas/dec.json'),
+            fetch('./formulas/manifest.json'),
+            fetch('./formulas/dec.json'),
         ]);
 
         if (!manifestRes.ok) throw new Error(`Failed to load manifest: ${manifestRes.status}`);
@@ -120,7 +120,7 @@ function getLibrary(): FormulaEntry[] {
 
 /** Fetch a .frag formula's source code from public/formulas/frag/ */
 export async function loadFragSource(id: string): Promise<string> {
-    const res = await fetch(`/formulas/frag/${id}`);
+    const res = await fetch(`./formulas/frag/${id}`);
     if (!res.ok) throw new Error(`Failed to load frag: ${id} (${res.status})`);
     return res.text();
 }

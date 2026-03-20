@@ -99,7 +99,7 @@ export const PortalDropdown = ({
         const fetchGallery = async () => {
             setGalleryLoading(true);
             try {
-                const response = await fetch('/gmf/gallery.json');
+                const response = await fetch('./gmf/gallery.json');
                 if (response.ok) {
                     const data: GalleryManifest = await response.json();
                     setGalleryItems(data.categories || []);
