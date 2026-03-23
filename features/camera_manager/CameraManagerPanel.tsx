@@ -218,7 +218,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
     // Thumbnails are captured when saving or updating a camera — no auto-update.
 
     return (
-        <div className={`flex flex-col bg-[#080808] ${className}`}>
+        <div className={`flex flex-col bg-[#080808] ${className}`} data-help-id="panel.camera_manager">
              {/* Toolbar */}
              <div className="p-2 border-b border-white/10 bg-black/40 grid grid-cols-4 gap-1">
                  <button onClick={() => handleDirectional('Front')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">FRONT</button>

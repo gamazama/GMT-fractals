@@ -335,6 +335,12 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                 <div className="mt-1 pl-2 border-l border-white/10 ml-2">
                                     {advancedFeatures.map(feat => renderFeatureToggle(feat))}
                                     {extraAdvanced.map(item => renderFeatureToggle(item, true))}
+                                    <a href="./mesh-export/index.html" target="_blank" rel="noopener noreferrer"
+                                       onClick={(e) => { e.stopPropagation(); vibrate(5); setShowSystemMenu(false); }}
+                                       className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group no-underline">
+                                        <span className="text-xs font-bold group-hover:text-orange-400">Mesh Export</span>
+                                        <span className="text-[9px] text-gray-600">↗</span>
+                                    </a>
                                     <div className="flex items-center justify-between p-2 rounded hover:bg-white/5 cursor-pointer"
                                          onClick={() => state.setDebugMobileLayout(!state.debugMobileLayout)}>
                                         <span className="text-xs text-gray-300 font-bold">Force Mobile UI</span>

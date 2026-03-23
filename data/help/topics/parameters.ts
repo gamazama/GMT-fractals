@@ -105,7 +105,7 @@ Animating the Julia coordinates is the best way to create "shapeshifting" organi
 3. Choose a **Shape** (Sine, Sawtooth, Noise).
 4. Adjust **Period** (Speed) and **Amplitude** (Strength).
 
-The slider for the target parameter will show a "Ghost Knob" indicating the modulated value.
+The slider for the target parameter will show a **purple indicator line** on the slider track, showing the current modulated value in real time.
 `
     }
 };

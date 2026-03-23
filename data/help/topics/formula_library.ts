@@ -18,14 +18,12 @@ $$ v \to v^n + c $$
 **Credits:** Discovered by **Daniel White** and **Paul Nylander**.
 
 ## Parameters
-- **Param A (Power)**: The exponent $n$.
+- **Power**: The exponent $n$.
   - **8.0**: The classic "Broccoli" shape discovered by Daniel White.
   - **2.0**: A smooth, bulbous shape similar to a 3D Cardioid.
-- **Param B (Theta Phase)**: Adds an offset to the polar angle $\theta$ during iteration. Warps the bulbs vertically.
-- **Param C (Phi Phase)**: Adds an offset to the azimuthal angle $\phi$. Twists the bulbs horizontally.
-- **Param D (Z Twist)**: Applies a spatial twist along the Z-axis after the power function.
-- **Param E (Radiolaria)**: Toggles the **Radiolaria Mutation**.
-- **Param F (Radio Limit)**: When Radiolaria is on, this clamps the Y-coordinate.
+- **Phase (theta, phi)**: A two-axis control for the polar and azimuthal angle offsets. Theta warps the bulbs vertically; phi twists them horizontally.
+- **Z Twist**: Applies a spatial twist along the Z-axis after the power function.
+- **Radiolaria**: A two-axis control — the first slider toggles the Radiolaria mutation on/off, and the second sets the Y-coordinate clamp limit.
 
 ## Radiolaria Mode
 Inspired by **Tom Beddard's** Pixel Bender implementation.
@@ -50,40 +48,14 @@ Instead, it creates a field of "Interference Patterns".
 This implementation is designed to be rendered as a **Volumetric Cloud** (using the Glow engine) rather than a solid object.
 
 ## Parameters
-- **Param A (Interference)**: The strength of the subtraction term $k$.
+- **Interference**: The strength of the subtraction term $k$.
   - **0.0**: Standard "Lathe" fractal (Solid).
   - **0.33**: The theoretical Euclidean balance point.
   - **> 0.5**: Breaks the surface, revealing internal veins and structures.
-- **Param C (Ghost Shift)**: Shifts the calculation into the 4th dimension. Use this to scan through the "inside" of the ghost.
-- **Param D (Cloud Density)**: Artificially softens the Distance Estimator to make the fractal look like a nebula.
-`
-    },
-    'formula.mandelbrotck': {
-        id: 'formula.mandelbrotck',
-        category: 'Formulas',
-        title: 'Mandelbrot Hypercomplex',
-        parentId: 'formula.active',
-        content: `
-## The Math
-This is the corrected "True" 3D extension of the Mandelbrot set using Hypercomplex algebra.
-
-## The "Missing Cross-Term"
-Simple 3D extensions often look like a 2D Mandelbrot rotated around a stick (a "Lathe"). This happens because the Y and Z axes don't interact.
-This formula adds the **Cross-Term ($2yz$)** to the iteration, forcing the Y and Z components to mix. This creates a fully connected 3D structure that is not just a surface of revolution.
-
-## Parameters
-- **Param A (Metric)**:
-  - **-1.0**: Elliptic. Solid, bulbous, Tetabrot-like.
-  - **1.0**: Hyperbolic. Creates "Saddles", "Feathers" and open filaments.
-- **Param B (C-Phase)**: Rotates the injection constant $C$ during iteration. Creates spiraling arms and asymmetry.
-- **Param C (Coupling)**: Controls the strength of the Y/Z mixing.
-  - **0.0**: Lathe mode (No mixing).
-  - **1.0**: Full 3D Fractal.
-- **Param D (Burn Mix)**: Blends between Standard Mandelbrot and **Burning Ship** logic ($z \to |z|$).
-  - **0.0**: Smooth.
-  - **1.0**: Sharp, skeletal, mechanical structures.
-- **Param E (Spiral)**: Rotates the Y and Z axes at every step. Turns straight filaments into helixes.
-- **Param F (Y Scale)**: Modifies the width of the fractal arms.
+- **Power**: The exponent of the iteration. Default 2.0 for classic behavior; higher values create more complex structures.
+- **Ghost Shift**: Shifts the calculation into the 4th dimension. Use this to scan through the "inside" of the ghost.
+- **Cloud Density**: Artificially softens the Distance Estimator to make the fractal look like a nebula.
+- **Phase**: Rotational offset applied to the azimuthal angle during iteration. Creates twisted, spiraling structures.
 `
     },
     'formula.mandelorus': {
@@ -104,13 +76,13 @@ This creates a **Solenoid** structure where the fractal wraps around the ring en
 4. We apply a **Twist** rotation to the slice based on the angle around the ring.
 
 ## Parameters
-- **Param A (Ring Radius)**: The major radius of the donut. Controls the size of the "hole".
-- **Param B (Twist)**: The most important control. Spins the fractal pattern around the ring.
+- **Ring Radius**: The major radius of the donut. Controls the size of the "hole".
+- **Twist (Sym)**: The most important control. Spins the fractal pattern around the ring. Linked to Power so that 1.0 = one full symmetry step.
   - **0.0**: Creates a "Lathe" effect (constant cross-section).
   - **Values > 0**: Creates twisting, cable-like structures that connect endlessly.
-- **Param C (Power)**: The exponent of the Mandelbrot set ($z^2$, $z^3$, etc).
-- **Param D (Ring Phase)**: Shifts the fractal along the length of the tube.
-- **Param E (Cross Phase)**: Rotates the cross-section slice.
+- **Power**: The exponent of the Mandelbrot set ($z^2$, $z^3$, etc).
+- **Phase (Ring, Cross)**: A two-axis control — the first slider shifts the fractal along the length of the tube, the second rotates the cross-section slice.
+- **Vert Scale**: Scales the vertical (Z) axis of the torus cross-section. Use this to squash or stretch the fractal vertically.
 
 ## Usage
 Perfect for creating "Endless Tunnels" or "Ouroboros" structures. Fly the camera inside the tube for infinite loops.
@@ -150,11 +122,11 @@ This is not a true 3D fractal, but a heightmap generator. It calculates the 2D M
 **Credits:** Mathematical basis by **Benoit B. Mandelbrot**.
 
 ## Parameters
-- **Param A (Height)**: Controls the vertical displacement strength based on the Distance Estimator.
-- **Param B (Zoom)**: Zoom level into the 2D complex plane.
-- **Param C (Layer 2)**: Adds secondary ripples driven by the "Layer 2" gradient brightness.
-- **Param D (Smooth Trap)**: Adds spikey towers based on Orbit Trap proximity.
-- **Param E/F (Pan)**: Moves the fractal center coordinates (Julia/Mandelbrot origin).
+- **Map Zoom**: Zoom level into the 2D complex plane. Uses exponential scaling (power of 2).
+- **Pan (Real, Imag)**: A two-axis control that moves the fractal center coordinates on the complex plane.
+- **Height: Distance Estimator**: Controls the vertical displacement strength based on the Distance Estimator.
+- **Height: Layer 2 Gradient**: Adds secondary ripples driven by the "Layer 2" gradient brightness.
+- **Height: SmoothTrap**: Adds spikey towers based on Orbit Trap proximity.
 
 ## Usage
 Ideal for creating alien landscapes, canyons, and "Math Mountains".
@@ -174,9 +146,14 @@ Since our screens are 2D and the fractal is 4D, we view a **3D Slice** of the 4D
 **Credits:** Number system described by **William Rowan Hamilton**.
 
 ## Parameters
-- **Param A (Julia W)**: The 4th coordinate of the Julia Constant $C$. Changing this "animates" the fractal as you move through the 4th dimension.
-- **Param B (Slice W)**: The w-coordinate of the 3D slice we are rendering.
-- **Param C-F (Rotations)**: Rotates the 4D hyper-object on various planes (XY, XZ, XW, YW) before slicing. This creates "inside-out" morphing effects.
+- **Julia C (W)**: The 4th coordinate of the Julia Constant $C$. Changing this "animates" the fractal as you move through the 4th dimension.
+- **Slice W**: The w-coordinate of the 3D slice we are rendering.
+- **Damping**: Adds momentum feedback to the iteration trajectory, creating smoother variants of the fractal (Kosalos variant).
+- **Inversion Radius**: Enables spherical inversion pre-transform. When greater than 0, inverts space around the Inversion Center, creating inside-out shapes.
+- **Inversion Angle**: Angular twist applied during the spherical inversion.
+- **Rot 3D (XY, XZ)**: A two-axis control for 3D rotations on the XY and XZ planes before iteration.
+- **Rot 4D (XW, YW)**: A two-axis control for 4D rotations on the XW and YW planes. Creates "inside-out" morphing effects unique to 4D objects.
+- **Inversion Center**: A three-axis control (X, Y, Z) that sets the center point for the spherical inversion.
 
 ## History
 Quaternions were described by William Rowan Hamilton in 1843. They are the "true" 3D/4D extension of complex numbers, but because valid multiplication requires 4 dimensions, 3D slices often look "cut off" or smooth compared to the Mandelbulb.
@@ -201,11 +178,11 @@ The Mandelbox is defined by a "Map and Fold" algorithm rather than a power funct
 **Credits:** Discovered by **Tom Lowe (Tglad)** in 2010.
 
 ## Parameters
-- **Param A (Scale)**: The density multiplier. Positive values create solid cubes; negative values create hollow, lattice-like structures.
-- **Param B (Min Radius)**: The inner radius of the Sphere Fold (linear scaling region).
-- **Param C (Fold Limit)**: The size of the folding box.
-- **Param D (Fixed Radius)**: The outer radius of the Sphere Fold (inversion region).
-- **Param E/F (Pre-Rotation)**: Rotates space *before* the folds, creating diagonal symmetries.
+- **Scale**: The density multiplier. Positive values create solid cubes; negative values create hollow, lattice-like structures.
+- **Min Radius**: The inner radius of the Sphere Fold (linear scaling region).
+- **Folding Limit**: The size of the folding box.
+- **Fixed Radius**: The outer radius of the Sphere Fold (inversion region).
+- **Pre-Rotation**: A three-axis rotation (X, Y, Z) applied *before* the folds, creating diagonal symmetries.
 
 ## History
 It is famous for resembling Borg cubes, sci-fi cities, and brutalist architecture.
@@ -246,11 +223,10 @@ Our implementation adds **Rotation** to the folding steps, creating "Non-Orthogo
 **Reference:** [Wikipedia: Menger Sponge](https://en.wikipedia.org/wiki/Menger_sponge)
 
 ## Parameters
-- **Param A (Scale)**: The scaling factor. Standard Menger is 3.0.
-- **Param B (Offset)**: The spacing between sub-cubes.
-- **Param C (Rot X)**: Rotates the coordinate system between iterations.
-- **Param D (Rot Z)**: Rotates the coordinate system between iterations.
-- **Param E (Z Shift)**: Stretches the fractal vertically.
+- **Scale**: The scaling factor. Standard Menger is 3.0.
+- **Offset**: A three-axis control (X, Y, Z) for the spacing between sub-cubes. Axes can be linked for uniform scaling or adjusted independently for stretched variations.
+- **Rotation**: A three-axis rotation (X, Y, Z) applied to the coordinate system between iterations.
+- **Center Z**: A toggle (0 or 1). When on, restores the full cubic symmetry so the sponge is centered. When off, you get a corner-aligned fractal.
 
 ## Visuals
 With rotations set to 0, it looks like a perfect grid. Adding slight rotations creates complex, diagonal, interlocking machinery.
@@ -369,12 +345,15 @@ $$ z_n = z_{n-1}^p + c + K \cdot z_{n-2} $$
 **Reference:** [Wikipedia: Phoenix Set](https://en.wikipedia.org/wiki/Phoenix_set)
 
 ## Parameters
-- **Param A (Power)**: The main exponent.
-- **Param B (Distortion Real)**: The real component of the historical influence $K$.
-- **Param C (Distortion Imag)**: The imaginary component of $K$.
-- **Param D (History Exp)**: Exponent applied to the previous iteration.
-- **Param E (Z Stretch)**: Scales the Z-axis.
-- **Param F (Twist)**: Applies spatial twist.
+- **Power (p)**: The main exponent applied via spherical coordinates.
+- **History Exp**: Exponent applied to the previous iteration value $z_{n-1}$. At 1.0 it is linear; higher values create more extreme feedback.
+- **Twist**: Applies a spatial twist along the Z-axis before the power function.
+- **History Depth**: Blends between $z_{n-1}$ (depth 0) and $z_{n-2}$ (depth 1) for deeper memory effects.
+- **Distortion (Re, Im)**: A two-axis control for the historical influence $K$. The real and imaginary components control how the previous iteration feeds back into the current one.
+- **Phase (theta, phi)**: A two-axis control for phase offsets applied to the spherical angles during the power function.
+- **Stretch**: A three-axis control (X, Y, Z) for anisotropic stretching of the coordinates. Axes can be linked for uniform scaling.
+- **Abs Fold**: A three-axis toggle (per-axis on/off) that applies absolute value folding after the power function, creating "Burning Phoenix" variants.
+- **Pre-Rotation**: A three-axis rotation (X, Y, Z) applied before the power function.
 
 ## Visuals
 Creates distorted, stretching shapes that look like pulling taffy or molten glass.
@@ -476,12 +455,11 @@ $$ z \to \text{Fold}(z) + \sin(z) $$
 **Credits:** Discovered by **Kali** (Fractal Forums).
 
 ## Parameters
-- **Param A (Scale)**: Box scale.
-- **Param B (Min Radius)**: Sphere fold radius.
-- **Param C (Wave Freq)**: Frequency of the sine waves.
-- **Param D (Wave Amp)**: Amplitude (height) of the sine waves.
-- **Param E (Wave Twist)**: Twists the wave direction.
-- **Param F (Vert Shift)**: Shifts the waves vertically.
+- **Scale**: Box scale.
+- **Min Radius**: Sphere fold radius.
+- **Wave Freq**: Frequency of the sine waves.
+- **Wave Amp**: Amplitude (height) of the sine waves.
+- **Transform**: A three-axis control — X is Wave Twist (twists the wave direction), Y is Vertical Shift (shifts the waves up/down), and Z is available for additional effects.
 
 ## Visuals
 Creates structures that look like melting machinery, flowing liquid metal, or alien biomechanical surfaces.
@@ -632,13 +610,15 @@ Instead of a fixed equation, you drag-and-drop operations in the **Graph** tab.
 This formula creates a 3D volume by stacking 2D Julia sets along the Z-axis.
 Instead of a single constant $C$, the value of $C$ interpolates from a Start value to an End value as $Z$ changes.
 
-## Usage
-1. **Start Shape**: Set using the **Julia Mode** controls (Julia X/Y/Z).
-2. **End Shape**: Set using **Param D** (Real) and **Param E** (Imaginary).
-3. **Height**: Controls the length of the stack.
-
-## Slicing
-This formula is often used with "Slice Thickness" to create disjointed, floating layers (like MRI scans or topographic maps).
+## Parameters
+- **Height (Z Scale)**: Controls the vertical extent of the Julia stack.
+- **Slice Interval**: Spacing between repeating slices. Set to 0 for a continuous solid.
+- **Slice Thickness**: The width of each slice. Creates disjointed, floating layers (like MRI scans or topographic maps).
+- **Start C**: A two-axis control (Real, Imaginary) for the Julia constant at the bottom of the stack.
+- **End C**: A two-axis control (Real, Imaginary) for the Julia constant at the top. The constant smoothly interpolates between Start C and End C along the height.
+- **Twist**: Rotates the 2D Julia cross-section around the center as Z changes, creating spiraling structures.
+- **Bend**: Curves the entire column along the X-axis. Positive and negative values bend in opposite directions.
+- **Taper**: Scales the cross-section based on Z position — positive values make the top wider, negative makes it narrower.
 `
     },
     'formula.borromean': {

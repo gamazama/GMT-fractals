@@ -26,5 +26,8 @@ dist-ssr
 # Debug shader dumps
 fractal_generator_*.glsl
 
+# Deep zoom perturbation experiment
+prototype/deep-zoom/
+
 # Claude Code personal config
 .claude/

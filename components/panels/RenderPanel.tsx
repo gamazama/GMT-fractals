@@ -36,7 +36,7 @@ const RenderPanel = ({ state, actions }: { state: FractalState, actions: Fractal
     <div className="animate-fade-in -mx-4 -mt-4 flex flex-col" data-help-id="panel.render">
 
         {/* --- SURFACE MATERIALS --- */}
-        <div className="flex flex-col" data-help-id="mat.diffuse">
+        <div className="flex flex-col" data-help-id="mat.diffuse mat.metallic mat.roughness mat.specular mat.rim">
              <AutoFeaturePanel featureId="materials" groupFilter="surface" />
         </div>
 

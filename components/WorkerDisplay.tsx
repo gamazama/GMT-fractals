@@ -38,6 +38,21 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
         initRef.current = true;
 
         const container = containerRef.current;
+
+        // ── OffscreenCanvas support check ────────────────────────────────
+        if (typeof HTMLCanvasElement.prototype.transferControlToOffscreen !== 'function') {
+            const msg = document.createElement('div');
+            msg.style.cssText =
+                'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
+                'background:#1a1a2e;color:#e0e0e0;font:16px/1.5 system-ui,sans-serif;padding:2rem;text-align:center';
+            msg.innerHTML =
+                '<div><h2 style="color:#ff6b6b;margin:0 0 .5rem">Browser Not Supported</h2>' +
+                '<p>GMT requires <b>OffscreenCanvas</b> support.<br>' +
+                'Please use a recent version of Chrome, Edge, or Firefox.</p></div>';
+            container.appendChild(msg);
+            return;
+        }
+
         const dpr = window.devicePixelRatio || 1;
 
         // Measure the actual container size — the props may reflect a stale layout

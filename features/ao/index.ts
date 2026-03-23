@@ -23,7 +23,7 @@ export const AOFeature: FeatureDefinition = {
         toggleParam: 'aoEnabled',
         mode: 'compile',
         label: 'Ambient Occlusion',
-        groupFilter: 'engine_settings' 
+        groupFilter: 'engine_settings'
     },
     params: {
         // --- SHADING PARAMETERS (Runtime, in Shading Panel) ---

@@ -110,6 +110,11 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
 
     out += `<Metadata>\n${neatJSON(metadata)}\n</Metadata>\n\n`;
 
+    if (shader.preamble) {
+        out += `<!-- Global scope code: variables and helper functions (before formula) -->\n`;
+        out += `<Shader_Preamble>\n${dedentGLSL(shader.preamble)}\n</Shader_Preamble>\n\n`;
+    }
+
     if (shader.loopInit) {
         out += `<!-- Code executed once before the loop (Setup) -->\n`;
         out += `<Shader_Init>\n${dedentGLSL(shader.loopInit)}\n</Shader_Init>\n\n`;
@@ -150,6 +155,7 @@ export const parseGMF = (content: string): FractalDefinition => {
     const metadata = JSON.parse(metadataStr);
 
     // Extract Shader Parts
+    const preamble = extract('Shader_Preamble');
     const func = extract('Shader_Function');
     const loop = extract('Shader_Loop');
     const init = extract('Shader_Init');
@@ -162,6 +168,7 @@ export const parseGMF = (content: string): FractalDefinition => {
     const shader = {
         function: func,
         loopBody: loop,
+        preamble: preamble || undefined,
         loopInit: init || undefined,
         getDist: dist || undefined
     };

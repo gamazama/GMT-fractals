@@ -19,9 +19,13 @@ The deck is designed to be flexible for multi-monitor or large screen workflows.
 - **Formula**: Shape structure, iterations, and core math parameters.
 - **Scene**: Camera, Navigation, Fog, and Depth of Field.
 - **Light** (Advanced Mode): Lighting studio (3 lights) and shadows.
-- **Shading**: Surface material (PBR), Glow, and Ambient Occlusion.
-- **Gradients**: Color palettes and texturing.
+- **Shader**: Surface material (PBR), Glow, and Ambient Occlusion.
+- **Gradient**: Color palettes and texturing.
 - **Quality**: Performance tuning, Anti-aliasing, and Resolution.
+- **Engine**: Compile-time settings that require shader recompilation.
+- **Audio** (when enabled): Audio-reactive parameters.
+- **Drawing** (when enabled): Measurement and annotation tools.
+- **Camera Manager**: Camera presets, saved views, and composition guides.
 - **Graph** (Modular Mode): The node-based formula builder.
 `
     },
@@ -41,10 +45,9 @@ The camera lens will focus perfectly on that point, blurring foreground and back
 
 ## Light Gizmos
 When the **Light Panel** is open or "Show 3d helpers" is enabled:
-- Lights appear as glowing rings in 3D space.
-- **Drag** a ring to move the light directly.
-- **Click** a ring to open a quick-access menu for Color and Intensity.
-- **Click the Anchor Icon** above a light to toggle between "Fixed" (Headlamp) and "World" modes.
+- Each light appears as a 3D gizmo with colored axis lines (X=red, Y=green, Z=blue), colored planes, and a center dot filled with the light's color.
+- **Drag** the gizmo to reposition the light directly in 3D space.
+- **Click the Anchor Icon** below the gizmo to toggle between **Headlamp** (light moves with the camera) and **World** (light stays fixed in the scene) modes.
 `
     },
     'ui.colorpicker': {
@@ -60,10 +63,10 @@ The application uses a compact, high-precision **HSV Slider** system.
 - **Value (V)**: Bottom bar. Brightness (Left=Black, Right=Bright).
 
 ## Context Menu
-**Right-click** the color swatch (square on the left) to access:
+**Click** or **Right-click** the color swatch (square on the left) to access:
 - **Copy/Paste**: Transfer hex codes between pickers.
 - **History**: Quickly revert to recently used colors.
-- **Presets**: Pure White/Black shortcuts.
+- **Quick Picks**: Pure White/Black shortcuts.
 `
     },
     'ui.gradient_editor': {
@@ -101,6 +104,9 @@ Right-click the track to:
 - **Distribute**: Evenly space selected knots.
 - **Invert**: Flip the gradient.
 - **Double Knots**: Increase resolution.
+- **Bias Handles**: Toggle visibility of bias diamond handles.
+- **Reset Default**: Restore the gradient to its default state.
+- **Delete Selected**: Remove all currently selected knots.
 - **Output Mode**: Switch color space (sRGB, Linear, Inverse ACES).
 `
     },
@@ -132,7 +138,7 @@ All numeric inputs in the application use **Precision Draggable Sliders**.
 ## Interaction
 - **Drag Number**: Click and hold the number display text to adjust the value. This allows values to extend beyond the visual slider's min/max limits.
 - **Shift + Drag Number**: **10x Speed**. Useful for large adjustments.
-- **Alt + Drag Number**: **0.1x Precision**. Useful for fine-tuning. Also disables step quantization for full precision.
+- **Alt + Drag Number**: **0.1x Precision**. Useful for fine-tuning.
 - **Click Number**: Switch to typing mode to enter exact values.
 - **Reset**: Hover over the right edge of the slider track to reveal a hidden reset button (restores default value).
 
@@ -256,6 +262,34 @@ When in **Fixed Resolution** mode, an overlay appears in the top-left of the vie
 - **Fill Button**: Instantly switch back to "Full Screen" mode.
 `
     },
+    'panel.engine': {
+        id: 'panel.engine',
+        category: 'UI',
+        title: 'Engine Settings',
+        content: `
+The Engine panel controls compile-time shader features — settings that require rebuilding the GPU program before they take effect.
+
+## How It Works
+Unlike most sliders (which update instantly), changes here are **queued** and applied together when you click **Apply**. The shader then recompiles, which takes a few seconds depending on the features enabled.
+
+- **Green dot** = currently compiled into the shader.
+- **Yellow dot** = change is pending (waiting for you to click Apply).
+- **Blue dot** = updates instantly (no recompile needed).
+
+## Presets
+Quick configurations that set multiple features at once:
+- **Fastest**: Bare minimum — no shadows, no AO, no reflections. Maximum FPS.
+- **Lite**: Lightweight setup suitable for exploration on most hardware.
+- **Balanced**: Good mix of visual quality and performance (default).
+- **Ultra**: Everything enabled — reflections, volumetrics, high-quality AO.
+
+## Estimated Compile Time
+The bottom bar shows the estimated compile time for the current configuration. Complex setups (raymarched reflections + bounce shadows + volumetrics) can take 15 seconds or more.
+
+## Who Is This For?
+This panel is for advanced users who want fine control over which shader features are active. Most users can ignore it — the default **Balanced** preset works well for general use.
+`
+    },
     'ui.performance': {
         id: 'ui.performance',
         category: 'UI',
@@ -264,7 +298,7 @@ When in **Fixed Resolution** mode, an overlay appears in the top-left of the vie
 The system automatically detects sustained low framerates.
 
 - **Low FPS Warning**: Appears if the renderer struggles to maintain a usable frame rate.
-- **Fix Button**: Instantly reduces the internal resolution by 25% to restore interactivity.
+- **Suggestion Buttons**: One or more actions are offered depending on the situation — **Reset Scale**, **Lite Mode**, or **Reduce Resolution** (reduces internal resolution by ~33%) — to help restore interactivity.
 - **Dismiss**: Ignores the warning for this session.
 `
     }

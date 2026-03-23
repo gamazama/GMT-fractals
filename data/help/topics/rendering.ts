@@ -70,8 +70,11 @@ Renders the image in small tiles (Buckets) instead of all at once.
 
 ## Why use it?
 - **High Resolution**: Allows rendering 4K or 8K images that would otherwise crash the GPU memory.
-- **Anti-Aliasing**: Each bucket is allowed to accumulate samples until it is perfectly noise-free before moving to the next.
+- **Anti-Aliasing**: Each bucket accumulates samples (default 64 per bucket) until it is perfectly noise-free before moving to the next.
 - **Export**: Can automatically save the result as a PNG when finished.
+
+## Post-Processing
+Post-processing effects (Bloom, Chromatic Aberration, Color Grading, Tone Mapping) are applied to the complete image **after** all buckets have finished rendering — so the final result looks exactly like the live viewport with effects enabled.
 
 ## Usage
 1. Click the **Grid Icon** in the top bar.
@@ -103,6 +106,8 @@ Scales the raymarch step size. Also known as "Lipschitz Bound Relaxation".
 - **1.0 (Safe)**: Mathematically correct stepping. Guarantees no artifacts.
 - **< 1.0 (Slow/Safe)**: Takes smaller steps. Fixes "overstepping" artifacts (holes in the fractal) but is very slow.
 - **> 1.0 (Fast/Risky)**: Takes larger steps. Renders much faster, but may clip through thin geometry, creating black noise or missing details.
+
+> **Artistic use:** Values above 1.0 are also used for artistic slicing effects — they cause the ray to overshoot surfaces, creating cut-away or x-ray looks.
 `
     },
     'quality.threshold': {
@@ -145,10 +150,10 @@ Controls the resolution of the internal render buffer relative to the screen.
     'quality.tss': {
         id: 'quality.tss',
         category: 'Rendering',
-        title: 'Temporal Anti-Aliasing (TSS)',
+        title: 'Temporal AA',
         parentId: 'panel.quality',
         content: `
-**Temporal Super Sampling** is the secret sauce of this engine.
+**Temporal AA** (Temporal Super Sampling) is the secret sauce of this engine.
 
 ### How it works
 Instead of trying to render a perfect image in 16ms (60fps), the engine renders a "noisy" image quickly. It then blends this frame with the previous frame.
@@ -277,9 +282,11 @@ Darkens crevices and holes to add depth perception.
 
 - **Intensity**: Darkness of the shadows.
 - **Spread**: Radius of the sampling. Larger spread = larger soft shadows in corners.
-- **Mode**:
-  - **Fast**: 6 fixed samples. Good for editing.
-  - **High**: Stochastic sampling. Requires TSS (Accumulation) to look good, but produces photorealistic shading.
+- **Samples**: Number of AO samples (default 5, adjustable 2–32). More samples = smoother but slower.
+- **Stochastic Mode** (toggle):
+  - **Off**: Fixed sample positions. Fast and stable — good for editing.
+  - **On**: Randomized sample positions each frame. Requires Temporal AA (Accumulation) to look smooth, but produces photorealistic soft shading.
+- **AO Tint**: Colorizes the ambient occlusion shadows. By default AO darkens to black, but you can tint it to warm brown, cool blue, etc. for a more stylized look.
 
 ### Interaction with Emission
 Ambient Occlusion acts as a multiplier for Self-Illumination and Rim Light. This allows "dirt" or crevices to darken glowing parts of the surface, adding realism to magma/energy cracks.
@@ -310,7 +317,6 @@ Simulates light scattering through a participating medium. Requires **Volumetric
   - **0**: Isotropic — light scatters equally in all directions.
   - **+0.9**: Strong forward scatter — classic god rays pointing toward lights.
   - **−0.9**: Back scatter — halo effect around light sources.
-- **Surface Color Scatter**: Injects the fractal's Layer 1 color field into the fog. Creates a colored volumetric haze whose tones match the fractal's gradient palette.
 
 ## Tips
 - God rays accumulate over frames via Temporal Accumulation — they look best when the camera is still.
@@ -324,13 +330,9 @@ Simulates light scattering through a participating medium. Requires **Volumetric
         title: 'Depth of Field (DOF)',
         parentId: 'panel.scene',
         content: `
-Simulates a physical camera lens.
+Simulates a physical camera lens by blurring areas outside the focus plane. See **Scene > Optics** for full DOF documentation including Aperture, Focus Distance, Auto-Focus, and High Precision controls.
 
-- **Aperture (Blur)**: Strength of the blur. 0.0 = Pinhole camera (infinite focus).
-- **Focus Distance**: Distance to the sharp plane.
-- **Auto-Focus**: Use the "Pick Focus" button in the Scene tab to click a point and set this value automatically.
-
-**Note**: DOF requires **Temporal Accumulation** to look smooth. It uses stochastic jittering of the camera ray.
+**Note**: DOF requires **Temporal AA** (Accumulation) to look smooth.
 `
     },
     'render.reflections': {
@@ -344,14 +346,14 @@ Adds reflective surfaces to the fractal. Three modes available, from cheapest to
 ## Reflection Methods
 - **Off**: No reflections. Fastest.
 - **Environment Map**: Samples the environment map at the reflection angle. Cheap, adds realism to metals. Uses Fresnel weighting.
-- **Raymarched (Quality)**: Fires actual reflection rays through the fractal. Physically accurate but adds ~9s compile time.
+- **Raymarched (Quality)**: Fires actual reflection rays through the fractal. Physically accurate but adds ~7.5s compile time.
 
 ## Raymarched Settings
 - **Max Bounces (1-3)**: Recursion depth. Each bounce adds a full raytrace pass.
 - **Trace Steps**: Precision of the reflection ray (16-128).
 - **Roughness Cutoff**: Surfaces rougher than this skip raymarching (performance optimization).
 - **Raymarch Mix**: Blend between raymarched (1.0) and environment map (0.0) reflections.
-- **Bounce Shadows**: Compute shadows on reflected surfaces. Adds ~3-4s compile time.
+- **Bounce Shadows**: Compute shadows on reflected surfaces. Adds ~4.5s compile time.
 
 ## Tips
 - Combine with low **Roughness** (0.0-0.3) and high **Metallic** for dramatic mirror effects.
@@ -366,7 +368,7 @@ Adds reflective surfaces to the fractal. Three modes available, from cheapest to
         content: `
 Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored haze, and directional fog effects.
 
-**Note:** This is a compile-time feature. Enabling it triggers a shader recompile (~5.5s).
+**Note:** This is a compile-time feature. Enabling it triggers a shader recompile (~5.5s). You can also toggle it on/off at runtime without recompiling once it has been compiled in.
 
 ## Density & Shadow Rays
 - **Density**: Thickness of the participating medium. Log scale — small values (0.01-0.05) produce subtle haze, higher values create thick fog.
@@ -376,9 +378,10 @@ Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored
   - **-0.9**: Back scatter — halo effect around lights.
 - **Light Sources**: How many lights cast shadow rays into the volume (1-3). More = more expensive.
 - **Scatter Tint**: Color of the scattered light.
+- **Step Jitter**: Controls random variation in volumetric step positions. Higher values help with temporal accumulation (noise averages out over frames). Lower values produce cleaner single-frame results but may show banding. Can also be used artistically for slicing effects.
 
 ## Color Scatter
-- **Color Scatter**: Injects the fractal's orbit trap color field into the volume. Creates a colored volumetric haze matching the gradient palette. No shadow rays needed (cheap).
+- **Surface Color Scatter**: Injects the fractal's orbit trap color field into the volume. Creates a colored volumetric haze matching the gradient palette. No shadow rays needed (cheap).
 - **Surface Falloff**: Concentrates the color near the fractal surface.
 
 ## Height Fog
@@ -386,8 +389,33 @@ Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored
 - **Height Origin**: The Y level where fog is densest.
 `
     },
-    'render.waterplane': {
-        id: 'render.waterplane',
+    'mat.reflection': {
+        id: 'mat.reflection',
+        category: 'Rendering',
+        title: 'Reflections',
+        parentId: 'panel.render',
+        content: `
+Adds reflective surfaces to the fractal using raymarched reflection rays.
+
+## How It Works
+When enabled, the renderer fires additional rays from the surface in the reflection direction. These rays march through the fractal just like the camera ray, finding what the surface "sees" and blending that into the final image.
+
+## Key Controls
+- **Max Bounces (1–3)**: How many times light can bounce between surfaces. One bounce is a simple mirror; two or three bounces let you see reflections of reflections (like standing between two mirrors). More bounces = slower rendering.
+- **Roughness**: Smooth surfaces (low roughness) produce sharp, mirror-like reflections. Rough surfaces scatter the reflection into a soft, blurry highlight.
+- **Roughness Cutoff**: Surfaces rougher than this threshold skip raymarching entirely to save performance — they fall back to the environment map.
+- **Raymarch Mix**: Blends between full raymarched reflections (1.0) and the cheaper environment map reflections (0.0). Useful for dialing in the right balance of quality vs speed.
+- **Metallic Influence**: Metallic surfaces tint reflections with their own color (like gold or copper), while non-metallic surfaces (plastic, stone) reflect white light.
+
+## Bounce Shadows
+When enabled, reflected surfaces also receive proper shadows — so a reflection of a crevice will show the correct darkness inside it. This adds realism but increases compile time.
+
+## Performance Note
+Raymarched reflections are a compile-time feature. Enabling them triggers a shader recompile (roughly 7–8 seconds). Bounce shadows add another 3–5 seconds on top of that. Use Environment Map mode for fast editing, then switch to Raymarched for final renders.
+`
+    },
+    'water.settings': {
+        id: 'water.settings',
         category: 'Rendering',
         title: 'Water Plane',
         content: `
@@ -412,6 +440,78 @@ Normals are recomputed via finite differences for accurate specular highlights a
 ## Tips
 - Works best with **Reflections** enabled (Environment Map or Raymarched).
 - Set the fractal near the water surface and use **Fog** to create depth.
+`
+    },
+    'quality.metric': {
+        id: 'quality.metric',
+        category: 'Rendering',
+        title: 'Distance Metric',
+        parentId: 'panel.quality',
+        content: `
+> **REQUIRES ADVANCED MODE**
+
+Controls how "distance" is measured in 3D space. Different metrics produce different geometric styles.
+
+- **Euclidean** (default): Standard straight-line distance. Produces natural, round shapes.
+- **Chebyshev**: Uses the largest coordinate difference. Tends to produce cube-like, blocky geometry.
+- **Manhattan**: Uses the sum of coordinate differences. Creates diamond-shaped, angular geometry.
+- **Minkowski**: A tunable blend between the other metrics. Adjust the exponent to interpolate between Manhattan (1), Euclidean (2), and Chebyshev (infinity).
+`
+    },
+    'quality.estimator': {
+        id: 'quality.estimator',
+        category: 'Rendering',
+        title: 'Distance Estimator',
+        parentId: 'panel.quality',
+        content: `
+> **REQUIRES ADVANCED MODE**
+
+Controls the mathematical method used to estimate the distance to the fractal surface. Different estimators suit different formula types.
+
+- **Analytic Log**: Uses the logarithmic distance estimate. Best for standard fractals (Mandelbulb, Mandelbox) where the analytic derivative is reliable.
+- **Linear**: A simpler linear estimate. Can work better for formulas with non-standard divergence behavior.
+- **Pseudo**: Approximates the distance without true derivatives. Useful as a fallback when analytic methods produce artifacts.
+- **Dampened**: A conservative estimate that under-steps slightly for stability. Helps with formulas prone to overstepping artifacts (holes or noise on surfaces).
+`
+    },
+    'quality.jitter': {
+        id: 'quality.jitter',
+        category: 'Rendering',
+        title: 'Step Jitter',
+        parentId: 'panel.quality',
+        content: `
+> **REQUIRES ADVANCED MODE**
+
+Adds stochastic (random) variation to each ray step position (default 0.15).
+
+- **Purpose**: Breaks up banding and aliasing artifacts by randomizing where the ray samples. Over multiple frames with Temporal AA enabled, the random offsets average out to produce a smooth, noise-free image.
+- **0.0**: No jitter. Clean single frames but may show visible stepping bands on smooth surfaces.
+- **0.1–0.2**: Subtle variation. Good balance for most scenes.
+- **Higher values**: More randomness per frame — noisier in motion but converges faster when still.
+`
+    },
+    'quality.relaxation': {
+        id: 'quality.relaxation',
+        category: 'Rendering',
+        title: 'Step Relaxation',
+        parentId: 'panel.quality',
+        content: `
+> **REQUIRES ADVANCED MODE**
+
+A dynamic fudge factor that automatically adjusts the step size based on the previous step's distance estimate.
+
+When enabled, the raymarcher takes larger steps in open space (where it is safe) and smaller steps near surfaces (where precision matters). This speeds up rendering in scenes with large empty areas without sacrificing surface detail.
+`
+    },
+    'quality.adaptive': {
+        id: 'quality.adaptive',
+        category: 'Rendering',
+        title: 'Adaptive Resolution',
+        parentId: 'panel.quality',
+        content: `
+Dynamically lowers the rendering resolution while the camera is moving, then snaps back to full resolution when you stop.
+
+This gives you smoother, more responsive interaction when orbiting or flying through complex scenes, without permanently sacrificing image quality. The resolution recovers instantly once movement stops and Temporal AA cleans up the image.
 `
     },
     'export.video': {

@@ -21,6 +21,11 @@ async function createServer() {
 
   let vite;
 
+  // Serve standalone tools before Vite/SPA middleware (which would catch them)
+  app.use('/mesh-export', express.static(
+    isProduction ? path.join(distPath, 'mesh-export') : path.join(projectRoot, 'public', 'mesh-export')
+  ));
+
   if (!isProduction) {
     console.log('[Server] Mode: Development (Vite Middleware)');
     // --- DEVELOPMENT MODE ---

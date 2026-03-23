@@ -176,31 +176,31 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                 );
             })}
 
-            {items.length > 0 && helpTopics.length > 0 && <div className="h-px bg-white/10 my-1" />}
+            {items.length > 0 && helpTopics.length > 0 && <div className="h-px bg-cyan-500/15 my-1" />}
 
             {/* Help Items with Hierarchy */}
             {helpTopics.length > 0 && (
-                <>
-                    <div className="px-4 py-1 text-[9px] text-cyan-700 font-bold mb-1 flex items-center gap-2">
-                        <HelpIcon /> Context Help
+                <div className="bg-cyan-950/20 border-t border-cyan-500/10 pt-0.5 pb-0.5">
+                    <div className="px-3 py-1 text-[9px] text-cyan-600 font-semibold tracking-wider uppercase flex items-center gap-1.5 select-none">
+                        <span className="text-cyan-500 opacity-70"><HelpIcon /></span> Help
                     </div>
                     {helpTopics.map((topic, i) => (
                         <button
                             key={topic.id}
                             onClick={() => { onOpenHelp(topic.id); onClose(); }}
-                            className={`w-full text-left px-4 py-1.5 text-xs transition-colors flex items-center gap-2 group ${
-                                i === 0 
-                                ? 'text-cyan-400 hover:bg-cyan-900/30 hover:text-cyan-200 font-bold' // Most specific
-                                : 'text-gray-400 hover:bg-white/5 hover:text-white' // Parents
+                            className={`w-full text-left py-1.5 text-xs transition-colors flex items-center gap-2 group ${
+                                i === 0
+                                ? 'text-cyan-300 hover:bg-cyan-800/30 hover:text-cyan-100 font-medium'
+                                : 'text-cyan-600 hover:bg-cyan-900/20 hover:text-cyan-300'
                             }`}
-                            style={{ paddingLeft: `${16 + i * 8}px` }} // Indentation
+                            style={{ paddingLeft: `${14 + i * 10}px`, paddingRight: '16px' }}
                         >
-                            {i > 0 && <span className="opacity-30 text-[8px]">└</span>}
+                            <span className={`text-[10px] ${i === 0 ? 'text-cyan-500' : 'text-cyan-700'}`}>?</span>
                             <span>{topic.title}</span>
-                            {i === 0 && <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"><ArrowIcon /></span>}
+                            {i === 0 && <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-cyan-500"><ArrowIcon /></span>}
                         </button>
                     ))}
-                </>
+                </div>
             )}
             
             {/* Recursive Submenu Render */}

@@ -318,9 +318,10 @@ export const WebcamOverlay: React.FC<FeatureComponentProps> = ({ sliceState, act
     const currentBlendMode = BLEND_MODES[Math.floor(blendIdx)] || 'normal';
 
     return (
-        <div 
+        <div
             className="absolute select-none"
-            style={{ 
+            data-help-id="panel.webcam"
+            style={{
                 left: posX, top: posY, width: width, height: height,
                 cursor: 'move', pointerEvents: 'auto'
             }}

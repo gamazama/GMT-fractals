@@ -94,7 +94,7 @@ const BucketRenderSettingsPopup = () => {
 
     return (
         <Popover width="w-72">
-            <div className="relative space-y-3">
+            <div className="relative space-y-3" data-help-id="bucket.render">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2">
                     <span className="text-[10px] font-bold text-gray-400">High Quality Render</span>
                     {state.isBucketRendering && (

@@ -80,10 +80,14 @@ export const ColoringPanel = ({ state, actions }: { state: FractalState, actions
 
                         {texturing && !texturing.active ? (
                             <div className="flex flex-col">
-                                <AutoFeaturePanel featureId="coloring" groupFilter="layer1_top" />
+                                <div data-help-id="grad.mapping">
+                                    <AutoFeaturePanel featureId="coloring" groupFilter="layer1_top" />
+                                </div>
                                 <AutoFeaturePanel featureId="coloring" groupFilter="layer1_grad" />
                                 <AutoFeaturePanel featureId="coloring" groupFilter="layer1_hist" />
-                                <AutoFeaturePanel featureId="coloring" groupFilter="layer1_bottom" />
+                                <div data-help-id="grad.escape">
+                                    <AutoFeaturePanel featureId="coloring" groupFilter="layer1_bottom" />
+                                </div>
                             </div>
                         ) : texturing?.active ? (
                             <div className="flex flex-col" data-help-id="grad.texture">

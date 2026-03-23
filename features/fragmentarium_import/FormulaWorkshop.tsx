@@ -17,7 +17,10 @@ import { registry } from '../../engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { useFractalStore } from '../../store/fractalStore';
 import { GlslEditor } from '../../components/inputs/GlslEditor';
+import type { EditorHighlight } from '../../components/inputs/GlslEditor';
 import type { WorkshopDetection, WorkshopParam, TransformedFormulaV2 } from './types';
+import { detectVariables, promoteVariable } from './workshop/variable-detector';
+import type { DetectedVariable } from './workshop/variable-detector';
 import { detectFormulaV3, transformFormulaV3 } from './v3/compat';
 import { buildFractalParams, filterDeadParams, slotLabel, componentSlotBase, groupedSlotOptions, buildOccupancyMap, isSlotConflict, getSlotOccupancy } from './workshop/param-builder';
 
@@ -419,6 +422,8 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     const [libraryReady, setLibraryReady]                 = useState(isLibraryLoaded());
     const [searchQuery, setSearchQuery]                   = useState('');
     const [searchResults, setSearchResults]               = useState<FormulaEntry[] | null>(null);
+    const [detectVarsActive, setDetectVarsActive]         = useState(false);
+    const [detectedVars, setDetectedVars]                 = useState<DetectedVariable[]>([]);
 
     // ── Refs ──
     const fileRef            = useRef<HTMLInputElement>(null);
@@ -487,11 +492,13 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         if (!def?.importSource) return;
         const { glsl, selectedFunction, loopMode: lm, mappings: m } = def.importSource;
         setSource(glsl);
-        setFormulaName(editFormula);
         setSelectedFunctionName(selectedFunction);
         setLoopMode(lm);
         setMappings(m as WorkshopParam[]);
-        runDetect(glsl);
+        runDetect(glsl, editFormula);
+        // Re-set name AFTER runDetect so it wins the React batch
+        // (runDetect derives a fresh name which would overwrite editFormula)
+        setFormulaName(editFormula);
     }, [editFormula, runDetect]);
 
     // ── Auto-generate annotated transformed output ──
@@ -608,6 +615,42 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
         }
     }, [runDetect]);
+
+    // ── Variable detection (highlight mode) ──
+    useEffect(() => {
+        if (detectVarsActive && source.trim()) {
+            setDetectedVars(detectVariables(source));
+        } else {
+            setDetectedVars([]);
+        }
+    }, [detectVarsActive, source]);
+
+    // Convert detected variables to editor highlights
+    const editorHighlights: EditorHighlight[] | undefined = useMemo(() => {
+        if (!detectVarsActive || detectedVars.length === 0) return undefined;
+        const highlights: EditorHighlight[] = [];
+        for (const v of detectedVars) {
+            for (const occ of v.occurrences) {
+                highlights.push({
+                    from: occ.from,
+                    to: occ.to,
+                    id: v.id,
+                    colorClass: v.colorClass,
+                    tooltip: `${v.context} → click to promote to uniform "${v.name}"`,
+                });
+            }
+        }
+        return highlights;
+    }, [detectVarsActive, detectedVars]);
+
+    // Click-to-promote handler
+    const handleHighlightClick = useCallback((id: string) => {
+        const variable = detectedVars.find(v => v.id === id);
+        if (!variable) return;
+        const newSource = promoteVariable(source, variable);
+        setSource(newSource);
+        // Re-detection happens automatically via the useEffect above
+    }, [detectedVars, source]);
 
     // ── Source resize (uses ref to avoid recreating on every height change) ──
     const handleSourceResizeStart = useCallback((e: React.PointerEvent) => {
@@ -976,6 +1019,8 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                                     onChange={val => setSource(val)}
                                     height="100%"
                                     placeholder="Paste GLSL here — distance estimator functions, Fragmentarium .frag files, or Shadertoy snippets."
+                                    highlights={editorHighlights}
+                                    onHighlightClick={handleHighlightClick}
                                 />
                             </div>
                             <div
@@ -985,7 +1030,51 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                             >
                                 <div className="w-8 h-0.5 rounded-full bg-white/10 group-hover:bg-white/30 transition-colors" />
                             </div>
-                            <div className="flex justify-end shrink-0">
+
+                            {/* Detect Variables toggle + legend */}
+                            {detectVarsActive && detectedVars.length > 0 && (
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[9px] text-gray-500">
+                                    {detectedVars.map(v => (
+                                        <button
+                                            key={v.id}
+                                            onClick={() => handleHighlightClick(v.id)}
+                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors cm-${v.colorClass}`}
+                                            title={`Promote "${v.originalText}" → uniform ${v.name}`}
+                                            style={{
+                                                borderBottom: 'none',
+                                            }}
+                                        >
+                                            <span className="font-mono text-white/80">{v.name}</span>
+                                            <span className="text-gray-600">= {Array.isArray(v.defaultValue) ? `(${(v.defaultValue as number[]).join(', ')})` : v.defaultValue}</span>
+                                            <span className="text-gray-700">({v.occurrences.length}x)</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-between shrink-0">
+                                {/* Detect Variables toggle */}
+                                <label className="flex items-center gap-2 cursor-pointer select-none group" title="Highlight magic numbers, #defines, and vec constructors — click highlights to promote to uniforms">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            checked={detectVarsActive}
+                                            onChange={e => setDetectVarsActive(e.target.checked)}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-7 h-4 bg-white/10 peer-checked:bg-amber-600/60 rounded-full transition-colors" />
+                                        <div className="absolute left-0.5 top-0.5 w-3 h-3 bg-gray-400 peer-checked:bg-amber-300 rounded-full transition-all peer-checked:translate-x-3" />
+                                    </div>
+                                    <span className={`text-[10px] font-semibold transition-colors ${detectVarsActive ? 'text-amber-300' : 'text-gray-500 group-hover:text-gray-300'}`}>
+                                        Detect Variables
+                                    </span>
+                                    {detectVarsActive && detectedVars.length > 0 && (
+                                        <span className="text-[9px] text-amber-400/60">
+                                            {detectedVars.length} found — click to promote
+                                        </span>
+                                    )}
+                                </label>
+
                                 <button
                                     onClick={() => runDetect(source)}
                                     disabled={!source.trim()}

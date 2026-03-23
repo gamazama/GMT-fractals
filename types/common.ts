@@ -1,5 +1,5 @@
 
-export type FormulaType = 'Mandelbulb' | 'AmazingBox' | 'MengerSponge' | 'MixPinski' | 'AmazingSurf' | 'Kleinian' | 'BoxBulb' | 'MengerAdvanced' | 'Quaternion' | 'Dodecahedron' | 'Mandelbar3D' | 'Bristorbrot' | 'MakinBrot' | 'Tetrabrot' | 'Modular' | 'PseudoKleinian' | 'Phoenix' | 'Buffalo'| 'MandelTerrain' | 'MarbleMarcher' | 'JuliaMorph' | 'AmazingSurface' | 'Mandelorus' | 'Appell' | 'Borromean' | 'MandelMap' | 'MandelbrotCK' | 'MandelBolic' | 'SierpinskiTetrahedron' | 'KaliBox' | 'Claude';
+export type FormulaType = 'Mandelbulb' | 'AmazingBox' | 'MengerSponge' | 'MixPinski' | 'AmazingSurf' | 'Kleinian' | 'BoxBulb' | 'MengerAdvanced' | 'Quaternion' | 'Dodecahedron' | 'Mandelbar3D' | 'Bristorbrot' | 'MakinBrot' | 'Tetrabrot' | 'Modular' | 'PseudoKleinian' | 'Phoenix' | 'Buffalo'| 'MandelTerrain' | 'MarbleMarcher' | 'JuliaMorph' | 'AmazingSurface' | 'Mandelorus' | 'Appell' | 'Borromean' | 'MandelMap' | 'MandelBolic' | 'SierpinskiTetrahedron' | 'KaliBox' | 'Claude';
 export type CameraMode = 'Orbit' | 'Fly';
 
 export interface PreciseVector3 {

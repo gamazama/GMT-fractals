@@ -40,6 +40,7 @@ export const VolumetricFeature: FeatureDefinition = {
         runtimeToggleParam: 'volEnabled',
         label: 'Volumetric Scatter',
         compileMessage: 'Compiling Volumetric Shader...',
+        helpId: 'render.volumetric',
     },
     groups: {
         density: { label: 'Density & Shadow Rays', collapsible: true },

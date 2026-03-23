@@ -261,7 +261,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                                     </div>
                                 </div>
                             </div>,
-                            <div key="performance">
+                            <div key="performance" data-help-id="quality.adaptive">
                                 <AutoFeaturePanel featureId="quality" groupFilter="performance" />
                             </div>
                         );
@@ -307,7 +307,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
              <SectionDivider />
 
              {/* Raymarching Controls - Runtime */}
-             <div className="flex flex-col">
+             <div className="flex flex-col" data-help-id="quality.steps quality.detail quality.fudge quality.threshold quality.metric quality.estimator quality.jitter quality.relaxation">
                 {quality && (
                     <AutoFeaturePanel featureId="quality" groupFilter="kernel" />
                 )}

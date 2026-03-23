@@ -40,7 +40,9 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
         {optics && (
             <div className="flex flex-col">
                  <AutoFeaturePanel featureId="optics" groupFilter="dof" />
-                 <AutoFeaturePanel featureId="optics" groupFilter="projection" />
+                 <div data-help-id="cam.fov">
+                     <AutoFeaturePanel featureId="optics" groupFilter="projection" />
+                 </div>
             </div>
         )}
      </div>
@@ -63,7 +65,7 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
      </div>
 
      {/* --- VOLUMETRIC SCATTER (under Fog) --- */}
-     <CompilableFeatureSection featureId="volumetric" />
+     <CompilableFeatureSection featureId="volumetric" helpId="render.volumetric" />
 
      <SectionDivider />
 
@@ -99,7 +101,7 @@ const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalA
            <AutoFeaturePanel featureId="postEffects" groupFilter="bloom" />
            <AutoFeaturePanel featureId="postEffects" groupFilter="lens" />
         </div>
-can you check this erro        {droste && (
+        {droste && (
            <div className="flex flex-col" data-help-id="effect.droste">
               <AutoFeaturePanel featureId="droste" groupFilter="main" />
 
