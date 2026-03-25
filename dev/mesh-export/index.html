@@ -29,6 +29,8 @@ button.btn-next:disabled { background: #333; color: #555; font-weight: normal; }
 #status { font-size: 13px; color: #fa0; min-height: 18px; margin-bottom: 6px; font-weight: bold; }
 .progress-bar { width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, #2a5, #5d8); width: 0%; transition: width 0.15s; }
+.mem-block { display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px; font-weight:bold; white-space:nowrap; overflow:hidden; border-radius:2px; transition: opacity 0.4s, flex 0.3s; min-width:0; }
+.mem-block.freed { opacity:0.25; }
 canvas { border: 1px solid #333; image-rendering: pixelated; border-radius: 2px; }
 #meshPreview { cursor: grab; }
 #meshPreview:active { cursor: grabbing; }
@@ -65,6 +67,14 @@ canvas { border: 1px solid #333; image-rendering: pixelated; border-radius: 2px;
 .vec-comp-letter.z { color: #66f; }
 .vec-comp-letter.w { color: #fa0; }
 #formulaParams { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bbox-controls { font-size: 12px; }
+.bbox-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
+.bbox-label { font-size: 10px; color: #888; text-transform: uppercase; min-width: 42px; }
+.bbox-axis { font-size: 10px; font-weight: bold; width: 12px; text-align: center; }
+.bbox-axis.x { color: #f66; }
+.bbox-axis.y { color: #6f6; }
+.bbox-axis.z { color: #66f; }
+.bbox-input { background: #222; color: #eee; border: 1px solid #444; padding: 3px 4px; font-family: inherit; font-size: 12px; border-radius: 2px; width: 56px; }
 #logCopyBtn { font-size: 10px; background: #333; color: #888; border: 1px solid #444; padding: 2px 8px; cursor: pointer; border-radius: 2px; float: right; margin-top: -2px; }
 #logCopyBtn:hover { background: #444; color: #ccc; }
 </style>
@@ -89,10 +99,10 @@ canvas { border: 1px solid #333; image-rendering: pixelated; border-radius: 2px;
 </div>
 
 <div class="panel">
-  <div class="panel-title">Export Settings</div>
+  <div class="panel-title">Pipeline</div>
   <div class="controls">
     <div class="control-row">
-      <span class="control-row-label">Sampling</span>
+      <span class="control-row-label">1 &middot; SDF</span>
       <label title="Number of voxels per axis. Higher = more detail but slower and more memory. 256 is good for previews, 512&ndash;1024 for final exports.">Resolution
         <select id="res">
           <option value="32">32&sup3;</option>
@@ -123,13 +133,18 @@ canvas { border: 1px solid #333; image-rendering: pixelated; border-radius: 2px;
           <option value="4">4&sup3; = 64</option>
         </select>
       </label>
-      <label title="World-space bounding box minimum. The fractal is sampled within this cube. Increase range for fractals that extend beyond &plusmn;1.5.">Bounds Min <input type="number" id="bboxMin" value="-1.5" step="0.1" style="width:60px"></label>
-      <label title="World-space bounding box maximum.">Max <input type="number" id="bboxMax" value="1.5" step="0.1" style="width:60px"></label>
+      <label title="Z sub-slices for mesh and VDB export. Samples multiple Z positions per voxel layer and averages the SDF. Smooths Z-axis banding/contour artifacts. 1 = off, 4&ndash;8 recommended. Cost scales linearly.">Z Sub-slices
+        <select id="zSubSlices">
+          <option value="1">1 (off)</option>
+          <option value="2">2</option>
+          <option value="4" selected>4</option>
+          <option value="8">8</option>
+          <option value="16">16</option>
+        </select>
+      </label>
     </div>
-    <div class="control-row" id="meshRow">
-      <span class="control-row-label">Mesh</span>
-      <label title="Taubin smoothing passes. Removes staircase artifacts from voxelization. 0 = no smoothing, 3 = subtle, 10+ = very smooth. May lose fine detail at high values.">Smoothing <input type="number" id="smoothPasses" value="3" min="0" max="20"></label>
-      <label title="Newton projection. Snaps mesh vertices onto the true fractal surface using iterative refinement. Greatly improves accuracy with minimal cost. Recommended on.">Newton <input type="checkbox" id="newton" checked></label>
+    <div class="control-row" id="filterRow">
+      <span class="control-row-label">2 &middot; Filter</span>
       <label title="Minimum feature size. Clamps thin interior SDF regions to prevent interior geometry artifacts. Auto = 1.5x voxel size. Off for maximum detail, higher values for cleaner prints.">Min Feature
         <select id="minFeature">
           <option value="auto" selected>Auto</option>
@@ -156,6 +171,55 @@ canvas { border: 1px solid #333; image-rendering: pixelated; border-radius: 2px;
         <input type="number" id="closingRadius" value="0" min="0" max="20" step="0.5" style="width:50px"> <span style="color:#888;font-size:11px">voxels</span>
       </label>
     </div>
+    <div class="control-row" id="newtonRow">
+      <span class="control-row-label">3 &middot; Newton</span>
+      <label title="Newton projection. Snaps mesh vertices onto the true fractal surface using iterative refinement. Greatly improves accuracy with minimal cost. Recommended on.">Enable <input type="checkbox" id="newton" checked></label>
+      <label title="Number of Newton-Raphson refinement steps per vertex. More steps = more accurate surface snapping but slower. 6 is robust for most fractals; try 8&ndash;12 for highly detailed surfaces.">Steps
+        <select id="newtonSteps">
+          <option value="2">2</option>
+          <option value="4">4</option>
+          <option value="6" selected>6</option>
+          <option value="8">8</option>
+          <option value="12">12</option>
+          <option value="16">16</option>
+        </select>
+      </label>
+    </div>
+    <div class="control-row" id="smoothRow">
+      <span class="control-row-label">4 &middot; Smooth</span>
+      <label title="Taubin smoothing passes. Removes staircase artifacts from voxelization. 0 = no smoothing (skip phase), 3 = subtle, 10+ = very smooth. May lose fine detail at high values.">Passes <input type="number" id="smoothPasses" value="3" min="0" max="50"></label>
+      <label title="Smoothing strength (Taubin lambda). Higher = more aggressive smoothing per pass. 0.5 is standard. Reduce to 0.3 for gentler smoothing, increase to 0.7 for stronger.">Lambda
+        <select id="smoothLambda">
+          <option value="0.3">0.3 (gentle)</option>
+          <option value="0.5" selected>0.5 (standard)</option>
+          <option value="0.7">0.7 (strong)</option>
+        </select>
+      </label>
+      <span id="smoothNote" style="display:none;font-size:10px;color:#fa0;">Skipped: &gt;5M verts (adjacency OOM). TODO: chunk-based smoothing.</span>
+    </div>
+    <div class="control-row" id="colorRow">
+      <span class="control-row-label">5 &middot; Color</span>
+      <label title="Color supersampling. Evaluates the orbit trap at multiple jittered positions around each vertex and averages. Smooths splotchy colors at high iterations. 1 = off, 8&ndash;16 recommended. Cost scales linearly.">Samples
+        <select id="colorSamples">
+          <option value="1">1 (off)</option>
+          <option value="4">4</option>
+          <option value="8" selected>8</option>
+          <option value="16">16</option>
+          <option value="32">32</option>
+          <option value="64">64</option>
+          <option value="128">128</option>
+          <option value="256">256</option>
+        </select>
+      </label>
+      <label title="Jitter radius for color supersampling, as a multiple of voxel size. Larger radius = smoother color averaging but may blur detail. 0.5 is default.">Jitter Radius
+        <select id="colorJitter">
+          <option value="0.25">0.25x</option>
+          <option value="0.5" selected>0.5x</option>
+          <option value="1.0">1.0x</option>
+          <option value="2.0">2.0x</option>
+        </select>
+      </label>
+    </div>
     <div class="control-row">
       <span class="control-row-label">Output</span>
       <label title="Output file format. GLB = 3D model with vertex colors (for viewers/engines). STL = triangle mesh (for 3D printing). VDB = sparse volume grid (for Blender/Houdini rendering).">Format
@@ -179,6 +243,49 @@ canvas { border: 1px solid #333; image-rendering: pixelated; border-radius: 2px;
 <div id="phaseStatus" style="font-size:11px;color:#666;margin-bottom:4px;height:16px;"></div>
 <div class="progress-bar" style="height:3px;margin-bottom:10px;"><div class="progress-fill" id="phaseProgress" style="background:linear-gradient(90deg,#47a,#7cf);"></div></div>
 
+<div id="memoryMap" style="display:none;margin-bottom:10px;">
+  <div id="memBlocks" style="display:flex;height:24px;border-radius:3px;overflow:hidden;border:1px solid #333;gap:1px;background:#222;"></div>
+  <div id="memSummary" style="font-size:10px;color:#666;margin-top:3px;height:14px;"></div>
+</div>
+
+<div id="previewPanel" class="panel">
+  <div class="panel-title">Preview &amp; Bounds</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <div style="position:relative;width:384px;height:384px;flex-shrink:0;">
+      <canvas id="fractalPreview" width="384" height="384" style="cursor:grab;"></canvas>
+      <canvas id="bboxOverlay" width="384" height="384" style="position:absolute;top:0;left:0;"></canvas>
+    </div>
+    <div style="flex:1;min-width:200px;">
+      <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Bounding Box</div>
+      <div class="bbox-controls">
+        <div class="bbox-row">
+          <span class="bbox-label">Center</span>
+          <span class="bbox-axis x">X</span><input type="number" id="bboxCX" value="0" step="0.1" class="bbox-input" title="Bounding box center X">
+          <span class="bbox-axis y">Y</span><input type="number" id="bboxCY" value="0" step="0.1" class="bbox-input" title="Bounding box center Y">
+          <span class="bbox-axis z">Z</span><input type="number" id="bboxCZ" value="0" step="0.1" class="bbox-input" title="Bounding box center Z">
+        </div>
+        <div class="bbox-row">
+          <span class="bbox-label">Size</span>
+          <span class="bbox-axis x">W</span><input type="number" id="bboxSX" value="3" step="0.1" min="0.1" class="bbox-input" title="Width (X axis)">
+          <span class="bbox-axis y">H</span><input type="number" id="bboxSY" value="3" step="0.1" min="0.1" class="bbox-input" title="Height (Y axis)">
+          <span class="bbox-axis z">D</span><input type="number" id="bboxSZ" value="3" step="0.1" min="0.1" class="bbox-input" title="Depth (Z axis)">
+          <label title="Lock all axes to the same size"><input type="checkbox" id="bboxLock" checked> <span style="font-size:10px;color:#888;">Lock</span></label>
+        </div>
+        <div class="bbox-row" style="margin-top:4px;">
+          <button onclick="resetBounds()" style="font-size:11px;padding:2px 8px;background:#333;">Reset</button>
+          <button onclick="fitBounds()" style="font-size:11px;padding:2px 8px;background:#333;" title="Auto-fit bounds to visible fractal">Auto-fit</button>
+          <span id="bboxInfo" style="font-size:10px;color:#666;margin-left:6px;"></span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#555;margin-top:8px;line-height:1.5;">
+        Drag preview to orbit. Scroll to zoom.<br>
+        Drag <span style="color:#f55;">red</span>/<span style="color:#5f5;">green</span>/<span style="color:#55f;">blue</span> handles to resize.<br>
+        Drag <span style="color:#fa0;">center</span> gizmo to reposition.
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="canvases">
   <canvas id="preview" width="512" height="512"></canvas>
   <canvas id="meshPreview" width="512" height="512"></canvas>
@@ -199,6 +306,10 @@ canvas { border: 1px solid #333; image-rendering: pixelated; border-radius: 2px;
 <script src="formula-system.js"></script>  <!-- GMF parser, GLSL templates, builtins, UI -->
 <script src="vdb-writer.js"></script>     <!-- VDB file format writer -->
 <script src="gpu-pipeline.js"></script>   <!-- WebGL setup, GPU sampling, Newton, coloring -->
+<script src="preview-camera.js"></script> <!-- vec3, ortho camera, projection, snap math -->
+<script src="sdf-filter.js"></script>     <!-- min-feature, morphological closing, cavity fill -->
+<script src="mesh-preview.js"></script>   <!-- wireframe mesh preview rendering -->
+<script src="pipeline.js"></script>       <!-- mesh generation pipeline, export orchestration -->
 
 <script>
 // ============================================================================
@@ -214,7 +325,17 @@ var statusEl, progressEl, infoEl, previewCvs, previewCtx, meshCvs, meshCtx;
 var logPanelEl, logHeaderEl;
 var logLines = [];
 var phaseStatusEl, phaseProgressEl;
+var memMapEl, memBlocksEl, memSummaryEl;
 var cancelRequested = false;
+
+// Memory map: tracks live allocations as colored blocks
+var memAllocations = {};  // id -> { label, mb, color, freed }
+
+var MEM_COLORS = {
+  coarseGrid: '#2a7a3a', sdfGrid: '#3c8', sparseGrid: '#4a9',
+  meshPos: '#c6f', meshNrm: '#a5d', meshIdx: '#84b', meshCol: '#f75',
+  webgl: '#47a', exportBlob: '#ec5'
+};
 
 function setStatus(msg) { statusEl.textContent = msg; }
 function setProgress(pct) { progressEl.style.width = Math.min(100, pct) + '%'; }
@@ -222,7 +343,119 @@ function setPhase(name, pct) {
   if (phaseStatusEl) phaseStatusEl.textContent = name + (pct !== undefined ? ' \u2014 ' + Math.round(pct) + '%' : '');
   if (phaseProgressEl) phaseProgressEl.style.width = (pct !== undefined ? Math.min(100, pct) : 0) + '%';
 }
+
+/** Register a memory allocation in the map */
+function memAlloc(id, label, mb, color) {
+  memAllocations[id] = { label: label, mb: mb, color: color || MEM_COLORS[id] || '#888', freed: false };
+  renderMemMap();
+}
+
+/** Mark an allocation as freed */
+function memFree(id) {
+  if (memAllocations[id]) {
+    memAllocations[id].freed = true;
+    renderMemMap();
+  }
+}
+
+/** Update size of an existing allocation */
+function memUpdate(id, label, mb) {
+  if (memAllocations[id]) {
+    if (label) memAllocations[id].label = label;
+    if (mb !== undefined) memAllocations[id].mb = mb;
+    renderMemMap();
+  }
+}
+
+/** Clear all allocations */
+function memReset() {
+  memAllocations = {};
+  if (memMapEl) memMapEl.style.display = 'none';
+  if (memBlocksEl) memBlocksEl.innerHTML = '';
+  if (memSummaryEl) memSummaryEl.textContent = '';
+}
+
+/** Render the memory map blocks */
+function renderMemMap() {
+  if (!memBlocksEl) return;
+  memMapEl.style.display = '';
+
+  var ids = Object.keys(memAllocations);
+  var totalMB = 0, liveMB = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var a = memAllocations[ids[i]];
+    totalMB += a.mb;
+    if (!a.freed) liveMB += a.mb;
+  }
+  if (totalMB === 0) totalMB = 1; // avoid div by zero
+
+  memBlocksEl.innerHTML = '';
+  for (var i = 0; i < ids.length; i++) {
+    var a = memAllocations[ids[i]];
+    var el = document.createElement('div');
+    el.className = 'mem-block' + (a.freed ? ' freed' : '');
+    el.style.flex = Math.max(1, Math.round(a.mb / totalMB * 100));
+    el.style.background = a.color;
+    el.textContent = a.label + ' ' + a.mb + 'MB';
+    el.title = a.label + ': ' + a.mb + ' MB' + (a.freed ? ' (freed)' : ' (live)');
+    memBlocksEl.appendChild(el);
+  }
+
+  memSummaryEl.textContent = 'Live: ' + liveMB.toFixed(0) + ' MB | Peak: ' + totalMB.toFixed(0) + ' MB';
+}
 var tick = function() { return new Promise(function(r) { setTimeout(r, 0); }).then(function() { if (cancelRequested) throw new Error('CANCELLED'); }); };
+
+/** Read bounding box from center/size UI. Returns {minX,minY,minZ, maxX,maxY,maxZ, gridMin,gridMax,boundsRange} */
+function readBounds() {
+  var cx = parseFloat(document.getElementById('bboxCX').value) || 0;
+  var cy = parseFloat(document.getElementById('bboxCY').value) || 0;
+  var cz = parseFloat(document.getElementById('bboxCZ').value) || 0;
+  var sx = parseFloat(document.getElementById('bboxSX').value) || 3;
+  var sy = parseFloat(document.getElementById('bboxSY').value) || 3;
+  var sz = parseFloat(document.getElementById('bboxSZ').value) || 3;
+  return {
+    cx: cx, cy: cy, cz: cz, sx: sx, sy: sy, sz: sz,
+    minX: cx - sx * 0.5, minY: cy - sy * 0.5, minZ: cz - sz * 0.5,
+    maxX: cx + sx * 0.5, maxY: cy + sy * 0.5, maxZ: cz + sz * 0.5
+  };
+}
+
+function resetBounds() {
+  document.getElementById('bboxCX').value = '0';
+  document.getElementById('bboxCY').value = '0';
+  document.getElementById('bboxCZ').value = '0';
+  document.getElementById('bboxSX').value = '3';
+  document.getElementById('bboxSY').value = '3';
+  document.getElementById('bboxSZ').value = '3';
+  document.getElementById('bboxLock').checked = true;
+  onBoundsChange();
+}
+
+function onBoundsChange() {
+  // Enforce lock: when locked, changing one size updates all
+  updateBoundsInfo();
+  requestPreviewRender();
+}
+
+function updateBoundsInfo() {
+  var b = readBounds();
+  var info = document.getElementById('bboxInfo');
+  if (info) info.textContent = b.sx.toFixed(1) + ' \u00D7 ' + b.sy.toFixed(1) + ' \u00D7 ' + b.sz.toFixed(1);
+}
+
+function onSizeInput(axis) {
+  if (!document.getElementById('bboxLock').checked) { onBoundsChange(); return; }
+  var val = document.getElementById('bboxS' + axis).value;
+  document.getElementById('bboxSX').value = val;
+  document.getElementById('bboxSY').value = val;
+  document.getElementById('bboxSZ').value = val;
+  onBoundsChange();
+}
+
+function fitBounds() {
+  // TODO: sample a few rays to auto-detect fractal extent
+  resetBounds();
+}
 
 function cancelGenerate() {
   cancelRequested = true;
@@ -236,8 +469,13 @@ function getTimestamp() {
 }
 
 function getMemoryMB() {
+  // performance.memory is Chrome-only; navigator.deviceMemory is coarse estimate
   if (performance.memory) return (performance.memory.usedJSHeapSize / (1024 * 1024)).toFixed(0);
-  return '?';
+  // Fallback: try crossOriginIsolated memory measurement (not available everywhere)
+  if (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated && performance.measureUserAgentSpecificMemory) {
+    return '--';
+  }
+  return '--';
 }
 
 /** Add a line to the on-screen log. type: info|phase|data|warn|error|success|mem */
@@ -268,16 +506,10 @@ function clearLog() {
 }
 
 // ============================================================================
-// Interactive 3D Mesh Preview
+// Interactive 3D Mesh Preview (thin wrapper around mesh-preview.js)
 // ============================================================================
 
-var meshPreviewState = {
-  positions: null, indices: null, normals: null,
-  vertexCount: 0, faceCount: 0,
-  rotX: -0.4, rotY: 0.6, zoom: 1.0,
-  cx: 0, cy: 0, cz: 0, scale: 1,
-  dragging: false, lastMX: 0, lastMY: 0
-};
+var meshPreviewState = MeshPreviewState();
 
 function initMeshPreviewControls() {
   meshCvs.addEventListener('mousedown', function(e) {
@@ -306,627 +538,49 @@ function initMeshPreviewControls() {
 }
 
 function drawMeshPreview(positions, indices, vertexCount, faceCount) {
-  var s = meshPreviewState;
-  s.positions = positions; s.indices = indices;
-  s.vertexCount = vertexCount; s.faceCount = faceCount;
-  var minX = Infinity, minY = Infinity, minZ = Infinity;
-  var maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-  for (var i = 0; i < vertexCount; i++) {
-    var x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2];
-    if (x < minX) minX = x; if (y < minY) minY = y; if (z < minZ) minZ = z;
-    if (x > maxX) maxX = x; if (y > maxY) maxY = y; if (z > maxZ) maxZ = z;
-  }
-  s.cx = (minX + maxX) / 2; s.cy = (minY + maxY) / 2; s.cz = (minZ + maxZ) / 2;
-  s.scale = meshCvs.width / (Math.max(maxX - minX, maxY - minY, maxZ - minZ) * 1.15);
+  meshPreviewSetMesh(meshPreviewState, positions, indices, vertexCount, faceCount, meshCvs.width);
   renderMeshPreview();
 }
 
 function renderMeshPreview() {
-  var s = meshPreviewState;
-  var ctx = meshCtx;
-  var w = meshCvs.width, h = meshCvs.height;
-  ctx.fillStyle = '#111';
-  ctx.fillRect(0, 0, w, h);
-  if (!s.positions || s.vertexCount === 0) return;
-
-  var cosX = Math.cos(s.rotX), sinX = Math.sin(s.rotX);
-  var cosY = Math.cos(s.rotY), sinY = Math.sin(s.rotY);
-  var sc = s.scale * s.zoom;
-
-  function proj(i) {
-    var x = s.positions[i * 3] - s.cx;
-    var y = s.positions[i * 3 + 1] - s.cy;
-    var z = s.positions[i * 3 + 2] - s.cz;
-    var rx = x * cosY - z * sinY;
-    var rz = x * sinY + z * cosY;
-    var ry = y * cosX - rz * sinX;
-    return [rx * sc + w / 2, h / 2 - ry * sc];
-  }
-
-  // Uniform face sampling to prevent tiling artifacts at high res
-  var maxDraw = 150000;
-  var stride = s.faceCount > maxDraw ? Math.ceil(s.faceCount / maxDraw) : 1;
-  var drawn = 0;
-
-  ctx.strokeStyle = 'rgba(42,170,85,0.12)';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  for (var f = 0; f < s.faceCount && drawn < maxDraw; f += stride) {
-    var a = proj(s.indices[f * 3]), b = proj(s.indices[f * 3 + 1]), c = proj(s.indices[f * 3 + 2]);
-    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(a[0], a[1]);
-    drawn++;
-  }
-  ctx.stroke();
-
-  ctx.fillStyle = '#888';
-  ctx.font = '11px monospace';
-  ctx.fillText(s.vertexCount.toLocaleString() + ' verts, ' + s.faceCount.toLocaleString() + ' faces', 4, h - 4);
-  ctx.fillStyle = '#555';
-  ctx.fillText('drag to rotate, scroll to zoom', 4, 14);
+  meshPreviewRender(meshPreviewState, meshCtx, meshCvs.width, meshCvs.height);
 }
+
+// SDF filtering functions now in sdf-filter.js
+
+// Cavity fill functions now in sdf-filter.js
 
 // ============================================================================
-// SDF Filtering — min feature size clamp + morphological closing
+// Main Pipeline (thin wrapper around pipeline.js)
 // ============================================================================
 
-/**
- * Minimum feature size: flip deeply interior cells to positive (outside).
- * Any cell with sdf < -threshold is set to +threshold, eliminating zero-crossings
- * deeper than threshold from the surface. This removes interior cavities while
- * preserving the outer shell (cells near the surface where |sdf| < threshold are untouched).
- * Works on dense Float32Array grid.
- */
-function applyMinFeatureDense(grid, N, threshold) {
-  var clamped = 0;
-  for (var i = 0; i < grid.length; i++) {
-    if (grid[i] < -threshold) { grid[i] = threshold; clamped++; }
-  }
-  return clamped;
+/** Build the UI callback object used by pipeline.js */
+function buildPipelineUI() {
+  return {
+    setStatus: setStatus, setProgress: setProgress, setPhase: setPhase,
+    log: log, memAlloc: memAlloc, memFree: memFree,
+    tick: tick,
+    checkCancel: function() { if (cancelRequested) throw new Error('CANCELLED'); },
+    MEM_COLORS: MEM_COLORS
+  };
 }
-
-/**
- * Minimum feature size for sparse grid.
- * Flips deeply interior cells to positive in allocated blocks only.
- */
-function applyMinFeatureSparse(sparseGrid, threshold) {
-  var clamped = 0;
-  sparseGrid.blocks.forEach(function(block) {
-    for (var i = 0; i < block.length; i++) {
-      if (block[i] < -threshold) { block[i] = threshold; clamped++; }
-    }
-  });
-  return clamped;
-}
-
-/**
- * Morphological closing on a dense grid: dilate (subtract radius) then erode (add radius).
- * This fills gaps/cavities smaller than radius while preserving the outer shape.
- * Uses a fast separable min/max filter (3-pass per operation).
- * radius is in voxels (integer).
- */
-async function morphCloseDense(grid, N, radius, onProgress) {
-  onProgress = onProgress || function(){};
-  if (radius <= 0) return;
-  var r = Math.round(radius);
-  var len = N * N * N;
-  var tmp = new Float32Array(len);
-
-  // Dilate: sdf -= radius  (equivalent to min-filter then add back)
-  // Actually: dilate = take min over neighborhood, erode = take max over neighborhood
-  // Closing = dilate then erode = min-filter then max-filter
-
-  // Separable min filter (dilate) along X, Y, Z
-  onProgress(0);
-  separableFilter(grid, tmp, N, r, Math.min);
-  onProgress(25);
-  await new Promise(function(re) { setTimeout(re, 0); });
-
-  // Separable max filter (erode) along X, Y, Z
-  separableFilter(tmp, grid, N, r, Math.max);
-  onProgress(50);
-}
-
-/**
- * Morphological closing on a sparse grid.
- * Operates block-by-block with neighbor lookups for boundary cells.
- * radius is in voxels.
- */
-async function morphCloseSparse(sparseGrid, radius, onProgress) {
-  onProgress = onProgress || function(){};
-  if (radius <= 0) return;
-  var r = Math.round(radius);
-  var N = sparseGrid.N;
-  var bs = sparseGrid.blockSize;
-
-  // For sparse grids, we do a simple per-cell neighborhood scan within allocated blocks.
-  // Less efficient than separable filter but works with sparse storage.
-  // Pass 1: min-filter (dilate), Pass 2: max-filter (erode)
-
-  for (var pass = 0; pass < 2; pass++) {
-    var op = pass === 0 ? Math.min : Math.max;
-    var result = new Map();
-
-    sparseGrid.blocks.forEach(function(block, key) {
-      var filtered = new Float32Array(block.length);
-      var bpa = sparseGrid.blocksPerAxis;
-      var bx = key % bpa;
-      var by = ((key / bpa) | 0) % bpa;
-      var bz = (key / (bpa * bpa)) | 0;
-      var startX = bx * bs, startY = by * bs, startZ = bz * bs;
-
-      for (var lz = 0; lz < bs; lz++) {
-        for (var ly = 0; ly < bs; ly++) {
-          for (var lx = 0; lx < bs; lx++) {
-            var best = block[(lz * bs + ly) * bs + lx];
-            for (var dz = -r; dz <= r; dz++) {
-              for (var dy = -r; dy <= r; dy++) {
-                for (var dx = -r; dx <= r; dx++) {
-                  var gx = startX + lx + dx, gy = startY + ly + dy, gz = startZ + lz + dz;
-                  best = op(best, sparseGrid.get(gx, gy, gz));
-                }
-              }
-            }
-            filtered[(lz * bs + ly) * bs + lx] = best;
-          }
-        }
-      }
-      result.set(key, filtered);
-    });
-
-    // Replace blocks with filtered results
-    result.forEach(function(block, key) {
-      sparseGrid.blocks.set(key, block);
-    });
-
-    onProgress(pass === 0 ? 50 : 100);
-    await new Promise(function(re) { setTimeout(re, 0); });
-  }
-}
-
-/**
- * 3D separable filter (min or max) on a dense Float32Array grid.
- * Applies the filter along X, Y, Z axes sequentially.
- */
-function separableFilter(src, dst, N, radius, op) {
-  // Pass along X
-  var tmp1 = new Float32Array(src.length);
-  for (var z = 0; z < N; z++) {
-    for (var y = 0; y < N; y++) {
-      var row = z * N * N + y * N;
-      for (var x = 0; x < N; x++) {
-        var best = src[row + x];
-        for (var dx = -radius; dx <= radius; dx++) {
-          var nx = x + dx;
-          if (nx >= 0 && nx < N) best = op(best, src[row + nx]);
-        }
-        tmp1[row + x] = best;
-      }
-    }
-  }
-  // Pass along Y
-  var tmp2 = new Float32Array(src.length);
-  for (var z = 0; z < N; z++) {
-    for (var x = 0; x < N; x++) {
-      for (var y = 0; y < N; y++) {
-        var idx = z * N * N + y * N + x;
-        var best = tmp1[idx];
-        for (var dy = -radius; dy <= radius; dy++) {
-          var ny = y + dy;
-          if (ny >= 0 && ny < N) best = op(best, tmp1[z * N * N + ny * N + x]);
-        }
-        tmp2[idx] = best;
-      }
-    }
-  }
-  // Pass along Z
-  for (var y = 0; y < N; y++) {
-    for (var x = 0; x < N; x++) {
-      for (var z = 0; z < N; z++) {
-        var idx = z * N * N + y * N + x;
-        var best = tmp2[idx];
-        for (var dz = -radius; dz <= radius; dz++) {
-          var nz = z + dz;
-          if (nz >= 0 && nz < N) best = op(best, tmp2[nz * N * N + y * N + x]);
-        }
-        dst[idx] = best;
-      }
-    }
-  }
-}
-
-// ============================================================================
-// Cavity Fill — flood-fill from outside, fill unreachable positive cells
-// ============================================================================
-
-/**
- * Cavity fill for dense grid. Flood-fill from grid boundary through positive
- * (outside) cells. Any positive cell not reached is an interior cavity → flip negative.
- * Uses a BFS with a flat queue. Visited bits stored as Uint8Array (1 bit per cell).
- * Returns number of cells filled.
- */
-async function cavityFillDense(grid, N, onProgress) {
-  onProgress = onProgress || function(){};
-  var totalCells = N * N * N;
-  var visitedBytes = (totalCells + 7) >> 3;
-  var visited = new Uint8Array(visitedBytes);
-
-  function idx(x, y, z) { return (z * N + y) * N + x; }
-  function isVisited(i) { return (visited[i >> 3] & (1 << (i & 7))) !== 0; }
-  function setVisited(i) { visited[i >> 3] |= (1 << (i & 7)); }
-
-  // BFS queue — use a typed array ring buffer for memory efficiency
-  // Max queue size is bounded by number of positive cells, but we grow as needed
-  var queueCap = Math.min(totalCells, 4 * 1024 * 1024);
-  var queue = new Int32Array(queueCap);
-  var qHead = 0, qTail = 0, qCount = 0;
-
-  function enqueue(i) {
-    if (qCount >= queueCap) {
-      // Grow queue
-      var newCap = queueCap * 2;
-      var newQ = new Int32Array(newCap);
-      for (var qi = 0; qi < qCount; qi++) newQ[qi] = queue[(qHead + qi) % queueCap];
-      queue = newQ; qHead = 0; qTail = qCount; queueCap = newCap;
-    }
-    queue[qTail] = i;
-    qTail = (qTail + 1) % queueCap;
-    qCount++;
-  }
-
-  function dequeue() {
-    var val = queue[qHead];
-    qHead = (qHead + 1) % queueCap;
-    qCount--;
-    return val;
-  }
-
-  // Seed: all positive cells on the 6 boundary faces
-  for (var z = 0; z < N; z++) {
-    for (var y = 0; y < N; y++) {
-      for (var x = 0; x < N; x++) {
-        if (x === 0 || x === N-1 || y === 0 || y === N-1 || z === 0 || z === N-1) {
-          var i = idx(x, y, z);
-          if (grid[i] >= 0 && !isVisited(i)) {
-            setVisited(i);
-            enqueue(i);
-          }
-        }
-      }
-    }
-  }
-
-  onProgress(5);
-
-  // BFS through positive cells
-  var processed = 0;
-  var totalSeeded = qCount;
-  while (qCount > 0) {
-    var ci = dequeue();
-    var cx = ci % N;
-    var cy = ((ci / N) | 0) % N;
-    var cz = (ci / (N * N)) | 0;
-
-    // 6-connected neighbors
-    var nx = [cx-1, cx+1, cx, cx, cx, cx];
-    var ny = [cy, cy, cy-1, cy+1, cy, cy];
-    var nz = [cz, cz, cz, cz, cz-1, cz+1];
-
-    for (var ni = 0; ni < 6; ni++) {
-      var nxx = nx[ni], nyy = ny[ni], nzz = nz[ni];
-      if (nxx < 0 || nyy < 0 || nzz < 0 || nxx >= N || nyy >= N || nzz >= N) continue;
-      var nIdx = idx(nxx, nyy, nzz);
-      if (isVisited(nIdx)) continue;
-      if (grid[nIdx] >= 0) {
-        setVisited(nIdx);
-        enqueue(nIdx);
-      }
-    }
-
-    processed++;
-    if ((processed & 0xFFFFF) === 0) {
-      onProgress(5 + Math.round(85 * processed / totalCells));
-      await new Promise(function(r) { setTimeout(r, 0); });
-      if (window.cancelRequested) throw new Error('CANCELLED');
-    }
-  }
-
-  // Any positive cell not visited = interior cavity → flip to negative
-  var filled = 0;
-  for (var i = 0; i < totalCells; i++) {
-    if (grid[i] >= 0 && !isVisited(i)) {
-      grid[i] = -Math.abs(grid[i]) - 0.001; // flip to negative
-      filled++;
-    }
-  }
-
-  onProgress(100);
-  visited = null;
-  queue = null;
-  return filled;
-}
-
-/**
- * Cavity fill for sparse grid. Flood-fill from cells adjacent to unallocated
- * space (which is outside by definition) through positive cells in allocated blocks.
- * Any positive cell in allocated blocks not reached = interior cavity → flip negative.
- * Returns number of cells filled.
- */
-/**
- * Dilate-then-flood cavity fill for sparse grids.
- * 1. BFS-dilate interior (SDF<0) outward by `radius` voxels — closes
- *    passages narrower than 2*radius.
- * 2. Flood fill from boundary through non-dilated cells.
- * 3. Unreachable positive cells = sealed cavities → flip to negative.
- *
- * @param {SparseSDFGrid} sparseGrid
- * @param {number} radius — dilation radius in voxels
- * @param {function} onProgress
- * @returns {{ filled, dilated, seeds }}
- */
-async function cavityFillDilate(sparseGrid, radius, onProgress) {
-  onProgress = onProgress || function(){};
-  var N = sparseGrid.N;
-  var bs = sparseGrid.blockSize;
-  var bpa = sparseGrid.blocksPerAxis;
-  var bytesPerBlock = (sparseGrid.blockCellCount + 7) >> 3;
-
-  function bitGet(map, ix, iy, iz) {
-    if (ix < 0 || iy < 0 || iz < 0 || ix >= N || iy >= N || iz >= N) return false;
-    var bx = (ix / bs) | 0, by = (iy / bs) | 0, bz = (iz / bs) | 0;
-    var bk = (bz * bpa + by) * bpa + bx;
-    var bits = map.get(bk);
-    if (!bits) return false;
-    var lx = ix - bx * bs, ly = iy - by * bs, lz = iz - bz * bs;
-    var li = (lz * bs + ly) * bs + lx;
-    return (bits[li >> 3] & (1 << (li & 7))) !== 0;
-  }
-
-  function bitSet(map, ix, iy, iz) {
-    var bx = (ix / bs) | 0, by = (iy / bs) | 0, bz = (iz / bs) | 0;
-    var bk = (bz * bpa + by) * bpa + bx;
-    var bits = map.get(bk);
-    if (!bits) return;
-    var lx = ix - bx * bs, ly = iy - by * bs, lz = iz - bz * bs;
-    var li = (lz * bs + ly) * bs + lx;
-    bits[li >> 3] |= (1 << (li & 7));
-  }
-
-  // Growable typed-array BFS queue (coords only, no distance)
-  var qBuf, qHead, qTail, qCap;
-  function qInit(cap) {
-    qCap = cap || 2 * 1024 * 1024;
-    qBuf = new Int32Array(qCap);
-    qHead = 0; qTail = 0;
-  }
-  function qGrow() {
-    var count = qTail - qHead;
-    var newCap = qCap * 2;
-    var newBuf = new Int32Array(newCap);
-    for (var i = 0; i < count; i++) newBuf[i] = qBuf[(qHead + i) % qCap];
-    qBuf = newBuf; qHead = 0; qTail = count; qCap = newCap;
-  }
-  function qPush(v) {
-    if (qTail - qHead >= qCap - 1) qGrow();
-    qBuf[qTail++ % qCap] = v;
-  }
-  function qPop() { return qBuf[qHead++ % qCap]; }
-  function qEmpty() { return qHead >= qTail; }
-  function qFree() { qBuf = null; }
-
-  // Growable typed-array BFS queue WITH distance tracking (for dilation)
-  var dqCoords, dqDist, dqHead, dqTail, dqCap;
-  function dqInit(cap) {
-    dqCap = cap || 2 * 1024 * 1024;
-    dqCoords = new Int32Array(dqCap);
-    dqDist = new Uint8Array(dqCap);
-    dqHead = 0; dqTail = 0;
-  }
-  function dqGrow() {
-    var count = dqTail - dqHead;
-    var newCap = dqCap * 2;
-    var newC = new Int32Array(newCap);
-    var newD = new Uint8Array(newCap);
-    for (var i = 0; i < count; i++) {
-      newC[i] = dqCoords[(dqHead + i) % dqCap];
-      newD[i] = dqDist[(dqHead + i) % dqCap];
-    }
-    dqCoords = newC; dqDist = newD; dqHead = 0; dqTail = count; dqCap = newCap;
-  }
-  function dqPush(coord, dist) {
-    if (dqTail - dqHead >= dqCap - 1) dqGrow();
-    dqCoords[dqTail % dqCap] = coord;
-    dqDist[dqTail % dqCap] = dist;
-    dqTail++;
-  }
-  function dqPop() {
-    var c = dqCoords[dqHead % dqCap];
-    var d = dqDist[dqHead % dqCap];
-    dqHead++;
-    return { coord: c, dist: d };
-  }
-  function dqEmpty() { return dqHead >= dqTail; }
-  function dqFree() { dqCoords = null; dqDist = null; }
-
-  // ---- Step 1: Build sign field (1 = inside where SDF < 0) ----
-  var signMap = new Map();
-  sparseGrid.blocks.forEach(function(block, key) {
-    var bits = new Uint8Array(bytesPerBlock);
-    for (var i = 0; i < block.length; i++) {
-      if (block[i] < 0) bits[i >> 3] |= (1 << (i & 7));
-    }
-    signMap.set(key, bits);
-  });
-
-  // ---- Step 2: BFS DILATE interior by R voxels ----
-  // Closes passages narrower than 2R. The dilated signMap becomes the
-  // barrier for flood fill — positive cells behind sealed passages
-  // become unreachable = cavities to fill.
-  dqInit();
-  var dilateSeeds = 0;
-
-  sparseGrid.blocks.forEach(function(block, key) {
-    var bx = key % bpa, by = ((key / bpa) | 0) % bpa, bz = (key / (bpa * bpa)) | 0;
-    var startX = bx * bs, startY = by * bs, startZ = bz * bs;
-    for (var lz = 0; lz < bs; lz++) {
-      for (var ly = 0; ly < bs; ly++) {
-        for (var lx = 0; lx < bs; lx++) {
-          var li = (lz * bs + ly) * bs + lx;
-          if (block[li] < 0) continue;
-          var ix = startX + lx, iy = startY + ly, iz = startZ + lz;
-          var adjNeg = false;
-          for (var d = 0; d < 6 && !adjNeg; d++) {
-            var nx = ix + (d===0?-1:d===1?1:0), ny = iy + (d===2?-1:d===3?1:0), nz = iz + (d===4?-1:d===5?1:0);
-            if (sparseGrid.get(nx, ny, nz) < 0) adjNeg = true;
-          }
-          if (adjNeg) {
-            bitSet(signMap, ix, iy, iz);
-            dqPush((iz * N + iy) * N + ix, 1);
-            dilateSeeds++;
-          }
-        }
-      }
-    }
-  });
-
-  console.log('[CavityFill] Dilate by ' + radius + ': ' + dilateSeeds + ' surface seeds');
-  onProgress(5);
-  var dilatedCount = 0, dilPops = 0;
-  while (!dqEmpty()) {
-    var item = dqPop();
-    var ci = item.coord, dist = item.dist;
-    var cx = ci % N, cy = ((ci / N) | 0) % N, cz = (ci / (N * N)) | 0;
-    for (var d = 0; d < 6; d++) {
-      var nx = cx + (d===0?-1:d===1?1:0), ny = cy + (d===2?-1:d===3?1:0), nz = cz + (d===4?-1:d===5?1:0);
-      if (nx < 0 || ny < 0 || nz < 0 || nx >= N || ny >= N || nz >= N) continue;
-      if (bitGet(signMap, nx, ny, nz)) continue;
-      bitSet(signMap, nx, ny, nz);
-      dilatedCount++;
-      if (dist + 1 < radius) dqPush((nz * N + ny) * N + nx, dist + 1);
-    }
-    if ((++dilPops & 0x3FFFF) === 0) {
-      onProgress(5 + Math.round(20 * Math.min(1, dilatedCount / (dilateSeeds * radius + 1))));
-      await new Promise(function(r) { setTimeout(r, 0); });
-      if (window.cancelRequested) throw new Error('CANCELLED');
-    }
-  }
-  dqFree();
-  console.log('[CavityFill] Dilate done: ' + dilatedCount + ' cells expanded');
-  onProgress(30);
-
-  // ---- Step 3: Flood fill from boundary through non-signMap cells ----
-  // signMap (dilated) = barrier. Flood reaches all exterior positive cells.
-  // Unreachable positive cells = sealed behind dilated barrier = cavities.
-  var floodVisited = new Map();
-  sparseGrid.blocks.forEach(function(block, key) {
-    floodVisited.set(key, new Uint8Array(bytesPerBlock));
-  });
-
-  qInit();
-  sparseGrid.blocks.forEach(function(block, key) {
-    var signBits = signMap.get(key);
-    var bx = key % bpa, by = ((key / bpa) | 0) % bpa, bz = (key / (bpa * bpa)) | 0;
-    var startX = bx * bs, startY = by * bs, startZ = bz * bs;
-    for (var lz = 0; lz < bs; lz++) {
-      for (var ly = 0; ly < bs; ly++) {
-        for (var lx = 0; lx < bs; lx++) {
-          var li = (lz * bs + ly) * bs + lx;
-          if (signBits[li >> 3] & (1 << (li & 7))) continue; // barrier
-          var ix = startX + lx, iy = startY + ly, iz = startZ + lz;
-          // Seed if at grid edge or adjacent to unallocated block
-          var isSeed = false;
-          if (ix === 0 || ix === N-1 || iy === 0 || iy === N-1 || iz === 0 || iz === N-1) {
-            isSeed = true;
-          } else if (lx === 0 || lx === bs-1 || ly === 0 || ly === bs-1 || lz === 0 || lz === bs-1) {
-            for (var d = 0; d < 6 && !isSeed; d++) {
-              var nx = ix + (d===0?-1:d===1?1:0), ny = iy + (d===2?-1:d===3?1:0), nz = iz + (d===4?-1:d===5?1:0);
-              var nbx = (nx / bs) | 0, nby = (ny / bs) | 0, nbz = (nz / bs) | 0;
-              if (!sparseGrid.hasBlock(nbx, nby, nbz)) isSeed = true;
-            }
-          }
-          if (isSeed) {
-            var fv = floodVisited.get(key);
-            fv[li >> 3] |= (1 << (li & 7));
-            qPush((iz * N + iy) * N + ix);
-          }
-        }
-      }
-    }
-  });
-
-  var floodSeeds = qTail;
-  console.log('[CavityFill] Flood fill: ' + floodSeeds + ' boundary seeds');
-  onProgress(40);
-  var flooded = 0, floodPops = 0;
-  while (!qEmpty()) {
-    var ci = qPop();
-    var cx = ci % N, cy = ((ci / N) | 0) % N, cz = (ci / (N * N)) | 0;
-    for (var d = 0; d < 6; d++) {
-      var nx = cx + (d===0?-1:d===1?1:0), ny = cy + (d===2?-1:d===3?1:0), nz = cz + (d===4?-1:d===5?1:0);
-      if (nx < 0 || ny < 0 || nz < 0 || nx >= N || ny >= N || nz >= N) continue;
-      var nbx = (nx / bs) | 0, nby = (ny / bs) | 0, nbz = (nz / bs) | 0;
-      var nbk = (nbz * bpa + nby) * bpa + nbx;
-      var nlx = nx - nbx * bs, nly = ny - nby * bs, nlz = nz - nbz * bs;
-      var nli = (nlz * bs + nly) * bs + nlx;
-      var fv = floodVisited.get(nbk);
-      if (!fv) continue; // unallocated = exterior, skip
-      if (fv[nli >> 3] & (1 << (nli & 7))) continue; // visited
-      if (bitGet(signMap, nx, ny, nz)) continue; // barrier
-      fv[nli >> 3] |= (1 << (nli & 7));
-      qPush((nz * N + ny) * N + nx);
-      flooded++;
-    }
-    if ((++floodPops & 0x3FFFF) === 0) {
-      onProgress(40 + Math.round(40 * flooded / (flooded + (qTail - qHead) + 1)));
-      await new Promise(function(r) { setTimeout(r, 0); });
-      if (window.cancelRequested) throw new Error('CANCELLED');
-    }
-  }
-  qFree();
-  signMap = null; // no longer needed — flood is done
-  console.log('[CavityFill] Flood done: ' + flooded + ' cells reached');
-  onProgress(85);
-
-  // ---- Step 4: Fill unreachable positive cells ----
-  // Positive in original AND not reached by flood = interior cavity → fill solid
-  var filled = 0;
-  sparseGrid.blocks.forEach(function(block, key) {
-    var vis = floodVisited.get(key);
-    for (var i = 0; i < block.length; i++) {
-      if (block[i] >= 0 && !(vis[i >> 3] & (1 << (i & 7)))) {
-        block[i] = -Math.abs(block[i]) - 0.001;
-        filled++;
-      }
-    }
-  });
-
-  onProgress(100);
-  floodVisited = null;
-  console.log('[CavityFill] Filled: ' + filled + ' cavity cells');
-  return { filled: filled, dilated: dilatedCount, seeds: dilateSeeds };
-}
-
-// ============================================================================
-// Main Pipeline
-// ============================================================================
 
 async function generate() {
   var N = parseInt(document.getElementById('res').value);
-  var iters = parseInt(document.getElementById('iters').value);
-  var smoothPasses = parseInt(document.getElementById('smoothPasses').value);
-  var useNewton = document.getElementById('newton').checked;
-  var useNarrowBand = N > 256;
   var config = activeFormulaConfig;
   var formulaParams = readFormulaParams();
-  var power = formulaParams.paramA || 8;
-  var deType = getEffectiveDEType(config);
-  var deSamples = parseInt(document.getElementById('deSamples').value);
-  var minFeatureSel = document.getElementById('minFeature').value;
-  var closingRadius = parseFloat(document.getElementById('closingRadius').value) || 0;
   var cavityFillVal = document.getElementById('cavityFill').value;
-  var cavityFillMode = cavityFillVal === 'escape' ? 'escape' : 'dilate';
-  var cavityFillLevel = cavityFillVal === 'escape' ? 1 : (parseInt(cavityFillVal) || 0);
 
+  // Compute bounds — cubic grid centered on user's bounding box center
+  var bounds = readBounds();
+  var half = Math.max(bounds.sx, bounds.sy, bounds.sz) * 0.5;
+  var gridMin = [bounds.cx - half, bounds.cy - half, bounds.cz - half];
+  var gridMax = [bounds.cx + half, bounds.cy + half, bounds.cz + half];
+  var boundsRange = half * 2;
+
+  // UI state
   cancelRequested = false;
+  document.getElementById('previewPanel').style.display = 'none';
   document.getElementById('genBtn').style.display = 'none';
   document.getElementById('cancelBtn').style.display = '';
   document.getElementById('dlBtn').disabled = true;
@@ -934,473 +588,96 @@ async function generate() {
   lastMesh = null;
   setProgress(0); infoEl.innerHTML = '';
   clearLog();
+  memReset();
+  var smoothNote = document.getElementById('smoothNote');
+  if (smoothNote) smoothNote.style.display = 'none';
 
-  var formulaName = config.metadata.name || config.metadata.id || 'unknown';
-  log('=== Generate: ' + formulaName + ' ===', 'phase');
-  log('Resolution: ' + N + '\u00B3 | Iterations: ' + iters + ' | DE: ' + deType + ' | SS: ' + deSamples + '\u00B3=' + (deSamples * deSamples * deSamples) + ' | Newton: ' + (useNewton ? 'yes' : 'no') + ' | Smooth: ' + smoothPasses +
-    ' | MinFeat: ' + minFeatureSel + ' | CavityFill: ' + (cavityFillMode === 'escape' ? 'escape-test' : cavityFillLevel + 'x') + ' | Closing: ' + closingRadius, 'data');
-  log('Params: ' + JSON.stringify(formulaParams).substring(0, 200), 'data');
-
-  var gridMin = parseFloat(document.getElementById('bboxMin').value);
-  var gridMax = parseFloat(document.getElementById('bboxMax').value);
-  var boundsRange = gridMax - gridMin;
-  log('Bounds: [' + gridMin + ', ' + gridMax + '] range=' + boundsRange.toFixed(2), 'data');
-
-  // Iteration efficiency check: estimate how many iterations produce resolvable detail.
-  // For IFS fractals (scale ~2x per iter), feature size halves each iteration.
-  // For power fractals (Mandelbulb), feature size shrinks by ~1/power per iteration.
-  // Beyond the resolvable threshold, extra iterations only add interior complexity.
-  var voxelSizeEst = boundsRange / N;
-  var usefulIters;
-  if (deType === 'ifs') {
-    // IFS: feature_size ≈ boundsRange / 2^iters → useful when boundsRange / 2^i > voxelSize
-    usefulIters = Math.ceil(Math.log2(boundsRange / voxelSizeEst));
-  } else {
-    // Power: feature_size ≈ boundsRange / power^iters (rough approx)
-    var p = Math.max(power, 2);
-    usefulIters = Math.ceil(Math.log(boundsRange / voxelSizeEst) / Math.log(p));
-  }
-  if (iters > usefulIters + 2) {
-    log('Note: At ' + N + '\u00B3 (voxel=' + voxelSizeEst.toFixed(5) + '), ~' + usefulIters +
-      ' iterations resolve detail at voxel scale. Using ' + iters +
-      ' adds ' + (iters - usefulIters) + ' levels of sub-voxel interior detail. ' +
-      'Min Feature filter will clamp this. Consider reducing iterations for faster export.', 'warn');
-  }
-
-  var t0 = performance.now();
-  var mesh, gl;
-  var tCoarse, tFine, t1, t2, t3, t4, t5, tNewton;
-  var sparseGrid = null;
-  var sdfGrid = null;
+  log('Bounds: min=[' + gridMin[0].toFixed(2) + ',' + gridMin[1].toFixed(2) + ',' + gridMin[2].toFixed(2) +
+    '] max=[' + gridMax[0].toFixed(2) + ',' + gridMax[1].toFixed(2) + ',' + gridMax[2].toFixed(2) +
+    '] range=' + boundsRange.toFixed(2) +
+    ' (center ' + bounds.cx.toFixed(1) + ',' + bounds.cy.toFixed(1) + ',' + bounds.cz.toFixed(1) +
+    ' size ' + bounds.sx.toFixed(1) + '\u00D7' + bounds.sy.toFixed(1) + '\u00D7' + bounds.sz.toFixed(1) + ')', 'data');
 
   try {
+    var result = await runMeshPipeline({
+      N: N,
+      iters: parseInt(document.getElementById('iters').value),
+      smoothPasses: parseInt(document.getElementById('smoothPasses').value),
+      useNewton: document.getElementById('newton').checked,
+      newtonSteps: parseInt(document.getElementById('newtonSteps').value) || 6,
+      smoothLambda: parseFloat(document.getElementById('smoothLambda').value) || 0.5,
+      config: config,
+      formulaParams: formulaParams,
+      power: formulaParams.paramA || 8,
+      deType: getEffectiveDEType(config),
+      deSamples: parseInt(document.getElementById('deSamples').value),
+      zSubSlices: parseInt(document.getElementById('zSubSlices').value) || 1,
+      minFeatureSel: document.getElementById('minFeature').value,
+      closingRadius: parseFloat(document.getElementById('closingRadius').value) || 0,
+      colorSamples: parseInt(document.getElementById('colorSamples').value) || 1,
+      colorJitterMul: parseFloat(document.getElementById('colorJitter').value) || 0.5,
+      cavityFillMode: cavityFillVal === 'escape' ? 'escape' : 'dilate',
+      cavityFillLevel: cavityFillVal === 'escape' ? 1 : (parseInt(cavityFillVal) || 0),
+      gridMin: gridMin,
+      gridMax: gridMax,
+      boundsRange: boundsRange
+    }, buildPipelineUI());
 
-  // ================================================================
-  // Phase 1: GPU SDF Sampling
-  // ================================================================
-  try {
-    log('[Phase 1] GPU SDF Sampling', 'phase');
-    setPhase('Phase 1: SDF Sampling', 0);
-    setStatus('Initializing WebGL2...');
-    await tick();
-    gl = initWebGL();
-    log('WebGL2 initialized (max texture: ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ')', 'info');
+    if (!result.mesh) return;
 
-    if (useNarrowBand) {
-      // ---- Pass 1: Coarse grid ----
-      var coarseN = 128;
-      log('Pass 1: Coarse SDF ' + coarseN + '\u00B3 (' + ((coarseN * coarseN * coarseN * 4) / (1024 * 1024)).toFixed(1) + ' MB)', 'info');
-      setStatus('Pass 1: Coarse SDF (' + coarseN + '\u00B3)...');
-      await tick();
+    lastMesh = result.mesh;
+    lastBaseName = result.baseName;
 
-      var coarsePipeline = setupSDFPipeline(gl, Math.min(coarseN, 2048), config, deSamples);
-      var coarseGrid = await sampleDenseGrid(gl, coarsePipeline, coarseN, power, iters, formulaParams, gridMin, gridMax, 0, 10);
-      tCoarse = performance.now();
+    // Show smoothing-skipped note
+    if (result.smoothingSkipped) {
+      var sn = document.getElementById('smoothNote');
+      if (sn) sn.style.display = '';
+    }
 
-      var cPos = 0, cNeg = 0;
-      for (var di = 0; di < coarseGrid.length; di++) {
-        if (coarseGrid[di] >= 0) cPos++; else cNeg++;
-      }
-      log('Coarse: ' + cPos.toLocaleString() + ' outside, ' + cNeg.toLocaleString() + ' inside (' + ((tCoarse - t0) / 1000).toFixed(1) + 's)', 'data');
-      if (cNeg === 0) log('WARNING: No interior voxels in coarse grid \u2014 surface may not be found', 'warn');
+    drawMeshPreview(result.mesh.positions, result.mesh.indices, result.mesh.vertexCount, result.mesh.faceCount);
 
-      // ---- Build narrow band ----
-      setStatus('Building narrow band for ' + N + '\u00B3...');
-      await tick();
-      var bandResult = buildNarrowBand(coarseGrid, coarseN, N, 8, 2);
-      sparseGrid = bandResult.grid;
-      var totalBlocks = Math.pow(N / sparseGrid.blockSize, 3);
-      var bandPct = (sparseGrid.allocatedCount / totalBlocks * 100).toFixed(1);
-      log('Narrow band: ' + sparseGrid.allocatedCount.toLocaleString() + ' blocks (' + bandPct + '% of ' + totalBlocks.toLocaleString() + '), ' + sparseGrid.memoryMB().toFixed(0) + ' MB', 'data');
-
-      // ---- Pass 2: Fine grid ----
-      log('Pass 2: Fine SDF ' + N + '\u00B3 (narrow-band, ' + sparseGrid.memoryMB().toFixed(0) + ' MB allocated)', 'info');
-      setStatus('Pass 2: Fine SDF (' + N + '\u00B3 narrow-band)...');
-      await tick();
-
-      gl.deleteTexture(coarsePipeline.tex);
-      gl.deleteFramebuffer(coarsePipeline.fbo);
-      var finePipeline = setupSDFPipeline(gl, Math.min(N, 2048), config, deSamples);
-      await sampleSparseGrid(gl, finePipeline, sparseGrid, power, iters, formulaParams, gridMin, gridMax, 10, 25);
-
-      t1 = performance.now();
-      tFine = t1;
-      log('Fine sampling done: ' + ((tFine - tCoarse) / 1000).toFixed(1) + 's', 'success');
-
+    // Summary
+    var t = result.timings;
+    var totalSec = (t.total / 1000).toFixed(1);
+    var timingHtml = '';
+    if (result.useNarrowBand) {
+      timingHtml = 'Coarse: ' + (t.coarse / 1000).toFixed(1) + 's &middot; Fine: ' + (t.fine / 1000).toFixed(1) + 's';
     } else {
-      // ---- Standard dense sampling ----
-      var gridMemMB = (N * N * N * 4 / (1024 * 1024)).toFixed(0);
-      log('Dense SDF ' + N + '\u00B3 (' + gridMemMB + ' MB grid)', 'info');
-      var pipeline = setupSDFPipeline(gl, Math.min(N, 2048), config, deSamples);
-      sdfGrid = await sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gridMin, gridMax, 0, 35);
-      t1 = performance.now();
+      timingHtml = 'SDF: ' + (t.sdf / 1000).toFixed(1) + 's';
+    }
+    timingHtml += ' &middot; DC: ' + (t.dc / 1000).toFixed(1) + 's';
+    if (t.newton > 0) timingHtml += ' &middot; Newton: ' + (t.newton / 1000).toFixed(1) + 's';
+    timingHtml += ' &middot; Post: ' + (t.post / 1000).toFixed(1) + 's';
+    timingHtml += ' &middot; Color: ' + (t.color / 1000).toFixed(1) + 's';
+    timingHtml += ' &middot; <b>Total: ' + totalSec + 's</b>';
 
-      var nPos = 0, nNeg = 0, nNan = 0;
-      for (var di = 0; di < sdfGrid.length; di++) {
-        var sv = sdfGrid[di];
-        if (isNaN(sv)) nNan++;
-        else if (sv > 0) nPos++;
-        else nNeg++;
-      }
-      log('SDF: ' + nPos.toLocaleString() + ' outside, ' + nNeg.toLocaleString() + ' inside' + (nNan > 0 ? ', ' + nNan + ' NaN!' : '') + ' (' + ((t1 - t0) / 1000).toFixed(1) + 's)', 'data');
+    var mesh = result.mesh;
+    var meshMB = ((mesh.positions.byteLength + mesh.normals.byteLength + mesh.indices.byteLength) / (1024 * 1024)).toFixed(0);
+    var modeLabel = result.useNarrowBand ? N + '\u00B3 narrow-band' : N + '\u00B3 grid';
+    infoEl.innerHTML =
+      modeLabel + ' &middot; ' +
+      '<span class="highlight">' + mesh.vertexCount.toLocaleString() + ' vertices &middot; ' + mesh.faceCount.toLocaleString() + ' faces</span> &middot; ' +
+      meshMB + ' MB mesh data' +
+      (document.getElementById('newton').checked ? ' &middot; Newton projected' : '') +
+      (result.smoothingSkipped ? ' &middot; <span class="warn">smoothing skipped (large mesh)</span>' : '') + '<br>' +
+      timingHtml;
+
+    // Clean up GL from pipeline
+    if (result.gl) {
+      try { result.gl.getExtension('WEBGL_lose_context').loseContext(); } catch (ignore) {}
+      memFree('webgl');
     }
   } catch (e) {
-    if (cancelRequested) throw e;
-    log('PHASE 1 FAILED: ' + e.message, 'error');
-    log(e.stack || '', 'error');
-    setStatus('Error in SDF sampling: ' + e.message);
-    return;
-  }
-
-  if (cancelRequested) { log('Cancelled', 'warn'); setStatus('Cancelled'); return; }
-
-  // ================================================================
-  // Phase 1b: SDF Filtering (min feature size + morphological closing)
-  // ================================================================
-  var voxelSize = (gridMax - gridMin) / N;
-  var minFeatureThreshold = 0;
-  if (minFeatureSel === 'auto') {
-    minFeatureThreshold = voxelSize * 1.5;
-  } else if (parseFloat(minFeatureSel) > 0) {
-    minFeatureThreshold = voxelSize * parseFloat(minFeatureSel);
-  }
-
-  {
-    // Log SDF value distribution for diagnostics (always)
-    var sdfMin = Infinity, sdfMax = -Infinity, negCount = 0, totalCells = 0;
-    if (useNarrowBand) {
-      sparseGrid.blocks.forEach(function(block) {
-        for (var i = 0; i < block.length; i++) {
-          var v = block[i];
-          if (v < sdfMin) sdfMin = v;
-          if (v > sdfMax) sdfMax = v;
-          if (v < 0) negCount++;
-          totalCells++;
-        }
-      });
+    if (e.message !== 'CANCELLED') {
+      log('Pipeline failed: ' + e.message, 'error');
+      setStatus('Error: ' + e.message);
     } else {
-      totalCells = sdfGrid.length;
-      for (var i = 0; i < sdfGrid.length; i++) {
-        var v = sdfGrid[i];
-        if (v < sdfMin) sdfMin = v;
-        if (v > sdfMax) sdfMax = v;
-        if (v < 0) negCount++;
-      }
+      log('Cancelled', 'warn');
+      setStatus('Cancelled');
     }
-    log('SDF range: [' + sdfMin.toFixed(6) + ', ' + sdfMax.toFixed(6) + '] | ' +
-      negCount.toLocaleString() + ' interior cells of ' + totalCells.toLocaleString() +
-      ' | threshold=' + (minFeatureThreshold > 0 ? minFeatureThreshold.toFixed(6) : 'off'), 'data');
-
-    if (cavityFillLevel > 0 || minFeatureThreshold > 0 || closingRadius > 0) {
-      log('[Phase 1b] SDF Filtering', 'phase');
-      setPhase('Phase 1b: SDF Filtering', 0);
-      setStatus('Filtering SDF...');
-      await tick();
-
-      if (cavityFillLevel > 0) {
-        if (cavityFillMode === 'escape' && useNarrowBand) {
-          // GPU escape test: sample escape condition, fill SDF-positive cells
-          // that the escape test says are interior (did not escape)
-          setStatus('Cavity fill (escape test)...');
-          setPhase('Phase 1b: Escape Test', 0);
-          var escResult = await sampleEscapeTest(gl, sparseGrid, config, power, iters,
-            formulaParams, gridMin, gridMax, function(pct) {
-              setPhase('Phase 1b: Escape Test', pct);
-            });
-          // Fill: positive SDF cells that are escape-interior → flip to negative
-          var escapeFilled = 0;
-          sparseGrid.blocks.forEach(function(block, key) {
-            var esc = escResult.escapeMap.get(key);
-            if (!esc) return;
-            for (var i = 0; i < block.length; i++) {
-              if (block[i] >= 0 && (esc[i >> 3] & (1 << (i & 7)))) {
-                block[i] = -Math.abs(block[i]) - 0.001;
-                escapeFilled++;
-              }
-            }
-          });
-          log('Cavity fill (escape test): ' + escResult.solidCount.toLocaleString() +
-            ' escape-interior cells, ' + escapeFilled.toLocaleString() + ' positive cells filled', 'data');
-        } else if (useNarrowBand) {
-          setStatus('Cavity fill (dilate r=' + cavityFillLevel + ', then flood)...');
-          setPhase('Phase 1b: Cavity Fill', 0);
-          var cavityResult = await cavityFillDilate(sparseGrid, cavityFillLevel, function(pct) {
-            setPhase('Phase 1b: Cavity Fill (r=' + cavityFillLevel + ')', pct);
-          });
-          log('Cavity fill: dilate=' + cavityFillLevel + ' | ' +
-            cavityResult.dilated.toLocaleString() + ' dilated, ' +
-            cavityResult.filled.toLocaleString() + ' filled solid', 'data');
-        } else {
-          // Dense grids: use simple flood fill (no dilation needed at low res)
-          setStatus('Cavity fill (flood)...');
-          setPhase('Phase 1b: Cavity Fill', 0);
-          var cavityFilled = await cavityFillDense(sdfGrid, N, function(pct) {
-            setPhase('Phase 1b: Cavity Fill', pct);
-          });
-          log('Cavity fill: ' + cavityFilled.toLocaleString() + ' cells filled solid', 'data');
-        }
-      }
-
-      if (minFeatureThreshold > 0) {
-        var clamped;
-        if (useNarrowBand) {
-          clamped = applyMinFeatureSparse(sparseGrid, minFeatureThreshold);
-        } else {
-          clamped = applyMinFeatureDense(sdfGrid, N, minFeatureThreshold);
-        }
-        log('Min feature clamp: threshold=' + minFeatureThreshold.toFixed(6) +
-          ' (' + (minFeatureThreshold / voxelSize).toFixed(1) + 'x voxel), ' +
-          clamped.toLocaleString() + ' cells clamped', 'data');
-      }
-
-      if (closingRadius > 0) {
-        setStatus('Morphological closing (r=' + closingRadius + ' voxels)...');
-        if (useNarrowBand) {
-          await morphCloseSparse(sparseGrid, closingRadius, function(pct) {
-            setPhase('Phase 1b: Morph Closing', pct);
-          });
-        } else {
-          await morphCloseDense(sdfGrid, N, closingRadius, function(pct) {
-            setPhase('Phase 1b: Morph Closing', pct);
-          });
-        }
-        log('Morphological closing: radius=' + closingRadius + ' voxels', 'data');
-      }
-
-      setPhase('Phase 1b: SDF Filtering', 100);
-    }
-  }
-
-  if (cancelRequested) { log('Cancelled', 'warn'); setStatus('Cancelled'); return; }
-
-  // ================================================================
-  // Phase 2: Dual Contouring
-  // ================================================================
-  try {
-    log('[Phase 2] Dual Contouring', 'phase');
-    setPhase('Phase 2: Dual Contouring', 0);
-    setProgress(35);
-    await tick();
-
-    if (useNarrowBand) {
-      setStatus('Dual contouring (sparse, ' + N + '\u00B3)...');
-      mesh = await dualContourSparse(sparseGrid, gridMin, gridMax, function(phase, pct) {
-        setProgress(35 + Math.round(pct * 0.25));
-        setPhase('Phase 2: Dual Contouring', pct);
-      });
-    } else {
-      setStatus('Dual contouring (' + N + '\u00B3)...');
-      var maxDepth = Math.round(Math.log2(N));
-      mesh = await dualContour(sdfGrid, N, gridMin, gridMax, maxDepth, function(phase, pct) {
-        setProgress(35 + Math.round(pct * 0.25));
-        setPhase('Phase 2: Dual Contouring', pct);
-      });
-      sdfGrid = null; // free dense grid
-    }
-
-    t2 = performance.now();
-    log('DC result: ' + mesh.vertexCount.toLocaleString() + ' vertices, ' + mesh.faceCount.toLocaleString() + ' faces (' + ((t2 - t1) / 1000).toFixed(1) + 's)', 'data');
-
-    var meshPosMB = (mesh.positions.byteLength / (1024 * 1024)).toFixed(0);
-    var meshNrmMB = (mesh.normals.byteLength / (1024 * 1024)).toFixed(0);
-    var meshIdxMB = (mesh.indices.byteLength / (1024 * 1024)).toFixed(0);
-    log('Mesh memory: positions=' + meshPosMB + 'MB normals=' + meshNrmMB + 'MB indices=' + meshIdxMB + 'MB (total ' + (parseInt(meshPosMB) + parseInt(meshNrmMB) + parseInt(meshIdxMB)) + 'MB)', 'mem');
-
-    if (sparseGrid) { sparseGrid = null; log('Sparse grid freed', 'mem'); }
-
-    setStatus('Mesh: ' + mesh.vertexCount.toLocaleString() + ' verts, ' + mesh.faceCount.toLocaleString() + ' faces');
-    setProgress(60);
-    await tick();
-
-    if (mesh.vertexCount === 0) {
-      log('No surface found \u2014 check parameters and bounds', 'error');
-      setStatus('No surface found! Try different parameters.');
-      return;
-    }
-  } catch (e) {
-    if (cancelRequested) throw e;
-    log('PHASE 2 FAILED: ' + e.message, 'error');
-    log(e.stack || '', 'error');
-    setStatus('Error in dual contouring: ' + e.message);
-    return;
-  }
-
-  if (cancelRequested) { log('Cancelled', 'warn'); setStatus('Cancelled'); return; }
-
-  // ================================================================
-  // Phase 3: Newton Projection
-  // ================================================================
-  tNewton = t2;
-  var voxSize = (gridMax - gridMin) / N;
-
-  if (useNewton) {
-    try {
-      log('[Phase 3] Newton Projection', 'phase');
-      setPhase('Phase 3: Newton Projection', 0);
-      var isBuiltin = config === BUILTIN_MANDELBULB || config === BUILTIN_KALIBOX;
-
-      if (isBuiltin && typeof formulaDE === 'function') {
-        log('Mode: CPU (float64, builtin formula)', 'info');
-        activeFormula = config.metadata.id;
-        activeFormulaParams = formulaParams;
-        setStatus('Newton projection (' + mesh.vertexCount.toLocaleString() + ' vertices)...');
-        await tick();
-
-        var positions = mesh.positions, normals = mesh.normals;
-        var vc = mesh.vertexCount;
-        var maxProjDist = voxSize * 2.0;
-        var chunkSize = 4096;
-        for (var start = 0; start < vc; start += chunkSize) {
-          var end = Math.min(start + chunkSize, vc);
-          for (var v = start; v < end; v++) {
-            var v3 = v * 3;
-            var proj = newtonProject(positions[v3], positions[v3 + 1], positions[v3 + 2], power, iters, 6, maxProjDist);
-            positions[v3] = proj[0]; positions[v3 + 1] = proj[1]; positions[v3 + 2] = proj[2];
-            var g = sdfGradientTrue(proj[0], proj[1], proj[2], power, iters);
-            normals[v3] = g[0]; normals[v3 + 1] = g[1]; normals[v3 + 2] = g[2];
-          }
-          var newtonPct = Math.round(100 * start / vc);
-          setProgress(60 + Math.round((start / vc) * 10));
-          setPhase('Phase 3: Newton Projection', newtonPct);
-          if ((start & 0x3FFF) === 0) {
-            setStatus('Newton projection... ' + newtonPct + '%');
-            await tick();
-          }
-        }
-        tNewton = performance.now();
-        log('CPU Newton done: ' + ((tNewton - t2) / 1000).toFixed(1) + 's', 'success');
-      } else {
-        // GPU Newton — reuses existing GL context
-        log('Mode: GPU (float32, generic formula) \u2014 ' + mesh.vertexCount.toLocaleString() + ' vertices', 'info');
-        var texW = Math.ceil(Math.sqrt(mesh.vertexCount));
-        log('Newton texture: ' + texW + 'x' + texW + ' (' + (texW * texW * 16 * 3 / (1024 * 1024)).toFixed(0) + ' MB GPU)', 'mem');
-        setStatus('GPU Newton projection (' + mesh.vertexCount.toLocaleString() + ' vertices)...');
-        setPhase('Phase 3: Newton Projection', 50);
-        await tick();
-
-        gpuNewtonProject(gl, mesh, config, formulaParams, power, iters, voxSize, 6);
-        tNewton = performance.now();
-        setPhase('Phase 3: Newton Projection', 100);
-        log('GPU Newton done: ' + ((tNewton - t2) / 1000).toFixed(1) + 's', 'success');
-      }
-    } catch (err) {
-      if (cancelRequested) throw err;
-      tNewton = performance.now();
-      log('Newton FAILED: ' + err.message, 'error');
-      log(err.stack || '', 'error');
-      setStatus('Newton failed \u2014 continuing without projection');
-      await tick();
-    }
-  }
-  setProgress(70);
-
-  if (cancelRequested) { log('Cancelled', 'warn'); setStatus('Cancelled'); return; }
-
-  // ================================================================
-  // Phase 4: Post-processing
-  // ================================================================
-  try {
-    log('[Phase 4] Post-processing', 'phase');
-    setPhase('Phase 4: Post-processing', 0);
-    setStatus('Post-processing (smoothing, normals)...');
-    await tick();
-
-    if (mesh.vertexCount > 5000000) {
-      log('Large mesh (' + mesh.vertexCount.toLocaleString() + ' verts) \u2014 smoothing disabled to avoid OOM', 'warn');
-    }
-
-    mesh = postProcessMesh(mesh, { smoothing: smoothPasses > 0, smoothIterations: smoothPasses });
-    t3 = performance.now();
-    setPhase('Phase 4: Post-processing', 100);
-    log('Post-processing done: ' + ((t3 - tNewton) / 1000).toFixed(1) + 's', 'success');
-  } catch (e) {
-    if (cancelRequested) throw e;
-    t3 = performance.now();
-    log('PHASE 4 FAILED: ' + e.message, 'error');
-    log(e.stack || '', 'error');
-    setStatus('Error in post-processing: ' + e.message);
-    return;
-  }
-  setProgress(80);
-
-  if (cancelRequested) { log('Cancelled', 'warn'); setStatus('Cancelled'); return; }
-
-  // ================================================================
-  // Phase 5: Vertex Coloring (GPU) — reuses existing GL context
-  // ================================================================
-  try {
-    log('[Phase 5] Vertex Coloring', 'phase');
-    setPhase('Phase 5: Vertex Coloring', 0);
-    setStatus('Colorizing vertices...');
-    await tick();
-
-    // Re-init GL only if context was lost
-    if (!gl || gl.isContextLost()) {
-      log('Re-initializing WebGL for colorizer', 'warn');
-      gl = initWebGL();
-    }
-
-    mesh.colors = colorizeVerticesGPU(gl, mesh, config, formulaParams, power, iters);
-    t4 = performance.now();
-    setPhase('Phase 5: Vertex Coloring', 100);
-    log('Coloring done: ' + ((t4 - t3) / 1000).toFixed(1) + 's', 'success');
-  } catch (e) {
-    if (cancelRequested) throw e;
-    t4 = performance.now();
-    log('PHASE 5 FAILED: ' + e.message, 'error');
-    log(e.stack || '', 'error');
-    log('Continuing without vertex colors', 'warn');
-  }
-  setProgress(90);
-
-  if (cancelRequested) { log('Cancelled', 'warn'); setStatus('Cancelled'); return; }
-
-  // ================================================================
-  // Store mesh for export (decoupled from format selection)
-  // ================================================================
-  lastMesh = mesh;
-  lastBaseName = (config.metadata.name || config.metadata.id || 'fractal').toLowerCase().replace(/\s+/g, '-');
-  t5 = performance.now();
-
-  setProgress(100);
-  setPhase('Complete', 100);
-  setStatus('Done — choose format and export');
-
-  drawMeshPreview(mesh.positions, mesh.indices, mesh.vertexCount, mesh.faceCount);
-
-  // ---- Summary ----
-  var totalSec = ((t5 - t0) / 1000).toFixed(1);
-  log('=== Complete in ' + totalSec + 's ===', 'phase');
-
-  var timingHtml = '';
-  if (useNarrowBand) {
-    timingHtml = 'Coarse: ' + ((tCoarse - t0) / 1000).toFixed(1) + 's &middot; Fine: ' + ((tFine - tCoarse) / 1000).toFixed(1) + 's';
-  } else {
-    timingHtml = 'SDF: ' + ((t1 - t0) / 1000).toFixed(1) + 's';
-  }
-  timingHtml += ' &middot; DC: ' + ((t2 - t1) / 1000).toFixed(1) + 's';
-  if (useNewton && tNewton > t2) timingHtml += ' &middot; Newton: ' + ((tNewton - t2) / 1000).toFixed(1) + 's';
-  timingHtml += ' &middot; Post: ' + ((t3 - tNewton) / 1000).toFixed(1) + 's';
-  timingHtml += ' &middot; Color: ' + ((t4 - t3) / 1000).toFixed(1) + 's';
-  timingHtml += ' &middot; <b>Total: ' + totalSec + 's</b>';
-
-  var meshMB = ((mesh.positions.byteLength + mesh.normals.byteLength + mesh.indices.byteLength) / (1024 * 1024)).toFixed(0);
-  var modeLabel = useNarrowBand ? N + '\u00B3 narrow-band' : N + '\u00B3 grid';
-  infoEl.innerHTML =
-    modeLabel + ' &middot; ' +
-    '<span class="highlight">' + mesh.vertexCount.toLocaleString() + ' vertices &middot; ' + mesh.faceCount.toLocaleString() + ' faces</span> &middot; ' +
-    meshMB + ' MB mesh data' +
-    (useNewton ? ' &middot; Newton projected' : '') +
-    (mesh.vertexCount > 5000000 ? ' &middot; <span class="warn">smoothing skipped (large mesh)</span>' : '') + '<br>' +
-    timingHtml;
-
   } finally {
-    // Always clean up: release GL, reset buttons
-    if (gl) {
-      try { gl.getExtension('WEBGL_lose_context').loseContext(); } catch (e) {}
-      gl = null;
-    }
     cancelRequested = false;
+    document.getElementById('previewPanel').style.display = '';
     document.getElementById('genBtn').style.display = '';
     document.getElementById('genBtn').disabled = document.getElementById('format').value === 'vdb';
     document.getElementById('cancelBtn').style.display = 'none';
@@ -1409,67 +686,40 @@ async function generate() {
 }
 
 // ============================================================================
-// Export — decoupled from generation, can be called multiple times
+// Export (thin wrapper around pipeline.js)
 // ============================================================================
 
 async function exportMesh() {
   var format = document.getElementById('format').value;
-  if (format !== 'vdb' && !lastMesh) { log('No mesh to export — click Generate first', 'warn'); setStatus('Click Generate first'); highlightStep('generate'); return; }
-  var t0 = performance.now();
+  if (format !== 'vdb' && !lastMesh) { log('No mesh to export \u2014 click Generate first', 'warn'); setStatus('Click Generate first'); highlightStep('generate'); return; }
 
   document.getElementById('exportBtn').disabled = true;
-  log('[Export] Encoding ' + format.toUpperCase() + '...', 'phase');
-  setStatus('Encoding ' + format.toUpperCase() + '...');
-  setPhase('Export ' + format.toUpperCase(), 0);
+  if (format === 'vdb') document.getElementById('previewPanel').style.display = 'none';
 
   try {
+    var vdbParams = null;
     if (format === 'vdb') {
-      // VDB: standalone pipeline — GPU sample → VDB tree → serialize
-      // No mesh or sparse grid needed. Runs its own GPU pass.
+      clearLog();
       var config = activeFormulaConfig;
       var formulaParams = readFormulaParams();
-      var vdbN = parseInt(document.getElementById('res').value);
-      var vdbIters = parseInt(document.getElementById('iters').value);
-      var vdbPower = formulaParams.paramA || 8;
-      var vdbMin = parseFloat(document.getElementById('bboxMin').value);
-      var vdbMax = parseFloat(document.getElementById('bboxMax').value);
-      var vdbDeSamples = parseInt(document.getElementById('deSamples').value);
-
-      clearLog();
-      var formulaName = config.metadata.name || config.metadata.id || 'unknown';
-      log('=== VDB Export: ' + formulaName + ' ===', 'phase');
-      log('Resolution: ' + vdbN + '\u00B3 | Iterations: ' + vdbIters + ' | Mode: solid', 'data');
-
-      if (!gl) gl = initWebGL();
-      var vdbResult = await generateVDB(gl, config, formulaParams, vdbN, vdbPower, vdbIters,
-        vdbMin, vdbMax, 'solid', vdbDeSamples);
-      exportBlob = vdbResult.blob;
-      exportFilename = ((config.metadata.name || config.metadata.id || 'fractal')
-        .toLowerCase().replace(/\s+/g, '-')) + '.vdb';
-      log('VDB: ' + vdbResult.voxelCount.toLocaleString() + ' active voxels, ' +
-        vdbResult.leafCount + ' leaf blocks' +
-        (vdbResult.promoted.promotedLeaves ? ', ' + vdbResult.promoted.promotedLeaves + ' tiles promoted' : ''), 'data');
-    } else if (format === 'glb') {
-      var estBytes = estimateExportSize(lastMesh, format);
-      log('Estimated size: ~' + (estBytes / (1024 * 1024)).toFixed(0) + ' MB', 'mem');
-      exportBlob = exportGLB(lastMesh);
-      exportFilename = lastBaseName + '.glb';
-      setPhase('Export GLB', 100);
-    } else {
-      var estBytes = estimateExportSize(lastMesh, format);
-      log('Estimated size: ~' + (estBytes / (1024 * 1024)).toFixed(0) + ' MB', 'mem');
-      exportBlob = await exportSTL(lastMesh, function(pct) {
-        setPhase('Export STL', pct);
-        setStatus('Encoding STL... ' + pct + '%');
-      });
-      exportFilename = lastBaseName + '.stl';
+      var vdbBounds = readBounds();
+      var vdbHalf = Math.max(vdbBounds.sx, vdbBounds.sy, vdbBounds.sz) * 0.5;
+      vdbParams = {
+        config: config,
+        formulaParams: formulaParams,
+        N: parseInt(document.getElementById('res').value),
+        iters: parseInt(document.getElementById('iters').value),
+        power: formulaParams.paramA || 8,
+        gridMin: [vdbBounds.cx - vdbHalf, vdbBounds.cy - vdbHalf, vdbBounds.cz - vdbHalf],
+        gridMax: [vdbBounds.cx + vdbHalf, vdbBounds.cy + vdbHalf, vdbBounds.cz + vdbHalf],
+        deSamples: parseInt(document.getElementById('deSamples').value),
+        zSubSlices: parseInt(document.getElementById('zSubSlices').value) || 1
+      };
     }
 
-    var t1 = performance.now();
-    var sizeMB = (exportBlob.size / (1024 * 1024)).toFixed(2);
-    log('Export: ' + sizeMB + ' MB ' + format.toUpperCase() + ' (' + ((t1 - t0) / 1000).toFixed(1) + 's)', 'success');
-    setStatus(sizeMB + ' MB ' + format.toUpperCase() + ' ready');
-    setPhase('Export complete', 100);
+    var result = await runExportMesh(format, lastMesh, lastBaseName, vdbParams, buildPipelineUI());
+    exportBlob = result.blob;
+    exportFilename = result.filename;
     document.getElementById('dlBtn').disabled = false;
     highlightStep('download');
   } catch (e) {
@@ -1478,6 +728,7 @@ async function exportMesh() {
     setStatus('Export error: ' + e.message);
   } finally {
     document.getElementById('exportBtn').disabled = false;
+    document.getElementById('previewPanel').style.display = '';
   }
 }
 
@@ -1495,29 +746,376 @@ function highlightStep(step) {
 }
 
 function onFormatChange() {
-  exportBlob = null;
+  exportBlob = null; memFree('exportBlob');
   document.getElementById('dlBtn').disabled = true;
   var isVDB = document.getElementById('format').value === 'vdb';
-  // Disable mesh-only controls for VDB (they don't apply to volume export)
-  var meshRow = document.getElementById('meshRow');
-  if (meshRow) meshRow.classList.toggle('disabled', isVDB);
-  // Disable Generate for VDB (Export runs its own pipeline)
+  var meshPhaseRows = ['filterRow', 'newtonRow', 'smoothRow', 'colorRow'];
+  for (var i = 0; i < meshPhaseRows.length; i++) {
+    var row = document.getElementById(meshPhaseRows[i]);
+    if (row) row.classList.toggle('disabled', isVDB);
+  }
   document.getElementById('genBtn').disabled = isVDB;
-  // Context-sensitive button labels with step numbers
   var exp = document.getElementById('exportBtn');
   exp.innerHTML = isVDB ? '<span class="step-num">1</span> Export VDB' : '<span class="step-num">2</span> Export';
   document.getElementById('genBtn').innerHTML = '<span class="step-num">1</span> Generate';
   document.getElementById('dlBtn').innerHTML = isVDB ? '<span class="step-num">2</span> Download' : '<span class="step-num">3</span> Download';
-  // Show hint for VDB
   var hint = document.getElementById('vdbHint');
   if (hint) hint.style.display = isVDB ? '' : 'none';
-  // Highlight first step
   highlightStep(isVDB ? 'export' : 'generate');
 }
 
 function download() {
   if (!exportBlob) return;
   downloadBlob(exportBlob, exportFilename);
+}
+
+// ============================================================================
+// Fractal Preview — UI/DOM layer (math in preview-camera.js)
+// ============================================================================
+
+var pvGl = null, pvProg = null, pvLoc = {}, pvConfig = null;
+var pvRawAngle = 0.6, pvRawPitch = 0.3;   // raw (tracks mouse freely)
+var pvCamAngle = 0.6, pvCamPitch = 0.3;   // display (may be snapped)
+var pvCamDist = 3.5;
+var pvDragging = false, pvLastX = 0, pvLastY = 0;
+var pvRafId = 0;
+var pvDragMode = null;
+var pvHover = null;
+var pvSnapAnimId = 0;
+var pvShiftHeld = false;
+var pvSnapped = false;
+var pvSnapTarget = null;
+
+// Convenience wrappers that bind current camera state to preview-camera.js functions
+function pvProject(p) {
+  var cvs = document.getElementById('bboxOverlay');
+  return orthoProject(p, pvCamAngle, pvCamPitch, pvCamDist, cvs.width, cvs.height);
+}
+function pvUnprojectDelta(dxPx, dyPx) {
+  var cvs = document.getElementById('bboxOverlay');
+  return orthoUnprojectDelta(dxPx, dyPx, pvCamAngle, pvCamPitch, pvCamDist, cvs.height);
+}
+
+function pvUpdateSnap() {
+  if (pvShiftHeld) {
+    var snap = findAxisSnap(pvRawAngle, pvRawPitch, SNAP_THRESH);
+    if (snap) {
+      if (!pvSnapped) pvSnapped = true;
+      pvSnapTarget = snap;
+      if (!pvSnapAnimId) pvSnapAnimId = requestAnimationFrame(snapAnimStep);
+      return;
+    }
+  }
+  pvSnapped = false;
+  pvSnapTarget = null;
+  if (pvSnapAnimId) { cancelAnimationFrame(pvSnapAnimId); pvSnapAnimId = 0; }
+  pvCamAngle = pvRawAngle;
+  pvCamPitch = pvRawPitch;
+}
+
+function snapAnimStep() {
+  pvSnapAnimId = 0;
+  if (!pvSnapTarget) return;
+  var da = normAngle(pvSnapTarget.angle - pvCamAngle);
+  var dp = pvSnapTarget.pitch - pvCamPitch;
+  var dist = Math.sqrt(da * da + dp * dp);
+  if (dist < 0.002) {
+    pvCamAngle = pvSnapTarget.angle;
+    pvCamPitch = pvSnapTarget.pitch;
+    requestPreviewRender();
+    if (pvSnapped) pvSnapAnimId = requestAnimationFrame(snapAnimStep);
+    return;
+  }
+  var t = 0.2;
+  pvCamAngle += da * t;
+  pvCamPitch += dp * t;
+  requestPreviewRender();
+  pvSnapAnimId = requestAnimationFrame(snapAnimStep);
+}
+
+function initPreview() {
+  var cvs = document.getElementById('fractalPreview');
+  pvGl = cvs.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+  if (!pvGl) { console.warn('Preview: WebGL2 not available'); return; }
+
+  var overlay = document.getElementById('bboxOverlay');
+
+  overlay.addEventListener('mousedown', function(e) {
+    var rect = overlay.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    pvLastX = e.clientX; pvLastY = e.clientY;
+    var hit = hitTestHandles(mx, my);
+    pvDragMode = hit || 'orbit';
+    pvDragging = true;
+    overlay.style.cursor = pvDragMode === 'orbit' ? 'grabbing' : 'ew-resize';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    if (!pvDragging) {
+      var rect = overlay.getBoundingClientRect();
+      var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      var oldHover = pvHover;
+      pvHover = hitTestHandles(mx, my);
+      overlay.style.cursor = pvHover ? (pvHover === 'center' ? 'move' : 'ew-resize') : 'grab';
+      if (pvHover !== oldHover) requestPreviewRender();
+      return;
+    }
+
+    var dx = e.clientX - pvLastX, dy = e.clientY - pvLastY;
+    pvLastX = e.clientX; pvLastY = e.clientY;
+
+    if (pvDragMode === 'orbit') {
+      pvRawAngle += dx * 0.008;
+      pvRawPitch = Math.max(-HP, Math.min(HP, pvRawPitch + dy * 0.008));
+      pvUpdateSnap();
+      requestPreviewRender();
+    } else if (pvDragMode === 'center') {
+      var worldDelta = pvUnprojectDelta(dx, dy);
+      var cx = parseFloat(document.getElementById('bboxCX').value) || 0;
+      var cy = parseFloat(document.getElementById('bboxCY').value) || 0;
+      var cz = parseFloat(document.getElementById('bboxCZ').value) || 0;
+      document.getElementById('bboxCX').value = (cx + worldDelta[0]).toFixed(3);
+      document.getElementById('bboxCY').value = (cy + worldDelta[1]).toFixed(3);
+      document.getElementById('bboxCZ').value = (cz + worldDelta[2]).toFixed(3);
+      onBoundsChange();
+    } else {
+      var axisChar = pvDragMode.charAt(4);
+      var sign = pvDragMode.charAt(5) === '+' ? 1 : -1;
+      var axis = axisChar === 'X' ? [1,0,0] : axisChar === 'Y' ? [0,1,0] : [0,0,1];
+      var worldDelta = pvUnprojectDelta(dx, dy);
+      var axisDelta = dot3(worldDelta, axis) * sign;
+      var sizeId = 'bboxS' + axisChar;
+      var centerId = 'bboxC' + axisChar;
+      var locked = document.getElementById('bboxLock').checked;
+      var cur = parseFloat(document.getElementById(sizeId).value) || 3;
+      var newSize = Math.max(0.1, cur + axisDelta * 2);
+      var sizeDelta = newSize - cur;
+      if (locked) {
+        document.getElementById('bboxSX').value = newSize.toFixed(3);
+        document.getElementById('bboxSY').value = newSize.toFixed(3);
+        document.getElementById('bboxSZ').value = newSize.toFixed(3);
+      } else {
+        document.getElementById(sizeId).value = newSize.toFixed(3);
+        var cVal = parseFloat(document.getElementById(centerId).value) || 0;
+        document.getElementById(centerId).value = (cVal + sizeDelta * 0.5 * sign).toFixed(3);
+      }
+      onBoundsChange();
+    }
+  });
+
+  window.addEventListener('mouseup', function() {
+    pvDragging = false;
+    pvDragMode = null;
+    var overlay = document.getElementById('bboxOverlay');
+    if (overlay) overlay.style.cursor = pvHover ? (pvHover === 'center' ? 'move' : 'ew-resize') : 'grab';
+  });
+
+  overlay.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    pvCamDist = Math.max(0.5, Math.min(20.0, pvCamDist * (1 + e.deltaY * 0.001)));
+    requestPreviewRender();
+  });
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Shift' && !pvShiftHeld) {
+      pvShiftHeld = true;
+      pvUpdateSnap();
+      requestPreviewRender();
+    }
+  });
+  window.addEventListener('keyup', function(e) {
+    if (e.key === 'Shift') {
+      pvShiftHeld = false;
+      pvUpdateSnap();
+      requestPreviewRender();
+    }
+  });
+
+  compilePreview();
+}
+
+function compilePreview() {
+  if (!pvGl) return;
+  var gl = pvGl;
+  pvConfig = activeFormulaConfig;
+  if (pvProg) { gl.deleteProgram(pvProg); pvProg = null; }
+  try {
+    var fragSrc = buildPreviewFrag(pvConfig);
+    pvProg = createProgram(gl, SDF_VERT, fragSrc);
+  } catch (e) {
+    console.warn('Preview shader compile failed:', e.message);
+    pvProg = null;
+    return;
+  }
+  gl.useProgram(pvProg);
+  gl.bindVertexArray(gl.createVertexArray());
+  pvLoc = {};
+  var names = ['uPower', 'uIters', 'uResolution', 'uCamPos', 'uCamTarget', 'uCamRight', 'uFov']
+    .concat(FORMULA_UNIFORM_NAMES);
+  for (var i = 0; i < names.length; i++) {
+    pvLoc[names[i]] = gl.getUniformLocation(pvProg, names[i]);
+  }
+  requestPreviewRender();
+}
+
+function requestPreviewRender() {
+  if (pvRafId) return;
+  pvRafId = requestAnimationFrame(function() { pvRafId = 0; renderPreview(); });
+}
+
+function renderPreview() {
+  if (!pvGl || !pvProg) return;
+  var gl = pvGl;
+  var cvs = gl.canvas;
+  gl.viewport(0, 0, cvs.width, cvs.height);
+  gl.useProgram(pvProg);
+
+  var cam = orthoCamBasis(pvCamAngle, pvCamPitch);
+  gl.uniform2f(pvLoc.uResolution, cvs.width, cvs.height);
+  gl.uniform3f(pvLoc.uCamPos, cam.pos[0], cam.pos[1], cam.pos[2]);
+  gl.uniform3f(pvLoc.uCamTarget, 0, 0, 0);
+  gl.uniform3f(pvLoc.uCamRight, cam.right[0], cam.right[1], cam.right[2]);
+  gl.uniform1f(pvLoc.uFov, pvCamDist);
+
+  var params = readFormulaParams();
+  gl.uniform1f(pvLoc.uPower, params.paramA || 8);
+  gl.uniform1i(pvLoc.uIters, parseInt(document.getElementById('iters').value) || 12);
+  setFormulaUniforms(gl, pvLoc, params);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  drawBBoxOverlay();
+}
+
+function getBBoxHandles() {
+  var b = readBounds();
+  var hx = b.sx * 0.5, hy = b.sy * 0.5, hz = b.sz * 0.5;
+  return {
+    center: [b.cx, b.cy, b.cz],
+    'sizeX+': [b.cx + hx, b.cy, b.cz], 'sizeX-': [b.cx - hx, b.cy, b.cz],
+    'sizeY+': [b.cx, b.cy + hy, b.cz], 'sizeY-': [b.cx, b.cy - hy, b.cz],
+    'sizeZ+': [b.cx, b.cy, b.cz + hz], 'sizeZ-': [b.cx, b.cy, b.cz - hz]
+  };
+}
+
+function hitTestHandles(mx, my) {
+  var handles = getBBoxHandles();
+  var hitRadius = 8;
+  var cp = pvProject(handles.center);
+  if (Math.abs(mx - cp[0]) < hitRadius && Math.abs(my - cp[1]) < hitRadius) return 'center';
+  var axisKeys = ['sizeX+', 'sizeX-', 'sizeY+', 'sizeY-', 'sizeZ+', 'sizeZ-'];
+  for (var i = 0; i < axisKeys.length; i++) {
+    var hp = pvProject(handles[axisKeys[i]]);
+    if (Math.abs(mx - hp[0]) < hitRadius && Math.abs(my - hp[1]) < hitRadius) return axisKeys[i];
+  }
+  return null;
+}
+
+function drawBBoxOverlay() {
+  var overlay = document.getElementById('bboxOverlay');
+  var ctx = overlay.getContext('2d');
+  var w = overlay.width, h = overlay.height;
+  ctx.clearRect(0, 0, w, h);
+
+  var b = readBounds();
+  var c = [b.cx, b.cy, b.cz];
+  var hx = b.sx * 0.5, hy = b.sy * 0.5, hz = b.sz * 0.5;
+
+  var corners = [];
+  for (var xi = 0; xi < 2; xi++)
+    for (var yi = 0; yi < 2; yi++)
+      for (var zi = 0; zi < 2; zi++)
+        corners.push([b.cx + (xi ? hx : -hx), b.cy + (yi ? hy : -hy), b.cz + (zi ? hz : -hz)]);
+
+  var projected = corners.map(pvProject);
+
+  var edgeGroups = [
+    { color: '#f554', edges: [[0,4],[1,5],[2,6],[3,7]] },
+    { color: '#5f54', edges: [[0,2],[1,3],[4,6],[5,7]] },
+    { color: '#55f4', edges: [[0,1],[2,3],[4,5],[6,7]] }
+  ];
+  for (var g = 0; g < edgeGroups.length; g++) {
+    ctx.strokeStyle = edgeGroups[g].color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    for (var i = 0; i < edgeGroups[g].edges.length; i++) {
+      var a = projected[edgeGroups[g].edges[i][0]];
+      var b2 = projected[edgeGroups[g].edges[i][1]];
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b2[0], b2[1]);
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Axis handle diamonds
+  var handles = getBBoxHandles();
+  var handleColors = { 'sizeX+': '#f55', 'sizeX-': '#f55', 'sizeY+': '#5f5', 'sizeY-': '#5f5', 'sizeZ+': '#55f', 'sizeZ-': '#55f' };
+  var axisKeys = ['sizeX+', 'sizeX-', 'sizeY+', 'sizeY-', 'sizeZ+', 'sizeZ-'];
+  for (var i = 0; i < axisKeys.length; i++) {
+    var key = axisKeys[i];
+    var hp = pvProject(handles[key]);
+    var sz = (pvHover === key) ? 7 : 5;
+    ctx.fillStyle = handleColors[key];
+    ctx.beginPath();
+    ctx.moveTo(hp[0], hp[1] - sz); ctx.lineTo(hp[0] + sz, hp[1]);
+    ctx.lineTo(hp[0], hp[1] + sz); ctx.lineTo(hp[0] - sz, hp[1]);
+    ctx.closePath();
+    ctx.fill();
+    if (pvHover === key) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+
+  // Center gizmo — 3 axis arrows
+  var cp = pvProject(handles.center);
+  var axisWorldLen = pvCamDist * 0.12;
+  var axisColors = ['#f55', '#5f5', '#55f'];
+  var axisDirs = [[1,0,0],[0,1,0],[0,0,1]];
+  var axisLabels = ['X', 'Y', 'Z'];
+
+  for (var i = 0; i < 3; i++) {
+    var tip3d = add3(c, scale3(axisDirs[i], axisWorldLen));
+    var tip = pvProject(tip3d);
+    var dx = tip[0] - cp[0], dy = tip[1] - cp[1];
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 2) continue;
+    var hovered = pvHover === 'center';
+    ctx.strokeStyle = axisColors[i];
+    ctx.lineWidth = hovered ? 3 : 2;
+    ctx.beginPath(); ctx.moveTo(cp[0], cp[1]); ctx.lineTo(tip[0], tip[1]); ctx.stroke();
+    var nx = dx / len, ny = dy / len;
+    ctx.fillStyle = axisColors[i];
+    ctx.beginPath();
+    ctx.moveTo(tip[0], tip[1]);
+    ctx.lineTo(tip[0] - nx * 6 + ny * 3, tip[1] - ny * 6 - nx * 3);
+    ctx.lineTo(tip[0] - nx * 6 - ny * 3, tip[1] - ny * 6 + nx * 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.font = 'bold 9px monospace';
+    ctx.fillStyle = axisColors[i];
+    ctx.fillText(axisLabels[i], tip[0] + nx * 6 - 3, tip[1] + ny * 6 + 3);
+  }
+
+  // Center dot
+  var cr = (pvHover === 'center') ? 5 : 3;
+  ctx.fillStyle = pvHover === 'center' ? '#fc0' : '#fa0';
+  ctx.beginPath(); ctx.arc(cp[0], cp[1], cr, 0, Math.PI * 2); ctx.fill();
+  if (pvHover === 'center') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke(); }
+
+  // Snap label
+  if (pvSnapTarget) {
+    var snap = findAxisSnap(pvSnapTarget.angle, pvSnapTarget.pitch, 0.1);
+    if (snap) {
+      ctx.font = 'bold 11px monospace'; ctx.fillStyle = '#fa0'; ctx.textAlign = 'right';
+      ctx.fillText(snap.label, w - 6, 14); ctx.textAlign = 'left';
+    }
+  } else if (pvShiftHeld) {
+    var snap = findAxisSnap(pvCamAngle, pvCamPitch, SNAP_THRESH);
+    if (snap) {
+      ctx.font = '10px monospace'; ctx.fillStyle = '#888'; ctx.textAlign = 'right';
+      ctx.fillText('snap: ' + snap.label, w - 6, 14); ctx.textAlign = 'left';
+    }
+  }
 }
 
 // ============================================================================
@@ -1529,6 +1127,9 @@ window.addEventListener('DOMContentLoaded', function() {
   progressEl = document.getElementById('progress');
   phaseStatusEl = document.getElementById('phaseStatus');
   phaseProgressEl = document.getElementById('phaseProgress');
+  memMapEl = document.getElementById('memoryMap');
+  memBlocksEl = document.getElementById('memBlocks');
+  memSummaryEl = document.getElementById('memSummary');
   infoEl = document.getElementById('info');
   logPanelEl = document.getElementById('logPanel');
   logHeaderEl = document.getElementById('logHeader');
@@ -1541,6 +1142,22 @@ window.addEventListener('DOMContentLoaded', function() {
   buildFormulaUI(activeFormulaConfig);
   initMeshPreviewControls();
   highlightStep('generate');
+  initPreview();
+  updateBoundsInfo();
+
+  // Bounds controls: center, size, lock
+  ['bboxCX','bboxCY','bboxCZ'].forEach(function(id) {
+    document.getElementById(id).addEventListener('input', onBoundsChange);
+  });
+  document.getElementById('bboxSX').addEventListener('input', function() { onSizeInput('X'); });
+  document.getElementById('bboxSY').addEventListener('input', function() { onSizeInput('Y'); });
+  document.getElementById('bboxSZ').addEventListener('input', function() { onSizeInput('Z'); });
+
+  // Re-render preview when iterations change
+  document.getElementById('iters').addEventListener('input', function() { requestPreviewRender(); });
+
+  // Re-render preview when any formula param slider/input changes
+  document.getElementById('formulaParams').addEventListener('input', function() { requestPreviewRender(); });
 
   window.addEventListener('error', function(e) {
     log('UNCAUGHT: ' + e.message + ' at ' + e.filename + ':' + e.lineno, 'error');

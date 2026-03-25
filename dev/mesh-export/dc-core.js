@@ -195,8 +195,8 @@ function solveQEF(crossings, cellMin, cellMax) {
  *
  * @param {Float32Array} sdfGrid  SDF values indexed as grid[z*N*N + y*N + x]
  * @param {number} N              Grid resolution per axis
- * @param {number} gridMin        World-space minimum (same for all axes)
- * @param {number} gridMax        World-space maximum
+ * @param {number[]} gridMin      World-space minimum [x, y, z]
+ * @param {number[]} gridMax      World-space maximum [x, y, z]
  * @param {number} maxDepth       Unused (sparse variant uses block depth)
  * @param {function} onProgress   Callback: onProgress(phase, percentInt)
  * @returns {Promise<{ positions: Float32Array, normals: Float32Array, indices: Uint32Array,
@@ -259,18 +259,18 @@ async function dualContour(sdfGrid, N, gridMin, gridMax, maxDepth, onProgress) {
           var px = (lo0 + hi0) * 0.5, py = (lo1 + hi1) * 0.5, pz = (lo2 + hi2) * 0.5;
           var grad = sdfGradient(sdfGrid, N, px, py, pz);
           crossings.push({
-            point: [gridToWorld(px, N, gridMin, gridMax), gridToWorld(py, N, gridMin, gridMax), gridToWorld(pz, N, gridMin, gridMax)],
+            point: [gridToWorld(px, N, gridMin[0], gridMax[0]), gridToWorld(py, N, gridMin[1], gridMax[1]), gridToWorld(pz, N, gridMin[2], gridMax[2])],
             normal: grad
           });
         }
         if (crossings.length === 0) continue;
 
-        var cellMin = [gridToWorld(ix, N, gridMin, gridMax), gridToWorld(iy, N, gridMin, gridMax), gridToWorld(iz, N, gridMin, gridMax)];
-        var cellMax = [gridToWorld(ix + 1, N, gridMin, gridMax), gridToWorld(iy + 1, N, gridMin, gridMax), gridToWorld(iz + 1, N, gridMin, gridMax)];
+        var cellMin = [gridToWorld(ix, N, gridMin[0], gridMax[0]), gridToWorld(iy, N, gridMin[1], gridMax[1]), gridToWorld(iz, N, gridMin[2], gridMax[2])];
+        var cellMax = [gridToWorld(ix + 1, N, gridMin[0], gridMax[0]), gridToWorld(iy + 1, N, gridMin[1], gridMax[1]), gridToWorld(iz + 1, N, gridMin[2], gridMax[2])];
         var v = solveQEF(crossings, cellMin, cellMax);
         if (!v) continue;
 
-        var grad2 = sdfGradient(sdfGrid, N, worldToGrid(v[0], N, gridMin, gridMax), worldToGrid(v[1], N, gridMin, gridMax), worldToGrid(v[2], N, gridMin, gridMax));
+        var grad2 = sdfGradient(sdfGrid, N, worldToGrid(v[0], N, gridMin[0], gridMax[0]), worldToGrid(v[1], N, gridMin[1], gridMax[1]), worldToGrid(v[2], N, gridMin[2], gridMax[2]));
         var key = (iz * M + iy) * M + ix;
         vertexMap.set(key, vertexCount);
         posArr.push3(v[0], v[1], v[2]);

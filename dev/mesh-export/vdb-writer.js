@@ -197,7 +197,7 @@ function _writeTree(w, tree) {
  * Serialize a VDB tree to binary ArrayBuffer.
  * @param tree - VDB tree from createTree/addLeafBlock
  * @param {number} N - grid resolution
- * @param {number} boundsMin - grid min coordinate (e.g. -1.5)
+ * @param {number[]} boundsMin - grid min coordinate [x, y, z]
  * @param {number} boundsRange - grid extent (e.g. 3.0)
  */
 function serializeVDB(tree, N, boundsMin, boundsRange) {
@@ -229,12 +229,12 @@ function serializeVDB(tree, N, boundsMin, boundsRange) {
   _metaS(w, 'name', 'density');
 
   // Transform
-  var s = boundsRange / N, t = boundsMin;
+  var s = boundsRange / N;
   w.name('AffineMap');
   w.f64(s); w.f64(0); w.f64(0); w.f64(0);
   w.f64(0); w.f64(s); w.f64(0); w.f64(0);
   w.f64(0); w.f64(0); w.f64(s); w.f64(0);
-  w.f64(t); w.f64(t); w.f64(t); w.f64(1);
+  w.f64(boundsMin[0]); w.f64(boundsMin[1]); w.f64(boundsMin[2]); w.f64(1);
 
   // Tree
   _writeTree(w, tree);

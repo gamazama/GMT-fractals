@@ -245,8 +245,8 @@ function forEachBandBlock(grid, callback) {
 /**
  * Run dual contouring on a sparse SDF grid (only processes allocated blocks).
  * @param {SparseSDFGrid} grid — sparse grid with SDF values
- * @param {number} gridMin — world-space min (e.g., -1.5)
- * @param {number} gridMax — world-space max (e.g., 1.5)
+ * @param {number[]} gridMin — world-space min [x, y, z]
+ * @param {number[]} gridMax — world-space max [x, y, z]
  * @param {function} onProgress — progress callback
  * @returns {{ positions: Float32Array, normals: Float32Array, indices: Uint32Array, vertexCount: number, faceCount: number }}
  */
@@ -382,18 +382,18 @@ async function dualContourSparse(grid, gridMin, gridMax, onProgress) {
             var px=(lo0+hi0)*0.5, py=(lo1+hi1)*0.5, pz=(lo2+hi2)*0.5;
             var grad=grid.gradient(px,py,pz);
             crossings.push({
-              point:[gridToWorld(px,N,gridMin,gridMax),gridToWorld(py,N,gridMin,gridMax),gridToWorld(pz,N,gridMin,gridMax)],
+              point:[gridToWorld(px,N,gridMin[0],gridMax[0]),gridToWorld(py,N,gridMin[1],gridMax[1]),gridToWorld(pz,N,gridMin[2],gridMax[2])],
               normal:grad
             });
           }
           if (crossings.length===0) continue;
 
-          var cellMin=[gridToWorld(ix,N,gridMin,gridMax),gridToWorld(iy,N,gridMin,gridMax),gridToWorld(iz,N,gridMin,gridMax)];
-          var cellMax=[gridToWorld(ix+1,N,gridMin,gridMax),gridToWorld(iy+1,N,gridMin,gridMax),gridToWorld(iz+1,N,gridMin,gridMax)];
+          var cellMin=[gridToWorld(ix,N,gridMin[0],gridMax[0]),gridToWorld(iy,N,gridMin[1],gridMax[1]),gridToWorld(iz,N,gridMin[2],gridMax[2])];
+          var cellMax=[gridToWorld(ix+1,N,gridMin[0],gridMax[0]),gridToWorld(iy+1,N,gridMin[1],gridMax[1]),gridToWorld(iz+1,N,gridMin[2],gridMax[2])];
           var v = solveQEF(crossings, cellMin, cellMax);
           if (!v) continue;
 
-          var grad2 = grid.gradient(worldToGrid(v[0],N,gridMin,gridMax),worldToGrid(v[1],N,gridMin,gridMax),worldToGrid(v[2],N,gridMin,gridMax));
+          var grad2 = grid.gradient(worldToGrid(v[0],N,gridMin[0],gridMax[0]),worldToGrid(v[1],N,gridMin[1],gridMax[1]),worldToGrid(v[2],N,gridMin[2],gridMax[2]));
           setVertexIndex(ix, iy, iz, vertexCount);
           positions.push3(v[0], v[1], v[2]);
           normals.push3(grad2[0], grad2[1], grad2[2]);

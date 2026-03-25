@@ -323,7 +323,7 @@ function buildSDFFrag(config, deSamples) {
     'uniform int   uIters;\n' +
     'uniform float uInvRes;\n' +
     'uniform vec2  uTileOffset;\n' +
-    'uniform float uBoundsMin;\n' +
+    'uniform vec3  uBoundsMin;\n' +
     'uniform float uBoundsRange;\n' +
     GLSL_UNIFORMS + '\n' +
     'out vec4 fragColor;\n\n' +
@@ -342,9 +342,9 @@ function buildSDFFrag(config, deSamples) {
     'void main() {\n' +
     '  float voxelSize = uBoundsRange * uInvRes;\n' +
     '  vec3 center = vec3(\n' +
-    '    (gl_FragCoord.x + uTileOffset.x) * uInvRes * uBoundsRange + uBoundsMin,\n' +
-    '    (gl_FragCoord.y + uTileOffset.y) * uInvRes * uBoundsRange + uBoundsMin,\n' +
-    '    uZ * uBoundsRange + uBoundsMin\n' +
+    '    (gl_FragCoord.x + uTileOffset.x) * uInvRes * uBoundsRange + uBoundsMin.x,\n' +
+    '    (gl_FragCoord.y + uTileOffset.y) * uInvRes * uBoundsRange + uBoundsMin.y,\n' +
+    '    uZ * uBoundsRange + uBoundsMin.z\n' +
     '  );\n\n' +
     '  const int SS = ' + deSamples + ';\n' +
     '  const int TOTAL = SS * SS * SS;\n' +
@@ -405,7 +405,7 @@ function buildEscapeFrag(config) {
     'uniform int   uIters;\n' +
     'uniform float uInvRes;\n' +
     'uniform vec2  uTileOffset;\n' +
-    'uniform float uBoundsMin;\n' +
+    'uniform vec3  uBoundsMin;\n' +
     'uniform float uBoundsRange;\n' +
     GLSL_UNIFORMS + '\n' +
     'out vec4 fragColor;\n\n' +
@@ -414,9 +414,9 @@ function buildEscapeFrag(config) {
     config.shaderFunction + '\n\n' +
     'void main() {\n' +
     '  vec3 pos = vec3(\n' +
-    '    (gl_FragCoord.x + uTileOffset.x) * uInvRes * uBoundsRange + uBoundsMin,\n' +
-    '    (gl_FragCoord.y + uTileOffset.y) * uInvRes * uBoundsRange + uBoundsMin,\n' +
-    '    uZ * uBoundsRange + uBoundsMin\n' +
+    '    (gl_FragCoord.x + uTileOffset.x) * uInvRes * uBoundsRange + uBoundsMin.x,\n' +
+    '    (gl_FragCoord.y + uTileOffset.y) * uInvRes * uBoundsRange + uBoundsMin.y,\n' +
+    '    uZ * uBoundsRange + uBoundsMin.z\n' +
     '  );\n\n' +
     _buildIterationLoop(config, 'uIters') + '\n\n' +
     '  float r2 = dot(z.xyz, z.xyz);\n' +
@@ -436,6 +436,7 @@ function buildColorFrag(config) {
     'uniform float uPower;\n' +
     'uniform int uIters;\n' +
     'uniform int uWidth;\n' +
+    'uniform vec3 uJitterOffset;\n' +
     GLSL_UNIFORMS + '\n' +
     'out vec4 fragColor;\n\n' +
     GLSL_HELPERS + '\n\n' +
@@ -445,7 +446,7 @@ function buildColorFrag(config) {
     'void main() {\n' +
     '  ivec2 coord = ivec2(gl_FragCoord.xy);\n' +
     '  vec4 pd = texelFetch(uPositions, coord, 0);\n' +
-    '  vec3 pos = pd.xyz;\n' +
+    '  vec3 pos = pd.xyz + uJitterOffset;\n' +
     '  if (pd.w < 0.5) { fragColor = vec4(0.5, 0.5, 0.5, 1.0); return; }\n\n' +
     _buildIterationLoop(config, 'uIters') + '\n\n' +
     '  float t = log(max(1e-5, trap)) * -0.3;\n' +
@@ -530,6 +531,82 @@ function buildNewtonFrag(config) {
     '  vec3 n = sdfGradient(pos);\n' +
     '  outPosition = vec4(pos, 1.0);\n' +
     '  outNormal = vec4(n, 0.0);\n' +
+    '}';
+}
+
+/**
+ * Build a raymarching preview fragment shader from formula config.
+ * Renders a quick 3D preview from a fixed camera with basic shading.
+ */
+function buildPreviewFrag(config) {
+  var deType = getEffectiveDEType(config);
+  var getDistBlock = _buildGetDistBlock(config);
+  var deReturn = _buildDEReturn(deType, !!config.shaderDist, '0.001');
+
+  return '#version 300 es\n' +
+    'precision highp float;\n' +
+    'uniform float uPower;\n' +
+    'uniform int   uIters;\n' +
+    'uniform vec2  uResolution;\n' +
+    'uniform vec3  uCamPos;\n' +
+    'uniform vec3  uCamTarget;\n' +
+    'uniform vec3  uCamRight;\n' +
+    'uniform float uFov;\n' +
+    GLSL_UNIFORMS + '\n' +
+    'out vec4 fragColor;\n\n' +
+    GLSL_HELPERS + '\n\n' +
+    (config.shaderPreamble || '') + '\n\n' +
+    config.shaderFunction + '\n\n' +
+    getDistBlock + '\n' +
+    'float formulaDE(vec3 pos, float power, int iters) {\n' +
+    _buildIterationLoop(config, 'iters') + '\n\n' +
+    '  float r = length(z.xyz);\n' +
+    '  float safeDr = max(abs(dr), 1e-10);\n' +
+    '  ' + deReturn + '\n' +
+    '}\n\n' +
+    'float DE(vec3 p) { return formulaDE(p, uPower, uIters); }\n\n' +
+    'vec3 calcNormal(vec3 p) {\n' +
+    '  float h = 0.0005;\n' +
+    '  return normalize(vec3(\n' +
+    '    DE(p+vec3(h,0,0))-DE(p-vec3(h,0,0)),\n' +
+    '    DE(p+vec3(0,h,0))-DE(p-vec3(0,h,0)),\n' +
+    '    DE(p+vec3(0,0,h))-DE(p-vec3(0,0,h))\n' +
+    '  ));\n' +
+    '}\n\n' +
+    'void main() {\n' +
+    '  vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;\n' +
+    '  vec3 fwd = normalize(uCamTarget - uCamPos);\n' +
+    '  vec3 right = uCamRight;\n' +
+    '  vec3 up = cross(right, fwd);\n' +
+    '  // Orthographic: parallel rays, offset origin\n' +
+    '  vec3 ro = uCamPos + right * uv.x * uFov + up * uv.y * uFov;\n' +
+    '  vec3 rd = fwd;\n\n' +
+    '  float t = 0.0;\n' +
+    '  bool hit = false;\n' +
+    '  for (int i = 0; i < 128; i++) {\n' +
+    '    float d = DE(ro + rd * t);\n' +
+    '    if (abs(d) < 0.0002) { hit = true; break; }\n' +
+    '    t += d * 0.8;\n' +
+    '    if (t > 20.0) break;\n' +
+    '  }\n\n' +
+    '  if (!hit) {\n' +
+    '    fragColor = vec4(0.06, 0.06, 0.06, 1.0);\n' +
+    '    return;\n' +
+    '  }\n\n' +
+    '  vec3 p = ro + rd * t;\n' +
+    '  vec3 n = calcNormal(p);\n' +
+    '  vec3 light = normalize(vec3(0.6, 0.8, -0.5));\n' +
+    '  float diff = max(dot(n, light), 0.0);\n' +
+    '  float amb = 0.15;\n' +
+    '  float ao = 1.0;\n' +
+    '  for (int i = 1; i <= 5; i++) {\n' +
+    '    float fi = float(i) * 0.04;\n' +
+    '    ao -= (fi - DE(p + n * fi)) * (1.0 / pow(2.0, float(i)));\n' +
+    '  }\n' +
+    '  ao = clamp(ao, 0.0, 1.0);\n' +
+    '  vec3 col = vec3(0.7, 0.75, 0.8) * (amb + diff * 0.85) * ao;\n' +
+    '  col = pow(col, vec3(0.45));\n' +
+    '  fragColor = vec4(col, 1.0);\n' +
     '}';
 }
 
@@ -736,6 +813,7 @@ function onFormulaChange() {
   if (BUILTIN_FORMULAS[val]) {
     activeFormulaConfig = BUILTIN_FORMULAS[val];
     buildFormulaUI(activeFormulaConfig);
+    if (typeof compilePreview === 'function') compilePreview();
   }
 }
 
@@ -770,6 +848,7 @@ function loadGMFFile(event) {
       sel.value = '__loaded_gmf__';
 
       buildFormulaUI(activeFormulaConfig);
+      if (typeof compilePreview === 'function') compilePreview();
       setStatus('Loaded: ' + gmf.metadata.name);
     } catch (err) {
       log('GMF load FAILED: ' + err.message, 'error');
