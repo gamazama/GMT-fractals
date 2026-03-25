@@ -17,7 +17,7 @@
 | `mesh-postprocess.js` | ~280 | Smoothing, degenerate removal, normals, winding, vertex merge |
 | `mesh-writers.js` | ~240 | `BinaryWriter`, GLB export (FLOAT VEC4 colors), STL export |
 | `formula-system.js` | ~550 | GMF parser, built-in formulas, GLSL shader builders, dynamic UI, uniform binding |
-| `gpu-pipeline.js` | ~300 | WebGL helpers, SDF pipeline setup, sparse sampling, GPU Newton, GPU coloring |
+| `gpu-pipeline.js` | ~300 | WebGL helpers, SDF pipeline setup, shared sampling helpers (`bindPipelineUniforms`, `coarsePrePass`, `sampleSliceWithSubZ`), dense/sparse sampling, GPU Newton, GPU coloring, VDB generation |
 
 Scripts are loaded in dependency order: `dc-core → sdf-eval → sparse-grid → mesh-postprocess → mesh-writers → formula-system → gpu-pipeline`. A single WebGL2 context is created once in `generate()` and passed to all GPU phases; `loseContext()` is called only at the end.
 
@@ -162,6 +162,8 @@ Runs the formula iteration loop on each vertex position to compute orbit trap va
 
 The color shader uses the same `GLSL_UNIFORMS + GLSL_HELPERS + shaderPreamble + shaderFunction` as the SDF shader, but runs the iteration without computing DE — just accumulates `trap = min(trap, length(z.xyz))`.
 
+**Color supersampling**: At high iterations, orbit trap values become chaotic — tiny position changes produce wildly different colors, causing splotchy vertex colors. The `colorSamples` parameter (1–64, default 8) renders multiple passes with jittered positions and accumulates into a `RGBA32F` FBO using additive blending. Jitter offsets use a Fibonacci sphere distribution with volume-filling radius scaling (`cbrt` falloff), covering a sphere of radius `0.5 × voxelSize` around each vertex. The accumulated colors are averaged on readback. Cost scales linearly with sample count.
+
 ---
 
 ## Phase 6: Export
@@ -176,6 +178,22 @@ The color shader uses the same `GLSL_UNIFORMS + GLSL_HELPERS + shaderPreamble + 
 
 ### STL (Binary)
 Standard 80-byte header + per-face normal + 3 vertices + attribute byte count. No vertex colors (STL spec doesn't support them).
+
+### VDB (OpenVDB)
+VDB export runs a standalone pipeline in `generateVDB()` (gpu-pipeline.js) — separate from the mesh pipeline. It samples the SDF slice-by-slice via GPU and builds a VDB tree directly, never allocating a full grid or mesh.
+
+### Shared Sampling Helpers (gpu-pipeline.js)
+Both the dense mesh and VDB pipelines share three helpers extracted to avoid code duplication:
+
+- **`bindPipelineUniforms()`**: Sets common SDF uniforms (power, iters, invRes, boundsMin, boundsRange, formula params, FBO). Used by dense, sparse, and VDB sampling paths.
+- **`coarsePrePass()`**: At resolutions >128³, samples a fast 128³ coarse SDF grid to detect the Z range containing fractal data. Returns `{zSliceMin, zSliceMax}` aligned to block boundaries (multiples of 8). At 2048³ this typically skips 30–50% of slices. Used by both dense mesh and VDB paths (the sparse mesh path has its own narrow-band coarse pass).
+- **`sampleSliceWithSubZ()`**: Samples one Z-slice into a flat `Float32Array(N*N)` slab. Handles GPU tiling for `N > tileSize`. When `zSubSlices > 1`, samples multiple sub-Z positions within the voxel and averages. Used by both dense mesh and VDB paths.
+
+**Z sub-slice averaging**: Configurable 1–16 sub-slices per voxel layer. For each Z layer, the GPU renders multiple sub-Z positions evenly spaced within the voxel, and the SDF values are averaged. This smooths inter-voxel Z transitions that otherwise appear as visible contour/banding artifacts in both mesh and volume exports. Default is 4 sub-slices. Cost scales linearly with sub-slice count.
+
+**Density conversion**: SDF → density uses a linear falloff: interior (`sdf < 0`) maps to 255 (full density), exterior maps to `255 * (1 - sdf / (voxelSize * 2.5))` clamped to [0, 255]. The 2.5-voxel transition band provides a smooth surface in volume renders.
+
+**VDB tree**: 5-4-3 tree with half-float (float16) density values. `vdb-writer.js` handles serialization. `optimizeTree()` promotes uniform leaf blocks to node4 tiles, and uniform node4s to node5 tiles, reducing file size for solid interior regions.
 
 ---
 
@@ -268,3 +286,4 @@ Previous implementation used JS arrays (8 bytes/boxed double) which consumed ~3.
 - **Auto bounding box**: Currently manual min/max inputs. Future: GMT will provide the selected bounding box, or a coarse 32³ SDF probe could auto-detect the occupied region.
 - **GPU Newton memory**: At 20M vertices, Newton textures consume ~960 MB GPU memory. Could be batched.
 - **Single-threaded DC**: The async yielding prevents UI freezing but doesn't parallelize. A Web Worker approach would allow true background processing.
+- **VDB XY banding**: Z sub-slicing smooths Z-axis banding, but equivalent XY banding may be visible. The in-shader DE supersampling (deSamples) helps but operates within single voxels. A similar sub-pixel averaging approach could be applied to XY if needed.

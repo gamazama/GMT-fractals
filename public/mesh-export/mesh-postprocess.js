@@ -261,6 +261,8 @@ function postProcessMesh(mesh, options) {
   if (!options) options = {};
   var smoothing = options.smoothing !== undefined ? options.smoothing : true;
   var smoothIterations = options.smoothIterations !== undefined ? options.smoothIterations : 5;
+  var lambda = options.lambda !== undefined ? options.lambda : 0.5;
+  var mu = options.mu !== undefined ? options.mu : -(lambda + 0.03);
 
   // Skip degenerate face removal for very large meshes (JS array push overhead)
   if (mesh.faceCount < 5000000) {
@@ -273,7 +275,7 @@ function postProcessMesh(mesh, options) {
     if (mesh.vertexCount > 5000000) {
       console.warn('Skipping smoothing: ' + mesh.vertexCount.toLocaleString() + ' vertices too large (>5M limit)');
     } else {
-      mesh = taubinSmooth(mesh, 0.5, -0.53, smoothIterations);
+      mesh = taubinSmooth(mesh, lambda, mu, smoothIterations);
     }
   }
 

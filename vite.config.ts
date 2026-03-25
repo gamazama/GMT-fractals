@@ -21,6 +21,10 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
+      },
       output: {
         manualChunks: {
           // Core vendor libraries
@@ -38,6 +42,6 @@ export default defineConfig({
     }
   },
   server: {
-    middlewareMode: true, 
+    middlewareMode: true,
   }
 });

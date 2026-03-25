@@ -636,13 +636,13 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
             // ─── Bucket Render ───────────────────────────────────────
             case 'BUCKET_START':
                 if (engine && renderer) {
-                    engine.state.isBucketRendering = true;
                     engine.state.bucketConfig = { ...msg.config };
                     const exportData = msg.exportData ? {
                         preset: JSON.parse(msg.exportData.preset),
                         name: msg.exportData.name,
                         version: msg.exportData.version
                     } : undefined;
+                    engine.state.isBucketRendering = true;
                     bucketRenderer.start(msg.exportImage, msg.config, exportData);
                 }
                 break;

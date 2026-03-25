@@ -96,6 +96,134 @@ function setupSDFPipeline(gl, tileSize, config, deSamples) {
   return { prog: sdfProg, loc: loc, fbo: fbo, tex: tex };
 }
 
+/** Bind common SDF pipeline uniforms (shared by dense, sparse, VDB sampling).
+ *  gridMin is a 3-element array [minX, minY, minZ]. */
+function bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams) {
+  gl.useProgram(pipeline.prog);
+  gl.uniform1f(pipeline.loc.uPower, power);
+  gl.uniform1i(pipeline.loc.uIters, iters);
+  gl.uniform1f(pipeline.loc.uInvRes, 1.0 / N);
+  gl.uniform3f(pipeline.loc.uBoundsMin, gridMin[0], gridMin[1], gridMin[2]);
+  gl.uniform1f(pipeline.loc.uBoundsRange, boundsRange);
+  setFormulaUniforms(gl, pipeline.loc, formulaParams);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, pipeline.fbo);
+}
+
+/**
+ * Coarse pre-pass: sample a low-res 128³ grid to find the Z range that
+ * actually contains fractal data. Skips empty slices in the fine pass.
+ * At 2048³ this can skip 30-50% of slices, saving minutes.
+ * Shared by both VDB and dense mesh pipelines.
+ */
+async function coarsePrePass(gl, config, formulaParams, N, power, iters, gridMin, gridMax, voxelSize) {
+  var coarseN = 128;
+  var boundsRange = gridMax[0] - gridMin[0];
+  var zSliceMin = 0, zSliceMax = N - 1;
+
+  if (N > coarseN) {
+    log('Coarse pre-pass: sampling ' + coarseN + '\u00B3 to detect Z range...', 'info');
+    setPhase('Coarse Pre-pass', 0);
+    setStatus('Coarse pre-pass (' + coarseN + '\u00B3)...');
+    await tick();
+
+    var coarsePipeline = setupSDFPipeline(gl, coarseN, config, 1);
+    bindPipelineUniforms(gl, coarsePipeline, coarseN, power, iters, gridMin, boundsRange, formulaParams);
+    gl.viewport(0, 0, coarseN, coarseN);
+
+    var coarsePixF = new Float32Array(coarseN * coarseN * 4);
+    var coarseZMin = coarseN, coarseZMax = -1;
+
+    for (var cz = 0; cz < coarseN; cz++) {
+      gl.uniform1f(coarsePipeline.loc.uZ, (cz + 0.5) / coarseN);
+      gl.uniform2f(coarsePipeline.loc.uTileOffset, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.readPixels(0, 0, coarseN, coarseN, gl.RGBA, gl.FLOAT, coarsePixF);
+
+      var hasData = false;
+      for (var ci = 0; ci < coarseN * coarseN; ci++) {
+        if (coarsePixF[ci * 4] < voxelSize * 3) { hasData = true; break; }
+      }
+      if (hasData) {
+        if (cz < coarseZMin) coarseZMin = cz;
+        coarseZMax = cz;
+      }
+    }
+
+    gl.deleteTexture(coarsePipeline.tex);
+    gl.deleteFramebuffer(coarsePipeline.fbo);
+    gl.deleteProgram(coarsePipeline.prog);
+
+    if (coarseZMax >= coarseZMin) {
+      var margin = 2;
+      var ratio = N / coarseN;
+      zSliceMin = Math.max(0, Math.floor((coarseZMin - margin) * ratio));
+      zSliceMax = Math.min(N - 1, Math.ceil((coarseZMax + margin + 1) * ratio));
+      // Align to block boundaries (multiples of 8)
+      zSliceMin = (zSliceMin & ~7);
+      zSliceMax = Math.min(N - 1, (zSliceMax | 7));
+      var skippedPct = (100 * (1 - (zSliceMax - zSliceMin + 1) / N)).toFixed(0);
+      log('Coarse pre-pass: data in Z [' + coarseZMin + ',' + coarseZMax + '] of ' + coarseN +
+        ' \u2192 fine Z [' + zSliceMin + ',' + zSliceMax + '] of ' + N +
+        ' (skipping ' + skippedPct + '% of slices)', 'data');
+    } else {
+      log('Coarse pre-pass: no data found \u2014 sampling all slices', 'warn');
+    }
+    setPhase('Coarse Pre-pass', 100);
+  }
+
+  return { zSliceMin: zSliceMin, zSliceMax: zSliceMax };
+}
+
+/**
+ * Sample one Z-slice into a slab buffer with optional Z sub-slice averaging.
+ * Handles tiling for N > tileSize. Shared by dense mesh and VDB pipelines.
+ * When zSubSlices <= 1: single sample at (gz + 0.5) / N.
+ * When zSubSlices > 1: average zSubSlices positions within [gz, gz+1).
+ */
+function sampleSliceWithSubZ(gl, pipeline, N, tileSize, pixF, destSlab, gz, zSubSlices, subSliceBuf) {
+  function sampleOneZ(zNorm, dest) {
+    gl.useProgram(pipeline.prog);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pipeline.fbo);
+    gl.uniform1f(pipeline.loc.uZ, zNorm);
+    if (N <= tileSize) {
+      gl.uniform2f(pipeline.loc.uTileOffset, 0, 0);
+      gl.viewport(0, 0, N, N);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.readPixels(0, 0, N, N, gl.RGBA, gl.FLOAT, pixF);
+      for (var j = 0; j < N * N; j++) dest[j] = pixF[j * 4];
+    } else {
+      for (var tileY = 0; tileY < N; tileY += tileSize) {
+        for (var tileX = 0; tileX < N; tileX += tileSize) {
+          var tw = Math.min(tileSize, N - tileX);
+          var th = Math.min(tileSize, N - tileY);
+          gl.uniform2f(pipeline.loc.uTileOffset, tileX, tileY);
+          gl.viewport(0, 0, tw, th);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          gl.readPixels(0, 0, tw, th, gl.RGBA, gl.FLOAT, pixF);
+          for (var py = 0; py < th; py++) {
+            for (var px = 0; px < tw; px++) {
+              dest[(tileY + py) * N + (tileX + px)] = pixF[(py * tw + px) * 4];
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!zSubSlices || zSubSlices <= 1) {
+    sampleOneZ((gz + 0.5) / N, destSlab);
+  } else {
+    destSlab.fill(0);
+    var invSS = 1.0 / zSubSlices;
+    for (var ss = 0; ss < zSubSlices; ss++) {
+      var subZ = (gz + (ss + 0.5) * invSS) / N;
+      sampleOneZ(subZ, subSliceBuf);
+      for (var j = 0; j < N * N; j++) destSlab[j] += subSliceBuf[j];
+    }
+    for (var j = 0; j < N * N; j++) destSlab[j] *= invSS;
+  }
+}
+
 /** Helper: locate formula uniforms on a GL program */
 function locateFormulaUniforms(gl, prog) {
   var loc = {};
@@ -113,22 +241,20 @@ function locateFormulaUniforms(gl, prog) {
  * Sample a full dense SDF grid via GPU.
  * Updates the SDF preview canvas every slice.
  */
-async function sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gridMin, gridMax, progressBase, progressRange) {
+async function sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gridMin, gridMax, progressBase, progressRange, zSubSlices, zSliceMin, zSliceMax) {
   var tileSize = Math.min(N, 2048);
-  var boundsRange = gridMax - gridMin;
-  gl.useProgram(pipeline.prog);
-  gl.uniform1f(pipeline.loc.uPower, power);
-  gl.uniform1i(pipeline.loc.uIters, iters);
-  gl.uniform1f(pipeline.loc.uInvRes, 1.0 / N);
-  gl.uniform1f(pipeline.loc.uBoundsMin, gridMin);
-  gl.uniform1f(pipeline.loc.uBoundsRange, boundsRange);
-  setFormulaUniforms(gl, pipeline.loc, formulaParams);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, pipeline.fbo);
+  var boundsRange = gridMax[0] - gridMin[0];
+  if (!zSubSlices || zSubSlices < 1) zSubSlices = 1;
+  if (zSliceMin == null) zSliceMin = 0;
+  if (zSliceMax == null) zSliceMax = N - 1;
+  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams);
   gl.viewport(0, 0, tileSize, tileSize);
 
   var pixF = new Float32Array(tileSize * tileSize * 4);
   var sdfGrid = new Float32Array(N * N * N);
   var voxelSize = boundsRange / N;
+  var slab = new Float32Array(N * N);
+  var subSliceBuf = zSubSlices > 1 ? new Float32Array(N * N) : null;
 
   // Live preview: reusable canvas for slice visualization
   var prevSize = Math.min(N, 512);
@@ -137,30 +263,27 @@ async function sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gri
   var prevX = prevC.getContext('2d');
   var prevI = prevX.createImageData(prevSize, prevSize);
 
-  for (var z = 0; z < N; z++) {
-    gl.uniform1f(pipeline.loc.uZ, (z + 0.5) / N);
-    var tilesX = Math.ceil(N / tileSize), tilesY = Math.ceil(N / tileSize);
-    for (var ty = 0; ty < tilesY; ty++) {
-      for (var tx = 0; tx < tilesX; tx++) {
-        var ox = tx * tileSize, oy = ty * tileSize;
-        var tw = Math.min(tileSize, N - ox), th = Math.min(tileSize, N - oy);
-        gl.uniform2f(pipeline.loc.uTileOffset, ox, oy);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        gl.readPixels(0, 0, tw, th, gl.RGBA, gl.FLOAT, pixF);
-        for (var row = 0; row < th; row++) {
-          for (var col = 0; col < tw; col++) {
-            sdfGrid[(z * N + (oy + row)) * N + (ox + col)] = pixF[(row * tw + col) * 4];
-          }
-        }
-      }
-    }
+  // Fill skipped slices with +1.0 (far outside surface)
+  if (zSliceMin > 0 || zSliceMax < N - 1) {
+    sdfGrid.fill(1.0);
+  }
+  if (zSubSlices > 1) {
+    log('Z sub-slicing: ' + zSubSlices + ' sub-samples per voxel layer (smooths Z-axis banding)', 'info');
+  }
+
+  var activeSlices = zSliceMax - zSliceMin + 1;
+  var slicesDone = 0;
+
+  for (var z = zSliceMin; z <= zSliceMax; z++) {
+    sampleSliceWithSubZ(gl, pipeline, N, tileSize, pixF, slab, z, zSubSlices, subSliceBuf);
+    sdfGrid.set(slab, z * N * N);
 
     // Live preview — every slice
     for (var py = 0; py < prevSize; py++) {
       var srcY = Math.min(Math.round(py * prevScale), N - 1);
       for (var px = 0; px < prevSize; px++) {
         var srcX = Math.min(Math.round(px * prevScale), N - 1);
-        var sVal = sdfGrid[(z * N + srcY) * N + srcX];
+        var sVal = slab[srcY * N + srcX];
         var absDist = Math.abs(sVal);
         var contour = absDist < voxelSize * 2 ? Math.round(255 * (1 - absDist / (voxelSize * 2))) : 0;
         var interior = sVal < 0 ? 50 : 0;
@@ -174,9 +297,10 @@ async function sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gri
     prevX.putImageData(prevI, 0, 0);
     previewCtx.drawImage(prevC, 0, 0, previewCvs.width, previewCvs.height);
 
-    setProgress(progressBase + Math.round(z / N * progressRange));
-    setPhase('SDF Sampling', Math.round(z / N * 100));
-    if ((z & 3) === 0) { setStatus('Sampling SDF... slice ' + (z + 1) + '/' + N); await tick(); }
+    slicesDone++;
+    setProgress(progressBase + Math.round(slicesDone / activeSlices * progressRange));
+    setPhase('SDF Sampling', Math.round(slicesDone / activeSlices * 100));
+    if ((slicesDone & 3) === 0) { setStatus('Sampling SDF... slice ' + slicesDone + '/' + activeSlices); await tick(); }
   }
 
   return sdfGrid;
@@ -195,15 +319,8 @@ async function sampleSparseGrid(gl, pipeline, sparseGrid, power, iters, formulaP
   var N = sparseGrid.N;
   var bs = sparseGrid.blockSize;
   var tileSize = Math.min(N, 2048);
-  var boundsRange = gridMax - gridMin;
-  gl.useProgram(pipeline.prog);
-  gl.uniform1f(pipeline.loc.uPower, power);
-  gl.uniform1i(pipeline.loc.uIters, iters);
-  gl.uniform1f(pipeline.loc.uInvRes, 1.0 / N);
-  gl.uniform1f(pipeline.loc.uBoundsMin, gridMin);
-  gl.uniform1f(pipeline.loc.uBoundsRange, boundsRange);
-  setFormulaUniforms(gl, pipeline.loc, formulaParams);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, pipeline.fbo);
+  var boundsRange = gridMax[0] - gridMin[0];
+  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams);
   gl.viewport(0, 0, tileSize, tileSize);
 
   // Collect unique Z slices that have allocated blocks, with XY bounding box
@@ -342,23 +459,22 @@ async function sampleSparseGrid(gl, pipeline, sparseGrid, power, iters, formulaP
  * @param {number} deSamples
  * @returns {{ blob, voxelCount, leafCount, promoted }}
  */
-async function generateVDB(gl, config, formulaParams, N, power, iters, gridMin, gridMax, mode, deSamples) {
-  var boundsRange = gridMax - gridMin;
+async function generateVDB(gl, config, formulaParams, N, power, iters, gridMin, gridMax, mode, deSamples, zSubSlices) {
+  var boundsRange = gridMax[0] - gridMin[0];
   var voxelSize = boundsRange / N;
   var bs = 8; // VDB leaf = 8^3, must match
   var bpa = (N / bs) | 0;
   var tileSize = Math.min(N, 2048);
+  if (!zSubSlices || zSubSlices < 1) zSubSlices = 1;
 
-  // Build & compile SDF shader (single sample, no supersampling for VDB)
+  var zRange = await coarsePrePass(gl, config, formulaParams, N, power, iters, gridMin, gridMax, voxelSize);
+  var zSliceMin = zRange.zSliceMin, zSliceMax = zRange.zSliceMax;
+
+  // ================================================================
+  // Fine pass: sample SDF slice by slice with optional Z sub-slicing
+  // ================================================================
   var pipeline = setupSDFPipeline(gl, tileSize, config, deSamples || 1);
-  gl.useProgram(pipeline.prog);
-  gl.uniform1f(pipeline.loc.uPower, power);
-  gl.uniform1i(pipeline.loc.uIters, iters);
-  gl.uniform1f(pipeline.loc.uInvRes, 1.0 / N);
-  gl.uniform1f(pipeline.loc.uBoundsMin, gridMin);
-  gl.uniform1f(pipeline.loc.uBoundsRange, boundsRange);
-  setFormulaUniforms(gl, pipeline.loc, formulaParams);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, pipeline.fbo);
+  bindPipelineUniforms(gl, pipeline, N, power, iters, gridMin, boundsRange, formulaParams);
 
   var pixF = new Float32Array(tileSize * tileSize * 4);
   var tree = createTree();
@@ -369,6 +485,9 @@ async function generateVDB(gl, config, formulaParams, N, power, iters, gridMin, 
   var slabBuf = new Array(bs);
   for (var i = 0; i < bs; i++) slabBuf[i] = new Float32Array(N * N);
 
+  // Temp buffer for Z sub-slice accumulation (reused per slice)
+  var subSliceBuf = zSubSlices > 1 ? new Float32Array(N * N) : null;
+
   // Live preview
   var prevSize = Math.min(N, 512);
   var prevScale = N / prevSize;
@@ -376,36 +495,16 @@ async function generateVDB(gl, config, formulaParams, N, power, iters, gridMin, 
   var prevX = prevC.getContext('2d');
   var prevI = prevX.createImageData(prevSize, prevSize);
 
-  for (var gz = 0; gz < N; gz++) {
-    // GPU: render one Z slice
-    gl.uniform1f(pipeline.loc.uZ, (gz + 0.5) / N);
-    // Handle tiling if N > tileSize
-    if (N <= tileSize) {
-      gl.uniform2f(pipeline.loc.uTileOffset, 0, 0);
-      gl.viewport(0, 0, N, N);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      gl.readPixels(0, 0, N, N, gl.RGBA, gl.FLOAT, pixF);
-      // Copy SDF values into slab buffer
-      var slab = slabBuf[gz % bs];
-      for (var j = 0; j < N * N; j++) slab[j] = pixF[j * 4];
-    } else {
-      var slab = slabBuf[gz % bs];
-      for (var tileY = 0; tileY < N; tileY += tileSize) {
-        for (var tileX = 0; tileX < N; tileX += tileSize) {
-          var tw = Math.min(tileSize, N - tileX);
-          var th = Math.min(tileSize, N - tileY);
-          gl.uniform2f(pipeline.loc.uTileOffset, tileX, tileY);
-          gl.viewport(0, 0, tw, th);
-          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-          gl.readPixels(0, 0, tw, th, gl.RGBA, gl.FLOAT, pixF);
-          for (var py = 0; py < th; py++) {
-            for (var px = 0; px < tw; px++) {
-              slab[(tileY + py) * N + (tileX + px)] = pixF[(py * tw + px) * 4];
-            }
-          }
-        }
-      }
-    }
+  var activeSlices = zSliceMax - zSliceMin + 1;
+  var slicesDone = 0;
+
+  if (zSubSlices > 1) {
+    log('Z sub-slicing: ' + zSubSlices + ' sub-samples per voxel layer (smooths Z-axis banding)', 'info');
+  }
+
+  for (var gz = zSliceMin; gz <= zSliceMax; gz++) {
+    var slab = slabBuf[gz % bs];
+    sampleSliceWithSubZ(gl, pipeline, N, tileSize, pixF, slab, gz, zSubSlices, subSliceBuf);
 
     // Every 8 slices: build VDB blocks from the buffered slab
     if ((gz % bs) === bs - 1) {
@@ -440,11 +539,13 @@ async function generateVDB(gl, config, formulaParams, N, power, iters, gridMin, 
     }
 
     // Progress + preview every 8 slices
-    if ((gz & 7) === 0) {
-      var pct = Math.round(gz / N * 80);
+    slicesDone++;
+    if ((slicesDone & 7) === 0) {
+      var pct = Math.round(slicesDone / activeSlices * 80);
       setProgress(pct);
-      setPhase('VDB Sampling', Math.round(gz / N * 100));
-      setStatus('VDB sampling slice ' + gz + '/' + N);
+      setPhase('VDB Sampling', Math.round(slicesDone / activeSlices * 100));
+      setStatus('VDB sampling slice ' + slicesDone + '/' + activeSlices +
+        (zSliceMin > 0 || zSliceMax < N - 1 ? ' (Z ' + zSliceMin + '\u2013' + zSliceMax + ')' : ''));
 
       // Live preview
       for (var py = 0; py < prevSize; py++) {
@@ -489,7 +590,9 @@ async function generateVDB(gl, config, formulaParams, N, power, iters, gridMin, 
     blob: new Blob([vdbBuf], { type: 'application/octet-stream' }),
     voxelCount: totalVoxels,
     leafCount: leafCount,
-    promoted: promoted
+    promoted: promoted,
+    zRange: [zSliceMin, zSliceMax],
+    skippedSlices: N - activeSlices
   };
 }
 
@@ -507,7 +610,7 @@ async function sampleEscapeTest(gl, sparseGrid, config, power, iters, formulaPar
   var bs = sparseGrid.blockSize;
   var bpa = sparseGrid.blocksPerAxis;
   var tileSize = Math.min(N, 2048);
-  var boundsRange = gridMax - gridMin;
+  var boundsRange = gridMax[0] - gridMin[0];
   var bytesPerBlock = (sparseGrid.blockCellCount + 7) >> 3;
 
   // Build & compile escape shader
@@ -532,7 +635,7 @@ async function sampleEscapeTest(gl, sparseGrid, config, power, iters, formulaPar
   gl.uniform1f(loc.uPower, power);
   gl.uniform1i(loc.uIters, iters);
   gl.uniform1f(loc.uInvRes, 1.0 / N);
-  gl.uniform1f(loc.uBoundsMin, gridMin);
+  gl.uniform3f(loc.uBoundsMin, gridMin[0], gridMin[1], gridMin[2]);
   gl.uniform1f(loc.uBoundsRange, boundsRange);
   setFormulaUniforms(gl, loc, formulaParams);
   gl.bindVertexArray(gl.createVertexArray());
@@ -741,14 +844,20 @@ function gpuNewtonProject(gl, mesh, config, formulaParams, power, iters, voxelSi
 
 /**
  * Colorize mesh vertices on GPU using orbit trap values.
- * FIX #7: Accepts `gl` as a parameter — reuses the existing WebGL context.
+ * Supports spatial supersampling: renders N passes with jittered positions
+ * and accumulates into a float FBO for smooth, noise-free colors.
+ * @param {number} colorSamples - number of jittered samples (1 = no SS)
+ * @param {number} jitterRadius - world-space radius for jitter (e.g. voxelSize * 0.5)
  * Returns Uint8Array of RGBA colors (0-255).
  */
-function colorizeVerticesGPU(gl, mesh, config, formulaParams, power, iters) {
+async function colorizeVerticesGPU(gl, mesh, config, formulaParams, power, iters, colorSamples, jitterRadius) {
+  if (!colorSamples || colorSamples < 1) colorSamples = 1;
+  if (!jitterRadius) jitterRadius = 0;
   var vertexCount = mesh.vertexCount;
   var colTexW = Math.ceil(Math.sqrt(vertexCount));
   var colTexH = Math.ceil(vertexCount / colTexW);
-  log('Color texture: ' + colTexW + 'x' + colTexH + ' (' + (colTexW * colTexH * 16 / (1024 * 1024)).toFixed(0) + ' MB position data)', 'mem');
+  log('Color texture: ' + colTexW + 'x' + colTexH + ' (' + (colTexW * colTexH * 16 / (1024 * 1024)).toFixed(0) + ' MB position data)' +
+    (colorSamples > 1 ? ' | ' + colorSamples + ' samples, radius=' + jitterRadius.toFixed(5) : ''), 'mem');
 
   // Pack positions into RGBA32F texture
   var posData = new Float32Array(colTexW * colTexH * 4);
@@ -772,9 +881,11 @@ function colorizeVerticesGPU(gl, mesh, config, formulaParams, power, iters) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   posData = null; // free immediately
 
+  // Use RGBA32F for accumulation when supersampling, RGBA8 for single-pass
+  var useFloat = colorSamples > 1;
   var colOutTex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, colOutTex);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, colTexW, colTexH);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, useFloat ? gl.RGBA32F : gl.RGBA8, colTexW, colTexH);
   var colFbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, colFbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colOutTex, 0);
@@ -783,6 +894,7 @@ function colorizeVerticesGPU(gl, mesh, config, formulaParams, power, iters) {
 
   // Set uniforms
   var colLoc = locateFormulaUniforms(gl, colProg);
+  var jitterLoc = gl.getUniformLocation(colProg, 'uJitterOffset');
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, posTex);
   gl.uniform1i(gl.getUniformLocation(colProg, 'uPositions'), 0);
@@ -791,17 +903,63 @@ function colorizeVerticesGPU(gl, mesh, config, formulaParams, power, iters) {
   gl.uniform1i(gl.getUniformLocation(colProg, 'uWidth'), colTexW);
   setFormulaUniforms(gl, colLoc, formulaParams);
 
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  if (colorSamples <= 1) {
+    // Single pass — no jitter, no blending
+    gl.uniform3f(jitterLoc, 0, 0, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  } else {
+    // Multi-pass: clear to black, additive blend each jittered pass
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
 
-  var colPix = new Uint8Array(colTexW * colTexH * 4);
-  gl.readPixels(0, 0, colTexW, colTexH, gl.RGBA, gl.UNSIGNED_BYTE, colPix);
+    // Jitter offsets using Fibonacci sphere distribution (uniform coverage)
+    var goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    for (var si = 0; si < colorSamples; si++) {
+      var phi = Math.acos(1 - 2 * (si + 0.5) / colorSamples);
+      var theta = goldenAngle * si;
+      // Vary radius per sample to fill the sphere volume, not just surface
+      var r = jitterRadius * Math.cbrt((si + 0.5) / colorSamples);
+      var jx = r * Math.sin(phi) * Math.cos(theta);
+      var jy = r * Math.sin(phi) * Math.sin(theta);
+      var jz = r * Math.cos(phi);
+      gl.uniform3f(jitterLoc, jx, jy, jz);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
+      if ((si & 3) === 0 || si === colorSamples - 1) {
+        var pct = Math.round((si + 1) / colorSamples * 100);
+        setProgress(80 + Math.round((si + 1) / colorSamples * 10));
+        setPhase('Phase 5: Vertex Coloring', pct);
+        setStatus('Color sample ' + (si + 1) + '/' + colorSamples);
+        await tick();
+      }
+    }
+
+    gl.disable(gl.BLEND);
+  }
+
+  // Read back results
   var colors = new Uint8Array(vertexCount * 4);
-  for (var i = 0; i < vertexCount; i++) {
-    colors[i * 4] = colPix[i * 4];
-    colors[i * 4 + 1] = colPix[i * 4 + 1];
-    colors[i * 4 + 2] = colPix[i * 4 + 2];
-    colors[i * 4 + 3] = 255;
+  if (useFloat) {
+    var colPixF = new Float32Array(colTexW * colTexH * 4);
+    gl.readPixels(0, 0, colTexW, colTexH, gl.RGBA, gl.FLOAT, colPixF);
+    var invN = 1.0 / colorSamples;
+    for (var i = 0; i < vertexCount; i++) {
+      colors[i * 4]     = Math.min(255, Math.round(colPixF[i * 4]     * invN * 255));
+      colors[i * 4 + 1] = Math.min(255, Math.round(colPixF[i * 4 + 1] * invN * 255));
+      colors[i * 4 + 2] = Math.min(255, Math.round(colPixF[i * 4 + 2] * invN * 255));
+      colors[i * 4 + 3] = 255;
+    }
+  } else {
+    var colPix = new Uint8Array(colTexW * colTexH * 4);
+    gl.readPixels(0, 0, colTexW, colTexH, gl.RGBA, gl.UNSIGNED_BYTE, colPix);
+    for (var i = 0; i < vertexCount; i++) {
+      colors[i * 4]     = colPix[i * 4];
+      colors[i * 4 + 1] = colPix[i * 4 + 1];
+      colors[i * 4 + 2] = colPix[i * 4 + 2];
+      colors[i * 4 + 3] = 255;
+    }
   }
 
   // Clean up GPU resources (but don't destroy the context)

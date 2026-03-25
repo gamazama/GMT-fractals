@@ -1,4 +1,110 @@
 
+// ============================================================================
+// Shared GLSL Primitives — single source of truth for both main app and mesh export
+// ============================================================================
+
+/** Sphere fold — Mandelbox-family distance estimator helper */
+export const GLSL_SPHERE_FOLD = `
+void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR) {
+    float r2 = max(dot(z,z), 1.0e-9);
+    float minR2 = max(minR * minR, 1.0e-9);
+    float fixedR2 = max(fixedR * fixedR, 1.0e-9);
+    float k = clamp(fixedR2 / r2, 1.0, fixedR2 / minR2);
+    z *= k; dz *= k;
+}`;
+
+/** Box fold — Mandelbox-family distance estimator helper */
+export const GLSL_BOX_FOLD = `
+void boxFold(inout vec3 z, inout float dz, float foldLimit) {
+    z = clamp(z, -foldLimit, foldLimit) * 2.0 - z;
+}`;
+
+/** Simplex noise core — Stefan Gustavson (github.com/stegu/webgl-noise)
+ *  @param prefix - function name prefix to avoid GLSL name collisions (e.g. '' or '_')
+ */
+export function getSnoiseFunctions(prefix: string): string {
+  return `
+vec3 ${prefix}mod289v3(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 ${prefix}mod289v4(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 ${prefix}permute(vec4 x) { return ${prefix}mod289v4(((x*34.0)+1.0)*x); }
+vec4 ${prefix}taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v) {
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = ${prefix}mod289v3(i);
+  vec4 p = ${prefix}permute(${prefix}permute(${prefix}permute(
+    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x2_ = x_ * ns.x + ns.yyyy;
+  vec4 y2_ = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x2_) - abs(y2_);
+  vec4 b0 = vec4(x2_.xy, y2_.xy);
+  vec4 b1 = vec4(x2_.zw, y2_.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy,h.x);
+  vec3 p1 = vec3(a0.zw,h.y);
+  vec3 p2 = vec3(a1.xy,h.z);
+  vec3 p3 = vec3(a1.zw,h.w);
+  vec4 norm = ${prefix}taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}`;
+}
+
+// ============================================================================
+// Mesh Export GLSL — composed from shared primitives
+// Standalone subset: no rotation uniforms, no #ifdef guards,
+// simplified getLength (always Euclidean).
+// ============================================================================
+
+export const MESH_GLSL_UNIFORMS = `
+uniform float uParamA, uParamB, uParamC, uParamD, uParamE, uParamF;
+uniform vec2  uVec2A, uVec2B, uVec2C;
+uniform vec3  uVec3A, uVec3B, uVec3C;
+uniform vec4  uVec4A, uVec4B, uVec4C;
+uniform vec3  uJulia;
+uniform float uJuliaMode;
+uniform float uEscapeThresh;
+uniform float uDistanceMetric;
+#define uIterations uIters
+vec4 g_orbitTrap;
+`;
+
+export const MESH_GLSL_HELPERS = `
+// --- Helper functions for mesh export formulas ---
+${GLSL_SPHERE_FOLD}
+${GLSL_BOX_FOLD}
+
+float getLength(vec3 p) { return length(p); }
+
+void applyPreRotation(inout vec3 p) {}
+void applyPostRotation(inout vec3 p) {}
+void applyWorldRotation(inout vec3 p) {}
+
+// Simplex noise (Stefan Gustavson)
+${getSnoiseFunctions('_')}
+`;
 
 export const getMathGLSL = (useRotation: boolean) => {
     
@@ -155,17 +261,8 @@ vec3 applyTextureProfile(vec3 col, float mode) {
     }
 }
 
-void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR) {
-    float r2 = max(dot(z,z), 1.0e-9);
-    float minR2 = max(minR * minR, 1.0e-9);
-    float fixedR2 = max(fixedR * fixedR, 1.0e-9);
-    float k = clamp(fixedR2 / r2, 1.0, fixedR2 / minR2);
-    z *= k; dz *= k;
-}
-
-void boxFold(inout vec3 z, inout float dz, float foldLimit) {
-    z = clamp(z, -foldLimit, foldLimit) * 2.0 - z;
-}
+${GLSL_SPHERE_FOLD}
+${GLSL_BOX_FOLD}
 
 vec2 intersectSphere(vec3 ro, vec3 rd, float r) {
     float b = dot(ro, rd); float c = dot(ro, ro) - r * r;

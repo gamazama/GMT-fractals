@@ -2,6 +2,8 @@
 import React from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import { collectHelpIds } from '../utils/helpUtils';
+import { GenericToggleSwitch } from './GenericToggleSwitch';
+import type { GenericToggleOption } from './GenericToggleSwitch';
 
 export interface ToggleOption<T> {
     label: string;
@@ -21,17 +23,8 @@ interface ToggleSwitchProps<T> {
     isLfoActive?: boolean;
     icon?: React.ReactNode;
     disabled?: boolean;
-    variant?: 'default' | 'dense'; // New variant prop
+    variant?: 'default' | 'dense';
 }
-
-// Map color prop string to vec-style toggle classes
-const getToggleColor = (color: string) => {
-    if (color.includes('red')) return { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    if (color.includes('green')) return { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    if (color.includes('amber') || color.includes('yellow')) return { on: 'bg-amber-500/30 text-amber-300 border-amber-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    if (color.includes('purple')) return { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-    return { on: 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' };
-};
 
 function ToggleSwitch<T extends string | number | boolean>({
     label,
@@ -59,140 +52,28 @@ function ToggleSwitch<T extends string | number | boolean>({
         }
     };
 
-    const handleClick = (val: T) => {
-        if (disabled) return;
+    const handleChange = (val: T) => {
         handleInteractionStart('param');
         onChange(val);
         handleInteractionEnd();
     };
 
-    const handleBooleanClick = () => {
-        if (disabled) return;
-        handleInteractionStart('param');
-        onChange(!value as T);
-        handleInteractionEnd();
-    };
-
-    const toggleColor = getToggleColor(color);
-
-    // --- DENSE (SPREADSHEET) VARIANT ---
-    if (variant === 'dense' && !options && typeof value === 'boolean') {
-        const tc = getToggleColor(color);
-        return (
-             <div
-                className={`flex items-center justify-between px-3 py-1 border-b border-white/5 hover:bg-white/5 transition-colors ${disabled ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
-                data-help-id={helpId}
-                onContextMenu={handleContextMenu}
-                onClick={handleBooleanClick}
-             >
-                <div className="flex items-center gap-2">
-                    {icon}
-                    <span className="text-[10px] text-gray-400 font-medium tracking-tight truncate select-none">
-                        {label}
-                    </span>
-                </div>
-
-                <div
-                    className={`px-2 py-0.5 text-[8px] font-bold rounded-sm transition-all border ${
-                        value ? tc.on : tc.off
-                    } ${disabled ? '' : 'hover:brightness-125'}`}
-                >{value ? 'ON' : 'OFF'}</div>
-             </div>
-        );
-    }
-
-    // --- OPTIONS (segmented buttons) ---
-    if (options) {
-        return (
-            <div
-                className={`mb-px animate-slider-entry ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
-                data-help-id={helpId}
-                onContextMenu={handleContextMenu}
-            >
-                {/* Label header — matches vec input header */}
-                {label && (
-                    <div className="flex items-center bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 px-2 gap-2">
-                        {icon}
-                        <span className="text-[10px] text-gray-400 font-medium tracking-tight truncate select-none pointer-events-none">
-                            {label}
-                        </span>
-                    </div>
-                )}
-                {/* Segmented buttons row */}
-                <div className={`flex h-9 md:h-[26px] overflow-hidden ${label ? 'rounded-b-sm' : 'rounded-sm'}`}>
-                    {options.map((opt) => (
-                        <button
-                            key={String(opt.value)}
-                            onClick={() => handleClick(opt.value)}
-                            disabled={disabled}
-                            className={`
-                                flex-1 min-w-0 flex items-center justify-center text-[9px] font-bold border-r border-white/5 last:border-r-0 transition-all truncate
-                                ${value === opt.value
-                                    ? 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40'
-                                    : 'bg-white/[0.04] text-gray-600 hover:brightness-125'}
-                            `}
-                            title={opt.tooltip || opt.label}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-        );
-    }
-
-    // --- BOOLEAN toggle ---
-    // Entire row is clickable (label + toggle) for easier interaction
     return (
-        <div
-            className={`mb-px animate-slider-entry ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+        <GenericToggleSwitch
+            label={label}
+            value={value}
+            onChange={handleChange}
+            options={options as GenericToggleOption<T>[] | undefined}
+            color={color}
+            onLfoToggle={onLfoToggle}
+            isLfoActive={isLfoActive}
+            icon={icon}
+            disabled={disabled}
+            variant={variant}
+            labelSuffix={labelSuffix}
             data-help-id={helpId}
             onContextMenu={handleContextMenu}
-        >
-            <div
-                className={`group/toggle flex items-stretch h-9 md:h-[26px] overflow-hidden rounded-sm transition-colors ${label ? 'bg-white/[0.12]' : ''} ${disabled ? '' : 'cursor-pointer hover:bg-white/[0.18]'}`}
-                onClick={handleBooleanClick}
-            >
-                {/* Label area */}
-                {label && (
-                    <div className="flex-1 flex items-center gap-2 px-2 min-w-0 select-none">
-                        {icon}
-                        <span className="text-[10px] text-gray-400 group-hover/toggle:text-gray-300 font-medium tracking-tight truncate transition-colors">
-                            {label}
-                        </span>
-                        {labelSuffix}
-                    </div>
-                )}
-                {/* Toggle indicator + optional LFO */}
-                <div className={`flex ${label ? 'border-l border-white/5' : 'flex-1'}`}>
-                    <div
-                        className={`
-                            flex items-center justify-center gap-1 px-3 text-[10px] font-bold transition-all border-0 ${
-                            value ? toggleColor.on : toggleColor.off
-                        } ${disabled ? 'opacity-40' : 'hover:brightness-125'}
-                            ${!label ? 'flex-1' : ''}
-                        `}
-                    >
-                        <span className={`text-[8px] ${value ? 'opacity-90' : 'opacity-50'}`}>{value ? 'ON' : 'OFF'}</span>
-                    </div>
-                    {onLfoToggle && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); if (!disabled) onLfoToggle(); }}
-                            disabled={disabled}
-                            className={`
-                                flex items-center justify-center px-2 text-[10px] font-bold transition-all border-l border-white/5 ${
-                                isLfoActive
-                                    ? 'bg-purple-500/30 text-purple-300'
-                                    : 'bg-white/[0.04] text-gray-600 hover:brightness-125'}
-                            `}
-                            title="LFO"
-                        >
-                            <span className={`text-[8px] ${isLfoActive ? 'opacity-90' : 'opacity-50'}`}>LFO</span>
-                        </button>
-                    )}
-                </div>
-            </div>
-        </div>
+        />
     );
 }
 
