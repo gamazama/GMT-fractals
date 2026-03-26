@@ -139,7 +139,7 @@ When making changes to GMT:
 2. Use Shader Debugger (`components/ShaderDebugger.tsx`)
 3. Check State Debugger for feature parameter values
 4. Use Performance Monitor to identify bottlenecks
-5. Try "Lite Mode" to isolate GPU-related issues
+5. Try the "Fastest" or "Preview" viewport quality preset to isolate GPU-related issues
 
 ## 📚 Additional Resources
 
@@ -149,9 +149,22 @@ When making changes to GMT:
 
 ---
 
-*Last updated: March 2026*
+*Last updated: March 2026 (viewport quality system added)*
 
 ## 11. Recent Changes Summary
+
+### 2026-03-27 Viewport Quality System
+| Category | Change | Files |
+|----------|--------|-------|
+| **Scalability** | Per-subsystem tier model replaces flat ENGINE_PROFILES. Four subsystems (Shadows, Reflections, Lighting, Atmosphere) with ordered quality tiers. Six master presets (Preview→Ultra). | `types/viewport.ts` (NEW) |
+| **Store Slice** | Scalability slice manages tier state, writes overrides to store via DDFS feature setters. Late-bound `bindGetShaderConfig()` breaks circular dep. | `store/slices/scalabilitySlice.ts` (NEW) |
+| **Top Bar UI** | ViewportQuality dropdown with preset selection, per-subsystem tiers, PT-aware controls (runtime sliders + compile toggles), compile estimates, and batched Apply. | `components/topbar/ViewportQuality.tsx` (NEW) |
+| **Hardware Detection** | Boot-time GPU probing (Float32 support, mobile detection, tier classification). Hardware caps applied as ceiling in `getShaderConfigFromState()`. | `engine/HardwareDetection.ts` (NEW) |
+| **Hardware Prefs** | Modal for overriding detected precision, buffer format, and hard loop cap. Portal-rendered for correct stacking. | `components/panels/HardwarePreferences.tsx` (NEW) |
+| **Engine Panel** | Moved to advanced mode. Old preset dropdown removed from SystemMenu. Hardware params hidden from DDFS. | `SystemMenu.tsx`, `EnginePanel.tsx`, `features/quality.ts` |
+| **Config Pipeline** | Three-stage: authored state → subsystem tier overrides (store writes) → hardware caps (overlay). Shallow cloning in `getShaderConfigFromState()` for Stage 3 safety. | `store/fractalStore.ts`, `types/store.ts` |
+| **TSS Removed** | TSS toggle removed from top bar and Quality panel — accumulation is always on. | `RenderTools.tsx`, `QualityPanel.tsx` |
+| **Top Bar Layout** | Reordered: FPS → Pause → Viewport Quality → PT toggle. Tighter spacing. | `RenderTools.tsx` |
 
 ### 2026-03-21 GMF as Primary Save Format
 | Category | Change | Files |

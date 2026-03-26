@@ -97,6 +97,17 @@ const WorkerTickScene: React.FC<WorkerTickSceneProps> = ({ onLoaded }) => {
                 // captured at mount time (layout may have changed during compilation).
                 const s = sizeRef.current;
                 proxy.resizeWorker(s.width, s.height, s.dpr);
+
+                // Consume the stashed teleport from applyPresetState.
+                // This is the exact payload computed during loadScene — not a
+                // re-read from the store, which may have drifted if Navigation's
+                // orbit/physics ticks ran between mount and boot-ready.
+                const stashed = proxy.pendingTeleport;
+                if (stashed) {
+                    proxy.pendingTeleport = null;
+                    FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, stashed);
+                }
+
                 setIsReady(true);
                 if (onLoaded) onLoaded();
             }
@@ -111,27 +122,37 @@ const WorkerTickScene: React.FC<WorkerTickSceneProps> = ({ onLoaded }) => {
         proxy.resizeWorker(size.width, size.height, dpr);
     }, [size.width, size.height, dpr]);
 
-    // Bridge FractalEvents → worker
+    // Bridge FractalEvents → worker.
+    // Before boot, CONFIG/UNIFORM/RESET messages are suppressed — they'd just
+    // queue on the worker and trigger a redundant second compile after BOOT
+    // delivers the full config. OFFSET_SET and shadow-state-only ops still pass
+    // through so the proxy's local offset stays correct for bootEngine().
     useEffect(() => {
         const unsubs = [
-            FractalEvents.on(FRACTAL_EVENTS.CONFIG, (config) => { proxy.sendConfig(config); }),
-            FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noReset }) => { proxy.setUniform(key, value, noReset); }),
-            FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => { proxy.resetAccumulation(); }),
+            FractalEvents.on(FRACTAL_EVENTS.CONFIG, (config) => {
+                if (proxy.isBooted) proxy.sendConfig(config);
+            }),
+            FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noReset }) => {
+                if (proxy.isBooted) proxy.setUniform(key, value, noReset);
+            }),
+            FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => {
+                if (proxy.isBooted) proxy.resetAccumulation();
+            }),
             FractalEvents.on(FRACTAL_EVENTS.OFFSET_SET, (v) => {
                 const offset = { x: v.x, y: v.y, z: v.z, xL: v.xL ?? 0, yL: v.yL ?? 0, zL: v.zL ?? 0 };
                 proxy.setShadowOffset(offset);
-                proxy.post({ type: 'OFFSET_SET', offset });
+                if (proxy.isBooted) proxy.post({ type: 'OFFSET_SET', offset });
             }),
             // OFFSET_SILENT removed — orbit absorb now uses atomic queueOffsetSync via RENDER_TICK
             FractalEvents.on(FRACTAL_EVENTS.OFFSET_SHIFT, ({ x, y, z }) => {
                 proxy.applyOffsetShift(x, y, z);
-                proxy.post({ type: 'OFFSET_SHIFT', x, y, z });
+                if (proxy.isBooted) proxy.post({ type: 'OFFSET_SHIFT', x, y, z });
             }),
             FractalEvents.on(FRACTAL_EVENTS.CAMERA_SNAP, () => {
                 proxy.shouldSnapCamera = true;
             }),
             FractalEvents.on(FRACTAL_EVENTS.TEXTURE, ({ textureType, dataUrl }) => {
-                proxy.updateTexture(textureType, dataUrl);
+                if (proxy.isBooted) proxy.updateTexture(textureType, dataUrl);
             }),
             FractalEvents.on(FRACTAL_EVENTS.REGISTER_FORMULA, ({ id, shader }) => {
                 proxy.registerFormula(id, shader);

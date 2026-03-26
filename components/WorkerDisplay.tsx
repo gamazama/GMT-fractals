@@ -89,6 +89,9 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
             { position: [0, 0, 0], quaternion: [camRot.x, camRot.y, camRot.z, camRot.w], fov: camFov }
         );
 
+        // Set initial canvas pixel size for UI estimates
+        state.setCanvasPixelSize(Math.floor(initW * dpr), Math.floor(initH * dpr));
+
         // Send initial offset so the worker starts at the correct position
         const offset = state.sceneOffset;
         if (offset) {
@@ -104,10 +107,18 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
         // opening, etc.) and push the corrected size to the worker so the very
         // first rendered frame has the right aspect ratio.
         const observer = new ResizeObserver(entries => {
+            // Skip resize while bucket rendering to prevent corrupting the tiled render
+            if (useFractalStore.getState().isBucketRendering) return;
             for (const entry of entries) {
                 const w = Math.max(1, entry.contentRect.width);
                 const h = Math.max(1, entry.contentRect.height);
-                proxy.resizeWorker(w, h, window.devicePixelRatio || 1);
+                const currentDpr = window.devicePixelRatio || 1;
+                proxy.resizeWorker(w, h, currentDpr);
+                // Track actual physical pixel size in store for UI estimates
+                useFractalStore.getState().setCanvasPixelSize(
+                    Math.floor(w * currentDpr),
+                    Math.floor(h * currentDpr)
+                );
             }
         });
         observer.observe(container);

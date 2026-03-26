@@ -5,19 +5,15 @@ import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { registry } from '../engine/FractalRegistry';
 import { parseShareString } from '../utils/Sharing';
-import { Preset } from '../types';
-import { ENGINE_PROFILES } from '../features/engine/profiles';
-
-const isMobileDevice = () => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
-};
+import type { Preset } from '../types';
+import { detectHardwareProfileMainThread } from '../engine/HardwareDetection';
 
 export const useAppStartup = (isSceneReady: boolean) => {
     const state = useFractalStore();
 
     const [startupMode, setStartupMode] = useState<'default' | 'url'>('default');
     const bootRequestedRef = useRef(false);
+    const hydratedRef = useRef(false);
 
     // 1. STABLE BOOT FUNCTION
     const bootEngine = useCallback((force?: boolean) => {
@@ -53,6 +49,11 @@ export const useAppStartup = (isSceneReady: boolean) => {
                     engine.setShadowOffset(precise);
                     engine.post({ type: 'OFFSET_SET', offset: precise });
                 }
+
+                // NOTE: camera_teleport is NOT emitted here — this 50ms timer
+                // fires before R3F's Navigation is guaranteed to be mounted.
+                // Instead, WorkerTickScene emits the teleport after boot+compile
+                // finishes, when Navigation is definitely listening.
             }, 50);
         } catch (e) {
             console.error("Critical Engine Boot Failure:", e);
@@ -61,6 +62,11 @@ export const useAppStartup = (isSceneReady: boolean) => {
     }, []);
 
     useEffect(() => {
+        // Guard against React StrictMode re-running this effect.
+        // loadScene is idempotent but wasteful — fires all feature setters twice.
+        if (hydratedRef.current) return;
+        hydratedRef.current = true;
+
         // 2. Determine Initial Preset
         const hash = window.location.hash;
         let preset: Preset | null = null;
@@ -82,24 +88,23 @@ export const useAppStartup = (isSceneReady: boolean) => {
              }
         }
 
-        // 3. Environment Optimizations (Mobile)
-        if (preset && isMobileDevice()) {
-             if (import.meta.env.DEV) console.log("App: Mobile detected. Enforcing Lite profile.");
-             if (!preset.features) preset.features = {};
-             const liteProfile = ENGINE_PROFILES.lite;
-
-             Object.entries(liteProfile).forEach(([featureId, params]) => {
-                 if (!preset!.features![featureId]) {
-                     preset!.features![featureId] = {};
-                 }
-                 Object.assign(preset!.features![featureId], params);
-             });
+        // 3. Environment Optimizations — Non-destructive hardware detection
+        //    The preset is loaded UNMODIFIED into the store (authored intent preserved).
+        //    Hardware caps + viewport quality tiers are applied at getShaderConfigFromState().
+        const hwProfile = detectHardwareProfileMainThread();
+        state.setHardwareProfile(hwProfile);
+        if (hwProfile.isMobile) {
+            if (import.meta.env.DEV) console.log("App: Mobile detected. Setting Lite viewport quality.");
+            state.applyScalabilityPreset('lite');
         }
 
-        // 4. Load into Store (UI State)
+        // 4. Load into Store (UI State) via unified loadScene path.
+        //    loadScene detects the engine hasn't booted yet and skips CONFIG/OFFSET
+        //    events (they would just queue and cause a redundant second compile).
+        //    bootEngine() will push the full config + offset after the worker boots.
         if (preset) {
             if (import.meta.env.DEV) console.log("App: Hydrating Store from Preset...");
-            state.loadPreset(preset);
+            state.loadScene({ preset });
         }
 
         // Don't boot here — LoadingScreen will call bootEngine().

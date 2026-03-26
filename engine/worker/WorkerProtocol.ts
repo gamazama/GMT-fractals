@@ -35,6 +35,7 @@ export interface WorkerShadowState {
     lastCompileDuration: number;
     lastMeasuredDistance: number;
     accumulationCount: number;
+    convergenceValue: number;
     frameCount: number;
     sceneOffset: SerializedOffset;
 }

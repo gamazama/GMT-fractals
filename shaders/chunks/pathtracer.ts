@@ -140,9 +140,14 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         if (uLightIntensity[2] > 0.01) activeIndices[activeCount++] = 2;
 
         // Bias epsilon — hoisted so PT_ENV_NEE can reuse it
+        // Use camera-to-point distance for pixel footprint (not bounce travel distance).
+        // Bounce rays that hit nearby geometry have small d, which would collapse the bias
+        // and cause self-intersection on the next bounce. p_ray is in camera-local space,
+        // so length(p_ray) gives the true camera distance for correct pixel footprint scaling.
+        float cameraDist = length(p_ray);
         float distFromFractalOrigin = length(p_fractal);
         float floatLimitNEE = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH);
-        float orthoPixelFootprintNEE = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
+        float orthoPixelFootprintNEE = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * cameraDist;
         float visualLimitNEE = orthoPixelFootprintNEE * (1.0 / uDetail);
         float biasEps = max(floatLimitNEE, visualLimitNEE);
 

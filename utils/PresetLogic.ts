@@ -264,13 +264,18 @@ export const applyPresetState = (p: Partial<Preset>, set: (partial: Record<strin
         });
     }
     
-    // Emit teleport with the CLEAN (Zeroed) position to update Navigation/OrbitControls
-    FractalEvents.emit('camera_teleport', { 
-        position: { x: 0, y: 0, z: 0 }, 
-        rotation: rot, 
-        sceneOffset: finalOffset, 
-        targetDistance: dist 
-    });
+    // Stash + emit teleport with the CLEAN (Zeroed) position.
+    // The stash on WorkerProxy ensures WorkerTickScene can re-emit this exact
+    // payload at boot-ready time — avoiding races with Navigation mount timing
+    // and any store drift from orbit/physics ticks.
+    const teleport = {
+        position: { x: 0, y: 0, z: 0 },
+        rotation: rot,
+        sceneOffset: finalOffset,
+        targetDistance: dist
+    };
+    engine.pendingTeleport = teleport;
+    FractalEvents.emit('camera_teleport', teleport);
 
     if (p.duration) useAnimationStore.getState().setDuration(p.duration);
     if (p.formula === 'Modular') (actions as unknown as FractalActions).refreshPipeline();

@@ -14,15 +14,15 @@ export const getShadingGLSL = (reflectionCode: string = '') => {
 
 // Apply fog to environment samples (treat as being at fog far plane)
 vec3 applyEnvFog(vec3 env) {
-    if (uFogFar >= 1000.0) return env;
-    float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar);
+    if (uFogIntensity < 0.001 || uFogFar >= 1000.0) return env;
+    float fogFactor = uFogIntensity;
     return mix(env, uFogColorLinear, fogFactor);
 }
 
 // Apply distance-based fog to shaded geometry
 vec3 applyDistanceFog(vec3 col, float dist) {
-    if (uFogFar >= 1000.0) return col;
-    float fogFactor = smoothstep(uFogNear, uFogFar, dist);
+    if (uFogIntensity < 0.001 || uFogFar >= 1000.0) return col;
+    float fogFactor = smoothstep(uFogNear, uFogFar, dist) * uFogIntensity;
     return mix(col, uFogColorLinear, fogFactor);
 }
 

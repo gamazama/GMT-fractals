@@ -27,10 +27,13 @@ const REFL_ENV_SHADING = `
 const REFL_RAYMARCH_SHADING = `
     // --- REFLECTIONS: RAYMARCHED ---
     {
-        // Adaptive bias: scales with pixel size and distance to avoid self-intersection
+        // Adaptive bias: scales with pixel size at camera distance to avoid self-intersection.
+        // Use camera distance (length(p_ray)) not ray travel distance (d) — for reflected
+        // hits near the surface, d can be tiny, collapsing the bias and causing self-intersection.
         float pixelSizeScale = uPixelSizeBase / uInternalScale;
-        float reflPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * d;
-        float reflBias = max(0.001, reflPixelFootprint * 2.0);
+        float cameraDist_refl = length(p_ray);
+        float reflPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * cameraDist_refl;
+        float reflBias = max(reflPixelFootprint * 2.0, length(p_fractal) * PRECISION_RATIO_HIGH * 2.0);
         vec3 currRo = p_ray + n * reflBias;
         vec3 currRd = reflDir;
 
@@ -60,7 +63,10 @@ const REFL_RAYMARCH_SHADING = `
                 vec3 r_albedo, r_n, r_emission;
                 float r_rough;
 
-                getSurfaceMaterial(p_next, p_next_fractal, vec4(0.0, refHit.yzw), hitD, r_albedo, r_n, r_emission, r_rough, false);
+                // Use camera-to-reflected-point distance for normal epsilon, not reflection ray travel distance.
+                // p_next is in camera-local space, so length(p_next) = camera distance.
+                float reflCameraDist = length(p_next);
+                getSurfaceMaterial(p_next, p_next_fractal, vec4(0.0, refHit.yzw), reflCameraDist, r_albedo, r_n, r_emission, r_rough, false);
 
                 if (dot(r_n, -currRd) < 0.0) r_n = -r_n;
 

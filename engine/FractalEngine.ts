@@ -82,7 +82,7 @@ export class FractalEngine {
         lighting: null,
         quality: null,
         geometry: null,
-        bucketConfig: { bucketSize: 128, bucketUpscale: 1.0, convergenceThreshold: 0.1, accumulation: true, samplesPerBucket: 64 }
+        bucketConfig: { bucketSize: 128, bucketUpscale: 1.0, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 }
     };
 
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }

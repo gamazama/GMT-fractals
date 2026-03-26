@@ -89,7 +89,19 @@ This ensures:
 4. Smooth blur convergence during accumulation
 5. Consistent behavior across all environments (localhost and GitHub Pages)
 
-## 6. Mobile-Specific Issues
+## 6. Black Patches in Path Traced Reflections
+
+### Black areas in concave fractal regions (PT mode and Direct reflections)
+*   **Cause:** The bounce ray bias (surface offset to prevent self-intersection) was computed using the bounce ray's travel distance `d`. In concave geometry, bounce rays hit nearby surfaces (small `d`), collapsing the bias. The next bounce origin would be effectively *on* the surface, causing self-intersection or the ray crawling along the surface, exhausting step budget, and returning a miss (black).
+*   **Root cause code:** `biasEps` in `pathtracer.ts` used `pixelSizeScale * d` where `d` was bounce travel distance.
+*   **Fix:** Replaced with `pixelSizeScale * length(p_ray)` — camera-to-point distance in camera-local space. This matches the actual pixel footprint at that depth regardless of how far the bounce traveled. Same fix applied to direct reflections in `features/reflections/index.ts`.
+*   **Locations:**
+    - `shaders/chunks/pathtracer.ts` — `biasEps` calculation
+    - `features/reflections/index.ts` — `reflBias` calculation + `getSurfaceMaterial` distance parameter
+    - `features/reflections/shader.ts` — removed redundant hardcoded `t = 0.01` start offset
+*   **Reference:** Mandelbulber uses `cameraDistance * pixelAngularSize / detailLevel` for the same purpose (recomputed per recursion level). Fragmentarium uses a fixed `minDist * 3-8x` multiplier.
+
+## 7. Mobile-Specific Issues
 
 ### Black Screen on iOS/Mobile
 *   **Cause:** Creating a separate WebGL context to check HalfFloat16 support fails on iOS Safari.
@@ -115,7 +127,7 @@ This ensures:
 *   **Fix:** These panels now automatically redirect to the right dock on mobile devices.
 *   **Detection:** Uses `window.matchMedia("(pointer: coarse)")` and `window.innerWidth < 768`
 
-## 7. Canvas Resolution Wrong on Initial Load
+## 8. Canvas Resolution Wrong on Initial Load
 
 ### Low Resolution Until Manual Resize
 *   **Cause:** Two issues combined:
@@ -143,7 +155,7 @@ This ensures:
     }, []);
     ```
 
-## 8. Performance Issues
+## 9. Performance Issues
 
 ### FPS Drops During Interaction
 *   **Cause:** Creating new typed arrays every frame causes garbage collection pressure.
@@ -162,12 +174,20 @@ This ensures:
     renderer.readPixels(..., pixelBuffer.current);
     ```
 
-### Bucket Render Artifacts (Bleeding Between Tiles)
-*   **Cause:** WebGL state not properly cleared between bucket tiles.
-*   **Fix:** Call `clearTargets()` before each bucket render pass.
-*   **Location:** `engine/BucketRenderer.ts`
+### Bucket Render Artifacts (Black Stripes Between Tiles)
+*   **Cause:** UV-space float comparisons in the composite shader had precision mismatches with the render shader's `vUv` computation, causing boundary pixels to be discarded by both adjacent tiles.
+*   **Fix:** Compositing now uses GL scissor rect with integer pixel bounds instead of shader-based UV discard. The render region is expanded by half a pixel so boundary pixels are always rendered; the scissor clips precisely.
+*   **Location:** `engine/BucketRenderer.ts` — `compositeCurrentBucket()`, `applyCurrentBucket()`
 
-## 9. HalfFloat16 Buffer Handling
+### Bucket Render Size Estimation Wrong in Fixed Mode
+*   **Cause:** `canvasPixelSize` store value (set by WorkerDisplay ResizeObserver) may lag behind resolution mode changes.
+*   **Fix:** UI components (BucketRenderControls, RenderPopup, PerformanceMonitor) use `fixedResolution * dpr` directly when `resolutionMode === 'Fixed'`, falling back to `canvasPixelSize` for Full mode.
+
+### Bucket Render Corruption from UI Interaction
+*   **Cause:** Resize, uniform, config, or offset messages reaching the worker mid-render corrupt the pipeline state.
+*   **Fix:** Three-layer lock: (1) worker message filter drops all messages except `BUCKET_STOP`/`RENDER_TICK`, (2) main thread sets `isExporting=true` to lock UI via `selectMovementLock`, (3) WorkerDisplay ResizeObserver skips during `isBucketRendering`.
+
+## 10. HalfFloat16 Buffer Handling
 
 ### Reading Depth from HalfFloat16 Buffers
 *   **Issue:** Cannot read HalfFloat16 values directly as floats - must convert.
@@ -183,7 +203,7 @@ This ensures:
     const depth = halfToFloat(rawPixels[0]);  // Use conversion function
     ```
 
-## 10. Environment Light Sky Image Not Loading
+## 11. Environment Light Sky Image Not Loading
 
 ### Issue
 The environment light sky image loads correctly for some formulas (e.g., Mandelbulb) but not for others (e.g., MixPinski, PseudoKleinian, etc.).
@@ -212,6 +232,26 @@ if (paramKey === 'envMapData' && next['useEnvMap'] === false) {
 ```
 
 Also auto-disables when image is cleared (lines 121-125) and applies the same pattern to texturing (lines 114-117, 127-130).
+
+## 12. Region Rendering & Convergence
+
+### Sample Cap Not Applied on Startup
+*   **Cause:** `RenderPipeline.sampleCap` defaults to 0 (infinite). The initial `SET_SAMPLE_CAP` message sent during store init arrives before the worker engine exists, so `engine?.setPreviewSampleCap()` is a no-op.
+*   **Fix:** The `onBooted` callback in `fractalStore.ts` now re-sends the sample cap after the worker engine is ready.
+*   **Location:** `store/fractalStore.ts` — `engine.onBooted` callback
+
+### Convergence Not Improving (Stuck at 100%)
+*   **Cause:** Convergence is only measured after 2+ accumulated samples and every 8 frames. If accumulation is disabled, paused, or the camera is moving, no measurement occurs.
+*   **Fix:** Stop the camera and ensure accumulation is enabled. Wait for at least 16 frames.
+
+### Convergence Measurement Inaccurate
+*   **Cause (historical):** The convergence render target was hardcoded at 64×64, sampling only ~0.2% of a 1080p viewport. Hot spots of unconverged pixels could be missed.
+*   **Fix:** The convergence target now dynamically resizes to match the measured region's pixel dimensions (capped at 256×256). For a 128px bucket, coverage is 100%. For a full 1080p viewport, coverage is ~6% — much better than 0.2%.
+*   **Location:** `engine/RenderPipeline.ts` — `ensureConvergenceSize()`
+
+### Region Resize Handles Not Working
+*   **Cause (historical):** `useRegionSelection.ts` checked for `target.dataset.handle` on mousedown, but no DOM elements with `data-handle` attributes existed in the region overlay.
+*   **Fix:** Added 8 handle elements (n/s/e/w/ne/nw/se/sw) with `data-handle` attributes to the `RegionOverlay` component. Visible on hover via `group-hover/box:opacity-100`.
 
 ### Related Parameters
 - `envSource`: Controls gradient (1) vs image (0) - defaults to 1 (gradient)

@@ -199,6 +199,6 @@ Add a way to re-open the Workshop with a previously imported formula's source pr
 
 ## Notes
 
-- `ENGINE_PROFILES.fastest` sets `compilerHardCap: 128` which limits `MAX_HARD_ITERATIONS` — this alone is a significant compile time reduction since the GPU unrolls the main loop
+- `ENGINE_PROFILES.fastest` sets `compilerHardCap: 128` which limits `MAX_HARD_ITERATIONS` — note: this does NOT affect compile time (ANGLE/D3D does not unroll define-bounded loops), but it does affect runtime performance by capping iterations
 - The `as any` casts for `FormulaType` in the importer are fine — the registry uses string keys internally
 - Three.js r162 supports `renderer.compileAsync()` but a previous attempt to use it still froze the UI — likely because the first `render()` call blocks if the program isn't ready. Would need a dual-material approach (keep old material active while new one compiles in background). Deferred to a future task.

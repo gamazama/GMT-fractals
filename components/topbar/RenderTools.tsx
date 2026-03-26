@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useFractalStore, selectIsGlobalInteraction } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
-import { LayersIcon, PathTraceIcon, CropIcon, CloseRegionIcon, RenderGridIcon, CheckIcon, PlayIcon, PauseIcon } from '../Icons';
+import { PathTraceIcon, CropIcon, CloseRegionIcon, RenderGridIcon, CheckIcon, PlayIcon, PauseIcon } from '../Icons';
 import FpsCounter from './FpsCounter';
 import BucketRenderSettingsPopup from './BucketRenderControls';
 import { getProxy } from '../../engine/worker/WorkerProxy';
@@ -11,6 +11,7 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import Slider, { DraggableNumber } from '../Slider';
 import { Popover } from '../../components/Popover';
 import { LightingState } from '../../features/lighting';
+import { ViewportQuality } from './ViewportQuality';
 
 export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void }> = ({ isMobileMode, vibrate }) => {
     const state = useFractalStore();
@@ -46,7 +47,7 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (bucketMenuRef.current && !bucketMenuRef.current.contains(e.target as Node)) {
+            if (bucketMenuRef.current && !bucketMenuRef.current.contains(e.target as Node) && !state.isBucketRendering) {
                 setShowBucketMenu(false);
             }
             if (renameRef.current && !renameRef.current.contains(e.target as Node)) {
@@ -114,10 +115,10 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
     };
 
     return (
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3">
             <div className="flex flex-col leading-none relative">
                 <span className="text-xl font-bold tracking-tighter text-white">G<span className="text-cyan-400">M</span>T</span>
-                
+
                 <button 
                     onClick={() => setIsRenaming(true)}
                     className="text-[8px] font-mono text-gray-500 hover:text-cyan-300 transition-colors text-left truncate max-w-[120px]"
@@ -171,16 +172,9 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
             
             <div className="flex items-center gap-2">
                 <FpsCounter />
-                
-                {isPlaying && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-900/30 border border-green-500/30 rounded text-[9px] font-bold text-green-400 animate-pulse">
-                        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                        <span>Playing</span>
-                    </div>
-                )}
-                
+
                 {!isMobileMode && (
-                    <div 
+                    <div
                         className="relative"
                         onMouseEnter={handlePauseMouseEnter}
                         onMouseLeave={handlePauseMouseLeave}
@@ -189,15 +183,15 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                         <button
                             onClick={togglePause}
                             className={`p-0.5 rounded transition-colors ${
-                                isEffectivePaused 
-                                ? 'text-amber-400 bg-amber-900/30 border border-amber-500/30' 
+                                isEffectivePaused
+                                ? 'text-amber-400 bg-amber-900/30 border border-amber-500/30'
                                 : 'text-gray-600 hover:text-gray-400'
                             }`}
                             title={state.isPaused ? "Resume Rendering" : "Pause Rendering (Battery Saver)"}
                         >
                             {isEffectivePaused ? <PlayIcon /> : <PauseIcon />}
                         </button>
-                        
+
                         {showPauseMenu && (
                              <Popover width="w-40">
                                 <div className="mb-1">
@@ -217,38 +211,31 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                     </div>
                 )}
 
-                <div className="w-px h-3 bg-white/10 mx-1" />
+                <div className="h-6 w-px bg-white/10" />
 
-                <button 
-                    onClick={() => { 
-                        vibrate(5); 
-                        handleInteractionStart('param');
-                        state.setAccumulation(!state.accumulation); 
-                        handleInteractionEnd();
-                    }} 
-                    onContextMenu={(e) => handleContextMenu(e, ['quality.tss'])}
-                    className={`p-0.5 rounded transition-colors ${state.accumulation ? 'text-green-400 bg-green-900/30' : 'text-gray-600 hover:text-gray-400'}`} 
-                    title="TSS (Temporal Anti-Aliasing)"
-                >
-                    <LayersIcon />
-                </button>
+                <ViewportQuality />
 
-                <div className="w-px h-3 bg-white/10 mx-1" />
-
-                <button 
+                <button
                     onClick={toggleRenderMode}
                     disabled={!ptEnabled}
                     className={`p-0.5 rounded transition-colors ${
-                        !ptEnabled 
-                        ? 'text-gray-700 cursor-not-allowed opacity-50' 
-                        : state.renderMode === 'PathTracing' 
-                            ? 'text-purple-400 bg-purple-900/30' 
+                        !ptEnabled
+                        ? 'text-gray-700 cursor-not-allowed opacity-50'
+                        : state.renderMode === 'PathTracing'
+                            ? 'text-purple-400 bg-purple-900/30'
                             : 'text-gray-600 hover:text-gray-400'
                     }`}
-                    title={!ptEnabled ? "Path Tracing disabled in Engine Panel" : (isMobileMode ? "Enable Path Tracer (Experimental)" : "Path Tracer (Global Illumination)")}
+                    title={!ptEnabled ? "Path Tracing disabled" : (isMobileMode ? "Enable Path Tracer (Experimental)" : "Path Tracer (Global Illumination)")}
                 >
                     <PathTraceIcon />
                 </button>
+                
+                {isPlaying && (
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-900/30 border border-green-500/30 rounded text-[9px] font-bold text-green-400 animate-pulse">
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <span>Playing</span>
+                    </div>
+                )}
 
                 {!isMobileMode && (
                     <>

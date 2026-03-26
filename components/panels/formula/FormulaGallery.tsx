@@ -119,20 +119,12 @@ export const PortalDropdown = ({
             const response = await fetch(item.path);
             if (response.ok) {
                 const content = await response.text();
-                // Emit compiling event to show spinner before parsing
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
                 const { def, preset } = loadGMFScene(content);
                 if (def) {
-                    if (!registry.get(def.id)) {
-                        registry.register(def);
-                        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
-                    }
-                    // If preset has scene data (camera, features), load the full preset
-                    if (preset.cameraRot || preset.features) {
-                        useFractalStore.getState().loadPreset(preset);
-                    } else {
-                        onSelect(def.id as FormulaType);
-                    }
+                    // loadScene handles: formula registration (main + worker),
+                    // store hydration, full config flush, and offset sync.
+                    useFractalStore.getState().loadScene({ def, preset });
                 } else {
                     // Legacy JSON or formula-only — just switch formula
                     onSelect(preset.formula as FormulaType);

@@ -42,7 +42,10 @@ export class RenderPipeline {
     public lastCompleteDuration: number = 0;
     private startTime: number = 0;
     
-    // Convergence Measurement Resources
+    // ── Convergence Measurement ────────────────────────────────────────
+    // Shared by both bucket rendering and viewport accumulation.
+    // Renders a diff pass between ping-pong targets, then reads back the
+    // max delta. Async path uses a GPU fence to avoid stalling the pipeline.
     private convergenceTarget: THREE.WebGLRenderTarget | null = null;
     private convergenceMaterial: THREE.ShaderMaterial | null = null;
     private convergenceBuffer: Float32Array | null = null;
@@ -53,6 +56,11 @@ export class RenderPipeline {
     private convergenceFence: WebGLSync | null = null;
     private convergencePending: boolean = false;
     private lastConvergenceResult: number = 1.0;
+
+    // Viewport convergence: periodic measurement during normal accumulation.
+    // Skipped during bucket rendering (BucketRenderer manages its own).
+    private static readonly VIEWPORT_CONVERGENCE_INTERVAL = 8;
+    private _isBucketRendering: boolean = false;
 
     public isHolding: boolean = false;
 
@@ -220,8 +228,14 @@ export class RenderPipeline {
     
 
     
+    // Current convergence target dimensions (resized to match measured area)
+    private convergenceW: number = 0;
+    private convergenceH: number = 0;
+    private static readonly CONVERGENCE_MAX_DIM = 256; // Cap readback size for CPU scan performance
+
     private initConvergenceTools(floatType: THREE.TextureDataType) {
         if (!this.convergenceTarget) {
+            // Initial size — will be resized by ensureConvergenceSize() before each measurement
             this.convergenceTarget = new THREE.WebGLRenderTarget(64, 64, {
                 minFilter: THREE.NearestFilter,
                 magFilter: THREE.NearestFilter,
@@ -231,6 +245,8 @@ export class RenderPipeline {
                 stencilBuffer: false,
                 generateMipmaps: false
             });
+            this.convergenceW = 64;
+            this.convergenceH = 64;
             this.convergenceBuffer = new Float32Array(64 * 64 * 4);
             
             this.convergenceMaterial = new THREE.ShaderMaterial({
@@ -281,6 +297,7 @@ export class RenderPipeline {
     public resetAccumulation() {
         this.accumulationCount = 0;
         this.lastCompleteDuration = 0;
+        this.lastConvergenceResult = 1.0;
         this.isHolding = false;
     }
     
@@ -325,6 +342,23 @@ export class RenderPipeline {
     }
     
     /**
+     * Resize convergence target to match the pixel dimensions of the region being measured.
+     * Capped at CONVERGENCE_MAX_DIM to keep CPU readback scan fast.
+     */
+    private ensureConvergenceSize(regionPixelW: number, regionPixelH: number) {
+        const max = RenderPipeline.CONVERGENCE_MAX_DIM;
+        const w = Math.min(max, Math.max(1, regionPixelW));
+        const h = Math.min(max, Math.max(1, regionPixelH));
+        if (w === this.convergenceW && h === this.convergenceH) return;
+        if (this.convergenceTarget) {
+            this.convergenceTarget.setSize(w, h);
+        }
+        this.convergenceW = w;
+        this.convergenceH = h;
+        this.convergenceBuffer = new Float32Array(w * h * 4);
+    }
+
+    /**
      * Synchronous convergence measurement (legacy — used by non-bucket paths).
      * Causes a GPU stall due to immediate readRenderTargetPixels.
      */
@@ -337,6 +371,11 @@ export class RenderPipeline {
 
         if (this.accumulationCount <= 1) return 1.0;
 
+        // Resize convergence target to match measured region pixel dimensions
+        const regionW = Math.round((boundsMax.x - boundsMin.x) * this.mrtTargetA.width);
+        const regionH = Math.round((boundsMax.y - boundsMin.y) * this.mrtTargetA.height);
+        this.ensureConvergenceSize(regionW, regionH);
+
         // Bind color textures from both render targets
         this.convergenceMaterial.uniforms.tA.value = this.mrtTargetA.texture;
         this.convergenceMaterial.uniforms.tB.value = this.mrtTargetB.texture;
@@ -347,7 +386,7 @@ export class RenderPipeline {
         renderer.setRenderTarget(this.convergenceTarget);
         renderer.render(this.convergenceScene, this.convergenceCamera);
 
-        renderer.readRenderTargetPixels(this.convergenceTarget, 0, 0, 64, 64, this.convergenceBuffer);
+        renderer.readRenderTargetPixels(this.convergenceTarget, 0, 0, this.convergenceW, this.convergenceH, this.convergenceBuffer);
         renderer.setRenderTarget(currentTarget);
 
         let maxDelta = 0;
@@ -373,6 +412,11 @@ export class RenderPipeline {
             !this.convergenceMaterial || !this.convergenceScene || !this.convergenceCamera) return;
         if (this.convergencePending) return; // Already waiting for a result
         if (this.accumulationCount <= 1) { this.lastConvergenceResult = 1.0; return; }
+
+        // Resize convergence target to match measured region pixel dimensions
+        const regionW = Math.round((boundsMax.x - boundsMin.x) * this.mrtTargetA.width);
+        const regionH = Math.round((boundsMax.y - boundsMin.y) * this.mrtTargetA.height);
+        this.ensureConvergenceSize(regionW, regionH);
 
         this.convergenceMaterial.uniforms.tA.value = this.mrtTargetA.texture;
         this.convergenceMaterial.uniforms.tB.value = this.mrtTargetB.texture;
@@ -410,7 +454,7 @@ export class RenderPipeline {
 
         if (status === gl2.ALREADY_SIGNALED || status === gl2.CONDITION_SATISFIED) {
             // GPU is done — readback is fast now (data already in driver buffer)
-            renderer.readRenderTargetPixels(this.convergenceTarget!, 0, 0, 64, 64, this.convergenceBuffer);
+            renderer.readRenderTargetPixels(this.convergenceTarget!, 0, 0, this.convergenceW, this.convergenceH, this.convergenceBuffer);
 
             let maxDelta = 0;
             for (let i = 0; i < this.convergenceBuffer.length; i += 4) {
@@ -441,6 +485,12 @@ export class RenderPipeline {
     public getLastConvergenceResult(): number {
         return this.lastConvergenceResult;
     }
+
+    /** Tell pipeline whether bucket rendering is active (disables viewport convergence) */
+    public setBucketRendering(active: boolean) {
+        this._isBucketRendering = active;
+    }
+
 
     public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
@@ -492,6 +542,27 @@ export class RenderPipeline {
 
         if (this.sampleCap > 0 && this.accumulationCount === this.sampleCap) {
             this.lastCompleteDuration = performance.now() - this.startTime;
+        }
+
+        // Viewport convergence: periodic async measurement during normal accumulation.
+        // Same startAsyncConvergence/pollConvergenceResult as bucket rendering uses.
+        // Skipped during bucket rendering (BucketRenderer manages its own measurements).
+        // Measures the active render region (or full viewport if no region set).
+        // Cost: one convergence diff pass every 8 frames + non-blocking fence poll.
+        if (accumEnabled && !this._isBucketRendering && this.accumulationCount > 2) {
+            // Poll any pending result first
+            if (this.convergencePending) {
+                this.pollConvergenceResult(renderer);
+            }
+            // Start new measurement every N frames (if none pending)
+            if (!this.convergencePending && this.accumulationCount % RenderPipeline.VIEWPORT_CONVERGENCE_INTERVAL === 0) {
+                // Read active render region from uniforms (defaults to full viewport)
+                const regionMin = uniforms?.[Uniforms.RegionMin]?.value as THREE.Vector2 | undefined;
+                const regionMax = uniforms?.[Uniforms.RegionMax]?.value as THREE.Vector2 | undefined;
+                const min = regionMin ?? new THREE.Vector2(0, 0);
+                const max = regionMax ?? new THREE.Vector2(1, 1);
+                this.startAsyncConvergence(renderer, min, max);
+            }
         }
     }
 }

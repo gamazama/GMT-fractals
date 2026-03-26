@@ -7,6 +7,7 @@
 *   `App.tsx`: Main Layout (Loading, TopBar, Viewport, Controls, Timeline).
 *   `metadata.json`: PWA manifest and permissions.
 *   `types.ts`: Aggregates all type definitions.
+*   `types/viewport.ts`: Viewport quality types — `SubsystemDefinition`, `ScalabilityPreset`, `ScalabilityState`, `HardwareProfile`. Contains subsystem definitions (tiers, overrides), master presets, and helper functions.
 *   `vite.config.ts`: Build configuration.
 *   `server/server.js`: Custom Express server for dev/prod serving.
 
@@ -40,6 +41,7 @@ The imperative WebGL system.
     *   `WorkerProtocol.ts`: Message type definitions and protocol constants.
     *   `WorkerExporter.ts`: Worker-side video export coordination.
     *   `ViewportRefs.ts`: Shared viewport dimension/canvas references.
+*   `HardwareDetection.ts`: GPU capability probing — Float32 support, mobile detection, tier classification. Called once at boot from `useAppStartup`.
 *   **`controllers/`**:
     *   `CameraController.ts`: Physics for Fly/Orbit movement.
     *   `PickingController.ts`: Handles depth-buffer reading for focus/interaction.
@@ -103,7 +105,7 @@ Self-contained modules defining State, UI, and Shaders.
 *   **`water_plane.ts`**: Infinite ocean plane logic.
 *   **`volumetric/`**: Volumetric rendering effects (fog density, scatter).
 *   **`camera_manager`**: Camera position management — saved cameras with thumbnails, drag-to-reorder, duplicate, smooth transitions, Ctrl+1-9 shortcuts, export/import, composition overlays. Persists into presets/PNG snapshots.
-*   **`engine`**: Master configuration profiles (Lite/Balanced/Ultra).
+*   **`engine`**: Master configuration profiles (legacy — superseded by viewport quality system).
 
 ## 4. State Management (`store/`)
 *   `fractalStore.ts`: Main Zustand store.
@@ -114,6 +116,7 @@ Self-contained modules defining State, UI, and Shaders.
     *   `cameraSlice.ts`: Position, Rotation, History.
     *   `uiSlice.ts`: Panel visibility, Layout.
     *   `historySlice.ts`: Parameter Undo/Redo stack.
+    *   `scalabilitySlice.ts`: Viewport quality tiers, hardware profile. Writes tier overrides to store via feature setters; uses `bindGetShaderConfig()` pattern for circular dep with `fractalStore.ts`.
 *   **`animation/`**:
     *   `playbackSlice.ts`: Play/Pause/Seek.
     *   `sequenceSlice.ts`: Track/Keyframe CRUD.
@@ -137,14 +140,14 @@ Self-contained modules defining State, UI, and Shaders.
     *   `DualAxisPad.tsx`: XY/WZ manipulation pad.
     *   `index.tsx`, `types.ts`: Public API and types.
 *   **Pickers**: `SmallColorPicker`, `EmbeddedColorPicker`, `AdvancedGradientEditor`.
-*   **Panels**: `FormulaPanel`, `ScenePanel`, `LightPanel`, `RenderPanel`, `QualityPanel`, `EnginePanel`.
+*   **Panels**: `FormulaPanel`, `ScenePanel`, `LightPanel`, `RenderPanel`, `QualityPanel`, `EnginePanel`, `HardwarePreferences` (modal for hardware caps — precision, buffer format, loop cap).
 *   **Visuals**: `HudOverlay`, `CompilingIndicator`, `PerformanceMonitor`, `LoadingScreen`.
 *   **Worker**: `WorkerDisplay`, `WorkerTickScene`, `StandaloneTickLoop`.
 *   **Timeline**: `DopeSheet`, `GraphEditor`, `TimeNavigator`, `TimelineRuler`, `KeyframeInspector`, `TimelineToolbar`, `RenderPopup`, `KeyframeContextMenu`.
 *   **Flow**: `FlowEditor`, `ShaderNode` (Modular Graph).
 *   **Registry**: `ComponentRegistry` (Maps strings to React components for DDFS).
 *   **Graph**: `GraphCanvas`, `GraphSidebar`, `GraphToolbar`.
-*   **TopBar**: `SystemMenu`, `CameraTools`, `RenderTools`, `FpsCounter`, `CenterHUD`, `BucketRenderControls`.
+*   **TopBar**: `SystemMenu`, `CameraTools`, `RenderTools`, `FpsCounter`, `CenterHUD`, `BucketRenderControls`, `ViewportQuality` (viewport quality dropdown with subsystem tiers, PT controls, and batched apply).
 *   **Viewport**: `FixedResolutionControls`.
 *   **Layout**: `Dock`, `DropZones`.
 *   **Gradient**: `GradientContextMenu`.

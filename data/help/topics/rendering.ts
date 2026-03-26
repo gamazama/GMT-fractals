@@ -70,8 +70,14 @@ Renders the image in small tiles (Buckets) instead of all at once.
 
 ## Why use it?
 - **High Resolution**: Allows rendering 4K or 8K images that would otherwise crash the GPU memory.
-- **Anti-Aliasing**: Each bucket accumulates samples (default 64 per bucket) until it is perfectly noise-free before moving to the next.
+- **Anti-Aliasing**: Each bucket accumulates samples until noise-free before moving to the next.
 - **Export**: Can automatically save the result as a PNG when finished.
+
+## Settings
+- **Convergence Threshold** (default 0.25%): How similar consecutive frames must be before a tile is "done". Lower = more samples, higher quality. 0.1% for production, 1% for fast preview.
+- **Max Samples Per Bucket** (default 64): Safety limit. Tiles stop early if converged.
+- **Export Scale**: Resolution multiplier (2× = 4K from 1080p, 4× = 8K).
+- **Bucket Size**: Smaller tiles use less VRAM, larger tiles render faster.
 
 ## Post-Processing
 Post-processing effects (Bloom, Chromatic Aberration, Color Grading, Tone Mapping) are applied to the complete image **after** all buckets have finished rendering — so the final result looks exactly like the live viewport with effects enabled.
@@ -80,6 +86,38 @@ Post-processing effects (Bloom, Chromatic Aberration, Color Grading, Tone Mappin
 1. Click the **Grid Icon** in the top bar.
 2. Select **Refine View** to clear up the current viewport.
 3. Select **Export Image** to render and download a file.
+
+While rendering, the viewport is locked — camera movement, parameter changes, and window resizing are blocked to prevent corrupting the tiled render. The render panel stays visible with a progress bar and stop button.
+`
+    },
+    'render.region': {
+        id: 'render.region',
+        category: 'Rendering',
+        title: 'Render Region',
+        content: `
+Focus accumulation on a specific area of the viewport. Pixels outside the region keep their history unchanged while the selected area accumulates new samples.
+
+## Drawing a Region
+1. Click the **Crop Icon** in the top bar (or click it again to cancel).
+2. Drag on the viewport to draw the region. A dashed preview appears as you drag.
+3. Release to set the region.
+
+## Region Controls
+Once set, the region overlay shows live stats:
+- **Pixel dimensions** of the selected area (e.g. 820×460).
+- **Sample count** — how many accumulation passes have completed.
+- **Sample cap** — click the cycle button (⟳) to step through caps: ∞ / 64 / 128 / 256 / 512 / 1024 / 2048 / 4096.
+- **Convergence** — live measurement of how much the image is still changing. When below the threshold, it turns green.
+
+## Editing
+- **Move**: Drag inside the region box.
+- **Resize**: Hover to reveal corner and edge handles, then drag.
+- **Clear**: Click ✕ on the overlay or click the crop icon in the top bar.
+
+## Tips
+- Use a region to quickly refine a specific detail without waiting for the whole viewport.
+- The sample cap shown on the region is the same global setting as the pause menu — changing it in either place updates both.
+- Convergence is measured only within the region bounds, not the full viewport.
 `
     },
     'quality.detail': {
@@ -145,23 +183,6 @@ Controls the resolution of the internal render buffer relative to the screen.
 - **0.25x - 0.5x**: Retro/Pixelated look. Extremely fast. Great for complex editing on low-end devices.
 - **1.0x**: Native resolution.
 - **1.5x - 2.0x**: Super-sampling (SSAA). Renders at a higher resolution and scales down. Eliminates aliasing but is very expensive (4x the pixels).
-`
-    },
-    'quality.tss': {
-        id: 'quality.tss',
-        category: 'Rendering',
-        title: 'Temporal AA',
-        parentId: 'panel.quality',
-        content: `
-**Temporal AA** (Temporal Super Sampling) is the secret sauce of this engine.
-
-### How it works
-Instead of trying to render a perfect image in 16ms (60fps), the engine renders a "noisy" image quickly. It then blends this frame with the previous frame.
-Over the course of 10-20 frames, the noise cancels out, revealing a perfect, high-resolution, soft-shadowed image.
-
-### Usage
-- **Enabled (Default)**: Image is noisy when moving, but crystal clear when still.
-- **Disabled**: Image is always sharp but lacks soft shadows/AO, or runs at very low FPS.
 `
     },
     'mat.diffuse': {
@@ -310,7 +331,7 @@ Adds depth and atmospheric effects to the scene. Fog controls appear when **Fog 
 - **Fog Color**: The color distant objects fade into.
 
 ## Volumetric Scatter (God Rays)
-Simulates light scattering through a participating medium. Requires **Volumetric Scattering (HG)** enabled in the Engine panel under Path Tracing settings.
+Simulates light scattering through a participating medium. Requires **Volumetric Scattering (HG)** to be compiled — enable via the Viewport Quality dropdown (Atmosphere: Volumetric) or the Engine panel.
 
 - **Volumetric Density (σ)**: Thickness of the air. Higher values = denser fog, shorter light shafts. Good range: 0.005–0.05.
 - **Anisotropy (g)**: Controls direction bias of scattered light (Henyey-Greenstein phase):

@@ -401,6 +401,7 @@ export class WorkerExporter {
             lastCompileDuration: 0,
             lastMeasuredDistance: this.engine.lastMeasuredDistance ?? 10,
             accumulationCount: 0,
+            convergenceValue: 1.0,
             frameCount: 0,
             sceneOffset: {
                 x: eo?.x ?? 0, y: eo?.y ?? 0, z: eo?.z ?? 0,

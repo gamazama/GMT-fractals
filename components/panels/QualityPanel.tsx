@@ -284,19 +284,6 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
 
              <SectionDivider />
 
-             {/* TSS & Shadows */}
-             <div className="flex flex-col" data-help-id="quality.tss">
-                <ToggleSwitch
-                    label="Temporal AA (Remove Noise)"
-                    value={state.accumulation}
-                    onChange={actions.setAccumulation}
-                    color="bg-green-500"
-                    helpId="quality.tss"
-                />
-
-                {/* Area Lights: compile toggle in Engine Panel, runtime toggle in Shadow popup */}
-             </div>
-
              {/* Shadow Quality Settings */}
              {(lighting?.shadowsCompile && lighting?.shadows) && (
                  <div className="flex flex-col" data-help-id="shadows">

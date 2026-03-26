@@ -28,7 +28,7 @@ interface RenderPopupProps {
 
 export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     const animStore = useAnimationStore();
-    const { resolutionMode, fixedResolution } = useFractalStore();
+    const { resolutionMode, fixedResolution, canvasPixelSize } = useFractalStore();
     
     // Config State
     const [vidRes, setVidRes] = useState<{w:number, h:number}>(() => {
@@ -455,8 +455,10 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         
         let multiplier = 1.0;
         // Estimate based on viewport vs target resolution ratio
-        const viewportW = window.innerWidth * (window.devicePixelRatio || 1);
-        const viewportH = window.innerHeight * (window.devicePixelRatio || 1);
+        const dpr = useFractalStore.getState().dpr || 1;
+        const [viewportW, viewportH] = resolutionMode === 'Fixed'
+            ? [Math.floor(fixedResolution[0] * dpr), Math.floor(fixedResolution[1] * dpr)]
+            : canvasPixelSize;
         const viewportPixels = viewportW * viewportH;
         const targetW = vidRes.w * internalScale;
         const targetH = vidRes.h * internalScale;

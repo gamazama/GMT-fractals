@@ -2,16 +2,18 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { FractalStoreState, FractalActions, Preset } from '../types';
+import type { FractalDefinition } from '../types/fractal';
 import { createUISlice } from './slices/uiSlice';
 import { createRendererSlice } from './slices/rendererSlice';
 import { createCameraSlice } from './slices/cameraSlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createFeatureSlice } from './createFeatureSlice';
+import { createScalabilitySlice, bindGetShaderConfig } from './slices/scalabilitySlice';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { registry } from '../engine/FractalRegistry';
 import { featureRegistry } from '../engine/FeatureSystem';
-import { generateShareStringFromPreset, parseShareString } from '../utils/Sharing';
+import { generateShareStringFromPreset } from '../utils/Sharing';
 import { getFullDefaultPreset, applyPresetState, sanitizeFeatureState } from '../utils/PresetLogic';
 import type { ShaderConfig } from '../engine/ShaderFactory';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
@@ -29,6 +31,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
     ...createCameraSlice(set, get, api),
     ...createHistorySlice(set, get, api),
     ...createFeatureSlice(set, get, api),
+    ...createScalabilitySlice(set, get),
 
     // Initial State not covered by slices
     formula: 'Mandelbulb',
@@ -229,6 +232,52 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         }, 50);
     },
 
+    loadScene: ({ def, preset }: { def?: FractalDefinition; preset: Preset }) => {
+        // 1. Register formula on main thread + worker (before any CONFIG events)
+        if (def) {
+            if (!registry.get(def.id)) {
+                registry.register(def);
+            }
+            // Always push to worker — idempotent, ensures worker-side registry
+            // has the shader before any CONFIG triggers a rebuild.
+            FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+        }
+
+        // 2. Hydrate store — setter chain emits per-feature CONFIG events that
+        //    ConfigManager diffs individually (compile-time vs runtime).
+        get().loadPreset(preset);
+
+        // If the engine hasn't booted yet (initial startup), skip the CONFIG
+        // flush and OFFSET push — bootEngine() will send the full config + offset
+        // as part of the BOOT message, and any CONFIG events from the setter chain
+        // above just queue up as redundant work that causes a double compile.
+        if (!engine.isBooted && !engine.bootSent) {
+            return;
+        }
+
+        // 3. Full config flush — guarantees the worker sees the complete picture.
+        //    The setter chain sends partial CONFIGs per-feature; ConfigManager
+        //    was already updated incrementally, so this flush is usually a no-op.
+        //    But it catches edge cases: params missing from the old config (first
+        //    load of a feature), or setters that were skipped because the feature
+        //    wasn't registered at applyPresetState time.
+        const fullConfig = getShaderConfigFromState(get());
+        FractalEvents.emit(FRACTAL_EVENTS.CONFIG, fullConfig);
+
+        // 4. Push offset to worker — ensures the first rendered frame after
+        //    recompilation uses the correct viewpoint, not a stale offset that
+        //    would persist until the next RENDER_TICK arrives.
+        const offset = get().sceneOffset;
+        if (offset) {
+            const precise = {
+                x: offset.x, y: offset.y, z: offset.z,
+                xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
+            };
+            engine.setShadowOffset(precise);
+            engine.post({ type: 'OFFSET_SET', offset: precise });
+        }
+    },
+
     getPreset: (options) => {
         const s = get();
         
@@ -308,14 +357,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
          return generateShareStringFromPreset(p, advanced, options);
     },
     
-    loadShareString: (str) => {
-        const p = parseShareString(str);
-        if (p) {
-            get().loadPreset(p);
-            return true;
-        }
-        return false;
-    }
 
 })));
 
@@ -325,7 +366,7 @@ export const selectIsGlobalInteraction = (state: FractalStoreState) => {
 };
 
 export const selectMovementLock = (state: FractalStoreState) => {
-    if (state.isGizmoDragging || state.interactionMode !== 'none' || state.isExporting) return true;
+    if (state.isGizmoDragging || state.interactionMode !== 'none' || state.isExporting || state.isBucketRendering) return true;
     const features = featureRegistry.getAll();
     for (const feat of features) {
         if (feat.interactionConfig?.blockCamera && feat.interactionConfig.activeParam) {
@@ -337,6 +378,7 @@ export const selectMovementLock = (state: FractalStoreState) => {
 };
 
 export const getShaderConfigFromState = (state: FractalStoreState): ShaderConfig => {
+    // ── STAGE 1: Build from authored state ──────────────────
     const config: ShaderConfig = {
         formula: state.formula,
         pipeline: state.pipeline,
@@ -347,19 +389,42 @@ export const getShaderConfigFromState = (state: FractalStoreState): ShaderConfig
         renderMode: state.renderMode,
         compilerHardCap: state.compilerHardCap,
         shadows: true,
-        quality: state.quality,
+        quality: { ...state.quality },  // Shallow clone — stage 2/3 may mutate
     };
-    
+
     const features = featureRegistry.getAll();
     features.forEach(feat => {
         const slice = (state as any)[feat.id];
         if (slice) {
-            (config as any)[feat.id] = slice;
+            (config as any)[feat.id] = { ...slice };
         }
     });
-    
+
+    // Stage 2 (subsystem tier overrides) is no longer needed here —
+    // tier overrides are written directly to the store via feature setters
+    // in scalabilitySlice.applyTierOverrides(). The store always reflects
+    // the actual compiled state.
+
+    // ── STAGE 3: Apply hardware caps (unconditional ceiling) ─
+    if (state.hardwareProfile) {
+        const hw = state.hardwareProfile;
+        const q = (config as any).quality;
+        if (q) {
+            // Higher value = lower capability, so take the max (most constrained)
+            q.precisionMode = Math.max(q.precisionMode ?? 0, hw.caps.precisionMode);
+            q.bufferPrecision = Math.max(q.bufferPrecision ?? 0, hw.caps.bufferPrecision);
+            // Hard cap: take the min (device ceiling)
+            q.compilerHardCap = Math.min(q.compilerHardCap ?? 500, hw.caps.compilerHardCap);
+        }
+        config.compilerHardCap = (config as any).quality?.compilerHardCap ?? config.compilerHardCap;
+    }
+
     return config;
 }
+
+// Late-bind into the scalability slice so its actions can flush CONFIG
+// without a circular import (fractalStore → scalabilitySlice → fractalStore).
+bindGetShaderConfig(getShaderConfigFromState);
 
 export const bindStoreToEngine = () => {
     const s = useFractalStore.getState();
@@ -389,6 +454,9 @@ export const bindStoreToEngine = () => {
             engine.setShadowOffset(precise);
             engine.post({ type: 'OFFSET_SET', offset: precise });
         }
+        // Sync sample cap — the initial SET_SAMPLE_CAP may have been lost
+        // if it arrived before the worker engine was created.
+        engine.setPreviewSampleCap(current.sampleCap);
     };
 
     // State subscriptions that work through proxy methods or events.
@@ -437,7 +505,11 @@ export const bindStoreToEngine = () => {
     });
 
     FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, ({ isRendering }) => {
-        useFractalStore.getState().setIsBucketRendering(isRendering);
+        const s = useFractalStore.getState();
+        s.setIsBucketRendering(isRendering);
+        // Piggyback on isExporting to lock UI (camera, panels, resize).
+        // The worker's own engine.state.isExporting stays false so compute() keeps running.
+        s.setIsExporting(isRendering);
     });
 };
 

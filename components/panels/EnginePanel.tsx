@@ -9,8 +9,7 @@ import { AlertIcon, CheckIcon, InfoIcon, SpinnerIcon } from '../Icons';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { EngineFeatureRow, EngineStatus } from './engine/EngineFeatureRow';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
-import Dropdown from '../Dropdown';
-import { detectEngineProfile, ENGINE_PROFILES, estimateCompileTime } from '../../features/engine/profiles';
+import { getScalabilityLabel, estimateScalabilityCompileTime } from '../../types/viewport';
 import { SectionLabel } from '../SectionLabel';
 import { accent, warn, text as themeText, surface, border as themeBorder } from '../../data/theme';
 
@@ -24,37 +23,12 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
     const [compileFeedback, setCompileFeedback] = useState<string | null>(null);
     const [isCompiling, setIsCompiling] = useState(false);
     
-    // 1. Construct Virtual State for Detection (Store + Pending Overrides)
-    const virtualState = useMemo(() => {
-        const vState: Record<string, Record<string, unknown>> = {};
-        // Only need to clone slices that are actually used in profiles
-        const relevantFeatures = ['lighting', 'ao', 'geometry', 'reflections', 'quality', 'atmosphere'];
-
-        relevantFeatures.forEach(fid => {
-            // Shallow copy slice if it exists
-            const slice = (store as unknown as Record<string, unknown>)[fid];
-            if (slice && typeof slice === 'object') {
-                vState[fid] = { ...(slice as Record<string, unknown>) };
-            }
-        });
-
-        // Overlay pending changes
-        Object.entries(pendingChanges).forEach(([key, val]) => {
-            const [fid, param] = key.split('.');
-            if (vState[fid]) {
-                vState[fid][param] = val;
-            }
-        });
-        
-        return vState;
-    }, [store, pendingChanges]);
-
-    // 2. Detect Profile and estimate compile time based on Virtual State
-    const activeProfileKey = detectEngineProfile(virtualState);
-    const activeProfileLabel = activeProfileKey.charAt(0).toUpperCase() + activeProfileKey.slice(1);
-    const estCompileMs = useMemo(() => estimateCompileTime(virtualState), [virtualState]);
+    // Scalability label from viewport quality system + compile time estimate
+    const scalability = useFractalStore(s => s.scalability);
+    const scalabilityLabel = getScalabilityLabel(scalability);
+    const estCompileMs = useMemo(() => estimateScalabilityCompileTime(scalability.subsystems), [scalability.subsystems]);
     const estCompileSec = (estCompileMs / 1000).toFixed(1);
-    
+
     const engineFeatures = featureRegistry.getEngineFeatures();
 
     // Ref to latest handleParamChange so the ENGINE_QUEUE listener never goes stale
@@ -147,47 +121,18 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
         }, 100);
     };
     
-    const handlePreset = (mode: string) => {
-        if (mode === 'Custom') return;
-
-        const profile = ENGINE_PROFILES[mode as keyof typeof ENGINE_PROFILES];
-        if (!profile) return;
-
-        const newPending: Record<string, unknown> = {};
-
-        // Populate pending changes based on diffs between Profile and Store
-        Object.entries(profile).forEach(([featId, params]) => {
-            Object.entries(params as Record<string, unknown>).forEach(([param, val]) => {
-                const storeVal = (store as unknown as Record<string, Record<string, unknown>>)[featId]?.[param];
-                
-                let isDiff = storeVal !== val;
-                // Fuzzy match for floats
-                if (typeof val === 'number' && typeof storeVal === 'number') {
-                    isDiff = Math.abs(val - storeVal) > 0.001;
-                }
-                
-                if (isDiff) {
-                    newPending[`${featId}.${param}`] = val;
-                }
-            });
-        });
-        
-        // Fully replace pending state to switch context to new preset
-        setPendingChanges(newPending);
-        setCompileFeedback(null);
-    };
-    
     const getMergedState = (featureId: string) => {
         const slice = (store as any)[featureId];
         if (!slice) return {};
         const merged = { ...slice };
-        
+
         Object.entries(pendingChanges).forEach(([key, value]) => {
             const [fId, param] = key.split('.');
             if (fId === featureId) {
                 merged[param] = value;
             }
         });
+
         return merged;
     };
 
@@ -195,19 +140,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
         <div className={`flex flex-col h-full ${surface.dock} min-h-0 overflow-hidden ${className}`} data-help-id="panel.engine">
             <div className={`px-3 py-2 bg-black/60 border-b ${themeBorder.standard} flex items-center justify-between shrink-0`}>
                 <SectionLabel>Engine Configuration</SectionLabel>
-                <div className="w-32">
-                    <Dropdown 
-                        value={activeProfileLabel}
-                        options={[
-                            { label: 'Fastest (Bare)', value: 'Fastest' },
-                            { label: 'Lite (Fast)', value: 'Lite' },
-                            { label: 'Balanced', value: 'Balanced' },
-                            { label: 'Ultra', value: 'Ultra' },
-                            { label: 'Custom', value: 'Custom' }
-                        ]}
-                        onChange={(val) => handlePreset(val.toLowerCase())}
-                    />
-                </div>
+                <span className={`text-[10px] font-bold ${accent.text}`}>{scalabilityLabel}</span>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scroll p-0 min-h-0">
@@ -226,7 +159,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
                         const effectiveState = getMergedState(feat.id);
                         const toggleParam = config.toggleParam;
                         const isEnabled = effectiveState[toggleParam];
-                        
+
                         const toggleKey = `${feat.id}.${toggleParam}`;
                         const isTogglePending = pendingChanges[toggleKey] !== undefined;
 
@@ -234,7 +167,7 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
 
                         return (
                             <div key={feat.id} className="group">
-                                <EngineFeatureRow 
+                                <EngineFeatureRow
                                     label={config.label}
                                     description={config.description}
                                     isActive={isEnabled}
@@ -243,9 +176,9 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) 
                                 />
                                 {isEnabled && config.groupFilter && (
                                     <div className={`ml-4 pl-2 border-l ${themeBorder.standard} my-0.5`}>
-                                        <AutoFeaturePanel 
-                                            featureId={feat.id} 
-                                            groupFilter={config.groupFilter} 
+                                        <AutoFeaturePanel
+                                            featureId={feat.id}
+                                            groupFilter={config.groupFilter}
                                             excludeParams={[config.toggleParam]}
                                             variant="dense"
                                             forcedState={effectiveState}

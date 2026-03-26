@@ -52,7 +52,7 @@ export class BucketRenderer {
     private isRunning: boolean = false;
     private isExporting: boolean = false;
 
-    private buckets: { minX: number, minY: number, maxX: number, maxY: number }[] = [];
+    private buckets: { minX: number, minY: number, maxX: number, maxY: number, pixelX: number, pixelY: number, pixelW: number, pixelH: number }[] = [];
     private currentBucketIndex: number = 0;
 
     private bucketFrameCount: number = 0;
@@ -73,7 +73,7 @@ export class BucketRenderer {
     private config: BucketRenderConfig = {
         bucketSize: 128,
         bucketUpscale: 1.0,
-        convergenceThreshold: 0.1,
+        convergenceThreshold: 0.25,
         accumulation: true,
         samplesPerBucket: 64 // Default to 64 samples for predictable quality
     };
@@ -158,11 +158,23 @@ export class BucketRenderer {
 
         for (let y = 0; y < rows; y++) {
             for (let x = 0; x < cols; x++) {
-                const x1 = (x * size) / targetW;
-                const y1 = (y * size) / targetH;
-                const x2 = Math.min(1.0, ((x + 1) * size) / targetW);
-                const y2 = Math.min(1.0, ((y + 1) * size) / targetH);
-                this.buckets.push({ minX: x1, minY: y1, maxX: x2, maxY: y2 });
+                // Compute pixel boundaries first, then convert to UV.
+                // This ensures adjacent buckets share exact pixel edges with no gaps.
+                const px0 = x * size;
+                const py0 = y * size;
+                const px1 = Math.min(targetW, (x + 1) * size);
+                const py1 = Math.min(targetH, (y + 1) * size);
+                this.buckets.push({
+                    minX: px0 / targetW,
+                    minY: py0 / targetH,
+                    maxX: px1 / targetW,
+                    maxY: py1 / targetH,
+                    // Integer pixel bounds for scissor compositing
+                    pixelX: px0,
+                    pixelY: py0,
+                    pixelW: px1 - px0,
+                    pixelH: py1 - py0,
+                });
             }
         }
 
@@ -178,6 +190,7 @@ export class BucketRenderer {
         this.currentBucketIndex = 0;
         this.bucketFrameCount = 0;
         this.isRunning = true;
+        this.engine.pipeline.setBucketRendering(true);
 
         // Clear the composite buffer at start
         this.clearCompositeBuffer();
@@ -211,12 +224,11 @@ export class BucketRenderer {
             depthBuffer: false
         });
 
-        // Create composite shader material for copying bucket to composite
+        // Simple fullscreen copy material — bucket clipping is done via GL scissor
+        // to guarantee exact integer pixel boundaries with no float precision gaps
         this.compositeMaterial = new THREE.ShaderMaterial({
             uniforms: {
                 map: { value: null },
-                bucketMin: { value: new THREE.Vector2(0, 0) },
-                bucketMax: { value: new THREE.Vector2(1, 1) }
             },
             vertexShader: `
                 varying vec2 vUv;
@@ -227,20 +239,10 @@ export class BucketRenderer {
             `,
             fragmentShader: `
                 uniform sampler2D map;
-                uniform vec2 bucketMin;
-                uniform vec2 bucketMax;
                 varying vec2 vUv;
 
                 void main() {
-                    // Only render within the bucket region
-                    if (vUv.x < bucketMin.x || vUv.y < bucketMin.y ||
-                        vUv.x > bucketMax.x || vUv.y > bucketMax.y) {
-                        discard;
-                    }
-
-                    // Sample from the bucket texture
-                    vec4 color = texture2D(map, vUv);
-                    gl_FragColor = color;
+                    gl_FragColor = texture2D(map, vUv);
                 }
             `,
             depthTest: false,
@@ -297,6 +299,8 @@ export class BucketRenderer {
         this.isExporting = false;
         this.exportPreset = null;
 
+        this.engine.pipeline.setBucketRendering(false);
+
         // Reset bucket region to full screen
         const min = new THREE.Vector2(0, 0);
         const max = new THREE.Vector2(1, 1);
@@ -335,8 +339,13 @@ export class BucketRenderer {
         }
 
         const b = this.buckets[this.currentBucketIndex];
-        const min = new THREE.Vector2(b.minX, b.minY);
-        const max = new THREE.Vector2(b.maxX, b.maxY);
+        // Expand render region by half a pixel in UV space so boundary pixels
+        // are always rendered. The composite step uses integer scissor for
+        // exact clipping, so any slight over-render is harmless.
+        const halfPixelU = 0.5 / this.targetResolution.x;
+        const halfPixelV = 0.5 / this.targetResolution.y;
+        const min = new THREE.Vector2(b.minX - halfPixelU, b.minY - halfPixelV);
+        const max = new THREE.Vector2(b.maxX + halfPixelU, b.maxY + halfPixelV);
 
         this.engine.materials.setUniform(Uniforms.RegionMin, min);
         this.engine.materials.setUniform(Uniforms.RegionMax, max);
@@ -365,12 +374,9 @@ export class BucketRenderer {
 
         const b = this.buckets[this.currentBucketIndex];
 
-        // Setup composite material
+        // Setup composite material — simple fullscreen copy
         this.compositeMaterial.uniforms.map.value = outputTex;
-        this.compositeMaterial.uniforms.bucketMin.value.set(b.minX, b.minY);
-        this.compositeMaterial.uniforms.bucketMax.value.set(b.maxX, b.maxY);
 
-        // Render to composite target with additive blending
         const currentTarget = gl.getRenderTarget();
         const currentViewport = new THREE.Vector4();
         gl.getViewport(currentViewport);
@@ -378,13 +384,20 @@ export class BucketRenderer {
         gl.setRenderTarget(this.compositeTarget);
         gl.setViewport(0, 0, this.targetResolution.x, this.targetResolution.y);
 
-        // Disable autoClear so previous buckets aren't wiped.
-        // The composite shader discards fragments outside the bucket region,
-        // so only the current bucket's pixels get written.
+        // Use GL scissor to clip to exact integer pixel boundaries.
+        // This avoids float precision issues that caused 1px black stripes
+        // between adjacent buckets when using shader-based UV discard.
+        const prevScissor = gl.getScissorTest();
+        gl.setScissorTest(true);
+        gl.setScissor(b.pixelX, b.pixelY, b.pixelW, b.pixelH);
+
         const prevAutoClear = gl.autoClear;
         gl.autoClear = false;
         gl.render(this.compositeScene, this.compositeCamera);
         gl.autoClear = prevAutoClear;
+
+        // Restore scissor state
+        gl.setScissorTest(prevScissor);
 
         gl.setRenderTarget(currentTarget);
         gl.setViewport(currentViewport);

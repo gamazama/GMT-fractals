@@ -22,7 +22,7 @@ The deck is designed to be flexible for multi-monitor or large screen workflows.
 - **Shader**: Surface material (PBR), Glow, and Ambient Occlusion.
 - **Gradient**: Color palettes and texturing.
 - **Quality**: Performance tuning, Anti-aliasing, and Resolution.
-- **Engine**: Compile-time settings that require shader recompilation.
+- **Engine** (Advanced Mode): Compile-time settings that require shader recompilation.
 - **Audio** (when enabled): Audio-reactive parameters.
 - **Drawing** (when enabled): Measurement and annotation tools.
 - **Camera Manager**: Camera presets, saved views, and composition guides.
@@ -35,6 +35,14 @@ The deck is designed to be flexible for multi-monitor or large screen workflows.
         title: 'Viewport Interaction',
         content: `
 The main view displays the fractal in real-time.
+
+## Render Region
+Click the **Crop Icon** to enter region selection mode, then drag to define an area. Only pixels inside the region accumulate new samples — the rest keep their existing image. The region overlay shows live sample count, convergence status, and pixel dimensions.
+
+- **Move**: Drag inside the box.
+- **Resize**: Hover to reveal handles on edges and corners, then drag.
+- **Sample Cap**: Click ⟳ on the overlay to cycle through common caps (∞/64/128/256/...).
+- **Clear**: Click ✕ on the overlay header or click the crop icon again.
 
 ## Focus Picking (DOF)
 To set the **Depth of Field** focal plane exactly on a subject:
@@ -267,7 +275,7 @@ When in **Fixed Resolution** mode, an overlay appears in the top-left of the vie
         category: 'UI',
         title: 'Engine Settings',
         content: `
-The Engine panel controls compile-time shader features — settings that require rebuilding the GPU program before they take effect.
+The Engine panel controls compile-time shader features — settings that require rebuilding the GPU program before they take effect. It is available in **Advanced Mode** (toggle via System Menu or the \` key).
 
 ## How It Works
 Unlike most sliders (which update instantly), changes here are **queued** and applied together when you click **Apply**. The shader then recompiles, which takes a few seconds depending on the features enabled.
@@ -276,18 +284,14 @@ Unlike most sliders (which update instantly), changes here are **queued** and ap
 - **Yellow dot** = change is pending (waiting for you to click Apply).
 - **Blue dot** = updates instantly (no recompile needed).
 
-## Presets
-Quick configurations that set multiple features at once:
-- **Fastest**: Bare minimum — no shadows, no AO, no reflections. Maximum FPS.
-- **Lite**: Lightweight setup suitable for exploration on most hardware.
-- **Balanced**: Good mix of visual quality and performance (default).
-- **Ultra**: Everything enabled — reflections, volumetrics, high-quality AO.
+## Viewport Quality
+For quick quality switching, use the **Viewport Quality** dropdown in the top bar. It provides master presets (Preview, Fastest, Lite, Balanced, Full, Ultra) and per-subsystem tier controls without needing the full Engine panel.
 
 ## Estimated Compile Time
 The bottom bar shows the estimated compile time for the current configuration. Complex setups (raymarched reflections + bounce shadows + volumetrics) can take 15 seconds or more.
 
 ## Who Is This For?
-This panel is for advanced users who want fine control over which shader features are active. Most users can ignore it — the default **Balanced** preset works well for general use.
+This panel is for advanced users who want fine control over individual compile-time shader features beyond what the Viewport Quality dropdown offers.
 `
     },
     'ui.performance': {
@@ -298,7 +302,7 @@ This panel is for advanced users who want fine control over which shader feature
 The system automatically detects sustained low framerates.
 
 - **Low FPS Warning**: Appears if the renderer struggles to maintain a usable frame rate.
-- **Suggestion Buttons**: One or more actions are offered depending on the situation — **Reset Scale**, **Lite Mode**, or **Reduce Resolution** (reduces internal resolution by ~33%) — to help restore interactivity.
+- **Suggestion Buttons**: One or more actions are offered depending on the situation — **Reset Scale**, **Reduce Quality**, or **Reduce Resolution** (reduces internal resolution by ~33%) — to help restore interactivity.
 - **Dismiss**: Ignores the warning for this session.
 `
     }

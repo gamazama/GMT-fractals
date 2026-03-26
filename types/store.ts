@@ -2,11 +2,12 @@
 import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LfoTarget, AnimationParams } from './animation';
 import { FractalGraph, PipelineNode } from './graph';
-import { Preset } from './fractal';
+import { Preset, FractalDefinition } from './fractal';
 import { ContextMenuItem } from './help';
 import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
 import { LightParams } from './graphics';
 import { OpticsState } from '../features/optics';
+import type { ScalabilityState, HardwareProfile } from './viewport';
 
 export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
 
@@ -102,7 +103,8 @@ export interface FractalStoreState extends FeatureStateMap {
   bucketSize: number; 
   bucketUpscale: number; 
   convergenceThreshold: number;
-  samplesPerBucket: number; 
+  samplesPerBucket: number;
+  canvasPixelSize: [number, number]; // Actual physical pixel size of the render canvas
 
   advancedMode: boolean;
   showHints: boolean;
@@ -185,6 +187,10 @@ export interface FractalStoreState extends FeatureStateMap {
   // Formula Workshop
   workshopOpen: boolean;
   workshopEditFormula: string | undefined;
+
+  // Viewport Quality System
+  scalability: ScalabilityState;
+  hardwareProfile: HardwareProfile | null;
 }
 
 export type FractalState = FractalStoreState;
@@ -213,6 +219,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setBucketUpscale: (v: number) => void;
     setConvergenceThreshold: (v: number) => void;
     setSamplesPerBucket: (v: number) => void;
+    setCanvasPixelSize: (w: number, h: number) => void;
 
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
@@ -248,10 +255,10 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     refreshPipeline: () => void;
     setAutoCompile: (v: boolean) => void;
     loadPreset: (p: Preset) => void;
-    
-    getPreset: (options?: { includeScene?: boolean }) => Preset; 
+    loadScene: (args: { def?: FractalDefinition; preset: Preset }) => void;
+
+    getPreset: (options?: { includeScene?: boolean }) => Preset;
     getShareString: (options?: { includeAnimations?: boolean }) => string;
-    loadShareString: (str: string) => boolean;
     
     setHistogramData: (d: Float32Array | null) => void;
     setHistogramAutoUpdate: (v: boolean) => void;
@@ -321,4 +328,9 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     // Composition overlay
     setCompositionOverlay: (type: CompositionOverlayType) => void;
     setCompositionOverlaySettings: (settings: Partial<CompositionOverlaySettings>) => void;
+
+    // Viewport Quality System
+    applyScalabilityPreset: (presetId: string) => void;
+    setSubsystemTier: (subsystemId: string, tier: number) => void;
+    setHardwareProfile: (profile: HardwareProfile) => void;
 }

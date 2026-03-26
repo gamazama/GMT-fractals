@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { DraggableNumber } from '../../Slider';
 
-export type EngineStatus = 'synced' | 'pending' | 'runtime';
+export type EngineStatus = 'synced' | 'pending' | 'runtime' | 'overridden';
 
 export interface EngineFeatureRowProps {
     label: string;
@@ -61,13 +61,19 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
     const handleMouseLeave = () => setShowTooltip(false);
 
     // Dense spreadsheet styling
-    const textColor = status === 'pending' ? 'text-amber-400' : isActive ? 'text-gray-300' : 'text-gray-500';
-    
+    const textColor = status === 'overridden' ? 'text-purple-400/60'
+        : status === 'pending' ? 'text-amber-400'
+        : isActive ? 'text-gray-300' : 'text-gray-500';
+
     // Status Light Logic
     let statusClass = '';
     let statusTitle = '';
-    
+
     switch (status) {
+        case 'overridden':
+            statusClass = 'bg-purple-500/50';
+            statusTitle = 'Controlled by Viewport Quality';
+            break;
         case 'pending':
             statusClass = 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse';
             statusTitle = 'Pending Compilation (Click Apply)';

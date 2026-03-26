@@ -14,11 +14,11 @@ const isMobile = () => {
 export type RendererSlice = Pick<FractalStoreState,
     'dpr' | 'aaLevel' | 'msaaSamples' | 'aaMode' | 'accumulation' | 'previewMode' | 'renderMode' |
     'isExporting' | 'renderRegion' | 'isBucketRendering' | 'bucketSize' | 'bucketUpscale' | 'convergenceThreshold' |
-    'isPaused' | 'sampleCap' | 'samplesPerBucket'
+    'isPaused' | 'sampleCap' | 'samplesPerBucket' | 'canvasPixelSize'
 > & Pick<FractalActions,
     'setDpr' | 'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
     'setIsExporting' | 'setRenderRegion' | 'setIsBucketRendering' | 'setBucketSize' | 'setBucketUpscale' | 'setConvergenceThreshold' |
-    'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket'
+    'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket' | 'setCanvasPixelSize'
 >;
 
 export const createRendererSlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], RendererSlice> = (set, get) => ({
@@ -44,9 +44,10 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     isBucketRendering: false,
     bucketSize: 128,
     bucketUpscale: 1.0,
-    convergenceThreshold: 0.1, // 0.1% default
+    convergenceThreshold: 0.25, // 0.25% default
     samplesPerBucket: 64, // Default samples per bucket for predictable quality
-    
+    canvasPixelSize: [1920, 1080], // Updated by WorkerDisplay on resize
+
     setDpr: (v) => { set({ dpr: v }); FractalEvents.emit('reset_accum', undefined); },
     setAALevel: (v) => { 
         set({ aaLevel: v }); 
@@ -111,6 +112,7 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     setBucketUpscale: (v) => set({ bucketUpscale: v }),
     setConvergenceThreshold: (v) => set({ convergenceThreshold: v }),
     setSamplesPerBucket: (v) => set({ samplesPerBucket: v }),
-    
+    setCanvasPixelSize: (w, h) => set({ canvasPixelSize: [w, h] }),
+
     setIsExporting: (v) => set({ isExporting: v }),
 });

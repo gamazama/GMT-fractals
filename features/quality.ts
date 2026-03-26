@@ -46,9 +46,10 @@ export const QualityFeature: FeatureDefinition = {
             type: 'int', default: 500, label: 'Hard Loop Cap', shortId: 'hc',
             min: 64, max: 2000, step: 1, group: 'engine_settings',
             ui: 'numeric',
-            description: "Compile-time safety limit. Ray loop will never exceed this.",
+            description: "Safety limit for ray/DE loops (MAX_HARD_ITERATIONS define). Requires recompile but does not affect compile time — ANGLE/D3D does not unroll define-bounded loops.",
             onUpdate: 'compile',
-            noReset: true
+            noReset: true,
+            hidden: true  // Managed by Hardware Preferences modal
         },
         precisionMode: {
             type: 'float', default: 0.0, label: 'Ray Precision', shortId: 'pm',
@@ -56,7 +57,8 @@ export const QualityFeature: FeatureDefinition = {
             options: [{ label: 'High (Desktop)', value: 0.0 }, { label: 'Standard (Mobile)', value: 1.0 }],
             description: 'Sets the minimum epsilon (ray hit distance). Standard prevents GPU hangs on mobile.',
             onUpdate: 'compile',
-            noReset: true
+            noReset: true,
+            hidden: true  // Managed by Hardware Preferences modal
         },
         bufferPrecision: {
             type: 'float', default: 0.0, label: 'Texture Buffer', shortId: 'bp',
@@ -64,7 +66,8 @@ export const QualityFeature: FeatureDefinition = {
             options: [{ label: 'Float32 (HDR)', value: 0.0 }, { label: 'HalfFloat16', value: 1.0 }],
             description: 'Controls render target bit-depth. 16-bit is faster and required on some mobile GPUs.',
             onUpdate: 'compile',
-            noReset: true
+            noReset: true,
+            hidden: true  // Managed by Hardware Preferences modal
         },
 
         // --- RUNTIME (Quality Panel) ---

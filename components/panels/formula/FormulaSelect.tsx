@@ -95,21 +95,14 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         reader.onload = (ev) => {
             try {
                 const content = ev.target?.result as string;
-                // Emit compiling event to show spinner before parsing
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
                 const { def, preset } = loadGMFScene(content);
                 if (def) {
-                    if (!registry.get(def.id)) {
-                        registry.register(def);
-                        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
-                    }
-                    // If preset has scene data, load full preset; otherwise just switch formula
-                    if (preset.cameraRot || preset.features) {
-                        useFractalStore.getState().loadPreset(preset);
-                    } else {
-                        onChange(def.id as FormulaType);
-                    }
+                    // loadScene handles: formula registration (main + worker),
+                    // store hydration, full config flush, and offset sync.
+                    useFractalStore.getState().loadScene({ def, preset });
                 } else {
+                    // Legacy JSON — just switch formula
                     onChange(preset.formula as FormulaType);
                 }
                 if (fileRef.current) fileRef.current.value = '';

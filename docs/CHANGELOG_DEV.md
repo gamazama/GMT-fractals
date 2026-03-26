@@ -2,6 +2,32 @@
 
 Chronological log of significant changes during the v0.9.0 development cycle (uncommitted on `dev` branch).
 
+## 2026-03-27
+
+### Bucket Renderer Fixes
+
+- **Scissor-based compositing** replaces shader UV discard for tile compositing. Each bucket stores integer pixel bounds (`pixelX/pixelY/pixelW/pixelH`); compositing uses `gl.setScissor()` for pixel-perfect boundaries. Eliminates 1px black stripe artifacts between adjacent tiles caused by float precision mismatch between render and composite shader `vUv` computations.
+- **Half-pixel render region expansion**: `uRegionMin`/`uRegionMax` are padded by 0.5px in UV space so boundary pixels are always rendered. The scissor rect clips precisely.
+- **State lock during bucket render**: Three-layer protection prevents mid-render corruption: (1) worker message filter drops all messages except `BUCKET_STOP`/`RENDER_TICK`, (2) main thread sets `isExporting=true` to lock camera/UI via `selectMovementLock`, (3) WorkerDisplay ResizeObserver skips during `isBucketRendering`.
+- **Accurate size estimation**: New `canvasPixelSize` store field tracked by WorkerDisplay ResizeObserver. In Fixed resolution mode, UI components use `fixedResolution * dpr` directly instead of relying on observer timing. Fixes wrong output size shown in bucket render panel and video export time estimation.
+- **Popover stays open**: Bucket render controls popover no longer closes on outside click while rendering.
+
+### Viewport Quality System
+
+- **New per-subsystem scalability system** replaces the old flat ENGINE_PROFILES approach. The store always holds the user's full-quality authored intent; a per-subsystem tier overlay controls what actually compiles. Switching viewport quality writes tier overrides to the store via DDFS feature setters — the existing CONFIG pipeline handles recompilation automatically.
+- **Four rendering subsystems** with ordered quality tiers: Shadows (Off/Hard/Soft/Full), Reflections (Off/Env Map/Raymarched/Full), Lighting (Preview/Path Traced/PT+NEE), Atmosphere (Off/Fast Glow/Color Glow/Volumetric). Each tier defines a sparse override map of feature params.
+- **Six master presets**: Preview (instant compile, no advanced lighting), Fastest, Lite, Balanced (default), Full, Ultra. Ultra and the Lighting subsystem are advanced-mode only.
+- **Top-bar ViewportQuality dropdown** with master preset selection, per-subsystem tier dropdowns, compile time estimates, and Apply button for batched recompilation. PT-aware: when path tracer is active, direct-render subsystems (Shadows, Reflections) dim, and a purple Path Tracer section appears with editable controls for Max Bounces (runtime slider), GI Strength (runtime slider), Sample All Lights (compile toggle), and Environment NEE (compile toggle).
+- **Hardware detection** at boot via `detectHardwareProfileMainThread()` — probes Float32 render target support, mobile detection via pointer/viewport heuristics, GPU renderer string analysis. Sets hardware caps (precision, buffer format, loop cap) that are applied as a ceiling in `getShaderConfigFromState()` Stage 3.
+- **Hardware Preferences modal** accessible from System Menu — lets users override detected precision, buffer format, and hard loop cap. Renders via `createPortal` to `document.body` for correct stacking context.
+- **Engine Panel moved to advanced mode.** The toggle is now inside the Advanced Mode section of the System Menu. The old ENGINE_PROFILES dropdown has been removed from SystemMenu.
+- **Quality feature hardware params hidden** (`precisionMode`, `bufferPrecision`, `compilerHardCap`) — marked `hidden: true` in DDFS, managed by Hardware Preferences modal instead of Engine Panel.
+- **Three-layer config pipeline**: Stage 1 (authored state) → Stage 2 (subsystem tier overrides, written directly to store) → Stage 3 (hardware caps, applied as overlay in `getShaderConfigFromState()`).
+- **TSS toggle removed** from top bar and Quality panel. Accumulation is always on — the toggle was not wired to anything useful and confused users.
+- **Top bar layout reorganized**: FPS counter → Pause button → divider → Viewport Quality dropdown → Path Tracer toggle. Previously the PT toggle was separated from the quality controls.
+- **Preview preset** shows "lighting disabled" inline label and has corrected compile time estimate (~2s instead of ~4s).
+- Files: `types/viewport.ts` (NEW), `store/slices/scalabilitySlice.ts` (NEW), `engine/HardwareDetection.ts` (NEW), `components/topbar/ViewportQuality.tsx` (NEW), `components/panels/HardwarePreferences.tsx` (NEW), `store/fractalStore.ts`, `types/store.ts`, `components/topbar/RenderTools.tsx`, `components/topbar/SystemMenu.tsx`, `components/panels/EnginePanel.tsx`, `components/panels/QualityPanel.tsx`, `features/quality.ts`, `hooks/useAppStartup.ts`
+
 ## 2026-03-21
 
 ### GMF as Primary Save Format
@@ -26,8 +52,19 @@ Chronological log of significant changes during the v0.9.0 development cycle (un
 ### Async Convergence Measurement
 
 - **GPU fence-based readback:** New `startAsyncConvergence()` method renders the convergence diff pass and inserts a GL sync fence. `pollConvergenceResult()` checks fence status without blocking the GPU pipeline. Cached `lastConvergenceResult` returned on subsequent frames.
+- **Dynamic convergence target sizing:** Convergence render target now resizes to match the measured region's actual pixel dimensions (capped at 256×256). Previously hardcoded at 64×64, which sampled only ~0.2% of a 1080p viewport. Both bucket rendering and viewport convergence benefit.
+- **Viewport convergence polling:** `RenderPipeline.render()` now runs periodic async convergence measurement every 8 frames during normal accumulation. Reads active render region from `uRegionMin`/`uRegionMax` uniforms. Skipped during bucket rendering. Result exposed via `WorkerShadowState.convergenceValue`.
+- **Default convergence threshold** changed from 0.1% to 0.25%.
 - **Legacy path preserved:** `measureConvergence()` kept for non-bucket paths where synchronous readback is acceptable.
-- Files: `engine/RenderPipeline.ts`
+- Files: `engine/RenderPipeline.ts`, `engine/BucketRenderer.ts`, `engine/worker/WorkerProtocol.ts`, `engine/worker/WorkerProxy.ts`, `engine/worker/renderWorker.ts`
+
+### Region Rendering Overhaul
+
+- **Region overlay with live stats:** New `RegionOverlay` component in `ViewportArea.tsx` shows pixel dimensions, live sample count, click-to-cycle sample cap, live convergence value vs threshold, and clear button. Replaces the old minimal "Active Region" label.
+- **Resize handles:** 8 directional handles (`n/s/e/w/ne/nw/se/sw`) with `data-handle` attributes, visible on hover. Previously the hook checked for handles but no DOM elements existed.
+- **Draw preview:** Region is now visible while drawing (dashed cyan border) via `drawPreview` from `useRegionSelection`. Previously the overlay was hidden during the selection phase (`!isSelectingRegion` guard).
+- **Sample cap boot sync:** `sampleCap` is now re-sent to the worker in the `onBooted` callback, fixing a race where the initial `SET_SAMPLE_CAP` message arrived before the worker engine existed, leaving the pipeline at infinite samples.
+- Files: `components/ViewportArea.tsx`, `hooks/useRegionSelection.ts`, `store/fractalStore.ts`
 
 ### Formula Library & Runtime Discovery
 

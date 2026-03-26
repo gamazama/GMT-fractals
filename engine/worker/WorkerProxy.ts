@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import type { EngineRenderState } from '../FractalEngine';
 import type { ShaderConfig } from '../ShaderFactory';
+import type { CameraState } from '../../types/common';
 import type { VideoExportConfig } from '../codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, SerializedCamera, SerializedOffset } from './WorkerProtocol';
@@ -34,7 +35,7 @@ export class WorkerProxy {
     private _shadow: WorkerShadowState = {
         isBooted: false, isCompiling: false, hasCompiledShader: false,
         isPaused: false, dirty: false, lastCompileDuration: 0,
-        lastMeasuredDistance: 1, accumulationCount: 0, frameCount: 0,
+        lastMeasuredDistance: 1, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
         sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
     };
 
@@ -154,7 +155,7 @@ export class WorkerProxy {
         this._shadow = {
             isBooted: false, isCompiling: false, hasCompiledShader: false,
             isPaused: false, dirty: false, lastCompileDuration: 0,
-            lastMeasuredDistance: 1, accumulationCount: 0, frameCount: 0,
+            lastMeasuredDistance: 1, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
             sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
         };
 
@@ -366,6 +367,7 @@ export class WorkerProxy {
     get sceneOffset() { return this._localOffset; }
     get lastGeneratedFrag() { return this._lastGeneratedFrag; }
     get accumulationCount() { return this._shadow.accumulationCount; }
+    get convergenceValue() { return this._shadow.convergenceValue; }
     get frameCount() { return this._shadow.frameCount; }
     get lastCompileDuration() { return this._shadow.lastCompileDuration; }
     get lastMeasuredDistance() { return this._shadow.lastMeasuredDistance; }
@@ -377,6 +379,13 @@ export class WorkerProxy {
     set isPaused(v: boolean) { this.post({ type: 'PAUSE', paused: v }); }
     get shouldSnapCamera() { return false; }
     set shouldSnapCamera(v: boolean) { if (v) this.post({ type: 'SNAP_CAMERA' }); }
+    /**
+     * Stashed teleport payload from applyPresetState — consumed by WorkerTickScene
+     * at boot-ready time to sync Navigation. Avoids reading potentially drifted
+     * store values and eliminates race with Navigation mount timing.
+     */
+    pendingTeleport: CameraState | null = null;
+
     private _isGizmoInteracting = false;
     get isGizmoInteracting() { return this._isGizmoInteracting; }
     set isGizmoInteracting(v: boolean) { this._isGizmoInteracting = v; }
@@ -387,6 +396,7 @@ export class WorkerProxy {
 
     /** Whether a BOOT message has been sent (worker may still be compiling) */
     private _bootSent = false;
+    get bootSent() { return this._bootSent; }
 
     bootWithConfig(config: ShaderConfig, initialCamera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number }) {
         // If a boot was already sent (worker is likely compiling — especially on Firefox

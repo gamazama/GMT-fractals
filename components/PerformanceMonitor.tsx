@@ -109,11 +109,12 @@ export const PerformanceMonitor = () => {
     
     // Store Access
     const { 
-        resolutionMode, setResolutionMode, setFixedResolution, fixedResolution, 
-        isExporting, isBroadcastMode, openContextMenu, 
-        aaLevel, setAALevel, 
+        resolutionMode, setResolutionMode, setFixedResolution, fixedResolution,
+        isExporting, isBroadcastMode, openContextMenu,
+        aaLevel, setAALevel,
         renderMode,
-        quality
+        quality,
+        canvasPixelSize
     } = useFractalStore();
     
     const isPaused = useFractalStore(s => s.isPaused);
@@ -160,19 +161,11 @@ export const PerformanceMonitor = () => {
     
     // --- Suggestions Logic ---
 
-    // 1. Resolution Reduction
-    let currentW = window.innerWidth;
-    let currentH = window.innerHeight;
-    
-    // Use actual canvas size if available for accuracy
-    if (engine.renderer) {
-        const canvas = engine.renderer.domElement;
-        currentW = canvas.width;
-        currentH = canvas.height;
-    } else if (resolutionMode === 'Fixed') {
-        currentW = fixedResolution[0];
-        currentH = fixedResolution[1];
-    }
+    // 1. Resolution Reduction — use actual canvas pixel size
+    const dpr = useFractalStore(s => s.dpr) || 1;
+    const [currentW, currentH] = resolutionMode === 'Fixed'
+        ? [Math.floor(fixedResolution[0] * dpr), Math.floor(fixedResolution[1] * dpr)]
+        : canvasPixelSize;
     
     const canReduce = currentW > 480;
 

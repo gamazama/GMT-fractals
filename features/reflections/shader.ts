@@ -13,7 +13,7 @@ export const getReflectionsGLSL = () => {
 
 // Lightweight Raymarcher for Reflection Bounce
 vec4 traceReflectionRay(vec3 ro, vec3 rd) {
-    float t = 0.01; // Start offset
+    float t = 0.0; // Caller biases ro along normal — no skip needed here
 
     // Dynamic loop
     int limit = uReflSteps;

@@ -39,17 +39,19 @@ const BucketRenderSettingsPopup = () => {
         });
     }, []);
 
-    // Estimate VRAM and output resolution
+    // Estimate VRAM and output resolution using actual canvas pixel size.
+    // In Fixed mode, derive from fixedResolution directly (ResizeObserver may lag).
     const vramInfo = useMemo(() => {
         const dpr = state.dpr || 1;
-        const vw = Math.floor((typeof window !== 'undefined' ? window.innerWidth : 1920) * dpr);
-        const vh = Math.floor((typeof window !== 'undefined' ? window.innerHeight : 1080) * dpr);
+        const [vw, vh] = state.resolutionMode === 'Fixed'
+            ? [Math.floor(state.fixedResolution[0] * dpr), Math.floor(state.fixedResolution[1] * dpr)]
+            : state.canvasPixelSize;
         const upscale = state.bucketUpscale;
         const outW = Math.floor(vw * upscale);
         const outH = Math.floor(vh * upscale);
         const mb = estimateVRAM(vw, vh, upscale);
         return { outW, outH, mb };
-    }, [state.dpr, state.bucketUpscale]);
+    }, [state.canvasPixelSize, state.bucketUpscale, state.resolutionMode, state.fixedResolution, state.dpr]);
 
     // Explicit Start/Stop handlers to avoid race conditions with state toggles
     const handleStartRefine = () => {

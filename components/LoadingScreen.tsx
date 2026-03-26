@@ -79,8 +79,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeFormula = useFractalStore(s => s.formula);
-  const setFormula = useFractalStore(s => s.setFormula);
-  const loadPreset = useFractalStore(s => s.loadPreset);
+  const loadScene = useFractalStore(s => s.loadScene);
   const applyPreset = useFractalStore(s => (s as any).applyPreset);
 
   const quality = useFractalStore(s => (s as any).quality) as QualityState;
@@ -109,11 +108,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
   const handleSelectFormula = (formulaId: string) => {
       const def = registry.get(formulaId as any);
       if (def && def.defaultPreset) {
-          // Load preset into store immediately — the force reboot below will
-          // pick up the new config via getShaderConfigFromState().
-          loadPreset(def.defaultPreset as Preset);
+          loadScene({ preset: def.defaultPreset as Preset });
       }
-      setFormula(formulaId as any);
       setIsMenuOpen(false);
       setProgress(0);
       progressRef.current = 0;
@@ -144,16 +140,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
           // Detect GMF vs legacy JSON format
           const { def, preset } = loadGMFScene(content);
 
-          // Register formula if it came from GMF and isn't already known
-          if (def && !registry.get(def.id)) {
-              registry.register(def);
-          }
-
-          loadPreset(preset);
-
-          // Don't queue via onPresetLoaded — loadPreset already applied the
-          // preset to the store, and the force reboot reads getShaderConfigFromState().
-          // Queuing would cause a redundant loadPreset + recompile after boot.
+          // loadScene handles: formula registration (main + worker),
+          // store hydration, full config flush, and offset sync.
+          loadScene({ def: def || undefined, preset });
 
           setIsMenuOpen(false);
           setProgress(0);
