@@ -117,9 +117,24 @@ export const createScalabilitySlice = (set: any, get: any) => ({
         applyTierOverrides(newSubsystems, get);
     },
 
-    /** Set hardware profile (called once at boot from GPU detection) */
+    /** Set hardware profile (called once at boot from GPU detection, or from HardwarePreferences modal) */
     setHardwareProfile: (profile: HardwareProfile) => {
         set({ hardwareProfile: profile });
+
+        // Push hardware caps into the quality slice so the store value
+        // matches the hardware-detected (or user-chosen) capability.
+        // Without this, quality.compilerHardCap stays at its default (500)
+        // and Math.min(500, 2000) in Stage 3 never raises the actual cap.
+        const state = get();
+        const setQuality = state.setQuality;
+        if (typeof setQuality === 'function') {
+            setQuality({
+                compilerHardCap: profile.caps.compilerHardCap,
+                precisionMode: profile.caps.precisionMode,
+                bufferPrecision: profile.caps.bufferPrecision,
+            });
+        }
+
         // Hardware caps affect getShaderConfigFromState stage 3 — flush
         flushConfig(get);
     },

@@ -118,17 +118,29 @@ export const applyPresetState = (p: Partial<Preset>, set: (partial: Record<strin
         }
     }
 
+    // Hardware-managed params are owned by the hardware profile, not by scenes.
+    // Preserve current store values so loading a formula/scene doesn't downgrade them.
+    const HARDWARE_MANAGED_PARAMS = new Set(['compilerHardCap', 'precisionMode', 'bufferPrecision']);
+
     featureRegistry.getAll().forEach(feat => {
         const setterName = `set${feat.id.charAt(0).toUpperCase() + feat.id.slice(1)}`;
         const setter = (actions as any)[setterName];
-        
+
         if (typeof setter === 'function') {
             const incomingData = features[feat.id];
             const nextState: Record<string, unknown> = {};
+            // Snapshot current quality slice so we can preserve hardware-managed params
+            const currentSlice = feat.id === 'quality' ? (get() as any).quality : null;
 
             if (feat.state) Object.assign(nextState, feat.state);
-            
+
             Object.entries(feat.params).forEach(([key, config]) => {
+                // Hardware-managed params: keep current store value, ignore scene data
+                if (feat.id === 'quality' && HARDWARE_MANAGED_PARAMS.has(key) && currentSlice) {
+                    nextState[key] = currentSlice[key];
+                    return;
+                }
+
                 if (incomingData && incomingData[key] !== undefined) {
                     let val = incomingData[key];
                     // Sanitize incoming vectors/colors back to THREE objects if needed
