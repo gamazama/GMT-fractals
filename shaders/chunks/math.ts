@@ -73,6 +73,12 @@ float snoise(vec3 v) {
 }
 
 // ============================================================================
+// Shared GLSL Transforms (used by both main app and mesh export)
+// ============================================================================
+
+import { SHARED_TRANSFORMS_GLSL } from '../../features/geometry/transforms';
+
+// ============================================================================
 // Mesh Export GLSL — composed from shared primitives
 // Standalone subset: no rotation uniforms, no #ifdef guards,
 // simplified getLength (always Euclidean).
@@ -87,8 +93,7 @@ uniform vec3  uJulia;
 uniform float uJuliaMode;
 uniform float uEscapeThresh;
 uniform float uDistanceMetric;
-#define uIterations uIters
-vec4 g_orbitTrap;
+#define uIterations float(uIters)
 `;
 
 export const MESH_GLSL_HELPERS = `
@@ -102,12 +107,25 @@ void applyPreRotation(inout vec3 p) {}
 void applyPostRotation(inout vec3 p) {}
 void applyWorldRotation(inout vec3 p) {}
 
+// Shared transforms (Rodrigues rotation, twist)
+${SHARED_TRANSFORMS_GLSL}
+
 // Simplex noise (Stefan Gustavson)
 ${getSnoiseFunctions('_')}
 `;
 
+/** Math constants shared by both the main renderer and the mesh SDF library.
+ *  Exported so buildMeshSDFLibrary() can include them without duplicating values. */
+export const GLSL_MATH_CONSTANTS = `
+#define PI 3.14159265
+#define TAU 6.28318530
+#define INV_TAU 0.15915494
+#define INV_PI  0.31830989
+const float phi = 1.61803398875;
+`;
+
 export const getMathGLSL = (useRotation: boolean) => {
-    
+
     const rotationLogic = !useRotation ? `
     // Kernel Optimization: No Rotation Code
     void applyPreRotation(inout vec3 p) {}
@@ -135,18 +153,14 @@ export const getMathGLSL = (useRotation: boolean) => {
 
     return `
 // Constants
+${GLSL_MATH_CONSTANTS}
 #define MAX_DIST 10000.0
 #define MISS_DIST 1000.0            // Far sentinel for missed rays — d > MISS_DIST means no geometry hit; must be < MAX_DIST
 #define BOUNDING_RADIUS 400.0
-#define PI 3.14159265
-#define TAU 6.28318530
-#define INV_TAU 0.15915494          // 1/(2π) — maps [-π,π] atan2 to [-0.5,0.5]
-#define INV_PI  0.31830989          // 1/π — maps [0,π] acos to [0,1]
 #define PRECISION_RATIO_HIGH 5.0e-7 // ~0.5 ppm — float precision floor, scales with distance from fractal origin
 #define PRECISION_RATIO_LOW  1.0e-5 // ~10 ppm — low precision / mobile float floor
 #define GGX_EPSILON 0.0001          // GGX denominator safety — prevents divide-by-zero near specular singularities
 #define DIR_LIGHT_DIST 100.0        // Directional light distance proxy — larger than BOUNDING_RADIUS, treated as infinite
-const float phi = 1.61803398875;
 
 // --- RANDOM FUNCTIONS ---
 // Interleaved Gradient Noise (Jimenez 2014, "Next Generation Post Processing in Call of Duty")

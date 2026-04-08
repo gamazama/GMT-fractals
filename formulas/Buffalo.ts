@@ -6,29 +6,9 @@ export const Buffalo: FractalDefinition = {
     name: 'Buffalo 3D',
     shortDescription: 'Mandelbulb with per-axis absolute value folds — creates the signature "buffalo" shape.',
     description: 'The Buffalo fractal (ported from Mandelbulber via 3Dickulus). A Mandelbulb variant with selective per-axis absolute value folding before and after the power iteration. The default abs on Y+Z creates the distinctive buffalo/horn shape. Based on the original by youhn @ fractalforums.com.',
+    juliaType: 'julia',
 
     shader: {
-        preamble: `
-    // Buffalo: Pre-calculated rotation (computed once per frame)
-    vec3 uBuffalo_rotAxis = vec3(0.0, 1.0, 0.0);
-    float uBuffalo_rotCos = 1.0;
-    float uBuffalo_rotSin = 0.0;
-
-    void Buffalo_precalcRotation() {
-        if (abs(uVec3C.z) > 0.001) {
-            float azimuth = uVec3C.x;
-            float pitch = uVec3C.y;
-            float rotAngle = uVec3C.z * 0.5;
-            float cosPitch = cos(pitch);
-            uBuffalo_rotAxis = vec3(
-                cosPitch * sin(azimuth),
-                sin(pitch),
-                cosPitch * cos(azimuth)
-            );
-            uBuffalo_rotSin = sin(rotAngle);
-            uBuffalo_rotCos = cos(rotAngle);
-        }
-    }`,
         function: `
     void formula_Buffalo(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -36,11 +16,7 @@ export const Buffalo: FractalDefinition = {
         // Vec3B: Abs before power
         z3 = mix(z3, abs(z3), step(vec3(0.5), uVec3B));
 
-        // Vec3C: Rotation using pre-calculated values
-        if (abs(uVec3C.z) > 0.001) {
-            z3 = z3 * uBuffalo_rotCos + cross(uBuffalo_rotAxis, z3) * uBuffalo_rotSin
-                 + uBuffalo_rotAxis * dot(uBuffalo_rotAxis, z3) * (1.0 - uBuffalo_rotCos);
-        }
+        gmt_applyRodrigues(z3);
 
         // Mandelbulb power iteration (branchless)
         float r = max(length(z3), 1.0e-9);
@@ -64,7 +40,8 @@ export const Buffalo: FractalDefinition = {
         trap = min(trap, r);
     }`,
         loopBody: `formula_Buffalo(z, dr, trap, c);`,
-        loopInit: `Buffalo_precalcRotation();`
+        loopInit: `gmt_precalcRodrigues(uVec3C);`,
+        usesSharedRotation: true,
     },
 
     parameters: [
@@ -140,8 +117,8 @@ export const Buffalo: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: -0.4527317101694649, y: -0.04511061025925526, z: -2.1858885005397504 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFCEA6", intensity: 0.75, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 4000 },
-            { type: 'Point', position: { x: 2, y: -1, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0, y: 0, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0044ff", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 2, y: -1, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0, y: 0, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

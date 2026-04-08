@@ -6,43 +6,14 @@ export const SierpinskiTetrahedron: FractalDefinition = {
     name: 'Sierpinski Tetrahedron',
     shortDescription: 'Classic IFS Sierpinski tetrahedron with fold symmetry.',
     description: 'The Sierpinski Tetrahedron (Tetrix) — a 3D IFS fractal built from reflective folds across tetrahedron face planes. Supports per-axis scale, rotation, shift and twist.',
+    juliaType: 'offset',
 
     shader: {
-        // Preamble: Global variables and pre-calculation function (runs once per frame)
-        preamble: `
-    // Pre-calculated rotation values for SierpinskiTetrahedron (computed once per frame)
-    vec3 uSierpinski_rotAxis = vec3(0.0, 1.0, 0.0);
-    float uSierpinski_rotCos = 1.0;
-    float uSierpinski_rotSin = 0.0;
-
-    void SierpinskiTetrahedron_precalcRotation() {
-        if (abs(uVec3B.z) > 0.001) {
-            float azimuth = uVec3B.x;
-            float pitch = uVec3B.y;
-            float rotAngle = uVec3B.z * 0.5;
-
-            // Convert spherical to direction vector
-            float cosPitch = cos(pitch);
-            uSierpinski_rotAxis = vec3(
-                cosPitch * sin(azimuth),
-                sin(pitch),
-                cosPitch * cos(azimuth)
-            );
-
-            uSierpinski_rotSin = sin(rotAngle);
-            uSierpinski_rotCos = cos(rotAngle);
-        }
-    }`,
         function: `
     void formula_SierpinskiTetrahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
 
-        // Param F: Twist
-        if (abs(uParamF) > 0.001) {
-            float ang = z3.z * uParamF;
-            float s = sin(ang); float co = cos(ang);
-            z3.xy = mat2(co, -s, s, co) * z3.xy;
-        }
+        gmt_applyTwist(z3, uParamF);
 
         float sf;
         sf = step(0.0, z3.x + z3.y); z3.xy = mix(-z3.yx, z3.xy, sf);
@@ -52,12 +23,8 @@ export const SierpinskiTetrahedron: FractalDefinition = {
         vec3 scale3 = uVec3C;
         z3 = z3 * scale3 - vec3(uParamB * (scale3 - 1.0));
 
-        // Vec3B: Rotation using pre-calculated values (no trig in loop!)
-        if (abs(uVec3B.z) > 0.001) {
-            // Rodrigues' rotation formula with pre-calculated axis and angles
-            z3 = z3 * uSierpinski_rotCos + cross(uSierpinski_rotAxis, z3) * uSierpinski_rotSin
-                 + uSierpinski_rotAxis * dot(uSierpinski_rotAxis, z3) * (1.0 - uSierpinski_rotCos);
-        }
+        // Vec3B: Rotation (post-fold, using shared precalc)
+        gmt_applyRodrigues(z3);
 
         // Vec3A: Shift X, Y, Z
         z3 += uVec3A;
@@ -70,7 +37,8 @@ export const SierpinskiTetrahedron: FractalDefinition = {
         trap = min(trap, length(z3));
     }`,
         loopBody: `formula_SierpinskiTetrahedron(z, dr, trap, c);`,
-        loopInit: `SierpinskiTetrahedron_precalcRotation();`
+        loopInit: `gmt_precalcRodrigues(uVec3B);`,
+        usesSharedRotation: true,
     },
 
     parameters: [
@@ -134,8 +102,8 @@ export const SierpinskiTetrahedron: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.435, y: 1.031, z: 2.022 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 1.4, falloff: 1, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

@@ -6,51 +6,22 @@ export const Dodecahedron: FractalDefinition = {
     name: 'Dodecahedron',
     shortDescription: 'Kaleidoscopic IFS with dodecahedral symmetry (Knighty).',
     description: 'Kaleidoscopic IFS fractal with true dodecahedral symmetry using 3 golden-ratio reflection normals. Based on Knighty\'s method: 3 normals × 3 reflections = 9 fold operations per iteration, producing the icosahedral/dodecahedral reflection group. Supports rotation, twist, and shift.',
+    juliaType: 'offset',
 
     shader: {
         preamble: `
-    // Dodecahedron: Pre-calculated golden-ratio normals and rotation (computed once per frame)
+    // Dodecahedron: Golden-ratio fold normals
     // Reference: Syntopia/Knighty Kaleidoscopic IFS
     const float dodeca_Phi = (1.0 + sqrt(5.0)) * 0.5; // golden ratio 1.618...
     const vec3 dodeca_n1 = normalize(vec3(-1.0, dodeca_Phi - 1.0, 1.0 / (dodeca_Phi - 1.0)));
     const vec3 dodeca_n2 = normalize(vec3(dodeca_Phi - 1.0, 1.0 / (dodeca_Phi - 1.0), -1.0));
-    const vec3 dodeca_n3 = normalize(vec3(1.0 / (dodeca_Phi - 1.0), -1.0, dodeca_Phi - 1.0));
-
-    vec3 uDodeca_rotAxis = vec3(0.0, 1.0, 0.0);
-    float uDodeca_rotCos = 1.0;
-    float uDodeca_rotSin = 0.0;
-
-    void Dodecahedron_precalcRotation() {
-        if (abs(uVec3B.z) > 0.001) {
-            float azimuth = uVec3B.x;
-            float pitch = uVec3B.y;
-            float rotAngle = uVec3B.z * 0.5;
-            float cosPitch = cos(pitch);
-            uDodeca_rotAxis = vec3(
-                cosPitch * sin(azimuth),
-                sin(pitch),
-                cosPitch * cos(azimuth)
-            );
-            uDodeca_rotSin = sin(rotAngle);
-            uDodeca_rotCos = cos(rotAngle);
-        }
-    }`,
+    const vec3 dodeca_n3 = normalize(vec3(1.0 / (dodeca_Phi - 1.0), -1.0, dodeca_Phi - 1.0));`,
         function: `
     void formula_Dodecahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
 
-        // Param F: Twist
-        if (abs(uParamF) > 0.001) {
-            float ang = z3.z * uParamF;
-            float s = sin(ang); float co = cos(ang);
-            z3.xy = mat2(co, -s, s, co) * z3.xy;
-        }
-
-        // Vec3B: Rotation using pre-calculated values (no trig in loop)
-        if (abs(uVec3B.z) > 0.001) {
-            z3 = z3 * uDodeca_rotCos + cross(uDodeca_rotAxis, z3) * uDodeca_rotSin
-                 + uDodeca_rotAxis * dot(uDodeca_rotAxis, z3) * (1.0 - uDodeca_rotCos);
-        }
+        gmt_applyTwist(z3, uParamF);
+        gmt_applyRodrigues(z3);
 
         // 3 normals × 3 repetitions = 9 fold operations (true dodecahedral symmetry)
         z3 -= 2.0 * min(0.0, dot(z3, dodeca_n1)) * dodeca_n1;
@@ -79,7 +50,8 @@ export const Dodecahedron: FractalDefinition = {
         trap = min(trap, length(z3));
     }`,
         loopBody: `formula_Dodecahedron(z, dr, trap, c);`,
-        loopInit: `Dodecahedron_precalcRotation();`
+        loopInit: `gmt_precalcRodrigues(uVec3B);`,
+        usesSharedRotation: true,
     },
 
     parameters: [
@@ -143,7 +115,7 @@ export const Dodecahedron: FractalDefinition = {
             },
             geometry: { juliaMode: false, juliaX: -0.495, juliaY: 0.43, juliaZ: -0.07, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 538, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 2, fudgeFactor: 0.618, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 2, stepJitter: 0.15, estimator: 0 },
+            quality: { detail: 2, fudgeFactor: 0.618, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 2, stepJitter: 0.15, estimator: 2 },
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 30, dofStrength: 0, dofFocus: 5.416511696387403 }
         },
@@ -155,11 +127,8 @@ export const Dodecahedron: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Directional', position: { x: 0.3935750958329095, y: 1.1219073945240998, z: 2.531297422652509 }, rotation: { x: -0.1760895376460553, y: -0.04312640645659912, z: 0.00380748198692117 }, color: "#FFE6D1", intensity: 0.43559999999999993, falloff: 6.4, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true, useTemperature: true, temperature: 5100 },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 2.618, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

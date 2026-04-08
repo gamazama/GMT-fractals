@@ -18,30 +18,35 @@ export const Claude: FractalDefinition = {
     name: 'Claude',
     shortDescription: 'Harmonic resonance IFS — icosahedral folds with parametric 4th reflection plane.',
     description: 'Icosahedral reflection folds (golden-ratio normals) + a parametric "harmonic" fold (4th plane swept around the golden axis) + clamped sphere inversion. The harmonic fold is unique to this formula — it enriches the icosahedral base like an overtone enriches a fundamental tone. φ appears in fold geometry, harmonic axis, and default parameters.',
+    juliaType: 'offset',
 
     shader: {
         preamble: `
     // Golden ratio and icosahedral fold normals
-    const float claude_Phi = (1.0 + sqrt(5.0)) * 0.5;
-    const vec3 claude_n1 = normalize(vec3(-1.0, claude_Phi - 1.0, 1.0 / (claude_Phi - 1.0)));
-    const vec3 claude_n2 = normalize(vec3(claude_Phi - 1.0, 1.0 / (claude_Phi - 1.0), -1.0));
-    const vec3 claude_n3 = normalize(vec3(1.0 / (claude_Phi - 1.0), -1.0, claude_Phi - 1.0));
-
-    // Golden axis: (1, φ, 0) normalized — an icosahedral vertex direction
-    // Used as the sweep axis for the harmonic fold
-    const vec3 claude_goldenAxis = normalize(vec3(1.0, claude_Phi, 0.0));
+    // Declared as non-const globals — GLSL ES 3.0 does not permit built-in functions
+    // (sqrt, normalize) in constant expressions. Values are computed in Claude_precalc().
+    float claude_Phi;
+    vec3 claude_n1;
+    vec3 claude_n2;
+    vec3 claude_n3;
+    vec3 claude_goldenAxis;
 
     // Harmonic fold normal (4th plane, computed once per frame via Rodrigues)
-    vec3 uCl_n4 = claude_n3;
-    bool uCl_doHarmonic = false;
-
-    // Pre-fold rotation (vec3B: azimuth/pitch/angle)
-    vec3 uCl_rotAxis = vec3(0.0, 1.0, 0.0);
-    float uCl_rotCos = 1.0;
-    float uCl_rotSin = 0.0;
-    bool uCl_doRot = false;
+    vec3 uCl_n4;
+    bool uCl_doHarmonic;
 
     void Claude_precalc() {
+        // Compute golden ratio and icosahedral normals
+        claude_Phi = (1.0 + sqrt(5.0)) * 0.5;
+        claude_n1 = normalize(vec3(-1.0, claude_Phi - 1.0, 1.0 / (claude_Phi - 1.0)));
+        claude_n2 = normalize(vec3(claude_Phi - 1.0, 1.0 / (claude_Phi - 1.0), -1.0));
+        claude_n3 = normalize(vec3(1.0 / (claude_Phi - 1.0), -1.0, claude_Phi - 1.0));
+        claude_goldenAxis = normalize(vec3(1.0, claude_Phi, 0.0));
+
+        // Harmonic fold normal defaults to n3
+        uCl_n4 = claude_n3;
+        uCl_doHarmonic = false;
+
         // Harmonic: rotate n3 around golden axis by paramB (Rodrigues formula)
         float h = uParamB;
         if (abs(h) > 0.001) {
@@ -51,48 +56,25 @@ export const Claude: FractalDefinition = {
             uCl_n4 = claude_n3 * ch
                    + cross(claude_goldenAxis, claude_n3) * sh
                    + claude_goldenAxis * dk * (1.0 - ch);
-        } else {
-            uCl_doHarmonic = false;
         }
-
-        // Pre-fold rotation (standard axis-angle from vec3B)
-        if (abs(uVec3B.z) > 0.001) {
-            uCl_doRot = true;
-            float azimuth = uVec3B.x;
-            float pitch = uVec3B.y;
-            float rotAngle = uVec3B.z * 0.5;
-            float cosPitch = cos(pitch);
-            uCl_rotAxis = vec3(
-                cosPitch * sin(azimuth),
-                sin(pitch),
-                cosPitch * cos(azimuth)
-            );
-            uCl_rotSin = sin(rotAngle);
-            uCl_rotCos = cos(rotAngle);
-        } else {
-            uCl_doRot = false;
-        }
+        // Note: gmt_precalcRodrigues(uVec3B) is called separately from loopInit —
+        // preamble functions are assembled before shared transforms, so calling it
+        // here would cause a "no matching overloaded function" error.
     }`,
 
         function: `
     void formula_Claude(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 p = z.xyz;
 
-        // 1. Pre-fold rotation (Rodrigues, vec3B)
-        if (uCl_doRot) {
-            p = p * uCl_rotCos
-              + cross(uCl_rotAxis, p) * uCl_rotSin
-              + uCl_rotAxis * dot(uCl_rotAxis, p) * (1.0 - uCl_rotCos);
-        }
+        // 1. Pre-fold rotation (shared Rodrigues, vec3B)
+        gmt_applyRodrigues(p);
 
         // 2. Icosahedral fold — three golden-ratio reflection normals
-        //    Maps space into a fundamental domain with partial 5-fold symmetry
         p -= 2.0 * min(0.0, dot(p, claude_n1)) * claude_n1;
         p -= 2.0 * min(0.0, dot(p, claude_n2)) * claude_n2;
         p -= 2.0 * min(0.0, dot(p, claude_n3)) * claude_n3;
 
         // 3. Harmonic fold — 4th reflection plane at golden-axis angle
-        //    Enriches the icosahedral base with an additional perspective
         if (uCl_doHarmonic) {
             p -= 2.0 * min(0.0, dot(p, uCl_n4)) * uCl_n4;
         }
@@ -124,7 +106,9 @@ export const Claude: FractalDefinition = {
     }`,
 
         loopBody: `formula_Claude(z, dr, trap, c);`,
-        loopInit: `Claude_precalc();`
+        loopInit: `Claude_precalc(); gmt_precalcRodrigues(uVec3B);`,
+        preambleVars: ['uCl_n4', 'uCl_doHarmonic'],
+        usesSharedRotation: true,
     },
 
     parameters: [
@@ -132,7 +116,7 @@ export const Claude: FractalDefinition = {
         { label: 'Harmonic', id: 'paramB', min: -3.14, max: 3.14, step: 0.001, default: 0.61 },
         { label: 'Inner R²', id: 'paramC', min: 0.001, max: 1.5, step: 0.001, default: 0.25 },
         { label: 'Fix R²', id: 'paramD', min: 0.1, max: 2.5, step: 0.001, default: 1.0 },
-        { label: 'Offset', id: 'vec3A', type: 'vec3', min: -3.0, max: 3.0, step: 0.001, default: { x: 1, y: 1, z: 1 } },
+        { label: 'Offset', id: 'vec3A', type: 'vec3', min: -3.0, max: 3.0, step: 0.001, default: { x: 1, y: 1, z: 1 }, linkable: true },
         { label: 'Rotation', id: 'vec3B', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
         { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
@@ -204,7 +188,7 @@ export const Claude: FractalDefinition = {
         lights: [
             { type: 'Point', position: { x: -0.8, y: 3.2, z: 3.5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFE4CC", intensity: 6, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 3.5, y: -0.5, z: 1.5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#4A8BCC", intensity: 2.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: false },
-            { type: 'Point', position: { x: 1, y: 1, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#C4603A", intensity: 1.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 1, y: 1, z: -2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFBE8A", useTemperature: true, temperature: 3200, intensity: 1.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

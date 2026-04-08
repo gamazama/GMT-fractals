@@ -6,45 +6,15 @@ export const MakinBrot: FractalDefinition = {
     name: 'Makin Brot',
     shortDescription: 'Creates stacked, pagoda-like ornamental structures.',
     description: 'A 3D fractal variant discovered by Makin. Custom polynomial: x²-y²-z², 2xy, 2z(x-y). Supports rotation, shift, and twist.',
+    juliaType: 'offset',
 
     shader: {
-        preamble: `
-    // MakinBrot: Pre-calculated rotation (computed once per frame)
-    vec3 uMakin_rotAxis = vec3(0.0, 1.0, 0.0);
-    float uMakin_rotCos = 1.0;
-    float uMakin_rotSin = 0.0;
-
-    void MakinBrot_precalcRotation() {
-        if (abs(uVec3B.z) > 0.001) {
-            float azimuth = uVec3B.x;
-            float pitch = uVec3B.y;
-            float rotAngle = uVec3B.z * 0.5;
-            float cosPitch = cos(pitch);
-            uMakin_rotAxis = vec3(
-                cosPitch * sin(azimuth),
-                sin(pitch),
-                cosPitch * cos(azimuth)
-            );
-            uMakin_rotSin = sin(rotAngle);
-            uMakin_rotCos = cos(rotAngle);
-        }
-    }`,
         function: `
     void formula_MakinBrot(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
 
-        // Param F: Twist
-        if (abs(uParamF) > 0.001) {
-            float ang = z3.z * uParamF;
-            float s = sin(ang); float co = cos(ang);
-            z3.xy = mat2(co, -s, s, co) * z3.xy;
-        }
-
-        // Vec3B: Rotation using pre-calculated Rodrigues
-        if (abs(uVec3B.z) > 0.001) {
-            z3 = z3 * uMakin_rotCos + cross(uMakin_rotAxis, z3) * uMakin_rotSin
-                 + uMakin_rotAxis * dot(uMakin_rotAxis, z3) * (1.0 - uMakin_rotCos);
-        }
+        gmt_applyTwist(z3, uParamF);
+        gmt_applyRodrigues(z3);
 
         float x = z3.x; float y = z3.y; float z_ = z3.z;
         z3.x = x*x - y*y - z_*z_;
@@ -62,7 +32,8 @@ export const MakinBrot: FractalDefinition = {
         trap = min(trap, dot(z3,z3));
     }`,
         loopBody: `formula_MakinBrot(z, dr, trap, c);`,
-        loopInit: `MakinBrot_precalcRotation();`
+        loopInit: `gmt_precalcRodrigues(uVec3B);`,
+        usesSharedRotation: true,
     },
 
     parameters: [
@@ -116,12 +87,9 @@ export const MakinBrot: FractalDefinition = {
         sceneOffset: { x: 0, y: 0, z: 0, xL: -0.8442073707354043, yL: -0.15795817300110893, zL: 0.25127901307775025 },
         cameraMode: "Orbit",
         lights: [
-            { type: 'Point', position: { x: -1.5227203148465231, y: -0.10858858668233184, z: 0.5084783790561214 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 1.455, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: -1.5227203148465231, y: -0.10858858668233184, z: 0.5084783790561214 }, rotation: { x: 0, y: 0, z: 0 }, color: "#F0F0FF", useTemperature: true, temperature: 6500, intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

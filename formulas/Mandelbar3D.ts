@@ -6,45 +6,15 @@ export const Mandelbar3D: FractalDefinition = {
     name: 'Mandelbar 3D',
     shortDescription: 'The 3D Tricorn. Features heavy shelving and tri-corner symmetry.',
     description: 'The 3D extension of the Tricorn (Mandelbar) fractal: x²-y²-z², 2xy, -2xz. The conjugation on z creates the distinctive tri-corner symmetry. Supports rotation, offset, and twist.',
+    juliaType: 'julia',
 
     shader: {
-        preamble: `
-    // Mandelbar3D: Pre-calculated rotation (computed once per frame)
-    vec3 uMbar_rotAxis = vec3(0.0, 1.0, 0.0);
-    float uMbar_rotCos = 1.0;
-    float uMbar_rotSin = 0.0;
-
-    void Mandelbar3D_precalcRotation() {
-        if (abs(uVec3B.z) > 0.001) {
-            float azimuth = uVec3B.x;
-            float pitch = uVec3B.y;
-            float rotAngle = uVec3B.z * 0.5;
-            float cosPitch = cos(pitch);
-            uMbar_rotAxis = vec3(
-                cosPitch * sin(azimuth),
-                sin(pitch),
-                cosPitch * cos(azimuth)
-            );
-            uMbar_rotSin = sin(rotAngle);
-            uMbar_rotCos = cos(rotAngle);
-        }
-    }`,
         function: `
     void formula_Mandelbar3D(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
 
-        // Param F: Twist
-        if (abs(uParamF) > 0.001) {
-            float ang = z3.z * uParamF;
-            float s = sin(ang); float co = cos(ang);
-            z3.xy = mat2(co, -s, s, co) * z3.xy;
-        }
-
-        // Vec3B: Rotation using pre-calculated Rodrigues
-        if (abs(uVec3B.z) > 0.001) {
-            z3 = z3 * uMbar_rotCos + cross(uMbar_rotAxis, z3) * uMbar_rotSin
-                 + uMbar_rotAxis * dot(uMbar_rotAxis, z3) * (1.0 - uMbar_rotCos);
-        }
+        gmt_applyTwist(z3, uParamF);
+        gmt_applyRodrigues(z3);
 
         float x = z3.x; float y = z3.y; float z_ = z3.z;
         z3.x = x*x - y*y - z_*z_;
@@ -66,7 +36,8 @@ export const Mandelbar3D: FractalDefinition = {
         trap = min(trap, dot(z3,z3));
     }`,
         loopBody: `formula_Mandelbar3D(z, dr, trap, c);`,
-        loopInit: `Mandelbar3D_precalcRotation();`
+        loopInit: `gmt_precalcRodrigues(uVec3B);`,
+        usesSharedRotation: true,
     },
 
     parameters: [
@@ -118,9 +89,9 @@ export const Mandelbar3D: FractalDefinition = {
         cameraRot: { x: -0.35319547668295764, y: 0.8984954585062485, z: 0.19510512782513617, w: -0.17289550425237224 },
         sceneOffset: { x: 0, y: 0, z: 0, xL: -0.003768067067355675, yL: 0.19239495665458275, zL: -0.5314800136479048 },
         lights: [
-            { type: 'Point', position: { x: -0.34, y: 0.2, z: 1.76 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: -0.34, y: 0.2, z: 1.76 }, rotation: { x: 0, y: 0, z: 0 }, color: "#F0F0FF", useTemperature: true, temperature: 6500, intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

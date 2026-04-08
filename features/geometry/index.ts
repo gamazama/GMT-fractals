@@ -2,6 +2,7 @@
 import { FeatureDefinition } from '../../engine/FeatureSystem';
 import * as THREE from 'three';
 import { FOLD_LIST, FOLD_OPTIONS, getFold } from './folds';
+import { SHARED_TRANSFORMS_GLSL } from './transforms';
 
 // Re-export types
 export type { FoldDefinition } from './types';
@@ -377,6 +378,10 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
         // 1. Rotation Logic
         const useRotation = state ? (state.preRotMaster !== false) : true;
         builder.setRotation(useRotation);
+
+        // 1b. Shared transform utilities (twist, Rodrigues rotation)
+        // Injected as preamble (stage 7) so they're available to formula functions (stage 8)
+        builder.addPreamble(SHARED_TRANSFORMS_GLSL);
 
         // 2. Hybrid Box — compile-time gated by hybridCompiled
         const hybridCompiled = state?.hybridCompiled ?? false;

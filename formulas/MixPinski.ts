@@ -22,31 +22,9 @@ export const MixPinski: FractalDefinition = {
     name: 'MixPinski',
     shortDescription: '4D Sierpinski-Menger hybrid by Darkbeam. Rich geometric detail.',
     description: 'Darkbeam\'s MixPinski — a 4D hybrid combining Sierpinski tetrahedron folds (extended to 4D with w-component) and a Menger-like fold-scale transform. The interplay of these two IFS systems produces extraordinary geometric complexity.',
+    juliaType: 'offset',
 
     shader: {
-        preamble: `
-    // Pre-calculated rotation values for MixPinski (computed once per frame)
-    vec3 uMixPinski_rotAxis = vec3(0.0, 1.0, 0.0);
-    float uMixPinski_rotCos = 1.0;
-    float uMixPinski_rotSin = 0.0;
-
-    void MixPinski_precalcRotation() {
-        if (abs(uVec3C.z) > 0.001) {
-            float azimuth = uVec3C.x;
-            float pitch = uVec3C.y;
-            float rotAngle = uVec3C.z * 0.5;
-
-            float cosPitch = cos(pitch);
-            uMixPinski_rotAxis = vec3(
-                cosPitch * sin(azimuth),
-                sin(pitch),
-                cosPitch * cos(azimuth)
-            );
-
-            uMixPinski_rotSin = sin(rotAngle);
-            uMixPinski_rotCos = cos(rotAngle);
-        }
-    }`,
 
         function: `
     void formula_MixPinski(inout vec4 z, inout float dr, inout float trap, vec4 c) {
@@ -87,11 +65,11 @@ export const MixPinski: FractalDefinition = {
 
         dr *= abs(scaleM);
 
-        // --- Stage 3: Optional 3D Rotation ---
-        if (abs(uVec3C.z) > 0.001) {
-            z.xyz = z.xyz * uMixPinski_rotCos
-                  + cross(uMixPinski_rotAxis, z.xyz) * uMixPinski_rotSin
-                  + uMixPinski_rotAxis * dot(uMixPinski_rotAxis, z.xyz) * (1.0 - uMixPinski_rotCos);
+        // --- Stage 3: Optional 3D Rotation (uses vec3C, precalc via gmt_precalcRodrigues) ---
+        {
+            vec3 rp = z.xyz;
+            gmt_applyRodrigues(rp);
+            z.xyz = rp;
         }
 
         // Julia mode
@@ -103,7 +81,8 @@ export const MixPinski: FractalDefinition = {
     }`,
 
         loopBody: `formula_MixPinski(z, dr, trap, c);`,
-        loopInit: `MixPinski_precalcRotation();`,
+        loopInit: `gmt_precalcRodrigues(uVec3C);`,
+        usesSharedRotation: true,
 
         // Custom DE: 4D Chebyshev norm (faithful to original)
         // Offset hardcoded to 1.0 (original default). Use Quality panel estimator for tweaks.
@@ -119,7 +98,7 @@ export const MixPinski: FractalDefinition = {
         { label: 'Menger Scale', id: 'paramC', min: 0.1, max: 4.0, step: 0.001, default: 2.0 },
         { label: 'W (4th Dim)', id: 'paramB', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
         { label: 'Sierpinski Offset', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 0, y: 0, z: 0 } },
-        { label: 'Menger Offset', id: 'vec3B', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 1, y: 1, z: 1 } },
+        { label: 'Menger Offset', id: 'vec3B', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 1, y: 1, z: 1 }, linkable: true },
         { label: '4D Offsets', id: 'vec2A', type: 'vec2', min: -5.0, max: 5.0, step: 0.01, default: { x: 0, y: 0.5 } },
         { label: 'Rotation', id: 'vec3C', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
     ],
@@ -186,8 +165,8 @@ export const MixPinski: FractalDefinition = {
         cameraMode: "Fly",
         lights: [
             { type: 'Point', position: { x: -0.8183725352111588, y: 1.3532257824970233, z: 1.5729904550803229 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 3, falloff: 1, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };
