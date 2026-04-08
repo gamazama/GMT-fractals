@@ -8,6 +8,59 @@ import { ProgressPanel } from './ProgressPanel';
 import { ExportPanel } from './ExportPanel';
 import { PreviewCanvas } from './PreviewCanvas';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
+import { useMeshExportStore } from '../store/meshExportStore';
+
+function InterlaceControls() {
+  const store = useMeshExportStore();
+  const interlaceState = useMeshExportStore((s) => s.interlaceState);
+
+  if (!interlaceState) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5 border border-purple-700/40 rounded px-2 py-1.5 bg-purple-900/10 mt-1">
+      <div className="text-[11px] text-purple-300 font-bold flex items-center justify-between">
+        <span>Interlace: {interlaceState.definition.name}</span>
+        <label className="flex items-center gap-1 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={interlaceState.enabled}
+            onChange={(e) => store.setInterlaceState({ ...interlaceState, enabled: e.target.checked })}
+          />
+          <span className="text-[10px] text-purple-400">enabled</span>
+        </label>
+      </div>
+      <div className="flex gap-3 text-[11px] text-gray-400">
+        <label className="flex items-center gap-1">
+          Interval
+          <input
+            type="number" min={1} max={16} step={1}
+            value={interlaceState.interval}
+            onChange={(e) => store.setInterlaceState({ ...interlaceState, interval: Math.max(1, parseInt(e.target.value) || 1) })}
+            className="w-12 bg-gray-800 border border-gray-700 rounded px-1 text-gray-200 text-center"
+          />
+        </label>
+        <label className="flex items-center gap-1">
+          Start iter
+          <input
+            type="number" min={0} max={64} step={1}
+            value={interlaceState.startIter}
+            onChange={(e) => store.setInterlaceState({ ...interlaceState, startIter: Math.max(0, parseInt(e.target.value) || 0) })}
+            className="w-12 bg-gray-800 border border-gray-700 rounded px-1 text-gray-200 text-center"
+          />
+        </label>
+      </div>
+      {/* Secondary formula parameters */}
+      <FormulaParams
+        definition={interlaceState.definition}
+        params={interlaceState.params}
+        onUpdate={(key, value) => store.setInterlaceState({
+          ...interlaceState,
+          params: { ...interlaceState.params, [key]: value },
+        })}
+      />
+    </div>
+  );
+}
 
 export function MeshExportPage() {
   return (
@@ -25,6 +78,7 @@ export function MeshExportPage() {
               <div className="flex flex-col gap-2 mt-1">
                 <FormulaSelector />
                 <FormulaParams />
+                <InterlaceControls />
               </div>
             </CollapsibleSection>
           </div>

@@ -8,7 +8,8 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
 import { useMeshExportStore, registerSlicePreview, unregisterSlicePreview } from '../store/meshExportStore';
-import { buildMeshPreviewShader, MESH_SDF_VERT, MESH_FORMULA_UNIFORMS } from '../../engine/SDFShaderBuilder';
+import { buildMeshPreviewShader, classifyDEType, MESH_SDF_VERT, MESH_FORMULA_UNIFORMS } from '../../engine/SDFShaderBuilder';
+import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
 import {
   orthoCamBasis, orthoProject, orthoUnprojectDelta,
   normAngle, findAxisSnap, add3, scale3, dot3,
@@ -107,7 +108,9 @@ export function PreviewCanvas() {
   const _bboxCenter = useMeshExportStore((s) => s.bboxCenter);
   const _bboxSize = useMeshExportStore((s) => s.bboxSize);
   const _formulaParams = useMeshExportStore((s) => s.formulaParams);
+  const _interlaceState = useMeshExportStore((s) => s.interlaceState);
   const _iters = useMeshExportStore((s) => s.iters);
+  const _qualitySettings = useMeshExportStore((s) => s.qualitySettings);
 
   // Refs
   const glCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -153,15 +156,34 @@ export function PreviewCanvas() {
 
   const compilePreview = useCallback(() => {
     const pv = pvRef.current;
-    const def = useMeshExportStore.getState().loadedDefinition;
+    const state = useMeshExportStore.getState();
+    const def = state.loadedDefinition;
     if (!pv.gl || !def) return;
     const gl = pv.gl;
 
-    if (pv.defId === def.id && pv.prog) return;
+    // Build interlace config for shader
+    let interlace: MeshInterlaceConfig | undefined;
+    if (state.interlaceState) {
+      interlace = {
+        definition: state.interlaceState.definition,
+        params: state.interlaceState.params,
+        enabled: state.interlaceState.enabled,
+        interval: state.interlaceState.interval,
+        startIter: state.interlaceState.startIter,
+      };
+    }
+
+    // Cache key includes interlace formula + estimator to force recompile when they change
+    const qs = state.qualitySettings;
+    // For IFS formulas, override power-type estimator to Linear Fold 1.0 (sign-changing for IFS orbits)
+    const defDeType = classifyDEType(def);
+    const previewEstimator = (defDeType === 'ifs' && qs.estimator >= 1.5 && qs.estimator < 2.5) ? 1 : qs.estimator;
+    const cacheKey = def.id + (interlace ? '+' + interlace.definition.id : '') + ':e' + (previewEstimator ?? 0);
+    if (pv.defId === cacheKey && pv.prog) return;
 
     if (pv.prog) { gl.deleteProgram(pv.prog); pv.prog = null; }
     try {
-      const fragSrc = buildMeshPreviewShader({ definition: def, deType: 'auto' });
+      const fragSrc = buildMeshPreviewShader({ definition: def, deType: 'auto', interlace, estimator: previewEstimator });
       pv.prog = createProgram(gl, MESH_SDF_VERT, fragSrc);
     } catch (e) {
       console.warn('Preview shader compile failed:', (e as Error).message);
@@ -178,7 +200,7 @@ export function PreviewCanvas() {
     for (const name of uNames) {
       pv.loc[name] = gl.getUniformLocation(pv.prog, name);
     }
-    pv.defId = def.id;
+    pv.defId = cacheKey;
   }, []);
 
   // ── BBox overlay (reads state imperatively) ────────────────────────
@@ -327,6 +349,38 @@ export function PreviewCanvas() {
     gl.uniform1i(pv.loc.uIters!, state.iters);
     setFormulaUniforms(gl, pv.loc, params);
 
+    // Bind interlace uniforms
+    if (state.interlaceState) {
+      const il = state.interlaceState;
+      const ip = il.params || {};
+      if (pv.loc.uInterlaceEnabled) gl.uniform1f(pv.loc.uInterlaceEnabled, il.enabled ? 1.0 : 0.0);
+      if (pv.loc.uInterlaceInterval) gl.uniform1f(pv.loc.uInterlaceInterval, il.interval ?? 2);
+      if (pv.loc.uInterlaceStartIter) gl.uniform1f(pv.loc.uInterlaceStartIter, il.startIter ?? 0);
+      if (pv.loc.uInterlaceParamA) gl.uniform1f(pv.loc.uInterlaceParamA, ip.paramA ?? 0);
+      if (pv.loc.uInterlaceParamB) gl.uniform1f(pv.loc.uInterlaceParamB, ip.paramB ?? 0);
+      if (pv.loc.uInterlaceParamC) gl.uniform1f(pv.loc.uInterlaceParamC, ip.paramC ?? 0);
+      if (pv.loc.uInterlaceParamD) gl.uniform1f(pv.loc.uInterlaceParamD, ip.paramD ?? 0);
+      if (pv.loc.uInterlaceParamE) gl.uniform1f(pv.loc.uInterlaceParamE, ip.paramE ?? 0);
+      if (pv.loc.uInterlaceParamF) gl.uniform1f(pv.loc.uInterlaceParamF, ip.paramF ?? 0);
+      const setVec2 = (name: string, v: any) => {
+        if (pv.loc[name]) gl.uniform2f(pv.loc[name]!, v?.x ?? 0, v?.y ?? 0);
+      };
+      const setVec3 = (name: string, v: any) => {
+        if (pv.loc[name]) gl.uniform3f(pv.loc[name]!, v?.x ?? 0, v?.y ?? 0, v?.z ?? 0);
+      };
+      setVec2('uInterlaceVec2A', ip.vec2A); setVec2('uInterlaceVec2B', ip.vec2B); setVec2('uInterlaceVec2C', ip.vec2C);
+      setVec3('uInterlaceVec3A', ip.vec3A); setVec3('uInterlaceVec3B', ip.vec3B); setVec3('uInterlaceVec3C', ip.vec3C);
+    } else {
+      if (pv.loc.uInterlaceEnabled) gl.uniform1f(pv.loc.uInterlaceEnabled, 0.0);
+    }
+
+    // Quality uniforms for preview raymarching
+    const qs = state.qualitySettings;
+    if (pv.loc.uFudgeFactor) gl.uniform1f(pv.loc.uFudgeFactor, qs.fudgeFactor ?? 1.0);
+    if (pv.loc.uDetail) gl.uniform1f(pv.loc.uDetail, qs.detail ?? 1.0);
+    if (pv.loc.uPixelThreshold) gl.uniform1f(pv.loc.uPixelThreshold, qs.pixelThreshold ?? 0.5);
+    if (pv.loc.uDistanceMetric) gl.uniform1i(pv.loc.uDistanceMetric, qs.distanceMetric ?? 0);
+
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     drawBBoxOverlay();
   }, [drawBBoxOverlay]);
@@ -458,17 +512,20 @@ export function PreviewCanvas() {
   useEffect(() => {
     if (mode !== 'fractal') return;
     const pv = pvRef.current;
-    if (loadedDefinition && pv.defId !== loadedDefinition.id) {
+    const state = useMeshExportStore.getState();
+    const il = state.interlaceState;
+    const expectedKey = (loadedDefinition?.id ?? '') + (il ? '+' + il.definition.id : '');
+    if (loadedDefinition && pv.defId !== expectedKey) {
       pv.defId = null; // force recompile
     }
     requestRender();
-  }, [loadedDefinition, mode, requestRender]);
+  }, [loadedDefinition, _interlaceState, mode, requestRender]);
 
   // ── Re-render when params/bounds change ──────────────────────────
 
   useEffect(() => {
     if (mode === 'fractal') requestRender();
-  }, [_formulaParams, _iters, _bboxCenter, _bboxSize, mode, requestRender]);
+  }, [_formulaParams, _interlaceState, _iters, _bboxCenter, _bboxSize, mode, requestRender]);
 
   // ── Update mesh preview when lastMesh changes ────────────────────
 

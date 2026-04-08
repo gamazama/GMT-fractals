@@ -9,15 +9,33 @@
 
 import type { FractalDefinition } from '../types/fractal';
 import { MESH_GLSL_UNIFORMS, MESH_GLSL_HELPERS } from '../shaders/chunks/math';
+import {
+  rewriteFormulaFunction,
+  rewriteLoopBody,
+  rewriteLoopInit,
+  rewritePreamble,
+  buildInterlaceLoopGLSL,
+  INTERLACE_UNIFORM_NAMES,
+} from '../features/interlace/glslRewriter';
 
 // ============================================================================
 // Types
 // ============================================================================
 
+export interface MeshInterlaceConfig {
+  definition: FractalDefinition;  // Secondary formula definition
+  params: Record<string, any>;    // Secondary formula parameter values
+  enabled: boolean;
+  interval: number;
+  startIter: number;
+}
+
 export interface MeshShaderConfig {
   definition: FractalDefinition;
   deType: 'power' | 'ifs' | 'auto';
   deSamples?: number;
+  interlace?: MeshInterlaceConfig;
+  estimator?: number;  // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
 }
 
 export type DEType = 'power' | 'ifs' | 'custom';
@@ -59,37 +77,138 @@ vec2 _getDistCustom(float r, float safeDr, float iter, vec4 z) {
 `;
 }
 
+/** Build DE math expression for a given estimator type */
+function buildEstimatorMath(estimator: number): string {
+  if (estimator < 0.5) {
+    // 0: Analytic (Log) — standard for power fractals
+    return `float logR2 = log2(r * r);
+    return 0.17328679 * logR2 * r / safeDr;`;
+  }
+  if (estimator < 1.5) {
+    // 1: Linear (Fold 1.0) — standard for IFS/box/menger
+    return `return (r - 1.0) / safeDr;`;
+  }
+  if (estimator < 2.5) {
+    // 2: Pseudo (Raw) — brings sparse fractals into visible range
+    return `return r / safeDr;`;
+  }
+  if (estimator < 3.5) {
+    // 3: Dampened — fixes slicing on thin structures
+    return `float logR2 = log2(r * r);
+    return 0.34657359 * logR2 * r / (safeDr + 8.0);`;
+  }
+  // 4: Linear (Fold 2.0) — classic Menger offset
+  return `return (r - 2.0) / safeDr;`;
+}
+
 /** Build the DE return expression for formulaDE() */
-function buildDEReturn(deType: DEType, hasCustomDist: boolean, thresholdExpr: string): string {
+function buildDEReturn(deType: DEType, hasCustomDist: boolean, thresholdExpr: string, estimator?: number): string {
   if (hasCustomDist) {
     return deType === 'ifs'
       ? `return _getDistCustom(r, safeDr, iter, z).x - ${thresholdExpr};`
       : `return _getDistCustom(r, safeDr, iter, z).x;`;
   }
+
+  // If an explicit estimator is provided, use it directly
+  if (estimator !== undefined && estimator > 0) {
+    const math = buildEstimatorMath(estimator);
+    // For IFS-like estimators (1, 4), subtract threshold
+    if (estimator >= 0.5 && estimator < 1.5 || estimator >= 3.5) {
+      // Linear estimators: subtract IFS threshold
+      const lines = math.split('\n');
+      const lastLine = lines[lines.length - 1];
+      lines[lines.length - 1] = lastLine.replace(/;$/, ` - ${thresholdExpr};`);
+      return lines.join('\n');
+    }
+    // For power-like estimators (2, 3): only use escape check for power fractals.
+    // IFS orbits never escape (r stays bounded), so escape guard returns -1.0 everywhere.
+    // Fall through to default IFS linear formula below.
+    if (deType !== 'ifs') {
+      return `if (r > 2.0) { ${math} }
+    return -1.0;`;
+    }
+    // IFS + power-type estimator: fall through to linear IFS
+  }
+
+  // Default: auto based on deType
   if (deType === 'power') {
     return `// Power fractals: orbit must escape (r > 2) for valid DE.
     // Non-escaped = interior sentinel.
-    if (r > 2.0) return 0.5 * log(r) * r / safeDr;
+    if (r > 2.0) { ${buildEstimatorMath(0)} }
     return -1.0;`;
   }
   // IFS without custom getDist
   return `return (r - 1.0) / safeDr - ${thresholdExpr};`;
 }
 
+/** Build interlace uniform declarations GLSL */
+function buildInterlaceUniforms(): string {
+  const { scalars, vec2s, vec3s, vec4s } = INTERLACE_UNIFORM_NAMES;
+  return `
+uniform float ${scalars.join(', ')};
+uniform vec2  ${vec2s.join(', ')};
+uniform vec3  ${vec3s.join(', ')};
+uniform vec4  ${vec4s.join(', ')};
+uniform float uInterlaceEnabled;
+uniform float uInterlaceInterval;
+uniform float uInterlaceStartIter;
+`;
+}
+
+/** Build interlace GLSL blocks (preamble + function) */
+function buildInterlaceGLSL(interlace: MeshInterlaceConfig): { preamble: string; func: string; loopInit: string } {
+  const def = interlace.definition;
+  let preamble = '';
+  if (def.shader.preamble) {
+    preamble = rewritePreamble(def.shader.preamble, def.id, def.shader.preambleVars);
+  }
+  const func = rewriteFormulaFunction(def.shader.function, def.id, def.shader.preambleVars);
+  let loopInit = '';
+  if (def.shader.loopInit) {
+    loopInit = rewriteLoopInit(def.shader.loopInit, def.id);
+  }
+  return { preamble, func, loopInit };
+}
+
 /** Build the common formula iteration block */
-function buildIterationLoop(def: FractalDefinition, itersVar: string): string {
+function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?: MeshInterlaceConfig): string {
+  // Build interlace pre-loop and in-loop logic if interlace is active
+  let interlacePreLoop = '';
+  let interlaceInLoop = '';
+
+  if (interlace) {
+    const rewrittenBody = rewriteLoopBody(interlace.definition.shader.loopBody, interlace.definition.id);
+    let interlaceInit = '';
+    if (interlace.definition.shader.loopInit) {
+      interlaceInit = rewriteLoopInit(interlace.definition.shader.loopInit, interlace.definition.id);
+    }
+    const needsRotSwap = !!interlace.definition.shader.usesSharedRotation;
+    ({ preLoop: interlacePreLoop, inLoop: interlaceInLoop } = buildInterlaceLoopGLSL(
+      rewrittenBody,
+      interlaceInit,
+      needsRotSwap,
+    ));
+  }
+
+  const mainBody = interlace
+    ? `if (!skipMainFormula) { ${def.shader.loopBody} }`
+    : def.shader.loopBody;
+
   return `  vec4 z = vec4(pos, 0.0);
   vec4 c = mix(z, vec4(uJulia, 0.0), step(0.5, uJuliaMode));
   float dr = 1.0;
   float trap = 1e10;
   float iter = 0.0;
   ${def.shader.loopInit || ''}
+  ${interlacePreLoop}
 
   for (int i = 0; i < 100; i++) {
     if (i >= ${itersVar}) break;
     float r2 = dot(z.xyz, z.xyz);
     if (r2 > 1e4) break;
-    ${def.shader.loopBody}
+    ${interlace ? 'bool skipMainFormula = false;' : ''}
+    ${interlaceInLoop}
+    ${mainBody}
     iter += 1.0;
   }`;
 }
@@ -118,9 +237,11 @@ export function buildMeshSDFShader(config: MeshShaderConfig): string {
   const def = config.definition;
   const deType = resolveDE(config);
   const deSamples = config.deSamples || 2;
+  const il = config.interlace;
+  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5');
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator);
 
   return `#version 300 es
 precision highp float;
@@ -131,20 +252,24 @@ uniform float uInvRes;
 uniform vec2  uTileOffset;
 uniform vec3  uBoundsMin;
 uniform float uBoundsRange;
+uniform float uSurfaceThreshold;
 ${MESH_GLSL_UNIFORMS}
+${il ? buildInterlaceUniforms() : ''}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
 // --- Preamble (global variables / helpers) ---
 ${def.shader.preamble || ''}
+${ilGLSL?.preamble || ''}
 
 // --- Formula function ---
 ${def.shader.function}
+${ilGLSL?.func || ''}
 
 ${getDistBlock}
 float formulaDE(vec3 pos, float power, int iters) {
-${buildIterationLoop(def, 'iters')}
+${buildIterationLoop(def, 'iters', il)}
 
   float r = length(z.xyz);
   float safeDr = max(abs(dr), 1e-10);
@@ -169,6 +294,7 @@ void main() {
   int insideCount = 0;
   int outsideCount = 0;
   float minOutsideDist = 1e10;
+  float thresh = uSurfaceThreshold;
 
   float jx = fract(sin(dot(center.xy, vec2(12.9898, 78.233))) * 43758.5453);
   float jy = fract(sin(dot(center.yz, vec2(93.989, 67.345))) * 23421.6312);
@@ -186,12 +312,13 @@ void main() {
         p += vec3(jx - 0.5, jy - 0.5, jz - 0.5) * jitter;
 
         float d = formulaDE(p, uPower, uIters);
-        if (d < 0.0) {
+        // Surface threshold: offset the zero-crossing to bring sparse fractals into range
+        if (d < thresh) {
           insideCount++;
         } else {
           outsideCount++;
-          minOutsideDist = min(minOutsideDist, d);
-          sumDist += d;
+          minOutsideDist = min(minOutsideDist, d - thresh);
+          sumDist += d - thresh;
         }
       }
     }
@@ -218,6 +345,8 @@ void main() {
  */
 export function buildMeshEscapeShader(config: MeshShaderConfig): string {
   const def = config.definition;
+  const il = config.interlace;
+  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   return `#version 300 es
 precision highp float;
@@ -229,13 +358,16 @@ uniform vec2  uTileOffset;
 uniform vec3  uBoundsMin;
 uniform float uBoundsRange;
 ${MESH_GLSL_UNIFORMS}
+${il ? buildInterlaceUniforms() : ''}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
 ${def.shader.preamble || ''}
+${ilGLSL?.preamble || ''}
 
 ${def.shader.function}
+${ilGLSL?.func || ''}
 
 void main() {
   vec3 pos = vec3(
@@ -244,7 +376,7 @@ void main() {
     uZ * uBoundsRange + uBoundsMin.z
   );
 
-${buildIterationLoop(def, 'uIters')}
+${buildIterationLoop(def, 'uIters', il)}
 
   float r2 = dot(z.xyz, z.xyz);
   // 1.0 = interior (did not escape), 0.0 = exterior
@@ -260,8 +392,10 @@ ${buildIterationLoop(def, 'uIters')}
 export function buildMeshNewtonShader(config: MeshShaderConfig): string {
   const def = config.definition;
   const deType = resolveDE(config);
+  const il = config.interlace;
+  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5');
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5', config.estimator);
 
   return `#version 300 es
 precision highp float;
@@ -271,6 +405,7 @@ uniform int   uIters;
 uniform float uVoxelSize;
 uniform int   uNewtonSteps;
 ${MESH_GLSL_UNIFORMS}
+${il ? buildInterlaceUniforms() : ''}
 
 layout(location = 0) out vec4 outPosition;
 layout(location = 1) out vec4 outNormal;
@@ -278,13 +413,15 @@ layout(location = 1) out vec4 outNormal;
 ${MESH_GLSL_HELPERS}
 
 ${def.shader.preamble || ''}
+${ilGLSL?.preamble || ''}
 
 // --- Formula function ---
 ${def.shader.function}
+${ilGLSL?.func || ''}
 
 ${getDistBlock}
 float formulaDE(vec3 pos) {
-${buildIterationLoop(def, 'uIters')}
+${buildIterationLoop(def, 'uIters', il)}
 
   float r = length(z.xyz);
   float safeDr = max(abs(dr), 1e-10);
@@ -342,6 +479,8 @@ void main() {
  */
 export function buildMeshColorShader(config: MeshShaderConfig): string {
   const def = config.definition;
+  const il = config.interlace;
+  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   return `#version 300 es
 precision highp float;
@@ -351,14 +490,17 @@ uniform int uIters;
 uniform int uWidth;
 uniform vec3 uJitterOffset;
 ${MESH_GLSL_UNIFORMS}
+${il ? buildInterlaceUniforms() : ''}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
 ${def.shader.preamble || ''}
+${ilGLSL?.preamble || ''}
 
 // --- Formula function ---
 ${def.shader.function}
+${ilGLSL?.func || ''}
 
 void main() {
   ivec2 coord = ivec2(gl_FragCoord.xy);
@@ -366,7 +508,7 @@ void main() {
   vec3 pos = pd.xyz + uJitterOffset;
   if (pd.w < 0.5) { fragColor = vec4(0.5, 0.5, 0.5, 1.0); return; }
 
-${buildIterationLoop(def, 'uIters')}
+${buildIterationLoop(def, 'uIters', il)}
 
   float t = log(max(1e-5, trap)) * -0.3;
   t = fract(t * 1.5 + 0.1);
@@ -390,8 +532,13 @@ ${buildIterationLoop(def, 'uIters')}
 export function buildMeshPreviewShader(config: MeshShaderConfig): string {
   const def = config.definition;
   const deType = resolveDE(config);
+  const il = config.interlace;
+  const ilGLSL = il ? buildInterlaceGLSL(il) : null;
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, '0.001');
+  // IFS preview: threshold 0.0 places the zero-crossing at r=1. Using '0.001' would shift it by
+  // 0.001*dr ≈ 8 units (for dr=8192), making the raymarcher see everything as interior.
+  const previewThresh = deType === 'ifs' ? '0.0' : '0.001';
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator);
 
   return `#version 300 es
 precision highp float;
@@ -402,18 +549,24 @@ uniform vec3  uCamPos;
 uniform vec3  uCamTarget;
 uniform vec3  uCamRight;
 uniform float uFov;
+uniform float uFudgeFactor;
+uniform float uDetail;
+uniform float uPixelThreshold;
 ${MESH_GLSL_UNIFORMS}
+${il ? buildInterlaceUniforms() : ''}
 out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
 ${def.shader.preamble || ''}
+${ilGLSL?.preamble || ''}
 
 ${def.shader.function}
+${ilGLSL?.func || ''}
 
 ${getDistBlock}
 float formulaDE(vec3 pos, float power, int iters) {
-${buildIterationLoop(def, 'iters')}
+${buildIterationLoop(def, 'iters', il)}
 
   float r = length(z.xyz);
   float safeDr = max(abs(dr), 1e-10);
@@ -440,12 +593,16 @@ void main() {
   vec3 ro = uCamPos + right * uv.x * uFov + up * uv.y * uFov;
   vec3 rd = fwd;
 
+  // Quality-aware raymarching
+  float fudge = uFudgeFactor;
+  float hitThreshold = 0.0002 * uPixelThreshold / max(uDetail, 0.1);
+
   float t = 0.0;
   bool hit = false;
-  for (int i = 0; i < 128; i++) {
+  for (int i = 0; i < 200; i++) {
     float d = DE(ro + rd * t);
-    if (abs(d) < 0.0002) { hit = true; break; }
-    t += d * 0.8;
+    if (abs(d) < hitThreshold) { hit = true; break; }
+    t += d * fudge;
     if (t > 20.0) break;
   }
 
@@ -482,4 +639,12 @@ export const MESH_FORMULA_UNIFORMS = [
   'uVec3A', 'uVec3B', 'uVec3C',
   'uVec4A', 'uVec4B', 'uVec4C',
   'uJulia', 'uJuliaMode', 'uEscapeThresh', 'uDistanceMetric',
+  // Interlace uniforms
+  ...INTERLACE_UNIFORM_NAMES.scalars,
+  ...INTERLACE_UNIFORM_NAMES.vec2s,
+  ...INTERLACE_UNIFORM_NAMES.vec3s,
+  ...INTERLACE_UNIFORM_NAMES.vec4s,
+  'uInterlaceEnabled', 'uInterlaceInterval', 'uInterlaceStartIter',
+  // Quality / preview uniforms
+  'uFudgeFactor', 'uDetail', 'uPixelThreshold', 'uSurfaceThreshold',
 ] as const;

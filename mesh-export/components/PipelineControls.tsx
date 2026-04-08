@@ -16,10 +16,66 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export function PipelineControls() {
   const s = useMeshExportStore();
+  const qs = useMeshExportStore((state) => state.qualitySettings);
 
   return (
     <CollapsibleSection label="Pipeline" defaultOpen>
       <div className="flex flex-col gap-1">
+        {/* Quality */}
+        <Row label="Quality">
+          <GenericDropdown
+            label="Estimator"
+            value={qs.estimator}
+            options={[
+              { label: 'Analytic (Log)', value: 0 },
+              { label: 'Linear (Fold 1.0)', value: 1 },
+              { label: 'Pseudo (Raw)', value: 2 },
+              { label: 'Dampened', value: 3 },
+              { label: 'Linear (Fold 2.0)', value: 4 },
+            ]}
+            onChange={(v) => s.updateQuality('estimator', v)}
+          />
+          <GenericDropdown
+            label="Distance Metric"
+            value={qs.distanceMetric}
+            options={[
+              { label: 'Euclidean (Sphere)', value: 0 },
+              { label: 'Chebyshev (Box)', value: 1 },
+              { label: 'Manhattan (Diamond)', value: 2 },
+              { label: 'Minkowski 4 (Rounded)', value: 3 },
+            ]}
+            onChange={(v) => s.updateQuality('distanceMetric', v)}
+          />
+          <ScalarInput
+            label="Surface Threshold"
+            value={qs.surfaceThreshold}
+            onChange={(v) => s.updateQuality('surfaceThreshold', v)}
+            min={0} max={2} step={0.001}
+            variant="compact"
+          />
+          <ScalarInput
+            label="Fudge Factor"
+            value={qs.fudgeFactor}
+            onChange={(v) => s.updateQuality('fudgeFactor', v)}
+            min={0.01} max={1.0} step={0.01}
+            variant="compact"
+          />
+          <ScalarInput
+            label="Ray Detail"
+            value={qs.detail}
+            onChange={(v) => s.updateQuality('detail', v)}
+            min={0.1} max={10} step={0.1}
+            variant="compact"
+          />
+          <ScalarInput
+            label="Pixel Threshold"
+            value={qs.pixelThreshold}
+            onChange={(v) => s.updateQuality('pixelThreshold', v)}
+            min={0.1} max={2.0} step={0.1}
+            variant="compact"
+          />
+        </Row>
+
         {/* SDF */}
         <Row label="1 · SDF">
           <GenericDropdown
@@ -33,7 +89,7 @@ export function PipelineControls() {
             value={s.iters}
             onChange={s.setIters}
             min={2} max={64} step={1}
-            variant="compact"
+            variant="full"
           />
           <GenericDropdown
             label="DE Type"

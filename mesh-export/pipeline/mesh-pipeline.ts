@@ -7,6 +7,8 @@
 //   runExportMesh(format, lastMesh, lastBaseName, vdbParams, ui) -> ExportResult
 
 import type { FractalDefinition } from '../../types/fractal';
+import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
+import { classifyDEType } from '../../engine/SDFShaderBuilder';
 import type { DCMeshResult } from '../algorithms/dc-core';
 import type {
   PipelineCallbacks,
@@ -110,7 +112,26 @@ export async function runMeshPipeline(
     gridMin,
     gridMax,
     boundsRange,
+    interlace,
+    estimator,
+    distanceMetric,
   } = params;
+
+  // effectiveSurfaceThreshold starts from the user setting and may be auto-raised for IFS fractals
+  let effectiveSurfaceThreshold: number = params.surfaceThreshold ?? 0;
+
+  // For IFS formulas, estimator=2 (Pseudo Raw = r/dr) produces always-positive DE values —
+  // no zero-crossing, so no surface can be found. Override to estimator=1 (Linear Fold 1.0)
+  // which has a natural zero-crossing at r=1 for IFS orbits.
+  const resolvedDeType = deType === 'auto' ? classifyDEType(definition) : deType as 'power' | 'ifs' | 'custom';
+  const meshEstimator = (resolvedDeType === 'ifs' && estimator !== undefined &&
+    estimator >= 1.5 && estimator < 2.5)
+    ? 1
+    : estimator;
+
+  const quality = (meshEstimator !== undefined || distanceMetric !== undefined)
+    ? { estimator: meshEstimator ?? 0, distanceMetric: distanceMetric ?? 0 }
+    : undefined;
 
   const gpuCallbacks: GPUPipelineCallbacks = {
     log: ui.log,
@@ -198,19 +219,42 @@ export async function runMeshPipeline(
       ui.setStatus('Pass 1: Coarse SDF (' + coarseN + '\u00B3)...');
       await _pipelineTick(ui);
 
-      const coarsePipeline = setupSDFPipeline(gl, Math.min(coarseN, 2048), definition, deSamples, ui.log);
+      const coarsePipeline = setupSDFPipeline(gl, Math.min(coarseN, 2048), definition, deSamples, ui.log, interlace, quality);
       const coarseMB = Math.round(coarseN * coarseN * coarseN * 4 / (1024 * 1024));
       ui.memAlloc('coarseGrid', 'Coarse SDF', coarseMB, ui.MEM_COLORS.coarseGrid);
-      let coarseGrid: Float32Array | null = await sampleDenseGrid(gl, coarsePipeline, coarseN, power, iters, formulaParams, gridMin, gridMax, 0, 10, 1, null, null, gpuCallbacks);
+      let coarseGrid: Float32Array | null = await sampleDenseGrid(gl, coarsePipeline, coarseN, power, iters, formulaParams, gridMin, gridMax, 0, 10, 1, null, null, gpuCallbacks, interlace, effectiveSurfaceThreshold);
       tCoarse = performance.now();
 
       let cPos = 0;
       let cNeg = 0;
+      let cMin = Infinity;
       for (let di = 0; di < coarseGrid.length; di++) {
-        if (coarseGrid[di] >= 0) cPos++; else cNeg++;
+        const cv = coarseGrid[di];
+        if (cv >= 0) cPos++; else cNeg++;
+        if (cv < cMin) cMin = cv;
       }
       ui.log('Coarse: ' + cPos.toLocaleString() + ' outside, ' + cNeg.toLocaleString() + ' inside (' + ((tCoarse - t0) / 1000).toFixed(1) + 's)', 'data');
-      if (cNeg === 0) ui.log('WARNING: No interior voxels in coarse grid \u2014 surface may not be found', 'warn');
+
+      // Auto-threshold: IFS/surface fractals have all-positive DE — detect a usable threshold
+      // from the coarse min before building the narrow band (which requires negative values).
+      if (cNeg === 0 && cMin < 10.0 && effectiveSurfaceThreshold === 0) {
+        const coarseVoxelSize = boundsRange / 128;
+        const autoThresh = cMin + coarseVoxelSize * 2.0;
+        ui.log(
+          'Auto-threshold: DE always positive (IFS/surface fractal), min=' + cMin.toFixed(6) +
+          ' \u2192 threshold=' + autoThresh.toFixed(6) +
+          '. Set \u201CSurface Threshold\u201D in Quality to control shell thickness.',
+          'warn'
+        );
+        for (let di = 0; di < coarseGrid.length; di++) coarseGrid[di] -= autoThresh;
+        effectiveSurfaceThreshold = autoThresh;
+        // Recount after shift
+        cNeg = 0;
+        for (let di = 0; di < coarseGrid.length; di++) { if (coarseGrid[di] < 0) cNeg++; }
+        ui.log('After auto-threshold: ' + cNeg.toLocaleString() + ' interior coarse cells', 'data');
+      } else if (cNeg === 0) {
+        ui.log('WARNING: No interior voxels in coarse grid \u2014 surface may not be found', 'warn');
+      }
 
       ui.setStatus('Building narrow band for ' + N + '\u00B3...');
       await _pipelineTick(ui);
@@ -230,8 +274,8 @@ export async function runMeshPipeline(
 
       gl.deleteTexture(coarsePipeline.tex);
       gl.deleteFramebuffer(coarsePipeline.fbo);
-      const finePipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log);
-      await sampleSparseGrid(gl, finePipeline, sparseGrid, power, iters, formulaParams, gridMin, gridMax, 10, 25, gpuCallbacks);
+      const finePipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log, interlace, quality);
+      await sampleSparseGrid(gl, finePipeline, sparseGrid, power, iters, formulaParams, gridMin, gridMax, 10, 25, gpuCallbacks, interlace, effectiveSurfaceThreshold);
 
       t1 = performance.now();
       tFine = t1;
@@ -241,9 +285,9 @@ export async function runMeshPipeline(
       const gridMemMB = Math.round(N * N * N * 4 / (1024 * 1024));
       ui.memAlloc('sdfGrid', 'SDF Grid', gridMemMB, ui.MEM_COLORS.sdfGrid);
       ui.log('Dense SDF ' + N + '\u00B3 (' + gridMemMB + ' MB grid)', 'info');
-      const denseZRange = await coarsePrePass(gl, definition, formulaParams, N, power, iters, gridMin, gridMax, voxelSize, gpuCallbacks);
-      const pipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log);
-      sdfGrid = await sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gridMin, gridMax, 0, 35, zSubSlices, denseZRange.zSliceMin, denseZRange.zSliceMax, gpuCallbacks);
+      const denseZRange = await coarsePrePass(gl, definition, formulaParams, N, power, iters, gridMin, gridMax, voxelSize, gpuCallbacks, interlace, quality, effectiveSurfaceThreshold);
+      const pipeline = setupSDFPipeline(gl, Math.min(N, 2048), definition, deSamples, ui.log, interlace, quality);
+      sdfGrid = await sampleDenseGrid(gl, pipeline, N, power, iters, formulaParams, gridMin, gridMax, 0, 35, zSubSlices, denseZRange.zSliceMin, denseZRange.zSliceMax, gpuCallbacks, interlace, effectiveSurfaceThreshold);
       t1 = performance.now();
 
       let nPos = 0;
@@ -256,6 +300,23 @@ export async function runMeshPipeline(
         else nNeg++;
       }
       ui.log('SDF: ' + nPos.toLocaleString() + ' outside, ' + nNeg.toLocaleString() + ' inside' + (nNan > 0 ? ', ' + nNan + ' NaN!' : '') + ' (' + ((t1 - t0) / 1000).toFixed(1) + 's)', 'data');
+
+      // Auto-threshold for dense path: IFS fractals have all-positive DE
+      if (nNeg === 0 && effectiveSurfaceThreshold === 0) {
+        let dMin = Infinity;
+        for (let di = 0; di < sdfGrid.length; di++) { if (sdfGrid[di] < dMin) dMin = sdfGrid[di]; }
+        if (dMin < 10.0) {
+          const autoThresh = dMin + voxelSize * 2.0;
+          ui.log(
+            'Auto-threshold: DE always positive (IFS/surface fractal), min=' + dMin.toFixed(6) +
+            ' \u2192 threshold=' + autoThresh.toFixed(6) +
+            '. Set \u201CSurface Threshold\u201D in Quality to control shell thickness.',
+            'warn'
+          );
+          for (let di = 0; di < sdfGrid.length; di++) sdfGrid[di] -= autoThresh;
+          effectiveSurfaceThreshold = autoThresh;
+        }
+      }
     }
   } catch (e: unknown) {
     ui.checkCancel();
@@ -309,6 +370,30 @@ export async function runMeshPipeline(
       'data'
     );
 
+    // Auto-threshold for IFS/surface fractals: if the DE is always positive (no interior),
+    // create a thin shell by shifting the SDF so the near-surface region becomes interior.
+    // This handles fractals like Sierpinski Tetrahedron where the attractor has no 3D volume.
+    if (negCount === 0 && sdfMin > 0 && sdfMin < 10.0) {
+      const autoThresh = sdfMin + voxelSize * 2.0;
+      ui.log(
+        'Auto-threshold: no interior found, SDF min=' + sdfMin.toFixed(6) +
+        ' → applying threshold ' + autoThresh.toFixed(6) +
+        ' (set Surface Threshold manually to control shell thickness)',
+        'warn'
+      );
+      if (useNarrowBand && sparseGrid) {
+        sparseGrid.blocks.forEach((block: Float32Array) => {
+          for (let i = 0; i < block.length; i++) block[i] -= autoThresh;
+        });
+      } else if (sdfGrid) {
+        for (let i = 0; i < sdfGrid.length; i++) sdfGrid[i] -= autoThresh;
+      }
+      negCount = useNarrowBand && sparseGrid
+        ? (() => { let n = 0; sparseGrid!.blocks.forEach((b: Float32Array) => { for (let i = 0; i < b.length; i++) if (b[i] < 0) n++; }); return n; })()
+        : (sdfGrid ? sdfGrid.reduce((n, v) => n + (v < 0 ? 1 : 0), 0) : 0);
+      ui.log('After auto-threshold: ' + negCount.toLocaleString() + ' interior cells', 'data');
+    }
+
     if (cavityFillLevel > 0 || minFeatureThreshold > 0 || closingRadius > 0) {
       ui.log('[Phase 1b] SDF Filtering', 'phase');
       ui.setPhase('Phase 1b: SDF Filtering', 0);
@@ -322,7 +407,7 @@ export async function runMeshPipeline(
           const escResult = await sampleEscapeTest(gl, sparseGrid, definition, power, iters,
             formulaParams, gridMin, gridMax, gpuCallbacks, (pct: number) => {
               ui.setPhase('Phase 1b: Escape Test', pct);
-            });
+            }, interlace);
           let escapeFilled = 0;
           sparseGrid.blocks.forEach((block: Float32Array, key: number) => {
             const esc = escResult.escapeMap.get(key);
@@ -474,7 +559,7 @@ export async function runMeshPipeline(
       ui.setPhase('Phase 3: Newton Projection', 50);
       await _pipelineTick(ui);
 
-      gpuNewtonProject(gl, mesh, definition, formulaParams, power, iters, voxSize, newtonSteps, ui.log);
+      gpuNewtonProject(gl, mesh, definition, formulaParams, power, iters, voxSize, newtonSteps, ui.log, interlace);
       tNewton = performance.now();
       ui.setPhase('Phase 3: Newton Projection', 100);
       ui.log('GPU Newton done: ' + ((tNewton - t2) / 1000).toFixed(1) + 's', 'success');
@@ -544,7 +629,7 @@ export async function runMeshPipeline(
     }
 
     const colorJitterRadius = voxelSize * colorJitterMul;
-    mesh!.colors = await colorizeVerticesGPU(gl, mesh!, definition, formulaParams, power, iters, colorSamples, colorJitterRadius, gpuCallbacks);
+    mesh!.colors = await colorizeVerticesGPU(gl, mesh!, definition, formulaParams, power, iters, colorSamples, colorJitterRadius, gpuCallbacks, interlace);
     t4 = performance.now();
     ui.setPhase('Phase 5: Vertex Coloring', 100);
     const colorMB = (mesh!.vertexCount * 3 / (1024 * 1024)).toFixed(1);
@@ -622,6 +707,10 @@ export interface VDBExportParams {
   gridMax: [number, number, number];
   deSamples: number;
   zSubSlices: number;
+  interlace?: MeshInterlaceConfig;
+  estimator?: number;
+  distanceMetric?: number;
+  surfaceThreshold?: number;
 }
 
 /**
@@ -658,7 +747,15 @@ export async function runExportMesh(
       gridMax: vdbMax,
       deSamples: vdbDeSamples,
       zSubSlices: vdbZSubSlices,
+      interlace: vdbInterlace,
+      estimator: vdbEstimator,
+      distanceMetric: vdbDistanceMetric,
+      surfaceThreshold: vdbSurfaceThreshold,
     } = vdbParams;
+
+    const vdbQuality = (vdbEstimator !== undefined || vdbDistanceMetric !== undefined)
+      ? { estimator: vdbEstimator ?? 0, distanceMetric: vdbDistanceMetric ?? 0 }
+      : undefined;
 
     const formulaName = definition.name || definition.id || 'unknown';
     ui.log('=== VDB Export: ' + formulaName + ' ===', 'phase');
@@ -674,7 +771,7 @@ export async function runExportMesh(
       onSlicePreview: ui.onSlicePreview,
     };
     const vdbResult = await generateVDB(gl, definition, formulaParams, vdbN, vdbPower, vdbIters,
-      vdbMin, vdbMax, 'solid', vdbDeSamples, vdbZSubSlices, vdbGpuCallbacks);
+      vdbMin, vdbMax, 'solid', vdbDeSamples, vdbZSubSlices, vdbGpuCallbacks, vdbInterlace, vdbQuality, vdbSurfaceThreshold);
     try {
       const ext = gl.getExtension('WEBGL_lose_context');
       if (ext) ext.loseContext();

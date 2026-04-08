@@ -251,7 +251,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
             <div className="relative" ref={menuRef}>
                 <button onClick={toggleSystemMenu} className={`${btnBase} ${showSystemMenu ? btnActive : btnInactive}`}><MenuIcon /></button>
                 {showSystemMenu && (
-                    <Popover width="w-64" align="end" className="p-2 custom-scroll overflow-y-auto max-h-[85vh]" onClose={() => toggleSystemMenu({} as React.MouseEvent)}>
+                    <Popover width="w-64" align="end" className="p-2 custom-scroll overflow-y-auto max-h-[85vh]" onClose={() => setShowSystemMenu(false)}>
                         <div className="space-y-1">
                             <button onClick={(e) => { e.stopPropagation(); handleShareLink(); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
                                 <span className={`text-xs font-bold ${linkStatus ? 'text-green-400' : 'group-hover:text-white'}`}>{linkStatus || "Copy Share Link"}</span>
@@ -306,7 +306,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                     {renderFeatureToggle({ id: 'engineSettings', toggleParam: 'showEngineTab', label: 'Engine Settings' })}
                                     {advancedFeatures.map(feat => renderFeatureToggle(feat))}
                                     {extraAdvanced.map(item => renderFeatureToggle(item, true))}
-                                    <a href="./mesh-export/index.html" target="_blank" rel="noopener noreferrer"
+                                    <a href="/mesh-export.html" target="_blank" rel="noopener noreferrer"
                                        onClick={(e) => { e.stopPropagation(); vibrate(5); setShowSystemMenu(false); }}
                                        className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group no-underline">
                                         <span className="text-xs font-bold group-hover:text-orange-400">Mesh Export</span>

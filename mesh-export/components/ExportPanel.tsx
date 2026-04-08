@@ -3,6 +3,7 @@ import { useMeshExportStore } from '../store/meshExportStore';
 import { registry } from '../../engine/FractalRegistry';
 import { runMeshPipeline, runExportMesh } from '../pipeline/mesh-pipeline';
 import type { PipelineCallbacks, MeshPipelineParams } from '../pipeline/types';
+import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
 import { downloadBlob } from '../algorithms/mesh-writers';
 import { resetCancel, requestCancel } from '../algorithms/dc-core';
 import { resetCancel as resetCancelSparse, requestCancel as requestCancelSparse } from '../algorithms/sparse-grid';
@@ -44,6 +45,20 @@ export const ExportPanel: React.FC = () => {
     if (state.cavityFill === 'escape') { cavityFillMode = 'escape'; cavityFillLevel = 1; }
     else { cavityFillMode = 'dilate'; cavityFillLevel = parseInt(state.cavityFill) || 0; }
 
+    // Build interlace config if present
+    let interlace: MeshInterlaceConfig | undefined;
+    if (state.interlaceState) {
+      interlace = {
+        definition: state.interlaceState.definition,
+        params: state.interlaceState.params,
+        enabled: state.interlaceState.enabled,
+        interval: state.interlaceState.interval,
+        startIter: state.interlaceState.startIter,
+      };
+    }
+
+    const qs = state.qualitySettings;
+
     return {
       N: state.resolution, iters: state.iters, smoothPasses: state.smoothPasses,
       useNewton: state.newton, newtonSteps: state.newtonSteps, smoothLambda: state.smoothLambda,
@@ -54,6 +69,10 @@ export const ExportPanel: React.FC = () => {
       colorSamples: state.colorSamples, colorJitterMul: state.colorJitter,
       cavityFillMode, cavityFillLevel,
       gridMin, gridMax, boundsRange: gridMax[0] - gridMin[0],
+      interlace,
+      estimator: qs.estimator,
+      distanceMetric: qs.distanceMetric,
+      surfaceThreshold: qs.surfaceThreshold,
     };
   }
 
@@ -117,6 +136,10 @@ export const ExportPanel: React.FC = () => {
         N: params.N, iters: params.iters, power: params.power,
         gridMin: params.gridMin, gridMax: params.gridMax,
         deSamples: params.deSamples, zSubSlices: params.zSubSlices,
+        interlace: params.interlace,
+        estimator: params.estimator,
+        distanceMetric: params.distanceMetric,
+        surfaceThreshold: params.surfaceThreshold,
       }, buildCallbacks());
       useMeshExportStore.getState().setExportBlob(result.blob, result.filename);
     } catch (err: unknown) {

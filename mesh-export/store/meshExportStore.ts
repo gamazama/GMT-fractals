@@ -23,11 +23,43 @@ export interface MemoryBlock {
   freed: boolean;
 }
 
+export interface MeshExportInterlaceState {
+  definition: FractalDefinition;
+  params: Record<string, any>;
+  enabled: boolean;
+  interval: number;
+  startIter: number;
+}
+
+export interface MeshQualitySettings {
+  estimator: number;       // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
+  distanceMetric: number;  // 0=Euclidean, 1=Chebyshev, 2=Manhattan, 3=Minkowski
+  surfaceThreshold: number; // SDF threshold offset (0 = exact surface)
+  fudgeFactor: number;     // Step size multiplier (preview raymarching)
+  detail: number;          // Ray detail (preview raymarching)
+  pixelThreshold: number;  // Hit threshold (preview raymarching)
+}
+
+export const DEFAULT_QUALITY: MeshQualitySettings = {
+  estimator: 0,
+  distanceMetric: 0,
+  surfaceThreshold: 0.0,
+  fudgeFactor: 1.0,
+  detail: 1.0,
+  pixelThreshold: 0.5,
+};
+
 export interface MeshExportState {
   // Formula
   selectedFormulaId: string;
   loadedDefinition: FractalDefinition | null;
   formulaParams: Record<string, any>;
+  interlaceState: MeshExportInterlaceState | null;
+  loadedFilename: string | null;
+  loadError: string | null;
+
+  // Quality (from GMF or user)
+  qualitySettings: MeshQualitySettings;
 
   // Pipeline config
   resolution: number;
@@ -98,7 +130,12 @@ export interface MeshExportActions {
   setSelectedFormula: (id: string) => void;
   setLoadedDefinition: (def: FractalDefinition | null) => void;
   setFormulaParams: (params: Record<string, any>) => void;
+  setInterlaceState: (state: MeshExportInterlaceState | null) => void;
   updateParam: (key: string, value: any) => void;
+  setLoadedFilename: (name: string | null) => void;
+  setLoadError: (err: string | null) => void;
+  setQualitySettings: (q: MeshQualitySettings) => void;
+  updateQuality: <K extends keyof MeshQualitySettings>(key: K, value: MeshQualitySettings[K]) => void;
 
   // Pipeline config
   setResolution: (n: number) => void;
@@ -140,6 +177,7 @@ export interface MeshExportActions {
   setTimings: (timings: PipelineTimings | null, smoothingSkipped: boolean, useNarrowBand: boolean) => void;
   setExportBlob: (blob: Blob | null, filename: string) => void;
   setGL: (gl: WebGL2RenderingContext | null) => void;
+  resetMeshResult: () => void;
 }
 
 // ============================================================================
@@ -163,6 +201,12 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
   selectedFormulaId: 'Mandelbulb',
   loadedDefinition: null,
   formulaParams: {},
+  interlaceState: null,
+  loadedFilename: null,
+  loadError: null,
+
+  // Quality
+  qualitySettings: { ...DEFAULT_QUALITY },
 
   // Pipeline config
   resolution: 512,
@@ -212,8 +256,15 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
   setSelectedFormula: (id) => set({ selectedFormulaId: id }),
   setLoadedDefinition: (def) => set({ loadedDefinition: def }),
   setFormulaParams: (params) => set({ formulaParams: params }),
+  setInterlaceState: (state) => set({ interlaceState: state }),
   updateParam: (key, value) => set((s) => ({
     formulaParams: { ...s.formulaParams, [key]: value },
+  })),
+  setLoadedFilename: (name) => set({ loadedFilename: name }),
+  setLoadError: (err) => set({ loadError: err }),
+  setQualitySettings: (q) => set({ qualitySettings: q }),
+  updateQuality: (key, value) => set((s) => ({
+    qualitySettings: { ...s.qualitySettings, [key]: value },
   })),
 
   // Pipeline config
@@ -269,4 +320,9 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
   setTimings: (timings, smoothingSkipped, useNarrowBand) => set({ lastTimings: timings, smoothingSkipped, useNarrowBand }),
   setExportBlob: (blob, filename) => set({ lastBlob: blob, lastFilename: filename }),
   setGL: (gl) => set({ gl }),
+  resetMeshResult: () => set({
+    lastMesh: null, lastBaseName: '', lastBlob: null, lastFilename: '',
+    lastTimings: null, smoothingSkipped: false, gl: null,
+    logEntries: [], memoryBlocks: [], progress: 0, phaseName: '', status: '',
+  }),
 }));

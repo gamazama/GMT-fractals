@@ -21,9 +21,10 @@ async function createServer() {
 
   let vite;
 
-  // Serve standalone tools before Vite/SPA middleware (which would catch them)
-  app.use('/mesh-export', express.static(
-    isProduction ? path.join(distPath, 'mesh-export') : path.join(projectRoot, 'public', 'mesh-export')
+  // Serve the legacy static mesh export tool at /mesh-export-legacy
+  // The React mesh export app is served by Vite at /mesh-export.html
+  app.use('/mesh-export-legacy', express.static(
+    isProduction ? path.join(distPath, 'mesh-export-legacy') : path.join(projectRoot, 'public', 'mesh-export')
   ));
 
   if (!isProduction) {

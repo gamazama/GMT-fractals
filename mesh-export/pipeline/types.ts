@@ -2,6 +2,7 @@
 // GMT Fractal Explorer
 
 import type { FractalDefinition } from '../../types/fractal';
+import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
 import type { DCMeshResult } from '../algorithms/dc-core';
 
 /** UI callback object — all pipeline UI interaction goes through this */
@@ -40,6 +41,12 @@ export interface MeshPipelineParams {
   gridMin: [number, number, number];
   gridMax: [number, number, number];
   boundsRange: number;
+  interlace?: MeshInterlaceConfig;
+
+  // Quality settings
+  estimator?: number;        // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
+  distanceMetric?: number;   // 0=Euclidean, 1=Chebyshev, 2=Manhattan, 3=Minkowski
+  surfaceThreshold?: number; // SDF threshold offset for surface detection
 }
 
 export interface MeshWithColors extends DCMeshResult {
