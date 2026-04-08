@@ -74,6 +74,15 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                     }
                 });
 
+                // Apply onSet hooks: params can inject extra state updates when their value changes
+                Object.keys(sanitized).forEach(paramKey => {
+                    const config = feat.params[paramKey];
+                    if (config?.onSet) {
+                        const extras = config.onSet(sanitized[paramKey], current);
+                        if (extras) Object.assign(sanitized, extras);
+                    }
+                });
+
                 const next = { ...current, ...sanitized };
                 const compositesToUpdate = new Set<string>();
 

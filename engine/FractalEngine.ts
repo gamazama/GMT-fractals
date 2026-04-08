@@ -438,7 +438,11 @@ export class FractalEngine {
         //   build full shader async, swap when done. No preview downgrade.
         // - twoStage: first boot or formula change → show preview while full compiles
         // - singleStage: no parallel compile or lighting already off → synchronous
-        const formulaChanged = config.formula !== this._lastCompiledFormula;
+        const interlaceId = (config as any).interlace?.interlaceCompiled
+            ? ((config as any).interlace?.interlaceFormula ?? '')
+            : '';
+        const compiledFormulaKey = config.formula + (interlaceId ? '+' + interlaceId : '');
+        const formulaChanged = compiledFormulaKey !== this._lastCompiledFormula;
         const keepCurrent = this.hasCompiledShader && this._hasParallelCompile && !formulaChanged;
 
         if (!keepCurrent) {
@@ -466,7 +470,7 @@ export class FractalEngine {
                 if (useTwoStage) await new Promise(resolve => setTimeout(resolve, 50));
 
                 this.hasCompiledShader = true;
-                this._lastCompiledFormula = config.formula;
+                this._lastCompiledFormula = compiledFormulaKey;
                 this.materials.shaderDirty = false;
                 this.lastCompileDuration = (performance.now() - t0) / 1000;
             }
@@ -552,7 +556,7 @@ export class FractalEngine {
         this.sceneCtrl.setMaterial(this.materials.getMaterial(mode));
         this.resetAccumulation();
         this.materials.shaderDirty = false;
-        this._lastCompiledFormula = config.formula;
+        this._lastCompiledFormula = compiledFormulaKey;
         this.pipelineRender(this.renderer);
 
         const totalElapsed = performance.now() - t0;

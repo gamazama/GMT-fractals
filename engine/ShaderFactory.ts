@@ -20,6 +20,13 @@ export class ShaderFactory {
         return this.buildShader(config, 'Histogram');
     }
 
+    /** Generates a GLSL SDF library for mesh export.
+     *  Returns the library body only (no #version, no void main).
+     *  The GPU pipeline wraps it with pass-specific preamble + entry point. */
+    public static generateMeshSDFLibrary(config: ShaderConfig): string {
+        return this.buildShader(config, 'Mesh');
+    }
+
     private static buildShader(config: ShaderConfig, variant: RenderVariant): string {
         const builder = new ShaderBuilder(variant);
         

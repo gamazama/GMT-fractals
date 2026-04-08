@@ -8,6 +8,7 @@ import { ColorGradingFeature } from './color_grading';
 import { TexturingFeature } from './texturing';
 import { ColoringFeature } from './coloring';
 import { GeometryFeature } from './geometry';
+import { InterlaceFeature } from './interlace';
 import { QualityFeature } from './quality';
 import { CoreMathFeature } from './core_math';
 import { LightingFeature } from './lighting/index';
@@ -31,7 +32,8 @@ export const registerFeatures = () => {
     // Core
     featureRegistry.register(CoreMathFeature);
     featureRegistry.register(GeometryFeature);
-    
+    featureRegistry.register(InterlaceFeature);
+
     // Rendering & Shading
     featureRegistry.register(LightingFeature);
     featureRegistry.register(LightSpheresFeature); // dependsOn: ['lighting'] — order enforced by registry
@@ -77,6 +79,7 @@ export type { NavigationState } from './navigation';
 export type { OpticsState } from './optics';
 export type { QualityState } from './quality';
 export type { GeometryState } from './geometry';
+export type { InterlaceState } from './interlace';
 export type { ColoringState } from './coloring';
 export type { TexturingState } from './texturing';
 export type { ColorGradingState } from './color_grading';

@@ -79,6 +79,23 @@ export interface ParamConfig {
     // Reference to another parameter whose value should be used as this param's max
     dynamicMaxRef?: string;
 
+    /** Dynamic config overrides computed from slice state. Returned fields merge over static config.
+     *  Use for params whose label, range, mode, etc. change based on other state (e.g. interlace
+     *  params that mirror the selected secondary formula's parameter definitions). */
+    dynamicConfig?: (sliceState: any) => Partial<Pick<ParamConfig,
+        'label' | 'min' | 'max' | 'step' | 'mode' | 'scale' | 'linkable' | 'options' | 'description'
+    >> | undefined;
+
+    /** Dynamic visibility computed from slice state. Return false to hide. Checked after `condition`. */
+    dynamicVisible?: (sliceState: any) => boolean;
+
+    /**
+     * Called inside the standard setter when this param's value changes.
+     * Returns additional state updates to merge alongside the primary change.
+     * Runs before CONFIG event emission, so extra updates are included in the same compile trigger.
+     */
+    onSet?: (newValue: any, currentSliceState: any) => Record<string, any>;
+
     // 'uniform' (Default): Updates a GLSL uniform (Instant)
     // 'compile': Triggers a shader rebuild (Slow)
     onUpdate?: 'uniform' | 'compile';

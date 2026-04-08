@@ -25,7 +25,7 @@
 // Histogram variant: 1-10 + trace + ray (no lighting/material/post)
 
 import { UNIFORMS } from '../shaders/chunks/uniforms';
-import { getMathGLSL } from '../shaders/chunks/math';
+import { getMathGLSL, MESH_GLSL_UNIFORMS, GLSL_MATH_CONSTANTS, GLSL_SPHERE_FOLD, GLSL_BOX_FOLD, getSnoiseFunctions } from '../shaders/chunks/math';
 import { DE_MASTER } from '../shaders/chunks/de';
 import { generateMaterialEval } from '../shaders/chunks/material_eval';
 import { getFragmentMainGLSL } from '../shaders/chunks/main';
@@ -36,7 +36,7 @@ import { getPostGLSL } from '../shaders/chunks/post';
 import { getShadingGLSL } from '../shaders/chunks/lighting/shading';
 import { BLUE_NOISE } from '../shaders/chunks/blue_noise';
 
-export type RenderVariant = 'Main' | 'Physics' | 'Histogram';
+export type RenderVariant = 'Main' | 'Physics' | 'Histogram' | 'Mesh';
 
 
 export class ShaderBuilder {
@@ -299,8 +299,101 @@ vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
         return out;
     }
 
+    // Returns a GLSL library (no #version, no void main) for the mesh SDF pass.
+    // The GPU pipeline wraps this with #version 300 es + pass-specific uniforms + void main.
+    buildMeshSDFLibrary(): string {
+        // Build feature-injected uniforms (interlace params etc.) from addUniform() calls
+        let injectedUniforms = '';
+        this.uniforms.forEach((info, name) => {
+            if (info.arraySize) {
+                injectedUniforms += `uniform ${info.type} ${name}[${info.arraySize}];\n`;
+            } else {
+                injectedUniforms += `uniform ${info.type} ${name};\n`;
+            }
+        });
+
+        const de = DE_MASTER(
+            this.formulaLoopBody,
+            this.formulaInit,
+            this.formulaDist,
+            this.hybridInit.join('\n'),
+            this.hybridPreLoop.join('\n'),
+            this.hybridInLoop.join('\n'),
+            this.distOverrideInit,
+            this.distOverrideInLoopFull,
+            this.distOverrideInLoopGeom,
+            this.distOverridePostFull,
+            this.distOverridePostGeom,
+            this.postMapCode.join('\n'),
+            this.postDistCode.join('\n')
+        );
+
+        // Base mesh helpers — sphereFold/boxFold/getLength/rotation stubs/snoise.
+        // Does NOT include SHARED_TRANSFORMS_GLSL — that arrives via geometry.inject()
+        // calling builder.addPreamble(SHARED_TRANSFORMS_GLSL), ensuring no duplication.
+        const meshBaseHelpers = `
+${GLSL_SPHERE_FOLD}
+${GLSL_BOX_FOLD}
+
+float getLength(vec3 p) { return length(p); }
+
+void applyPreRotation(inout vec3 p) {}
+void applyPostRotation(inout vec3 p) {}
+void applyWorldRotation(inout vec3 p) {}
+
+${getSnoiseFunctions('_')}
+`;
+
+        return `
+#define MAX_HARD_ITERATIONS 100
+
+// Math constants shared with the main renderer (PI, TAU, INV_TAU, INV_PI, phi)
+${GLSL_MATH_CONSTANTS}
+
+${MESH_GLSL_UNIFORMS}
+
+// Stub uniforms required by DE_MASTER generated code (map + mapDist reference these;
+// only mapDist is called in the mesh SDF path but both functions must compile).
+// Any uniform referenced by features' hybridInLoop/hybridPreLoop injections also goes here.
+uniform vec3  uSceneOffsetLow;
+uniform vec3  uSceneOffsetHigh;
+uniform vec3  uCameraPosition;
+uniform float uColorIter;
+uniform float uColorMode;
+uniform float uColorMode2;
+uniform float uUseTexture;
+uniform float uTextureModeU;
+uniform float uTextureModeV;
+uniform float uBurningEnabled;
+
+// Feature-injected uniforms (e.g. interlace params from Interlace.inject())
+${injectedUniforms}
+
+// Precision offset stub — mesh SDF operates in local space (no camera offset needed)
+vec3 applyPrecisionOffset(vec3 p, vec3 lo, vec3 hi) { return p; }
+
+// Base mesh helpers (sphereFold, boxFold, getLength, rotation stubs, snoise)
+${meshBaseHelpers}
+
+// Preambles from feature inject() calls (e.g. SHARED_TRANSFORMS_GLSL from Geometry)
+${this.preambles.join('\n')}
+
+// Pre-DE functions (primary formula + secondary interlace formula functions)
+${this.preDEFunctions.join('\n')}
+
+// Distance estimator — generates map(vec3 p) -> vec4 and mapDist(vec3 p) -> float
+${de}
+
+// Mesh SDF entry point — wraps mapDist() which is a pure function of position
+float formulaDE(vec3 pos) {
+    return mapDist(pos);
+}
+`;
+    }
+
     // Returns the fully assembled shader string based on the variant
     buildFragment(): string {
+        if (this.variant === 'Mesh') return this.buildMeshSDFLibrary();
         const defines = this.buildDefinesString();
         const uniforms = this.buildUniformsString();
         const headers = this.headers.join('\n');

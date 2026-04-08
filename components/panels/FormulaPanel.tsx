@@ -349,9 +349,24 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
 
        <SectionDivider />
 
-       <div className={`border-t ${themeBorder.subtle}`} data-help-id="julia.mode">
-           <AutoFeaturePanel featureId="geometry" groupFilter="julia" />
-       </div>
+       {(() => {
+           const formulaDef = registry.get(state.formula);
+           const jt = formulaDef?.juliaType;
+           if (jt === 'none') return null;
+           const isOffset = jt === 'offset';
+           return (
+               <div className={`border-t ${themeBorder.subtle}`} data-help-id="julia.mode">
+                   <AutoFeaturePanel
+                       featureId="geometry"
+                       groupFilter="julia"
+                       labelOverrides={isOffset ? {
+                           juliaMode: 'Constant Offset',
+                           julia: 'Offset Vector',
+                       } : undefined}
+                   />
+               </div>
+           );
+       })()}
 
        <SectionDivider />
 
@@ -365,6 +380,12 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
            runtimeExcludeParams={['hybridMode']}
            compileMessage="Compiling Hybrid Shader..."
            helpId="hybrid.mode"
+       />
+
+       <SectionDivider />
+
+       <CompilableFeatureSection
+           featureId="interlace"
        />
 
        <SectionDivider />

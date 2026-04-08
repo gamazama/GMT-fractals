@@ -275,10 +275,11 @@ export const MaterialFeature: FeatureDefinition = {
             ]
         }
     },
-    inject: (builder) => {
+    inject: (builder, _config, variant) => {
+        if (variant === 'Mesh') return; // Mesh SDF library doesn't use materials or env map
         builder.addHeader(MAIN_HEADER);
         builder.addMaterialLogic(MATERIAL_LOGIC);
-        
+
         // Inject Environment Map Logic used by Lighting and Path Tracer
         builder.addFunction(LIGHTING_ENV);
     }

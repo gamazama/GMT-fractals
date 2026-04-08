@@ -31,6 +31,7 @@ interface AutoFeaturePanelProps {
     disabledParams?: string[];
     excludeParams?: string[];
     whitelistParams?: string[]; // New: Render ONLY these params, ignore group
+    labelOverrides?: Record<string, string>; // Override labels for specific params by key
     variant?: 'default' | 'dense';
     // New Props for Engine Panel Interception
     forcedState?: any; 
@@ -127,8 +128,8 @@ const getMapping = (config: ParamConfig) => {
 };
 
 export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({ 
-    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], variant = 'default',
-    forcedState, onChangeOverride, pendingChanges 
+    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], labelOverrides = {}, variant = 'default',
+    forcedState, onChangeOverride, pendingChanges
 }) => {
     const feature = featureRegistry.get(featureId);
     // Use forcedState if provided (for Engine Panel pending changes), otherwise fallback to Store
@@ -226,7 +227,17 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
     if (!feature || !sliceState) return null;
     
-    const renderControl = (key: string, config: ParamConfig) => {
+    const renderControl = (key: string, config_raw: ParamConfig) => {
+        // Apply dynamic config overrides from DDFS (computed from slice state)
+        let config = config_raw;
+        if (config_raw.dynamicConfig) {
+            const overrides = config_raw.dynamicConfig(sliceState);
+            if (overrides) config = { ...config_raw, ...overrides };
+        }
+        // Static label overrides take final precedence
+        if (labelOverrides[key]) {
+            config = config === config_raw ? { ...config_raw, label: labelOverrides[key] } : { ...config, label: labelOverrides[key] };
+        }
         // For composed vec3/vec2, always assemble from individual scalar fields
         let val;
         if (config.composeFrom) {
@@ -453,6 +464,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const config = feature.params[id];
         // EXCLUSION CHECK
         if (!config || config.hidden || excludeParams.includes(id) || !checkVisibility(config.condition, sliceState, globalState, config.parentId)) return null;
+        // Dynamic visibility (DDFS) — checked after condition
+        if (config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
         if (config.isAdvanced && !advancedMode) return null;
         const control = renderControl(id, config);
         const childIds = Object.keys(feature.params).filter(k => feature.params[k].parentId === id);
@@ -532,6 +545,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const id = roots[i];
             const config = feature.params[id];
             if (config.hidden || excludeParams.includes(id) || !checkVisibility(config.condition, sliceState, globalState)) continue;
+            if (config.dynamicVisible && !config.dynamicVisible(sliceState)) continue;
             if (config.layout === 'half' && variant !== 'dense') {
                 let nextId = roots[i + 1];
                 let nextConfig = nextId ? feature.params[nextId] : null;
