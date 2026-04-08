@@ -8,6 +8,7 @@ import { ProgressPanel } from './ProgressPanel';
 import { ExportPanel } from './ExportPanel';
 import { PreviewCanvas } from './PreviewCanvas';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
+import { ScalarInput } from '../../components/inputs/ScalarInput';
 import { useMeshExportStore } from '../store/meshExportStore';
 
 function InterlaceControls() {
@@ -63,6 +64,9 @@ function InterlaceControls() {
 }
 
 export function MeshExportPage() {
+  const iters = useMeshExportStore((s) => s.iters);
+  const setIters = useMeshExportStore((s) => s.setIters);
+
   return (
     <div className="font-mono bg-[#080808] text-gray-200 h-screen flex flex-col overflow-hidden">
       <h1 className="text-sm font-bold text-white tracking-wide px-5 pt-4 pb-2 shrink-0">
@@ -70,16 +74,12 @@ export function MeshExportPage() {
       </h1>
 
       <div className="flex gap-4 flex-1 min-h-0 px-5 pb-4">
-        {/* Left column: controls — scrollable */}
+        {/* Left column: export + pipeline + bounds */}
         <div className="flex flex-col gap-2.5 w-[340px] shrink-0 overflow-y-auto pr-1">
-          {/* Formula */}
+          {/* Export controls */}
           <div className="bg-black/60 border border-white/10 rounded p-3">
-            <CollapsibleSection label="Formula" defaultOpen>
-              <div className="flex flex-col gap-2 mt-1">
-                <FormulaSelector />
-                <FormulaParams />
-                <InterlaceControls />
-              </div>
+            <CollapsibleSection label="Export" defaultOpen>
+              <ExportPanel />
             </CollapsibleSection>
           </div>
 
@@ -96,17 +96,39 @@ export function MeshExportPage() {
           </div>
         </div>
 
-        {/* Right column: export + preview + progress — separate scroll */}
-        <div className="flex flex-col gap-2.5 flex-1 min-w-[520px] overflow-y-auto">
-          {/* Export controls at top */}
+        {/* Center column: preview + progress — fills remaining space */}
+        <div className="flex flex-col gap-2.5 flex-1 min-w-0 items-center">
+          <PreviewCanvas />
+          <ProgressPanel />
+        </div>
+
+        {/* Right column: formula + params (like main GMT panel) — pinned right */}
+        <div className="flex flex-col gap-2.5 w-[300px] shrink-0 overflow-y-auto pl-1">
+          {/* Formula selector + iterations */}
           <div className="bg-black/60 border border-white/10 rounded p-3">
-            <CollapsibleSection label="Export" defaultOpen>
-              <ExportPanel />
+            <CollapsibleSection label="Formula" defaultOpen>
+              <div className="flex flex-col gap-2 mt-1">
+                <FormulaSelector />
+                <ScalarInput
+                  label="Iterations"
+                  value={iters}
+                  onChange={setIters}
+                  min={2} max={64} step={1}
+                  variant="full"
+                />
+              </div>
             </CollapsibleSection>
           </div>
 
-          <PreviewCanvas />
-          <ProgressPanel />
+          {/* Formula parameters */}
+          <div className="bg-black/60 border border-white/10 rounded p-3">
+            <CollapsibleSection label="Parameters" defaultOpen>
+              <div className="flex flex-col gap-1 mt-1">
+                <FormulaParams />
+                <InterlaceControls />
+              </div>
+            </CollapsibleSection>
+          </div>
         </div>
       </div>
     </div>

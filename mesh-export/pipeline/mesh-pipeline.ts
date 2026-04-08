@@ -69,6 +69,8 @@ interface GPUPipelineCallbacks {
   setPhase: (name: string, pct: number) => void;
   tick: () => Promise<void>;
   onSlicePreview?: (imageData: ImageData, width: number, height: number) => void;
+  memAlloc?: (id: string, label: string, mb: number, color: string) => void;
+  memFree?: (id: string) => void;
 }
 
 // ============================================================================
@@ -711,6 +713,7 @@ export interface VDBExportParams {
   estimator?: number;
   distanceMetric?: number;
   surfaceThreshold?: number;
+  vdbColor?: boolean;
 }
 
 /**
@@ -769,17 +772,23 @@ export async function runExportMesh(
       setPhase: ui.setPhase,
       tick: ui.tick,
       onSlicePreview: ui.onSlicePreview,
+      memAlloc: ui.memAlloc,
+      memFree: ui.memFree,
     };
     const vdbResult = await generateVDB(gl, definition, formulaParams, vdbN, vdbPower, vdbIters,
-      vdbMin, vdbMax, 'solid', vdbDeSamples, vdbZSubSlices, vdbGpuCallbacks, vdbInterlace, vdbQuality, vdbSurfaceThreshold);
+      vdbMin, vdbMax, 'solid', vdbDeSamples, vdbZSubSlices, vdbGpuCallbacks, vdbInterlace, vdbQuality, vdbSurfaceThreshold,
+      vdbParams.vdbColor);
     try {
       const ext = gl.getExtension('WEBGL_lose_context');
       if (ext) ext.loseContext();
     } catch (_ignore) { /* noop */ }
 
     blob = vdbResult.blob;
-    filename = (definition.name || definition.id || 'fractal')
-      .toLowerCase().replace(/\s+/g, '-') + '.vdb';
+    const baseName = (definition.name || definition.id || 'fractal')
+      .toLowerCase().replace(/\s+/g, '-');
+    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12); // YYYYMMDDHHMI
+    const colorTag = vdbParams.vdbColor ? '-density-color' : '-density';
+    filename = baseName + '-' + vdbN + colorTag + '-' + ts + '.vdb';
     ui.log('VDB: ' + vdbResult.voxelCount.toLocaleString() + ' active voxels, ' +
       vdbResult.leafCount + ' leaf blocks' +
       (vdbResult.promoted.promotedLeaves ? ', ' + vdbResult.promoted.promotedLeaves + ' tiles promoted' : '') +

@@ -180,9 +180,39 @@ The color shader uses the same `GLSL_UNIFORMS + GLSL_HELPERS + shaderPreamble + 
 Standard 80-byte header + per-face normal + 3 vertices + attribute byte count. No vertex colors (STL spec doesn't support them).
 
 ### VDB (OpenVDB)
-VDB export runs a standalone pipeline in `generateVDB()` (gpu-pipeline.js) — separate from the mesh pipeline. It samples the SDF slice-by-slice via GPU and builds a VDB tree directly, never allocating a full grid or mesh.
+VDB export runs a standalone pipeline in `generateVDB()` (`mesh-export/gpu/gpu-pipeline.ts`) — separate from the mesh pipeline. It samples the SDF slice-by-slice via GPU and builds a VDB tree directly, never allocating a full grid or mesh.
 
-### Shared Sampling Helpers (gpu-pipeline.js)
+**VDB file format**: Files follow the OpenVDB binary format (version 224). Each grid is written as interleaved descriptor + stream offsets + data block. The format is:
+
+```
+[File header: magic, version, UUID, metadata count, grid count]
+For each grid:
+  [Descriptor: name, type string, instance parent (empty)]
+  [3x int64: gridPos, blockPos, endPos]
+  [Data: compression flag, metadata, AffineMap transform, tree topology + leaf buffers]
+```
+
+**Density grid**: Scalar half-float (`Tree_float_5_4_3_HalfFloat`). 5-4-3 tree with 32768 N5 entries, 4096 N4 entries, 8^3 leaf blocks. Values are `uint16` half-float. `is_saved_as_half_float: true`.
+
+**Color grid (optional)**: When "Include color grids" is enabled, a second `Cd` grid is written as `vec3s` float (`Tree_vec3s_5_4_3`). Each voxel stores RGB as 3x `float32` (0.0–1.0). The color pass:
+1. Walks all active voxels in the density tree to collect world positions
+2. Packs positions into a GPU texture
+3. Runs the orbit-trap color shader (same as mesh vertex coloring)
+4. Builds a `Vec3VDBTree` with matching leaf topology
+5. Serializes as a standard OpenVDB `vec3s` grid named `Cd`
+
+Key vec3s format differences from scalar:
+- Background value is 12 bytes (3 floats) vs 4 bytes (1 float) in the tree header
+- Tile values: N5 = 32768×3 floats, N4 = 4096×3 floats
+- Leaf data: 512×3 floats (interleaved AoS: `[r0,g0,b0, r1,g1,b1, ...]`)
+- Compression metadata byte is always `6` (`NO_MASK_AND_ALL_VALS` enum), not a size
+- `is_saved_as_half_float: false`
+
+**VDB filenames** include resolution, content tag, and timestamp: `mandelbulb-512-density-color-202604081430.vdb`.
+
+**Tree optimization**: `optimizeTree()` / `optimizeVec3Tree()` promotes uniform leaf blocks to N4 tiles, and uniform N4s to N5 tiles, reducing file size for solid interior and uniform-color regions.
+
+### Shared Sampling Helpers (gpu-pipeline.ts)
 Both the dense mesh and VDB pipelines share three helpers extracted to avoid code duplication:
 
 - **`bindPipelineUniforms()`**: Sets common SDF uniforms (power, iters, invRes, boundsMin, boundsRange, formula params, FBO). Used by dense, sparse, and VDB sampling paths.
@@ -192,8 +222,6 @@ Both the dense mesh and VDB pipelines share three helpers extracted to avoid cod
 **Z sub-slice averaging**: Configurable 1–16 sub-slices per voxel layer. For each Z layer, the GPU renders multiple sub-Z positions evenly spaced within the voxel, and the SDF values are averaged. This smooths inter-voxel Z transitions that otherwise appear as visible contour/banding artifacts in both mesh and volume exports. Default is 4 sub-slices. Cost scales linearly with sub-slice count.
 
 **Density conversion**: SDF → density uses a linear falloff: interior (`sdf < 0`) maps to 255 (full density), exterior maps to `255 * (1 - sdf / (voxelSize * 2.5))` clamped to [0, 255]. The 2.5-voxel transition band provides a smooth surface in volume renders.
-
-**VDB tree**: 5-4-3 tree with half-float (float16) density values. `vdb-writer.js` handles serialization. `optimizeTree()` promotes uniform leaf blocks to node4 tiles, and uniform node4s to node5 tiles, reducing file size for solid interior regions.
 
 ---
 
@@ -242,12 +270,24 @@ On-screen log at bottom of page with timestamped, color-coded entries. Each line
 ### Cancel Button
 A Cancel button replaces the Generate button during export. It sets `cancelRequested = true`, which is checked at every async yield point (sampling, DC, Newton). The pipeline uses `try/finally` to ensure WebGL context cleanup and button state reset on cancel, error, or completion.
 
-### Interactive Mesh Preview
-Right canvas (512×512) shows a wireframe of the exported mesh:
-- **Drag** to rotate (trackball: Y-axis + X-axis rotation)
-- **Scroll** to zoom (0.1×–10×)
-- For large meshes (>150K faces), faces are sampled at uniform stride across the full mesh rather than drawing the first N faces — this prevents the "tiling" artifact where only spatially-clustered early blocks were visible
-- Persistent state: can rotate/zoom after generation without re-running
+### Preview Canvas
+The preview canvas (512×512) supports three modes that switch automatically based on pipeline state:
+
+**SDF Preview** (`mode: 'fractal'`): WebGL2 raymarched preview of the fractal formula with orthographic camera. Supports bounding box overlay with draggable size/center handles.
+
+**Slice Preview** (`mode: 'slice'`): 2D grayscale display of SDF sampling progress during generation.
+
+**Mesh Preview** (`mode: 'mesh'`): Wireframe visualization of the generated mesh. For large meshes (>150K faces), faces are sampled at uniform stride to prevent spatial clustering artifacts.
+
+**Camera controls** (shared by SDF and Mesh modes):
+- **Left mouse drag**: Orbit (angle/pitch)
+- **Right mouse / middle mouse drag**: Pan (translates camera target)
+- **Scroll wheel**: Zoom (0.5×–20× for SDF, 0.1×–10× for mesh)
+- **Shift + drag**: Snap to nearest cardinal axis (Front/Back/Left/Right/Top/Bottom)
+- **Camera preset toolbar**: Bottom bar with F/B/L/R/T/D buttons for instant axis views, C to reset pan
+- **Controls hint**: Overlay shows "LMB orbit · RMB pan · Scroll zoom · Shift snap"
+
+The preview switches back to SDF mode when Generate is clicked again (previous mesh result is cleared).
 
 ### Error Handling
 - Each pipeline phase has its own try/catch with error + stack trace logged
@@ -283,7 +323,7 @@ Previous implementation used JS arrays (8 bytes/boxed double) which consumed ~3.
 - **Formula-specific uniforms** (e.g., `uSierpinski_rotCos`): Formulas that declare global GLSL variables in their preamble work fine, but if a formula references a uniform not in the standard set, it will fail to compile. The preamble system handles the common case of pre-computed values.
 - **Smoothing disabled for large meshes**: >5M vertices skips Taubin smoothing due to adjacency memory. Could be replaced with a spatial hash-based smoother.
 - **No mesh decimation**: High-res exports can produce 20M+ vertex meshes. A simplification pass would be valuable.
-- **Auto bounding box**: Currently manual min/max inputs. Future: GMT will provide the selected bounding box, or a coarse 32³ SDF probe could auto-detect the occupied region.
+- **Auto bounding box**: Auto-fit button uses a coarse 64³ SDF probe to detect occupied region. Manual adjustment via draggable handles in preview.
 - **GPU Newton memory**: At 20M vertices, Newton textures consume ~960 MB GPU memory. Could be batched.
 - **Single-threaded DC**: The async yielding prevents UI freezing but doesn't parallelize. A Web Worker approach would allow true background processing.
 - **VDB XY banding**: Z sub-slicing smooths Z-axis banding, but equivalent XY banding may be visible. The in-shader DE supersampling (deSamples) helps but operates within single voxels. A similar sub-pixel averaging approach could be applied to XY if needed.

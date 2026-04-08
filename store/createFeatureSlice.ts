@@ -74,12 +74,19 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                     }
                 });
 
-                // Apply onSet hooks: params can inject extra state updates when their value changes
+                // Apply onSet hooks: params can inject extra state updates when their value changes.
+                // Only apply extras for keys NOT already in the original updates — this prevents
+                // onSet from overwriting explicitly provided values (e.g. during preset load where
+                // interlaceFormula + interlaceParamA are both in the same update batch).
                 Object.keys(sanitized).forEach(paramKey => {
                     const config = feat.params[paramKey];
                     if (config?.onSet) {
                         const extras = config.onSet(sanitized[paramKey], current);
-                        if (extras) Object.assign(sanitized, extras);
+                        if (extras) {
+                            Object.entries(extras).forEach(([k, v]) => {
+                                if (updates[k] === undefined) sanitized[k] = v;
+                            });
+                        }
                     }
                 });
 

@@ -77,11 +77,14 @@ export interface MeshExportState {
   colorSamples: number;
   colorJitter: number;
   exportFormat: string;
+  customFilename: string;
+  vdbColor: boolean;
 
   // Bounding box
   bboxCenter: [number, number, number];
   bboxSize: [number, number, number];
   bboxLock: boolean;
+  clipOutsideBounds: boolean;
 
   // Runtime state
   isRunning: boolean;
@@ -153,11 +156,14 @@ export interface MeshExportActions {
   setColorSamples: (n: number) => void;
   setColorJitter: (n: number) => void;
   setExportFormat: (f: string) => void;
+  setVdbColor: (on: boolean) => void;
+  setCustomFilename: (name: string) => void;
 
   // Bounding box
   setBboxCenter: (c: [number, number, number]) => void;
   setBboxSize: (s: [number, number, number]) => void;
   setBboxLock: (locked: boolean) => void;
+  setClipOutsideBounds: (clip: boolean) => void;
   resetBounds: () => void;
 
   // Runtime
@@ -223,12 +229,15 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
   smoothLambda: 0.5,
   colorSamples: 8,
   colorJitter: 0.5,
-  exportFormat: 'glb',
+  exportFormat: 'vdb',
+  customFilename: '',
+  vdbColor: false,
 
   // Bounding box
   bboxCenter: DEFAULT_BBOX_CENTER,
   bboxSize: DEFAULT_BBOX_SIZE,
-  bboxLock: true,
+  bboxLock: false,
+  clipOutsideBounds: false,
 
   // Runtime
   isRunning: false,
@@ -283,11 +292,14 @@ export const useMeshExportStore = create<MeshExportState & MeshExportActions>()(
   setColorSamples: (n) => set({ colorSamples: n }),
   setColorJitter: (n) => set({ colorJitter: n }),
   setExportFormat: (f) => set({ exportFormat: f }),
+  setVdbColor: (on) => set({ vdbColor: on }),
+  setCustomFilename: (name) => set({ customFilename: name }),
 
   // Bounding box
   setBboxCenter: (c) => set({ bboxCenter: c }),
   setBboxSize: (s) => set({ bboxSize: s }),
   setBboxLock: (locked) => set({ bboxLock: locked }),
+  setClipOutsideBounds: (clip) => set({ clipOutsideBounds: clip }),
   resetBounds: () => set({ bboxCenter: [...DEFAULT_BBOX_CENTER] as [number, number, number], bboxSize: [...DEFAULT_BBOX_SIZE] as [number, number, number] }),
 
   // Runtime

@@ -26,7 +26,9 @@ export const FormulaParams: React.FC<FormulaParamsProps> = ({ definition, params
   if (!activeDef) return null;
 
   const paramList = activeDef.parameters.filter((p): p is FractalParameter => p !== null);
-  if (paramList.length === 0) return null;
+
+  const juliaMode = activeParams.juliaMode ?? 0;
+  const julia = activeParams.julia ?? { x: 0, y: 0, z: 0 };
 
   return (
     <div className="flex flex-col gap-px">
@@ -49,7 +51,6 @@ export const FormulaParams: React.FC<FormulaParamsProps> = ({ definition, params
 
         // Vec2/Vec3/Vec4
         if (pType === 'vec2' || pType === 'vec3' || pType === 'vec4') {
-          const axes = pType === 'vec2' ? ['X', 'Y'] : pType === 'vec3' ? ['X', 'Y', 'Z'] : ['X', 'Y', 'Z', 'W'];
           const current = value ?? param.default ?? { x: 0, y: 0, z: 0, w: 0 };
           return (
             <VectorInput
@@ -82,6 +83,23 @@ export const FormulaParams: React.FC<FormulaParamsProps> = ({ definition, params
           />
         );
       })}
+
+      {/* Julia controls */}
+      <div className="border-t border-white/5 mt-1 pt-1">
+        <GenericToggleSwitch
+          label="Julia Mode"
+          value={juliaMode > 0.5}
+          onChange={(v) => activeUpdate('juliaMode', v ? 1 : 0)}
+        />
+        {juliaMode > 0.5 && (
+          <VectorInput
+            label="Julia Offset"
+            value={julia}
+            onChange={(v) => activeUpdate('julia', v)}
+            axisConfig={{ min: -4, max: 4, step: 0.01 }}
+          />
+        )}
+      </div>
     </div>
   );
 };

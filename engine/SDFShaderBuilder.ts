@@ -195,7 +195,7 @@ function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?
     : def.shader.loopBody;
 
   return `  vec4 z = vec4(pos, 0.0);
-  vec4 c = mix(z, vec4(uJulia, 0.0), step(0.5, uJuliaMode));
+  vec4 c = mix(z, vec4(uJulia, uParamA), step(0.5, uJuliaMode));
   float dr = 1.0;
   float trap = 1e10;
   float iter = 0.0;
@@ -244,6 +244,7 @@ export function buildMeshSDFShader(config: MeshShaderConfig): string {
   const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator);
 
   return `#version 300 es
+// GMT mesh-sdf ${Date.now()}
 precision highp float;
 uniform float uZ;
 uniform float uPower;
@@ -483,6 +484,7 @@ export function buildMeshColorShader(config: MeshShaderConfig): string {
   const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   return `#version 300 es
+// GMT mesh-color ${Date.now()}
 precision highp float;
 uniform sampler2D uPositions;
 uniform float uPower;
@@ -541,6 +543,7 @@ export function buildMeshPreviewShader(config: MeshShaderConfig): string {
   const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator);
 
   return `#version 300 es
+// GMT mesh-preview ${Date.now()}
 precision highp float;
 uniform float uPower;
 uniform int   uIters;
@@ -552,6 +555,9 @@ uniform float uFov;
 uniform float uFudgeFactor;
 uniform float uDetail;
 uniform float uPixelThreshold;
+uniform float uClipBounds;
+uniform vec3  uBoundsMin;
+uniform vec3  uBoundsMax;
 ${MESH_GLSL_UNIFORMS}
 ${il ? buildInterlaceUniforms() : ''}
 out vec4 fragColor;
@@ -599,10 +605,10 @@ void main() {
 
   float t = 0.0;
   bool hit = false;
-  for (int i = 0; i < 200; i++) {
+  for (int i = 0; i < 400; i++) {
     float d = DE(ro + rd * t);
-    if (abs(d) < hitThreshold) { hit = true; break; }
-    t += d * fudge;
+    if (d < hitThreshold) { hit = true; break; }
+    t += max(d, 1e-6) * fudge;
     if (t > 20.0) break;
   }
 
@@ -612,6 +618,15 @@ void main() {
   }
 
   vec3 p = ro + rd * t;
+
+  // Clip outside bounding box when enabled
+  if (uClipBounds > 0.5) {
+    if (any(lessThan(p, uBoundsMin)) || any(greaterThan(p, uBoundsMax))) {
+      fragColor = vec4(0.06, 0.06, 0.06, 1.0);
+      return;
+    }
+  }
+
   vec3 n = calcNormal(p);
   vec3 light = normalize(vec3(0.6, 0.8, -0.5));
   float diff = max(dot(n, light), 0.0);
@@ -647,4 +662,6 @@ export const MESH_FORMULA_UNIFORMS = [
   'uInterlaceEnabled', 'uInterlaceInterval', 'uInterlaceStartIter',
   // Quality / preview uniforms
   'uFudgeFactor', 'uDetail', 'uPixelThreshold', 'uSurfaceThreshold',
+  // Bounds clipping
+  'uClipBounds', 'uBoundsMin', 'uBoundsMax',
 ] as const;

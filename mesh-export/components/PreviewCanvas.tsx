@@ -6,7 +6,7 @@
 // rather than closing over reactive values. This avoids stale-closure bugs in the
 // useCallback chain (drawBBoxOverlay → renderFractalPreview → requestRender).
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useMeshExportStore, registerSlicePreview, unregisterSlicePreview } from '../store/meshExportStore';
 import { buildMeshPreviewShader, classifyDEType, MESH_SDF_VERT, MESH_FORMULA_UNIFORMS } from '../../engine/SDFShaderBuilder';
 import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
@@ -71,10 +71,10 @@ function setFormulaUniforms(
   if (loc.uVec4A) gl.uniform4f(loc.uVec4A, p.vec4A?.x ?? 0, p.vec4A?.y ?? 0, p.vec4A?.z ?? 0, p.vec4A?.w ?? 0);
   if (loc.uVec4B) gl.uniform4f(loc.uVec4B, p.vec4B?.x ?? 0, p.vec4B?.y ?? 0, p.vec4B?.z ?? 0, p.vec4B?.w ?? 0);
   if (loc.uVec4C) gl.uniform4f(loc.uVec4C, p.vec4C?.x ?? 0, p.vec4C?.y ?? 0, p.vec4C?.z ?? 0, p.vec4C?.w ?? 0);
-  if (loc.uJulia) gl.uniform4f(loc.uJulia, p.julia?.x ?? 0, p.julia?.y ?? 0, p.julia?.z ?? 0, p.julia?.w ?? 0);
-  if (loc.uJuliaMode) gl.uniform1i(loc.uJuliaMode, p.juliaMode ?? 0);
+  if (loc.uJulia) gl.uniform3f(loc.uJulia, p.julia?.x ?? 0, p.julia?.y ?? 0, p.julia?.z ?? 0);
+  if (loc.uJuliaMode) gl.uniform1f(loc.uJuliaMode, p.juliaMode ?? 0);
   if (loc.uEscapeThresh) gl.uniform1f(loc.uEscapeThresh, p.escapeThresh ?? 4.0);
-  if (loc.uDistanceMetric) gl.uniform1i(loc.uDistanceMetric, p.distanceMetric ?? 0);
+  if (loc.uDistanceMetric) gl.uniform1f(loc.uDistanceMetric, p.distanceMetric ?? 0);
 }
 
 // ============================================================================
@@ -111,6 +111,7 @@ export function PreviewCanvas() {
   const _interlaceState = useMeshExportStore((s) => s.interlaceState);
   const _iters = useMeshExportStore((s) => s.iters);
   const _qualitySettings = useMeshExportStore((s) => s.qualitySettings);
+  const _clipOutsideBounds = useMeshExportStore((s) => s.clipOutsideBounds);
 
   // Refs
   const glCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -129,6 +130,7 @@ export function PreviewCanvas() {
     camAngle: number;
     camPitch: number;
     camDist: number;
+    camTarget: Vec3;
     dragging: boolean;
     dragMode: string | null;
     hover: HandleKey;
@@ -142,6 +144,7 @@ export function PreviewCanvas() {
   }>({
     gl: null, prog: null, loc: {}, defId: null,
     rawAngle: 0.6, rawPitch: 0.3, camAngle: 0.6, camPitch: 0.3, camDist: 3.5,
+    camTarget: [0, 0, 0],
     dragging: false, dragMode: null, hover: null, lastX: 0, lastY: 0,
     shiftHeld: false, snapped: false, snapTarget: null, snapAnimId: 0, rafId: 0,
   });
@@ -184,9 +187,11 @@ export function PreviewCanvas() {
     if (pv.prog) { gl.deleteProgram(pv.prog); pv.prog = null; }
     try {
       const fragSrc = buildMeshPreviewShader({ definition: def, deType: 'auto', interlace, estimator: previewEstimator });
+      console.log('[Preview] Compiling shader for', def.id, '| estimator:', previewEstimator, '| length:', fragSrc.length);
       pv.prog = createProgram(gl, MESH_SDF_VERT, fragSrc);
+      console.log('[Preview] Shader compiled OK for', def.id);
     } catch (e) {
-      console.warn('Preview shader compile failed:', (e as Error).message);
+      console.warn('Preview shader compile failed for', def.id + ':', (e as Error).message);
       pv.prog = null;
       pv.defId = null;
       return;
@@ -196,6 +201,7 @@ export function PreviewCanvas() {
 
     pv.loc = {};
     const uNames = ['uPower', 'uIters', 'uResolution', 'uCamPos', 'uCamTarget', 'uCamRight', 'uFov',
+      'uFudgeFactor', 'uDetail', 'uPixelThreshold', 'uClipBounds', 'uBoundsMin', 'uBoundsMax',
       ...MESH_FORMULA_UNIFORMS];
     for (const name of uNames) {
       pv.loc[name] = gl.getUniformLocation(pv.prog, name);
@@ -220,7 +226,7 @@ export function PreviewCanvas() {
     const hx = sx * 0.5, hy = sy * 0.5, hz = sz * 0.5;
 
     const project = (p: Vec3): Vec3 =>
-      orthoProject(p, pv.camAngle, pv.camPitch, pv.camDist, CANVAS_SIZE, CANVAS_SIZE);
+      orthoProject(p, pv.camAngle, pv.camPitch, pv.camDist, CANVAS_SIZE, CANVAS_SIZE, pv.camTarget);
 
     // Project 8 corners
     const corners: Vec3[] = [];
@@ -329,16 +335,17 @@ export function PreviewCanvas() {
 
   const renderFractalPreview = useCallback(() => {
     const pv = pvRef.current;
-    if (!pv.gl || !pv.prog) return;
+    if (!pv.gl || !pv.prog) { console.log('[Preview] Render skipped: gl=', !!pv.gl, 'prog=', !!pv.prog); return; }
     const gl = pv.gl;
     const cvs = gl.canvas as HTMLCanvasElement;
     gl.viewport(0, 0, cvs.width, cvs.height);
     gl.useProgram(pv.prog);
 
     const cam = orthoCamBasis(pv.camAngle, pv.camPitch);
+    const t = pv.camTarget;
     gl.uniform2f(pv.loc.uResolution!, cvs.width, cvs.height);
-    gl.uniform3f(pv.loc.uCamPos!, cam.pos[0], cam.pos[1], cam.pos[2]);
-    gl.uniform3f(pv.loc.uCamTarget!, 0, 0, 0);
+    gl.uniform3f(pv.loc.uCamPos!, cam.pos[0] + t[0], cam.pos[1] + t[1], cam.pos[2] + t[2]);
+    gl.uniform3f(pv.loc.uCamTarget!, t[0], t[1], t[2]);
     gl.uniform3f(pv.loc.uCamRight!, cam.right[0], cam.right[1], cam.right[2]);
     gl.uniform1f(pv.loc.uFov!, pv.camDist);
 
@@ -376,10 +383,20 @@ export function PreviewCanvas() {
 
     // Quality uniforms for preview raymarching
     const qs = state.qualitySettings;
-    if (pv.loc.uFudgeFactor) gl.uniform1f(pv.loc.uFudgeFactor, qs.fudgeFactor ?? 1.0);
+    // Scale down fudge factor for ortho preview — parallel rays overshooting is more
+    // visible than in perspective, so we march more conservatively
+    if (pv.loc.uFudgeFactor) gl.uniform1f(pv.loc.uFudgeFactor, (qs.fudgeFactor ?? 1.0) * 0.75);
     if (pv.loc.uDetail) gl.uniform1f(pv.loc.uDetail, qs.detail ?? 1.0);
     if (pv.loc.uPixelThreshold) gl.uniform1f(pv.loc.uPixelThreshold, qs.pixelThreshold ?? 0.5);
-    if (pv.loc.uDistanceMetric) gl.uniform1i(pv.loc.uDistanceMetric, qs.distanceMetric ?? 0);
+    if (pv.loc.uDistanceMetric) gl.uniform1f(pv.loc.uDistanceMetric, qs.distanceMetric ?? 0);
+
+    // Bounds clipping uniforms
+    if (pv.loc.uClipBounds) gl.uniform1f(pv.loc.uClipBounds, state.clipOutsideBounds ? 1.0 : 0.0);
+    if (pv.loc.uBoundsMin) {
+      const hs = state.bboxSize.map((s: number) => s / 2);
+      gl.uniform3f(pv.loc.uBoundsMin, state.bboxCenter[0] - hs[0], state.bboxCenter[1] - hs[1], state.bboxCenter[2] - hs[2]);
+      gl.uniform3f(pv.loc.uBoundsMax!, state.bboxCenter[0] + hs[0], state.bboxCenter[1] + hs[1], state.bboxCenter[2] + hs[2]);
+    }
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     drawBBoxOverlay();
@@ -412,7 +429,7 @@ export function PreviewCanvas() {
     const hx = sx * 0.5, hy = sy * 0.5, hz = sz * 0.5;
 
     const project = (p: Vec3): Vec3 =>
-      orthoProject(p, pv.camAngle, pv.camPitch, pv.camDist, CANVAS_SIZE, CANVAS_SIZE);
+      orthoProject(p, pv.camAngle, pv.camPitch, pv.camDist, CANVAS_SIZE, CANVAS_SIZE, pv.camTarget);
 
     const hitRadius = 8;
     const cp = project([cx, cy, cz]);
@@ -525,7 +542,7 @@ export function PreviewCanvas() {
 
   useEffect(() => {
     if (mode === 'fractal') requestRender();
-  }, [_formulaParams, _interlaceState, _iters, _bboxCenter, _bboxSize, mode, requestRender]);
+  }, [_formulaParams, _interlaceState, _iters, _bboxCenter, _bboxSize, _clipOutsideBounds, _qualitySettings, mode, requestRender]);
 
   // ── Update mesh preview when lastMesh changes ────────────────────
 
@@ -551,11 +568,25 @@ export function PreviewCanvas() {
       const rect = overlay.getBoundingClientRect();
       const mx = e.clientX - rect.left, my = e.clientY - rect.top;
       pv.lastX = e.clientX; pv.lastY = e.clientY;
+
+      // Right-click or middle-click = pan
+      if (e.button === 1 || e.button === 2) {
+        pv.dragMode = 'pan';
+        pv.dragging = true;
+        overlay.style.cursor = 'all-scroll';
+        e.preventDefault();
+        return;
+      }
+
       const hit = hitTestHandles(mx, my);
       pv.dragMode = hit || 'orbit';
       pv.dragging = true;
       overlay.style.cursor = pv.dragMode === 'orbit' ? 'grabbing' : 'ew-resize';
       e.preventDefault();
+    };
+
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault(); // prevent context menu on right-click (used for pan)
     };
 
     const onMouseMove = (e: MouseEvent) => {
@@ -572,7 +603,11 @@ export function PreviewCanvas() {
       const dx = e.clientX - pv.lastX, dy = e.clientY - pv.lastY;
       pv.lastX = e.clientX; pv.lastY = e.clientY;
 
-      if (pv.dragMode === 'orbit') {
+      if (pv.dragMode === 'pan') {
+        const worldDelta = orthoUnprojectDelta(-dx, -dy, pv.camAngle, pv.camPitch, pv.camDist, CANVAS_SIZE);
+        pv.camTarget = add3(pv.camTarget, worldDelta);
+        requestRender();
+      } else if (pv.dragMode === 'orbit') {
         pv.rawAngle += dx * 0.008;
         pv.rawPitch = Math.max(-HP, Math.min(HP, pv.rawPitch + dy * 0.008));
         updateSnap();
@@ -642,6 +677,7 @@ export function PreviewCanvas() {
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     overlay.addEventListener('wheel', onWheel, { passive: false });
+    overlay.addEventListener('contextmenu', onContextMenu);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
@@ -650,6 +686,7 @@ export function PreviewCanvas() {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       overlay.removeEventListener('wheel', onWheel);
+      overlay.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
@@ -661,6 +698,7 @@ export function PreviewCanvas() {
     const cvs = meshCanvasRef.current;
     if (!cvs) return;
     const mpv = meshPvRef.current;
+    let meshDragMode: 'orbit' | 'pan' | null = null;
 
     const renderMesh = () => {
       const ctx = cvs.getContext('2d');
@@ -671,9 +709,10 @@ export function PreviewCanvas() {
       mpv.dragging = true;
       mpv.lastMX = e.clientX;
       mpv.lastMY = e.clientY;
+      meshDragMode = (e.button === 1 || e.button === 2) ? 'pan' : 'orbit';
     };
 
-    const onMouseUp = () => { mpv.dragging = false; };
+    const onMouseUp = () => { mpv.dragging = false; meshDragMode = null; };
 
     const onMouseMove = (e: MouseEvent) => {
       if (!mpv.dragging || !mpv.positions) return;
@@ -681,10 +720,18 @@ export function PreviewCanvas() {
       const dy = e.clientY - mpv.lastMY;
       mpv.lastMX = e.clientX;
       mpv.lastMY = e.clientY;
-      mpv.rotY += dx * 0.01;
-      mpv.rotX += dy * 0.01;
-      mpv.rotX = Math.max(-HP, Math.min(HP, mpv.rotX));
-      renderMesh();
+
+      if (meshDragMode === 'pan') {
+        const panScale = 1 / (mpv.scale * mpv.zoom);
+        mpv.cx -= dx * panScale;
+        mpv.cy += dy * panScale;
+        renderMesh();
+      } else {
+        mpv.rotY += dx * 0.01;
+        mpv.rotX += dy * 0.01;
+        mpv.rotX = Math.max(-HP, Math.min(HP, mpv.rotX));
+        renderMesh();
+      }
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -694,18 +741,76 @@ export function PreviewCanvas() {
       if (mpv.positions) renderMesh();
     };
 
+    const onContextMenu = (e: MouseEvent) => { e.preventDefault(); };
+
     cvs.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('mousemove', onMouseMove);
     cvs.addEventListener('wheel', onWheel, { passive: false });
+    cvs.addEventListener('contextmenu', onContextMenu);
 
     return () => {
       cvs.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('mousemove', onMouseMove);
       cvs.removeEventListener('wheel', onWheel);
+      cvs.removeEventListener('contextmenu', onContextMenu);
     };
   }, []);
+
+  // ── Camera presets ─────────────────────────────────────────────────
+
+  const setCameraPreset = useCallback((angle: number, pitch: number, label: string) => {
+    const pv = pvRef.current;
+    pv.rawAngle = angle;
+    pv.rawPitch = pitch;
+    pv.camAngle = angle;
+    pv.camPitch = pitch;
+    pv.snapped = false;
+    pv.snapTarget = null;
+    if (pv.snapAnimId) { cancelAnimationFrame(pv.snapAnimId); pv.snapAnimId = 0; }
+
+    // Also set mesh preview rotation to match
+    const mpv = meshPvRef.current;
+    mpv.rotX = -pitch;
+    mpv.rotY = angle;
+    if (mpv.positions) {
+      const cvs = meshCanvasRef.current;
+      if (cvs) {
+        const ctx = cvs.getContext('2d');
+        if (ctx) meshPreviewRender(mpv, ctx, cvs.width, cvs.height);
+      }
+    }
+
+    requestRender();
+  }, [requestRender]);
+
+  const resetPan = useCallback(() => {
+    const pv = pvRef.current;
+    pv.camTarget = [0, 0, 0];
+    // Reset mesh preview pan too
+    const mpv = meshPvRef.current;
+    if (mpv.positions) {
+      // Re-center on mesh bounds
+      meshPreviewSetMesh(mpv, mpv.positions, mpv.indices!, mpv.vertexCount, mpv.faceCount, CANVAS_SIZE);
+      const cvs = meshCanvasRef.current;
+      if (cvs) {
+        const ctx = cvs.getContext('2d');
+        if (ctx) meshPreviewRender(mpv, ctx, cvs.width, cvs.height);
+      }
+    }
+    requestRender();
+  }, [requestRender]);
+
+  // Camera preset button definitions
+  const CAMERA_PRESETS = [
+    { label: 'F', title: 'Front (-Z)', angle: 0, pitch: 0 },
+    { label: 'B', title: 'Back (+Z)', angle: Math.PI, pitch: 0 },
+    { label: 'L', title: 'Left (-X)', angle: -HP, pitch: 0 },
+    { label: 'R', title: 'Right (+X)', angle: HP, pitch: 0 },
+    { label: 'T', title: 'Top (+Y)', angle: 0, pitch: HP },
+    { label: 'D', title: 'Bottom (-Y)', angle: 0, pitch: -HP },
+  ];
 
   // ── Render ───────────────────────────────────────────────────────
 
@@ -762,6 +867,50 @@ export function PreviewCanvas() {
         {mode === 'slice' && 'Sampling...'}
         {mode === 'mesh' && 'Mesh Preview'}
       </div>
+
+      {/* Camera preset toolbar — visible in fractal and mesh modes */}
+      {mode !== 'slice' && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-black/70 backdrop-blur rounded px-1 py-0.5 pointer-events-auto">
+          {CAMERA_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              title={p.title}
+              onClick={() => setCameraPreset(p.angle, p.pitch, p.label)}
+              className="w-[22px] h-[20px] text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+            >
+              {p.label}
+            </button>
+          ))}
+          <div className="w-px h-3 bg-gray-700 mx-0.5" />
+          <button
+            title="Reset pan (re-center view)"
+            onClick={resetPan}
+            className="w-[22px] h-[20px] text-[10px] font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+          >
+            C
+          </button>
+        </div>
+      )}
+
+      {/* Clip-to-bounds toggle — top right of preview */}
+      {mode === 'fractal' && (
+        <label className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 backdrop-blur rounded px-1.5 py-0.5 cursor-pointer pointer-events-auto select-none">
+          <input
+            type="checkbox"
+            checked={_clipOutsideBounds}
+            onChange={(e) => useMeshExportStore.getState().setClipOutsideBounds(e.target.checked)}
+            className="accent-amber-500 w-3 h-3"
+          />
+          <span className="text-[9px] text-gray-400">Clip bounds</span>
+        </label>
+      )}
+
+      {/* Controls hint */}
+      {mode !== 'slice' && (
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-[9px] text-gray-600 pointer-events-none whitespace-nowrap">
+          LMB orbit · RMB pan · Scroll zoom · Shift snap
+        </div>
+      )}
     </div>
   );
 }

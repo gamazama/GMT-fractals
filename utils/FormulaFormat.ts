@@ -97,8 +97,16 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
     // We clone to avoid mutating the original definition during delete
     const { shader, ...meta } = def;
 
+    // Preserve shader metadata that isn't GLSL code but is needed for
+    // interlace (preambleVars, usesSharedRotation). These live on the shader
+    // object but don't map to a GLSL block, so we stash them in Metadata.
+    const shaderMeta: Record<string, any> = {};
+    if (shader.preambleVars?.length) shaderMeta.preambleVars = shader.preambleVars;
+    if (shader.usesSharedRotation) shaderMeta.usesSharedRotation = true;
+
     const metadata = {
         ...meta,
+        ...(Object.keys(shaderMeta).length > 0 ? { shaderMeta } : {}),
         defaultPreset: preset
     };
 
@@ -165,13 +173,20 @@ export const parseGMF = (content: string): FractalDefinition => {
          throw new Error("Invalid GMF: Missing essential shader blocks (<Shader_Function> or <Shader_Loop>)");
     }
 
-    const shader = {
+    const shader: Record<string, any> = {
         function: func,
         loopBody: loop,
         preamble: preamble || undefined,
         loopInit: init || undefined,
-        getDist: dist || undefined
+        getDist: dist || undefined,
     };
+
+    // Restore shader metadata saved alongside the Metadata JSON
+    if (metadata.shaderMeta) {
+        if (metadata.shaderMeta.preambleVars) shader.preambleVars = metadata.shaderMeta.preambleVars;
+        if (metadata.shaderMeta.usesSharedRotation) shader.usesSharedRotation = true;
+        delete metadata.shaderMeta;
+    }
 
     return {
         ...metadata,

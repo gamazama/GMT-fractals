@@ -27,6 +27,8 @@ export const ExportPanel: React.FC = () => {
   const loadedDefinition = useMeshExportStore((s) => s.loadedDefinition);
   const selectedFormulaId = useMeshExportStore((s) => s.selectedFormulaId);
 
+  const customFilename = useMeshExportStore((s) => s.customFilename);
+  const vdbColor = useMeshExportStore((s) => s.vdbColor);
   const hasDefinition = !!(loadedDefinition || registry.get(selectedFormulaId));
   const isVDB = exportFormat === 'vdb';
 
@@ -99,6 +101,8 @@ export const ExportPanel: React.FC = () => {
 
   const handleGenerate = async () => {
     const s = useMeshExportStore.getState();
+    s.setMesh(null, '');          // clear previous mesh so preview switches to slice mode
+    s.setExportBlob(null, '');    // clear stale export blob
     s.setRunning(true); s.setCancelled(false); s.setProgress(0); s.setPhase('', 0); s.clearMemory();
     resetCancel(); resetCancelSparse();
     try {
@@ -140,8 +144,11 @@ export const ExportPanel: React.FC = () => {
         estimator: params.estimator,
         distanceMetric: params.distanceMetric,
         surfaceThreshold: params.surfaceThreshold,
+        vdbColor: s.vdbColor,
       }, buildCallbacks());
-      useMeshExportStore.getState().setExportBlob(result.blob, result.filename);
+      const custom = useMeshExportStore.getState().customFilename.trim();
+      const finalName = custom ? custom.replace(/\.[^.]+$/, '') + '.' + result.filename.split('.').pop() : result.filename;
+      useMeshExportStore.getState().setExportBlob(result.blob, finalName);
     } catch (err: unknown) {
       const e = err as Error;
       if (e.message !== 'Cancelled') {
@@ -172,10 +179,35 @@ export const ExportPanel: React.FC = () => {
         fullWidth
       />
 
+      {/* Custom filename */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-gray-500 uppercase tracking-wide shrink-0">Filename</span>
+        <input
+          type="text"
+          value={customFilename}
+          onChange={(e) => store.setCustomFilename(e.target.value)}
+          placeholder={(loadedDefinition?.name || selectedFormulaId || 'fractal').toLowerCase().replace(/\s+/g, '-')}
+          className="flex-1 h-[26px] bg-gray-800 border border-gray-700 rounded px-2 text-[11px] text-gray-200 font-mono placeholder:text-gray-600"
+        />
+        <span className="text-[10px] text-gray-600">.{exportFormat}</span>
+      </div>
+
       {isVDB && (
         <div className="text-[11px] text-sky-400 bg-sky-900/20 px-2 py-1 rounded">
           VDB exports directly — no Generate needed
         </div>
+      )}
+
+      {isVDB && (
+        <label className="flex items-center gap-2 text-[11px] text-gray-300 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={vdbColor}
+            onChange={(e) => store.setVdbColor(e.target.checked)}
+            className="accent-amber-500"
+          />
+          Include color grids (slower)
+        </label>
       )}
 
       {/* Buttons */}

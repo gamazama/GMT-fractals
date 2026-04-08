@@ -1,8 +1,9 @@
 // BoundsPanel.tsx — Bounding box center/size controls using GMT VectorInput
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import * as THREE from 'three';
 import { useMeshExportStore } from '../store/meshExportStore';
 import { VectorInput } from '../../components/inputs/VectorInput';
-import { GenericToggleSwitch } from '../../components/GenericToggleSwitch';
+import { BaseVectorInput } from '../../components/vector-input/BaseVectorInput';
 import { autoFitBounds } from '../gpu/gpu-pipeline';
 import { registry } from '../../engine/FractalRegistry';
 import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
@@ -10,10 +11,8 @@ import type { MeshInterlaceConfig } from '../../engine/SDFShaderBuilder';
 export function BoundsPanel() {
   const center = useMeshExportStore((s) => s.bboxCenter);
   const size = useMeshExportStore((s) => s.bboxSize);
-  const lock = useMeshExportStore((s) => s.bboxLock);
   const setBboxCenter = useMeshExportStore((s) => s.setBboxCenter);
   const setBboxSize = useMeshExportStore((s) => s.setBboxSize);
-  const setBboxLock = useMeshExportStore((s) => s.setBboxLock);
   const resetBounds = useMeshExportStore((s) => s.resetBounds);
   const [fitting, setFitting] = useState(false);
 
@@ -22,17 +21,14 @@ export function BoundsPanel() {
   };
 
   const handleSizeChange = (v: { x: number; y: number; z?: number }) => {
-    if (lock) {
-      // When locked, use the axis that changed (compare to current)
-      const dx = Math.abs(v.x - size[0]);
-      const dy = Math.abs(v.y - size[1]);
-      const dz = Math.abs((v.z ?? size[2]) - size[2]);
-      const newVal = dx > 0.001 ? v.x : dy > 0.001 ? v.y : (v.z ?? size[2]);
-      setBboxSize([newVal, newVal, newVal]);
-    } else {
-      setBboxSize([v.x, v.y, v.z ?? size[2]]);
-    }
+    setBboxSize([v.x, v.y, v.z ?? size[2]]);
   };
+
+  // BaseVectorInput uses THREE.Vector3
+  const sizeVec = useMemo(() => new THREE.Vector3(size[0], size[1], size[2]), [size[0], size[1], size[2]]);
+  const handleSizeVecChange = useCallback((v: THREE.Vector2 | THREE.Vector3 | THREE.Vector4) => {
+    setBboxSize([(v as THREE.Vector3).x, (v as THREE.Vector3).y, (v as THREE.Vector3).z]);
+  }, [setBboxSize]);
 
   const handleAutoFit = async () => {
     const state = useMeshExportStore.getState();
@@ -83,19 +79,18 @@ export function BoundsPanel() {
         value={{ x: center[0], y: center[1], z: center[2] }}
         onChange={handleCenterChange}
         axisConfig={{ min: -100, max: 100, step: 0.1 }}
+        showDualAxisPads={false}
       />
 
-      <VectorInput
+      <BaseVectorInput
         label="Size"
-        value={{ x: size[0], y: size[1], z: size[2] }}
-        onChange={handleSizeChange}
-        axisConfig={{ min: 0.1, max: 100, step: 0.1 }}
-      />
-
-      <GenericToggleSwitch
-        label="Lock Axes"
-        value={lock}
-        onChange={setBboxLock}
+        value={sizeVec}
+        onChange={handleSizeVecChange}
+        min={0.1}
+        max={100}
+        step={0.1}
+        showDualAxisPads={false}
+        linkable
       />
 
       {/* Reset + Auto-fit + info */}

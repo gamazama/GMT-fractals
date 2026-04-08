@@ -24,6 +24,7 @@ Before making ANY code changes, you MUST read the relevant documentation using t
 | Formula conversion | `docs/22_Frag_to_Native_Formula_Conversion.md` |
 | **Writing formulas**: full API, shader fields, params, GLSL built-ins, quirks | `docs/25_Formula_Dev_Reference.md` |
 | Formula interlace system, preambleVars, mesh export interlace | `docs/24_Formula_Interlace_System.md` |
+| Mesh export tool, VDB writer, preview canvas, pipeline | `docs/30_Mesh_Export_Prototype.md` |
 
 After making changes, update the relevant docs if you discovered new patterns, quirks, or undocumented behavior. Check `docs/06_Troubleshooting_and_Quirks.md` for known issues when debugging.
 

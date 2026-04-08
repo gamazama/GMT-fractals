@@ -21,7 +21,8 @@ import type { ShaderConfig } from '../../engine/ShaderFactory';
 import { registry } from '../../engine/FractalRegistry';
 
 import { forEachBandBlock } from '../algorithms/sparse-grid';
-import { createTree, addLeafBlock, optimizeTree, serializeVDB } from '../algorithms/vdb-writer';
+import { createTree, addLeafBlock, optimizeTree, serializeVDB, serializeMultiGridVDB, createVec3Tree, addVec3LeafBlock, optimizeVec3Tree } from '../algorithms/vdb-writer';
+import type { Vec3VDBTree } from '../algorithms/vdb-writer';
 
 // ============================================================================
 // Mesh Shader Config Builder
@@ -64,6 +65,8 @@ export interface GPUPipelineCallbacks {
   setPhase: (name: string, pct: number) => void;
   tick: () => Promise<void>;
   onSlicePreview?: (imageData: ImageData, width: number, height: number) => void;
+  memAlloc?: (id: string, label: string, mb: number, color: string) => void;
+  memFree?: (id: string) => void;
 }
 
 export interface SDFPipeline {
@@ -134,13 +137,18 @@ function setFormulaUniforms(
   const v4b = rv4(p.vec4B); if (loc.uVec4B) gl.uniform4f(loc.uVec4B, v4b[0], v4b[1], v4b[2], v4b[3]);
   const v4c = rv4(p.vec4C); if (loc.uVec4C) gl.uniform4f(loc.uVec4C, v4c[0], v4c[1], v4c[2], v4c[3]);
 
-  // Julia
-  if (loc.uJulia) gl.uniform3f(loc.uJulia, p.julia?.[0] ?? 0, p.julia?.[1] ?? 0, p.julia?.[2] ?? 0);
-  if (loc.uJuliaMode) gl.uniform1i(loc.uJuliaMode, p.juliaMode ? 1 : 0);
+  // Julia — handle both array [x,y,z] and object {x,y,z} formats
+  if (loc.uJulia) {
+    const j = p.julia;
+    if (Array.isArray(j)) gl.uniform3f(loc.uJulia, j[0] ?? 0, j[1] ?? 0, j[2] ?? 0);
+    else if (j && typeof j === 'object') gl.uniform3f(loc.uJulia, j.x ?? 0, j.y ?? 0, j.z ?? 0);
+    else gl.uniform3f(loc.uJulia, 0, 0, 0);
+  }
+  if (loc.uJuliaMode) gl.uniform1f(loc.uJuliaMode, p.juliaMode ? 1.0 : 0.0);
 
   // Escape threshold & distance metric
   if (loc.uEscapeThresh) gl.uniform1f(loc.uEscapeThresh, p.escapeThresh ?? 10.0);
-  if (loc.uDistanceMetric) gl.uniform1i(loc.uDistanceMetric, p.distanceMetric ?? 0);
+  if (loc.uDistanceMetric) gl.uniform1f(loc.uDistanceMetric, p.distanceMetric ?? 0);
 }
 
 /** Set interlace uniforms on a GL program */
@@ -871,6 +879,7 @@ export async function generateVDB(
   interlace?: MeshInterlaceConfig,
   quality?: { estimator?: number; distanceMetric?: number },
   surfaceThreshold?: number,
+  enableColor?: boolean,
 ): Promise<GenerateVDBResult> {
   const { log, setProgress, setPhase, setStatus, tick, onSlicePreview } = callbacks;
   const boundsRange = gridMax[0] - gridMin[0];
@@ -966,25 +975,277 @@ export async function generateVDB(
     }
   }
 
-  // Optimize tree (promote uniform leaves/nodes to tiles)
-  setPhase('VDB Optimize', 0);
-  const promoted = optimizeTree(tree);
-  setPhase('VDB Serialize', 50);
-
-  // Serialize
-  const vdbBuf = serializeVDB(tree, N, gridMin, boundsRange);
-  setPhase('VDB Complete', 100);
-
-  let leafCount = 0;
-  tree.n4map.forEach((n4) => { leafCount += n4.leafMap.size; });
-
-  // Cleanup GPU resources
+  // Cleanup SDF pipeline resources
   gl.deleteTexture(pipeline.tex);
   gl.deleteFramebuffer(pipeline.fbo);
   gl.deleteProgram(pipeline.prog);
 
+  // Track density tree memory
+  if (callbacks.memAlloc) {
+    let densityLeafCount = 0;
+    tree.n4map.forEach((n4) => { densityLeafCount += n4.leafMap.size; });
+    // Each leaf: mask(64B) + data(1KB) ≈ 1.1KB. Node4 overhead ~10KB each.
+    const densityMB = Math.round((densityLeafCount * 1.1 + tree.n4map.size * 10) / 1024);
+    callbacks.memAlloc('vdbDensity', 'VDB Density', densityMB, '#8c6');
+  }
+
+  // ================================================================
+  // Optional: Color pass — sample orbit trap colors for active voxels
+  // Builds a single vec3s "Cd" grid (standard OpenVDB color attribute)
+  // ================================================================
+  let colorTree: Vec3VDBTree | null = null;
+
+  if (enableColor) {
+    setPhase('VDB Color', 0);
+    setStatus('Sampling voxel colors...');
+    log('Color pass: sampling orbit-trap colors for active voxels', 'phase');
+
+    // Count total active voxels first (cheap — just popcount the masks)
+    let totalActiveVoxels = 0;
+    tree.n4map.forEach((n4) => {
+      n4.leafMap.forEach((leaf) => {
+        for (let w = 0; w < 8; w++) {
+          let bits = leaf.mask[w];
+          // Brian Kernighan popcount
+          while (bits !== 0n) { bits &= bits - 1n; totalActiveVoxels++; }
+        }
+      });
+    });
+    log('Color pass: ' + totalActiveVoxels.toLocaleString() + ' active voxels to colorize', 'data');
+
+    if (totalActiveVoxels > 0) {
+      const cdTree = createVec3Tree();
+
+      // Batch color pass: process leaves in chunks that fit in a GPU texture.
+      // Cap batch texture at 2048×2048 = ~4M voxels to limit GPU+CPU memory.
+      const maxTexDim = Math.min(
+        gl.getParameter(gl.MAX_TEXTURE_SIZE) as number,
+        2048,
+      );
+      const maxBatchVoxels = maxTexDim * maxTexDim;
+
+      // Compile color shader once, reuse across batches
+      const colFrag = buildMeshColorShader({ definition: config, deType: 'auto', interlace });
+      const colProg = createProgram(gl, MESH_SDF_VERT, colFrag, log);
+      const colLoc = locateFormulaUniforms(gl, colProg);
+      const colVao = gl.createVertexArray();
+      const uPositions = gl.getUniformLocation(colProg, 'uPositions');
+      const uPower = gl.getUniformLocation(colProg, 'uPower');
+      const uIters = gl.getUniformLocation(colProg, 'uIters');
+      const uWidth = gl.getUniformLocation(colProg, 'uWidth');
+      const uJitterOffset = gl.getUniformLocation(colProg, 'uJitterOffset');
+
+      // Collect leaf references as a flat list: [n5k, n4k, n5k, n4k, ...]
+      // Each leaf has at most 512 voxels. This array is ~16 bytes per leaf vs ~100+ per voxel.
+      const leafList: number[] = [];
+      tree.n4map.forEach((n4, n5k) => {
+        n4.leafMap.forEach((_leaf, n4k) => {
+          leafList.push(n5k, n4k);
+        });
+      });
+      const totalLeaves = leafList.length >> 1;
+
+      // Pre-allocate reusable batch buffers (sized to upper bound, reused across batches)
+      const maxTexW = Math.ceil(Math.sqrt(maxBatchVoxels));
+      const maxTexH = Math.ceil(maxBatchVoxels / maxTexW);
+      const maxTexPixels = maxTexW * maxTexH;
+      const posData = new Float32Array(maxTexPixels * 4);
+      const colPixels = new Uint8Array(maxTexPixels * 4);
+      const batchVdbIdx = new Uint16Array(maxBatchVoxels);
+      const batchLeafIdx = new Uint32Array(maxBatchVoxels);
+      const rBytes = new Uint8Array(512);
+      const gBytes = new Uint8Array(512);
+      const bBytes = new Uint8Array(512);
+
+      let voxelsProcessed = 0;
+      let leafIdx = 0;
+
+      while (leafIdx < totalLeaves) {
+        // Pack positions directly — no counting pass needed.
+        // Fill until we hit maxBatchVoxels or run out of leaves.
+        let vi = 0;
+        let batchEnd = leafIdx;
+        while (batchEnd < totalLeaves && vi + 512 <= maxBatchVoxels) {
+          const n5k = leafList[batchEnd * 2];
+          const n4k = leafList[batchEnd * 2 + 1];
+          const leaf = tree.n4map.get(n5k)!.leafMap.get(n4k)!;
+          const n5x = ((n5k >> 10) & 31) << 7;
+          const n5y = ((n5k >> 5) & 31) << 7;
+          const n5z = (n5k & 31) << 7;
+          const n4x = ((n4k >> 8) & 15) << 3;
+          const n4y = ((n4k >> 4) & 15) << 3;
+          const n4z = (n4k & 15) << 3;
+          const blockX = n5x + n4x;
+          const blockY = n5y + n4y;
+          const blockZ = n5z + n4z;
+
+          for (let vdbI = 0; vdbI < 512; vdbI++) {
+            if ((leaf.mask[vdbI >> 6] & (1n << BigInt(vdbI & 63))) === 0n) continue;
+            const lz = vdbI & 7;
+            const ly = (vdbI >> 3) & 7;
+            const lx = (vdbI >> 6) & 7;
+            posData[vi * 4]     = gridMin[0] + (blockX + lx + 0.5) * voxelSize;
+            posData[vi * 4 + 1] = gridMin[1] + (blockY + ly + 0.5) * voxelSize;
+            posData[vi * 4 + 2] = gridMin[2] + (blockZ + lz + 0.5) * voxelSize;
+            posData[vi * 4 + 3] = 1.0;
+            batchVdbIdx[vi] = vdbI;
+            batchLeafIdx[vi] = batchEnd;
+            vi++;
+          }
+          batchEnd++;
+        }
+        const batchActiveCount = vi;
+
+        if (batchActiveCount === 0) {
+          leafIdx = batchEnd;
+          continue;
+        }
+
+        // Compute texture dimensions from actual packed count
+        const texW = Math.ceil(Math.sqrt(batchActiveCount));
+        const texH = Math.ceil(batchActiveCount / texW);
+
+        // GPU colorize this batch
+        gl.useProgram(colProg);
+
+        const posTex = gl.createTexture()!;
+        gl.bindTexture(gl.TEXTURE_2D, posTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, texW, texH, 0, gl.RGBA, gl.FLOAT,
+          posData.subarray(0, texW * texH * 4));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        const colOutTex = gl.createTexture()!;
+        gl.bindTexture(gl.TEXTURE_2D, colOutTex);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, texW, texH);
+        const colFbo = gl.createFramebuffer()!;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, colFbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colOutTex, 0);
+        gl.viewport(0, 0, texW, texH);
+        gl.bindVertexArray(colVao);
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, posTex);
+        gl.uniform1i(uPositions, 0);
+        gl.uniform1f(uPower, power);
+        gl.uniform1i(uIters, iters);
+        gl.uniform1i(uWidth, texW);
+        gl.uniform3f(uJitterOffset!, 0, 0, 0);
+        setFormulaUniforms(gl, colLoc, formulaParams);
+        setInterlaceUniforms(gl, colLoc, interlace);
+
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        gl.readPixels(0, 0, texW, texH, gl.RGBA, gl.UNSIGNED_BYTE, colPixels);
+
+        gl.deleteTexture(posTex);
+        gl.deleteTexture(colOutTex);
+        gl.deleteFramebuffer(colFbo);
+
+        // Scatter colors back into vec3 leaf blocks.
+        // Process one leaf at a time: gather its voxel colors, insert block.
+        let batchI = 0;
+        for (let li = leafIdx; li < batchEnd; li++) {
+          // Skip leaves with no active voxels in this range
+          if (batchI >= batchActiveCount || batchLeafIdx[batchI] !== li) continue;
+
+          const n5k = leafList[li * 2];
+          const n4k = leafList[li * 2 + 1];
+          const n5x = ((n5k >> 10) & 31) << 7;
+          const n5y = ((n5k >> 5) & 31) << 7;
+          const n5z = (n5k & 31) << 7;
+          const n4x = ((n4k >> 8) & 15) << 3;
+          const n4y = ((n4k >> 4) & 15) << 3;
+          const n4z = (n4k & 15) << 3;
+          const bx = (n5x + n4x) >> 3;
+          const by = (n5y + n4y) >> 3;
+          const bz = (n5z + n4z) >> 3;
+
+          rBytes.fill(0);
+          gBytes.fill(0);
+          bBytes.fill(0);
+
+          while (batchI < batchActiveCount && batchLeafIdx[batchI] === li) {
+            const vdbI = batchVdbIdx[batchI];
+            rBytes[vdbI] = colPixels[batchI * 4];
+            gBytes[vdbI] = colPixels[batchI * 4 + 1];
+            bBytes[vdbI] = colPixels[batchI * 4 + 2];
+            batchI++;
+          }
+
+          addVec3LeafBlock(cdTree, bx, by, bz, rBytes, gBytes, bBytes);
+        }
+
+        voxelsProcessed += batchActiveCount;
+        leafIdx = batchEnd;
+
+        const pct = Math.round(voxelsProcessed / totalActiveVoxels * 100);
+        setProgress(80 + Math.round(pct * 0.12)); // color pass: 80-92% of main bar
+        setPhase('VDB Color', pct);
+        setStatus('Color pass: ' + voxelsProcessed.toLocaleString() + '/' + totalActiveVoxels.toLocaleString() + ' voxels');
+        await tick();
+      }
+
+      gl.deleteProgram(colProg);
+      gl.deleteVertexArray(colVao);
+      optimizeVec3Tree(cdTree);
+      colorTree = cdTree;
+
+      // Track color tree memory
+      if (callbacks.memAlloc) {
+        let colorLeafCount = 0;
+        cdTree.n4map.forEach((n4) => { colorLeafCount += n4.leafMap.size; });
+        // Each vec3 leaf: mask(64B) + data(6KB) ≈ 6.2KB. Node4 overhead ~60KB each.
+        const colorMB = Math.round((colorLeafCount * 6.2 + cdTree.n4map.size * 60) / 1024);
+        callbacks.memAlloc('vdbColor', 'VDB Color', colorMB, '#e6a');
+      }
+
+      log('Color pass complete: Cd vec3s grid built', 'success');
+    }
+
+    setPhase('VDB Color', 100);
+    await tick();
+  }
+
+  // Optimize density tree
+  setProgress(92);
+  setPhase('VDB Optimize', 0);
+  setStatus('Optimizing VDB tree...');
+  const promoted = optimizeTree(tree);
+  setProgress(95);
+  setPhase('VDB Serialize', 50);
+  setStatus('Serializing VDB...');
+  await tick();
+
+  // Serialize — density only, or density + Cd color
+  // Note: serialization is destructive (frees leaf data to reduce peak memory)
+  let leafCount = 0;
+  tree.n4map.forEach((n4) => { leafCount += n4.leafMap.size; });
+
+  let vdbBuf: Uint8Array;
+  if (colorTree) {
+    vdbBuf = serializeMultiGridVDB(tree, colorTree, N, gridMin, boundsRange);
+  } else {
+    vdbBuf = serializeVDB(tree, N, gridMin, boundsRange);
+  }
+
+  // Trees are now destructed (leaf data freed during serialization) — update memory display
+  if (callbacks.memFree) {
+    callbacks.memFree('vdbDensity');
+    if (colorTree) callbacks.memFree('vdbColor');
+  }
+  if (callbacks.memAlloc) {
+    const blobMB = Math.round(vdbBuf.byteLength / (1024 * 1024));
+    callbacks.memAlloc('vdbBlob', 'VDB File', blobMB, '#5af');
+  }
+
+  setProgress(100);
+  setPhase('VDB Complete', 100);
+
   return {
-    blob: new Blob([vdbBuf], { type: 'application/octet-stream' }),
+    blob: new Blob([vdbBuf.buffer.slice(vdbBuf.byteOffset, vdbBuf.byteOffset + vdbBuf.byteLength) as ArrayBuffer], { type: 'application/octet-stream' }),
     voxelCount: totalVoxels,
     leafCount,
     promoted,

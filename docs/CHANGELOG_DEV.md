@@ -2,6 +2,32 @@
 
 Chronological log of significant changes during the v0.9.0 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-08
+
+### Mesh Export — Preview Camera Overhaul
+- **Pan support**: Right-click or middle-click drag pans the view in both SDF and mesh preview modes
+- **Camera preset toolbar**: Bottom-bar buttons for Front/Back/Left/Right/Top/Bottom views plus Center (reset pan)
+- **Controls hint overlay**: Shows "LMB orbit · RMB pan · Scroll zoom · Shift snap" below the toolbar
+- **Mesh preview pan**: Right-click/middle-click pans the wireframe preview; camera presets sync to mesh rotation
+- **Preview reset on re-generate**: Clicking Generate now clears the previous mesh result, switching back to slice preview mode instead of staying stuck on the old mesh wireframe
+
+### Mesh Export — VDB Color Grids
+- **Optional Cd vec3s grid**: "Include color grids" checkbox in the export panel (off by default for performance)
+- **GPU orbit-trap color sampling**: After SDF pass, walks all active density voxels, packs positions into a texture, runs the color shader, and builds a `Vec3VDBTree`
+- **Standard OpenVDB format**: Color exported as a single `Cd` grid with type `Tree_vec3s_5_4_3` — loads natively in Houdini, Blender, and other VDB-compatible tools
+- **Multi-grid interleaved layout**: Descriptor + offsets + data written per grid (not batched), matching the OpenVDB spec
+- **vec3s tree writer**: New `Vec3LeafNode`, `Vec3Node4`, `Vec3VDBTree` types with `addVec3LeafBlock()`, `optimizeVec3Tree()`, and `_writeVec3Tree()` serializer (12-byte Vec3f background, `u8(6)` compression enum, 3×float32 per voxel)
+- **VDB filenames**: Now include resolution, content tag (`-density` or `-density-color`), and timestamp
+
+### Mesh Export — Preview Fixes
+- **Missing uniform locations**: Quality uniforms (`uFudgeFactor`, `uDetail`, `uPixelThreshold`) and bounds uniforms (`uClipBounds`, `uBoundsMin`, `uBoundsMax`) were declared in the shader and set each frame, but their locations were never looked up — WebGL silently returned null, so all quality sliders had no effect
+- **Quality slider labels**: Changed from `variant="compact"` (no label) to `variant="full"` so Surface Threshold, Fudge Factor, Ray Detail, and Pixel Threshold are visible with labels
+- **Quality changes now trigger re-render**: `_qualitySettings` was subscribed but missing from the `useEffect` dependency array that calls `requestRender()`
+- **Ortho fudge compensation**: Preview applies 0.75× multiplier on fudge factor to compensate for orthographic ray overshooting (parallel rays are more prone to missing thin features than perspective rays)
+
+### Mesh Export — Shader Cache-Busting
+- `Date.now()` timestamp comment embedded in generated SDF, color, and preview GLSL source to prevent stale browser/driver shader caches
+
 ## 2026-03-27
 
 ### Bucket Renderer Fixes

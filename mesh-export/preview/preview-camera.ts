@@ -65,10 +65,14 @@ export function orthoCamBasis(angle: number, pitch: number): CamBasis {
 /**
  * Project 3D point to 2D canvas coords (orthographic).
  * Shader convention: res.y pixels spans camDist world units.
+ * Optional target offsets the camera look-at point (for pan).
  */
-export function orthoProject(p: Vec3, angle: number, pitch: number, camDist: number, w: number, h: number): Vec3 {
+export function orthoProject(p: Vec3, angle: number, pitch: number, camDist: number, w: number, h: number, target?: Vec3): Vec3 {
   const cam = orthoCamBasis(angle, pitch);
-  const v = sub3(p, cam.pos);
+  const t: Vec3 = target || [0, 0, 0];
+  // Camera position is offset by target
+  const camPos = add3(cam.pos, t);
+  const v = sub3(p, camPos);
   const dx = dot3(v, cam.right);
   const dy = dot3(v, cam.up);
   const s = h / camDist;

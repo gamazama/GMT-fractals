@@ -307,7 +307,14 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                     {advancedFeatures.map(feat => renderFeatureToggle(feat))}
                                     {extraAdvanced.map(item => renderFeatureToggle(item, true))}
                                     <a href="/mesh-export.html" target="_blank" rel="noopener noreferrer"
-                                       onClick={(e) => { e.stopPropagation(); vibrate(5); setShowSystemMenu(false); }}
+                                       onClick={(e) => {
+                                         e.stopPropagation(); vibrate(5); setShowSystemMenu(false);
+                                         try {
+                                           const gmf = saveGMFScene(state.getPreset());
+                                           localStorage.setItem('gmt-mesh-export-scene', gmf);
+                                           console.log('[SystemMenu] Saved scene to localStorage:', gmf.length, 'chars');
+                                         } catch (err) { console.warn('[SystemMenu] Failed to save scene:', err); }
+                                       }}
                                        className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group no-underline">
                                         <span className="text-xs font-bold group-hover:text-orange-400">Mesh Export</span>
                                         <span className="text-[9px] text-gray-600">↗</span>

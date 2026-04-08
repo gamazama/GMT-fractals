@@ -3,7 +3,7 @@
  * Unified across Slider and Vector inputs
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { EditState } from '../types';
 import { ValueMapping } from '../primitives/FormatUtils';
 
@@ -37,22 +37,26 @@ export const useEditMode = (options: UseEditModeOptions): UseEditModeReturn => {
     const [isEditing, setIsEditing] = useState(false);
     const [inputValue, setInputValue] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
+    // Always-fresh ref for the input value — immune to stale closures
+    const inputValueRef = useRef("");
     
     /**
      * Start editing mode - show input with current value
      */
     const startEditing = useCallback(() => {
         if (disabled) return;
-        
+
         setIsEditing(true);
         // When mapTextInput is false, use raw value; otherwise use mapped value
         const rawValue = mapTextInput && mapping ? mapping.toDisplay(value) : value;
         // Format to max 6 decimal places to avoid excessive precision
-        const formattedValue = typeof rawValue === 'number' 
-            ? parseFloat(rawValue.toFixed(6)) 
+        const formattedValue = typeof rawValue === 'number'
+            ? parseFloat(rawValue.toFixed(6))
             : (rawValue ?? 0);
-        setInputValue(String(formattedValue));
-        
+        const str = String(formattedValue);
+        setInputValue(str);
+        inputValueRef.current = str;
+
         // Focus and select the input
         setTimeout(() => {
             if (inputRef.current) {
@@ -66,30 +70,34 @@ export const useEditMode = (options: UseEditModeOptions): UseEditModeReturn => {
      * Commit the edit - parse value and call onChange
      */
     const commitEdit = useCallback(() => {
+        // Read from ref to avoid stale-closure issues (e.g. blur firing
+        // before React has re-rendered with the latest inputValue state)
+        const currentInput = inputValueRef.current;
+
         // Parse the input value
         let parsedValue: number | null;
-        
+
         if (mapping?.parseInput && mapTextInput) {
             // Use mapping's parseInput when mapTextInput is true
-            parsedValue = mapping.parseInput(inputValue);
+            parsedValue = mapping.parseInput(currentInput);
         } else {
             // Otherwise parse as raw float
-            parsedValue = parseFloat(inputValue);
+            parsedValue = parseFloat(currentInput);
             if (isNaN(parsedValue)) parsedValue = null;
         }
-        
+
         if (parsedValue !== null) {
             // Convert from display value to internal value only when mapTextInput is true
             const finalValue = (mapTextInput && mapping) ? mapping.fromDisplay(parsedValue) : parsedValue;
-            
+
             // Trigger undo history
             onDragStart?.();
             onChange(finalValue);
             onDragEnd?.();
         }
-        
+
         setIsEditing(false);
-    }, [inputValue, mapping, onChange, onDragStart, onDragEnd, mapTextInput]);
+    }, [mapping, onChange, onDragStart, onDragEnd, mapTextInput]);
     
     /**
      * Cancel editing - revert to display mode without changes
@@ -103,6 +111,7 @@ export const useEditMode = (options: UseEditModeOptions): UseEditModeReturn => {
      */
     const handleInputChange = useCallback((newValue: string) => {
         setInputValue(newValue);
+        inputValueRef.current = newValue;
     }, []);
     
     /**
@@ -116,7 +125,7 @@ export const useEditMode = (options: UseEditModeOptions): UseEditModeReturn => {
             e.preventDefault();
             cancelEdit();
         }
-        // Allow Tab to navigate naturally
+        // Allow Tab to navigate naturally (blur will call commitEdit)
         if (e.key !== 'Tab') {
             e.stopPropagation();
         }
