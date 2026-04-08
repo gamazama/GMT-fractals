@@ -115,7 +115,7 @@ function MeshDonateButton() {
       >
         <img
           ref={imgRef}
-          src="/guy.png"
+          src="guy.png"
           alt=""
           className="pointer-events-none object-contain block w-full"
           style={{ transform: 'scale(0)', transformOrigin: 'bottom center' }}

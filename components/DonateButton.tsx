@@ -81,7 +81,7 @@ const GuyReveal: React.FC<{ compact?: boolean }> = ({ compact }) => {
       >
         <img
           ref={imgRef}
-          src="/guy.png"
+          src="guy.png"
           alt=""
           className="pointer-events-none object-contain"
           style={{ height: h, width: 'auto', transform: 'scale(0)', transformOrigin: 'bottom center' }}

@@ -307,7 +307,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                     {renderFeatureToggle({ id: 'engineSettings', toggleParam: 'showEngineTab', label: 'Engine Settings' })}
                                     {advancedFeatures.map(feat => renderFeatureToggle(feat))}
                                     {extraAdvanced.map(item => renderFeatureToggle(item, true))}
-                                    <a href="/mesh-export.html" target="_blank" rel="noopener noreferrer"
+                                    <a href="mesh-export.html" target="_blank" rel="noopener noreferrer"
                                        onClick={(e) => {
                                          e.stopPropagation(); vibrate(5); setShowSystemMenu(false);
                                          try {
