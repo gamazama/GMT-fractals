@@ -63,6 +63,76 @@ function InterlaceControls() {
   );
 }
 
+/** Donate button: slide-in intro, scale-down outro */
+function MeshDonateButton() {
+  const clipRef = React.useRef<HTMLDivElement>(null);
+  const imgRef = React.useRef<HTMLImageElement>(null);
+  const timerRef = React.useRef(0);
+  const isHovered = React.useRef(false);
+
+  const onEnter = React.useCallback(() => {
+    isHovered.current = true;
+    clearTimeout(timerRef.current);
+    const clip = clipRef.current!;
+    const img = imgRef.current!;
+    // Reset scale instantly (no transition), then slide open
+    img.style.transition = 'none';
+    img.style.transform = 'scale(1)';
+    // Force reflow so the reset takes effect before slide starts
+    void clip.offsetHeight;
+    clip.style.transition = 'max-height 0.35s ease-out';
+    clip.style.maxHeight = '200px';
+  }, []);
+
+  const onLeave = React.useCallback(() => {
+    isHovered.current = false;
+    const clip = clipRef.current!;
+    const img = imgRef.current!;
+    // Scale down from bottom edge
+    img.style.transition = 'transform 0.3s ease-in';
+    img.style.transform = 'scale(0) translateY(0)';
+    img.style.transformOrigin = 'bottom center';
+    // After scale finishes, collapse clip
+    timerRef.current = window.setTimeout(() => {
+      if (!isHovered.current) {
+        clip.style.transition = 'none';
+        clip.style.maxHeight = '0';
+      }
+    }, 310);
+  }, []);
+
+  return (
+    <div
+      className="fixed bottom-5 right-5 z-50 inline-flex flex-col items-stretch"
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+    >
+      {/* Clip container sits directly above the button */}
+      <div
+        ref={clipRef}
+        className="overflow-hidden"
+        style={{ maxHeight: 0 }}
+      >
+        <img
+          ref={imgRef}
+          src="/guy.png"
+          alt=""
+          className="pointer-events-none object-contain block w-full"
+          style={{ transform: 'scale(0)', transformOrigin: 'bottom center' }}
+        />
+      </div>
+      <a
+        href="https://www.paypal.com/ncp/payment/WHMZWATKN6GEY"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 px-3 py-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white text-[11px] font-bold transition-colors"
+      >
+        Support GMT
+      </a>
+    </div>
+  );
+}
+
 export function MeshExportPage() {
   const iters = useMeshExportStore((s) => s.iters);
   const setIters = useMeshExportStore((s) => s.setIters);
@@ -131,6 +201,9 @@ export function MeshExportPage() {
           </div>
         </div>
       </div>
+
+      {/* Fixed bottom-right donate button */}
+      <MeshDonateButton />
     </div>
   );
 }

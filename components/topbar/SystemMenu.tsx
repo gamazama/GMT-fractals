@@ -12,6 +12,7 @@ import { saveGMFScene, loadGMFScene } from '../../utils/FormulaFormat';
 import { registry } from '../../engine/FractalRegistry';
 import { Popover } from '../Popover';
 import { HardwarePreferences } from '../panels/HardwarePreferences';
+import { DonateButton } from '../DonateButton';
 
 interface SystemMenuProps {
     isMobileMode: boolean;
@@ -371,6 +372,11 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                                 <span>Source:</span>
                                                 <span className="text-cyan-400 hover:underline">GitHub (GPL-3.0)</span>
                                             </a>
+                                        </div>
+
+                                        <div className="pt-2 border-t border-white/10">
+                                            <p className="text-[9px] text-gray-500 mb-2">GMT is free & open source. With support I could spend more time developing it!</p>
+                                            <DonateButton />
                                         </div>
                                     </div>
                                 </div>
