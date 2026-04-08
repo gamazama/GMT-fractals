@@ -278,6 +278,39 @@ A modification of the Kleinian formula that introduces a "Magic Factor" (Param D
 Creates intricate, filigree-like patterns that look like carved ivory or 3D printed metal.
 `
     },
+    'formula.pseudokleinian06': {
+        id: 'formula.pseudokleinian06',
+        category: 'Formulas',
+        title: 'Pseudo Kleinian 06',
+        parentId: 'formula.active',
+        content: `
+## The Math
+Scale-1 JuliaBox with "Thingy" distance estimator by Knighty and Theli-at. Each iteration applies a box fold, sphere fold, and Julia shift:
+
+$$p \\leftarrow 2 \\cdot \\text{clamp}(p, -\\text{CSize}, \\text{CSize}) - p$$
+$$k = \\max(\\text{Size} / r^2,\\; 1), \\quad p \\leftarrow k \\cdot p$$
+$$p \\leftarrow p + C$$
+
+The DE uses the "Thingy" shape — a twisted cylindrical cross-section controlled by Thickness (x, y).
+
+**Sphere Inversion** wraps the infinite periodic tiling into a bounded sphere via Möbius inversion. InvRadius and InvCenter control the inversion sphere.
+
+**Reference:** [Fractal Forums: Fragmentarium Pseudo Kleinian](http://www.fractalforums.com/3d-fractal-generation/fragmentarium-an-ide-for-exploring-3d-fractals-and-other-systems-on-the-gpu/msg32270/)
+
+## Parameters
+- **Size**: Sphere fold radius. 1.0 = scale-1 Julia box.
+- **CSize**: Box fold half-size per axis. CSize.z also offsets z before the loop.
+- **C**: Julia constant shift. Zero = pure Kleinian; non-zero = Julia variant.
+- **Thickness**: x = TThickness (DE numerator), y = TThickness2 (cylindrical shell radius).
+- **Inversion**: Toggle + InvRadius. Wraps infinite tiling into bounded sphere.
+- **InvCenter**: Sphere inversion center. Classic value (1.15, 0.5, −2).
+- **Offset**: Translates the Thingy DE shape origin.
+- **DEoffset**: Subtracts from the final DE, inflating the surface.
+
+## Visuals
+Produces nested bubble lattices, soap-film geometries, and intricate Kleinian group limit sets. With inversion off, generates infinite periodic tunnel/room structures.
+`
+    },
     'formula.dodecahedron': {
         id: 'formula.dodecahedron',
         category: 'Formulas',
@@ -770,6 +803,133 @@ $\\phi$ appears at every level of this fractal:
 
 ## Visuals
 Produces organic, layered structures with pentagonal symmetry undertones. The harmonic fold creates smooth structural transitions as you sweep through the parameter — like zooming through different "perspectives" of the same golden-ratio geometry. Best explored with the Rotation control to find different viewpoints of the fold structure.
+`
+    },
+
+    // --- CATALAN & COXETER ---
+
+    'formula.rhombicdodecahedron': {
+        id: 'formula.rhombicdodecahedron',
+        category: 'Formulas',
+        title: 'Rhombic Dodecahedron',
+        parentId: 'formula.active',
+        content: `
+## The Math
+Catalan solid fractal — the dual of the cuboctahedron. Uses the RD's own face normals as fold planes, NOT the standard Knighty fold. Reflecting through $(1,\\pm 1,0)/\\sqrt{2}$ and $(0,1,\\pm 1)/\\sqrt{2}$ generates the chiral octahedral group (24 elements), producing a fold domain bounded entirely by RD face planes.
+
+In this domain the RD SDF simplifies to a single cutting plane: $d = (x + y - s) / \\sqrt{2}$.
+
+This gives true rhombic dodecahedral geometry at ALL iteration levels.
+
+**Reference:** [Wikipedia: Rhombic Dodecahedron](https://en.wikipedia.org/wiki/Rhombic_dodecahedron)
+
+## Parameters
+- **Scale**: IFS expansion factor. Default 2.0.
+- **Offset**: Size of the cutting plane / face separation.
+- **Rotation (Vec3B)**: 3D pre-fold rotation (Rodrigues formula).
+- **Shift (Vec3A)**: Linear offset in X/Y/Z.
+- **Twist**: Spatial twist deformation.
+
+## Visuals
+Produces fractal structures with rhombic (diamond-shaped) faces at every zoom level. 12 faces arranged in octahedral symmetry.
+`
+    },
+    'formula.rhombictriacontahedron': {
+        id: 'formula.rhombictriacontahedron',
+        category: 'Formulas',
+        title: 'Rhombic Triacontahedron',
+        parentId: 'formula.active',
+        content: `
+## The Math
+The 3D shadow of a 6-dimensional hypercube — Buckminster Fuller's favorite shape. 30 golden-ratio rhombic faces with full icosahedral symmetry.
+
+The Knighty icosahedral fold planes are icosidodecahedron vertex normals — the RT's own face normals. After folding, the domain concentrates near the z-axis where the cutting plane simplifies to $d = z - s$.
+
+This gives correct RT geometry at all iteration levels.
+
+**Reference:** [Wikipedia: Rhombic Triacontahedron](https://en.wikipedia.org/wiki/Rhombic_triacontahedron)
+
+## Parameters
+- **Scale**: IFS expansion factor. Default 1.618 (the golden ratio).
+- **Offset**: Size parameter controlling face separation.
+- **Rotation (Vec3B)**: 3D pre-fold rotation (Rodrigues formula).
+- **Shift (Vec3A)**: Linear offset in X/Y/Z.
+- **Twist**: Spatial twist deformation.
+
+## Visuals
+Produces icosahedral-symmetry fractals with 30 rhombic faces. The golden ratio appears naturally in the face proportions.
+`
+    },
+    'formula.coxeter': {
+        id: 'formula.coxeter',
+        category: 'Formulas',
+        title: 'Coxeter',
+        parentId: 'formula.active',
+        content: `
+## The Math
+A parameterized Coxeter symmetry fractal that continuously interpolates between the three finite reflection groups in 3D:
+
+- **N = 3**: Tetrahedral [3,3]
+- **N = 4**: Octahedral [3,4]
+- **N = 5**: Icosahedral [3,5]
+- **Fractional N**: Novel intermediate symmetries unique to this formula
+
+## Parameters
+- **Scale**: IFS expansion factor.
+- **Offset**: Size parameter.
+- **Symmetry N**: The Coxeter group order. Sweep from 3 to 5 to morph the geometry.
+- **Rotation (Vec3B)**: 3D pre-fold rotation.
+- **Shift (Vec3A)**: Linear offset.
+- **Twist**: Spatial twist deformation.
+
+## Visuals
+Explore fractional N values to discover shapes that don't exist in classical geometry — smooth interpolations between tetrahedral, octahedral, and icosahedral symmetry.
+`
+    },
+    'formula.cuboctahedron': {
+        id: 'formula.cuboctahedron',
+        category: 'Formulas',
+        title: 'Cuboctahedron',
+        parentId: 'formula.active',
+        content: `
+## The Math
+Archimedean solid fractal — the rectification of both the cube and octahedron. Uses the Knighty octahedral fold with a cutting-plane distance estimator. 14 faces (8 triangles + 6 squares).
+
+**Reference:** [Wikipedia: Cuboctahedron](https://en.wikipedia.org/wiki/Cuboctahedron)
+**Credits:** Based on **Knighty's** Kaleidoscopic IFS.
+
+## Parameters
+- **Scale**: IFS expansion factor.
+- **Offset**: Face separation / size.
+- **Rotation (Vec3B)**: 3D pre-fold rotation.
+- **Shift (Vec3A)**: Linear offset.
+- **Twist**: Spatial twist deformation.
+
+## Visuals
+Produces fractals with mixed triangular and square faces — a geometry that appears in crystal structures (face-centered cubic packing).
+`
+    },
+    'formula.greatstellateddodecahedron': {
+        id: 'formula.greatstellateddodecahedron',
+        category: 'Formulas',
+        title: 'Great Stellated Dodecahedron',
+        parentId: 'formula.active',
+        content: `
+## The Math
+One of the four Kepler-Poinsot polyhedra — a stellated dodecahedron. Uses the Knighty icosahedral fold with a stellation-depth parameter.
+
+**Reference:** [Wikipedia: Great Stellated Dodecahedron](https://en.wikipedia.org/wiki/Great_stellated_dodecahedron)
+
+## Parameters
+- **Scale**: IFS expansion factor.
+- **Offset**: Size parameter.
+- **Stellation**: Controls how far the star points extend outward.
+- **Rotation (Vec3B)**: 3D pre-fold rotation.
+- **Shift (Vec3A)**: Linear offset.
+- **Twist**: Spatial twist deformation.
+
+## Visuals
+Produces spiky, star-like fractals with icosahedral symmetry. The stellation parameter interpolates between a dodecahedron and the fully stellated form.
 `
     }
 };

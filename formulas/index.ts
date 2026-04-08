@@ -31,6 +31,18 @@ import { MandelMap } from './MandelMap';
 import { MandelBolic } from './MandelBolic';
 import { KaliBox } from './KaliBox';
 import { Claude } from './Claude';
+import { Octahedron } from './Octahedron';
+import { Icosahedron } from './Icosahedron';
+import { RhombicDodecahedron } from './RhombicDodecahedron';
+import { Coxeter } from './Coxeter';
+import { RhombicTriacontahedron } from './RhombicTriacontahedron';
+import { Apollonian } from './Apollonian';
+import { Cuboctahedron } from './Cuboctahedron';
+import { TruncatedIcosahedron } from './TruncatedIcosahedron';
+import { GreatStellatedDodecahedron } from './GreatStellatedDodecahedron';
+import { PseudoKleinian06 } from './PseudoKleinianAdv';
+import { PseudoKleinianMod4 } from './PseudoKleinianMod4';
+
 
 // Organized list determines UI order on LOADING SCREEN
 const formulas = [
@@ -56,7 +68,18 @@ const formulas = [
     Mandelbar3D,
     Quaternion,
     PseudoKleinian,
+    PseudoKleinian06,
+    PseudoKleinianMod4,
     Dodecahedron,
+    Octahedron,
+    Icosahedron,
+    Cuboctahedron,
+    TruncatedIcosahedron,
+    RhombicDodecahedron,
+    Coxeter,
+    RhombicTriacontahedron,
+    GreatStellatedDodecahedron,
+    Apollonian,
     
     // --- Hybrids & Variants ---
     JuliaMorph,
@@ -81,10 +104,11 @@ registry.registerAlias('UberMenger', 'MengerAdvanced');
 registry.registerAlias('FoldingBrot', 'BoxBulb');
 registry.registerAlias('HyperTorus', 'Mandelorus'); // Legacy Alias
 registry.registerAlias('HyperbolicMandelbrot', 'MandelBolic'); // Legacy Alias
+registry.registerAlias('RhombicIcosahedron', 'Coxeter'); // Legacy Alias
 
 export const PREDEFINED_CATEGORIES = [
-    { 
-        name: "Featured Fractals", 
+    {
+        name: "Featured Fractals",
         match: [
             Mandelbulb.id,
             Mandelorus.id,
@@ -96,40 +120,81 @@ export const PREDEFINED_CATEGORIES = [
             AmazingSurf.id,
             MandelTerrain.id,
             Claude.id
-        ] 
+        ]
     },
-    { 
-        name: "Geometric & Folding", 
+    {
+        name: "Platonic & Archimedean",
         match: [
+            SierpinskiTetrahedron.id,
+            MengerSponge.id,
+            Octahedron.id,
+            Dodecahedron.id,
+            Icosahedron.id,
+            Cuboctahedron.id,
+            TruncatedIcosahedron.id,
+        ]
+    },
+    {
+        name: "Catalan & Coxeter",
+        match: [
+            RhombicDodecahedron.id,
+            Coxeter.id,
+            RhombicTriacontahedron.id,
+        ]
+    },
+    {
+        name: "Stellations & Special",
+        match: [
+            GreatStellatedDodecahedron.id,
+            Apollonian.id,
+        ]
+    },
+    {
+        name: "IFS & Folding",
+        match: [
+            MixPinski.id,
             MarbleMarcher.id,
             KaliBox.id,
-            SierpinskiTetrahedron.id,
-            PseudoKleinian.id,
-            Dodecahedron.id,
+            BoxBulb.id,
             MengerAdvanced.id,
-            BoxBulb.id
-        ] 
+            Kleinian.id,
+            PseudoKleinian.id,
+            PseudoKleinian06.id,
+            PseudoKleinianMod4.id,
+            AmazingBox.id,
+            AmazingSurf.id,
+            AmazingSurface.id,
+        ]
     },
-    { 
-        name: "Hybrids & Experiments", 
+    {
+        name: "Power Fractals",
+        match: [
+            Mandelbulb.id,
+            Mandelbar3D.id,
+            Quaternion.id,
+            Mandelorus.id,
+            Phoenix.id,
+            Buffalo.id,
+            Bristorbrot.id,
+            MakinBrot.id,
+            Tetrabrot.id,
+        ]
+    },
+    {
+        name: "Hybrids & Experiments",
         match: [
             MandelMap.id,
             Borromean.id,
             Appell.id,
-            JuliaMorph.id, 
-            Phoenix.id,
-            Buffalo.id, 
-            Bristorbrot.id, 
-            MakinBrot.id, 
-            Tetrabrot.id, 
-            Mandelbar3D.id, 
-            Quaternion.id,
-            MandelBolic.id
-        ] 
+            JuliaMorph.id,
+            MandelTerrain.id,
+            MandelBolic.id,
+            Claude.id
+        ]
     },
-    { 
-        name: "Systems", 
-        match: [Modular.id] 
+    {
+        name: "Systems",
+        match: [Modular.id]
     }
 ] as const;
 
