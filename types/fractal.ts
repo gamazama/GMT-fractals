@@ -69,12 +69,22 @@ export interface FractalDefinition {
     name: string;
     thumbnail?: string;
     shortDescription?: string;
+    /** How Julia mode behaves in this formula. Used for UI labeling.
+     * - 'julia': True Julia set (c is iteration constant)
+     * - 'offset': c.xyz adds a constant translation (same as Shift)
+     * - 'none': Formula doesn't use Julia/c at all
+     */
+    juliaType?: 'julia' | 'offset' | 'none';
+    /** Optional tags for search/filter */
+    tags?: string[];
     shader: {
         function: string;
         loopBody: string;
         loopInit?: string;
         getDist?: string;
-        preamble?: string;  // Global code before functions (for pre-calculation)
+        preamble?: string;           // Global code before functions (for pre-calculation)
+        preambleVars?: string[];     // Names of mutable globals declared in preamble (for interlace renaming)
+        usesSharedRotation?: boolean; // True if formula reads/writes gmt_rotAxis/rotCos/rotSin (needs swap during interlace)
     };
     parameters: (FractalParameter | null)[];
     description?: string;

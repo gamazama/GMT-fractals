@@ -6,6 +6,7 @@ export const MarbleMarcher: FractalDefinition = {
     name: 'Marble Marcher',
     shortDescription: 'The dynamic fractal from the game Marble Marcher. Fast rendering, geometric feel.',
     description: 'The dynamic fractal from the game Marble Marcher. A specialized Menger Sponge IFS with rotation and shifting steps.',
+    juliaType: 'offset',
 
     shader: {
         preamble: `
@@ -74,6 +75,7 @@ export const MarbleMarcher: FractalDefinition = {
     }`,
         loopBody: `formula_MarbleMarcher(z, dr, trap, c);`,
         loopInit: `MarbleMarcher_precalcRotation();`,
+        preambleVars: ['uMM_sZ', 'uMM_cZ', 'uMM_sX', 'uMM_cX', 'uMM_sY', 'uMM_cY'],
         getDist: `
             float limit = 6.0;
             return vec2((r - limit) / dr, iter);
@@ -83,7 +85,7 @@ export const MarbleMarcher: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 2.0 },
         { label: 'Shift', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: -2.0, y: -2.0, z: -2.0 } },
-        { label: 'Rotation (Z, X, Y)', id: 'vec3B', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'axes' },
+        { label: 'Rotation (Z, X, Y)', id: 'vec3B', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'axes', scale: 'pi' },
     ],
 
     defaultPreset: {
@@ -133,11 +135,8 @@ export const MarbleMarcher: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.936, y: -2.75, z: 6.21 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 8, falloff: 0.67, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: -5, y: -2, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0, y: 0, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0044ff", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "2JfG4QE8x4GkvGQU5DKqx", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 1.89, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: -5, y: -2, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0, y: 0, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

@@ -6,6 +6,7 @@ export const Borromean: FractalDefinition = {
     name: 'Borromean (Cyclic)',
     shortDescription: 'Three interlocking Complex Planes. Uses dimensional feedback loops instead of spherical math.',
     description: 'Treats 3D space as three coupled 2D planes (XY, YZ, ZX). The output of one plane becomes the input of the next, creating a "Rock-Paper-Scissors" feedback loop. Produces tetrahedral symmetries and solid, non-spherical shapes.',
+    juliaType: 'none',
     
     shader: {
         function: `
@@ -546,20 +547,6 @@ export const Borromean: FractalDefinition = {
   },
   "targetDistance": 2.0720281302928925,
   "cameraMode": "Orbit",
-  "lights": [],
-  "renderMode": "Direct",
-  "quality": {
-    "aaMode": "Always",
-    "aaLevel": 1,
-    "msaa": 1,
-    "accumulation": true
-  },
-  "animations": [],
-  "sequence": {
-    "durationFrames": 300,
-    "fps": 30,
-    "tracks": {}
-  },
-  "duration": 300
+  "lights": []
 }
 };

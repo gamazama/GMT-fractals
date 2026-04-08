@@ -5,6 +5,7 @@ export const AmazingSurface: FractalDefinition = {
     id: 'AmazingSurface',
     name: 'Amazing Surface',
     description: 'A "Menger-Kleinian" hybrid. Uses 3-axis sorting (Menger) followed by a Box Fold and Sphere Inversion. Capable of creating non-orthogonal, organic machinery.',
+    juliaType: 'offset',
     
     shader: {
         loopInit: `
@@ -67,7 +68,7 @@ export const AmazingSurface: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 2.37 }, // fractal_fold + 1
         { label: 'Inv Max', id: 'paramB', min: 1.0, max: 5.0, step: 0.01, default: 3.0 },
-        { label: 'Box Params', id: 'vec3A', type: 'vec3', min: -3.0, max: 3.0, step: 0.001, default: { x: 1.0, y: 1.0, z: 1.3 } },
+        { label: 'Box Params', id: 'vec3A', type: 'vec3', min: -3.0, max: 3.0, step: 0.001, default: { x: 1.0, y: 1.0, z: 1.3 }, linkable: true },
         { label: 'Offset Params', id: 'vec3B', type: 'vec3', min: -3.0, max: 3.0, step: 0.001, default: { x: 0.0, y: 0.0, z: 0.5 } },
         { label: 'Pre-Scale', id: 'paramE', min: 0.1, max: 5.0, step: 0.01, default: 1.0 }, // fractal_scale
         { label: 'Thickness', id: 'paramF', min: 0.0, max: 10.0, step: 0.01, default: 0.4 },
@@ -252,7 +253,7 @@ export const AmazingSurface: FractalDefinition = {
                 light1_posX: 0.05,
                 light1_posY: 0.075,
                 light1_posZ: -0.1,
-                light1_color: "#ff0000",
+                light1_color: "#FFD6AA",
                 light2_visible: false,
                 light2_fixed: false,
                 light2_castShadow: false,
@@ -262,7 +263,7 @@ export const AmazingSurface: FractalDefinition = {
                 light2_posX: 0.25,
                 light2_posY: 0.075,
                 light2_posZ: -0.1,
-                light2_color: "#0000ff"
+                light2_color: "#E0EEFF"
             },
             optics: {
                 camType: 0,
@@ -293,11 +294,6 @@ export const AmazingSurface: FractalDefinition = {
         sceneOffset: { x: 0, y: -2, z: 2, xL: 0.04868238113505319, yL: -0.4245626359584309, zL: 0.3428044731107205 },
         targetDistance: 2.077035516500473,
         cameraMode: "Orbit",
-        lights: [],
-        renderMode: "Direct",
-        quality: { aaMode: "Always", aaLevel: 1, msaa: 1, accumulation: true },
-        animations: [],
-        sequence: { durationFrames: 300, fps: 30, tracks: {} },
-        duration: 300
+        lights: []
     }
 };

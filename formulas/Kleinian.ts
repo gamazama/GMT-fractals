@@ -6,6 +6,7 @@ export const Kleinian: FractalDefinition = {
     name: 'Kleinian',
     shortDescription: 'Inversion fractal. Resembles organic structures, coral, and sponge tissues.',
     description: 'Based on Kleinian groups and inversion in a sphere. Creates intricate, bubbly, sponge-like structures.',
+    juliaType: 'offset',
     
     shader: {
         function: `
@@ -82,7 +83,7 @@ export const Kleinian: FractalDefinition = {
         lights: [
             { type: 'Point', position: { x: 0.06202062498807429, y: 0.022274010144572264, z: 3.439439471330585 }, rotation: { x: 0, y: 0, z: 0 }, color: "#8FA9FF", intensity: 0.4, falloff: 0.6760000000000002, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 0.00041247989335695644, y: -0.00142172416335363, z: 3.0187219870917428 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFB333", intensity: 5, falloff: 142.88399999999996, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: -0.12319987256138526, y: -0.0954216385692699, z: 2.9890303407494763 }, rotation: { x: 0, y: 0, z: 0 }, color: "#3636FF", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true }
+            { type: 'Point', position: { x: -0.12319987256138526, y: -0.0954216385692699, z: 2.9890303407494763 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E8F0FF", useTemperature: true, temperature: 7000, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true }
         ]
     }
 };

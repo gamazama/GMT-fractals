@@ -6,6 +6,7 @@ export const Mandelorus: FractalDefinition = {
     name: 'Mandelorus',
     shortDescription: 'The "True" 3D Mandelbrot topology. Wraps space around a ring instead of a point.',
     description: 'Wraps the fractal iteration around a Torus (Donut). Creates a Solenoid structure. Twist is linked to Power: 1.0 Twist = 1 Symmetry Shift (360/Power).',
+    juliaType: 'julia',
     
     shader: {
         function: `
@@ -571,117 +572,6 @@ export const Mandelorus: FractalDefinition = {
   },
   "targetDistance": 5.214554250240326,
   "cameraMode": "Orbit",
-  "lights": [],
-  "renderMode": "Direct",
-  "quality": {
-    "aaMode": "Always",
-    "aaLevel": 1,
-    "msaa": 1,
-    "accumulation": true
-  },
-  "animations": [],
-  "sequence": {
-    "durationFrames": 300,
-    "fps": 30,
-    "tracks": {
-      "camera.unified.x": {
-        "id": "camera.unified.x",
-        "type": "float",
-        "label": "Position X",
-        "keyframes": [
-          {
-            "id": "520JCebpirpIjkgSfViyb",
-            "frame": 0,
-            "value": -0.05059101356107703,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.unified.y": {
-        "id": "camera.unified.y",
-        "type": "float",
-        "label": "Position Y",
-        "keyframes": [
-          {
-            "id": "TlKGVi6rVx8aPvZFWKlvw",
-            "frame": 0,
-            "value": -0.1358890818952094,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.unified.z": {
-        "id": "camera.unified.z",
-        "type": "float",
-        "label": "Position Z",
-        "keyframes": [
-          {
-            "id": "zcz_hIp4HhQTRZSagfckN",
-            "frame": 0,
-            "value": -5.918975187098582,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.rotation.x": {
-        "id": "camera.rotation.x",
-        "type": "float",
-        "label": "Rotation X",
-        "keyframes": [
-          {
-            "id": "sLYXo677pGLgJlq19eoEQ",
-            "frame": 0,
-            "value": 3.141592653589793,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.rotation.y": {
-        "id": "camera.rotation.y",
-        "type": "float",
-        "label": "Rotation Y",
-        "keyframes": [
-          {
-            "id": "9Og7ZQx3kB_GSO0hjPEQs",
-            "frame": 0,
-            "value": 0,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.rotation.z": {
-        "id": "camera.rotation.z",
-        "type": "float",
-        "label": "Rotation Z",
-        "keyframes": [
-          {
-            "id": "sZtDA1yOQQpJIB1P6Nn7v",
-            "frame": 0,
-            "value": 0,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      }
-    }
-  },
-  "duration": 300
+  "lights": []
 }
 };

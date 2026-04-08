@@ -6,6 +6,7 @@ export const AmazingBox: FractalDefinition = {
     name: 'Amazing Box',
     shortDescription: 'Architectural fractal discovered by Tglad. Creates complex geometric lattices and Borg-like structures.',
     description: 'Also known as the Mandelbox (Tglad). A folding fractal that creates complex, machine-like architectural structures.',
+    juliaType: 'offset',
     
     shader: {
         function: `
@@ -40,7 +41,7 @@ export const AmazingBox: FractalDefinition = {
         { label: 'Min Radius', id: 'paramB', min: 0.0, max: 1.5, step: 0.001, default: 0.5 },
         { label: 'Folding Limit', id: 'paramC', min: 0.1, max: 2.0, step: 0.001, default: 1.0 },
         { label: 'Fixed Radius', id: 'paramD', min: 0.1, max: 3.0, step: 0.001, default: 1.0 },
-        { label: 'Pre-Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 } },
+        { label: 'Pre-Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 }, mode: 'axes', scale: 'pi' },
     ],
 
     defaultPreset: {
@@ -162,30 +163,17 @@ export const AmazingBox: FractalDefinition = {
             },
             {
                 type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 },
-                color: "#ff0000",
+                color: "#FFD6AA", useTemperature: true, temperature: 3500,
                 intensity: 0.5,
                 falloff: 0.5,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: false
             },
             {
                 type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 },
-                color: "#0000ff",
+                color: "#E0EEFF", useTemperature: true, temperature: 7500,
                 intensity: 0.5,
                 falloff: 0.5,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: false
-            }
-        ],
-        animations: [
-            {
-                id: "4yFFplV3QPo3KoNaGJwfX",
-                enabled: false,
-                target: "coreMath.paramA",
-                shape: "Sine",
-                period: 5,
-                amplitude: 1,
-                baseValue: 2.566,
-                phase: 0,
-                smoothing: 0.5
             }
         ]
     }

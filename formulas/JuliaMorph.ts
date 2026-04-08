@@ -6,6 +6,7 @@ export const JuliaMorph: FractalDefinition = {
     name: 'Julia Morph (Stack)',
     shortDescription: 'Constructs 3D volumes by stacking 2D Julia sets. Perfect for topographic or sliced "MRI" effects.',
     description: 'Constructs a 3D object by stacking 2D Julia sets along the Z-axis. Start C and End C define the Julia constants at the bottom and top. The constant smoothly interpolates between them along the height.',
+    juliaType: 'julia',
 
     shader: {
         function: `
@@ -114,6 +115,21 @@ export const JuliaMorph: FractalDefinition = {
         // Taper DE compensation: scaled coordinates produce scaled distances
         if (abs(taperFactor) > 0.01) {
             d2d /= abs(taperFactor);
+        }
+
+        // Twist DE correction: twist stretches space by sqrt(1 + (twist_rate * r_xy)^2)
+        // This is the Jacobian correction for the twist deformation
+        if (abs(uParamC) > 0.001) {
+            float r_xy = length(p.xy);
+            d2d /= sqrt(1.0 + uParamC * uParamC * r_xy * r_xy);
+        }
+
+        // Bend DE correction: bend compresses/stretches distances depending on
+        // distance from the bend axis. Correction factor = R / (R + p.x)
+        if (abs(uParamD) > 0.001) {
+            float bendR = 20.0 / abs(uParamD);
+            float bendCorr = bendR / max(bendR + p.x * sign(uParamD), 0.1);
+            d2d *= bendCorr;
         }
 
         // Vertical Box Bounds (using warped z_val)
@@ -305,7 +321,7 @@ export const JuliaMorph: FractalDefinition = {
                 type: 'Point',
                 position: { x: 0, y: -5, z: 2 },
                 rotation: { x: 0, y: 0, z: 0 },
-                color: "#0088ff",
+                color: "#E0EEFF", useTemperature: true, temperature: 7500,
                 intensity: 0.25,
                 falloff: 0,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: true

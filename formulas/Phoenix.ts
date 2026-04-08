@@ -6,6 +6,7 @@ export const Phoenix: FractalDefinition = {
     name: 'Phoenix',
     shortDescription: 'Iterates based on previous value (z_n-1). Creates flowing, taffy-like distortions.',
     description: 'A 3D generalization of the Phoenix Julia set. Now with Z-stretching and spatial twisting.',
+    juliaType: 'julia',
     
     shader: {
         function: `
@@ -197,9 +198,8 @@ export const Phoenix: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.755, y: 0.531, z: -0.026 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 1.4, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: []
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+        ]
     }
 };

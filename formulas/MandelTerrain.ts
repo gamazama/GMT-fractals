@@ -6,6 +6,7 @@ export const MandelTerrain: FractalDefinition = {
     name: 'MandelTerrain',
     shortDescription: '3D Heightmap of the Mandelbrot set. Creates alien landscapes and "Math Mountains".',
     description: 'A 3D Heightmap of the Mandelbrot set. Iterations slider controls terrain detail.',
+    juliaType: 'julia',
     
     shader: {
         function: `
@@ -519,20 +520,6 @@ export const MandelTerrain: FractalDefinition = {
         },
         "targetDistance": 2.997344970703125,
         "cameraMode": "Orbit",
-        "lights": [],
-        "renderMode": "Direct",
-        "quality": {
-            "aaMode": "Always",
-            "aaLevel": 1,
-            "msaa": 1,
-            "accumulation": true
-        },
-        "animations": [],
-        "sequence": {
-            "durationFrames": 300,
-            "fps": 30,
-            "tracks": {}
-        },
-        "duration": 300
+        "lights": []
     }
 };

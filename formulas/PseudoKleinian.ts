@@ -108,8 +108,5 @@ export const PseudoKleinian: FractalDefinition = {
             { type: 'Point', position: { x: 4.557440677764606, y: 1.1, z: -0.16 }, rotation: { x: 0, y: 0, z: 0 }, color: "#A9A9A9", intensity: 27.1441, falloff: 3.528, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 4.677024051602566, y: 0.8488697555642045, z: 1.2543798336180192 }, rotation: { x: 0, y: 0, z: 0 }, color: "#4E83FF", intensity: 28.4, falloff: 261.407, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true }
         ],
-        animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 1.71, phase: 0, smoothing: 0.5 }
-        ]
     }
 };

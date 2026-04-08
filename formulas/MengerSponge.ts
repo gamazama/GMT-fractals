@@ -6,6 +6,7 @@ export const MengerSponge: FractalDefinition = {
     name: 'Menger Sponge',
     shortDescription: 'The classic cubic fractal. Creates infinite grids and tech-like structures.',
     description: 'The canonical Menger Sponge (Level N). Set Scale to 3.0 and Offset to 1.0 for the classic mathematical shape. Use "Center Z" to toggle between a corner fractal and the full cube.',
+    juliaType: 'none',
     
     shader: {
         function: `
@@ -115,9 +116,8 @@ export const MengerSponge: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: -0.969, y: 1.465, z: 1.325 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 5, falloff: 0, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: -4, y: -2, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#3344ff", intensity: 0.5, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 2.069, y: 1.017, z: 2.748 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff3300", intensity: 0.3, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: true }
-        ],
-        animations: []
+            { type: 'Point', position: { x: -4, y: -2, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E8F0FF", useTemperature: true, temperature: 7000, intensity: 0.5, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 2.069, y: 1.017, z: 2.748 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFC58F", useTemperature: true, temperature: 3000, intensity: 0.3, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: true }
+        ]
     }
 };

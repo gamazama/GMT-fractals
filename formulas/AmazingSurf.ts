@@ -6,6 +6,7 @@ export const AmazingSurf: FractalDefinition = {
     name: 'Amazing Surf',
     shortDescription: 'Sinusoidal variation of the Amazing Box. Creates flowing, melted machinery.',
     description: 'A variant of the Amazing Box that introduces sinusoidal waves. Now with Wave Twist and Vertical Shift.',
+    juliaType: 'offset',
     
     shader: {
         function: `
@@ -89,8 +90,8 @@ export const AmazingSurf: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.06201624057047557, y: -0.0404139584830392, z: -0.6430434715537097 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FF9D7B", intensity: 5, falloff: 22, falloffType: "Quadratic", fixed: true, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

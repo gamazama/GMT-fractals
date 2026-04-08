@@ -6,6 +6,7 @@ export const MengerAdvanced: FractalDefinition = {
     name: 'Menger Advanced',
     shortDescription: 'Hybrid Menger Sponge with internal Box Folds and vertical scaling.',
     description: 'An advanced variant of the Menger Sponge. It adds an Inner Box Fold (Param E) to generate machinery-like details inside the voids, and Z-Scale (Param F) for creating towering structures. (Formerly UberMenger)',
+    juliaType: 'none',
     
     shader: {
         function: `
@@ -205,7 +206,6 @@ export const MengerAdvanced: FractalDefinition = {
         cameraRot: { x: -0.045, y: -0.453, z: 0.141, w: 0.879 },
         sceneOffset: { x: -4, y: 0, z: 3, xL: 0.35, yL: -0.27, zL: 0.18 },
         targetDistance: 2.98,
-        cameraMode: "Orbit",
-        renderMode: "Direct",
+        cameraMode: "Orbit"
     }
 };

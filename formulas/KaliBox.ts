@@ -6,6 +6,7 @@ export const KaliBox: FractalDefinition = {
     name: 'Kali Box',
     shortDescription: 'Kali\'s abs-fold fractal with sphere inversion. Organic caves and alien landscapes.',
     description: 'A Mandelbox variant by Kali (fractalforums.com), optimized by Rrrola. Uses rotation, abs-fold + translation, clamped sphere inversion, and scale/minRad rescaling. Produces organic, cave-like structures.',
+    juliaType: 'offset',
 
     shader: {
         preamble: `
@@ -62,6 +63,7 @@ export const KaliBox: FractalDefinition = {
     }`,
         loopBody: `formula_KaliBox(z, dr, trap, c);`,
         loopInit: `KaliBox_precalcRotation();`,
+        preambleVars: ['uKB_rot', 'uKB_doRot'],
         getDist: `
             float absScalem1 = abs(uParamA - 1.0);
             return vec2((r - absScalem1) / dr, iter);
@@ -137,8 +139,8 @@ export const KaliBox: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Directional', position: { x: 0.62, y: -0.07, z: 1.4 }, rotation: { x: -0.025067221468304684, y: -3.071530976748474, z: 0.6869655122565176 }, color: "#ffffff", intensity: 1, falloff: 0.22, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 2, y: -1, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0, y: 0, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0044ff", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 2, y: -1, z: 1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0, y: 0, z: -3 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

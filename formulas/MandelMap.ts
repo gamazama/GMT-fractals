@@ -6,6 +6,7 @@ export const MandelMap: FractalDefinition = {
     name: 'MandelMap (Unrolled)',
     shortDescription: 'Unrolls the Mandelbulb surface. Features Sphere, Cylinder, and Torus projections.',
     description: 'Maps the Mandelbulb 3D structure onto a 2D plane. Use "Projection" (Param D) to switch between Spherical (Standard), Cylindrical (Infinite Vertical), and Toroidal (Seamless) mappings.',
+    juliaType: 'julia',
 
     shader: {
         function: `
@@ -582,20 +583,6 @@ export const MandelMap: FractalDefinition = {
   },
   "targetDistance": 4.905199170112612,
   "cameraMode": "Orbit",
-  "lights": [],
-  "renderMode": "Direct",
-  "quality": {
-    "aaMode": "Always",
-    "aaLevel": 1,
-    "msaa": 1,
-    "accumulation": true
-  },
-  "animations": [],
-  "sequence": {
-    "durationFrames": 300,
-    "fps": 30,
-    "tracks": {}
-  },
-  "duration": 300
+  "lights": []
 }
 };

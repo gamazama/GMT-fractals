@@ -6,6 +6,7 @@ export const Mandelbulb: FractalDefinition = {
     name: 'Mandelbulb',
     shortDescription: 'The classic 3D extension of the Mandelbrot set. Features organic, broccoli-like recursive structures.',
     description: 'The classic 3D extension of the Mandelbrot set. Features standard Power controls plus the "Radiolaria" mutation for skeletal/hollow effects.',
+    juliaType: 'julia',
     
     shader: {
         function: `
@@ -107,11 +108,6 @@ export const Mandelbulb: FractalDefinition = {
             { type: 'Point', position: { x: -0.7, y: 0.37, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 3, falloff: 0.22, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 0.6, y: -0.5, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 0, y: -5, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0088ff", intensity: 0.25, falloff: 0, falloffType: "Quadratic", fixed: true, visible: true, castShadow: false }
-        ],
-        renderMode: "Direct",
-        navigation: { flySpeed: 0.5, autoSlow: true },
-        animations: [],
-        sequence: { durationFrames: 300, fps: 30, tracks: {} },
-        duration: 300
+        ]
     }
 };
