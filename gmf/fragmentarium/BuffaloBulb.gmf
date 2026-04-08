@@ -1,0 +1,497 @@
+<!--
+  GMF: GPU Mandelbulb Format v1.0
+  A proprietary container for Fractal math definitions + default presets.
+  You can edit the GLSL blocks below directly.
+-->
+
+  <!--
+   * --- GMT SHADER API REFERENCE ---
+   *
+   * Available Uniforms:
+   * float uParamA, uParamB, uParamC, uParamD, uParamE, uParamF; // The 6 Sliders
+   * int uIterations;      // Iteration count
+   * float uTime;          // Elapsed time in seconds
+   * vec3 uJulia;          // Julia coordinates (if Julia mode active)
+   * float uJuliaMode;     // 1.0 if active, 0.0 if not
+   *
+   * Helper Functions:
+   * void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR);
+   * void boxFold(inout vec3 z, inout float dz, float limit);
+   * void dodecaFold(inout vec3 z);
+   * vec3 bulbPow(vec3 z, float power);        // Spherical Power function
+   * vec4 quatPow(vec4 q, float p);            // Quaternion Power
+   * vec4 quatMult(vec4 q1, vec4 q2);          // Quaternion Multiplication
+   * float snoise(vec3 v);                     // Simplex Noise (-1.0 to 1.0)
+   *
+   * Input/Output:
+   * z    : Current coordinate (vec4). .xyz is position, .w is auxiliary.
+   * dr   : Running derivative (float). Used for distance estimation.
+   * trap : Orbit trap accumulator (float). Used for coloring.
+   * c    : The constant for the fractal (Julia value or Pixel position).
+   -->
+
+<Metadata>
+{
+  "id": "BuffaloBulb",
+  "name": "Buffalo Bulb",
+  "shortDescription": "A 3D Buffalo fractal variant with optional absolute value folding.",
+  "description": "The Buffalo fractal ported from Fragmentarium by 3Dickulus. Based on the original formula by user youhn at http://www.fractalforums.com/gallery-b177/buffalo-fractals. Features configurable absolute value folding on each axis for generating unique bulb-like structures.",
+  "parameters": [
+    { "label": "Power", "id": "paramA", "min": 0, "max": 16, "step": 0.1, "default": 2, "description": "Mandelbulb-style power exponent" },
+    { "label": "Scale", "id": "paramB", "min": 0.1, "max": 4, "step": 0.01, "default": 1, "description": "Additional scale factor" },
+    { "label": "Rot Angle", "id": "paramC", "min": 0, "max": 6.283185, "step": 0.01, "default": 0, "scale": "2pi", "description": "Rotation around (1,1,1) axis" },
+    { "label": "Abs Flags", "id": "paramD", "min": 0, "max": 63, "step": 1, "default": 22, "description": "Bit flags: 1=absX, 2=absY, 4=absZ, 8=preAbsX, 16=preAbsY, 32=preAbsZ" },
+    { "label": "Offset Z", "id": "paramE", "min": -2, "max": 2, "step": 0.01, "default": 0, "description": "Z-axis offset after iteration" },
+    { "label": "Julia W", "id": "paramF", "min": -2, "max": 2, "step": 0.01, "default": 0, "description": "W component for 4D Julia variants" }
+  ],
+  "defaultPreset": {
+    "version": 0,
+    "name": "BuffaloBulb",
+    "formula": "BuffaloBulb",
+    "features": {
+      "coreMath": {
+        "iterations": 20,
+        "paramA": 2,
+        "paramB": 1,
+        "paramC": 0,
+        "paramD": 22,
+        "paramE": 0,
+        "paramF": 0
+      },
+      "geometry": {
+        "applyTransformLogic": true,
+        "preRotMaster": true,
+        "hybridComplex": false,
+        "burningEnabled": false,
+        "hybridMode": false,
+        "hybridIter": 0,
+        "hybridFoldLimit": 1,
+        "hybridScale": 2,
+        "hybridMinR": 0.5,
+        "hybridFixedR": 1,
+        "hybridAddC": false,
+        "hybridProtect": true,
+        "hybridSwap": false,
+        "hybridSkip": 1,
+        "preRotEnabled": false,
+        "preRotY": 0,
+        "preRotX": 0,
+        "preRotZ": 0,
+        "juliaMode": true,
+        "juliaX": 0.3695652,
+        "juliaY": -0.3423913,
+        "juliaZ": -0.423913,
+        "preRot": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "julia": { "x": 0, "y": 0, "z": 0 }
+      },
+      "lighting": {
+        "advancedLighting": true,
+        "ptEnabled": true,
+        "renderMode": 0,
+        "ptBounces": 3,
+        "ptGIStrength": 1,
+        "shadowsCompile": true,
+        "shadowAlgorithm": 0,
+        "ptStochasticShadows": false,
+        "shadows": false,
+        "shadowIntensity": 1,
+        "shadowSoftness": 10,
+        "shadowSteps": 128,
+        "shadowBias": 0.001,
+        "lights": [
+          {
+            "type": "Directional",
+            "position": { "x": -0.7, "y": 0.37, "z": 1.4 },
+            "rotation": {
+              "x": 0.5114943,
+              "y": 0.1436782,
+              "z": 0
+            },
+            "color": "#ffffff",
+            "intensity": 1,
+            "falloff": 0.22,
+            "falloffType": "Quadratic",
+            "fixed": false,
+            "visible": true,
+            "castShadow": true
+          }
+        ]
+      },
+      "ao": {
+        "aoIntensity": 0.9232996,
+        "aoSpread": 0.5,
+        "aoSamples": 5,
+        "aoMode": false,
+        "aoMaxSamples": 32,
+        "aoStochasticCp": true,
+        "aoEnabled": true
+      },
+      "reflections": {
+        "mixStrength": 1,
+        "roughnessThreshold": 0.5,
+        "bounces": 1,
+        "steps": 64,
+        "enabled": true
+      },
+      "atmosphere": {
+        "glowEnabled": true,
+        "glowQuality": 0,
+        "fogIntensity": 0,
+        "fogNear": 0,
+        "fogFar": 5,
+        "fogColor": "#000000",
+        "fogDensity": 0,
+        "glowIntensity": 0.004798262654911253,
+        "glowSharpness": 1,
+        "glowMode": true,
+        "glowColor": "#50aaff"
+      },
+      "materials": {
+        "diffuse": 1,
+        "reflection": 0,
+        "specular": 0.4105409,
+        "roughness": 0.75,
+        "rim": 0,
+        "rimExponent": 3,
+        "envStrength": 0.25,
+        "envBackgroundStrength": 0.06,
+        "envSource": 1,
+        "envMapData": null,
+        "envMapColorSpace": 0,
+        "useEnvMap": true,
+        "envRotation": 0,
+        "envGradientStops": [
+          {
+            "id": "hor",
+            "position": 0,
+            "color": "#223344",
+            "bias": 0.5,
+            "interpolation": "smooth"
+          },
+          {
+            "id": "zen",
+            "position": 1,
+            "color": "#88ccff",
+            "bias": 0.5,
+            "interpolation": "smooth"
+          }
+        ],
+        "emission": 0,
+        "emissionMode": 0,
+        "emissionColor": "#ffffff",
+        "ptEmissionMult": 1
+      },
+      "waterPlane": {
+        "waterEnabled": false,
+        "active": true,
+        "height": -2,
+        "color": "#001133",
+        "roughness": 0.02,
+        "waveStrength": 0.1,
+        "waveSpeed": 1,
+        "waveFrequency": 1.5
+      },
+      "coloring": {
+        "gradient": {
+          "stops": [
+            { "id": "1", "position": 0, "color": "#9e0142", "bias": 0.5, "interpolation": "linear" },
+            { "id": "2", "position": 0.111, "color": "#d53e4f", "bias": 0.5, "interpolation": "linear" },
+            { "id": "3", "position": 0.222, "color": "#f46d43", "bias": 0.5, "interpolation": "linear" },
+            { "id": "4", "position": 0.333, "color": "#fdae61", "bias": 0.5, "interpolation": "linear" },
+            { "id": "5", "position": 0.444, "color": "#fee08b", "bias": 0.5, "interpolation": "linear" },
+            { "id": "6", "position": 0.556, "color": "#e6f598", "bias": 0.5, "interpolation": "linear" },
+            { "id": "7", "position": 0.667, "color": "#abdda4", "bias": 0.5, "interpolation": "linear" },
+            { "id": "8", "position": 0.778, "color": "#66c2a5", "bias": 0.5, "interpolation": "linear" },
+            { "id": "9", "position": 0.889, "color": "#3288bd", "bias": 0.5, "interpolation": "linear" },
+            { "id": "10", "position": 1, "color": "#5e4fa2", "bias": 0.5, "interpolation": "linear" }
+          ],
+          "colorSpace": "srgb"
+        },
+        "mode": 1,
+        "scale": 1.1510942207477979,
+        "offset": -0.1726286201331454,
+        "repeats": 1,
+        "phase": -0.13,
+        "bias": 1,
+        "twist": 0,
+        "escape": 1.2,
+        "gradient2": [
+          { "id": "1", "position": 0, "color": "#FFFFFF", "bias": 0.5, "interpolation": "linear" },
+          { "id": "2", "position": 0.5, "color": "#000000", "bias": 0.5, "interpolation": "linear" },
+          { "id": "3", "position": 1, "color": "#FFFFFF", "bias": 0.5, "interpolation": "linear" }
+        ],
+        "mode2": 4,
+        "scale2": 1,
+        "offset2": 0,
+        "repeats2": 7,
+        "phase2": 0,
+        "bias2": 1,
+        "twist2": 0,
+        "blendMode": 0,
+        "blendOpacity": 0,
+        "layer3Color": "#ffffff",
+        "layer3Scale": 20,
+        "layer3Strength": 0,
+        "layer3Bump": 0,
+        "layer3Turbulence": 0
+      },
+      "texturing": {
+        "active": false,
+        "layer1Data": null,
+        "colorSpace": 0,
+        "mapU": 6,
+        "mapV": 1,
+        "scaleX": 1,
+        "scaleY": 1,
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "textureScale": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "quality": {
+        "engineQuality": true,
+        "compilerHardCap": 500,
+        "precisionMode": 0,
+        "bufferPrecision": 0,
+        "maxSteps": 300,
+        "distanceMetric": 0,
+        "estimator": 0,
+        "fudgeFactor": 0.5,
+        "stepRelaxation": 0,
+        "refinementSteps": 0,
+        "detail": 1,
+        "pixelThreshold": 0.2,
+        "overstepTolerance": 0,
+        "dynamicScaling": false,
+        "interactionDownsample": 2
+      },
+      "droste": {
+        "active": false,
+        "tiling": 1,
+        "center": {
+          "x": 0,
+          "y": 0
+        },
+        "radiusInside": 5,
+        "radiusOutside": 100,
+        "periodicity": 2,
+        "strands": 2,
+        "autoPeriodicity": false,
+        "strandMirror": false,
+        "zoom": 0,
+        "rotate": 0,
+        "rotateSpin": 0,
+        "rotatePolar": 0,
+        "twist": true,
+        "hyperDroste": false,
+        "fractalPoints": 1
+      },
+      "colorGrading": {
+        "active": true,
+        "saturation": 1.29,
+        "levelsMin": 0,
+        "levelsMax": 0.47826086956521746,
+        "levelsGamma": 0.7718886339575918
+      },
+      "optics": {
+        "camType": 0,
+        "camFov": 60,
+        "orthoScale": 2,
+        "dofStrength": 0,
+        "dofFocus": 2
+      },
+      "navigation": {
+        "flySpeed": 0.5,
+        "autoSlow": true
+      },
+      "cameraManager": {},
+      "audio": {
+        "isEnabled": false,
+        "smoothing": 0.8,
+        "threshold": 0.1,
+        "agcEnabled": false,
+        "attack": 0.1,
+        "decay": 0.3,
+        "highPass": 20,
+        "lowPass": 20000,
+        "gain": 1
+      },
+      "sonification": {
+        "isEnabled": false,
+        "active": true,
+        "baseFrequency": 220,
+        "masterGain": 0.5,
+        "scanArea": 0.1,
+        "harmonics": true,
+        "lastDimension": 0
+      },
+      "drawing": {
+        "activeTool": "rect",
+        "enabled": false,
+        "active": false,
+        "originMode": 1,
+        "color": "#00ffff",
+        "lineWidth": 1,
+        "showLabels": true,
+        "showAxes": false,
+        "shapes": [],
+        "refreshTrigger": 0
+      },
+      "modulation": {
+        "rules": [],
+        "selectedRuleId": null
+      },
+      "webcam": {
+        "isEnabled": false,
+        "opacity": 1,
+        "posX": 20,
+        "posY": 80,
+        "width": 320,
+        "height": 240,
+        "cropL": 0,
+        "cropR": 0,
+        "cropT": 0,
+        "cropB": 0,
+        "blendMode": 0,
+        "crtMode": false,
+        "tilt": 0,
+        "fontSize": 12
+      },
+      "debugTools": {
+        "shaderDebuggerOpen": false,
+        "stateDebuggerOpen": false
+      },
+      "engineSettings": {
+        "showEngineTab": false
+      }
+    },
+    "cameraPos": { "x": 2.696639, "y": -0.8161848, "z": 0.2129048 },
+    "cameraRot": { "x": -0.0639562, "y": 0.017249, "z": 0.9960679, "w": 0.62536 },
+    "sceneOffset": { "x": 5.818878, "y": -1.564758, "z": 0.3750964, "xL": 0, "yL": 0, "zL": 0 },
+    "targetDistance": 6.5,
+    "cameraMode": "Orbit",
+    "lights": [],
+    "renderMode": "Direct",
+    "quality": {
+      "aaMode": "Always",
+      "aaLevel": 1,
+      "msaa": 1,
+      "accumulation": true
+    },
+    "animations": [],
+    "sequence": {
+      "durationFrames": 300,
+      "fps": 30,
+      "tracks": {}
+    },
+    "duration": 300
+  }
+}
+</Metadata>
+
+<!-- Main Distance Estimator Function -->
+<Shader_Function>
+void formula_BuffaloBulb(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+    vec3 p = z.xyz;
+    
+    float power = uParamA;
+    float scale = uParamB;
+    float rotAngle = uParamC;
+    float absFlags = uParamD;
+    float offsetZ = uParamE;
+    float juliaW = uParamF;
+    
+    // Decode abs flags: bit 0-2 = absX,absY,absZ; bit 3-5 = preAbsX,preAbsY,preAbsZ
+    bool absx = (mod(floor(absFlags / 1.0), 2.0) > 0.5);
+    bool absy = (mod(floor(absFlags / 2.0), 2.0) > 0.5);
+    bool absz = (mod(floor(absFlags / 4.0), 2.0) > 0.5);
+    bool preabsx = (mod(floor(absFlags / 8.0), 2.0) > 0.5);
+    bool preabsy = (mod(floor(absFlags / 16.0), 2.0) > 0.5);
+    bool preabsz = (mod(floor(absFlags / 32.0), 2.0) > 0.5);
+    
+    // Pre-abs folding
+    if (preabsx) p.x = abs(p.x);
+    if (preabsy) p.y = abs(p.y);
+    if (preabsz) p.z = abs(p.z);
+    
+    // Get current radius for derivative calculation
+    float r = length(p);
+    
+    // Buffalo iteration
+    float x2 = p.x * p.x;
+    float y2 = p.y * p.y;
+    float z2 = p.z * p.z;
+    float temp = 1.0 - (z2 / (x2 + y2 + 1e-20));
+    float newx = (x2 - y2) * temp;
+    float newy = 2.0 * p.x * p.y * temp;
+    float newz = -2.0 * p.z * sqrt(x2 + y2 + 1e-20);
+    
+    // Apply abs folding after iteration
+    p.x = absx ? abs(newx) : newx;
+    p.y = absy ? abs(newy) : newy;
+    p.z = absz ? abs(newz) : newz;
+    
+    // Apply scale
+    p *= scale;
+    
+    // Add Z offset
+    p.z += offsetZ;
+    
+    // Add constant (Julia or Mandelbrot mode)
+    vec3 cVal = uJuliaMode > 0.5 ? uJulia : c.xyz;
+    // Include juliaW in the constant if needed
+    cVal.z += juliaW;
+    p += cVal;
+    
+    // Update derivative using current radius
+    dr = dr * 2.0 * r * scale;
+    
+    // Apply rotation (around 1,1,1 axis)
+    if (abs(rotAngle) > 0.001) {
+        vec3 axis = normalize(vec3(1.0, 1.0, 1.0));
+        float s = sin(rotAngle);
+        float c_rot = cos(rotAngle);
+        float oc = 1.0 - c_rot;
+        mat3 rot = mat3(
+            oc * axis.x * axis.x + c_rot,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,
+            oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c_rot,           oc * axis.y * axis.z - axis.x * s,
+            oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c_rot
+        );
+        p *= rot;
+    }
+    
+    z.xyz = p;
+    trap = min(trap, length(p));
+}
+</Shader_Function>
+
+<!-- The Iteration Loop Body -->
+<Shader_Loop>
+formula_BuffaloBulb(z, dr, trap, c);
+</Shader_Loop>
+
+<!-- Custom Distance Estimation - matches Fragmentarium's DE formula -->
+<Shader_Dist>
+float m2 = r * r;
+if (m2 < 1.0e-20) return vec2(0.0, iter);
+
+// Standard DE formula: 0.5 * log(r) * r / dr
+float d = 0.5 * log(m2) * r / max(abs(dr), 1e-20);
+
+// Smooth iteration count
+float smoothIter = iter;
+if (m2 > 1.0) {
+    float threshLog = log2(max(uEscapeThresh, 1.1));
+    smoothIter = iter + 1.0 - log2(log2(m2) / threshLog);
+}
+
+return vec2(d, smoothIter);
+</Shader_Dist>
