@@ -188,7 +188,9 @@ export const generateGradientTextureBuffer = (input: GradientStop[] | GradientCo
 
                 const mode = s1.interpolation || 'linear';
                 if (mode === 'step') {
-                    t = t < 0.5 ? 0 : 1; 
+                    // Hold left color for full segment — switch happens at boundary
+                    // Must match CSS preview (getGradientCssString step behavior)
+                    t = 0.0;
                 } else if (mode === 'smooth' || mode === 'cubic') {
                     t = t * t * (3 - 2 * t);
                 }

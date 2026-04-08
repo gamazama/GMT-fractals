@@ -5,6 +5,7 @@ import { LightOrb, LightSettingsPopup } from '../../features/lighting/components
 import ShadowSettingsPopup from '../../features/lighting/components/ShadowControls';
 import { ShadowIcon, GizmoIcon, ChevronDown, ChevronUp, PlusIcon } from '../Icons';
 import { getLightFromSlice } from '../../features/lighting';
+import { activeLightPopup } from '../../features/lighting/utils/GizmoMath';
 import { MAX_LIGHTS } from '../../data/constants';
 
 export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number | number[]) => void }> = ({ isMobileMode, vibrate }) => {
@@ -21,6 +22,12 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     const shadowMenuRef = useRef<HTMLDivElement>(null);
     const hudRef = useRef<HTMLDivElement>(null);
     const expandRef = useRef<HTMLDivElement>(null);
+
+    // Sync active light popup ref for gizmo range circle
+    useEffect(() => {
+        activeLightPopup.index = hoveredLight ?? activeMenuIndex ?? -1;
+        return () => { activeLightPopup.index = -1; };
+    }, [hoveredLight, activeMenuIndex]);
 
     // Handle clicks outside menus
     useEffect(() => {
@@ -52,19 +59,19 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     const handleLightContextMenu = (e: React.MouseEvent, index: number) => {
         e.preventDefault(); e.stopPropagation();
         const light = getLightFromSlice(state.lighting, index);
-        
+
         const items = [
-            { label: `Light ${index + 1}`, isHeader: true, action: () => {} },
-            { 
-                label: 'Enabled', 
-                checked: light.visible, 
+            { label: `Light ${index + 1}`, isHeader: true },
+            {
+                label: 'Enabled',
+                checked: light.visible,
                 action: () => {
                     handleInteractionStart('param');
                     state.updateLight({ index, params: { visible: !light.visible } });
                     handleInteractionEnd();
                 }
             },
-            { label: 'Type', isHeader: true, action: () => {} },
+            { label: 'Type', isHeader: true },
             {
                 label: 'Point',
                 checked: light.type === 'Point',
@@ -82,9 +89,58 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     state.updateLight({ index, params: { type: 'Directional' } });
                     handleInteractionEnd();
                 }
+            },
+            { label: 'Intensity Unit', isHeader: true },
+            {
+                label: 'Raw (Linear)',
+                checked: (light.intensityUnit ?? 'raw') === 'raw',
+                action: () => {
+                    handleInteractionStart('param');
+                    if (light.intensityUnit === 'ev') {
+                        // Convert EV back to linear: 2^ev
+                        const linear = Math.pow(2, light.intensity);
+                        state.updateLight({ index, params: { intensityUnit: 'raw', intensity: Math.round(linear * 100) / 100 } });
+                    } else {
+                        state.updateLight({ index, params: { intensityUnit: 'raw' } });
+                    }
+                    handleInteractionEnd();
+                }
+            },
+            {
+                label: 'Exposure (EV)',
+                checked: light.intensityUnit === 'ev',
+                action: () => {
+                    handleInteractionStart('param');
+                    if ((light.intensityUnit ?? 'raw') === 'raw') {
+                        const ev = light.intensity > 0 ? Math.max(-4, Math.min(10, Math.log2(light.intensity))) : 0;
+                        state.updateLight({ index, params: { intensityUnit: 'ev', intensity: Math.round(ev * 10) / 10 } });
+                    } else {
+                        state.updateLight({ index, params: { intensityUnit: 'ev' } });
+                    }
+                    handleInteractionEnd();
+                }
+            },
+            { label: 'Falloff Curve', isHeader: true },
+            {
+                label: 'Quadratic (Smooth)',
+                checked: (light.falloffType ?? 'Quadratic') === 'Quadratic',
+                action: () => {
+                    handleInteractionStart('param');
+                    state.updateLight({ index, params: { falloffType: 'Quadratic' } });
+                    handleInteractionEnd();
+                }
+            },
+            {
+                label: 'Linear (Artistic)',
+                checked: light.falloffType === 'Linear',
+                action: () => {
+                    handleInteractionStart('param');
+                    state.updateLight({ index, params: { falloffType: 'Linear' } });
+                    handleInteractionEnd();
+                }
             }
         ];
-        
+
         openContextMenu(e.clientX, e.clientY, items, ['panel.light']);
     };
 
@@ -132,9 +188,10 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     
     const handleDragStartLogic = (i: number) => {
         vibrate(5);
-        state.setDraggedLight(i);
+        const light = lights[i];
+        state.setDraggedLight(light?.id ?? null);
         if (!isMobileMode) {
-             setActiveMenuIndex(null); 
+             setActiveMenuIndex(null);
              setHoveredLight(null);
         }
     };
@@ -165,7 +222,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                         onClick={() => handleLightInteraction(i)}
                         onDragStart={() => handleDragStartLogic(i)}
                     />
-                    {state.draggedLightIndex !== i && (hoveredLight === i || activeMenuIndex === i) && (
+                    {state.draggedLightIndex !== l.id && (hoveredLight === i || activeMenuIndex === i) && (
                         <LightSettingsPopup index={i} />
                     )}
                 </div>

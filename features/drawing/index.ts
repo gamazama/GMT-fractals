@@ -48,10 +48,10 @@ export const DrawingFeature: FeatureDefinition = {
         order: 80,
         condition: { param: 'enabled', bool: true }
     },
-    // Explicitly mark as scene (R3F) component
+    // DOM overlay — renders SVG/HTML projected from 3D, not R3F scene geometry
     viewportConfig: {
         componentId: 'overlay-drawing',
-        type: 'scene'
+        type: 'dom'
     },
     menuConfig: {
         label: 'Drawing Tools',
@@ -88,5 +88,4 @@ export const DrawingFeature: FeatureDefinition = {
         }),
         clearDrawnShapes: (state: DrawingState) => ({ shapes: [] })
     },
-    shader: {}
 };

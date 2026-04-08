@@ -41,7 +41,6 @@ const BASE_SCHEMA: UniformDefinition[] = [
     // Progressive / Pipeline
     { name: Uniforms.HistoryTexture, type: 'sampler2D', default: null },
     { name: Uniforms.BlendFactor, type: 'float', default: 1.0 },
-    { name: Uniforms.ExtraSeed, type: 'float', default: 0.0 },
     { name: Uniforms.Jitter, type: 'vec2', default: new THREE.Vector2(0,0) },
     { name: Uniforms.BlueNoiseTexture, type: 'sampler2D', default: null },
      { name: Uniforms.BlueNoiseResolution, type: 'vec2', default: new THREE.Vector2(512, 512) }, // Blue noise texture is 512x512
@@ -51,10 +50,14 @@ const BASE_SCHEMA: UniformDefinition[] = [
     
     // Export/Render Scale
     { name: Uniforms.InternalScale, type: 'float', default: 1.0 },
+    { name: Uniforms.PixelSizeBase, type: 'float', default: 0.01, comment: 'CPU: length(uCamBasisY)/resolution.y*2, avoids per-fragment sqrt' },
 
     // Optimizations (Shared by Geometry & Lighting)
     { name: Uniforms.PreRotMatrix, type: 'mat3', default: new THREE.Matrix3() },
-    { name: Uniforms.EnvRotationMatrix, type: 'mat2', default: [1, 0, 0, 1] }, 
+    { name: Uniforms.PostRotMatrix, type: 'mat3', default: new THREE.Matrix3() },
+    { name: Uniforms.WorldRotMatrix, type: 'mat3', default: new THREE.Matrix3() },
+    { name: Uniforms.EnvRotationMatrix, type: 'mat2', default: [1, 0, 0, 1] },
+    { name: Uniforms.FogColorLinear, type: 'vec3', default: new THREE.Vector3(0, 0, 0), comment: 'CPU: InverseACESFilm(uFogColor)' },
 ];
 
 const featureUniforms = featureRegistry.getUniformDefinitions();

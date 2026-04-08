@@ -6,6 +6,7 @@ export const Mandelbulb: FractalDefinition = {
     name: 'Mandelbulb',
     shortDescription: 'The classic 3D extension of the Mandelbrot set. Features organic, broccoli-like recursive structures.',
     description: 'The classic 3D extension of the Mandelbrot set. Features standard Power controls plus the "Radiolaria" mutation for skeletal/hollow effects.',
+    juliaType: 'julia',
     
     shader: {
         function: `
@@ -13,19 +14,20 @@ export const Mandelbulb: FractalDefinition = {
             vec3 z3 = z.xyz;
             float r = length(z3);
             
-            // Standard derivative
+            // Standard derivative — reuse pow(r, power-1) for both dr and zr
             float power = uParamA;
-            dr = pow(r, power - 1.0) * power * dr + 1.0;
-            
+            float rp1 = pow(r, power - 1.0);
+            dr = rp1 * power * dr + 1.0;
+
             // Spherical exponentiation
             float theta = acos(clamp(z3.z / r, -1.0, 1.0));
             float phi = atan(z3.y, z3.x);
-            
+
             // Apply Power & Phase Shifts
-            theta = theta * power + uParamB; 
-            phi = phi * power + uParamC;     
-            
-            float zr = pow(r, power);
+            theta = theta * power + uVec2A.x;
+            phi = phi * power + uVec2A.y;
+
+            float zr = rp1 * r;
             z3 = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
             
             // Optional Z-Twist (Param D)
@@ -40,12 +42,9 @@ export const Mandelbulb: FractalDefinition = {
             
             // --- RADIOLARIA MUTATION (Tom Beddard) ---
             // Applied AFTER iteration to affect the triplex structure, not the world bounding box.
-            if (uParamE > 0.5) {
-                float limit = uParamF;
-                if (z3.y > limit) {
-                    z3.y = limit;
-                    // Removed trap override to allow gradients to form naturally on the cut surface
-                }
+            // vec2B.x = toggle (on/off), vec2B.y = limit value
+            if (uVec2B.x > 0.5) {
+                z3.y = min(z3.y, uVec2B.y);
             }
             
             z.xyz = z3;
@@ -56,17 +55,15 @@ export const Mandelbulb: FractalDefinition = {
 
     parameters: [
         { label: 'Power', id: 'paramA', min: 2.0, max: 16.0, step: 0.001, default: 8.0 },
-        { label: 'Theta Phase', id: 'paramB', min: -3.14, max: 3.14, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Phi Phase', id: 'paramC', min: -6.28, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
         { label: 'Z Twist', id: 'paramD', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
-        { label: 'Radiolaria', id: 'paramE', min: 0.0, max: 1.0, step: 1.0, default: 0.0 }, 
-        { label: 'Radio Limit', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.5 },
+        { label: 'Radiolaria', id: 'vec2B', type: 'vec2', min: -2.0, max: 2.0, step: 0.01, default: { x: 0, y: 0.5 }, mode: 'mixed' },
     ],
 
     defaultPreset: {
         formula: "Mandelbulb",
         features: {
-            coreMath: { iterations: 16, paramA: 8, paramB: 0, paramC: 0, paramD: 0, paramE: 0, paramF: 0.5 },
+            coreMath: { iterations: 16, paramA: 8, paramD: 0, vec2A: { x: 0, y: 0 }, vec2B: { x: 0, y: 0.5 } },
             geometry: { hybridMode: false, hybridIter: 0, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1, hybridSkip: 1, hybridSwap: false, juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0 },
             coloring: {
                 mode: 0, repeats: 2, phase: 0, scale: 1, offset: 0, bias: 1, twist: 0, escape: 1.2,
@@ -111,11 +108,6 @@ export const Mandelbulb: FractalDefinition = {
             { type: 'Point', position: { x: -0.7, y: 0.37, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 3, falloff: 0.22, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 0.6, y: -0.5, z: 1.4 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 0.5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 0, y: -5, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0088ff", intensity: 0.25, falloff: 0, falloffType: "Quadratic", fixed: true, visible: true, castShadow: false }
-        ],
-        renderMode: "Direct",
-        navigation: { flySpeed: 0.5, autoSlow: true },
-        animations: [],
-        sequence: { durationFrames: 300, fps: 30, tracks: {} },
-        duration: 300
+        ]
     }
 };

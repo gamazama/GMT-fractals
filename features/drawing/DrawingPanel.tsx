@@ -1,12 +1,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
-import { engine } from '../../engine/FractalEngine';
-import { TrashIcon, CropIcon, CheckIcon, ChevronDown, ChevronUp, SquareIcon, CircleIcon, CubeIcon } from '../../components/Icons';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
+import { TrashIcon, CropIcon, CheckIcon, SquareIcon, CircleIcon, CubeIcon } from '../../components/Icons';
 import Button from '../../components/Button';
 import ToggleSwitch from '../../components/ToggleSwitch';
 import SmallColorPicker from '../../components/SmallColorPicker';
 import Slider from '../../components/Slider';
+import { SectionLabel } from '../../components/SectionLabel';
+import { CollapsibleSection } from '../../components/CollapsibleSection';
+import { PanelHeader } from '../../components/PanelHeader';
 import * as THREE from 'three';
 
 interface DrawingPanelProps {
@@ -19,7 +23,6 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
     
     // Local state for depth readout
     const [currentDepth, setCurrentDepth] = useState(engine.lastMeasuredDistance);
-    const [isListExpanded, setIsListExpanded] = useState(true);
 
     // Poll depth when panel is open and mode is surface
     useEffect(() => {
@@ -49,10 +52,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
             
             {/* --- HEADER --- */}
             <div className="p-3 bg-black/40 border-b border-white/5">
-                <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_5px_cyan]" />
-                    <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Measurement Tools</h3>
-                </div>
+                <PanelHeader label="Measurement Tools" icon={<span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_5px_cyan]" />} />
                 
                 <div className="flex gap-2 mb-2">
                     <Button 
@@ -70,14 +70,14 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
                 <div className="flex bg-gray-800/50 rounded p-1 mb-3">
                      <button
                         onClick={() => setDrawing({ activeTool: 'rect' })}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold uppercase transition-colors ${activeTool === 'rect' ? 'bg-cyan-900 text-cyan-200 shadow-sm' : 'text-gray-500 hover:text-white'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold transition-colors ${activeTool === 'rect' ? 'bg-cyan-900 text-cyan-200 shadow-sm' : 'text-gray-500 hover:text-white'}`}
                         title="Rectangle"
                      >
                          <SquareIcon /> RECT
                      </button>
                      <button
                         onClick={() => setDrawing({ activeTool: 'circle' })}
-                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold uppercase transition-colors ${activeTool === 'circle' ? 'bg-cyan-900 text-cyan-200 shadow-sm' : 'text-gray-500 hover:text-white'}`}
+                        className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded text-[9px] font-bold transition-colors ${activeTool === 'circle' ? 'bg-cyan-900 text-cyan-200 shadow-sm' : 'text-gray-500 hover:text-white'}`}
                         title="Circle / Ellipse"
                      >
                          <CircleIcon /> CIRCLE
@@ -85,7 +85,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
                 </div>
 
                 <div className="flex items-center justify-between mb-1">
-                     <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Default Color</label>
+                     <SectionLabel variant="secondary">Default Color</SectionLabel>
                      <SmallColorPicker 
                          color={'#' + color.getHexString()} 
                          onChange={(c) => setDrawing({ color: new THREE.Color(c) })} 
@@ -108,7 +108,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
                 
                 {/* 1. Origin Mode & Depth */}
                 <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Drawing Plane Origin</label>
+                    <SectionLabel variant="secondary">Drawing Plane Origin</SectionLabel>
                     <ToggleSwitch 
                         value={originMode}
                         onChange={(v) => setDrawing({ originMode: v })}
@@ -123,7 +123,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
                             <span className="text-[9px] text-gray-400 font-mono pl-1">Depth: <span className="text-cyan-400 font-bold">{currentDepth.toFixed(4)}</span></span>
                             <button 
                                 onClick={handleReProbe}
-                                className="px-2 py-0.5 bg-gray-800 hover:bg-white/10 text-gray-300 text-[9px] font-bold uppercase rounded border border-white/5 hover:border-white/20 transition-all"
+                                className="px-2 py-0.5 bg-gray-800 hover:bg-white/10 text-gray-300 text-[9px] font-bold rounded border border-white/5 hover:border-white/20 transition-all"
                                 title="Update axis position to current probe location"
                             >
                                 Refresh Axis
@@ -150,33 +150,28 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
             
             {/* --- OBJECT LIST --- */}
             <div className="flex-1 overflow-y-auto custom-scroll p-3 bg-black/20">
-                 <div 
-                    className="flex justify-between items-center mb-2 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
-                    onClick={() => setIsListExpanded(!isListExpanded)}
+                 <CollapsibleSection
+                    label="Measurement List"
+                    count={(shapes || []).length}
+                    defaultOpen={true}
+                    rightContent={
+                        (shapes || []).length > 0 ? (
+                            <button
+                                onClick={() => clearDrawnShapes()}
+                                className="text-[9px] text-red-500 hover:text-red-300 font-bold transition-colors px-2 py-0.5"
+                            >
+                                Clear
+                            </button>
+                        ) : undefined
+                    }
                  >
-                     <div className="flex items-center gap-2">
-                         <span className="text-gray-500">{isListExpanded ? <ChevronUp /> : <ChevronDown />}</span>
-                         <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Measurement List ({(shapes || []).length})</span>
-                     </div>
-                     {(shapes || []).length > 0 && isListExpanded && (
-                         <button 
-                            onClick={(e) => { e.stopPropagation(); clearDrawnShapes(); }} 
-                            className="text-[9px] text-red-500 hover:text-red-300 uppercase font-bold transition-colors px-2 py-0.5"
-                         >
-                            Clear
-                         </button>
-                     )}
-                 </div>
-                 
-                 {isListExpanded && (
-                     <>
-                         {(shapes || []).length === 0 ? (
-                             <div className="text-center py-4 text-[10px] text-gray-600 italic">
-                                 No measurements drawn.
-                             </div>
-                         ) : (
-                             <div className="space-y-1 animate-fade-in">
-                                 {(shapes || []).map((shape, i) => {
+                     {(shapes || []).length === 0 ? (
+                         <div className="text-center py-4 text-[10px] text-gray-600 italic">
+                             No measurements drawn.
+                         </div>
+                     ) : (
+                         <div className="space-y-1 animate-fade-in">
+                             {(shapes || []).map((shape, i) => {
                                      const isCube = shape.type === 'rect' && (shape.size.z || 0) > 0.001;
                                      return (
                                          <div key={shape.id} className="flex flex-col bg-white/5 rounded border border-white/5 hover:border-cyan-500/30 transition-colors group">
@@ -192,7 +187,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
                                                      <div className="flex flex-col">
                                                          <div className="flex items-center gap-2">
                                                              <span className="text-[10px] text-gray-300 font-mono font-bold">#{i+1}</span>
-                                                             <span className="text-[8px] text-gray-500 font-bold uppercase bg-black/40 px-1 rounded">{isCube ? 'CUBE' : shape.type}</span>
+                                                             <span className="text-[8px] text-gray-500 font-bold bg-black/40 px-1 rounded">{isCube ? 'CUBE' : shape.type}</span>
                                                          </div>
                                                          <span className="text-[9px] text-gray-500 font-mono">
                                                              {shape.size.x.toFixed(4)} x {shape.size.y.toFixed(4)} {isCube ? `x ${shape.size.z?.toFixed(4)}` : ''}
@@ -249,8 +244,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }
                                  })}
                              </div>
                          )}
-                     </>
-                 )}
+                 </CollapsibleSection>
             </div>
         </div>
     );

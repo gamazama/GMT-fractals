@@ -1,20 +1,24 @@
-
 import pako from 'pako';
 import * as THREE from 'three';
 
+type DictEntry = string | { _alias: string; children?: Dict };
+type Dict = Record<string, DictEntry>;
+// Represents any JSON-serializable value flowing through diff/merge/quantize
+type JsonVal = string | number | boolean | null | undefined | JsonVal[] | { [key: string]: JsonVal };
+
 export class UrlStateEncoder<T extends object> {
     private defaultState: T;
-    private dictionary: any;
-    private reverseDictCache: Map<any, any> = new Map();
+    private dictionary: Dict | null;
+    private reverseDictCache: Map<Dict, Record<string, string>> = new Map();
 
-    constructor(defaultState: T, dictionary: any = null) {
+    constructor(defaultState: T, dictionary: Dict | null = null) {
         this.defaultState = defaultState;
         this.dictionary = dictionary;
     }
 
-    public encode(currentState: T, debug: boolean = false): string {
+    public encode(currentState: T, _advancedMode?: boolean): string {
         try {
-            const diffed = this.getDiff(currentState, this.defaultState);
+            const diffed = this.getDiff(currentState as unknown as JsonVal, this.defaultState as unknown as JsonVal);
             if (!diffed || Object.keys(diffed).length === 0) return "";
             
             // Limit to 5 decimals for URL compactness
@@ -27,15 +31,8 @@ export class UrlStateEncoder<T extends object> {
 
             const jsonString = JSON.stringify(cleaned);
             
-            if (debug) {
-                console.group("UrlStateEncoder: Debug Output");
-                console.log("Input State:", currentState);
-                console.log("Minified JSON:", jsonString);
-                console.groupEnd();
-            }
-
             const compressed = pako.deflate(jsonString);
-            const binaryString = Array.from(compressed).map((b: number) => String.fromCharCode(b)).join('');
+            const binaryString = Array.from(compressed as ArrayLike<number>).map((b: number) => String.fromCharCode(b)).join('');
             const base64 = btoa(binaryString)
                 .replace(/\+/g, '-')
                 .replace(/\//g, '_')
@@ -68,17 +65,17 @@ export class UrlStateEncoder<T extends object> {
                 data = this.applyDictionary(data, this.dictionary, false);
             }
 
-            return this.deepMerge({ ...this.defaultState }, data);
+            return this.deepMerge({ ...this.defaultState } as unknown as Record<string, JsonVal>, data) as unknown as T;
         } catch (e) {
             console.error("UrlStateEncoder: Error decoding", e);
             return null;
         }
     }
 
-    private getReverseDict(dict: any) {
-        if (this.reverseDictCache.has(dict)) return this.reverseDictCache.get(dict);
-        
-        const reverse: any = {};
+    private getReverseDict(dict: Dict): Record<string, string> {
+        if (this.reverseDictCache.has(dict)) return this.reverseDictCache.get(dict)!;
+
+        const reverse: Record<string, string> = {};
         Object.keys(dict).forEach(longKey => {
             const val = dict[longKey];
             if (typeof val === 'string') {
@@ -91,9 +88,9 @@ export class UrlStateEncoder<T extends object> {
         return reverse;
     }
 
-    private applyDictionary(obj: any, dict: any, toShort: boolean): any {
+    private applyDictionary(obj: JsonVal, dict: Dict, toShort: boolean): JsonVal {
         if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-        const result: any = {};
+        const result: Record<string, JsonVal> = {};
         
         if (toShort) {
             Object.keys(obj).forEach(key => {
@@ -128,7 +125,7 @@ export class UrlStateEncoder<T extends object> {
         return result;
     }
 
-    private isEqual(a: any, b: any): boolean {
+    private isEqual(a: JsonVal, b: JsonVal): boolean {
         if (a === b) return true;
         if (a == null || b == null) return a === b;
         
@@ -142,15 +139,17 @@ export class UrlStateEncoder<T extends object> {
             return a.every((val, i) => this.isEqual(val, b[i]));
         }
         if (typeof a === 'object' && typeof b === 'object') {
-            const keysA = Object.keys(a).filter(k => !k.startsWith('is'));
-            const keysB = Object.keys(b).filter(k => !k.startsWith('is'));
+            const aObj = a as Record<string, JsonVal>;
+            const bObj = b as Record<string, JsonVal>;
+            const keysA = Object.keys(aObj).filter(k => !k.startsWith('is'));
+            const keysB = Object.keys(bObj).filter(k => !k.startsWith('is'));
             if (keysA.length !== keysB.length) return false;
-            return keysA.every(k => this.isEqual(a[k], b[k]));
+            return keysA.every(k => this.isEqual(aObj[k], bObj[k]));
         }
         return false;
     }
 
-    private quantize(obj: any): any {
+    private quantize(obj: JsonVal): JsonVal {
         if (typeof obj === 'string') {
             // Strip Base64 Image Data
             if (obj.startsWith('data:image')) {
@@ -166,7 +165,7 @@ export class UrlStateEncoder<T extends object> {
         }
         if (Array.isArray(obj)) return obj.map(v => this.quantize(v));
         if (obj !== null && typeof obj === 'object') {
-            const out: any = {};
+            const out: Record<string, JsonVal> = {};
             let hasContents = false;
             const keys = Object.keys(obj).filter(k => !k.startsWith('is'));
             for (const key of keys) {
@@ -181,17 +180,19 @@ export class UrlStateEncoder<T extends object> {
         return obj;
     }
 
-    private getDiff(current: any, base: any): any {
+    private getDiff(current: JsonVal, base: JsonVal): JsonVal {
         if (this.isEqual(current, base)) return undefined;
         if (typeof current !== 'object' || current === null || typeof base !== 'object' || base === null) return current;
         if (Array.isArray(current)) return current;
 
-        const diff: any = {};
+        const diff: Record<string, JsonVal> = {};
         let hasDiff = false;
-        Object.keys(current).forEach(key => {
+        const curObj = current as Record<string, JsonVal>;
+        const baseObj = base as Record<string, JsonVal>;
+        Object.keys(curObj).forEach(key => {
             // Ignore non-persistent properties
             if (key.startsWith('is') || key === 'histogramData' || key === 'interactionSnapshot' || key === 'liveModulations' || key.endsWith('Stack')) return;
-            const res = this.getDiff(current[key], base[key]);
+            const res = this.getDiff(curObj[key], baseObj[key]);
             if (res !== undefined) {
                 diff[key] = res;
                 hasDiff = true;
@@ -200,12 +201,12 @@ export class UrlStateEncoder<T extends object> {
         return hasDiff ? diff : undefined;
     }
 
-    private deepMerge(target: any, source: any): any {
+    private deepMerge(target: Record<string, JsonVal>, source: Record<string, JsonVal>): Record<string, JsonVal> {
         if (typeof source !== 'object' || source === null) return source;
         const output = { ...target };
         Object.keys(source).forEach(key => {
             if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
-                output[key] = this.deepMerge(target[key] || {}, source[key]);
+                output[key] = this.deepMerge((target[key] || {}) as Record<string, JsonVal>, source[key] as Record<string, JsonVal>);
             } else {
                 output[key] = source[key];
             }

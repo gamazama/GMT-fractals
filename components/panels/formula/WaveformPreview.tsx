@@ -50,7 +50,7 @@ export const WaveformPreview = ({ shape, period, phase, amplitude, enabled }: an
     return (
         <div className="relative h-12 bg-black/40 rounded border border-white/5 mb-3 overflow-hidden">
              <canvas ref={canvasRef} width={280} height={48} className="w-full h-full" />
-             <div className="absolute top-1 left-2 text-[7px] font-black text-purple-400/50 uppercase tracking-widest pointer-events-none">Signal (5 second window)</div>
+             <div className="absolute top-1 left-2 text-[7px] font-bold text-purple-400/50 pointer-events-none">Signal (5 second window)</div>
         </div>
     );
 };

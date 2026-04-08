@@ -1,0 +1,671 @@
+import React, { useState, useRef, useEffect } from 'react';
+import * as THREE from 'three';
+import { VectorAxisCell } from './VectorAxisCell';
+import { DualAxisPad } from './DualAxisPad';
+import { RotationHeliotrope } from './RotationHeliotrope';
+import { BaseVectorInputProps } from './types';
+import { piMapping, degreesMapping, getMapping, ValueMapping, formatDisplay, computePercentage } from '../inputs/primitives/FormatUtils';
+import { AXIS_CONFIG } from '../inputs/types';
+import { useFractalStore } from '../../store/fractalStore';
+import { ContextMenuItem } from '../../types/help';
+
+const D2R = Math.PI / 180;
+const R2D = 180 / Math.PI;
+
+// Indexed access helper for THREE.Vector2/Vector3 axis access by string key
+type VecIndexable = Record<'x' | 'y' | 'z' | 'w', number>;
+type AxisKey = 'x' | 'y' | 'z' | 'w';
+const AXIS_KEYS: readonly AxisKey[] = ['x', 'y', 'z', 'w'] as const;
+const AXIS_KEY_TO_INDEX = { x: 0, y: 1, z: 2, w: 3 } as const;
+
+// --- Direction mode helpers ---
+// Converts a vec3 to (azimuth, pitch) in radians.
+// Convention: az=0,pitch=0 → (0,0,1); az=π/2,pitch=0 → (1,0,0); pitch=π/2 → (0,1,0)
+const vec3ToDir = (v: THREE.Vector3): { azimuth: number; pitch: number } => {
+    const len = v.length();
+    if (len < 1e-9) return { azimuth: 0, pitch: 0 };
+    const ny = Math.max(-1, Math.min(1, v.y / len));
+    return {
+        azimuth: Math.atan2(v.x / len, v.z / len),
+        pitch: Math.asin(ny),
+    };
+};
+
+const dirToVec3 = (azimuth: number, pitch: number): THREE.Vector3 => {
+    const cosPit = Math.cos(pitch);
+    return new THREE.Vector3(
+        cosPit * Math.sin(azimuth),
+        Math.sin(pitch),
+        cosPit * Math.cos(azimuth),
+    );
+};
+
+export const BaseVectorInput: React.FC<BaseVectorInputProps> = ({ 
+    label, 
+    value, 
+    onChange, 
+    min = -10000, 
+    max = 10000, 
+    step = 0.01, 
+    disabled = false, 
+    convertRadToDeg = false,
+    // New props for unified system
+    mode = 'normal',
+    modeToggleable = false,
+    showLiveIndicator = false,
+    liveValue,
+    defaultValue,
+    hardMin,
+    hardMax,
+    // Axis-specific overrides
+    axisMin,
+    axisMax,
+    axisStep,
+    onDragStart, 
+    onDragEnd, 
+    headerRight,
+    showDualAxisPads = true,
+    // Link feature for scale controls
+    linkable = false,
+    // Display scale mode
+    scale,
+}) => {
+    // Local state for immediate visual feedback during drag
+    const [localValue, setLocalValue] = useState(value.clone());
+    const [hoveredPad, setHoveredPad] = useState<'xy' | 'zy' | 'wz' | null>(null);
+    const [currentMode, setCurrentMode] = useState(mode);
+    const [rotationDisplayMode, setRotationDisplayMode] = useState<'degrees' | 'radians'>('degrees');
+    const [piDisplayMode, setPiDisplayMode] = useState<'pi' | 'degrees'>('degrees');
+    const [isLinked, setIsLinked] = useState(linkable); // Linked by default when linkable is true
+    const isDragging = useRef(false);
+    const dragStartSnapshot = useRef<THREE.Vector2 | THREE.Vector3 | THREE.Vector4 | null>(null);
+    const sliderRowRef = useRef<HTMLDivElement>(null);
+
+    // Sync currentMode when the mode prop changes (e.g., formula switch reuses same key)
+    useEffect(() => {
+        setCurrentMode(mode);
+    }, [mode]);
+    
+    // Get context menu opener from store
+    const openContextMenu = useFractalStore(s => s.openContextMenu);
+
+    // Determine if this is a vec2, vec3, or vec4
+    const isVec4 = 'w' in value;
+    const isVec3 = 'z' in value;
+
+    // Determine if in rotation mode
+    const isRotationMode = currentMode === 'rotation';
+
+    // Determine if in toggle mode (boolean on/off per axis)
+    const isToggleMode = currentMode === 'toggle';
+
+    // Determine if in mixed mode (toggle X + slider Y)
+    const isMixedMode = currentMode === 'mixed';
+
+    // Determine if in direction mode (vec3 displayed as azimuth/pitch)
+    const isDirectionMode = currentMode === 'direction' && isVec3;
+    const dirAngles = isDirectionMode
+        ? vec3ToDir(localValue as THREE.Vector3)
+        : { azimuth: 0, pitch: 0 };
+
+    const updateDirection = (azimuth: number, pitch: number) => {
+        const pitchClamped = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+        const next = dirToVec3(azimuth, pitchClamped);
+        // Direct DOM push for direction mode axis cells (azimuth=index 0, pitch=index 1)
+        pushAxisToDOM(0, azimuth);
+        pushAxisToDOM(1, pitchClamped);
+        setLocalValue(next);
+        onChange(next);
+    };
+
+    // Sync local value with prop (only when not dragging)
+    useEffect(() => {
+        if (isDragging.current) return;
+        
+        // Only update if values are significantly different (prevents jitter)
+        const threshold = 0.0001;
+        const xDiff = Math.abs(value.x - localValue.x);
+        const yDiff = Math.abs(value.y - localValue.y);
+        const zDiff = isVec3 ? Math.abs((value as THREE.Vector3).z - (localValue as THREE.Vector3).z) : 0;
+        const wDiff = isVec4 ? Math.abs((value as THREE.Vector4).w - (localValue as THREE.Vector4).w) : 0;
+
+        if (xDiff > threshold || yDiff > threshold || zDiff > threshold || wDiff > threshold) {
+            setLocalValue(value.clone());
+        }
+    }, [value, isVec3, isVec4]);
+
+    const handleStart = () => {
+        isDragging.current = true;
+        dragStartSnapshot.current = localValue.clone();
+        if (onDragStart) onDragStart();
+    };
+
+    const handleEnd = () => {
+        dragStartSnapshot.current = null;
+        isDragging.current = false;
+        if (onDragEnd) onDragEnd();
+    };
+
+    // Get appropriate mapping for the current mode and axis
+    const getAxisMapping = (axis: 'x' | 'y' | 'z' | 'w'): ValueMapping | undefined => {
+        if (isRotationMode) {
+            // Use degrees by default, allow toggle to radians (π units)
+            return rotationDisplayMode === 'degrees' ? degreesMapping : piMapping;
+        }
+        // Pi scale mode: show as π units by default, allow toggle to degrees
+        if (scale === 'pi') {
+            return piDisplayMode === 'pi' ? piMapping : degreesMapping;
+        }
+        // Legacy prop — identical to degreesMapping
+        if (convertRadToDeg) return degreesMapping;
+        return undefined;
+    };
+
+    // Get appropriate bounds for the current mode
+    const getAxisBounds = (axis: 'x' | 'y' | 'z' | 'w') => {
+        if (isRotationMode) {
+            // Use larger step (60 degrees) for drag feel, but text edit has full precision
+            // The step only affects dragging via useDragValue, not text input
+            const step = rotationDisplayMode === 'degrees' ? (60 * Math.PI / 180) : 0.05;
+            return {
+                min: -2 * Math.PI,
+                max: 2 * Math.PI,
+                step,
+                hardMin: undefined,
+                hardMax: undefined,
+            };
+        }
+
+        // Use axis-specific overrides or defaults
+        const axisMins = axisMin || { x: min, y: min, z: min };
+        const axisMaxs = axisMax || { x: max, y: max, z: max };
+        const axisSteps = axisStep || { x: step, y: step, z: step };
+
+        // When scale='pi' in degrees mode, scale the step so drag speed feels equivalent
+        const stepScale = (scale === 'pi' && piDisplayMode === 'degrees') ? R2D : 1;
+
+        return {
+            min: axisMins[axis],
+            max: axisMaxs[axis],
+            step: (axisSteps[axis] ?? step) * stepScale,
+            hardMin,
+            hardMax,
+        };
+    };
+
+    // Direct DOM update for an axis cell — bypasses React render cycle for instant feedback.
+    // Queries sliderRowRef for the VectorAxisCell with matching data-axis-index,
+    // then updates the value text and fill bar width.
+    const pushAxisToDOM = (axisIndex: number, rawValue: number) => {
+        const container = sliderRowRef.current;
+        if (!container) return;
+        const cell = container.querySelector(`[data-axis-index="${axisIndex}"]`);
+        if (!cell) return;
+
+        const axisKey = AXIS_KEYS[axisIndex];
+        const mapping = getAxisMapping(axisKey);
+
+        // Update display text
+        const valueEl = cell.querySelector('[data-role="value"]');
+        if (valueEl) {
+            valueEl.textContent = mapping?.format
+                ? mapping.format(rawValue)
+                : formatDisplay(rawValue);
+        }
+
+        // Update fill bar width
+        const fillEl = cell.querySelector('[data-role="fill"]') as HTMLElement | null;
+        if (fillEl) {
+            const bounds = getAxisBounds(axisKey);
+            const bMin = bounds.min ?? min;
+            const bMax = bounds.max ?? max;
+            if (bMin !== bMax) {
+                const pct = computePercentage(rawValue, bMin, bMax, mapping);
+                fillEl.style.width = `${pct}%`;
+            }
+        }
+    };
+
+    const updateAxis = (axis: 'x'|'y'|'z'|'w', scalar: number) => {
+        const base = dragStartSnapshot.current || localValue;
+        const next = base.clone();
+
+        if (isLinked && !isRotationMode) {
+            // In linked mode, all axes change by the same delta
+            const currentVal = (base as VecIndexable)[axis];
+            const delta = scalar - currentVal;
+            (next as VecIndexable).x = base.x + delta;
+            (next as VecIndexable).y = base.y + delta;
+            if (isVec3) {
+                (next as VecIndexable).z = (base as VecIndexable).z + delta;
+            }
+            if (isVec4) {
+                (next as VecIndexable).w = (base as VecIndexable).w + delta;
+            }
+            // Push all linked axes to DOM immediately
+            pushAxisToDOM(0, (next as VecIndexable).x);
+            pushAxisToDOM(1, (next as VecIndexable).y);
+            if (isVec3) pushAxisToDOM(2, (next as VecIndexable).z);
+            if (isVec4) pushAxisToDOM(3, (next as VecIndexable).w);
+        } else {
+            (next as VecIndexable)[axis] = scalar;
+        }
+
+        setLocalValue(next);
+        onChange(next);
+    };
+
+    const updateDualAxis = (primary: 'x'|'y'|'z'|'w', secondary: 'x'|'y'|'z'|'w', primaryVal: number, secondaryVal: number) => {
+        const base = dragStartSnapshot.current || localValue;
+        const next = base.clone();
+        (next as VecIndexable)[primary] = primaryVal;
+        (next as VecIndexable)[secondary] = secondaryVal;
+
+        // Direct DOM update for both axes — instant feedback, no React render wait
+        pushAxisToDOM(AXIS_KEY_TO_INDEX[primary], primaryVal);
+        pushAxisToDOM(AXIS_KEY_TO_INDEX[secondary], secondaryVal);
+
+        setLocalValue(next);
+        onChange(next);
+    };
+
+    // Determine which sliders should be highlighted
+    const xHighlighted = hoveredPad === 'xy';
+    const yHighlighted = hoveredPad === 'xy' || hoveredPad === 'zy';
+    const zHighlighted = hoveredPad === 'zy' || hoveredPad === 'wz';
+    const wHighlighted = hoveredPad === 'wz';
+
+    // Get live value per axis if provided
+    const getLiveValue = (axis: 'x' | 'y' | 'z' | 'w'): number | undefined => {
+        if (!liveValue) return undefined;
+        return (liveValue as VecIndexable)[axis];
+    };
+
+    // Get default value per axis if provided
+    const getDefaultValue = (axis: 'x' | 'y' | 'z' | 'w'): number | undefined => {
+        if (!defaultValue) return undefined;
+        return (defaultValue as VecIndexable)[axis];
+    };
+
+    const vec3Value = localValue as THREE.Vector3;
+    const vec2Value = localValue as THREE.Vector2;
+
+    // Common props builder for VectorAxisCell — eliminates duplication across modes
+    const highlightMap = { x: xHighlighted, y: yHighlighted, z: zHighlighted, w: wHighlighted };
+    const axisCellProps = (axis: AxisKey) => ({
+        axisIndex: AXIS_KEY_TO_INDEX[axis],
+        value: (localValue as VecIndexable)[axis],
+        ...getAxisBounds(axis),
+        onUpdate: (v: number) => updateAxis(axis, v),
+        onDragStart: handleStart,
+        onDragEnd: handleEnd,
+        disabled,
+        highlight: highlightMap[axis],
+        mapping: getAxisMapping(axis),
+        mapTextInput: isRotationMode || scale === 'pi',
+        liveValue: showLiveIndicator ? getLiveValue(axis) : undefined,
+        defaultValue: getDefaultValue(axis),
+    });
+
+    // Shared toggle button colors per axis
+    const toggleColors = [
+        { on: 'bg-red-500/30 text-red-300 border-red-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+        { on: 'bg-green-500/30 text-green-300 border-green-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+        { on: 'bg-blue-500/30 text-blue-300 border-blue-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+        { on: 'bg-purple-500/30 text-purple-300 border-purple-500/40', off: 'bg-white/[0.04] text-gray-600 border-white/5' },
+    ];
+    const renderToggleButton = (axis: 'x' | 'y' | 'z' | 'w', axisIdx: number, className?: string) => {
+        const val = (localValue as VecIndexable)[axis];
+        const isOn = val > 0.5;
+        const colors = toggleColors[axisIdx];
+        return (
+            <button
+                key={axis}
+                className={`flex items-center justify-center gap-1 text-[10px] font-bold transition-all border ${
+                    isOn ? colors.on : colors.off
+                } ${disabled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:brightness-125'} ${className || 'flex-1'}`}
+                onClick={() => updateAxis(axis, isOn ? 0 : 1)}
+                disabled={disabled}
+            >
+                {className ? null : <span>{axis}</span>}
+                <span className={`text-[8px] ${isOn ? 'opacity-80' : 'opacity-70'}`}>{isOn ? 'ON' : 'OFF'}</span>
+            </button>
+        );
+    };
+
+    // Render mode toggle button if needed
+    const renderModeToggle = () => {
+        if (!modeToggleable) return null;
+        
+        return (
+            <button
+                onClick={() => setCurrentMode(prev => prev === 'rotation' ? 'normal' : 'rotation')}
+                className={`text-[10px] p-1 rounded transition-colors mr-2 ${
+                    currentMode === 'rotation' 
+                        ? 'text-cyan-400 bg-cyan-500/20' 
+                        : 'text-gray-500 hover:text-gray-300'
+                }`}
+                title={currentMode === 'rotation' ? 'Rotation mode (π units)' : 'Normal mode'}
+            >
+                ⟳
+            </button>
+        );
+    };
+
+    // Render link toggle button if enabled (only in normal/translation mode)
+    const renderLinkToggle = () => {
+        if (!linkable || isRotationMode) return null;
+        
+        return (
+            <button
+                onClick={() => setIsLinked(prev => !prev)}
+                className={`p-1 rounded transition-colors mr-2 ${
+                    isLinked 
+                        ? 'text-cyan-400 bg-cyan-500/20' 
+                        : 'text-gray-600 hover:text-gray-400'
+                }`}
+                title={isLinked ? 'Axes linked (uniform)' : 'Link axes'}
+            >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+            </button>
+        );
+    };
+
+    // Context menu handler - uses GMT native menu
+    const handleContextMenu = (e: React.MouseEvent) => {
+        const items: ContextMenuItem[] = [];
+
+        // Rotation display options (available in rotation and axes modes)
+        if (isRotationMode) {
+            items.push(
+                { label: 'Rotation Units', action: () => {}, isHeader: true },
+                {
+                    label: 'Degrees (°)',
+                    checked: rotationDisplayMode === 'degrees',
+                    action: () => setRotationDisplayMode('degrees')
+                },
+                {
+                    label: 'Radians (π)',
+                    checked: rotationDisplayMode === 'radians',
+                    action: () => setRotationDisplayMode('radians')
+                },
+            );
+        }
+
+        // Pi scale display options (for non-rotation pi-unit params like Phase)
+        if (!isRotationMode && scale === 'pi') {
+            items.push(
+                { label: 'Display Units', action: () => {}, isHeader: true },
+                {
+                    label: 'Radians (π)',
+                    checked: piDisplayMode === 'pi',
+                    action: () => setPiDisplayMode('pi')
+                },
+                {
+                    label: 'Degrees (°)',
+                    checked: piDisplayMode === 'degrees',
+                    action: () => setPiDisplayMode('degrees')
+                },
+            );
+        }
+
+        // Mode switching for vec3 rotation-type controls
+        if (isVec3 && (mode === 'rotation' || mode === 'axes')) {
+            // Add spacing between sections
+            items.push(
+                { label: 'Display Mode', action: () => {}, isHeader: true },
+                {
+                    label: 'Azimuth / Pitch (A/P)',
+                    checked: currentMode === 'rotation',
+                    action: () => setCurrentMode('rotation')
+                },
+                {
+                    label: 'Per-Axis (X/Y/Z)',
+                    checked: currentMode === 'axes' || currentMode === 'normal',
+                    action: () => setCurrentMode('normal')
+                },
+            );
+        }
+
+        if (items.length === 0) return; // Allow default menu
+
+        e.preventDefault();
+        e.stopPropagation();
+        openContextMenu(e.clientX, e.clientY, items, ['ui.vector']);
+    };
+
+    return (
+        <div className="mb-px animate-slider-entry">
+            {/* Header row with label and keyframe button */}
+            {label && (
+                <div className="flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5">
+                    <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
+                        {modeToggleable && renderModeToggle()}
+                        {headerRight}
+                        <label className={`text-[10px] font-medium tracking-tight select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-gray-600' : 'text-gray-400'}`}>
+                            {label}
+                        </label>
+                    </div>
+                    {/* Right side: link toggle */}
+                    {linkable && !isRotationMode && (
+                        <div className="flex items-center px-1 border-l border-white/5">
+                            {renderLinkToggle()}
+                        </div>
+                    )}
+                </div>
+            )}
+            
+            {/* Slider row - matches Slider.tsx bottom section styling */}
+            <div
+                className="relative h-9 md:h-[26px] flex items-center touch-none overflow-hidden rounded-b-sm"
+                style={{ touchAction: 'none' }}
+                onContextMenu={handleContextMenu}
+                data-help-id="ui.vector"
+            >
+                <div ref={sliderRowRef} className="flex gap-px w-full h-full">
+                    {isToggleMode ? (
+                        <>
+                            {/* Toggle mode: clickable on/off buttons per axis */}
+                            {(['x', 'y', 'z', 'w'] as const).slice(0, isVec4 ? 4 : isVec3 ? 3 : 2).map((axis, i) =>
+                                renderToggleButton(axis, i)
+                            )}
+                        </>
+                    ) : isMixedMode ? (
+                        <>
+                            {/* Mixed mode: toggle button for X, normal slider for Y */}
+                            {renderToggleButton('x', 0, 'w-14 flex-shrink-0')}
+                            <VectorAxisCell {...axisCellProps('y')} disabled={disabled || localValue.x < 0.5} />
+                        </>
+                    ) : isDirectionMode ? (
+                        <>
+                            {/* Heliotrope: drag to rotate direction */}
+                            <div className="flex items-center justify-center px-1 flex-shrink-0">
+                                <RotationHeliotrope
+                                    azimuth={dirAngles.azimuth}
+                                    pitch={dirAngles.pitch}
+                                    onChange={(az, pit) => {
+                                        updateDirection(az, pit);
+                                    }}
+                                    onDragStart={handleStart}
+                                    onDragEnd={handleEnd}
+                                    disabled={disabled}
+                                    size={56}
+                                />
+                            </div>
+
+                            {/* Azimuth cell */}
+                            <VectorAxisCell
+                                axisIndex={0}
+                                value={dirAngles.azimuth}
+                                min={-Math.PI}
+                                max={Math.PI}
+                                step={D2R}
+                                onUpdate={(az) => updateDirection(az, dirAngles.pitch)}
+                                onDragStart={handleStart}
+                                onDragEnd={handleEnd}
+                                disabled={disabled}
+                                mapping={degreesMapping}
+                                mapTextInput={true}
+                                customLabel="Az"
+                            />
+
+                            {/* DualAxisPad: horizontal = azimuth, vertical = pitch */}
+                            <DualAxisPad
+                                primaryAxis="x"
+                                secondaryAxis="y"
+                                primaryIndex={0}
+                                secondaryIndex={1}
+                                primaryValue={dirAngles.azimuth}
+                                secondaryValue={dirAngles.pitch}
+                                min={-Math.PI}
+                                max={Math.PI}
+                                step={D2R}
+                                onUpdate={(az, pit) => updateDirection(az, pit)}
+                                onDragStart={handleStart}
+                                onDragEnd={handleEnd}
+                                disabled={disabled}
+                                onHover={(isHovering) => setHoveredPad(isHovering ? 'xy' : null)}
+                            />
+
+                            {/* Pitch cell */}
+                            <VectorAxisCell
+                                axisIndex={1}
+                                value={dirAngles.pitch}
+                                min={-Math.PI / 2}
+                                max={Math.PI / 2}
+                                step={D2R}
+                                onUpdate={(pit) => updateDirection(dirAngles.azimuth, pit)}
+                                onDragStart={handleStart}
+                                onDragEnd={handleEnd}
+                                disabled={disabled}
+                                mapping={degreesMapping}
+                                mapTextInput={true}
+                                customLabel="Pt"
+                            />
+                        </>
+                    ) : isRotationMode ? (
+                        <>
+                            {/* Z Axis (Angle) - FIRST in rotation mode */}
+                            {isVec3 && (
+                                <VectorAxisCell {...axisCellProps('z')} customLabel="∠" />
+                            )}
+                            
+                            {/* Rotation Heliotrope - direction visualizer */}
+                            <div className="flex items-center justify-center px-1">
+                                <RotationHeliotrope
+                                    azimuth={localValue.x}
+                                    pitch={localValue.y}
+                                    onChange={(newAz, newPitch) => {
+                                        const next = localValue.clone();
+                                        (next as VecIndexable).x = newAz;
+                                        (next as VecIndexable).y = newPitch;
+                                        pushAxisToDOM(0, newAz);
+                                        pushAxisToDOM(1, newPitch);
+                                        setLocalValue(next);
+                                        onChange(next);
+                                    }}
+                                    onDragStart={handleStart}
+                                    onDragEnd={handleEnd}
+                                    disabled={disabled}
+                                    size={56}
+                                />
+                            </div>
+                            
+                            {/* X Axis (Azimuth) */}
+                            <div className="contents">
+                                <VectorAxisCell {...axisCellProps('x')} customLabel="A" />
+                            </div>
+
+                            {/* Y Axis (Pitch) */}
+                            <VectorAxisCell {...axisCellProps('y')} customLabel="P" />
+                        </>
+                    ) : (
+                        <>
+                            {/* Normal/Translation mode - original order */}
+                            {/* X Axis */}
+                            <div className="contents">
+                                <VectorAxisCell {...axisCellProps('x')} />
+                            </div>
+                            
+                            {/* XY Dual Axis Pad */}
+                            {showDualAxisPads && (
+                                <DualAxisPad
+                                    primaryAxis="x"
+                                    secondaryAxis="y"
+                                    primaryIndex={0}
+                                    secondaryIndex={1}
+                                    primaryValue={localValue.x}
+                                    secondaryValue={localValue.y}
+                                    min={min}
+                                    max={max}
+                                    step={step}
+                                    onUpdate={(px, sy) => updateDualAxis('x', 'y', px, sy)}
+                                    onDragStart={handleStart}
+                                    onDragEnd={handleEnd}
+                                    disabled={disabled}
+                                    onHover={(isHovering) => setHoveredPad(isHovering ? 'xy' : null)}
+                                />
+                            )}
+                            
+                            {/* Y Axis */}
+                            <VectorAxisCell {...axisCellProps('y')} />
+
+                            {/* ZY Dual Axis Pad - only for vec3 */}
+                            {isVec3 && showDualAxisPads && (
+                                <DualAxisPad
+                                    primaryAxis="z"
+                                    secondaryAxis="y"
+                                    primaryIndex={2}
+                                    secondaryIndex={1}
+                                    primaryValue={vec3Value.z}
+                                    secondaryValue={vec3Value.y}
+                                    min={min}
+                                    max={max}
+                                    step={step}
+                                    onUpdate={(pz, sy) => updateDualAxis('z', 'y', pz, sy)}
+                                    onDragStart={handleStart}
+                                    onDragEnd={handleEnd}
+                                    disabled={disabled}
+                                    onHover={(isHovering) => setHoveredPad(isHovering ? 'zy' : null)}
+                                />
+                            )}
+                            
+                            {/* Z Axis - only for vec3/vec4 */}
+                            {isVec3 && (
+                                <VectorAxisCell {...axisCellProps('z')} />
+                            )}
+
+                            {/* WZ Dual Axis Pad - only for vec4 */}
+                            {isVec4 && showDualAxisPads && (
+                                <DualAxisPad
+                                    primaryAxis="x"
+                                    secondaryAxis="z"
+                                    primaryIndex={3}
+                                    secondaryIndex={2}
+                                    primaryValue={(localValue as THREE.Vector4).w}
+                                    secondaryValue={(localValue as THREE.Vector3).z}
+                                    min={min}
+                                    max={max}
+                                    step={step}
+                                    onUpdate={(pw, sz) => updateDualAxis('w', 'z', pw, sz)}
+                                    onDragStart={handleStart}
+                                    onDragEnd={handleEnd}
+                                    disabled={disabled}
+                                    onHover={(isHovering) => setHoveredPad(isHovering ? 'wz' : null)}
+                                />
+                            )}
+
+                            {/* W Axis - only for vec4 */}
+                            {isVec4 && (
+                                <VectorAxisCell {...axisCellProps('w')} />
+                            )}
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};

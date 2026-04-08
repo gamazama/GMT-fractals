@@ -6,6 +6,7 @@ export const Mandelorus: FractalDefinition = {
     name: 'Mandelorus',
     shortDescription: 'The "True" 3D Mandelbrot topology. Wraps space around a ring instead of a point.',
     description: 'Wraps the fractal iteration around a Torus (Donut). Creates a Solenoid structure. Twist is linked to Power: 1.0 Twist = 1 Symmetry Shift (360/Power).',
+    juliaType: 'julia',
     
     shader: {
         function: `
@@ -15,9 +16,9 @@ export const Mandelorus: FractalDefinition = {
             float twistInput = uParamB;   // Twist Steps (1.0 = 1 Symmetry Unit)
             float power = uParamC;   // Fractal Power
             
-            // PI transform removed (handled by UI injection now)
-            float ringPhase = uParamD; 
-            float crossPhase = uParamE; 
+            // Phase controls (vec2A: ring phase, cross phase)
+            float ringPhase = uVec2A.x;
+            float crossPhase = uVec2A.y;
             
             float zScale = 1.0 + uParamF; // Vertical Scale
             
@@ -96,11 +97,9 @@ export const Mandelorus: FractalDefinition = {
 
     parameters: [
         { label: 'Ring Radius', id: 'paramA', min: 0.1, max: 5.0, step: 0.01, default: 1.0 },
-        { label: 'Twist (Sym)', id: 'paramB', min: -8.0, max: 8.0, step: 0.1, default: 0.0 }, 
+        { label: 'Twist (Sym)', id: 'paramB', min: -8.0, max: 8.0, step: 0.1, default: 0.0 },
         { label: 'Power', id: 'paramC', min: 1.0, max: 16.0, step: 0.01, default: 8.0 },
-        // Scale 'pi' means the UI sends values in Radians (0.5 slider = 1.57 uniform)
-        { label: 'Ring Phase', id: 'paramD', min: -6.28, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Cross Phase', id: 'paramE', min: -6.28, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Phase (Ring, Cross)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
         { label: 'Vert Scale', id: 'paramF', min: -0.9, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
@@ -114,9 +113,8 @@ export const Mandelorus: FractalDefinition = {
       "paramA": 1.32,
       "paramB": 0,
       "paramC": 5,
-      "paramD": 0,
-      "paramE": -1.159203974648639,
-      "paramF": 0
+      "paramF": 0,
+      "vec2A": { "x": 0, "y": -1.159203974648639 }
     },
     "geometry": {
       "applyTransformLogic": true,
@@ -513,15 +511,6 @@ export const Mandelorus: FractalDefinition = {
       "lowPass": 20000,
       "gain": 1
     },
-    "sonification": {
-      "isEnabled": false,
-      "active": true,
-      "baseFrequency": 220,
-      "masterGain": 0.5,
-      "scanArea": 0.1,
-      "harmonics": true,
-      "lastDimension": 0
-    },
     "drawing": {
       "activeTool": "rect",
       "enabled": false,
@@ -583,117 +572,6 @@ export const Mandelorus: FractalDefinition = {
   },
   "targetDistance": 5.214554250240326,
   "cameraMode": "Orbit",
-  "lights": [],
-  "renderMode": "Direct",
-  "quality": {
-    "aaMode": "Always",
-    "aaLevel": 1,
-    "msaa": 1,
-    "accumulation": true
-  },
-  "animations": [],
-  "sequence": {
-    "durationFrames": 300,
-    "fps": 30,
-    "tracks": {
-      "camera.unified.x": {
-        "id": "camera.unified.x",
-        "type": "float",
-        "label": "Position X",
-        "keyframes": [
-          {
-            "id": "520JCebpirpIjkgSfViyb",
-            "frame": 0,
-            "value": -0.05059101356107703,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.unified.y": {
-        "id": "camera.unified.y",
-        "type": "float",
-        "label": "Position Y",
-        "keyframes": [
-          {
-            "id": "TlKGVi6rVx8aPvZFWKlvw",
-            "frame": 0,
-            "value": -0.1358890818952094,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.unified.z": {
-        "id": "camera.unified.z",
-        "type": "float",
-        "label": "Position Z",
-        "keyframes": [
-          {
-            "id": "zcz_hIp4HhQTRZSagfckN",
-            "frame": 0,
-            "value": -5.918975187098582,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.rotation.x": {
-        "id": "camera.rotation.x",
-        "type": "float",
-        "label": "Rotation X",
-        "keyframes": [
-          {
-            "id": "sLYXo677pGLgJlq19eoEQ",
-            "frame": 0,
-            "value": 3.141592653589793,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.rotation.y": {
-        "id": "camera.rotation.y",
-        "type": "float",
-        "label": "Rotation Y",
-        "keyframes": [
-          {
-            "id": "9Og7ZQx3kB_GSO0hjPEQs",
-            "frame": 0,
-            "value": 0,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      },
-      "camera.rotation.z": {
-        "id": "camera.rotation.z",
-        "type": "float",
-        "label": "Rotation Z",
-        "keyframes": [
-          {
-            "id": "sZtDA1yOQQpJIB1P6Nn7v",
-            "frame": 0,
-            "value": 0,
-            "interpolation": "Linear",
-            "autoTangent": false,
-            "brokenTangents": false
-          }
-        ],
-        "hidden": false
-      }
-    }
-  },
-  "duration": 300
+  "lights": []
 }
 };

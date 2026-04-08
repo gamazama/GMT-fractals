@@ -6,6 +6,7 @@ export const MandelTerrain: FractalDefinition = {
     name: 'MandelTerrain',
     shortDescription: '3D Heightmap of the Mandelbrot set. Creates alien landscapes and "Math Mountains".',
     description: 'A 3D Heightmap of the Mandelbrot set. Iterations slider controls terrain detail.',
+    juliaType: 'julia',
     
     shader: {
         function: `
@@ -15,7 +16,7 @@ export const MandelTerrain: FractalDefinition = {
         // --- Zoom Logic ---
         float zoomVal = uParamB; 
         float zoom = pow(2.0, zoomVal);
-        vec2 center = vec2(uParamE, uParamF);
+        vec2 center = uVec2A;
         
         // Map 3D pos to 2D Complex Plane
         vec2 mapPos = p * (2.0 / zoom) + center;
@@ -66,9 +67,8 @@ export const MandelTerrain: FractalDefinition = {
 
             // --- BURNING SHIP SUPPORT ---
             if (uBurningEnabled > 0.5) {
-                 // FIX: Flip derivative to maintain DE continuity across axes
-                 if (z2.x < 0.0) dz.x = -dz.x;
-                 if (z2.y < 0.0) dz.y = -dz.y;
+                 // Flip derivative to maintain DE continuity across axes
+                 dz *= sign(z2 + vec2(1e-10));
                  z2 = abs(z2);
             }
 
@@ -219,8 +219,7 @@ export const MandelTerrain: FractalDefinition = {
 
     parameters: [
         { label: 'Map Zoom', id: 'paramB', min: 0.0, max: 16.0, step: 0.01, default: 1.0 },
-        { label: 'Pan X (Real)', id: 'paramE', min: -2.0, max: 0.5, step: 0.0001, default: 0.0 },
-        { label: 'Pan Y (Imagin)', id: 'paramF', min: -1.25, max: 1.25, step: 0.0001, default: 0.0 },
+        { label: 'Pan (Real, Imag)', id: 'vec2A', type: 'vec2', min: -2.0, max: 2.0, step: 0.0001, default: { x: 0.0, y: 0.0 } },
         { label: 'Height: Distance Estimator', id: 'paramA', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
         { label: 'Height: Layer 2 Gradient', id: 'paramC', min: -0.2, max: 0.2, step: 0.001, default: 0.0 },
         { label: 'Height: SmoothTrap', id: 'paramD', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
@@ -237,8 +236,7 @@ export const MandelTerrain: FractalDefinition = {
                 "paramB": 1,
                 "paramC": 0,
                 "paramD": 0,
-                "paramE": 0,
-                "paramF": 0
+                "vec2A": { "x": 0, "y": 0 }
             },
             "geometry": {
                 "applyTransformLogic": true,
@@ -522,20 +520,6 @@ export const MandelTerrain: FractalDefinition = {
         },
         "targetDistance": 2.997344970703125,
         "cameraMode": "Orbit",
-        "lights": [],
-        "renderMode": "Direct",
-        "quality": {
-            "aaMode": "Always",
-            "aaLevel": 1,
-            "msaa": 1,
-            "accumulation": true
-        },
-        "animations": [],
-        "sequence": {
-            "durationFrames": 300,
-            "fps": 30,
-            "tracks": {}
-        },
-        "duration": 300
+        "lights": []
     }
 };

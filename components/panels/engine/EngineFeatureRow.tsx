@@ -3,13 +3,13 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { DraggableNumber } from '../../Slider';
 
-export type EngineStatus = 'synced' | 'pending' | 'runtime';
+export type EngineStatus = 'synced' | 'pending' | 'runtime' | 'overridden';
 
 export interface EngineFeatureRowProps {
     label: string;
     isActive: boolean;
     onToggle: (v: boolean) => void;
-    numericValue?: number;
+    numericValue?: number | string;
     onNumericChange?: (v: number) => void;
     options?: { label: string; value: any }[];
     onOptionChange?: (v: any) => void;
@@ -42,16 +42,17 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
     // Tooltip Logic
     const [showTooltip, setShowTooltip] = useState(false);
     const rowRef = useRef<HTMLDivElement>(null);
-    const [tooltipPos, setTooltipPos] = useState({ top: 0, right: 0 });
+    const [tooltipPos, setTooltipPos] = useState<{ top: number; x: number; side: 'left' | 'right' }>({ top: 0, x: 0, side: 'right' });
 
     const handleMouseEnter = () => {
         if (!description) return;
         if (rowRef.current) {
             const rect = rowRef.current.getBoundingClientRect();
+            const isLeftPanel = rect.left < window.innerWidth / 2;
             setTooltipPos({
                 top: rect.top + rect.height / 2,
-                // Position to the left of the element with a small gap
-                right: window.innerWidth - rect.left + 6 
+                x: isLeftPanel ? rect.right + 6 : window.innerWidth - rect.left + 6,
+                side: isLeftPanel ? 'left' : 'right'
             });
             setShowTooltip(true);
         }
@@ -60,13 +61,19 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
     const handleMouseLeave = () => setShowTooltip(false);
 
     // Dense spreadsheet styling
-    const textColor = status === 'pending' ? 'text-amber-400' : isActive ? 'text-gray-300' : 'text-gray-500';
-    
+    const textColor = status === 'overridden' ? 'text-purple-400/60'
+        : status === 'pending' ? 'text-amber-400'
+        : isActive ? 'text-gray-300' : 'text-gray-500';
+
     // Status Light Logic
     let statusClass = '';
     let statusTitle = '';
-    
+
     switch (status) {
+        case 'overridden':
+            statusClass = 'bg-purple-500/50';
+            statusTitle = 'Controlled by Viewport Quality';
+            break;
         case 'pending':
             statusClass = 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse';
             statusTitle = 'Pending Compilation (Click Apply)';
@@ -126,7 +133,11 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                             <select
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                 value={numericValue}
-                                onChange={(e) => onOptionChange(Number(e.target.value))}
+                                onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const asNum = Number(raw);
+                                    onOptionChange(isNaN(asNum) ? raw : asNum);
+                                }}
                             >
                                 {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
@@ -135,10 +146,10 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                                  <span className="text-[6px] text-gray-500">▼</span>
                             </div>
                          </div>
-                    ) : onNumericChange && numericValue !== undefined && (
+                    ) : onNumericChange && numericValue !== undefined && typeof numericValue === 'number' && (
                         <div className="w-10 h-4 bg-black/40 border border-white/10 relative overflow-hidden rounded-sm">
-                             <DraggableNumber 
-                                value={numericValue} 
+                             <DraggableNumber
+                                value={numericValue}
                                 onChange={onNumericChange} 
                                 step={safeStep} 
                                 min={min}
@@ -166,19 +177,29 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
             
             {/* Portal Tooltip */}
             {showTooltip && createPortal(
-                <div 
+                <div
                     className="fixed z-[9999] pointer-events-none flex items-center animate-fade-in"
-                    style={{ 
-                        top: tooltipPos.top, 
-                        right: tooltipPos.right, 
-                        transform: 'translateY(-50%)' 
+                    style={{
+                        top: tooltipPos.top,
+                        [tooltipPos.side === 'left' ? 'left' : 'right']: tooltipPos.x,
+                        transform: 'translateY(-50%)'
                     }}
                 >
                     <div className="bg-black text-white text-[9px] px-2 py-1 rounded border border-white/20 shadow-xl whitespace-nowrap">
                         {description}
-                        {/* Right Arrow */}
-                        <div className="absolute top-1/2 -right-1 -translate-y-1/2 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-white/20" />
-                        <div className="absolute top-1/2 -right-[3px] -translate-y-1/2 border-t-[3px] border-b-[3px] border-l-[3px] border-t-transparent border-b-transparent border-l-black" />
+                        {tooltipPos.side === 'left' ? (
+                            <>
+                                {/* Left Arrow (panel docked left, tooltip opens right) */}
+                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 border-t-4 border-b-4 border-r-4 border-t-transparent border-b-transparent border-r-white/20" />
+                                <div className="absolute top-1/2 -left-[3px] -translate-y-1/2 border-t-[3px] border-b-[3px] border-r-[3px] border-t-transparent border-b-transparent border-r-black" />
+                            </>
+                        ) : (
+                            <>
+                                {/* Right Arrow (panel docked right, tooltip opens left) */}
+                                <div className="absolute top-1/2 -right-1 -translate-y-1/2 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-white/20" />
+                                <div className="absolute top-1/2 -right-[3px] -translate-y-1/2 border-t-[3px] border-b-[3px] border-l-[3px] border-t-transparent border-b-transparent border-l-black" />
+                            </>
+                        )}
                     </div>
                 </div>,
                 document.body

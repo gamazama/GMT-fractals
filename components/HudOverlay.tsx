@@ -9,11 +9,11 @@ interface HudOverlayProps {
     actions: FractalActions;
     isMobile: boolean;
     hudRefs: {
-        container: React.RefObject<HTMLDivElement | null>;
-        speed: React.RefObject<HTMLSpanElement | null>;
-        dist: React.RefObject<HTMLSpanElement | null>;
-        reset: React.RefObject<HTMLButtonElement | null>;
-        reticle: React.RefObject<HTMLDivElement | null>;
+        container: React.RefObject<HTMLDivElement>;
+        speed: React.RefObject<HTMLSpanElement>;
+        dist: React.RefObject<HTMLSpanElement>;
+        reset: React.RefObject<HTMLButtonElement>;
+        reticle: React.RefObject<HTMLDivElement>;
     };
 }
 
@@ -141,7 +141,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
                     <button 
                         ref={hudRefs.reset}
                         onClick={() => { actions.resetCamera(); if (navigator.vibrate) navigator.vibrate(30); }}
-                        className="pointer-events-auto px-4 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-black uppercase tracking-widest rounded-t-lg border-x border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl mb-[-1px]"
+                        className="pointer-events-auto px-4 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-t-lg border-x border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl mb-[-1px]"
                     >
                         Reset Camera
                     </button>
@@ -159,8 +159,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
                                         className="absolute inset-0 bg-cyan-500/10 border-r border-cyan-500/20 transition-all duration-300 ease-out"
                                         style={{ width: `${speedProgress * 100}%` }}
                                     />
-                                    <span ref={hudRefs.speed} className="relative z-10 font-bold text-cyan-300 font-mono text-[10px] tracking-widest uppercase group-hover:text-white transition-colors">
-                                        SPD x{flySpeed.toFixed(3)}
+                                    <span ref={hudRefs.speed} className="relative z-10 font-bold text-cyan-300 font-mono text-[10px] group-hover:text-white transition-colors">
+                                        Spd x{flySpeed.toFixed(3)}
                                     </span>
                                 </div>
                                 <div className="w-px bg-white/5" />
@@ -169,26 +169,26 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
 
                         {/* Distance Display (Updated by usePhysicsProbe) */}
                         <div className="px-6 py-3 bg-white/5 flex items-center min-w-[100px] justify-center">
-                            <span ref={hudRefs.dist} className="text-cyan-500/80 font-mono text-[10px] tracking-widest uppercase">
-                                DST ---
+                            <span ref={hudRefs.dist} className="text-cyan-500/80 font-mono text-[10px]">
+                                Dst ---
                             </span>
                         </div>
                     </div>
 
                     {/* Navigation Hints */}
                     {state.showHints && !isMobile && (
-                        <div className="mt-3 text-[9px] font-medium text-white/40 tracking-widest uppercase text-center animate-fade-in text-shadow-sm whitespace-nowrap">
-                            <span className="text-cyan-400/60 font-bold mr-2">[{state.cameraMode.toUpperCase()}]</span>
-                            {state.cameraMode === 'Fly' 
-                                ? "WASD Move • Space/C Vert • Shift Boost" 
-                                : "L-Drag Rotate • R-Drag Pan • Scroll Zoom"}
+                        <div className="mt-3 text-[9px] font-medium text-white/40 text-center animate-fade-in text-shadow-sm whitespace-nowrap">
+                            <span className="text-cyan-400/60 font-bold mr-2">[{state.cameraMode}]</span>
+                            {state.cameraMode === 'Fly'
+                                ? "WASD Move · Space/C Vert · Shift Boost"
+                                : "L-Drag Rotate · R-Drag Pan · Scroll Zoom"}
                         </div>
                     )}
                     
                     {/* Persistent Mode Switch Hint */}
                     {tabSwitchCount < 2 && !isMobile && state.showHints && (
-                         <div className="mt-2 text-[10px] font-bold text-cyan-300 animate-pulse bg-cyan-950/40 px-3 py-1 rounded border border-cyan-500/30 shadow-lg tracking-wider">
-                             PRESS <span className="text-white border border-white/20 rounded px-1 bg-white/10 mx-0.5">TAB</span> FOR {state.cameraMode === 'Orbit' ? 'FLY' : 'ORBIT'} NAVIGATION
+                         <div className="mt-2 text-[10px] font-bold text-cyan-300 animate-pulse bg-cyan-950/40 px-3 py-1 rounded border border-cyan-500/30 shadow-lg">
+                             Press <span className="text-white border border-white/20 rounded px-1 bg-white/10 mx-0.5">Tab</span> for {state.cameraMode === 'Orbit' ? 'Fly' : 'Orbit'} navigation
                          </div>
                     )}
                 </div>

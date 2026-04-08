@@ -21,6 +21,12 @@ async function createServer() {
 
   let vite;
 
+  // Serve the legacy static mesh export tool at /mesh-export-legacy
+  // The React mesh export app is served by Vite at /mesh-export.html
+  app.use('/mesh-export-legacy', express.static(
+    isProduction ? path.join(distPath, 'mesh-export-legacy') : path.join(projectRoot, 'public', 'mesh-export')
+  ));
+
   if (!isProduction) {
     console.log('[Server] Mode: Development (Vite Middleware)');
     // --- DEVELOPMENT MODE ---
@@ -53,15 +59,18 @@ async function createServer() {
     try {
       const url = req.originalUrl;
 
+      // Multi-page entry: serve mesh-export.html for its route
+      const htmlFile = url === '/mesh-export.html' ? 'mesh-export.html' : 'index.html';
+
       if (!isProduction && vite) {
-         // In Dev, use Vite to transform index.html
-         let template = fs.readFileSync(path.resolve(projectRoot, 'index.html'), 'utf-8');
+         // In Dev, use Vite to transform the HTML entry
+         let template = fs.readFileSync(path.resolve(projectRoot, htmlFile), 'utf-8');
          template = await vite.transformIndexHtml(url, template);
          res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
       } else {
-         // In Prod, serve dist/index.html
+         // In Prod, serve the appropriate HTML entry
          if (distExists) {
-             res.sendFile(path.join(distPath, 'index.html'));
+             res.sendFile(path.join(distPath, htmlFile));
          } else {
              res.status(500).send('Server Error: Production build not found. Please ensure "npm run build" runs before start.');
          }

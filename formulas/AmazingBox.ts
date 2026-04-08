@@ -6,21 +6,24 @@ export const AmazingBox: FractalDefinition = {
     name: 'Amazing Box',
     shortDescription: 'Architectural fractal discovered by Tglad. Creates complex geometric lattices and Borg-like structures.',
     description: 'Also known as the Mandelbox (Tglad). A folding fractal that creates complex, machine-like architectural structures.',
+    juliaType: 'offset',
     
     shader: {
         function: `
     void formula_AmazingBox(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        
-        // Pre-Fold Rotation (Param E = Rot X, Param F = Rot Z)
-        float angX = uParamE;
-        float angZ = uParamF;
-        if (abs(angX) > 0.001 || abs(angZ) > 0.001) {
-             float sx = sin(angX), cx = cos(angX);
-             float sz = sin(angZ), cz = cos(angZ);
+
+        // Pre-Fold Rotation (vec3A = Rot X/Y/Z)
+        vec3 rot = uVec3A;
+        if (length(rot) > 0.001) {
+             float sx = sin(rot.x), cx = cos(rot.x);
+             float sy = sin(rot.y), cy = cos(rot.y);
+             float sz = sin(rot.z), cz = cos(rot.z);
              mat2 rotX = mat2(cx, -sx, sx, cx);
+             mat2 rotY = mat2(cy, -sy, sy, cy);
              mat2 rotZ = mat2(cz, -sz, sz, cz);
              z3.yz = rotX * z3.yz;
+             z3.xz = rotY * z3.xz;
              z3.xy = rotZ * z3.xy;
         }
 
@@ -38,8 +41,7 @@ export const AmazingBox: FractalDefinition = {
         { label: 'Min Radius', id: 'paramB', min: 0.0, max: 1.5, step: 0.001, default: 0.5 },
         { label: 'Folding Limit', id: 'paramC', min: 0.1, max: 2.0, step: 0.001, default: 1.0 },
         { label: 'Fixed Radius', id: 'paramD', min: 0.1, max: 3.0, step: 0.001, default: 1.0 },
-        { label: 'Rot X (Pre)', id: 'paramE', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z (Pre)', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Pre-Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 }, mode: 'axes', scale: 'pi' },
     ],
 
     defaultPreset: {
@@ -51,8 +53,7 @@ export const AmazingBox: FractalDefinition = {
                 paramB: 1.026,
                 paramC: 1.445,
                 paramD: 1.637,
-                paramE: 3.14,
-                paramF: 1.57
+                vec3A: { x: 3.14, y: 0, z: 1.57 }
             },
             geometry: {
                 juliaMode: false,
@@ -162,30 +163,17 @@ export const AmazingBox: FractalDefinition = {
             },
             {
                 type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 },
-                color: "#ff0000",
+                color: "#FFD6AA", useTemperature: true, temperature: 3500,
                 intensity: 0.5,
                 falloff: 0.5,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: false
             },
             {
                 type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 },
-                color: "#0000ff",
+                color: "#E0EEFF", useTemperature: true, temperature: 7500,
                 intensity: 0.5,
                 falloff: 0.5,
                 falloffType: "Quadratic", fixed: false, visible: false, castShadow: false
-            }
-        ],
-        animations: [
-            {
-                id: "4yFFplV3QPo3KoNaGJwfX",
-                enabled: false,
-                target: "coreMath.paramA",
-                shape: "Sine",
-                period: 5,
-                amplitude: 1,
-                baseValue: 2.566,
-                phase: 0,
-                smoothing: 0.5
             }
         ]
     }

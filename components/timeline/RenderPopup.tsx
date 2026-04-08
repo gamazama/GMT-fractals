@@ -1,8 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { engine } from '../../engine/FractalEngine';
-// Removed circular import of videoExporter
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { useAnimationStore } from '../../store/animationStore';
 import { useFractalStore } from '../../store/fractalStore';
 import { VIDEO_FORMATS } from '../../data/constants';
@@ -11,10 +10,17 @@ import Dropdown from '../Dropdown';
 import Button from '../Button';
 import DraggableWindow from '../DraggableWindow';
 import * as THREE from 'three';
-import { PlayIcon, StopIcon, CheckIcon, TrashIcon, SaveIcon, AlertIcon, InfoIcon } from '../Icons';
+import { PlayIcon, StopIcon, CheckIcon, TrashIcon, SaveIcon, AlertIcon } from '../Icons';
 import * as Mediabunny from 'mediabunny';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { VIDEO_CONFIG } from '../../data/constants';
+import { animationEngine } from '../../engine/AnimationEngine';
+import { modulationEngine } from '../../features/modulation/ModulationEngine';
+import { getViewportCamera } from '../../engine/worker/ViewportRefs';
+import type { SerializedCamera, SerializedOffset } from '../../engine/worker/WorkerProtocol';
+import type { EngineRenderState } from '../../engine/FractalEngine';
+import { applyExportModulations } from './exportModulations';
+import { formatTimeWithUnits, formatDurationMs } from './exportHelpers';
 
 interface RenderPopupProps {
     onClose: () => void;
@@ -22,7 +28,7 @@ interface RenderPopupProps {
 
 export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     const animStore = useAnimationStore();
-    const { resolutionMode, fixedResolution } = useFractalStore();
+    const { resolutionMode, fixedResolution, canvasPixelSize } = useFractalStore();
     
     // Config State
     const [vidRes, setVidRes] = useState<{w:number, h:number}>(() => {
@@ -59,7 +65,10 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     const [progress, setProgress] = useState(0);
     const [statusText, setStatusText] = useState("");
     const [isRendering, setIsRendering] = useState(false);
-    const [isStopping, setIsStopping] = useState(false); 
+    const [isStopping, setIsStopping] = useState(false);
+    const stoppingRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const finishEarlyRef = useRef(false);
     
     // Timing Stats
     const startTimeRef = useRef<number>(0);
@@ -119,20 +128,30 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         }
 
         engine.setPreviewSampleCap(vidSamples);
-        
+
+        let sampleStartTime = Date.now();
+        let lastCount = 0;
+        let measuredDuration = 0;
+
         const pollInterval = setInterval(() => {
             if (isRendering) return;
-            
-            const pipeline = engine.pipeline;
-            if (pipeline) {
-                const currentDuration = pipeline.getCurrentFrameDuration();
-                const currentProgress = Math.min(1.0, pipeline.accumulationCount / vidSamples);
-                
-                setFrameStats({
-                    duration: currentDuration,
-                    progress: currentProgress
-                });
+
+            const count = engine.accumulationCount;
+            const currentProgress = Math.min(1.0, count / vidSamples);
+
+            // Detect accumulation restart (count dropped)
+            if (count < lastCount) {
+                sampleStartTime = Date.now();
+                measuredDuration = 0;
             }
+
+            // Measure when target reached
+            if (count >= vidSamples && measuredDuration === 0) {
+                measuredDuration = Date.now() - sampleStartTime;
+            }
+
+            lastCount = count;
+            setFrameStats({ duration: measuredDuration, progress: currentProgress });
         }, 30);
 
         return () => {
@@ -217,8 +236,6 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     }, [formatIndex, vidRes, vidBitrate, fps]);
 
     const handleVideoExport = async () => {
-        console.log("RenderPopup: Initializing export sequence...");
-        
         const selectedFormat = VIDEO_FORMATS[formatIndex];
         
         // --- STEP 1: OPEN SAVE DIALOG (MUST BE SYNCHRONOUS TO CLICK) ---
@@ -227,7 +244,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         
         if (isDiskMode) {
             try {
-                // @ts-ignore
+                // @ts-expect-error — File System Access API not in all TS lib targets
                 const handle = await window.showSaveFilePicker({
                     suggestedName: `fractal_${vidRes.w}x${vidRes.h}.${selectedFormat.ext}`,
                     types: [{
@@ -236,16 +253,18 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                     }],
                 });
                 fileStream = await handle.createWritable();
-            } catch (err: any) {
-                if (err.name === 'AbortError') return; // Cancelled
-                
-                const isSecurityError = err.name === 'SecurityError' || err.message.includes('not supported') || err.message.includes('not a function');
+            } catch (err) {
+                if (err instanceof DOMException && err.name === 'AbortError') return; // Cancelled
+
+                const errMsg = err instanceof Error ? err.message : String(err);
+                const errName = err instanceof DOMException ? err.name : '';
+                const isSecurityError = errName === 'SecurityError' || errMsg.includes('not supported') || errMsg.includes('not a function');
                 if (isSecurityError) {
                     console.warn("RenderPopup: Disk Access blocked. Fallback to RAM.");
                     fileStream = null;
                     effectiveDiskMode = false;
                 } else {
-                    alert("Could not start export. Error: " + err.message);
+                    alert("Could not start export. Error: " + errMsg);
                     return;
                 }
             }
@@ -266,36 +285,167 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
 
         startTimeRef.current = Date.now();
         
+        const config = {
+            width: vidRes.w,
+            height: vidRes.h,
+            fps: fps,
+            samples: vidSamples,
+            bitrate: vidBitrate,
+            startFrame: startFrame,
+            endFrame: endFrame,
+            frameStep: frameStep,
+            formatIndex: formatIndex,
+            internalScale: internalScale
+        };
+
+        // --- STEP 3: SAVE STATE FOR RESTORE ---
+        const animState = useAnimationStore.getState();
+        const savedFrame = animState.currentFrame;
+        const savedIsPlaying = animState.isPlaying;
+        if (savedIsPlaying) animState.pause();
+
+        cancelledRef.current = false;
+        finishEarlyRef.current = false;
+
         try {
-            // Use engine.videoExporter instance
-            engine.videoExporter.start({
-                width: vidRes.w,
-                height: vidRes.h,
-                fps: fps,
-                samples: vidSamples,
-                bitrate: vidBitrate,
-                startFrame: startFrame,
-                endFrame: endFrame,
-                frameStep: frameStep,
-                formatIndex: formatIndex,
-                internalScale: internalScale
-            }, fileStream);
-            
-            // The tick loop in FractalEngine will now drive the export
-            
-        } catch (e: any) {
-            if (e.message !== "Cancelled by user") {
-                console.error("RenderPopup: Render sequence failed", e);
-                alert(`Render process failed.\n\nError: ${e.message}`);
-                setIsRendering(false);
+            // --- STEP 4: INIT WORKER EXPORT SESSION ---
+            setStatusText("Initializing encoder...");
+            await engine.startExport(config, fileStream);
+
+            // --- STEP 5: FRAME PUMP LOOP ---
+            const totalFrames = Math.floor((endFrame - startFrame) / frameStep) + 1;
+
+            for (let i = 0; i < totalFrames; i++) {
+                if (cancelledRef.current || finishEarlyRef.current) break;
+
+                // Wait while paused
+                while (stoppingRef.current && !cancelledRef.current && !finishEarlyRef.current) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                if (cancelledRef.current || finishEarlyRef.current) break;
+
+                const timelineFrame = startFrame + (i * frameStep);
+                const time = timelineFrame / fps;
+
+                // 5a. Scrub animation to this frame (updates store via binders → events → worker)
+                animationEngine.scrub(timelineFrame);
+
+                // 5b. Apply modulations (LFOs + rules)
+                applyExportModulations(time, 1.0 / fps);
+
+                // 5c. Collect current state snapshot
+                const cam = getViewportCamera() as THREE.PerspectiveCamera | null;
+                const storeState = useFractalStore.getState();
+
+                // Serialize camera
+                const serializedCamera: SerializedCamera = cam ? {
+                    position: [cam.position.x, cam.position.y, cam.position.z],
+                    quaternion: [cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w],
+                    fov: cam.fov || 60,
+                    aspect: config.width / config.height
+                } : {
+                    position: [0, 0, 0],
+                    quaternion: [0, 0, 0, 1],
+                    fov: (storeState as any).optics?.camFov ?? 60,
+                    aspect: config.width / config.height
+                };
+
+                // Serialize offset
+                const so = storeState.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+                const serializedOffset: SerializedOffset = {
+                    x: so.x, y: so.y, z: so.z,
+                    xL: so.xL ?? 0, yL: so.yL ?? 0, zL: so.zL ?? 0
+                };
+
+                // Collect render state (same shape as RENDER_TICK)
+                const renderState: Partial<EngineRenderState> = {
+                    cameraMode: storeState.cameraMode,
+                    isCameraInteracting: false, // Not interacting during export
+                    optics: (storeState as any).optics ?? null,
+                    lighting: (storeState as any).lighting ?? null,
+                    quality: (storeState as any).quality ?? null,
+                    geometry: (storeState as any).geometry ?? null,
+                };
+
+                // 5d. Send frame to worker for rendering + encoding
+                const frameResult = await engine.renderExportFrame(
+                    i, time, serializedCamera, serializedOffset, renderState,
+                    { ...engine.modulations } // Copy current modulation offsets
+                );
+
+                // 5d.1 Focus Lock: sync dofFocus from measured depth for next frame
+                const fStore = useFractalStore.getState();
+                if (fStore.focusLock && frameResult.measuredDistance > 0 && frameResult.measuredDistance < 1000) {
+                    const currentFocus = (fStore as any).optics?.dofFocus ?? 0;
+                    const relChange = Math.abs(frameResult.measuredDistance - currentFocus) / Math.max(currentFocus, 0.0001);
+                    if (relChange > 0.01) {
+                        (fStore as any).setOptics({ dofFocus: frameResult.measuredDistance });
+                    }
+                }
+
+                // 5e. Update progress UI
+                const pct = ((i + 1) / totalFrames) * 100;
+                setProgress(pct);
+
+                const now = Date.now();
+                const elapsed = (now - startTimeRef.current) / 1000;
+                setElapsedTime(elapsed);
+
+                const framesDone = i + 1;
+                const avgTime = elapsed / framesDone;
+                const remaining = totalFrames - framesDone;
+                const eta = remaining * avgTime;
+                setEtaRange({ min: eta * 0.9, max: eta * 1.1 });
+                setLastFrameTime(avgTime);
+
+                FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: true, progress: pct });
             }
+
+            if (cancelledRef.current) {
+                engine.cancelExport();
+                setStatusText("Cancelled.");
+            } else {
+                // --- STEP 6: FINALIZE (full render or finish-early) ---
+                setStatusText("Finalizing video...");
+                const blob = await engine.finishExport();
+
+                // RAM mode: trigger download
+                if (blob && !effectiveDiskMode) {
+                    const blobObj = new Blob([blob], { type: selectedFormat.mime });
+                    const url = URL.createObjectURL(blobObj);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `fractal_${vidRes.w}x${vidRes.h}.${selectedFormat.ext}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+
+                setStatusText("Complete!");
+            }
+
+        } catch (e) {
+            console.error("RenderPopup: Export failed", e);
+            alert(`Export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            // Restore state
+            setIsRendering(false);
+            setWinSize({ width: BASE_WIDTH, height: BASE_HEIGHT });
+            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
+
+            // Restore animation frame
+            animationEngine.scrub(savedFrame);
+            if (savedIsPlaying) useAnimationStore.getState().play();
+
+            // Clear modulation offsets
+            engine.modulations = {};
+            modulationEngine.resetOffsets();
         }
     };
 
-    const handleStopClick = () => { setIsStopping(true); engine.videoExporter.pause(); };
-    const handleResume = () => { setIsStopping(false); engine.videoExporter.resume(); };
-    const confirmStitch = () => { setStatusText("Stitching..."); engine.videoExporter.finishAndStitch(); engine.videoExporter.resume(); };
-    const discardRender = () => { engine.videoExporter.cancel(); engine.videoExporter.resume(); setIsRendering(false); };
+    const handleStopClick = () => { stoppingRef.current = true; setIsStopping(true); };
+    const handleResume = () => { stoppingRef.current = false; setIsStopping(false); };
+    const confirmStitch = () => { stoppingRef.current = false; setStatusText("Finalizing..."); finishEarlyRef.current = true; };
+    const discardRender = () => { stoppingRef.current = false; cancelledRef.current = true; };
 
     const totalFramesCount = Math.floor((endFrame - startFrame) / frameStep) + 1;
     
@@ -304,16 +454,18 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         if (!frameStats.duration) return 0;
         
         let multiplier = 1.0;
-        if (engine.renderer) {
-             const canvas = engine.renderer.domElement;
-             const viewportPixels = canvas.width * canvas.height;
-             const targetW = vidRes.w * internalScale;
-             const targetH = vidRes.h * internalScale;
-             const targetPixels = targetW * targetH;
-             
-             if (viewportPixels > 0) {
-                 multiplier = targetPixels / viewportPixels;
-             }
+        // Estimate based on viewport vs target resolution ratio
+        const dpr = useFractalStore.getState().dpr || 1;
+        const [viewportW, viewportH] = resolutionMode === 'Fixed'
+            ? [Math.floor(fixedResolution[0] * dpr), Math.floor(fixedResolution[1] * dpr)]
+            : canvasPixelSize;
+        const viewportPixels = viewportW * viewportH;
+        const targetW = vidRes.w * internalScale;
+        const targetH = vidRes.h * internalScale;
+        const targetPixels = targetW * targetH;
+
+        if (viewportPixels > 0) {
+            multiplier = targetPixels / viewportPixels;
         }
         
         const singleFrameEst = (frameStats.duration / 1000) * multiplier;
@@ -520,10 +672,10 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                                 />
 
                                 {/* FLUSH SLIDER - SAMPLES */}
-                                <Slider 
-                                    label="Samples (Quality)" 
-                                    value={vidSamples} 
-                                    min={1} max={64} step={1} 
+                                <Slider
+                                    label="Samples (Quality)"
+                                    value={vidSamples}
+                                    min={1} max={256} step={1}
                                     onChange={setVidSamples}
                                     overrideInputText={vidSamples.toFixed(0)}
                                 />
@@ -595,26 +747,3 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     );
 };
 
-// --- Helpers moved out of main component to reduce size ---
-
-const formatTimeWithUnits = (secs: number) => {
-    if (!isFinite(secs) || secs < 0) return "--";
-    
-    if (secs < 60) return `${secs.toFixed(0)}s`;
-    
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    
-    if (m < 60) return `${m}m ${s}s`;
-    
-    const h = Math.floor(m / 60);
-    const remM = m % 60;
-    return `${h}h ${remM}m`;
-};
-
-const formatDurationMs = (ms: number) => {
-    if (ms < 1000) return `${ms.toFixed(0)}ms`;
-    const secs = ms / 1000;
-    if (secs < 60) return `${secs.toFixed(1)}s`;
-    return formatTimeWithUnits(secs);
-};

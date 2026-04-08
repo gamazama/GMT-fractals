@@ -38,6 +38,11 @@ interface AdvancedGradientEditorProps {
     helpId?: string;
 }
 
+const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
+    a.length === b.length && a.every((k, i) =>
+        k.id === b[i].id && k.position === b[i].position && k.color === b[i].color && k.bias === b[i].bias && k.interpolation === b[i].interpolation
+    );
+
 const getInterpolatedColor = (knots: AdvancedGradientKnot[], pos: number): string => {
     const sorted = [...knots].sort((a, b) => a.position - b.position);
     if (sorted.length === 0) return '#FFFFFF';
@@ -46,6 +51,10 @@ const getInterpolatedColor = (knots: AdvancedGradientKnot[], pos: number): strin
 
     for (let i = 0; i < sorted.length - 1; i++) {
         if (pos >= sorted[i].position && pos <= sorted[i + 1].position) {
+            // Step mode: hold the left knot's color for the full segment
+            if (sorted[i].interpolation === 'step') {
+                return sorted[i].color;
+            }
             const t = (pos - sorted[i].position) / (sorted[i + 1].position - sorted[i].position);
             const c1 = hexToRgb(sorted[i].color) || { r: 255, g: 255, b: 255 };
             const c2 = hexToRgb(sorted[i + 1].color) || { r: 255, g: 255, b: 255 };
@@ -91,13 +100,17 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
 
     useEffect(() => {
-        setKnots(stops.map(stop => ({
-            id: stop.id, 
-            position: stop.position, 
-            color: stop.color,
-            bias: stop.bias ?? 0.5,
-            interpolation: (stop.interpolation as InterpolationMode) ?? 'linear'
-        })).sort((a, b) => a.position - b.position));
+        setKnots(prev => {
+            const incoming = stops.map(stop => ({
+                id: stop.id,
+                position: stop.position,
+                color: stop.color,
+                bias: stop.bias ?? 0.5,
+                interpolation: (stop.interpolation as InterpolationMode) ?? 'linear'
+            })).sort((a, b) => a.position - b.position);
+            if (knotsEqual(prev, incoming)) return prev;
+            return incoming;
+        });
     }, [stops]);
 
     const knotsRef = useRef(knots);
@@ -149,19 +162,19 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         }
     }, [selectedIds, emitChange]);
 
-    const handleCopy = () => {
+    const handleCopy = useCallback(() => {
         const data = JSON.stringify({
             stops: knotsRef.current.map(({ position, color, bias, interpolation }) => ({ position, color, bias, interpolation })),
             colorSpace
         });
         navigator.clipboard.writeText(data);
-    };
+    }, [colorSpace]);
 
-    const handlePaste = async () => {
+    const handlePaste = useCallback(async () => {
         try {
             const text = await navigator.clipboard.readText();
             const data = JSON.parse(text);
-            
+
             // Support pasting legacy array OR new object
             let newStops = [];
             let newSpace: ColorSpaceMode = 'srgb';
@@ -189,9 +202,9 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         } catch (e) {
             console.error(e);
         }
-    };
+    }, [emitChange, handleInteractionStart, handleInteractionEnd]);
 
-    const loadPreset = (presetStops: GradientStop[]) => {
+    const loadPreset = useCallback((presetStops: GradientStop[]) => {
         handleInteractionStart('param');
         const newKnots: AdvancedGradientKnot[] = presetStops.map((s, i) => ({
              id: `${Date.now()}_${i}`,
@@ -203,7 +216,19 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         emitChange(newKnots, 'srgb'); // Presets default to sRGB
         setSelectedIds(new Set());
         handleInteractionEnd();
-    };
+    }, [emitChange, handleInteractionStart, handleInteractionEnd]);
+
+    const presetMenuOptions = useMemo(() => [
+        { label: 'Clipboard', action: () => {}, isHeader: true },
+        { label: 'Copy Gradient', action: handleCopy },
+        { label: 'Paste Gradient', action: handlePaste },
+        { label: 'Presets', action: () => {}, isHeader: true },
+        ...GRADIENT_PRESETS.map(p => ({
+            label: p.name,
+            action: () => loadPreset(p.stops),
+            stops: p.stops
+        }))
+    ], [handleCopy, handlePaste, loadPreset]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const payload = dragPayloadRef.current;
@@ -255,13 +280,14 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
              const initMin = Math.min(...selectedKnotsInitial.map(k => k.position));
              const initMax = Math.max(...selectedKnotsInitial.map(k => k.position));
-             
+             const initSpan = initMax - initMin;
+             if (initSpan < 0.001) return;
+
              const pivot = type === 'bracket_scale_left' ? initMax : initMin;
-             const targetEdge = type === 'bracket_scale_left' 
-                ? Math.min(pivot - 0.01, initMin + deltaXRatio) 
-                : Math.max(pivot + 0.01, initMax + deltaXRatio);
-             
-             const scale = Math.abs(targetEdge - pivot) / Math.abs(initMax - initMin);
+             const targetEdge = (type === 'bracket_scale_left' ? initMin : initMax) + deltaXRatio;
+
+             // Signed scale — allows inversion when bracket crosses the pivot
+             const scale = (targetEdge - pivot) / (type === 'bracket_scale_left' ? initMin - pivot : initMax - pivot);
 
              const updatedKnots = initialKnots.map(k => {
                  if (ids.includes(k.id)) {
@@ -270,7 +296,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                  }
                  return k;
              });
-             
+
              emitChange(updatedKnots);
         }
 
@@ -435,11 +461,18 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         return selectedNodes.every(k => k.color === first) ? first : selectedNodes[0].color;
     }, [selectedNodes]);
 
+    // Discrete change (dropdown, one-shot) — wraps with undo snapshot
     const handleMultiPropertyChange = (prop: keyof AdvancedGradientKnot, value: any) => {
         handleInteractionStart('param');
         const updatedKnots = knots.map(k => selectedIds.has(k.id) ? { ...k, [prop]: value } as AdvancedGradientKnot : k);
         emitChange(updatedKnots);
         handleInteractionEnd();
+    };
+
+    // Continuous change (slider drag) — no undo wrap, Slider handles its own drag lifecycle
+    const handleSliderPropertyChange = (prop: keyof AdvancedGradientKnot, value: any) => {
+        const updatedKnots = knots.map(k => selectedIds.has(k.id) ? { ...k, [prop]: value } as AdvancedGradientKnot : k);
+        emitChange(updatedKnots);
     };
     
     const openTrackContextMenu = (e: React.MouseEvent) => {
@@ -527,7 +560,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
     return (
         <div 
-            className="w-full select-none" 
+            className="w-full select-none bg-[#1f1f1f] rounded"
             ref={containerRef}
             data-help-id={helpId || "ui.gradient_editor"}
             onContextMenu={handleWrapperContextMenu}
@@ -545,7 +578,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         >
             <div className="flex items-center justify-between mb-1">
                 <div 
-                    className="flex items-center gap-2 cursor-pointer text-[10px] font-semibold text-gray-400 hover:text-white tracking-wider gradient-interactive-element" 
+                    className="flex items-center gap-2 cursor-pointer text-[10px] font-semibold text-gray-400 hover:text-white gradient-interactive-element" 
                     onClick={() => setIsExpanded(!isExpanded)}
                 >
                     <span className={`transform transition-transform duration-200 text-base ${isExpanded ? 'rotate-90' : ''}`}>›</span>
@@ -554,7 +587,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 <div className="flex items-center gap-2">
                     {/* Visual Indicator of current mode */}
                     <div 
-                        className="text-[8px] font-bold text-gray-600 uppercase cursor-pointer hover:text-cyan-400 transition-colors select-none"
+                        className="text-[8px] font-bold text-gray-600 cursor-pointer hover:text-cyan-400 transition-colors select-none"
                         onClick={cycleColorSpace}
                         title="Click to switch Color Profile"
                     >
@@ -563,35 +596,26 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
                     {/* Presets Button */}
                     <button
-                        className="gradient-interactive-element p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors active:scale-95"
+                        className="gradient-interactive-element flex items-center gap-1 px-1.5 py-0.5 rounded border border-white/10 hover:border-white/25 hover:bg-white/10 text-gray-500 hover:text-white text-[9px] font-medium transition-colors active:scale-95"
                         onClick={handlePresetsClick}
                         title="Presets"
                     >
                         <MenuIcon />
+                        <span>Presets</span>
                     </button>
                     
                     {presetMenu && (
-                        <PresetMenu 
+                        <PresetMenu
                             x={presetMenu.x}
                             y={presetMenu.y}
                             onClose={() => setPresetMenu(null)}
-                            options={[
-                                { label: 'Clipboard', action: () => {}, isHeader: true },
-                                { label: 'Copy Gradient', action: handleCopy },
-                                { label: 'Paste Gradient', action: handlePaste },
-                                { label: 'Presets', action: () => {}, isHeader: true },
-                                ...GRADIENT_PRESETS.map(p => ({
-                                    label: p.name,
-                                    action: () => loadPreset(p.stops),
-                                    stops: p.stops 
-                                }))
-                            ]}
+                            options={presetMenuOptions}
                         />
                     )}
                 </div>
             </div>
 
-            <div className="relative" onContextMenu={openTrackContextMenu}>
+            <div className="relative px-2" onContextMenu={openTrackContextMenu}>
                 <div 
                     className="h-8 w-full rounded-t border border-white/20 relative mb-0 cursor-pointer" 
                     style={{ background: getGradientCssString(knots) }} 
@@ -599,7 +623,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     title="Double-click to select all"
                 >
                      {isBiasHandlesVisible && [...knots].sort((a, b) => a.position - b.position).map((k, i, arr) => {
-                        if (i >= arr.length - 1 || arr[i+1].position - k.position < 0.02) return null;
+                        if (i >= arr.length - 1 || arr[i+1].position - k.position < 0.02 || k.interpolation === 'step') return null;
                         
                         const visualPos = k.position + (arr[i+1].position - k.position) * k.bias;
                         
@@ -620,7 +644,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
                 <div 
                     ref={knotTrackRef} 
-                    className="h-6 w-full bg-white/5 border-x border-b border-white/10 relative rounded-b cursor-crosshair" 
+                    className="h-6 w-full bg-white/5 border-x border-b border-white/10 relative rounded-b cursor-crosshair"
                     onMouseDown={handleTrackMouseDown} 
                     title="Click & drag to add/move knot"
                 >
@@ -630,10 +654,24 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                             className={`gradient-interactive-element absolute top-0 w-4 h-5 -ml-2 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center group transition-opacity duration-200 ${isDragRemoving && selectedIds.has(knot.id) ? 'opacity-30' : 'opacity-100'}`} 
                             style={{ left: `${knot.position * 100}%` }} 
                             onMouseDown={(e) => {
-                                e.stopPropagation(); 
+                                e.stopPropagation();
                                 const isRightClick = e.button === 2;
+
+                                // Ctrl+drag: duplicate the knot
+                                if (e.ctrlKey && !isRightClick) {
+                                    handleInteractionStart('param');
+                                    const dupeId = `${Date.now()}_dup`;
+                                    const dupe: AdvancedGradientKnot = { ...knot, id: dupeId };
+                                    const newKnots = [...knots, dupe].sort((a, b) => a.position - b.position);
+                                    setKnots(newKnots);
+                                    setSelectedIds(new Set([dupeId]));
+                                    emitChange(newKnots);
+                                    startDrag('knot', [dupeId], e, newKnots, true);
+                                    return;
+                                }
+
                                 let newSel = new Set(selectedIds);
-                                if (e.shiftKey || e.ctrlKey) {
+                                if (e.shiftKey) {
                                     if (selectedIds.has(knot.id)) newSel.delete(knot.id);
                                     else newSel.add(knot.id);
                                 } else {
@@ -652,11 +690,56 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     ))}
 
                     {selectionRange && (
-                        <div className="gradient-interactive-element absolute -bottom-3 h-3 border-l-2 border-r-2 border-b-4 border-[#6D48E3] z-10" style={{ left: `calc(${selectionRange.min * 100}% - 15px)`, width: `calc(${(selectionRange.max - selectionRange.min) * 100}% + 30px)`, pointerEvents: 'none' }}>
-                             <div className="absolute bottom-0 left-0 right-0 h-8 cursor-grab active:cursor-grabbing pointer-events-auto" onMouseDown={(e) => { if(e.button===0) startDrag('bracket_move', Array.from(selectedIds) as string[], e); }} />
-                             <div className="absolute bottom-0 -left-0 w-2 h-4 bg-[#6D48E3] cursor-ew-resize pointer-events-auto rounded-sm" onMouseDown={(e) => { if(e.button===0) startDrag('bracket_scale_left', Array.from(selectedIds) as string[], e); }} />
-                             <div className="absolute bottom-0 -right-0 w-2 h-4 bg-[#6D48E3] cursor-ew-resize pointer-events-auto rounded-sm" onMouseDown={(e) => { if(e.button===0) startDrag('bracket_scale_right', Array.from(selectedIds) as string[], e); }} />
-                        </div>
+                        <>
+                            {/* Selection background — solid fill behind handles, dashed bottom for drag affordance */}
+                            <div
+                                className="gradient-interactive-element absolute top-0 z-[5] cursor-move bg-cyan-400/10 border-b-[2px] border-dashed border-cyan-400/40"
+                                style={{ left: `calc(${selectionRange.min * 100}% - 8px)`, width: `calc(${(selectionRange.max - selectionRange.min) * 100}% + 16px)`, bottom: '-6px' }}
+                                onMouseDown={(e) => {
+                                    if (e.button !== 0) return;
+                                    // Ctrl+drag: duplicate selected knots then drag copies
+                                    if (e.ctrlKey) {
+                                        e.stopPropagation();
+                                        handleInteractionStart('param');
+                                        const dupeMap = new Map<string, string>();
+                                        const dupes: AdvancedGradientKnot[] = [];
+                                        knots.filter(k => selectedIds.has(k.id)).forEach((k, i) => {
+                                            const dupeId = `${Date.now()}_dup${i}`;
+                                            dupeMap.set(k.id, dupeId);
+                                            dupes.push({ ...k, id: dupeId });
+                                        });
+                                        const newKnots = [...knots, ...dupes].sort((a, b) => a.position - b.position);
+                                        const dupeIds = [...dupeMap.values()];
+                                        setKnots(newKnots);
+                                        setSelectedIds(new Set(dupeIds));
+                                        emitChange(newKnots);
+                                        startDrag('bracket_move', dupeIds, e, newKnots, true);
+                                        return;
+                                    }
+                                    startDrag('bracket_move', Array.from(selectedIds) as string[], e);
+                                }}
+                            />
+                            {/* Left bracket [ */}
+                            <div
+                                className="gradient-interactive-element absolute top-0 w-[16px] z-30 cursor-ew-resize group"
+                                style={{ left: `calc(${selectionRange.min * 100}% - 18px)`, bottom: '-6px' }}
+                                onMouseDown={(e) => { e.stopPropagation(); if(e.button===0) startDrag('bracket_scale_left', Array.from(selectedIds) as string[], e); }}
+                            >
+                                <svg width="16" height="100%" viewBox="0 0 16 30" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                                    <path d="M 14 1.5 L 4 1.5 L 4 28.5 L 14 28.5" fill="none" stroke="rgb(34 211 238)" strokeWidth="2.5" strokeLinecap="round" className="opacity-60 group-hover:opacity-100 transition-opacity" />
+                                </svg>
+                            </div>
+                            {/* Right bracket ] */}
+                            <div
+                                className="gradient-interactive-element absolute top-0 w-[16px] z-30 cursor-ew-resize group"
+                                style={{ left: `calc(${selectionRange.max * 100}% + 2px)`, bottom: '-6px' }}
+                                onMouseDown={(e) => { e.stopPropagation(); if(e.button===0) startDrag('bracket_scale_right', Array.from(selectedIds) as string[], e); }}
+                            >
+                                <svg width="16" height="100%" viewBox="0 0 16 30" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                                    <path d="M 2 1.5 L 12 1.5 L 12 28.5 L 2 28.5" fill="none" stroke="rgb(34 211 238)" strokeWidth="2.5" strokeLinecap="round" className="opacity-60 group-hover:opacity-100 transition-opacity" />
+                                </svg>
+                            </div>
+                        </>
                     )}
                 </div>
             </div>
@@ -688,15 +771,15 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                                         label="Position" 
                                         value={selectedNodes[0].position * 100} 
                                         min={0} max={100} step={0.1} 
-                                        onChange={(val) => handleMultiPropertyChange('position', val / 100)} 
+                                        onChange={(val) => handleSliderPropertyChange('position', val / 100)}
                                     />
                                  )}
-                                 
-                                 <Slider 
-                                    label="Bias (Midpoint)" 
-                                    value={commonBias === -1 ? 50 : commonBias * 100} 
-                                    min={0} max={100} step={1} 
-                                    onChange={(val) => handleMultiPropertyChange('bias', val / 100)}
+
+                                 <Slider
+                                    label="Bias (Midpoint)"
+                                    value={commonBias === -1 ? 50 : commonBias * 100}
+                                    min={0} max={100} step={1}
+                                    onChange={(val) => handleSliderPropertyChange('bias', val / 100)}
                                     overrideInputText={commonBias === -1 ? "Mixed" : undefined}
                                  />
                              </div>

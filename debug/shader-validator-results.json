@@ -1,0 +1,3664 @@
+{
+  "timestamp": "2026-03-20T08:01:13.098Z",
+  "totalTime": "162.1s",
+  "summary": {
+    "total": 581,
+    "pass": 185,
+    "fail": 87,
+    "skip": 309
+  },
+  "failures": [
+    {
+      "name": "DrosteGrid",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"ostart\"; Encountered undefined variable: \"ostop\"; Encountered undefined variable: \"istart\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 233.09749999999985,
+      "paramCount": 7
+    },
+    {
+      "name": "BurtsBisectorBulb",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"power\"",
+      "warnings": [],
+      "timeMs": 347.85009999999966,
+      "paramCount": 10
+    },
+    {
+      "name": "BenesiFoldedBulb",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"sr23\"; Encountered undefined variable: \"sr13\"; Encountered undefined variable: \"sr12\"",
+      "warnings": [],
+      "timeMs": 499.33040000000074,
+      "paramCount": 11
+    },
+    {
+      "name": "BenesiPineFoldDE",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"sr23\"; Encountered undefined variable: \"sr13\"; Encountered undefined variable: \"sr12\"",
+      "warnings": [],
+      "timeMs": 548.5482000000011,
+      "paramCount": 20
+    },
+    {
+      "name": "Funball",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"pi2\"; Encountered undefined variable: \"pi\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 336.20360000000073,
+      "paramCount": 17
+    },
+    {
+      "name": "FunballColorsAccordion",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"pi2\"; Encountered undefined variable: \"pi\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 829.5791000000008,
+      "paramCount": 33
+    },
+    {
+      "name": "MengerSmooth",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr32\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 612.721599999999,
+      "paramCount": 20
+    },
+    {
+      "name": "MengerSmoothforWeb",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr32\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 795.4436999999998,
+      "paramCount": 23
+    },
+    {
+      "name": "MengerWorkOnStella",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"pi\"; Encountered undefined variable: \"pi2\"; Encountered undefined variable: \"pi\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 532.2520999999997,
+      "paramCount": 17
+    },
+    {
+      "name": "PineV322",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"pi\"; Encountered undefined variable: \"pi2\"; Encountered undefined variable: \"pi\"",
+      "warnings": [],
+      "timeMs": 1304.3252000000011,
+      "paramCount": 49
+    },
+    {
+      "name": "pinewithgoodcolor",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr23\"",
+      "warnings": [],
+      "timeMs": 832.7680999999993,
+      "paramCount": 24
+    },
+    {
+      "name": "pinewithoptionsDE",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr32\"; Encountered undefined variable: \"sr23\"",
+      "warnings": [],
+      "timeMs": 928.1620000000003,
+      "paramCount": 24
+    },
+    {
+      "name": "00-Mandelbox",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undeclared type: \"Dual3f\"; Encountered undeclared type: \"Vec3Dual3f\"; Encountered undeclared type: \"Vec3Dual3f\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 461.2837999999974,
+      "paramCount": 10
+    },
+    {
+      "name": "00-Mandelbulb-vs-Menger",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undeclared type: \"Vec3Dual3f\"; Encountered undeclared type: \"Vec3fx\"; Encountered undefined variable: \"Dir\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 145.25380000000223,
+      "paramCount": 2
+    },
+    {
+      "name": "RecFold",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"OrbitStrength\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 271.2622999999985,
+      "paramCount": 17
+    },
+    {
+      "name": "Eiffies-SoC-DE",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"rCoC\"; Encountered undefined variable: \"dB\"; Encountered undefined variable: \"rCoC\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 254.33690000000206,
+      "paramCount": 2
+    },
+    {
+      "name": "iqPath4fragmentarium",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"iters\"; Encountered undefined variable: \"scale\"; Encountered undefined variable: \"offset\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 1067.7272999999986,
+      "paramCount": 10
+    },
+    {
+      "name": "MontecarloByEffie-KnightyMod",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"dB\"; Encountered undefined variable: \"mcol\"; Encountered undefined variable: \"rCoC\"",
+      "warnings": [],
+      "timeMs": 617.3227000000006,
+      "paramCount": 9
+    },
+    {
+      "name": "MontecarloByEffie",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"aperature\"; Encountered undefined variable: \"focalDistance\"; Encountered undefined variable: \"iResolution\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 506.5159000000058,
+      "paramCount": 0
+    },
+    {
+      "name": "pseudoknightyan",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"coord\"; Encountered undefined variable: \"rotater\"; Encountered undefined variable: \"pixelSize\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 463.0017000000007,
+      "paramCount": 1
+    },
+    {
+      "name": "testSoC",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"bColoring\"; Encountered undefined variable: \"bColoring\"; Encountered undefined variable: \"mcol\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 170.58289999999397,
+      "paramCount": 0
+    },
+    {
+      "name": "AnimationModeTest",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"ballSize\"; Encountered undefined variable: \"t\"",
+      "warnings": [],
+      "timeMs": 172.82830000000104,
+      "paramCount": 1
+    },
+    {
+      "name": "BenesiFoldedMandelbulb",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"sr23\"; Encountered undefined variable: \"sr13\"; Encountered undefined variable: \"sr12\"",
+      "warnings": [],
+      "timeMs": 497.3905999999988,
+      "paramCount": 11
+    },
+    {
+      "name": "iqPath4fragmentarium",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"iters\"; Encountered undefined variable: \"scale\"; Encountered undefined variable: \"offset\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 1077.2091,
+      "paramCount": 10
+    },
+    {
+      "name": "Mobius",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"floor\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 366.071100000001,
+      "paramCount": 10
+    },
+    {
+      "name": "Raytracingtestfrag",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"SpotLightPos\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 179.26260000000184,
+      "paramCount": 2
+    },
+    {
+      "name": "Tetrahedron-Alternative",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"vertices\"; Encountered undefined variable: \"frag_c\"; Encountered undefined variable: \"frag_c\"",
+      "warnings": [
+        "Pre-loop rename failed, using raw declarations: Error: Error: Expected \";\", \"{\", \"}\", expression, iteration statement, jump statement, precision statement, prepocessor, single type qualifier, type specifier, or whitespace but end of input found.\n --> location:8:2\n  |\n8 | }\n  |  "
+      ],
+      "timeMs": 266.0599000000002,
+      "paramCount": 6
+    },
+    {
+      "name": "NewtonVarPower",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Power\"; Encountered undefined variable: \"Julia\"; Encountered undefined variable: \"JuliaC\"",
+      "warnings": [
+        "Pre-loop rename failed, using raw declarations: Error: Error: Expected \";\", \"{\", \"}\", expression, iteration statement, jump statement, precision statement, prepocessor, single type qualifier, type specifier, or whitespace but end of input found.\n --> location:18:2\n   |\n18 | }\n   |  "
+      ],
+      "timeMs": 361.8558000000048,
+      "paramCount": 13
+    },
+    {
+      "name": "NewtonVarPowerSimplified",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Error: Expected \",\", \";\", \"=\", [A-Z,a-z,_,0-9], array specifier, or whitespace but \"(\" found.",
+      "errorLine": "11  uniform vec3  uJulia;\n12  uniform float uJuliaMode;\n13> uniform float uEscapeThresh, uColorIter, uColorMode;\n14  uniform vec3  uSceneOffsetLow, uSceneOffsetHigh;\n15  uniform vec3  uCameraPosition;",
+      "warnings": [
+        "Pre-loop rename failed, using raw declarations: Error: Error: Expected \";\", \"{\", \"}\", expression, iteration statement, jump statement, precision statement, prepocessor, single type qualifier, type specifier, or whitespace but end of input found.\n --> location:24:2\n   |\n24 | }\n   |  "
+      ],
+      "timeMs": 374.4825999999957,
+      "paramCount": 12
+    },
+    {
+      "name": "IQ-Clouds",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"SpotLightDir\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 476.8271999999997,
+      "paramCount": 9
+    },
+    {
+      "name": "testSoC",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"bColoring\"; Encountered undefined variable: \"bColoring\"; Encountered undefined variable: \"mcol\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 164.9372000000003,
+      "paramCount": 0
+    },
+    {
+      "name": "2D-HilbertCurve-notables-final",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"scl2\"; Encountered undefined variable: \"scl\"; Encountered undefined variable: \"scl\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 476.3773999999976,
+      "paramCount": 8
+    },
+    {
+      "name": "2D-HilbertCurve-with-tables",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"A\"; Encountered undefined variable: \"Cg\"; Encountered undefined variable: \"G\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 387.37059999999474,
+      "paramCount": 8
+    },
+    {
+      "name": "2D-KochCurve",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"A2B\"",
+      "warnings": [],
+      "timeMs": 319.3726000000024,
+      "paramCount": 9
+    },
+    {
+      "name": "SimpleIFS-DE3D-final",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"BO\"; Encountered undefined variable: \"minFindex\"; Encountered undefined variable: \"BR\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 794.0160999999935,
+      "paramCount": 8
+    },
+    {
+      "name": "AnotherKoch3D",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"c\"; Encountered undefined variable: \"c\"; Encountered undefined variable: \"c\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 350.30340000000433,
+      "paramCount": 0
+    },
+    {
+      "name": "AnotherKoch3D01",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"c\"; Encountered undefined variable: \"c\"; Encountered undefined variable: \"c\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 229.09590000000026,
+      "paramCount": 1
+    },
+    {
+      "name": "Baird-Delta",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"fl0\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 256.42669999999634,
+      "paramCount": 3
+    },
+    {
+      "name": "koch-darkbeam-40",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"b\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 303.758799999996,
+      "paramCount": 4
+    },
+    {
+      "name": "Julia2.5D13",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"D2M\"",
+      "warnings": [],
+      "timeMs": 291.1160000000091,
+      "paramCount": 3
+    },
+    {
+      "name": "quadray01-07",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"mc\"",
+      "warnings": [],
+      "timeMs": 205.78600000000733,
+      "paramCount": 3
+    },
+    {
+      "name": "quadray01-jacobian-02",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"mc\"",
+      "warnings": [],
+      "timeMs": 240.9728000000032,
+      "paramCount": 3
+    },
+    {
+      "name": "quadray04-02",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"mc\"",
+      "warnings": [],
+      "timeMs": 189.3420000000042,
+      "paramCount": 3
+    },
+    {
+      "name": "Simple_Kleinian-1st-flawed-version-DE",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Cs0\"; Encountered undefined variable: \"BRsq0\"; Encountered undefined variable: \"BRsq2\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 593.943299999999,
+      "paramCount": 8
+    },
+    {
+      "name": "Simple_Kleinian-2nd-attempt-Slow-DE",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Cs0\"; Encountered undefined variable: \"BRsq0\"; Encountered undefined variable: \"BRsq2\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 611.964799999987,
+      "paramCount": 8
+    },
+    {
+      "name": "hyperbolic-tesselation-5-3-n-colored-named",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"sinpin\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 802.0651000000071,
+      "paramCount": 19
+    },
+    {
+      "name": "Doyle12",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Error: Expected \";\", \"{\", \"}\", expression, iteration statement, jump statement, precision statement, prepocessor, single type qualifier, type specifier, or whitespace but \")\" found.",
+      "errorLine": "3  precision highp int;\n4  \n5> // ── Engine uniforms (DDFS) ──\n6  uniform float uIterations;\n7  uniform float uParamA, uParamB, uParamC, uParamD, uParamE, uParamF;",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 660.8225999999995,
+      "paramCount": 9
+    },
+    {
+      "name": "Kleinian_angles_10",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Tx\"; Encountered undefined variable: \"Tzz\"; Encountered undefined variable: \"Tx\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 522.7003000000113,
+      "paramCount": 14
+    },
+    {
+      "name": "Kleinian_angles_24",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Tx\"; Encountered undefined variable: \"Tzx\"; Encountered undefined variable: \"Tzz\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 670.5128000000113,
+      "paramCount": 15
+    },
+    {
+      "name": "polychora-colored-21-bis-time",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"coord\"; Encountered undefined variable: \"subframe\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 697.7698999999993,
+      "paramCount": 19
+    },
+    {
+      "name": "Simple_Kleinian-Slow-DE-02-----",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Cs0\"; Encountered undefined variable: \"BRsq0\"; Encountered undefined variable: \"BRsq2\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 625.1826000000001,
+      "paramCount": 8
+    },
+    {
+      "name": "Baird-Delta",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"fl0\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 261.5902999999962,
+      "paramCount": 3
+    },
+    {
+      "name": "Doyle-Spirals",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Error: Expected \";\", \"{\", \"}\", expression, iteration statement, jump statement, precision statement, prepocessor, single type qualifier, type specifier, or whitespace but \")\" found.",
+      "errorLine": "3  precision highp int;\n4  \n5> // ── Engine uniforms (DDFS) ──\n6  uniform float uIterations;\n7  uniform float uParamA, uParamB, uParamC, uParamD, uParamE, uParamF;",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 1170.4435000000085,
+      "paramCount": 6
+    },
+    {
+      "name": "Icosahedral_polyhedra02",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [],
+      "timeMs": 198.94439999999304,
+      "paramCount": 2
+    },
+    {
+      "name": "Icosahedral_polyhedra_iterated_10",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [],
+      "timeMs": 212.5847999999969,
+      "paramCount": 8
+    },
+    {
+      "name": "Icosahedral_polyhedra_iterated_11",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 491.48820000000705,
+      "paramCount": 8
+    },
+    {
+      "name": "Icosahedral_polyhedra_iterated_20",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [],
+      "timeMs": 204.91109999999753,
+      "paramCount": 9
+    },
+    {
+      "name": "menger_iterated_20",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 210.716499999995,
+      "paramCount": 9
+    },
+    {
+      "name": "octahedral_polyhedra02",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [],
+      "timeMs": 189.70149999999558,
+      "paramCount": 2
+    },
+    {
+      "name": "hyperbolic-tesselation-5-3-n-colored-named-00",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"sinpin\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 722.4253000000026,
+      "paramCount": 19
+    },
+    {
+      "name": "Icosahedral_polyhedra_iterated_11",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 410.3426999999938,
+      "paramCount": 8
+    },
+    {
+      "name": "Icosahedral_polyhedra_iterated_20",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [],
+      "timeMs": 212.11040000000503,
+      "paramCount": 9
+    },
+    {
+      "name": "Menger_iterated_20",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Phi\"",
+      "warnings": [],
+      "timeMs": 278.17549999999756,
+      "paramCount": 9
+    },
+    {
+      "name": "quadray01-07",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"mc\"",
+      "warnings": [],
+      "timeMs": 204.56930000000284,
+      "paramCount": 3
+    },
+    {
+      "name": "quadray01-jacobian-02",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"mc\"",
+      "warnings": [],
+      "timeMs": 278.1750000000029,
+      "paramCount": 3
+    },
+    {
+      "name": "quadray04-03forV0.8",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"mc\"",
+      "warnings": [],
+      "timeMs": 191.33269999999902,
+      "paramCount": 3
+    },
+    {
+      "name": "SimpleIFS-DE3D-final",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"BO\"; Encountered undefined variable: \"minFindex\"; Encountered undefined variable: \"BR\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 728.5491000000038,
+      "paramCount": 8
+    },
+    {
+      "name": "Floral",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"n1\"; Encountered undefined variable: \"n2\"; Encountered undefined variable: \"n3\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 346.8243000000075,
+      "paramCount": 18
+    },
+    {
+      "name": "Flower",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"offset\"; Encountered undefined variable: \"offset\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 253.2207000000053,
+      "paramCount": 11
+    },
+    {
+      "name": "Geode",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"n2\"; Encountered undefined variable: \"n1\"; Encountered undefined variable: \"n2\"",
+      "warnings": [],
+      "timeMs": 314.3608999999997,
+      "paramCount": 6
+    },
+    {
+      "name": "HalfTetra",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"n2\"; Encountered undefined variable: \"n1\"; Encountered undefined variable: \"n2\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 402.0862999999954,
+      "paramCount": 11
+    },
+    {
+      "name": "KaliBox",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"n1\"; Encountered undefined variable: \"mins\"; Encountered undefined variable: \"p0\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 382.30340000000433,
+      "paramCount": 17
+    },
+    {
+      "name": "KIFS",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"offset2\"; Encountered undefined variable: \"offset\"; Encountered undefined variable: \"offset2\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 285.386599999998,
+      "paramCount": 10
+    },
+    {
+      "name": "PlanetEarth",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"n2\"; Encountered undefined variable: \"n1\"; Encountered undefined variable: \"n2\"",
+      "warnings": [],
+      "timeMs": 323.0358000000124,
+      "paramCount": 6
+    },
+    {
+      "name": "Rontgen",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"param\"; Encountered undefined variable: \"param\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 307.1619000000064,
+      "paramCount": 11
+    },
+    {
+      "name": "SierpinskTetra",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"n2\"; Encountered undefined variable: \"n1\"; Encountered undefined variable: \"n2\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 281.2164000000048,
+      "paramCount": 11
+    },
+    {
+      "name": "DE-Raytracer-Fast-VDB",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"TWO_PI\"; Encountered undefined variable: \"TWO_PI\"; Encountered undefined variable: \"TWO_PI\"",
+      "warnings": [],
+      "timeMs": 1623.1102000000246,
+      "paramCount": 36
+    },
+    {
+      "name": "Extra-BRDFs",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"TWO_PI\"; Encountered undefined variable: \"TWO_PI\"; Encountered undefined variable: \"TWO_PI\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 862.9605000000156,
+      "paramCount": 0
+    },
+    {
+      "name": "Standard-BRDFs",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"surface\"; Encountered undefined variable: \"TWO_PI\"; Encountered undefined variable: \"surface\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 673.8262999999861,
+      "paramCount": 0
+    },
+    {
+      "name": "AboxColourTrial_mcl_1",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"orbitTrap2\"; Encountered undefined variable: \"orbitTrap2\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 1096.956199999986,
+      "paramCount": 76
+    },
+    {
+      "name": "AexionnSphereBoxRot4D",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Error: Expected \",\", \";\", \"=\", [A-Z,a-z,_,0-9], array specifier, or whitespace but \"(\" found.",
+      "errorLine": "33  void applyWorldRotation(inout vec3 p) {}\n34  vec3 applyPrecisionOffset(vec3 p, vec3 lo, vec3 hi) { return p + lo; }\n35> void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR) {\n36      float r2 = dot(z, z);\n37      float t = clamp(fixedR / max(r2, minR), 1.0, fixedR / minR);",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 500.7987000000139,
+      "paramCount": 13
+    },
+    {
+      "name": "Aexions_TetraBox2",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Error: Expected \",\", \";\", \"=\", [A-Z,a-z,_,0-9], array specifier, or whitespace but \"(\" found.",
+      "errorLine": "29  // ── Engine helpers (stubs) ──\n30  float getLength(vec3 p) { return length(p); }\n31> void applyPreRotation(inout vec3 p) {}\n32  void applyPostRotation(inout vec3 p) {}\n33  void applyWorldRotation(inout vec3 p) {}",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 328.326699999976,
+      "paramCount": 7
+    },
+    {
+      "name": "Mandelbulb_plus",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"Power\"; Encountered undefined variable: \"Power\"",
+      "warnings": [],
+      "timeMs": 275.90279999998165,
+      "paramCount": 13
+    },
+    {
+      "name": "primitives",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"rotA\"; Encountered undefined variable: \"rotB\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 379.17149999999674,
+      "paramCount": 21
+    },
+    {
+      "name": "hyperbolic-honeycombs-DERaytracer",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"BackgroundColor\"; Encountered undefined variable: \"BackgroundColor\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 2010.3104999999923,
+      "paramCount": 37
+    },
+    {
+      "name": "hyperoblic-honeycombs-DEKn2",
+      "category": "frag",
+      "status": "fail",
+      "mode": "full-DE",
+      "error": "Undeclared: Encountered undefined variable: \"BackgroundColor\"; Encountered undefined variable: \"BackgroundColor\"",
+      "warnings": [
+        "Using full-DE mode: formula runs complete DE internally (no per-iteration engine control)"
+      ],
+      "timeMs": 1913.9455000000016,
+      "paramCount": 37
+    },
+    {
+      "name": "Mandelbulb-Slicer",
+      "category": "frag",
+      "status": "fail",
+      "mode": "per-iter",
+      "error": "Undeclared: Encountered undefined variable: \"type\"",
+      "warnings": [],
+      "timeMs": 347.68369999999413,
+      "paramCount": 5
+    }
+  ],
+  "passes": [
+    {
+      "name": "DEFAULT_SCRIPT (Mandelbox)",
+      "category": "default",
+      "mode": "full-DE",
+      "timeMs": 258.3019
+    },
+    {
+      "name": "3Dickulus",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 662.2609000000002
+    },
+    {
+      "name": "AndyPolygon-Landscape",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 417.75840000000017
+    },
+    {
+      "name": "BuffaloBulb",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 521.7509000000005
+    },
+    {
+      "name": "LionBulb",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 914.3720999999996
+    },
+    {
+      "name": "Magnetic-Curiosity",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 435.2339000000002
+    },
+    {
+      "name": "MMM",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 942.9737000000005
+    },
+    {
+      "name": "Pengbulb",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 627.0238999999983
+    },
+    {
+      "name": "PetraBox",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 320.6472999999987
+    },
+    {
+      "name": "test",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 326.9385000000002
+    },
+    {
+      "name": "BuiltinFloat",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 961.3539999999994
+    },
+    {
+      "name": "OverloadFloat",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 1080.266499999998
+    },
+    {
+      "name": "aboxMinR2Bias-6",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 267.28949999999895
+    },
+    {
+      "name": "aboxMinR2Cuboid-2",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 288.16539999999804
+    },
+    {
+      "name": "abox_inCyl-10",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 243.0028999999995
+    },
+    {
+      "name": "mboxR2-3",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 588.5590999999986
+    },
+    {
+      "name": "BioCube",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 264.6298999999999
+    },
+    {
+      "name": "FoldcutToy",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 230.5684000000001
+    },
+    {
+      "name": "boxfold_kleinian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 714.1074000000008
+    },
+    {
+      "name": "Knot",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 265.21080000000075
+    },
+    {
+      "name": "LiftedDomainColoring3D",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 533.3747999999978
+    },
+    {
+      "name": "LogisticBulb",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 378.9377999999997
+    },
+    {
+      "name": "mandelcup",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 216.78199999999924
+    },
+    {
+      "name": "Mixed",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 343.8854000000065
+    },
+    {
+      "name": "Moebiusbulb",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 447.3119000000006
+    },
+    {
+      "name": "Noise",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 266.70240000000194
+    },
+    {
+      "name": "OctahedronOT",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 276.1774000000005
+    },
+    {
+      "name": "PseudoKleinian-Progressive-DOF",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 420.92179999999644
+    },
+    {
+      "name": "QuaternionMandelbrot4D",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 298.7804000000033
+    },
+    {
+      "name": "SphereSponge",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 202.01910000000498
+    },
+    {
+      "name": "Spudsville2",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 330.74960000000283
+    },
+    {
+      "name": "Stereographic4DJulia",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 186.6094000000012
+    },
+    {
+      "name": "StereographicQuaternionJulia",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 227.52390000000014
+    },
+    {
+      "name": "Terrain",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 256.44429999999556
+    },
+    {
+      "name": "NewtonVarPowerWithRotatdFoldAndMenger",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 445.7353000000003
+    },
+    {
+      "name": "NewtonVarPowerWithRotatedFold",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 377.47810000000027
+    },
+    {
+      "name": "Mandelbox",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 186.80949999999575
+    },
+    {
+      "name": "Mandelbulb",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 283.0171999999948
+    },
+    {
+      "name": "QuaternionJulia",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 193.89159999999538
+    },
+    {
+      "name": "Ashima-Noise",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 829.7563999999984
+    },
+    {
+      "name": "Classic-Noise",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 2824.061499999996
+    },
+    {
+      "name": "MathUtils",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 476.7184999999954
+    },
+    {
+      "name": "QuilezLib",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 322.7042000000001
+    },
+    {
+      "name": "Shipbulb_DeltaDE",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 492.3885999999984
+    },
+    {
+      "name": "Shipbulb_DeltaDE_FastPow2",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 400.8700000000026
+    },
+    {
+      "name": "Dodecahedron",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 313.8355999999985
+    },
+    {
+      "name": "Icosahedron",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 244.6782000000021
+    },
+    {
+      "name": "Menger",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 233.16710000000603
+    },
+    {
+      "name": "NewMenger",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 270.3856000000087
+    },
+    {
+      "name": "Octahedron",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 226.87770000001183
+    },
+    {
+      "name": "Tetrahedron",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 219.00470000000496
+    },
+    {
+      "name": "amazingsurface",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 222.7572000000073
+    },
+    {
+      "name": "Kalibox",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 258.578199999989
+    },
+    {
+      "name": "KboxExpSmooth",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 243.95679999999993
+    },
+    {
+      "name": "LivingKIFS",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 644.0129999999917
+    },
+    {
+      "name": "Treebroccoli",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 199.3573999999935
+    },
+    {
+      "name": "carpet-sierpinski",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 395.1356000000087
+    },
+    {
+      "name": "Cross-menger",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 294.6298999999999
+    },
+    {
+      "name": "CubeKoch01",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 233.5460999999923
+    },
+    {
+      "name": "Menger11",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 293.3191000000079
+    },
+    {
+      "name": "MsltoeIFS02",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 213.84970000000612
+    },
+    {
+      "name": "pythagore",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 262.68069999999716
+    },
+    {
+      "name": "ClusterFoam",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 261.64970000000903
+    },
+    {
+      "name": "koch102",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 232.15439999999944
+    },
+    {
+      "name": "bulbox",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 396.87049999999
+    },
+    {
+      "name": "Mandalabeth-M3-jacobian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 327.84829999999783
+    },
+    {
+      "name": "Mandalabeth-M3",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 260.4383999999991
+    },
+    {
+      "name": "Mandalabeth-M4-jacobian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 277.5941000000021
+    },
+    {
+      "name": "Mandalabeth-M4",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 227.8594000000012
+    },
+    {
+      "name": "Mandalabeth-M5-jacobian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 395.9082000000053
+    },
+    {
+      "name": "Mandalabeth-M5",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 279.3411999999953
+    },
+    {
+      "name": "mandalay-Mbox03",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 347.7479000000021
+    },
+    {
+      "name": "Mandelbox - Dual Numbers DE_JacoNormal_14",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 514.3833000000013
+    },
+    {
+      "name": "MB2.5D02",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 178.24150000000373
+    },
+    {
+      "name": "Newton2.5D01",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 206.23080000000482
+    },
+    {
+      "name": "SpherifyMenger00",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 248.51429999999527
+    },
+    {
+      "name": "SuperEllipsoidifyMenger",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 346.3561999999947
+    },
+    {
+      "name": "FaCPoly-catalan-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 503.22849999999744
+    },
+    {
+      "name": "FaCPoly-common-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 436.98399999999674
+    },
+    {
+      "name": "FaCPoly-compound-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 521.3831999999966
+    },
+    {
+      "name": "FaCPoly-duals-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 624.3467000000092
+    },
+    {
+      "name": "FaCPoly-interesting-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 364.12740000001213
+    },
+    {
+      "name": "foldandcutpoly",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 201.73709999999846
+    },
+    {
+      "name": "Stellations-dodecahedron-try-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 199.6073000000033
+    },
+    {
+      "name": "Stellations-icosahedron-try-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 273.8006000000023
+    },
+    {
+      "name": "hyperbolic-tesselation-2Din3D-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 1072.9638000000123
+    },
+    {
+      "name": "hyperbolic-tesselation-3-5-3-colored-named-half-plane-00",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 754.7416000000085
+    },
+    {
+      "name": "hyperbolic-tesselation-3-5-3-colored-named-Klein-model-00",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 733.6051000000007
+    },
+    {
+      "name": "hyperbolic-tesselation-3-5-3-colored-named",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 629.9818999999989
+    },
+    {
+      "name": "hyperbolic-tesselation-bifurcating-5-3-3-colored-named",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 841.6929999999993
+    },
+    {
+      "name": "hyperbolic-tesselation-cyclic-m-3-n-3-colored-named",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 906.257500000007
+    },
+    {
+      "name": "polychora-colored-w-faces",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 1379.3616000000038
+    },
+    {
+      "name": "polychora-colored",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 781.3689999999915
+    },
+    {
+      "name": "polychora-special",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 550.5035999999964
+    },
+    {
+      "name": "CubeKochMosely01",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 475.18270000000484
+    },
+    {
+      "name": "FaCPoly-catalan-colored08",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 425.3284999999887
+    },
+    {
+      "name": "inffold01",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 482.77730000000156
+    },
+    {
+      "name": "Kleinian_test23",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 464.3055999999924
+    },
+    {
+      "name": "LittleBunny_NN_SDF_03",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 2776.690800000011
+    },
+    {
+      "name": "Mandelbox - Dual Numbers DE_JacoNormal_14",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 369.2040999999881
+    },
+    {
+      "name": "Mandelbox2",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 452.385300000009
+    },
+    {
+      "name": "Mandelbulb_",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 389.6936999999889
+    },
+    {
+      "name": "Mandelbulb_02",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 408.58300000001327
+    },
+    {
+      "name": "Menger_box00",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 401.9753000000055
+    },
+    {
+      "name": "Monkey_NN_SDF_02",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 2905.631899999993
+    },
+    {
+      "name": "PseudoKleinian06---",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 313.9902000000002
+    },
+    {
+      "name": "pythagore",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 191.13069999999425
+    },
+    {
+      "name": "murmurHash",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 1428.87049999999
+    },
+    {
+      "name": "SmoothBOpStudy",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 223.0954999999958
+    },
+    {
+      "name": "voxel11",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 275.33890000000247
+    },
+    {
+      "name": "voxel12",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 312.01929999999993
+    },
+    {
+      "name": "Fold and Cut Polyhedra - Original",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 462.3850999999995
+    },
+    {
+      "name": "Fold and Cut Polyhedra",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 342.09210000000894
+    },
+    {
+      "name": "hyperbolic-tesselation-2Din3D-colored-02",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 1069.99010000001
+    },
+    {
+      "name": "hyperbolic-tesselation-3-5-3-colored-named-00",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 651.0910000000003
+    },
+    {
+      "name": "hyperbolic-tesselation-bifurcating-5-3-3-colored-named-00",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 825.1780999999901
+    },
+    {
+      "name": "hyperbolic-tesselation-cyclic-m-3-n-3-colored-named-00",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 803.0247999999992
+    },
+    {
+      "name": "Knot",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 273.50389999999607
+    },
+    {
+      "name": "Koch01",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 240.52449999999953
+    },
+    {
+      "name": "LiftedDomainColoring3D",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 522.5418999999965
+    },
+    {
+      "name": "Mandalabeth-M3-jacobian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 251.63419999998587
+    },
+    {
+      "name": "Mandalabeth-M4-jacobian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 438.26290000000154
+    },
+    {
+      "name": "Mandalabeth-M5-jacobian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 443.7292999999918
+    },
+    {
+      "name": "MandalayBox",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 312.1777999999904
+    },
+    {
+      "name": "MandelbrotHeightfield",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 310.30749999999534
+    },
+    {
+      "name": "mdifs",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 424.28459999999905
+    },
+    {
+      "name": "Menger_Sphere",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 228.1298999999999
+    },
+    {
+      "name": "NewtonHeightfield",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 205.91150000000198
+    },
+    {
+      "name": "polychora-special",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 697.072800000009
+    },
+    {
+      "name": "polychora-special02",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 442.4514999999956
+    },
+    {
+      "name": "polychora03",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 454.4557999999961
+    },
+    {
+      "name": "polychora06",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 922.3559999999998
+    },
+    {
+      "name": "Pseudo-MandalayBox",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 355.13000000000466
+    },
+    {
+      "name": "PseudoKleinian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 429.58120000000054
+    },
+    {
+      "name": "PseudoKleinianMenger",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 358.56780000000435
+    },
+    {
+      "name": "PseudoKleinian_4D_Quaternion_Julia",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 366.690499999997
+    },
+    {
+      "name": "PseudoKnightyan",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 209.79389999998966
+    },
+    {
+      "name": "pythagore",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 269.1322999999975
+    },
+    {
+      "name": "Apollonian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 315.8018999999913
+    },
+    {
+      "name": "Apollonian2-FirstSurface",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 324.74009999999544
+    },
+    {
+      "name": "Apollonian2",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 265.5599000000075
+    },
+    {
+      "name": "EvilSpuds",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 281.33090000000084
+    },
+    {
+      "name": "Gold",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 245.78089999998338
+    },
+    {
+      "name": "Kleinian",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 354.11610000001383
+    },
+    {
+      "name": "Mandelbulb",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 335.08399999997346
+    },
+    {
+      "name": "Monster",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 363.0431000000099
+    },
+    {
+      "name": "PseudoKleinian-FirstSurface",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 394.2078000000038
+    },
+    {
+      "name": "PseudoKleinianMenger-FirstSurface",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 368.5010000000184
+    },
+    {
+      "name": "Quaternion",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 295.97020000001066
+    },
+    {
+      "name": "Sponge",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 320.2394000000204
+    },
+    {
+      "name": "SpudsVille",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 392.09089999998105
+    },
+    {
+      "name": "Tower",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 443.0028000000166
+    },
+    {
+      "name": "Vertebrae",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 360.2201000000059
+    },
+    {
+      "name": "Mandelbulb",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 109.72620000000461
+    },
+    {
+      "name": "MarbleMarcher",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 78.12659999998868
+    },
+    {
+      "name": "VolumeAndDE",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 107.90510000000359
+    },
+    {
+      "name": "abox inCyl-10",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 248.43950000000768
+    },
+    {
+      "name": "aboxMinR2Bias-6",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 265.0089000000153
+    },
+    {
+      "name": "aboxMinR2Cuboid-2",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 271.9351000000024
+    },
+    {
+      "name": "aboxMod14a",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 233.2119000000239
+    },
+    {
+      "name": "darkbeam_MixPinski",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 501.7245999999868
+    },
+    {
+      "name": "darkbeam_surfbox",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 276.84720000001835
+    },
+    {
+      "name": "Mandelbulb_messC",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 291.67189999998664
+    },
+    {
+      "name": "Mandelbulb_pwrs1234_ cosmix",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 312.497400000022
+    },
+    {
+      "name": "Mandelbulb_pwrs1234_sinmix",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 338.4771999999939
+    },
+    {
+      "name": "mboxR2-3",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 589.3708000000042
+    },
+    {
+      "name": "menge4 4D rot-1",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 436.1051999999909
+    },
+    {
+      "name": "menger3_1",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 228.19700000001467
+    },
+    {
+      "name": "mengerDeltaAnalytic",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 338.6506999999983
+    },
+    {
+      "name": "msltoe riemann_DeltaDE",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 375.80930000002263
+    },
+    {
+      "name": "PseudoKleinian_3D_Quaternion_Julia_1",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 216.5054999999993
+    },
+    {
+      "name": "sym4_1",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 275.928899999999
+    },
+    {
+      "name": "SphereTree",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 501.45100000000093
+    },
+    {
+      "name": "Tetrahedral",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 252.67559999998775
+    },
+    {
+      "name": "Mandelbox - Dual Numbers DE - Slicer",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 341.06770000001416
+    },
+    {
+      "name": "Mandelbox - Dual Numbers DE",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 351.2173999999941
+    },
+    {
+      "name": "MultiIFS",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 662.08679999999
+    },
+    {
+      "name": "10 - Simple Distance Estimated 3D system",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 204.91779999999562
+    },
+    {
+      "name": "11 - Simple Distance Estimated 3D fractal",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 200.5409000000218
+    },
+    {
+      "name": "12 - Faster raytracing of 3D fractals",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 138.8686999999918
+    },
+    {
+      "name": "22 - Progressive 3D Rendering",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 300.6678000000247
+    },
+    {
+      "name": "25 - Image Based Lighting",
+      "category": "frag",
+      "mode": "full-DE",
+      "timeMs": 196.04720000000088
+    },
+    {
+      "name": "30 - Simple Keyframe Animation",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 498.2551000000094
+    },
+    {
+      "name": "31 - Simple Focal Plane Tracking Target",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 423.3693000000203
+    },
+    {
+      "name": "32 - Simple Multi-Parameter Easing Animation",
+      "category": "frag",
+      "mode": "per-iter",
+      "timeMs": 427.0411000000022
+    }
+  ],
+  "skips": [
+    {
+      "name": "2016-02-26_lyapunov_atom_domains",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BurningShip",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DomainDistortion2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Droste",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:14:1\n   |\n14 | uniform float time;\n   | ^"
+    },
+    {
+      "name": "Ducks",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Game of Life",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "GraphPlotter",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Kali",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbrot-AverageColoring",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbrot-Cellular",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbrot-DE",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbrot",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "MandelbrotCheckers",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "MandelbrotOrbitTrap",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "mandelexOptimised",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "mandel_mobius",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Metabrot",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Metaship1",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Newtonian",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "PenroseTiles",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "plasma",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Reaction-Diffusion",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Thorn",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BioMorph",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BrokenNewton",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Burningbulb",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:14:1\n   |\n14 | uniform vec3 bgOffset;\n   | ^"
+    },
+    {
+      "name": "BurtsBisector2D",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Cyclic",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DiscreteAttractor",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Essential_Singularities",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "HiddenBrotCos",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Holomorph",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "JuliaMand",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "LagrangianMandelbrot",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "lcosz-esinz-lexpz-lyapun",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Magnet",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbrot-Cellular-Sliding-C",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "MandelbrotDE-Sliding-C",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ManJul",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Metabrot-Sliding-C",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Misc",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Newt",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "OrbitTrap-Sliding-C",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "sinhJulia",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Kn2ColorandHeightmap",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:521:1\n    |\n521 | uniform float TextSpeedMult;\n    | ^"
+    },
+    {
+      "name": "Fast-Raytracer-with-Palette",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:21:1\n   |\n21 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Fast-Raytracer-with-Textures",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:21:1\n   |\n21 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Fast-Raytracer-with-Textures_and_MultiSampling_beta",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:21:1\n   |\n21 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "mengermultisampleKN2",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:114:1\n    |\n114 | uniform float hTextSpeedMult;\n    | ^"
+    },
+    {
+      "name": "MengersmoothnoDE",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "MengersmoothPolyhedra",
+      "category": "frag",
+      "error": "GLSL parse failed: Cannot read properties of null (reading 'type')"
+    },
+    {
+      "name": "MengerWorkOnHeightmap",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:112:1\n    |\n112 | uniform float hTextSpeedMult;\n    | ^"
+    },
+    {
+      "name": "pinewithoptionsoriginalBruteRaytracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Apollonian",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Balls",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:32:46\n   |\n32 | hit scene(scene_tag tag, Random PRNG, Ray V) \\\n   |                                              ^"
+    },
+    {
+      "name": "00-Bubbles",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:74:46\n   |\n74 | hit scene(scene_tag tag, Random PRNG, Ray V) \\\n   |                                              ^"
+    },
+    {
+      "name": "00-Cross-Trap",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Cubic",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Cubism",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"a\" found.\n --> location:28:11\n   |\n28 | Animation animation(Random PRNG)\n   |           ^"
+    },
+    {
+      "name": "00-Helices",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected end of input, function prototype, function prototype scope, precision statement, or prepocessor but \"(\" found.\n --> location:64:3\n   |\n64 |   ( DE(p + vec3(E,0.0,0.0)) - DE(p - vec3(E,0.0,0.0)) \\\n   |   ^"
+    },
+    {
+      "name": "00-HubbardTree",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Inflection-1",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Inflection-2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-JuliaSqrSinhZ2PlusC",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Lettuce",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:34:46\n   |\n34 | hit scene(scene_tag tag, Random PRNG, Ray V) \\\n   |                                              ^"
+    },
+    {
+      "name": "00-MandelbarDE",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Mandelbrot-3D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected end of input, function prototype, function prototype scope, precision statement, or prepocessor but \"(\" found.\n --> location:243:3\n    |\n243 |   ( DE(p + vec3(E,0.0,0.0)) - DE(p - vec3(E,0.0,0.0)) \\\n    |   ^"
+    },
+    {
+      "name": "00-Mandelbrot-MultiWave",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Mandelbrot-Numerics",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"[\" found.\n --> location:26:34\n   |\n26 | uniform sampler2D TextureDE; file[...]\n   |                                  ^"
+    },
+    {
+      "name": "00-Mengerbrot",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-MengerSponge",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:39:46\n   |\n39 | hit scene(scene_tag tag, Random PRNG, Ray V) \\\n   |                                              ^"
+    },
+    {
+      "name": "00-mET",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:104:21\n    |\n104 | float dwell(VEC c0) \\\n    |                     ^"
+    },
+    {
+      "name": "00-MuET",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Quadratic-Mating",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Rainbow-Slopes",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"f\" found.\n --> location:22:1\n   |\n22 | float EscapeRadius2;  // computed global\n   | ^"
+    },
+    {
+      "name": "00-ScientificNotation",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-SkyBox",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:44:46\n   |\n44 | hit scene(scene_tag tag, Random PRNG, Ray V) \\\n   |                                              ^"
+    },
+    {
+      "name": "00-SoapBubble",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:35:46\n   |\n35 | hit scene(scene_tag tag, Random PRNG, Ray V) \\\n   |                                              ^"
+    },
+    {
+      "name": "00-SpongeAndBulb",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:34:46\n   |\n34 | hit scene(scene_tag tag, Random PRNG, Ray V) \\\n   |                                              ^"
+    },
+    {
+      "name": "00-Triskelion",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Ultimate-AntiBuddhagram",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:21:1\n   |\n21 | uniform float Angle1;\n   | ^"
+    },
+    {
+      "name": "00-Variations-1",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Vein",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00-Wake",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Buffer-sRGB",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Builtin",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "BuiltinDouble",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BuiltinInt",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Camera2D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"#\" found.\n --> location:55:1\n   |\n55 | #else\n   | ^"
+    },
+    {
+      "name": "Common",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "Compensated",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"c\" found.\n --> location:24:14\n   |\n24 | Compensated2 compensated2(double x, double e)\n   |              ^"
+    },
+    {
+      "name": "Complex",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ComplexBase",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"c\" found.\n --> location:15:9\n   |\n15 | COMPLEX complex(int x)\n   |         ^"
+    },
+    {
+      "name": "Const",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "D65",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DistanceEstimate",
+      "category": "frag",
+      "error": "GLSL parse failed: Cannot read properties of null (reading 'type')"
+    },
+    {
+      "name": "Double",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected end of input, function prototype, function prototype scope, precision statement, prepocessor, or whitespace but \"\\\\\" found.\n --> location:15:52\n   |\n15 | dvec2 f(dvec2 x) { return dvec2(f(x.x), f(x.y)); } \\\n   |                                                    ^"
+    },
+    {
+      "name": "Dual",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DualBase",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"d\" found.\n --> location:16:6\n   |\n16 | DUAL dual(MONO x)\n   |      ^"
+    },
+    {
+      "name": "EscapeTime",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "FloatX",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "FloatXBase",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"f\" found.\n --> location:16:8\n   |\n16 | FLOATX floatx(FLOATX f)\n   |        ^"
+    },
+    {
+      "name": "FP4Plus",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Glass",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Hash",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Int",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "j_exray_in",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "j_exray_out",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "LambertW",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "LambertWBase",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"r\" found.\n --> location:35:18\n   |\n35 |    gsl_sf_result result; \\\n   |                  ^"
+    },
+    {
+      "name": "Magnetbulb",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:12:48\n   |\n12 | void Magnetbulb1Triplex(inout VEC w, in VEC c) \\\n   |                                                ^"
+    },
+    {
+      "name": "MandelbrotNumerics",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "Mandelbulb",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:12:51\n   |\n12 | void MandelbulbTrig(inout VEC w, in VEC c, NUM n) \\\n   |                                                   ^"
+    },
+    {
+      "name": "MengerSponge",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\" or \"{\" but \"\\\\\" found.\n --> location:14:46\n   |\n14 | void MengerSponge(inout VEC z, SCALAR scale) \\\n   |                                              ^"
+    },
+    {
+      "name": "MultiWave",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:176:1\n    |\n176 | uniform vec3 Wave1Colour1;\n    | ^"
+    },
+    {
+      "name": "m_attractor",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "m_exray_in",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "m_exray_out",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "m_interior_de",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "m_misiurewicz",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "m_newton",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"m\" found.\n --> location:18:10\n   |\n18 | m_newton m_newton_nucleus(Complexf c0, float pixel_spacing, int period, int steps)\n   |          ^"
+    },
+    {
+      "name": "m_nucleus",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "m_render",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"f\" found.\n --> location:25:3\n   |\n25 |   for (; i < Iterations;) \\\n   |   ^"
+    },
+    {
+      "name": "m_util",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Observer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Overload",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "OverloadDouble",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "OverloadInt",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Quartz",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Quaternion",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Raymond-Camera3D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:11:1\n   |\n11 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Raymond-Defs",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"s\" found.\n --> location:8:1\n  |\n8 | struct Camera  { vec3 origin, X, Y, Z; float fieldOfView; }\n  | ^"
+    },
+    {
+      "name": "Raymond-Fractal",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"(\" found.\n --> location:14:13\n   |\n14 | MengerSponge(type tag, Transform T, Ray V, int depth) \\\n   |             ^"
+    },
+    {
+      "name": "Raymond-Halton",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Raymond-Lettuce",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected end of input, function prototype, function prototype scope, precision statement, or prepocessor but \"(\" found.\n --> location:16:3\n   |\n16 |   ( N(p + vec3(E,0.0,0.0)) - N(p - vec3(E,0.0,0.0)) \\\n   |   ^"
+    },
+    {
+      "name": "Raymond-Material",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"f\" found.\n --> location:201:9\n    |\n201 | Fresnel fresnel(vec3 incident, vec3 normal, float n1, float n2)\n    |         ^"
+    },
+    {
+      "name": "Raymond-Pinhole",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"p\" found.\n --> location:23:9\n   |\n23 | Pinhole pinhole_uniforms()\n   |         ^"
+    },
+    {
+      "name": "Raymond-Random",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Raymond-SkyBox",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"[\" found.\n --> location:17:35\n   |\n17 | uniform sampler2D Background; file[...]\n   |                                   ^"
+    },
+    {
+      "name": "Raymond-StdDev-Buffer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Raymond-StdDev",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Raymond-Surface",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Raymond-Trace",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"r\" found.\n --> location:37:10\n   |\n37 | Raytrace raytrace_de_uniforms()\n   |          ^"
+    },
+    {
+      "name": "Raymond-Transform",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"c\" found.\n --> location:24:11\n   |\n24 | Transform compose(Transform S, Transform T)\n   |           ^"
+    },
+    {
+      "name": "Raymond",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Real",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "RealBase",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ScientificNotation",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Screen",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "sRGB",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ThreeD",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Triplex",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "TriplexBase",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"d\" found.\n --> location:16:6\n   |\n16 | REAL dot(TRIPLEX a, TRIPLEX b)\n   |      ^"
+    },
+    {
+      "name": "TwoD",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Vec",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "VecBase",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"v\" found.\n --> location:15:5\n   |\n15 | VEC vec(SCALAR x)\n   |     ^"
+    },
+    {
+      "name": "Water",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbox2D_ParamViz",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbox2D_ShapeInversion2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Mandelbox2D_ShapeInversion5",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"m\" found.\n --> location:79:7\n   |\n79 | Shape minShape;\n   |       ^"
+    },
+    {
+      "name": "Progressive2DColoring",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "AnimatedModVinz_EiffieGi2",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:39:1\n   |\n39 | uniform float AmbientStrenght;\n   | ^"
+    },
+    {
+      "name": "eiffieGI",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"M\" found.\n --> location:73:10\n   |\n73 | material Mater0=material(mengerColor,mengerRefrRefl,mengerGloss,mengerSpec,pow(2.,mengerSpecExp));\n   |          ^"
+    },
+    {
+      "name": "Kisocahedron - EiffieGi2",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:58:1\n   |\n58 | uniform float AmbientStrenght;\n   | ^"
+    },
+    {
+      "name": "MagGlass",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", \"=\", or array specifier but \"M\" found.\n --> location:62:10\n   |\n62 | material Mater0=material(bulbColor,bulbRefrRefl,bulbGloss,bulbSpec,pow(2.,bulbSpecExp));\n   |          ^"
+    },
+    {
+      "name": "3DMandel",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected end of input, function prototype, function prototype scope, precision statement, prepocessor, or whitespace but \";\" found.\n --> location:73:22\n   |\n73 | uniform vec3 InvertC;;\n   |                      ^"
+    },
+    {
+      "name": "BurningShirp",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DoubleTest",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "IFS",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"s\" found.\n --> location:27:7\n   |\n27 | vec3  sample(vec2 p) {\n   |       ^"
+    },
+    {
+      "name": "LiftedDomainColoring",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "LogSliderTest",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:5:1\n  |\n5 | uniform float Bad; Logarithmic\n  | ^"
+    },
+    {
+      "name": "Mandelbrot-Progressive",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SkyboxTest",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"v\" found.\n --> location:9:1\n  |\n9 | vec3  backgroundColor(vec3 dir) {\n  | ^"
+    },
+    {
+      "name": "TextureTest",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:19:1\n   |\n19 | uniform vec2 params;\n   | ^"
+    },
+    {
+      "name": "TriPlanarTexturing",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:10:1\n   |\n10 | uniform float TextureScale;\n   | ^"
+    },
+    {
+      "name": "2D-HP",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:15:1\n   |\n15 | uniform float Zoom; NotLockable\n   | ^"
+    },
+    {
+      "name": "2D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:18:1\n   |\n18 | uniform float Zoom; NotLockable\n   | ^"
+    },
+    {
+      "name": "2DJulia",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "3D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:32:1\n   |\n32 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "3DKn-1.0.0",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:35:1\n   |\n35 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "3DKn-1.0.1",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:37:1\n   |\n37 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "3DKn-1.0.4",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:44:1\n   |\n44 | uniform bool UseFocalLength;\n   | ^"
+    },
+    {
+      "name": "3DKn-1.0.5",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:31:1\n   |\n31 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Brute-Raytracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Brute3D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:27:1\n   |\n27 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "BufferShader-1.0.1",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BufferShader-1.0.2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BufferShader-4",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BufferShader",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BufferShaderIFS",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BufferShaderRD",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BufferShaderX",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ColorPalette",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ColorPalette2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Complex",
+      "category": "frag",
+      "error": "No GLSL functions found. Make sure the code contains at least one function definition."
+    },
+    {
+      "name": "ComplexBase",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Kn10",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:482:1\n    |\n482 | uniform bool EnableFloorPic;\n    | ^"
+    },
+    {
+      "name": "DE-Kn2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Kn2ColorandHeightmap",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:521:1\n    |\n521 | uniform float TextSpeedMult;\n    | ^"
+    },
+    {
+      "name": "DE-Kn2cr11",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:198:1\n    |\n198 | uniform vec3 FloorNormal;\n    | ^"
+    },
+    {
+      "name": "DE-Kn2exp",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Kn8",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-kn9",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Raytracer-Slicer",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:13:1\n   |\n13 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "DE-Raytracer-v0.9.0",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Raytracer-v0.9.1",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:12:1\n   |\n12 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "DE-Raytracer-v0.9.10",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Raytracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-RaytracerX",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DepthBufferShader",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "EmulatedDouble",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Fast-Raytracer",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:13:1\n   |\n13 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "IBL-Pathtracer",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:76:1\n   |\n76 | uniform float RotateMap;\n   | ^"
+    },
+    {
+      "name": "IBL-Raytracer",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:59:1\n   |\n59 | uniform sampler2D Specular; file[Ditch-River_Env.hdr]\n   | ^"
+    },
+    {
+      "name": "Kaliset3D",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Kaliset3Dtex",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Math",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Montecarlo-DE-Raytracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "NODE-Raytracer",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:13:1\n   |\n13 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Path-Raytracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Progressive2D-4",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:19:1\n   |\n19 | uniform dvec2 Center; NotLockable\n   | ^"
+    },
+    {
+      "name": "Progressive2D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:20:1\n   |\n20 | uniform float Zoom; NotLockable\n   | ^"
+    },
+    {
+      "name": "Progressive2DJulia",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Shadertoy",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Sky-PathTracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SoC-DE-Raytracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SoC",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:22:1\n   |\n22 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Soft-Raytracer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Subblue-Raytracer",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:40:1\n   |\n40 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Sunsky",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "terr_incl",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Volumetric",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ZBuffer3D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:27:1\n   |\n27 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "ZBufferShader",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "cosmos",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "RotJulia",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Xray_skifs",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:15:1\n   |\n15 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "SimpleIFS-OT-RT-final",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SimpleIFS-RT-final",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SimpleIFS2D-final",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "JC-NonDE",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "mdifs",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \"&&\", \",\", \";\", \"?\", \"^\", \"^^\", \"|\", \"||\", or asignment but \"i\" found.\n --> location:110:2\n    |\n110 | \tint i=0,imin=0;\n    |  ^"
+    },
+    {
+      "name": "Mbrot-prefilter",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:27:1\n   |\n27 | uniform bool Prefilter;\n   | ^"
+    },
+    {
+      "name": "Simple_Kleinian-NonDE02",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "CutNProject-5D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"f\" found.\n --> location:41:1\n   |\n41 | float theData_dist;\n   | ^"
+    },
+    {
+      "name": "Complex",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "my_2D",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "poincare-disc30-circle_limit_6",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:56:1\n   |\n56 | uniform float fade;\n   | ^"
+    },
+    {
+      "name": "poincare-disc30-E69_64_S",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:57:1\n   |\n57 | uniform vec2 pcenter;\n   | ^"
+    },
+    {
+      "name": "poincare-disc30",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "2D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:13:1\n   |\n13 | uniform float Zoom; NotLockable\n   | ^"
+    },
+    {
+      "name": "triangle-group-tesselation-2D-colored-DE_antialiased-20",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "triangle-group-tesselation-2D-colored-DE_antialiased-33",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "triangle-group-tesselation-2D-colored-DE_antialiased",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "AlgebraicSurfsViews-ess15",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \"&&\", \",\", \";\", \"?\", \"^\", \"^^\", \"|\", \"||\", or asignment but \"(\" found.\n --> location:377:17\n    |\n377 | \tfloat dv=length(2048.0                     //Inverse of epsilon*(vec4(Barth6(p4+vec4(0.00048828125               //epsilon,0.,0.,0.)),Barth6(p4+vec4(0.,0.00048828125               //epsilon,0.,0.)),Barth6(p4+vec4(0.,0.,0.00048828125               //epsilon,0.)),Barth6(p4+vec4(0.,0.,0.,0.00048828125               //epsilon)))-vec4(v)));\n    |                 ^"
+    },
+    {
+      "name": "AlgebraicSurfsViews_01",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \"&&\", \",\", \";\", \"?\", \"^\", \"^^\", \"|\", \"||\", or asignment but \"(\" found.\n --> location:193:17\n    |\n193 | \tfloat dv=length(2048.0                     //Inverse of epsilon*(vec4(Fn1(p4+vec4(0.00048828125               //epsilon,0.,0.,0.)),Fn1(p4+vec4(0.,0.00048828125               //epsilon,0.,0.)),Fn1(p4+vec4(0.,0.,0.00048828125               //epsilon,0.)),Fn1(p4+vec4(0.,0.,0.,0.00048828125               //epsilon)))-vec4(v)));\n    |                 ^"
+    },
+    {
+      "name": "MatrixInverse",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "3DKn-1.0.1",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:25:1\n   |\n25 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "BufferShader-1.0.1",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Kn2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Sarti-and-120cell",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \"&&\", \",\", \";\", \"?\", \"^\", \"^^\", \"|\", \"||\", or asignment but \"(\" found.\n --> location:190:17\n    |\n190 | \tfloat dv=length(2048.0                     //Inverse of epsilon*(vec3(Fn(z+vec3(0.00048828125               //epsilon,0.,0.)),Fn(z+vec3(0.,0.00048828125               //epsilon,0.)),Fn(z+vec3(0.,0.,0.00048828125               //epsilon)))-vec3(v)));\n    |                 ^"
+    },
+    {
+      "name": "Simple_Kleinian-Slow-DE-02----l",
+      "category": "frag",
+      "error": "GLSL parse failed: Cannot read properties of null (reading 'type')"
+    },
+    {
+      "name": "Zhao_Ball-Packings_03_bis03",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", or \"=\" but \"c\" found.\n --> location:137:9\n    |\n137 | Ball[5] coclusters;\n    |         ^"
+    },
+    {
+      "name": "algebraic07",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \"&&\", \",\", \";\", \"?\", \"^\", \"^^\", \"|\", \"||\", or asignment but \"f\" found.\n --> location:146:2\n    |\n146 | \tfloat dv=length(2048.0                     //Inverse of epsilon*(vec3(Klein //sinesphere//Barth6Cusp//heart//sine//Chmutov8//BarthDecic//Dervish//CayleyCubic//FlipFlap//Barth6//Barth6//BarthDecic//Mitchell//CrossCap4//absolutely//(z+vec3(0.00048828125               //epsilon,0.,0.)),Klein //sinesphere//Barth6Cusp//heart//sine//Chmutov8//BarthDecic//Dervish//CayleyCubic//FlipFlap//Barth6//Barth6//BarthDecic//Mitchell//CrossCap4//absolutely//(z+vec3(0.,0.00048828125               //epsilon,0.)),Klein //sinesphere//Barth6Cusp//heart//sine//Chmutov8//BarthDecic//Dervish//CayleyCubic//FlipFlap//Barth6//Barth6//BarthDecic//Mitchell//CrossCap4//absolutely//(z+vec3(0.,0.,0.00048828125               //epsilon)))-vec3(v)));\n    |  ^"
+    },
+    {
+      "name": "my_2D",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "poincare-disc30-circle_limit_6",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SimpleIFS-OT-RT-final",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SimpleIFS-RT-final",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "SimpleIFS2D-final",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "triangle-tess-ess-01",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "3D-XId",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:33:1\n   |\n33 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "DE-Raytracer-FirstSurface",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Raytracer-XId",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "3D-VDB",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:31:1\n   |\n31 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Background-Image-VDB",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:7:1\n  |\n7 | uniform float BackgroundLuminosity;\n  | ^"
+    },
+    {
+      "name": "Background-VDB",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "BufferShader-VDB",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Color-Management",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Common-folds",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Raytracer-VDB",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \";\", \"{\", expression, iteration statement, jump statement, precision statement, single type qualifier, type specifier, or whitespace but \"#\" found.\n --> location:305:2\n    |\n305 | \t#endif\n    |  ^"
+    },
+    {
+      "name": "MM-DE",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Shadertoy-VDB-BufferShader",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Shadertoy-VDB",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:11:1\n   |\n11 | uniform float Zoom; NotLockable\n   | ^"
+    },
+    {
+      "name": "Utils-VDB",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "ShadertoyExample",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "VolumeOnly",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-RaytracerColour",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "3DKn-1.0.5",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:23:1\n   |\n23 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "Ball-Packings-Knighty",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", or \"=\" but \"c\" found.\n --> location:134:9\n    |\n134 | Ball[5] coclusters;\n    |         ^"
+    },
+    {
+      "name": "Ball-Packings-UnitBall",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", or \"=\" but \"c\" found.\n --> location:130:9\n    |\n130 | Ball[5] coclusters;\n    |         ^"
+    },
+    {
+      "name": "Ball-Packings-UpperHalfSpace",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\", \";\", or \"=\" but \"c\" found.\n --> location:42:9\n   |\n42 | Ball[5] coclusters;\n   |         ^"
+    },
+    {
+      "name": "BufferShader-1.0.2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Kn2cr11",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "3DKn-1.0.5",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:23:1\n   |\n23 | uniform vec3 Eye; NotLockable\n   | ^"
+    },
+    {
+      "name": "BufferShader-1.0.2",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "DE-Kn2cr11",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "Convolution",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:40:1\n   |\n40 | uniform vec2 Cursor;\n   | ^"
+    },
+    {
+      "name": "Mandelbrot - Emulated Doubles",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "00 - Simple 2D system",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "01 - Simple 2D Escape Time Fractal",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "02 - User Variables and Presets",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "03 - Dynamic Systems",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "04 - Textures",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"v\" found.\n --> location:29:1\n   |\n29 | vec3 color(vec2 c) {\n   | ^"
+    },
+    {
+      "name": "20 - Progressive 2D",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "21 - Progressive 2D Escape Time Fractal",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "23 - Working with the back buffer",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "24 - Pure 3D",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"u\" found.\n --> location:4:1\n  |\n4 | uniform sampler2D texture2; file[Ditch-River_Env.hdr]\n  | ^"
+    },
+    {
+      "name": "26 - 3D fractals without a DE",
+      "category": "frag",
+      "error": "No DE function detected — deferring to V2"
+    },
+    {
+      "name": "33 - Simple Skybox",
+      "category": "frag",
+      "error": "GLSL parse failed: Error: Expected \",\" or \";\" but \"v\" found.\n --> location:9:1\n  |\n9 | vec3  backgroundColor(vec3 dir) {\n  | ^"
+    }
+  ]
+}

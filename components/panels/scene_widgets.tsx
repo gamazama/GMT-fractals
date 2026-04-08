@@ -2,18 +2,20 @@
 import React, { useState, useRef } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FeatureComponentProps } from '../registry/ComponentRegistry';
 import Histogram from '../Histogram';
 import ToggleSwitch from '../ToggleSwitch';
 import Slider from '../Slider';
 import Button from '../Button';
-import { Vector3Input } from '../Vector3Input';
+import { Vector3Input } from '../vector-input';
 import { LinkIcon } from '../Icons';
 import * as THREE from 'three';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { CameraUtils } from '../../utils/CameraUtils';
+import { getViewportCamera } from '../../engine/worker/ViewportRefs';
 
 // --- WIDGET 1: COLOR GRADING HISTOGRAM ---
 export const ColorGradingHistogram: React.FC<FeatureComponentProps> = ({ sliceState, actions }) => {
@@ -57,58 +59,51 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
     
     const interactionMode = useFractalStore(s => s.interactionMode);
     const setInteractionMode = useFractalStore(s => s.setInteractionMode);
-    
+    const focusLock = useFractalStore(s => s.focusLock);
+    const setFocusLock = useFractalStore(s => s.setFocusLock);
+
     const isPicking = interactionMode === 'picking_focus';
-    
+
     const [dollyLocked, setDollyLocked] = useState(true);
     const dollyStartRef = useRef<any>(null);
 
     const isPerspective = Math.abs((camType ?? 0) - 0.0) < 0.1;
 
-    const handleAutoFocus = () => {
-        if (engine.lastMeasuredDistance > 0) {
+    const handleFocusLockToggle = (v: boolean) => {
+        setFocusLock(v);
+        // Immediately sync on enable
+        if (v && engine.lastMeasuredDistance > 0) {
             setOptics({ dofFocus: engine.lastMeasuredDistance });
         }
     };
 
     const handleDollyStart = () => {
-        if (!engine.activeCamera) return;
-        
-        const state = useFractalStore.getState();
-        let dist = 3.5;
+        const cam = getViewportCamera();
+        if (!cam) return;
 
-        // MODE-AWARE DISTANCE SELECTION
-        // For initial lock, we prioritize physical radius for Orbit Mode stability
-        if (state.cameraMode === 'Orbit') {
-            const radius = engine.activeCamera.position.length();
-            if (radius > 0.001) {
-                dist = radius;
-            } else {
-                dist = state.targetDistance || 3.5;
-            }
-        } else {
-            // In Fly Mode, use the visual surface distance (Probe).
-            const probeDist = engine.lastMeasuredDistance;
-            if (probeDist > 0.0001 && probeDist < 900.0) {
-                dist = probeDist;
-            } else {
-                dist = state.targetDistance || 3.5;
-            }
-        }
-        
+        const state = useFractalStore.getState();
+
+        // Use center-screen surface distance (measured by worker every 3 frames)
+        // This is correct for both Orbit and Fly mode — it's the actual distance
+        // to the visible surface, not the orbit radius from origin.
+        const probeDist = engine.lastMeasuredDistance;
+        let dist = (probeDist > 0.0001 && probeDist < 900.0)
+            ? probeDist
+            : (state.targetDistance || 3.5);
+
         dist = Math.max(0.001, dist);
 
         // Use standard utility for Unified State reading
         const unifiedPos = CameraUtils.getUnifiedFromEngine();
-        
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(engine.activeCamera.quaternion);
-        
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+
         dollyStartRef.current = {
             fov: camFov,
             dist: dist,
             unifiedPos: { x: unifiedPos.x, y: unifiedPos.y, z: unifiedPos.z },
             forward: forward,
-            quat: engine.activeCamera.quaternion.clone()
+            quat: cam.quaternion.clone()
         };
     };
 
@@ -190,19 +185,7 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
     };
 
     return (
-        <div className="flex flex-col gap-2">
-            {(dofStrength > 0.000001) && (
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                    <Button onClick={handleAutoFocus} label="Auto-Centre" />
-                    <Button 
-                        active={isPicking}
-                        onClick={() => setInteractionMode(isPicking ? 'none' : 'picking_focus')}
-                        label={isPicking ? "Picking..." : "Pick Focus"}
-                        variant="success"
-                    />
-                </div>
-            )}
-            
+        <div className="flex flex-col">
             {isPerspective && (
                 <div>
                      <Slider
@@ -216,7 +199,7 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
                          onKeyToggle={handleFovKeyToggle}
                      />
                      <div>
-                        <ToggleSwitch 
+                        <ToggleSwitch
                             label="Dolly Link"
                             icon={<LinkIcon active={dollyLocked} />}
                             value={dollyLocked}
@@ -229,40 +212,52 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
     );
 };
 
-// --- WIDGET 3: NAVIGATION CONTROLS ---
-export const NavigationControls: React.FC<FeatureComponentProps> = () => {
-    // Connect to Root Store State
-    const cameraMode = useFractalStore(s => s.cameraMode);
-    const sceneOffset = useFractalStore(s => s.sceneOffset);
-    const cameraPos = useFractalStore(s => s.cameraPos);
-    const cameraRot = useFractalStore(s => s.cameraRot);
-    
-    const setCameraMode = useFractalStore(s => s.setCameraMode);
-    const optics = useFractalStore(s => s.optics);
-    const isOrtho = optics && Math.abs(optics.camType - 1.0) < 0.1;
+// --- WIDGET 2B: DOF FOCUS CONTROLS (Focus Lock & Pick) ---
+export const OpticsDofControls: React.FC<FeatureComponentProps> = ({ sliceState, actions }) => {
+    const setOptics = (actions as any).setOptics;
+    const interactionMode = useFractalStore(s => s.interactionMode);
+    const setInteractionMode = useFractalStore(s => s.setInteractionMode);
+    const focusLock = useFractalStore(s => s.focusLock);
+    const setFocusLock = useFractalStore(s => s.setFocusLock);
+    const isPicking = interactionMode === 'picking_focus';
 
-    // Use Utility to calculate Unified Coords and Rotations for display
-    const unified = CameraUtils.getUnifiedPosition(cameraPos, sceneOffset);
+    const handleFocusLockToggle = (v: boolean) => {
+        setFocusLock(v);
+        if (v && engine.lastMeasuredDistance > 0) {
+            setOptics({ dofFocus: engine.lastMeasuredDistance });
+        }
+    };
+
+    return (
+        <div className="grid grid-cols-2 gap-px p-px">
+            <Button
+                active={focusLock}
+                onClick={() => handleFocusLockToggle(!focusLock)}
+                label={focusLock ? "Lock On" : "Focus Lock"}
+                variant="primary"
+            />
+            <Button
+                active={isPicking}
+                onClick={() => setInteractionMode(isPicking ? 'none' : 'picking_focus')}
+                label={isPicking ? "Picking..." : "Pick Focus"}
+                variant="success"
+            />
+        </div>
+    );
+};
+
+// --- SHARED: CAMERA POSITION/ROTATION DISPLAY ---
+// Used by both NavigationControls (Scene tab) and CameraManagerPanel
+export const CameraPositionDisplay: React.FC = () => {
+    const sceneOffset = useFractalStore(s => s.sceneOffset);
+    const cameraRot = useFractalStore(s => s.cameraRot);
+
+    // World position lives entirely in sceneOffset (camera is always at origin)
+    const unified = CameraUtils.getUnifiedPosition({ x: 0, y: 0, z: 0 }, sceneOffset);
     const rotDeg = CameraUtils.getRotationDegrees(cameraRot);
 
     return (
-        <div className="flex flex-col gap-3">
-             <div className={isOrtho ? 'opacity-50 pointer-events-none' : ''}>
-                <ToggleSwitch 
-                    value={cameraMode}
-                    onChange={(v) => setCameraMode(v as any)}
-                    options={[
-                        { label: 'Orbit', value: 'Orbit' },
-                        { label: 'Fly', value: 'Fly' }
-                    ]}
-                />
-                {isOrtho && <p className="text-[9px] text-gray-500 mt-1 text-center">Fly Mode disabled in Orthographic view</p>}
-            </div>
-            
-            {cameraMode === 'Fly' && (
-                <AutoFeaturePanel featureId="navigation" groupFilter="movement" />
-            )}
-
+        <>
             <div data-help-id="cam.position">
                 <Vector3Input
                     label="Absolute Position"
@@ -276,7 +271,7 @@ export const NavigationControls: React.FC<FeatureComponentProps> = () => {
                     trackLabels={['Position X', 'Position Y', 'Position Z']}
                 />
             </div>
-            
+
             <div data-help-id="cam.rotation">
                 <Vector3Input
                     label="Rotation (Degrees)"
@@ -286,13 +281,41 @@ export const NavigationControls: React.FC<FeatureComponentProps> = () => {
                     min={-180}
                     max={180}
                     interactionMode="camera"
-                    // Pass the track keys for recording
                     trackKeys={['camera.rotation.x', 'camera.rotation.y', 'camera.rotation.z']}
                     trackLabels={['Rotation X', 'Rotation Y', 'Rotation Z']}
-                    // Critical: Enable conversion so UI shows Degrees but Store gets Radians
                     convertRadToDeg={true}
                 />
             </div>
+        </>
+    );
+};
+
+// --- WIDGET 3: NAVIGATION CONTROLS ---
+export const NavigationControls: React.FC<FeatureComponentProps> = () => {
+    const cameraMode = useFractalStore(s => s.cameraMode);
+    const setCameraMode = useFractalStore(s => s.setCameraMode);
+    const optics = useFractalStore(s => s.optics);
+    const isOrtho = optics && Math.abs(optics.camType - 1.0) < 0.1;
+
+    return (
+        <div className="flex flex-col gap-3">
+             <div className={isOrtho ? 'opacity-50 pointer-events-none' : ''}>
+                <ToggleSwitch
+                    value={cameraMode}
+                    onChange={(v) => setCameraMode(v as any)}
+                    options={[
+                        { label: 'Orbit', value: 'Orbit' },
+                        { label: 'Fly', value: 'Fly' }
+                    ]}
+                />
+                {isOrtho && <p className="text-[9px] text-gray-500 mt-1 text-center">Fly Mode disabled in Orthographic view</p>}
+            </div>
+
+            {cameraMode === 'Fly' && (
+                <AutoFeaturePanel featureId="navigation" groupFilter="movement" />
+            )}
+
+            <CameraPositionDisplay />
         </div>
     );
 };

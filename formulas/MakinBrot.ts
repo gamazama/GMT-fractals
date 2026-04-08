@@ -5,22 +5,17 @@ export const MakinBrot: FractalDefinition = {
     id: 'MakinBrot',
     name: 'Makin Brot',
     shortDescription: 'Creates stacked, pagoda-like ornamental structures.',
-    description: 'A 3D fractal variant discovered by Makin. Now with extra shift and twist parameters.',
-    
+    description: 'A 3D fractal variant discovered by Makin. Custom polynomial: x²-y²-z², 2xy, 2z(x-y). Supports rotation, shift, and twist.',
+    juliaType: 'offset',
+
     shader: {
         function: `
-    void formula_MakinBrot(inout vec4 z, inout float dr, inout float trap, vec4 c, mat2 rotX, mat2 rotZ) {
+    void formula_MakinBrot(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        
-        // Twist F
-        if (abs(uParamF) > 0.001) {
-            float ang = z3.z * uParamF;
-            float s = sin(ang); float co = cos(ang);
-            z3.xy = mat2(co, -s, s, co) * z3.xy;
-        }
 
-        z3.yz = rotX * z3.yz;
-        z3.xy = rotZ * z3.xy;
+        gmt_applyTwist(z3, uParamF);
+        gmt_applyRodrigues(z3);
+
         float x = z3.x; float y = z3.y; float z_ = z3.z;
         z3.x = x*x - y*y - z_*z_;
         z3.y = 2.0 * x * y;
@@ -28,39 +23,30 @@ export const MakinBrot: FractalDefinition = {
         float r = length(vec3(x,y,z_));
         dr = 2.0 * r * dr + 1.0;
         z3 = z3 * uParamA + c.xyz;
-        
-        // Shift E
-        if (abs(uParamE) > 0.001) z3.y += uParamE;
+
+        // Vec3A: Shift
+        z3 += uVec3A;
 
         dr *= abs(uParamA);
         z.xyz = z3;
         trap = min(trap, dot(z3,z3));
     }`,
-        loopInit: `
-        float angC = uParamC;
-        float sC = sin(angC), cC = cos(angC);
-        mat2 rotX = mat2(cC, -sC, sC, cC);
-        
-        float angD = uParamD;
-        float sD = sin(angD), cD = cos(angD);
-        mat2 rotZ = mat2(cD, -sD, sD, cD);
-        `,
-        loopBody: `formula_MakinBrot(z, dr, trap, c, rotX, rotZ);`
+        loopBody: `formula_MakinBrot(z, dr, trap, c);`,
+        loopInit: `gmt_precalcRodrigues(uVec3B);`,
+        usesSharedRotation: true,
     },
 
     parameters: [
         { label: 'Scale', id: 'paramA', min: 0.5, max: 3.0, step: 0.001, default: 1.0 },
-        { label: 'Offset', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 0.0 },
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Shift Y', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Rotation', id: 'vec3B', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
+        { label: 'Shift', id: 'vec3A', type: 'vec3', min: -2.0, max: 2.0, step: 0.01, default: { x: 0, y: 0, z: 0 } },
         { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
     defaultPreset: {
         formula: "MakinBrot",
         features: {
-            coreMath: { iterations: 24, paramA: 1.455, paramB: 0, paramC: 0, paramD: 0, paramE: 0, paramF: 0 },
+            coreMath: { iterations: 24, paramA: 1.455, paramF: 0, vec3A: { x: 0, y: 0, z: 0 }, vec3B: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 1, // Iterations
                 repeats: 1.3, phase: 0.2, scale: 1.298, offset: 0.207, bias: 1, twist: 0, escape: 2,
@@ -92,7 +78,6 @@ export const MakinBrot: FractalDefinition = {
             },
             geometry: { juliaMode: false, juliaX: -0.99, juliaY: 0.54, juliaZ: -0.72, hybridMode: false, hybridIter: 2, hybridScale: 2.13, hybridMinR: 0.72, hybridFixedR: 1, hybridFoldLimit: 0.97 },
             lighting: { shadows: true, shadowSoftness: 78, shadowIntensity: 1, shadowBias: 0 },
-            // Lowered fudgeFactor to 0.7 to fix slicing artifacts
             quality: { detail: 6.3, fudgeFactor: 0.7, pixelThreshold: 0.1, maxSteps: 300, aaMode: "Auto", aaLevel: 1 },
             optics: { dofStrength: 0, dofFocus: 1.368 }
         },
@@ -102,12 +87,9 @@ export const MakinBrot: FractalDefinition = {
         sceneOffset: { x: 0, y: 0, z: 0, xL: -0.8442073707354043, yL: -0.15795817300110893, zL: 0.25127901307775025 },
         cameraMode: "Orbit",
         lights: [
-            { type: 'Point', position: { x: -1.5227203148465231, y: -0.10858858668233184, z: 0.5084783790561214 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 1.455, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: -1.5227203148465231, y: -0.10858858668233184, z: 0.5084783790561214 }, rotation: { x: 0, y: 0, z: 0 }, color: "#F0F0FF", useTemperature: true, temperature: 6500, intensity: 5, falloff: 61.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true },
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

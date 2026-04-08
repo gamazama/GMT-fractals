@@ -6,11 +6,11 @@ import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
 export interface UIStateLocal {
-    draggedLightIndex: number | null;
+    draggedLightIndex: string | null;
 }
 
 export interface UIActionsLocal {
-    setDraggedLight: (index: number | null) => void;
+    setDraggedLight: (id: string | null) => void;
 }
 
 export type UISlice = Pick<FractalStoreState,
@@ -22,15 +22,16 @@ export type UISlice = Pick<FractalStoreState,
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
     'isTimelineHovered' | 
-    'interactionMode' |
+    'interactionMode' | 'focusLock' |
     'isBroadcastMode' |
     'isUserInteracting' |
     'tabSwitchCount' |
     'compositionOverlay' |
     'compositionOverlaySettings' |
     // New Layout Props
-    'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' | 
-    'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot'
+    'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
+    'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
+    'workshopOpen' | 'workshopEditFormula'
 > & Pick<FractalActions,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
@@ -39,7 +40,7 @@ export type UISlice = Pick<FractalStoreState,
     'setResolutionMode' | 'setFixedResolution' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
-    'setInteractionMode' |
+    'setInteractionMode' | 'setFocusLock' |
     'setIsBroadcastMode' |
     'openHelp' | 'closeHelp' | 'openContextMenu' | 'closeContextMenu' |
     'incrementTabSwitchCount' |
@@ -49,7 +50,9 @@ export type UISlice = Pick<FractalStoreState,
     'movePanel' | 'reorderPanel' | 'togglePanel' | 'setDockSize' | 'setDockCollapsed' | 'setFloatPosition' | 'setFloatSize' |
     'startPanelDrag' | 'endPanelDrag' | 'cancelPanelDrag' |
     // Legacy Mappers
-    'setActiveTab' | 'floatTab' | 'dockTab'
+    'setActiveTab' | 'floatTab' | 'dockTab' |
+    // Workshop
+    'openWorkshop' | 'closeWorkshop'
 >;
 
 const getUrlParam = (key: string) => {
@@ -76,13 +79,13 @@ const DEFAULT_PANELS: Record<string, PanelState> = {
     'Light': { id: 'Light', location: 'right', order: 6, isCore: false, isOpen: false },
     'Audio': { id: 'Audio', location: 'right', order: 7, isCore: false, isOpen: false },
     'Drawing': { id: 'Drawing', location: 'right', order: 8, isCore: false, isOpen: false },
-    'Sonification': { id: 'Sonification', location: 'right', order: 9, isCore: false, isOpen: false },
 };
 
 export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
     showLightGizmo: true, 
     isGizmoDragging: false, 
     interactionMode: 'none',
+    focusLock: false,
 
     histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0, histogramActiveCount: 0,
     sceneHistogramData: null, sceneHistogramTrigger: 0, sceneHistogramActiveCount: 0,
@@ -141,11 +144,16 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     activeLeftTab: null, // No active tab since panels are closed
     activeRightTab: 'Formula',
 
+    // Workshop
+    workshopOpen: false,
+    workshopEditFormula: undefined,
+
     // --- ACTIONS ---
 
     setShowLightGizmo: (v) => set({ showLightGizmo: v }),
     setGizmoDragging: (v) => set({ isGizmoDragging: v }),
     setInteractionMode: (mode) => set({ interactionMode: mode }),
+    setFocusLock: (v) => set({ focusLock: v }),
 
     setHistogramData: (d) => set({ histogramData: d }),
     setHistogramAutoUpdate: (v) => set({ histogramAutoUpdate: v }),
@@ -193,6 +201,9 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
         contextMenu: { visible: true, x, y, items, targetHelpIds: targetHelpIds || [] } 
     }),
     closeContextMenu: () => set(s => ({ contextMenu: { ...s.contextMenu, visible: false } })),
+
+    openWorkshop: (editFormula) => set({ workshopOpen: true, workshopEditFormula: editFormula }),
+    closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined }),
 
     // --- NEW LAYOUT ACTIONS IMPLEMENTATION ---
 

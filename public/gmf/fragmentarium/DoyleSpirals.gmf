@@ -1,0 +1,540 @@
+<!-- 
+  GMF: GPU Mandelbulb Format v1.0 
+  A proprietary container for Fractal math definitions + default presets.
+  You can edit the GLSL blocks below directly.
+-->
+
+  /* 
+   * --- GMT SHADER API REFERENCE ---
+   * 
+   * Available Uniforms:
+   * float uParamA, uParamB, uParamC, uParamD, uParamE, uParamF; // The 6 Sliders
+   * int uIterations;      // Iteration count
+   * float uTime;          // Elapsed time in seconds
+   * vec3 uJulia;          // Julia coordinates (if Julia mode active)
+   * float uJuliaMode;     // 1.0 if active, 0.0 if not
+   * 
+   * Helper Functions:
+   * void sphereFold(inout vec3 z, inout float dz, float minR, float fixedR);
+   * void boxFold(inout vec3 z, inout float dz, float limit);
+   * void dodecaFold(inout vec3 z);
+   * vec3 bulbPow(vec3 z, float power);        // Spherical Power function
+   * vec4 quatPow(vec4 q, float p);            // Quaternion Power
+   * vec4 quatMult(vec4 q1, vec4 q2);          // Quaternion Multiplication
+   * float snoise(vec3 v);                     // Simplex Noise (-1.0 to 1.0)
+   * 
+   * Input/Output:
+   * z    : Current coordinate (vec4). .xyz is position, .w is auxiliary.
+   * dr   : Running derivative (float). Used for distance estimation.
+   * trap : Orbit trap accumulator (float). Used for coloring.
+   * c    : The constant for the fractal (Julia value or Pixel position).
+   */
+
+<Metadata>
+{
+  "id": "DoyleSpirals",
+  "name": "Doyle Spirals",
+  "shortDescription": "A beautiful arrangement of tangent circles mapped into 3D space.",
+  "description": "Based on Jos Leys' work, this fractal uses the Newton-Raphson method to solve the Doyle spiral equations, creating a perfect packing of spheres that spiral infinitely. It includes an optional spherical inversion to create stunning closed forms.",
+  "parameters": [
+    { "label": "P (Spirals)", "id": "paramA", "min": 1, "max": 50, "step": 1, "default": 2 },
+    { "label": "Q (Spirals)", "id": "paramB", "min": 3, "max": 50, "step": 1, "default": 20 },
+    { "label": "Sphere Radius", "id": "paramC", "min": 0, "max": 2, "step": 0.01, "default": 1 },
+    { "label": "Do Inversion", "id": "paramD", "min": 0, "max": 1, "step": 1, "default": 1 },
+    { "label": "Inv Radius", "id": "paramE", "min": 0.01, "max": 2, "step": 0.01, "default": 1 }
+  ],
+  "defaultPreset": {
+    "version": 0,
+    "name": "DoyleSpirals",
+    "formula": "DoyleSpirals",
+    "features": {
+      "coreMath": {
+        "iterations": 0,
+        "paramA": 2,
+        "paramB": 20,
+        "paramC": 1,
+        "paramD": 1,
+        "paramE": 1,
+        "paramF": 0,
+        "customParams": {}
+      },
+      "geometry": {
+        "applyTransformLogic": true,
+        "preRotMaster": true,
+        "hybridComplex": false,
+        "burningEnabled": false,
+        "hybridMode": false,
+        "hybridIter": 0,
+        "hybridFoldLimit": 1,
+        "hybridScale": 2,
+        "hybridMinR": 0.5,
+        "hybridFixedR": 1,
+        "hybridAddC": false,
+        "hybridProtect": true,
+        "hybridSwap": false,
+        "hybridSkip": 1,
+        "preRotEnabled": false,
+        "preRotY": 0,
+        "preRotX": 0,
+        "preRotZ": 0,
+        "juliaMode": true,
+        "juliaX": -0.11112,
+        "juliaY": -0.57778,
+        "juliaZ": 0.44444,
+        "preRot": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "julia": { "x": 0, "y": 0, "z": 0 }
+      },
+      "lighting": {
+        "advancedLighting": true,
+        "ptEnabled": true,
+        "renderMode": 0,
+        "ptBounces": 3,
+        "ptGIStrength": 1,
+        "shadowsCompile": true,
+        "shadowAlgorithm": 0,
+        "ptStochasticShadows": false,
+        "shadows": true,
+        "shadowIntensity": 1,
+        "shadowSoftness": 12.5,
+        "shadowSteps": 128,
+        "shadowBias": 0.001,
+        "lights": [
+          {
+            "type": "Point",
+            "position": { "x": 0.69, "y": -1, "z": 1.4 },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "color": "#ffffff",
+            "intensity": 1,
+            "falloff": 0.22,
+            "falloffType": "Quadratic",
+            "fixed": false,
+            "visible": true,
+            "castShadow": true
+          }
+        ]
+      },
+      "ao": {
+        "aoIntensity": 0.7,
+        "aoSpread": 0.5,
+        "aoSamples": 5,
+        "aoMode": false,
+        "aoMaxSamples": 32,
+        "aoStochasticCp": true,
+        "aoEnabled": true
+      },
+      "reflections": {
+        "mixStrength": 1,
+        "roughnessThreshold": 0.5,
+        "bounces": 1,
+        "steps": 64,
+        "enabled": true
+      },
+      "atmosphere": {
+        "glowEnabled": true,
+        "glowQuality": 0,
+        "fogIntensity": 0,
+        "fogNear": 0,
+        "fogFar": 5,
+        "fogColor": "#000000",
+        "fogDensity": 0,
+        "glowIntensity": 0,
+        "glowSharpness": 50,
+        "glowMode": false,
+        "glowColor": "#ffffff"
+      },
+      "materials": {
+        "diffuse": 1,
+        "reflection": 0.34,
+        "specular": 3.5,
+        "roughness": 0.2,
+        "rim": 0,
+        "rimExponent": 3,
+        "envStrength": 0.3,
+        "envBackgroundStrength": 0,
+        "envSource": 1,
+        "envMapData": null,
+        "envMapColorSpace": 0,
+        "useEnvMap": true,
+        "envRotation": 0,
+        "envGradientStops": [
+          {
+            "id": "hor",
+            "position": 0,
+            "color": "#77a81b",
+            "bias": 0.5,
+            "interpolation": "smooth"
+          },
+          {
+            "id": "zen",
+            "position": 1,
+            "color": "#77a81b",
+            "bias": 0.5,
+            "interpolation": "smooth"
+          }
+        ],
+        "emission": 0,
+        "emissionMode": 0,
+        "emissionColor": "#ffffff",
+        "ptEmissionMult": 1
+      },
+      "waterPlane": {
+        "waterEnabled": false,
+        "active": true,
+        "height": -2,
+        "color": "#001133",
+        "roughness": 0.02,
+        "waveStrength": 0.1,
+        "waveSpeed": 1,
+        "waveFrequency": 1.5
+      },
+      "coloring": {
+        "gradient": [
+          {
+            "id": "2",
+            "position": 1,
+            "color": "#FFFFFF",
+            "bias": 0.5,
+            "interpolation": "linear"
+          }
+        ],
+        "mode": 0,
+        "scale": 1,
+        "offset": 0,
+        "repeats": 2,
+        "phase": 0,
+        "bias": 1,
+        "twist": 0,
+        "escape": 1.2,
+        "gradient2": [
+          {
+            "id": "1767363622003",
+            "position": 0,
+            "color": "#FFFFFF",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "1",
+            "position": 0.5,
+            "color": "#000000",
+            "bias": 0.5,
+            "interpolation": "linear"
+          },
+          {
+            "id": "1767363615540",
+            "position": 1,
+            "color": "#FFFFFF",
+            "bias": 0.5,
+            "interpolation": "linear"
+          }
+        ],
+        "mode2": 4,
+        "scale2": 1,
+        "offset2": 0,
+        "repeats2": 7,
+        "phase2": 0,
+        "bias2": 1,
+        "twist2": 0,
+        "blendMode": 0,
+        "blendOpacity": 0,
+        "layer3Color": "#ffffff",
+        "layer3Scale": 20,
+        "layer3Strength": 0,
+        "layer3Bump": 0,
+        "layer3Turbulence": 0
+      },
+      "texturing": {
+        "active": false,
+        "layer1Data": null,
+        "colorSpace": 0,
+        "mapU": 6,
+        "mapV": 1,
+        "scaleX": 1,
+        "scaleY": 1,
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "textureScale": {
+          "x": 1,
+          "y": 1
+        }
+      },
+      "quality": {
+        "engineQuality": true,
+        "compilerHardCap": 500,
+        "precisionMode": 0,
+        "bufferPrecision": 0,
+        "maxSteps": 128,
+        "distanceMetric": 0,
+        "estimator": 0,
+        "fudgeFactor": 1,
+        "stepRelaxation": 0,
+        "refinementSteps": 0,
+        "detail": 1,
+        "pixelThreshold": 0.2,
+        "overstepTolerance": 0,
+        "dynamicScaling": false,
+        "interactionDownsample": 2
+      },
+      "droste": {
+        "active": false,
+        "tiling": 1,
+        "center": {
+          "x": 0,
+          "y": 0
+        },
+        "radiusInside": 5,
+        "radiusOutside": 100,
+        "periodicity": 2,
+        "strands": 2,
+        "autoPeriodicity": false,
+        "strandMirror": false,
+        "zoom": 0,
+        "rotate": 0,
+        "rotateSpin": 0,
+        "rotatePolar": 0,
+        "twist": true,
+        "hyperDroste": false,
+        "fractalPoints": 1
+      },
+      "colorGrading": {
+        "active": false,
+        "saturation": 1,
+        "levelsMin": 0,
+        "levelsMax": 1,
+        "levelsGamma": 1
+      },
+      "optics": {
+        "camType": 0,
+        "camFov": 60,
+        "orthoScale": 2,
+        "dofStrength": 0,
+        "dofFocus": 2
+      },
+      "navigation": {
+        "flySpeed": 0.5,
+        "autoSlow": true
+      },
+      "cameraManager": {},
+      "audio": {
+        "isEnabled": false,
+        "smoothing": 0.8,
+        "threshold": 0.1,
+        "agcEnabled": false,
+        "attack": 0.1,
+        "decay": 0.3,
+        "highPass": 20,
+        "lowPass": 20000,
+        "gain": 1
+      },
+      "sonification": {
+        "isEnabled": false,
+        "active": true,
+        "baseFrequency": 220,
+        "masterGain": 0.5,
+        "scanArea": 0.1,
+        "harmonics": true,
+        "lastDimension": 0
+      },
+      "drawing": {
+        "activeTool": "rect",
+        "enabled": false,
+        "active": false,
+        "originMode": 1,
+        "color": "#00ffff",
+        "lineWidth": 1,
+        "showLabels": true,
+        "showAxes": false,
+        "shapes": [],
+        "refreshTrigger": 0
+      },
+      "modulation": {
+        "rules": [],
+        "selectedRuleId": null
+      },
+      "webcam": {
+        "isEnabled": false,
+        "opacity": 1,
+        "posX": 20,
+        "posY": 80,
+        "width": 320,
+        "height": 240,
+        "cropL": 0,
+        "cropR": 0,
+        "cropT": 0,
+        "cropB": 0,
+        "blendMode": 0,
+        "crtMode": false,
+        "tilt": 0,
+        "fontSize": 12
+      },
+      "debugTools": {
+        "shaderDebuggerOpen": false,
+        "stateDebuggerOpen": false
+      },
+      "engineSettings": {
+        "showEngineTab": false
+      }
+    },
+    "animations": [],
+    "sequence": {
+      "durationFrames": 300,
+      "fps": 30,
+      "tracks": {}
+    },
+    "duration": 300
+  }
+}
+</Metadata>
+
+<!-- Main Distance Estimator Function -->
+<Shader_Function>
+// Helper functions for Doyle Spirals
+        #ifndef PI
+        #define PI 3.14159265358979323846264
+        #endif
+        vec2 solve_doyle(vec2 z, int P, int Q){
+            float k = float(P) / float(Q);
+            for(int i = 0; i < 2; i++){
+                float lb = z.x * k;
+                float tb = z.y * k + 2.0 * PI / float(Q);
+                float ra = exp(z.x), rb = exp(lb), ca = cos(z.y), cb = cos(tb), cab = cos(z.y - tb);
+                
+                vec3 v = vec3(
+                    (ra*ra - 2.0*ra*ca + 1.0) / ((ra+1.0)*(ra+1.0)),
+                    (rb*rb - 2.0*rb*cb + 1.0) / ((rb+1.0)*(rb+1.0)),
+                    (ra*ra - 2.0*ra*rb*cab + rb*rb) / ((ra+rb)*(ra+rb))
+                );
+                vec2 f = v.xy - v.yz;
+                
+                vec3 c = 2.0 * vec3(
+                    ra / ((ra+1.0)*(ra+1.0)), 
+                    k * rb / ((rb+1.0)*(rb+1.0)), 
+                    (1.0 - k) * ra * rb / ((ra+rb)*(ra+rb))
+                );
+                vec3 v0 = c * vec3(
+                    (1.0 + ca) * (ra - 1.0) / (ra + 1.0), 
+                    (1.0 + cb) * (rb - 1.0) / (rb + 1.0), 
+                    (1.0 + cab) * (ra - rb) / (ra + rb)
+                );
+                vec3 v1 = c * sin(vec3(z.y, tb, z.y - tb));
+                
+                mat2 J;
+                J[0] = v0.xy - v0.yz; 
+                J[1] = v1.xy - v1.yz;
+                
+                float idet = 1.0 / (J[0][0]*J[1][1] - J[0][1]*J[1][0]);
+                mat2 iJ = mat2(J[1][1], -J[0][1], -J[1][0], J[0][0]) * idet;
+                
+                z -= iJ * f;
+            }
+            return z;
+        }
+
+        void getDoyleConstants(int P, int Q, float SRadScl, out mat2 Mat, out mat2 iMat, out vec4 rads, out vec4 xps, out vec4 yps, out vec2 ns) {
+            vec2 v = vec2(-float(P) + float(Q) * 0.5, float(Q) * sqrt(3.0) * 0.5);
+            float vd = 1.0 / length(v);
+            float scl = 2.0 * PI * vd;
+            vec2 z = scl * vd * vec2(v.y, v.x);
+            
+            z = solve_doyle(z, P, Q);
+            
+            float k = float(P) / float(Q);
+            vec2 zt = vec2(z.x * k, z.y * k + 2.0 * PI / float(Q));
+            
+            Mat[0] = z; 
+            Mat[1] = zt;
+            
+            float det = Mat[0][0]*Mat[1][1] - Mat[0][1]*Mat[1][0];
+            iMat = mat2(Mat[1][1], -Mat[0][1], -Mat[1][0], Mat[0][0]) / det;
+            
+            float ra = exp(z.x), rb = exp(zt.x), ca = cos(z.y);
+            float rs = sqrt((ra*ra - 2.0*ra*ca + 1.0) / ((ra+1.0)*(ra+1.0)));
+            rs *= SRadScl;
+            
+            rads = rs * vec4(1.0, ra, rb, ra*rb);
+            xps = vec4(1.0, ra*ca, rb*cos(zt.y), ra*rb*cos(z.y+zt.y));
+            yps = vec4(0.0, ra*sin(z.y), rb*sin(zt.y), ra*rb*sin(z.y+zt.y));
+            ns = vec2(-rs, sqrt(1.0 - rs*rs));
+        }
+
+        float Doyle(vec3 z, mat2 Mat, mat2 iMat, vec4 rads, vec4 xps, vec4 yps, vec2 ns) {
+            z.z = abs(z.z);
+            vec2 p = vec2(length(z.xy), abs(z.z));
+            float r = p.x;
+            
+            p -= ns * max(0.0, dot(ns, p));
+            p = z.xy * p.x / r;
+            
+            p = vec2(log(length(p)), atan(p.y, p.x));
+            vec2 pl = iMat * p;
+            pl = pl - floor(pl);
+            pl = Mat * pl;
+            
+            float scl = exp(pl.x - p.x);
+            float angle = pl.y - p.y;
+            
+            z *= scl;
+            float c = cos(angle), s = sin(angle);
+            z.xy = vec2(z.x*c - z.y*s, z.x*s + z.y*c);
+            
+            vec4 vx = vec4(z.x) - xps;
+            vec4 vy = vec4(z.y) - yps;
+            vec4 vz = vec4(z.z);
+            vec4 dists = sqrt(vx*vx + vy*vy + vz*vz) - rads;
+            
+            return min(min(dists.x, dists.y), min(dists.z, dists.w)) / scl;
+        }
+
+        float DE_Doyle(vec3 p, int P, int Q, float SRadScl, bool DoInversion, vec3 InvCenter, float InvRadius) {
+            mat2 Mat, iMat;
+            vec4 rads, xps, yps;
+            vec2 ns;
+            getDoyleConstants(P, Q, SRadScl, Mat, iMat, rads, xps, yps, ns);
+            
+            if(DoInversion){
+                p = p - InvCenter;
+                float r = length(p);
+                float r2 = r * r;
+                p = (InvRadius / r2) * p + InvCenter;
+                float de = Doyle(p, Mat, iMat, rads, xps, yps, ns);
+                de = r2 * de / (InvRadius + r * de);
+                return de;
+            } else {
+                return Doyle(p, Mat, iMat, rads, xps, yps, ns);
+            }
+        }
+
+        // Dummy formula body since we override getDist
+        void formula_DoyleSpirals(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+            // Handled entirely in getDist
+        }
+</Shader_Function>
+
+<!-- The Iteration Loop Body -->
+<Shader_Loop>
+formula_DoyleSpirals(z, dr, trap, c);
+</Shader_Loop>
+
+<!-- Optional: Custom Distance/Iteration Smoothing -->
+<Shader_Dist>
+int P = int(uParamA + 0.5);
+            int Q = int(uParamB + 0.5);
+            float SRadScl = uParamC;
+            bool DoInversion = uParamD > 0.5;
+            vec3 InvCenter = uJulia;
+            float InvRadius = uParamE;
+            
+            float d = DE_Doyle(z.xyz, P, Q, SRadScl, DoInversion, InvCenter, InvRadius);
+            return vec2(d, iter);
+</Shader_Dist>
+

@@ -5,7 +5,11 @@
  * for CPU-based distance estimation.
  */
 
-import { engine } from './FractalEngine';
+// Dynamic require() used below to break circular deps — declare for TS
+declare const require: (id: string) => any;
+
+import { getProxy } from './worker/WorkerProxy';
+const engine = getProxy();
 
 // Vector types for CPU computation
 export interface Vec3 { x: number; y: number; z: number; }
@@ -45,7 +49,7 @@ const glslBuiltins: Record<string, string> = {
 /**
  * Transpile GLSL formula code to JavaScript function
  */
-export function transpileGLSLToJS(glslCode: string, formulaName: string): Function {
+export function transpileGLSLToJS(glslCode: string, formulaName: string): string {
     let jsCode = glslCode;
     
     // Remove GLSL comments

@@ -14,6 +14,6 @@ export const useAnimationStore = create<AnimationStore>()(subscribeWithSelector(
 
 // Expose for FractalStore to avoid circular dependency lookup issues during save
 if (typeof window !== 'undefined') {
-    // @ts-ignore
+    // @ts-expect-error — custom window global for cross-store access without import cycle
     window.useAnimationStore = useAnimationStore;
 }

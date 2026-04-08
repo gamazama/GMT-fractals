@@ -6,15 +6,29 @@ export const BoxBulb: FractalDefinition = {
     name: 'Box Bulb',
     shortDescription: 'Hybrid of Box Folds and Mandelbulb Power. Creates "Boxy Bulbs".',
     description: 'A hybrid that combines box/sphere folding with the Mandelbulb power function. Now with rotation controls. (Formerly FoldingBrot)',
+    juliaType: 'offset',
     
     shader: {
         function: `
+    void DE_Bulb(inout vec3 z, inout float dr, inout float trap, float power) {
+        float r = max(length(z), 1.0e-9);
+        float rp1 = pow(r, power - 1.0);
+        dr = rp1 * power * dr + 1.0;
+        float theta = acos(clamp(z.z / r, -1.0, 1.0));
+        float phi = atan(z.y, z.x);
+        theta *= power;
+        phi *= power;
+        float zr = rp1 * r;
+        z = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+        trap = min(trap, r);
+    }
+
     void formula_BoxBulb(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
         
-        // Param E/F: Rotation
-        float angX = uParamE;
-        float angZ = uParamF;
+        // Rotation from vec3A
+        float angX = uVec3A.x;
+        float angZ = uVec3A.z;
         if (abs(angX) > 0.001 || abs(angZ) > 0.001) {
              float sx = sin(angX), cx = cos(angX);
              float sz = sin(angZ), cz = cos(angZ);
@@ -41,14 +55,13 @@ export const BoxBulb: FractalDefinition = {
         { label: 'Min Radius', id: 'paramB', min: 0.0, max: 1.5, step: 0.001, default: 0.5 },
         { label: 'Scale', id: 'paramC', min: 0.5, max: 2.5, step: 0.001, default: 1.0 },
         { label: 'Fixed Radius', id: 'paramD', min: 0.1, max: 2.5, step: 0.001, default: 1.0 },
-        { label: 'Rot X', id: 'paramE', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0, z: 0.0 }, scale: 'pi', mode: 'rotation' }
     ],
 
     defaultPreset: {
         formula: "BoxBulb",
         features: {
-            coreMath: { iterations: 16, paramA: 5.8386, paramB: 0.321, paramC: 0.91, paramD: 1.279, paramE: 0, paramF: 0 },
+            coreMath: { iterations: 16, paramA: 5.8386, paramB: 0.321, paramC: 0.91, paramD: 1.279, vec3A: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 6, // Decomposition
                 repeats: 1, phase: 2.62, scale: 1, offset: 2.62, bias: 1, twist: 0, escape: 33.72,
@@ -91,11 +104,8 @@ export const BoxBulb: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.3559846285676508, y: 0.08248395080524681, z: 2.1100465907611543 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 5, falloff: 0, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 5.8386, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

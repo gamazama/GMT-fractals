@@ -1,0 +1,47 @@
+features\fragmentarium_import{
+  "version": "1.0",
+  "description": "GMT Formula Gallery - Add GMF files here and update this manifest to show them in the gallery",
+  "categories": [
+    {
+      "id": "fragmentarium",
+      "name": "Fragmentarium",
+      "items": [
+        {
+          "id": "BioCube",
+          "name": "BioCube",
+          "path": "/gmf/fragmentarium/BioCube.gmf"
+        },
+        {
+          "id": "BuffaloBulb",
+          "name": "Buffalo Bulb",
+          "path": "/gmf/fragmentarium/BuffaloBulb.gmf"
+        },
+        {
+          "id": "DoyleSpirals",
+          "name": "Doyle Spirals",
+          "path": "/gmf/fragmentarium/DoyleSpirals.gmf"
+        },
+        {
+          "id": "AmazingSurface",
+          "name": "Amazing Surface",
+          "path": "/gmf/fragmentarium/KalisCreations-AmazingSurface.gmf"
+        },
+        {
+          "id": "Kalibox",
+          "name": "Kalibox",
+          "path": "/gmf/fragmentarium/KalisCreations-Kalibox.gmf"
+        },
+        {
+          "id": "PseudoKnightyan",
+          "name": "Pseudo Knightyan",
+          "path": "/gmf/fragmentarium/PseudoKnightyan.gmf"
+        },
+        {
+          "id": "TreeBrocolli",
+          "name": "Tree Brocolli",
+          "path": "/gmf/fragmentarium/KalisCreations-TreeBrocolli.gmf"
+        }
+      ]
+    }
+  ]
+}

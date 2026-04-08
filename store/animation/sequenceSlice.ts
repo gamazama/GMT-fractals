@@ -4,8 +4,10 @@ import { nanoid } from 'nanoid';
 import * as THREE from 'three';
 import { AnimationStore, SequenceSliceState, SequenceSliceActions, HistoryItem, CopiedKeyframe } from './types';
 import { Track, Keyframe, AnimationSequence } from '../../types';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { CameraUtils } from '../../utils/CameraUtils';
+import { getViewportCamera } from '../../engine/worker/ViewportRefs';
 import { simplifyTrack } from '../../utils/CurveFitting';
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';
@@ -490,14 +492,15 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
     // --- COMPLEX OPS ---
     captureCameraFrame: (frame, skipSnapshot = false, interpolation) => {
-        if (!engine.activeCamera) return;
+        const cam = getViewportCamera() || engine.activeCamera;
+        if (!cam) return;
         if (!skipSnapshot) get().snapshot();
-        
+
         // Use Unified Coordinate Utility
         const unified = CameraUtils.getUnifiedFromEngine();
-        
+
         // Get Rotation as Euler (Radians for storage)
-        const q = engine.activeCamera.quaternion;
+        const q = cam.quaternion;
         const euler = new THREE.Euler().setFromQuaternion(q);
         
         const cameraTracks = [

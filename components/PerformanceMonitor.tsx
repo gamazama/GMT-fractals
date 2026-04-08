@@ -2,7 +2,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { AlertIcon, CloseIcon, CheckIcon, LayersIcon, CubeIcon } from './Icons';
 import { collectHelpIds } from '../utils/helpUtils';
 import { QualityState } from '../features/quality';
@@ -49,13 +50,13 @@ export const tick = () => {
         
         // Update Refs
         performanceState.lastTime = now;
-        performanceState.lastFrameCount = engine.pipeline ? engine.pipeline.frameCount : 0;
+        performanceState.lastFrameCount = engine.frameCount;
 
         // --- Logic Gate ---
         const state = useFractalStore.getState();
 
         // Check if Accumulation is finished (Engine stops rendering intentionally)
-        const isAccumulationComplete = state.sampleCap > 0 && engine.pipeline && engine.pipeline.accumulationCount >= state.sampleCap;
+        const isAccumulationComplete = state.sampleCap > 0 && engine.accumulationCount >= state.sampleCap;
         
         // 1. Ignore if we aren't *trying* to render efficiently
         // (Exporting, Paused, Scrubbing, Compiling, Tab Hidden, or Finished Accumulating)
@@ -107,14 +108,16 @@ export const PerformanceMonitor = () => {
     const lastFrameCountRef = useRef(0);
     
     // Store Access
-    const { 
-        resolutionMode, setResolutionMode, setFixedResolution, fixedResolution, 
-        isExporting, isBroadcastMode, openContextMenu, 
-        aaLevel, setAALevel, 
+    const {
+        resolutionMode, setResolutionMode, setFixedResolution, fixedResolution,
+        isExporting, isBroadcastMode, openContextMenu,
+        aaLevel, setAALevel,
         renderMode,
-        quality
+        quality,
+        canvasPixelSize,
+        dpr
     } = useFractalStore();
-    
+
     const isPaused = useFractalStore(s => s.isPaused);
     const isScrubbing = useAnimationStore(s => s.isScrubbing);
     
@@ -134,7 +137,7 @@ export const PerformanceMonitor = () => {
         
         // Initial setup
         performanceState.lastTime = performance.now();
-        performanceState.lastFrameCount = engine.pipeline ? engine.pipeline.frameCount : 0;
+        performanceState.lastFrameCount = engine.frameCount;
         
         return () => {
             if (performanceState.setShowWarning === setShowWarning) {
@@ -159,19 +162,11 @@ export const PerformanceMonitor = () => {
     
     // --- Suggestions Logic ---
 
-    // 1. Resolution Reduction
-    let currentW = window.innerWidth;
-    let currentH = window.innerHeight;
-    
-    // Use actual canvas size if available for accuracy
-    if (engine.renderer) {
-        const canvas = engine.renderer.domElement;
-        currentW = canvas.width;
-        currentH = canvas.height;
-    } else if (resolutionMode === 'Fixed') {
-        currentW = fixedResolution[0];
-        currentH = fixedResolution[1];
-    }
+    // 1. Resolution Reduction — use actual canvas pixel size
+    const effectiveDpr = dpr || 1;
+    const [currentW, currentH] = resolutionMode === 'Fixed'
+        ? [Math.floor(fixedResolution[0] * effectiveDpr), Math.floor(fixedResolution[1] * effectiveDpr)]
+        : canvasPixelSize;
     
     const canReduce = currentW > 480;
 
@@ -225,7 +220,7 @@ export const PerformanceMonitor = () => {
             <div className="flex flex-col gap-1 bg-red-950/90 border border-red-500/30 rounded-lg shadow-xl backdrop-blur-md p-2">
                 
                 <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2 text-red-200 text-[10px] font-bold uppercase tracking-wider">
+                    <div className="flex items-center gap-2 text-red-200 text-[10px] font-bold">
                         <AlertIcon />
                         <span>Low FPS ({currentFps.toFixed(1)})</span>
                     </div>

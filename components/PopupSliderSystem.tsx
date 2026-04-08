@@ -31,7 +31,7 @@ export const PopupSliderSystem: React.FC = () => {
     if (!coreMath) return null;
 
     // Map keys 1-6 to params and setters
-    const paramMap = {
+    const paramMap: Record<string, { key: string; setter: (v: number) => void; val: number }> = {
         '1': { key: 'paramA', setter: (v: number) => setCoreMath({ paramA: v }), val: coreMath.paramA },
         '2': { key: 'paramB', setter: (v: number) => setCoreMath({ paramB: v }), val: coreMath.paramB },
         '3': { key: 'paramC', setter: (v: number) => setCoreMath({ paramC: v }), val: coreMath.paramC },
@@ -49,7 +49,6 @@ export const PopupSliderSystem: React.FC = () => {
             if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
             
             const key = e.key;
-            // @ts-ignore
             const map = paramMap[key];
             
             if (map && !activePopup) {
@@ -113,7 +112,6 @@ export const PopupSliderSystem: React.FC = () => {
 
     if (!activePopup) return null;
 
-    // @ts-ignore
     const currentMap = paramMap[String(activePopup.id)];
 
     return (
@@ -126,7 +124,7 @@ export const PopupSliderSystem: React.FC = () => {
                 height: HEIGHT 
             }}
         >
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-cyan-900 rounded text-[9px] font-bold text-cyan-200 uppercase tracking-widest border border-cyan-700 shadow-sm">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-cyan-900 rounded text-[9px] font-bold text-cyan-200 border border-cyan-700 shadow-sm">
                 Quick Edit ({activePopup.id})
             </div>
             

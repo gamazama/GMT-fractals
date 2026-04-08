@@ -12,26 +12,34 @@ float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale
 // The 'getMappingValue' function is now injected dynamically by ColoringFeature.
 // See features/coloring/MappingModes.ts for logic.
 
+// Blend modes: 0=Mix, 1=Add, 2=Multiply, 3=Overlay, 4+=Screen
 vec3 blendColors(vec3 c1, vec3 c2, float opacity, float mode) {
     vec3 col = c1;
-    
-    if (mode < 0.5) {
-        col = mix(c1, c2, opacity); // Mix
-    } else if (mode < 1.5) {
-        col = c1 + c2 * opacity; // Add
-    } else if (mode < 2.5) {
-        col = c1 * mix(vec3(1.0), c2, opacity); // Multiply
-    } else if (mode < 3.5) { 
+
+    switch(int(mode + 0.1)) {
+    case 0: // Mix
+        col = mix(c1, c2, opacity);
+        break;
+    case 1: // Add
+        col = c1 + c2 * opacity;
+        break;
+    case 2: // Multiply
+        col = c1 * mix(vec3(1.0), c2, opacity);
+        break;
+    case 3: { // Overlay
         vec3 check = step(0.5, c1);
         vec3 res = mix(2.0 * c1 * c2, 1.0 - 2.0 * (1.0 - c1) * (1.0 - c2), check);
         col = mix(c1, res, opacity);
-    } else {
+    } break;
+    default: // Screen
         col = 1.0 - (1.0 - c1) * (1.0 - c2 * opacity);
+        break;
     }
-    
+
     return col;
 }
 
+#ifdef LAYER3_ENABLED
 float getLayer3Noise(vec3 p) {
     float n = 0.0;
     if (uLayer3Turbulence > 0.001) {
@@ -46,6 +54,9 @@ float getLayer3Noise(vec3 p) {
     }
     return n;
 }
+#else
+float getLayer3Noise(vec3 p) { return 0.0; }
+#endif // LAYER3_ENABLED
 
 vec3 getTextureColor(vec3 p, vec3 n, vec4 result) {
     float u = getMappingValue(uTextureModeU, p, result, n, 1.0);
@@ -66,7 +77,7 @@ vec3 getGlowColor(vec3 p_fractal, vec4 result) {
     } else {
         vec3 n = vec3(0.0, 1.0, 0.0); 
         float val1 = getMappingValue(uColorMode, p_fractal, result, n, uColorScale);
-        float twistAngle = (abs(uColorTwist) > 0.001) ? atan(p_fractal.y, p_fractal.x) * 0.15915 : 0.0;
+        float twistAngle = (abs(uColorTwist) > 0.001) ? atan(p_fractal.y, p_fractal.x) * INV_TAU : 0.0;
         
         float t1Raw = val1 * uColorScale + uColorOffset + (length(p_fractal) + twistAngle) * uColorTwist;
         float t1Wrapped = fract(t1Raw);

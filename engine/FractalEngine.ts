@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { ShaderConfig } from './ShaderFactory';
-import { PreciseVector3, CameraState } from '../types';
+import { CameraState } from '../types';
 import { Uniforms } from './UniformNames';
 import { VirtualSpace } from './PrecisionMath';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
@@ -14,10 +14,15 @@ import { UniformManager } from './managers/UniformManager';
 import { ConfigManager } from './managers/ConfigManager';
 import { OpticsState } from '../features/optics';
 import { LightingState } from '../features/lighting';
-import { QualityState } from '../features/quality'; 
-import '../formulas'; 
-import { VideoExporter } from './VideoExporter';
+import { QualityState } from '../features/quality';
+import type { GeometryState } from '../features/geometry';
+import '../formulas';
 import { featureRegistry } from './FeatureSystem';
+
+/** Custom input event passed to FractalEngine.handleInput() from viewport interaction handlers. */
+export type EngineInputEvent =
+    | { type: 'wheel'; delta: number }
+    | { type: 'drag'; dx: number; dy: number };
 
 export interface EngineRenderState {
     cameraMode: 'Orbit' | 'Fly';
@@ -29,6 +34,7 @@ export interface EngineRenderState {
     optics: OpticsState | null;
     lighting: LightingState | null;
     quality: QualityState | null;
+    geometry: GeometryState | null;
     bucketConfig: BucketRenderConfig;
 }
 
@@ -63,8 +69,6 @@ export class FractalEngine {
     public renderer: THREE.WebGLRenderer | null = null;
     public pipeline: RenderPipeline;
     
-    public videoExporter: VideoExporter;
-    
     public modulations: Record<string, number> = {};
 
     public state: EngineRenderState = {
@@ -77,7 +81,8 @@ export class FractalEngine {
         optics: null,
         lighting: null,
         quality: null,
-        bucketConfig: { bucketSize: 128, bucketUpscale: 1.0, convergenceThreshold: 0.1, accumulation: true, samplesPerBucket: 64 }
+        geometry: null,
+        bucketConfig: { bucketSize: 128, bucketUpscale: 1.0, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 }
     };
 
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }
@@ -92,15 +97,27 @@ export class FractalEngine {
     public lastMeasuredDistance: number = 10.0;
     public dirty: boolean = true;
     
-    public lastCompileDuration: number = 0; 
+    public lastCompileDuration: number = 0;
     public isBooted: boolean = false;
-    
-    private _isCompiling: boolean = false; 
-    private compileTimer: any = null;
+
+    private _isCompiling: boolean = false;
     private _pendingTeleport: CameraState | null = null;
     private _totalFrames: number = 0;
     public hasCompiledShader: boolean = false;
-    
+
+    // Two-stage compile: generation counter to cancel stale async compiles
+    private _compileGeneration: number = 0;
+    // Dummy scene for async compilation of full shader (reused across compiles)
+    private _compileScene: THREE.Scene | null = null;
+    private _compileMesh: THREE.Mesh | null = null;
+    private _compileCamera: THREE.OrthographicCamera | null = null;
+    // Whether the GPU supports KHR_parallel_shader_compile (Chrome/ANGLE: yes, Firefox: no)
+    private _hasParallelCompile: boolean | null = null;
+    // Debounce timer for scheduleCompile — coalesces rapid config updates into one compile
+    private _compileTimer: ReturnType<typeof setTimeout> | null = null;
+    // Last compiled formula — used to detect formula changes vs engine setting changes
+    private _lastCompiledFormula: string | null = null;
+
     private lastRenderState = {
         pos: new THREE.Vector3(),
         quat: new THREE.Quaternion(),
@@ -169,8 +186,6 @@ export class FractalEngine {
         this.pipeline = new RenderPipeline();
         this.pickingCtrl = new PickingController(this.materials, this.sceneCtrl, this.virtualSpace, this.pipeline);
         
-        this.videoExporter = new VideoExporter(this);
-        
         this.pipeline.updateQuality(initialConfig.quality as QualityState);
 
         this.uniformManager = new UniformManager(this.materials.mainUniforms, this.virtualSpace, this.pipeline);
@@ -182,24 +197,26 @@ export class FractalEngine {
         
         this.bindEvents();
         this.isBooted = false;
-        
+
+        // Bind bucket renderer to this engine instance
+        bucketRenderer.init(this);
+
         this.markInteraction();
     }
 
-    public handleInput(event: any) {
+    public handleInput(event: EngineInputEvent) {
         if (!this.activeCamera) return;
-        const { type, dx, dy, delta } = event;
         this.markInteraction();
 
-        if (type === 'wheel') {
+        if (event.type === 'wheel') {
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.activeCamera.quaternion);
-            this.activeCamera.position.addScaledVector(forward, delta * this.inputState.zoomSpeed * this.lastMeasuredDistance);
+            this.activeCamera.position.addScaledVector(forward, event.delta * this.inputState.zoomSpeed * this.lastMeasuredDistance);
             this.resetAccumulation();
-        } else if (type === 'drag') {
-            const up = new THREE.Vector3(0, 1, 0); 
+        } else if (event.type === 'drag') {
+            const up = new THREE.Vector3(0, 1, 0);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.activeCamera.quaternion);
-            const qPitch = new THREE.Quaternion().setFromAxisAngle(right, dy * this.inputState.rotateSpeed);
-            const qYaw = new THREE.Quaternion().setFromAxisAngle(up, -dx * this.inputState.rotateSpeed);
+            const qPitch = new THREE.Quaternion().setFromAxisAngle(right, event.dy * this.inputState.rotateSpeed);
+            const qYaw = new THREE.Quaternion().setFromAxisAngle(up, -event.dx * this.inputState.rotateSpeed);
             this.activeCamera.quaternion.multiplyQuaternions(qYaw, this.activeCamera.quaternion);
             this.activeCamera.quaternion.multiplyQuaternions(this.activeCamera.quaternion, qPitch);
             this.resetAccumulation();
@@ -210,15 +227,22 @@ export class FractalEngine {
         this.lastInteractionTime = performance.now();
     }
 
-    public bootWithConfig(config: ShaderConfig) {
-        if (this.isBooted) return;
-        console.log("⚡ FractalEngine: Booting...");
-        
+    /** Pre-load config without triggering compilation. Used by worker INIT
+     *  so gradients/uniforms are ready before the deferred BOOT message arrives. */
+    public preloadConfig(config: ShaderConfig) {
         this.configManager.config = { ...config };
         this.configManager.rebuildMap();
-        
+    }
+
+    public bootWithConfig(config: ShaderConfig) {
+        if (this.isBooted) return;
+        if (import.meta.env.DEV) console.log("⚡ FractalEngine: Booting...");
+
+        this.configManager.config = { ...config };
+        this.configManager.rebuildMap();
+
         this.isBooted = true;
-        this.scheduleCompile(); 
+        this.scheduleCompile();
     }
 
     public get mainMaterial() { return this.materials.mainMaterial; }
@@ -238,7 +262,6 @@ export class FractalEngine {
     private bindEvents() {
         FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noReset }) => { this.setUniform(key, value, noReset); });
         FractalEvents.on(FRACTAL_EVENTS.CONFIG, (newConfig) => { this.updateConfigInternal(newConfig); });
-        FractalEvents.on(FRACTAL_EVENTS.GRADIENT, ({ stops, layer }) => { this.materials.setGradient(stops, layer); this.resetAccumulation(); });
         FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => { this.resetAccumulation(); });
         FractalEvents.on(FRACTAL_EVENTS.OFFSET_SHIFT, ({ x, y, z }) => { this.virtualSpace.move(x, y, z); this.resetAccumulation(); });
         FractalEvents.on(FRACTAL_EVENTS.OFFSET_SET, (v) => {
@@ -279,7 +302,7 @@ export class FractalEngine {
         this.markInteraction(); 
         this.pipeline?.resetAccumulation(); 
     }
-    public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); this.resetAccumulation(); }
+    public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); }
     
     public registerCamera(camera: THREE.Camera) { 
         this.sceneCtrl.registerCamera(camera); 
@@ -313,13 +336,17 @@ export class FractalEngine {
              return;
         }
 
-        const { rebuildNeeded, uniformUpdate, modeChanged } = this.configManager.update(newConfig, this.state);
+        const { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset } = this.configManager.update(newConfig, this.state);
 
         if (newConfig.maxSteps !== undefined) {
              this.setUniform('uMaxSteps', newConfig.maxSteps);
         }
-        
-        if (modeChanged) {
+
+        if (modeChanged && !rebuildNeeded) {
+            // Only do immediate mode swap if no rebuild is needed.
+            // If rebuildNeeded, performCompilation handles the mode switch via async path.
+            // Doing it here would trigger lazy synchronous PT compilation in getMaterial(),
+            // causing a 14s GPU freeze (fxc on Windows).
             const mode = this.configManager.config.renderMode;
             const mat = this.materials.getMaterial(mode || 'Direct');
             this.sceneCtrl.setMaterial(mat);
@@ -339,106 +366,206 @@ export class FractalEngine {
                 if (this.configManager.config.pipeline) {
                     this.materials.syncModularUniforms(this.configManager.config.pipeline);
                 }
-                this.resetAccumulation();
-            } else if (Object.keys(newConfig).length > 0) {
+                // Only reset accumulation if a non-noReset param actually changed.
+                // Post-process params (bloom, CA, color grading) are noReset and should
+                // not disrupt the accumulated buffer.
+                if (needsAccumReset) {
+                    this.resetAccumulation();
+                }
+            } else if (Object.keys(newConfig).length > 0 && needsAccumReset) {
                 this.resetAccumulation();
             }
         }
     }
     
     private scheduleCompile() {
-        console.log("FractalEngine: scheduleCompile called");
-        if (this.compileTimer) {
-            clearTimeout(this.compileTimer);
-        }
         this._isCompiling = true;
+        this._compileGeneration++;
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Shader...");
-        
-        // Wait for renderer to be available before compiling
-        // Also add a small delay to allow React to render the spinner before blocking
-        const waitForRenderer = async () => {
-            // Give React a frame to render the spinner
-            await new Promise(resolve => requestAnimationFrame(resolve));
-            while (!this.renderer) {
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-            this.performCompilation();
-        };
-        
-        waitForRenderer();
+
+        // Debounce: coalesce rapid config updates (e.g. loadPreset fires many feature setters)
+        // into a single compile. Each call resets the timer; only the last one fires.
+        if (this._compileTimer !== null) {
+            clearTimeout(this._compileTimer);
+        }
+        this._compileTimer = setTimeout(() => {
+            this._compileTimer = null;
+            void (async () => {
+                // Wait for renderer if not yet available (initial boot)
+                while (!this.renderer) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
+                try {
+                    await this.performCompilation();
+                } catch (e) {
+                    console.error('[FractalEngine] performCompilation failed:', e);
+                    this._isCompiling = false;
+                    FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
+                }
+            })();
+        }, 0);
     }
 
     private async performCompilation() {
-        console.log("FractalEngine: performCompilation started");
-        if (!this.renderer) {
-            console.log("FractalEngine: No renderer available");
-            return;
-        }
-        
-        const startTime = performance.now();
+        if (!this.renderer) return;
+        const t0 = performance.now();
+        const generation = this._compileGeneration;
 
-        // Ensure pipeline is properly sized before compilation
-        // Use default size if no resolution is set yet
         if (this.mainUniforms.uResolution.value.x === 0 || this.mainUniforms.uResolution.value.y === 0) {
             this.mainUniforms.uResolution.value.set(1024, 768);
         }
-        console.log("FractalEngine: Resizing pipeline to", this.mainUniforms.uResolution.value.x, "x", this.mainUniforms.uResolution.value.y);
         this.pipeline.resize(
-            Math.floor(this.mainUniforms.uResolution.value.x), 
+            Math.floor(this.mainUniforms.uResolution.value.x),
             Math.floor(this.mainUniforms.uResolution.value.y)
         );
 
-        console.log("FractalEngine: Updating materials");
-        this.materials.updateConfig(this.configManager.config);
-        this.materials.syncConfigUniforms(this.configManager.config);
-        if (this.configManager.config.pipeline) this.materials.syncModularUniforms(this.configManager.config.pipeline);
-        
-        await new Promise(resolve => setTimeout(resolve, 0));
+        const config = this.configManager.config;
+        if (config.pipeline) this.materials.syncModularUniforms(config.pipeline);
+        // Derive mode from DDFS lighting state (same logic as MaterialController)
+        const lighting = config.lighting as any;
+        const mode: 'Direct' | 'PathTracing' = (lighting && lighting.renderMode === 1.0) ? 'PathTracing' : (config.renderMode || 'Direct');
 
-        const mode = this.configManager.config.renderMode || 'Direct';
-        const mat = this.materials.getMaterial(mode);
-        this.sceneCtrl.setMaterial(mat);
-
-        this.resetAccumulation();
-        
-        // For first run, we need to render even if needsUpdate isn't set
-        // This ensures the shader is actually compiled on first boot
-        const currentMaterial = mode === 'Direct' ? this.materials.materialDirect : this.materials.materialPT;
-        
-        // Check if we need to compile the shader
-        const needsCompile = !this.hasCompiledShader || currentMaterial.needsUpdate;
-        
-        if (needsCompile) {
-            console.log("FractalEngine: Triggering GPU shader compilation");
-            
-            // CRITICAL: Render directly to MRT target to compile shader for MRT configuration
-            // This ensures the shader is compiled with the correct output layout (including depth)
-            // and prevents recompilation when physics probe reads from the depth buffer
-            // We render twice to ensure the shader is fully compiled and cached
-            this.pipeline.render(this.renderer);
-            await new Promise(resolve => setTimeout(resolve, 20));
-            this.pipeline.render(this.renderer);
-            
-            // Give renderer time to complete compilation and cache the shader
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
-            this.hasCompiledShader = true;
-            currentMaterial.needsUpdate = false;
-        } else {
-            console.log("FractalEngine: Shader unchanged - skipping GPU compilation");
+        // Lazy-detect KHR_parallel_shader_compile (Chrome/ANGLE: yes, Firefox: no).
+        // Without it, compileAsync degrades to synchronous — two-stage gives no benefit.
+        // Firefox also doesn't use fxc, so its shader compiler is fast enough for single-stage.
+        if (this._hasParallelCompile === null) {
+            const gl = this.renderer.getContext();
+            this._hasParallelCompile = !!gl.getExtension('KHR_parallel_shader_compile');
         }
-        
+
+        // Decide compile strategy:
+        // - keepCurrent: have a compiled shader, same formula → keep it on screen,
+        //   build full shader async, swap when done. No preview downgrade.
+        // - twoStage: first boot or formula change → show preview while full compiles
+        // - singleStage: no parallel compile or lighting already off → synchronous
+        const interlaceId = (config as any).interlace?.interlaceCompiled
+            ? ((config as any).interlace?.interlaceFormula ?? '')
+            : '';
+        const compiledFormulaKey = config.formula + (interlaceId ? '+' + interlaceId : '');
+        const formulaChanged = compiledFormulaKey !== this._lastCompiledFormula;
+        const keepCurrent = this.hasCompiledShader && this._hasParallelCompile && !formulaChanged;
+
+        if (!keepCurrent) {
+            // compilePreview returns false if lighting is already off (preview === full)
+            const useTwoStage = this._hasParallelCompile && this.materials.compilePreview(config);
+            if (!useTwoStage) {
+                // Single-stage synchronous: no parallel compile or lighting already off
+                this.materials.updateConfig(config);
+            }
+
+            const needsCompile = !this.hasCompiledShader || this.materials.shaderDirty;
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            // Sync uniforms so preview shader renders with correct parameters
+            // (fractal power, iterations, colors, etc.) instead of defaults.
+            this.materials.syncConfigUniforms(config);
+            const activeMat = this.materials.getMaterial(mode);
+            this.sceneCtrl.setMaterial(activeMat);
+            this.resetAccumulation();
+
+            if (needsCompile) {
+                this.pipelineRender(this.renderer);
+                await new Promise(resolve => setTimeout(resolve, 20));
+                this.pipelineRender(this.renderer);
+                if (useTwoStage) await new Promise(resolve => setTimeout(resolve, 50));
+
+                this.hasCompiledShader = true;
+                this._lastCompiledFormula = compiledFormulaKey;
+                this.materials.shaderDirty = false;
+                this.lastCompileDuration = (performance.now() - t0) / 1000;
+            }
+
+            if (!useTwoStage) {
+                // Single-stage done
+                this.lastCompileDuration = (performance.now() - t0) / 1000;
+                if (import.meta.env.DEV) console.log(`[Compile] Single-stage: ${(this.lastCompileDuration * 1000).toFixed(0)}ms`);
+                this._isCompiling = false;
+                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
+                FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
+                if (this.lastCompileDuration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, this.lastCompileDuration);
+                return;
+            }
+        } else {
+            // keepCurrent: sync uniforms so current shader has up-to-date values,
+            // but don't touch the active material or scene mesh
+            this.materials.syncConfigUniforms(config);
+            this.resetAccumulation();
+        }
+
+        // Current or preview shader is live. Proceed to async Stage 2.
         this._isCompiling = false;
-        this.compileTimer = null;
-        
-        const duration = (performance.now() - startTime) / 1000;
-        this.lastCompileDuration = duration;
-        console.log(`[Shader Compiled] Time: ${duration.toFixed(3)}s`);
+        FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, keepCurrent ? "Compiling Shader..." : "Compiling Lighting...");
+
+        // Yield 3 animation frames — each lets handleRenderTick run (compute + blit + flush).
+        for (let i = 0; i < 3; i++) {
+            if (typeof requestAnimationFrame === 'function') {
+                await new Promise(resolve => requestAnimationFrame(resolve));
+            } else {
+                await new Promise(resolve => setTimeout(resolve, 16));
+            }
+        }
+
+        // Check if a newer compile was triggered while we were yielding
+        if (generation !== this._compileGeneration) {
+            // Ensure IS_COMPILING false is emitted so BOOTED can fire
+            this._isCompiling = false;
+            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
+            return;
+        }
+
+        // ── STAGE 2: Full shader (async compile on dummy scene) ──
+        const tGenStart = performance.now();
+        const fullMat = this.materials.buildFullMaterial(config);
+        const tGenEnd = performance.now();
+        if (import.meta.env.DEV) console.log(`[Compile] JS generation: ${(tGenEnd - tGenStart).toFixed(0)}ms`);
+
+        // Lazy-init the dummy compile scene (reused across compiles)
+        if (!this._compileScene) {
+            this._compileScene = new THREE.Scene();
+            this._compileMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+            this._compileMesh.frustumCulled = false;
+            this._compileScene.add(this._compileMesh);
+            this._compileCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        }
+        this._compileMesh!.material = fullMat;
+
+        const tGpuStart = performance.now();
+        try {
+            const compileTarget = this.pipeline.getCompileTarget();
+            if (compileTarget) this.renderer.setRenderTarget(compileTarget);
+            await this.renderer.compileAsync(this._compileScene!, this._compileCamera!);
+            if (compileTarget) this.renderer.setRenderTarget(null);
+        } catch (e) {
+            console.warn('[Compile] compileAsync failed, falling back to sync:', e);
+            this.renderer.setRenderTarget(null);
+            this.renderer.compile(this._compileScene!, this._compileCamera!);
+        }
+        const tGpuEnd = performance.now();
+        if (import.meta.env.DEV) console.log(`[Compile] GPU compile: ${(tGpuEnd - tGpuStart).toFixed(0)}ms`);
+
+        // Check if a newer compile was triggered while we were compiling
+        if (generation !== this._compileGeneration) {
+            fullMat.dispose();
+            this._isCompiling = false;
+            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
+            return;
+        }
+
+        // Hot-swap: replace preview/current material with fully compiled material
+        this.materials.swapFullMaterial(fullMat);
+        this.sceneCtrl.setMaterial(this.materials.getMaterial(mode));
+        this.resetAccumulation();
+        this.materials.shaderDirty = false;
+        this._lastCompiledFormula = compiledFormulaKey;
+        this.pipelineRender(this.renderer);
+
+        const totalElapsed = performance.now() - t0;
+        this.lastCompileDuration = totalElapsed / 1000;
+        if (import.meta.env.DEV) console.log(`[Compile] Done — two-stage: ${totalElapsed.toFixed(0)}ms`);
+        if (totalElapsed / 1000 > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, totalElapsed / 1000);
 
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-        if (duration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, duration);
         FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
-        console.log("FractalEngine: performCompilation completed");
     }
 
     public setUniform(key: string, value: any, noReset: boolean = false) {
@@ -466,45 +593,59 @@ export class FractalEngine {
         if (isInteracting) this.markInteraction();
 
         this._totalFrames++;
-        this.mainUniforms[Uniforms.FrameCount].value = this._totalFrames;
+        // During bucket rendering, use per-bucket accumulation count for frame count.
+        // This gives each bucket a deterministic R2 noise sequence starting from 1,
+        // making DoF and stochastic sampling reproducible regardless of bucket order.
+        this.mainUniforms[Uniforms.FrameCount].value = this.state.isBucketRendering
+            ? this.pipeline.accumulationCount
+            : this._totalFrames;
 
         if (this.renderer && this.state.isBucketRendering) {
             bucketRenderer.update(this.renderer, this.state.bucketConfig);
         }
         
         const targetFov = this.state.optics?.camFov ?? 60.0;
-        const isOrbit = this.state.cameraMode === 'Orbit';
 
-        this.virtualSpace.updateSmoothing(camera, targetFov, delta, isOrbit, this.shouldSnapCamera, isInteracting);
+        this.virtualSpace.updateSmoothing(camera, targetFov, delta, this.shouldSnapCamera, isInteracting);
         
         if (this.shouldSnapCamera) {
             this.shouldSnapCamera = false;
-            this.pipeline.resetAccumulation();
+            if (!this.state.isBucketRendering) this.pipeline.resetAccumulation();
         }
 
         const currentOffsetState = this.sceneOffset;
         const prevRenderOffset = this.lastRenderState.offset;
         const offsetChanged = Math.abs(currentOffsetState.x - prevRenderOffset.x) > 1e-9 || Math.abs(currentOffsetState.y - prevRenderOffset.y) > 1e-9 || Math.abs(currentOffsetState.z - prevRenderOffset.z) > 1e-9;
-        
+
         const sPos = this.virtualSpace.smoothedPos;
         const sQuat = this.virtualSpace.smoothedQuat;
         const sFov = this.virtualSpace.smoothedFov;
 
-        if (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged || this.dirty) {
+        // During bucket rendering, do NOT reset accumulation on camera drift —
+        // the bucket renderer manages its own per-bucket accumulation cycle.
+        if (!this.state.isBucketRendering && (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged || this.dirty)) {
             this.pipeline.resetAccumulation(); this.dirty = false;
+        }
+        if (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged) {
             this.lastRenderState.pos.copy(sPos); this.lastRenderState.quat.copy(sQuat);
             this.lastRenderState.offset = { ...currentOffsetState };
             this.lastRenderState.fov = sFov;
         }
+        if (!this.state.isBucketRendering && this.dirty) this.dirty = false;
 
         const cam = camera as THREE.PerspectiveCamera;
         this.sceneCtrl.updateFallback(sPos, sQuat, sFov, cam.aspect);
         this.syncFrame(this.sceneCtrl.fallbackCamera, state);
     }
 
+    /** Helper: call pipeline.render with engine's uniforms/scene/camera */
+    public pipelineRender(renderer: THREE.WebGLRenderer) {
+        this.pipeline.render(renderer, this.mainUniforms, this.mainScene, this.mainCamera);
+    }
+
     // New: Compute Phase (Updates FBOs)
     public compute(renderer: THREE.WebGLRenderer) {
-        if (!this.isBooted || this._isCompiling || this.state.isExporting) return;
+        if (!this.isBooted || this.state.isExporting) return;
         
         if (this.isPaused && !this.state.isBucketRendering) {
              const timeSinceInteraction = performance.now() - this.lastInteractionTime;
@@ -513,11 +654,12 @@ export class FractalEngine {
 
         // Hold accumulation during camera interaction ONLY if DOF is disabled
         // If DOF is enabled, continue rendering to show blur preview (with stable per-pixel noise)
+        // During bucket rendering, never hold — the bucket renderer drives the pipeline.
         const dofEnabled = (this.state.optics?.dofStrength ?? 0) > 0.0001;
         const wasHolding = this.pipeline.isHolding;
-        const shouldHold = !dofEnabled && (this.state.isCameraInteracting || this.state.isGizmoInteracting);
+        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (this.state.isCameraInteracting || this.state.isGizmoInteracting);
         this.pipeline.setHold(shouldHold);
-        
+
         // If we just started holding, reset accumulation for clean frame
         if (shouldHold && !wasHolding) {
             this.pipeline.resetAccumulation();
@@ -533,8 +675,15 @@ export class FractalEngine {
             this.mainUniforms.uJitter.value.set(0,0);
         }
 
+        // SSAA: During bucket rendering at upscale > 1x, override uPixelSizeBase to viewport value.
+        // UniformManager recomputes it from the upscaled resolution each frame, but we want the
+        // same trace precision/normal epsilon/shadow bias as the viewport for true supersampling.
+        if (this.state.isBucketRendering && bucketRenderer.savedPixelSizeBase > 0) {
+            this.mainUniforms[Uniforms.PixelSizeBase].value = bucketRenderer.savedPixelSizeBase;
+        }
+
         // Execute Render Pipeline
-        this.pipeline.render(renderer);
+        this.pipelineRender(renderer);
     }
     
     // Updated: Only used for legacy or explicit blit calls (e.g. video export)
@@ -542,7 +691,7 @@ export class FractalEngine {
         // Forward compat stub: If called directly, run compute then blit to default
         this.compute(renderer);
         
-        // This part is now handled by MandelbulbScene for R3F, but kept for Bucket/Export
+        // Blit to screen — used for Bucket/Export paths
         const outputTex = this.pipeline.getOutputTexture();
         if (outputTex) {
             this.materials.displayMaterial.uniforms.map.value = outputTex;
@@ -564,21 +713,26 @@ export class FractalEngine {
         this.renderer.clear();
         
         this.materials.displayMaterial.uniforms.map.value = tex;
+        const oldRes = this.materials.displayMaterial.uniforms.uResolution.value.clone();
         this.materials.displayMaterial.uniforms.uResolution.value.set(w, h);
         const oldEncode = this.materials.displayMaterial.uniforms.uEncodeOutput.value;
-        this.materials.displayMaterial.uniforms.uEncodeOutput.value = 1.0; 
-        
+        this.materials.displayMaterial.uniforms.uEncodeOutput.value = 1.0;
+
         this.renderer.render(this.sceneCtrl.displayScene, this.sceneCtrl.mainCamera);
         const buffer = new Uint8Array(w * h * 4);
         this.renderer.readRenderTargetPixels(target, 0, 0, w, h, buffer);
         this.renderer.setRenderTarget(originalTarget);
+        this.materials.displayMaterial.uniforms.uResolution.value.copy(oldRes);
         this.materials.displayMaterial.uniforms.uEncodeOutput.value = oldEncode;
         target.dispose();
         
-        const canvas2d = document.createElement('canvas');
+        // Use OffscreenCanvas in worker contexts, DOM canvas otherwise
+        const canvas2d = (typeof document !== 'undefined')
+            ? document.createElement('canvas')
+            : new OffscreenCanvas(w, h);
         canvas2d.width = w;
         canvas2d.height = h;
-        const ctx = canvas2d.getContext('2d');
+        const ctx = canvas2d.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
         if (!ctx) return null;
         const imageData = ctx.createImageData(w, h);
         const stride = w * 4;
@@ -588,12 +742,15 @@ export class FractalEngine {
             imageData.data.set(buffer.subarray(srcStart, srcStart + stride), destRowStart);
         }
         ctx.putImageData(imageData, 0, 0);
-        return new Promise(resolve => canvas2d.toBlob(resolve, 'image/png'));
+        if (canvas2d instanceof OffscreenCanvas) {
+            return canvas2d.convertToBlob({ type: 'image/png' });
+        }
+        return new Promise(resolve => (canvas2d as HTMLCanvasElement).toBlob(resolve, 'image/png'));
     }
 
     public syncFrame(camera: THREE.Camera, state: any) {
         if (!this.state.optics && !this.state.lighting) return;
-        this.uniformManager.syncFrame(camera, state, this.renderer, this.state, this.state.optics || {} as any, this.state.lighting || {} as any, this.modulations, this.materials);
+        this.uniformManager.syncFrame(camera, state, this.renderer, this.state, this.state.optics || {} as any, this.state.lighting || {} as any, this.modulations, this.materials, this.state.geometry);
     }
 
     public measureDistanceAtScreenPoint(x: number, y: number, renderer: THREE.WebGLRenderer, camera: THREE.Camera): number {
@@ -649,20 +806,24 @@ export class FractalEngine {
     public checkHalfFloatAlphaSupport(): boolean {
         // Create a temporary canvas to test WebGL capabilities
         try {
-            const testCanvas = document.createElement('canvas');
+            // Use OffscreenCanvas in worker contexts, DOM canvas otherwise
+            const testCanvas = (typeof document !== 'undefined')
+                ? document.createElement('canvas')
+                : new OffscreenCanvas(1, 1);
             testCanvas.width = 1;
             testCanvas.height = 1;
             
             // Try WebGL2 first (Three.js uses WebGL2 by default)
-            let gl: WebGLRenderingContext | WebGL2RenderingContext | null = testCanvas.getContext('webgl2');
+            let gl = testCanvas.getContext('webgl2') as WebGL2RenderingContext | null;
             let halfFloatType: number;
-            
+
             if (gl) {
                 // WebGL2 has built-in HalfFloat support
-                halfFloatType = (gl as WebGL2RenderingContext).HALF_FLOAT;
+                halfFloatType = gl.HALF_FLOAT;
             } else {
                 // Fallback to WebGL1 with extension
-                gl = testCanvas.getContext('webgl') as WebGLRenderingContext | null;
+                const gl1 = testCanvas.getContext('webgl') as WebGLRenderingContext | null;
+                gl = gl1 as any;
                 if (!gl) return false;
                 
                 const halfFloatExt = gl.getExtension('OES_texture_half_float');
@@ -686,7 +847,7 @@ export class FractalEngine {
             gl.deleteFramebuffer(framebuffer);
             gl.deleteTexture(texture);
 
-            console.log(`[GMT] HalfFloat16 Alpha Support: ${isComplete ? 'YES' : 'NO'}`);
+            if (import.meta.env.DEV) console.log(`[GMT] HalfFloat16 Alpha Support: ${isComplete ? 'YES' : 'NO'}`);
             return isComplete;
         } catch (e) {
             console.warn('[GMT] HalfFloat alpha support check failed:', e);
@@ -695,4 +856,15 @@ export class FractalEngine {
     }
 }
 
-export const engine = new FractalEngine();
+// Lazy singleton — allows future replacement with WorkerProxy for off-thread rendering
+let _engine: FractalEngine | null = null;
+
+export function getEngine(): FractalEngine {
+    if (!_engine) {
+        _engine = new FractalEngine();
+    }
+    return _engine;
+}
+
+/** @deprecated Use getEngine() for new code. Kept for backward compatibility with existing imports. */
+export const engine = getEngine();

@@ -67,29 +67,33 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         }
     }, [mode, scrollLeft]);
 
-    // Auto-scroll logic
+    // Auto-scroll logic — read scrollLeft via ref to avoid re-trigger cycle
+    const scrollLeftRef = useRef(scrollLeft);
+    scrollLeftRef.current = scrollLeft;
+
     useEffect(() => {
         if (!isPlaying || !scrollContainerRef.current) return;
-        
+
         const containerWidth = scrollContainerRef.current.clientWidth;
         const playheadPos = TIMELINE_SIDEBAR_WIDTH + currentFrame * frameWidth;
-        
-        const visibleStart = scrollLeft + TIMELINE_SIDEBAR_WIDTH;
-        const visibleEnd = scrollLeft + containerWidth;
-        
+        const currentScroll = scrollLeftRef.current;
+
+        const visibleStart = currentScroll + TIMELINE_SIDEBAR_WIDTH;
+        const visibleEnd = currentScroll + containerWidth;
+
         const isOffscreenRight = playheadPos > visibleEnd;
         const isOffscreenLeft = playheadPos < visibleStart;
 
         if (isOffscreenRight || isOffscreenLeft) {
              const newScroll = playheadPos - (containerWidth / 2);
-             
+
              if (mode === 'DopeSheet') {
                 scrollContainerRef.current.scrollLeft = Math.max(0, newScroll);
              } else {
                 setScrollLeft(Math.max(0, newScroll));
              }
         }
-    }, [currentFrame, isPlaying, mode, scrollLeft, frameWidth]);
+    }, [currentFrame, isPlaying, mode, frameWidth]);
 
     useEffect(() => {
         if (!scrollContainerRef.current) return;

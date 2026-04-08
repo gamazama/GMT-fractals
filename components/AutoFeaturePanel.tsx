@@ -1,20 +1,25 @@
 
-import React, { useMemo, useState } from 'react';
-import { featureRegistry, ParamConfig, ParamCondition, CustomUIConfig } from '../engine/FeatureSystem';
+import React, { useMemo, useState, Suspense } from 'react';
+import { featureRegistry, ParamConfig, ParamCondition, CustomUIConfig, GroupConfig } from '../engine/FeatureSystem';
 import { useFractalStore } from '../store/fractalStore';
 import Slider, { DraggableNumber } from './Slider';
 import ToggleSwitch from './ToggleSwitch';
 import SmallColorPicker from './SmallColorPicker';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import Dropdown from './Dropdown';
-import AdvancedGradientEditor from './AdvancedGradientEditor';
-import Vector2Pad from './Vector2Pad';
-import { Vector3Input } from './Vector3Input'; 
-import { Knob } from './Knob'; 
+import { Vector2Input, Vector3Input, Vector4Input } from './vector-input';
+import type { BaseVectorInputProps } from './vector-input/types';
+import { Knob } from './Knob';
 import { collectHelpIds } from '../utils/helpUtils';
 import { componentRegistry } from './registry/ComponentRegistry';
 import { AlertIcon, CloseIcon } from './Icons';
+
+// Code-split: gradient editor only renders for gradient params
+const AdvancedGradientEditor = React.lazy(() => import('./AdvancedGradientEditor'));
 import { FractalEvents } from '../engine/FractalEvents';
+import { SectionLabel } from './SectionLabel';
+import { CollapsibleSection } from './CollapsibleSection';
+import { StatusDot } from './StatusDot';
 import { EngineFeatureRow, EngineStatus } from './panels/engine/EngineFeatureRow';
 import * as THREE from 'three';
 
@@ -26,6 +31,7 @@ interface AutoFeaturePanelProps {
     disabledParams?: string[];
     excludeParams?: string[];
     whitelistParams?: string[]; // New: Render ONLY these params, ignore group
+    labelOverrides?: Record<string, string>; // Override labels for specific params by key
     variant?: 'default' | 'dense';
     // New Props for Engine Panel Interception
     forcedState?: any; 
@@ -122,8 +128,8 @@ const getMapping = (config: ParamConfig) => {
 };
 
 export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({ 
-    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], variant = 'default',
-    forcedState, onChangeOverride, pendingChanges 
+    featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], labelOverrides = {}, variant = 'default',
+    forcedState, onChangeOverride, pendingChanges
 }) => {
     const feature = featureRegistry.get(featureId);
     // Use forcedState if provided (for Engine Panel pending changes), otherwise fallback to Store
@@ -133,18 +139,23 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     // Access Live Modulations
     const liveModulations = useFractalStore(state => state.liveModulations);
 
-    const globalState = useFractalStore(); 
-    const actions = useFractalStore();
+    // Read full store imperatively for condition evaluation (avoids full-store subscription re-renders)
+    const globalStateRef = React.useRef(useFractalStore.getState());
+    globalStateRef.current = useFractalStore.getState();
+    const globalState = globalStateRef.current;
+    const actions = globalState;
+    const advancedMode = useFractalStore(s => s.advancedMode);
     const openGlobalMenu = useFractalStore(s => s.openContextMenu);
     const showHints = useFractalStore(s => s.showHints);
     
     const [confirming, setConfirming] = useState<{key: string, value: any, message: string} | null>(null);
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
     const setterName = useMemo(() => `set${featureId.charAt(0).toUpperCase() + featureId.slice(1)}`, [featureId]);
 
     const handleUpdate = (key: string, value: any) => {
         if (isDisabled || disabledParams.includes(key)) return;
-        
+
         // Intercept for Engine Panel
         if (onChangeOverride) {
             onChangeOverride(key, value);
@@ -152,12 +163,32 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         }
 
         const config = feature!.params[key];
+
+        // Route compile-time params to Engine Panel instead of updating store directly
+        if (config?.onUpdate === 'compile') {
+            // Open engine panel first, then emit after it has time to mount its listener
+            useFractalStore.getState().movePanel('Engine', 'left');
+            setTimeout(() => FractalEvents.emit('engine_queue', { featureId, param: key, value }), 50);
+            return;
+        }
+
         if (config?.confirmation && value === true && sliceState[key] === false) {
              setConfirming({ key, value, message: config.confirmation });
              return;
         }
         const setter = (actions as any)[setterName];
-        if (setter) setter({ [key]: value });
+        if (setter) {
+            // Decompose composed vec4/vec3/vec2 back into individual scalar fields
+            if (config?.composeFrom && value && typeof value === 'object') {
+                const components = config.composeFrom;
+                const vals: Record<string, number> = { [components[0]]: value.x, [components[1]]: value.y };
+                if ('z' in value && components[2]) vals[components[2]] = value.z;
+                if ('w' in value && components[3]) vals[components[3]] = value.w;
+                setter(vals);
+            } else {
+                setter({ [key]: value });
+            }
+        }
     };
 
     const handleConfirmedUpdate = () => {
@@ -196,8 +227,26 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
     if (!feature || !sliceState) return null;
     
-    const renderControl = (key: string, config: ParamConfig) => {
-        const val = sliceState[key] ?? config.default;
+    const renderControl = (key: string, config_raw: ParamConfig) => {
+        // Apply dynamic config overrides from DDFS (computed from slice state)
+        let config = config_raw;
+        if (config_raw.dynamicConfig) {
+            const overrides = config_raw.dynamicConfig(sliceState);
+            if (overrides) config = { ...config_raw, ...overrides };
+        }
+        // Static label overrides take final precedence
+        if (labelOverrides[key]) {
+            config = config === config_raw ? { ...config_raw, label: labelOverrides[key] } : { ...config, label: labelOverrides[key] };
+        }
+        // For composed vec3/vec2, always assemble from individual scalar fields
+        let val;
+        if (config.composeFrom) {
+            const c = config.composeFrom;
+            if (c.length === 3) val = new THREE.Vector3(sliceState[c[0]] ?? 0, sliceState[c[1]] ?? 0, sliceState[c[2]] ?? 0);
+            else if (c.length === 2) val = new THREE.Vector2(sliceState[c[0]] ?? 0, sliceState[c[1]] ?? 0);
+        } else {
+            val = sliceState[key] ?? config.default;
+        }
         const isParamDisabled = isDisabled || disabledParams.includes(key);
         
         // Engine Panel Dense Rendering Logic
@@ -252,7 +301,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             } else {
                 return (
                     <div className={`flex items-center justify-between px-3 py-1 bg-gray-800/20 mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                        <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{config.label}</label>
+                        <SectionLabel>{config.label}</SectionLabel>
                         <SmallColorPicker color={hex} onChange={(c) => handleUpdate(key, c)} label={config.label} />
                     </div>
                 );
@@ -260,27 +309,35 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         }
 
         if (config.type === 'boolean') {
+            const boolCompileIndicator = config.onUpdate === 'compile' ? (
+                <span className="ml-1.5" title={val ? 'Compiled & Active' : 'Compiled Off — toggle to queue change'}>
+                    <StatusDot status={val ? 'active' : 'off'} />
+                </span>
+            ) : null;
+
             // UI: CHECKBOX (Fallback for explicit ui='checkbox' in Default mode)
             if (config.ui === 'checkbox') {
                  return (
                      <div className={isParamDisabled ? 'opacity-30 pointer-events-none' : ''}>
-                        <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} variant="dense" />
+                        <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} variant="dense" labelSuffix={boolCompileIndicator} />
                      </div>
                  );
             }
-            
-            // UI: TOGGLE SWITCH (Default) - Tighter spacing (mb-1 instead of mb-2 mt-1)
+
+            // UI: TOGGLE SWITCH (Default)
             return (
-                <div className={`mb-1 ${!!config.parentId ? "ml-1 p-1 pl-2 bg-white/5 border-l-2 border-white/10 rounded-r" : ""}`}>
-                    <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} options={config.options} disabled={isParamDisabled} />
+                <div>
+                    <ToggleSwitch label={config.label} value={val} onChange={(v) => handleUpdate(key, v)} options={config.options} disabled={isParamDisabled} labelSuffix={boolCompileIndicator} />
                 </div>
             );
         }
         
         if (config.type === 'float' || config.type === 'int') {
-            // Add compile indicator for options dropdowns with onUpdate: 'compile'
+            // Compile indicator for options dropdowns with onUpdate: 'compile'
             const compileIndicator = config.onUpdate === 'compile' ? (
-                <span className="text-[8px] text-amber-400 font-bold ml-1" title="Requires shader recompile">⚡</span>
+                <span className="ml-1.5" title="Compile-time setting — changes queue to Engine Panel">
+                    <StatusDot status="active" />
+                </span>
             ) : null;
             
             if (config.options) return (
@@ -312,16 +369,47 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const trackId = `${featureId}.${key}`;
             const liveValue = liveModulations[trackId];
             
-            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={val !== config.default} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} /></div>;
+            // Highlight if value differs from default, or if this param has a visibility condition (it's contextually relevant when shown)
+            const isHighlighted = val !== config.default || !!config.condition;
+            // Conditional params: skip entry animation to prevent grey-box on re-mount (CSS animation restart issue)
+            const conditionalClass = config.condition ? '!animate-none !overflow-visible' : '';
+            return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={isHighlighted} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} className={conditionalClass} /></div>;
         }
         
-        if (config.type === 'vec2') return <div className={`mb-2 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Pad label={config.label} valueX={val?.x ?? 0} valueY={val?.y ?? 0} min={config.min ?? -1} max={config.max ?? 1} onChange={(x, y) => handleUpdate(key, { x, y })} /></div>;
+        if (config.type === 'vec2') {
+            const x = val?.x ?? config.default?.x ?? 0;
+            const y = val?.y ?? config.default?.y ?? 0;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
+        }
         if (config.type === 'vec3') {
-             const v3 = val instanceof THREE.Vector3 ? val : new THREE.Vector3(val.x, val.y, val.z);
-             const trackKeys = config.composeFrom ? config.composeFrom.map(k => `${featureId}.${k}`) : undefined;
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} /></div>;
+             const x = val?.x ?? config.default?.x ?? 0;
+             const y = val?.y ?? config.default?.y ?? 0;
+             const z = val?.z ?? config.default?.z ?? 0;
+             const v3 = new THREE.Vector3(x, y, z);
+             // Generate track keys for animation (x, y, z components) - using underscore format
+             const trackKeys = config.composeFrom
+                 ? config.composeFrom.map(k => `${featureId}.${k}`)
+                 : [`${featureId}.${key}_x`, `${featureId}.${key}_y`, `${featureId}.${key}_z`];
+             const trackLabels = config.composeFrom
+                 ? undefined
+                 : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`];
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
         }
-        
+        if (config.type === 'vec4') {
+             const x = val?.x ?? config.default?.x ?? 0;
+             const y = val?.y ?? config.default?.y ?? 0;
+             const z = val?.z ?? config.default?.z ?? 0;
+             const w = val?.w ?? config.default?.w ?? 0;
+             const v4 = new THREE.Vector4(x, y, z, w);
+             const trackKeys = config.composeFrom
+                 ? config.composeFrom.map(k => `${featureId}.${k}`)
+                 : [`${featureId}.${key}_x`, `${featureId}.${key}_y`, `${featureId}.${key}_z`, `${featureId}.${key}_w`];
+             const trackLabels = config.composeFrom
+                 ? undefined
+                 : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`, `${config.label} W`];
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
+        }
+
         if (config.type === 'image') {
             // Check for linked colorSpace param or default to 'colorSpace'
             const colorSpaceKey = config.linkedParams?.colorSpace || 'colorSpace';
@@ -340,8 +428,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             return (
                 <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                      <div className="bg-gray-800/30 border border-white/5 text-center overflow-hidden relative group">
-                        <input type="file" accept="image/*" onChange={(e) => handleFileChange(e, key)} className="hidden" id={`file-input-${key}`} />
-                        <label htmlFor={`file-input-${key}`} className="block bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 w-full py-2 text-xs font-bold transition-colors cursor-pointer uppercase">{val ? "Replace Texture" : config.label}</label>
+                        <input type="file" accept="image/*,.hdr,.exr" onChange={(e) => handleFileChange(e, key)} className="hidden" id={`file-input-${key}`} />
+                        <label htmlFor={`file-input-${key}`} className="block bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 w-full py-2 text-xs font-bold transition-colors cursor-pointer">{val ? "Replace Texture" : config.label}</label>
                         
                         {/* Overlay for Color Space */}
                         {colorSpaceParam && (
@@ -360,11 +448,12 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (config.type === 'gradient') {
              return (
                  <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                     <AdvancedGradientEditor 
-                        // Directly pass the value (can be Array or Object)
-                        value={val} 
-                        onChange={(s) => handleUpdate(key, s)}
-                     />
+                     <Suspense fallback={null}>
+                         <AdvancedGradientEditor
+                            value={val}
+                            onChange={(s) => handleUpdate(key, s)}
+                         />
+                     </Suspense>
                  </div>
              );
         }
@@ -375,18 +464,60 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const config = feature.params[id];
         // EXCLUSION CHECK
         if (!config || config.hidden || excludeParams.includes(id) || !checkVisibility(config.condition, sliceState, globalState, config.parentId)) return null;
-        if (config.isAdvanced && !globalState.advancedMode) return null;
+        // Dynamic visibility (DDFS) — checked after condition
+        if (config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
+        if (config.isAdvanced && !advancedMode) return null;
         const control = renderControl(id, config);
         const childIds = Object.keys(feature.params).filter(k => feature.params[k].parentId === id);
-        const renderedChildren = childIds.map(cid => renderNode(cid)).filter(Boolean);
+        const renderedChildren: React.ReactNode[] = childIds.map(cid => renderNode(cid)).filter(Boolean);
+        // Include customUI entries that declare this param as their parent
+        feature.customUI?.forEach((c) => {
+            if (c.parentId !== id) return;
+            if (groupFilter && c.group !== groupFilter) return;
+            if (!checkVisibility(c.condition, sliceState, globalState, c.parentId)) return;
+            const Component = componentRegistry.get(c.componentId);
+            if (Component) renderedChildren.push(<div key={`custom-${c.componentId}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
+        });
         const containerClass = isHalfWidth ? "flex-1 min-w-0" : "flex flex-col";
+        const hasCustomUIChildren = feature.customUI?.some(c => c.parentId === id) ?? false;
+        const isParentSlider = childIds.length > 0 || hasCustomUIChildren;
+
+        // For parent params, inject description as first indented child
+        const showDescription = showHints && config.description && !isDisabled && variant !== 'dense'
+            && (config.type !== 'boolean' || sliceState?.[id]);
+        if (showDescription && isParentSlider) {
+            renderedChildren.unshift(
+                <div key={`desc-${id}`}>
+                    <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
+                </div>
+            );
+        }
+
+        const hasChildren = renderedChildren.length > 0;
         return (
-            <div key={id} className={`w-full ${containerClass}`}>
+            <div key={id} className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}>
+                {isParentSlider && <div className={`absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
-                {showHints && config.description && !isDisabled && variant !== 'dense' && (
-                    <p className="px-3 pb-2 text-[9px] text-gray-500 leading-tight italic border-l-2 border-white/5 ml-1 mb-1">{config.description}</p>
+                {showDescription && !isParentSlider && (
+                    <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
                 )}
-                {renderedChildren.length > 0 && <div className="ml-2 flex flex-col">{renderedChildren}</div>}
+                {renderedChildren.length > 0 && (
+                    <div className="flex flex-col">
+                        {renderedChildren.map((child, i) => {
+                            const isLast = i === renderedChildren.length - 1;
+                            return (
+                                <div key={i} className="flex">
+                                    <div className={`w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
+                                    <div className={`flex-1 min-w-0 relative ${isLast ? 'border-b border-b-white/20' : ''}`}>
+                                        <div className="absolute inset-0 bg-black/20 pointer-events-none z-10" />
+                                        {child}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
+                    </div>
+                )}
             </div>
         );
     };
@@ -407,30 +538,111 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         return true;
     });
 
+    // Build flat render list from paramRoots
+    const buildFlatItems = (roots: string[]) => {
+        const items: React.ReactNode[] = [];
+        for (let i = 0; i < roots.length; i++) {
+            const id = roots[i];
+            const config = feature.params[id];
+            if (config.hidden || excludeParams.includes(id) || !checkVisibility(config.condition, sliceState, globalState)) continue;
+            if (config.dynamicVisible && !config.dynamicVisible(sliceState)) continue;
+            if (config.layout === 'half' && variant !== 'dense') {
+                let nextId = roots[i + 1];
+                let nextConfig = nextId ? feature.params[nextId] : null;
+                if (nextConfig && nextConfig.layout === 'half' && !nextConfig.hidden && !excludeParams.includes(nextId!) && checkVisibility(nextConfig.condition, sliceState, globalState)) {
+                    items.push(<div key={`${id}-${nextId}`} className="flex gap-0.5 mb-px">{renderNode(id, true)}{renderNode(nextId, true)}</div>);
+                    i++; continue;
+                }
+            }
+            items.push(renderNode(id));
+        }
+        return items;
+    };
+
+    const toggleGroup = (groupId: string) => {
+        setCollapsedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
+    };
+
+    // Determine if we should render collapsible groups
+    const groupConfigs = feature.groups;
+    const hasCollapsibleGroups = groupConfigs && !groupFilter && !whitelistParams?.length &&
+        Object.values(groupConfigs).some(g => g.collapsible);
+
     const renderItems: React.ReactNode[] = [];
-    for (let i = 0; i < paramRoots.length; i++) {
-        const id = paramRoots[i];
-        const config = feature.params[id];
-        if (config.hidden || excludeParams.includes(id) || !checkVisibility(config.condition, sliceState, globalState)) continue;
-        if (config.layout === 'half' && variant !== 'dense') { 
-            let nextId = paramRoots[i + 1];
-            let nextConfig = nextId ? feature.params[nextId] : null;
-            if (nextConfig && nextConfig.layout === 'half' && !nextConfig.hidden && !excludeParams.includes(nextId!) && checkVisibility(nextConfig.condition, sliceState, globalState)) {
-                renderItems.push(<div key={`${id}-${nextId}`} className="flex gap-0.5 mb-px">{renderNode(id, true)}{renderNode(nextId, true)}</div>);
-                i++; continue;
+
+    if (hasCollapsibleGroups && groupConfigs) {
+        // Group paramRoots by their group property, preserving order
+        const groupOrder: string[] = [];
+        const groupedParams: Record<string, string[]> = {};
+        const ungrouped: string[] = [];
+
+        for (const id of paramRoots) {
+            const group = feature.params[id].group;
+            if (group && groupConfigs[group]) {
+                if (!groupedParams[group]) {
+                    groupedParams[group] = [];
+                    groupOrder.push(group);
+                }
+                groupedParams[group].push(id);
+            } else {
+                ungrouped.push(id);
             }
         }
-        renderItems.push(renderNode(id));
+
+        // Render ungrouped params first (e.g. engine_settings, hidden)
+        renderItems.push(...buildFlatItems(ungrouped));
+
+        // Render each collapsible group
+        for (const groupId of groupOrder) {
+            const gc = groupConfigs[groupId];
+            const groupParams = groupedParams[groupId];
+            const isCollapsed = collapsedGroups.has(groupId);
+
+            // Check if any param in this group is visible
+            const visibleItems = buildFlatItems(groupParams);
+            if (visibleItems.every(item => item === null)) continue;
+
+            if (gc.collapsible) {
+                const filtered = visibleItems.filter(Boolean);
+                renderItems.push(
+                    <CollapsibleSection
+                        key={`group-${groupId}`}
+                        label={gc.label}
+                        open={!collapsedGroups.has(groupId)}
+                        onToggle={() => toggleGroup(groupId)}
+                        defaultOpen={true}
+                        variant="panel"
+                    >
+                        <div className="flex flex-col">
+                            {filtered.map((item, idx) => (
+                                <div key={idx}>{item}</div>
+                            ))}
+                            <div className="ml-[9px] border-b border-white/10 rounded-bl mb-0.5" />
+                        </div>
+                    </CollapsibleSection>
+                );
+            } else {
+                renderItems.push(...visibleItems);
+            }
+        }
+    } else {
+        renderItems.push(...buildFlatItems(paramRoots));
     }
 
     feature.customUI?.forEach((c) => {
         // Prevent CustomUI leakage when using whitelist params (e.g. inserting single slider)
         if (whitelistParams && whitelistParams.length > 0) return;
-        
+        // Skip entries handled by renderNode tree-nesting
+        if (c.parentId) return;
         if (groupFilter && c.group !== groupFilter) return;
         if (!checkVisibility(c.condition, sliceState, globalState)) return;
         const Component = componentRegistry.get(c.componentId);
-        if (Component) renderItems.push(<div key={`custom-${c.componentId}`} className={`flex flex-col mb-2 ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
+        if (Component) renderItems.push(<div key={`custom-${c.componentId}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
     });
 
     return (
@@ -441,13 +653,13 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                     <div className="bg-black/95 border border-white/20 rounded shadow-2xl overflow-hidden h-full flex flex-col">
                         <div className="flex items-center gap-2 p-2 border-b border-white/10 bg-white/5">
                             <AlertIcon />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-300">Warning</span>
+                            <SectionLabel color="text-gray-300">Warning</SectionLabel>
                         </div>
                         <div className="p-3 flex-1 flex flex-col justify-between">
                             <p className="text-[10px] text-gray-400 leading-relaxed whitespace-pre-wrap">{confirming.message}</p>
                             <div className="flex gap-1 mt-4">
-                                <button onClick={() => setConfirming(null)} className="flex-1 py-1.5 bg-gray-800 text-gray-300 text-[9px] font-bold uppercase rounded border border-white/10 hover:bg-gray-700 transition-colors">Cancel</button>
-                                <button onClick={handleConfirmedUpdate} className="flex-1 py-1.5 bg-cyan-900/50 text-cyan-300 text-[9px] font-bold uppercase rounded border border-cyan-500/30 hover:bg-cyan-900 transition-colors">Confirm</button>
+                                <button onClick={() => setConfirming(null)} className="flex-1 py-1.5 bg-gray-800 text-gray-300 text-[9px] font-bold rounded border border-white/10 hover:bg-gray-700 transition-colors">Cancel</button>
+                                <button onClick={handleConfirmedUpdate} className="flex-1 py-1.5 bg-cyan-900/50 text-cyan-300 text-[9px] font-bold rounded border border-cyan-500/30 hover:bg-cyan-900 transition-colors">Confirm</button>
                             </div>
                         </div>
                     </div>

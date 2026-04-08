@@ -297,7 +297,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
 
     return (
         <div className="w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 flex flex-col shrink-0 overflow-y-auto custom-scroll">
-            <div className="h-6 flex items-center justify-between px-2 border-b border-white/5 text-[9px] text-gray-500 font-bold uppercase tracking-widest bg-black sticky top-0 z-10">
+            <div className="h-6 flex items-center justify-between px-2 border-b border-white/5 text-[9px] text-gray-500 font-bold bg-black sticky top-0 z-10">
                 <span>Curves</span>
                 <div className="flex gap-2">
                      <button 
@@ -333,7 +333,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
                         >
                             <div className="flex items-center gap-2 flex-1" onClick={(e) => toggleGroupCollapse(groupName, e.altKey)}>
                                 <span className="text-gray-500 w-4"><FolderIcon open={!collapsedGroups.has(groupName)} /></span>
-                                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">{groupName}</span>
+                                <span className="text-[10px] font-bold text-gray-300">{groupName}</span>
                             </div>
                             
                             <div className="flex items-center gap-1">

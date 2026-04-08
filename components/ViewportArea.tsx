@@ -1,6 +1,6 @@
 
-import React, { useRef, useState, useLayoutEffect } from 'react';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import React, { useRef, useState, useLayoutEffect, useEffect, useCallback } from 'react';
+import { Canvas } from '@react-three/fiber';
 import { useFractalStore } from '../store/fractalStore';
 import HistogramProbe from './HistogramProbe';
 import HudOverlay from './HudOverlay';
@@ -13,22 +13,24 @@ import { componentRegistry } from './registry/ComponentRegistry';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 import { FixedResolutionControls } from './viewport/FixedResolutionControls';
 import { CompositionOverlay } from './viewport/CompositionOverlay';
-import { engine } from '../engine/FractalEngine';
 import Navigation from './Navigation';
 import { CompilingIndicator } from './CompilingIndicator';
-import MandelbulbScene from './MandelbulbScene';
-import * as THREE from 'three';
+import WorkerTickScene from './WorkerTickScene';
+import { WorkerDisplay } from './WorkerDisplay';
+import { getProxy } from '../engine/worker/WorkerProxy';
+
+const engine = getProxy();
 
 // Layout Constants
 const LAYOUT_PADDING = 12;
 const CONTROLS_OFFSET = 40;
 
 interface HudRefs {
-    container: React.RefObject<HTMLDivElement | null>;
-    speed: React.RefObject<HTMLSpanElement | null>;
-    dist: React.RefObject<HTMLSpanElement | null>;
-    reset: React.RefObject<HTMLButtonElement | null>;
-    reticle: React.RefObject<HTMLDivElement | null>;
+    container: React.RefObject<HTMLDivElement>;
+    speed: React.RefObject<HTMLSpanElement>;
+    dist: React.RefObject<HTMLSpanElement>;
+    reset: React.RefObject<HTMLButtonElement>;
+    reticle: React.RefObject<HTMLDivElement>;
 }
 
 interface ViewportAreaProps {
@@ -43,15 +45,15 @@ const DomOverlays = () => {
     const actions = useFractalStore();
     
     return (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-[20]">
+        <div className="absolute inset-0 pointer-events-none z-[20]">
             {overlays.map(config => {
                 const Component = componentRegistry.get(config.componentId);
-                if (Component) {
-                    const featureId = config.id;
-                    const sliceState = (state as any)[featureId];
+                const featureId = config.id;
+                const sliceState = (state as any)[featureId];
+                if (Component && sliceState) {
                     return (
-                        <Component 
-                            key={config.id} 
+                        <Component
+                            key={config.id}
                             featureId={featureId}
                             sliceState={sliceState}
                             actions={actions}
@@ -74,12 +76,12 @@ const SceneOverlays = () => {
         <>
             {overlays.map(config => {
                 const Component = componentRegistry.get(config.componentId);
-                if (Component) {
-                    const featureId = config.id;
-                    const sliceState = (state as any)[featureId];
+                const featureId = config.id;
+                const sliceState = (state as any)[featureId];
+                if (Component && sliceState) {
                     return (
-                        <Component 
-                            key={config.id} 
+                        <Component
+                            key={config.id}
                             featureId={featureId}
                             sliceState={sliceState}
                             actions={actions}
@@ -92,52 +94,113 @@ const SceneOverlays = () => {
     );
 };
 
-// Syncs the R3F overlay camera to match the Main Engine camera
-const CameraSync = () => {
-    const { camera } = useThree();
-    const lastPosition = useRef(new THREE.Vector3());
-    const lastQuaternion = useRef(new THREE.Quaternion());
-    const lastFov = useRef(0);
-    
-    useFrame(() => {
-        if (engine.activeCamera) {
-            let hasChanged = false;
-            
-            // Check if camera position changed
-            if (!lastPosition.current.equals(camera.position)) {
-                engine.activeCamera.position.copy(camera.position);
-                lastPosition.current.copy(camera.position);
-                hasChanged = true;
-            }
-            
-            // Check if camera rotation changed
-            if (!lastQuaternion.current.equals(camera.quaternion)) {
-                engine.activeCamera.quaternion.copy(camera.quaternion);
-                lastQuaternion.current.copy(camera.quaternion);
-                hasChanged = true;
-            }
-            
-            // Sync Projection props if perspective (and changed)
-            if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera && (engine.activeCamera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-                const engCam = engine.activeCamera as THREE.PerspectiveCamera;
-                const r3fCam = camera as THREE.PerspectiveCamera;
-                
-                if (engCam.fov !== r3fCam.fov) {
-                    engCam.fov = r3fCam.fov;
-                    engCam.updateProjectionMatrix();
-                    lastFov.current = r3fCam.fov;
-                    hasChanged = true;
-                }
-            }
-            
-            // Only update matrix world if anything changed
-            if (hasChanged) {
-                engine.activeCamera.updateMatrixWorld();
-            }
-        }
-    });
-    return null;
-}
+// ── Region Overlay ──────────────────────────────────────────────────
+const HANDLE_DIRS = ['n','s','e','w','ne','nw','se','sw'] as const;
+const HANDLE_STYLES: Record<string, string> = {
+    n:  'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize',
+    s:  'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-ns-resize',
+    e:  'top-1/2 right-0 -translate-y-1/2 translate-x-1/2 cursor-ew-resize',
+    w:  'top-1/2 left-0 -translate-y-1/2 -translate-x-1/2 cursor-ew-resize',
+    ne: 'top-0 right-0 -translate-y-1/2 translate-x-1/2 cursor-nesw-resize',
+    nw: 'top-0 left-0 -translate-y-1/2 -translate-x-1/2 cursor-nwse-resize',
+    se: 'bottom-0 right-0 translate-y-1/2 translate-x-1/2 cursor-nwse-resize',
+    sw: 'bottom-0 left-0 translate-y-1/2 -translate-x-1/2 cursor-nesw-resize',
+};
+
+const RegionOverlay: React.FC<{
+    region: { minX: number; minY: number; maxX: number; maxY: number };
+    isGhostDragging: boolean;
+    isDrawing: boolean;
+    onClear: () => void;
+}> = ({ region, isGhostDragging, isDrawing, onClear }) => {
+    const sampleCap = useFractalStore(s => s.sampleCap);
+    const setSampleCap = useFractalStore(s => s.setSampleCap);
+    const convergenceThreshold = useFractalStore(s => s.convergenceThreshold);
+    const canvasPixelSize = useFractalStore(s => s.canvasPixelSize);
+
+    const [samples, setSamples] = useState(0);
+    const [convergence, setConvergence] = useState(1.0);
+
+    // Poll accumulation count and convergence from engine proxy
+    useEffect(() => {
+        const id = setInterval(() => {
+            setSamples(engine.accumulationCount);
+            setConvergence(engine.convergenceValue);
+        }, 100);
+        return () => clearInterval(id);
+    }, []);
+
+    const regionW = Math.round((region.maxX - region.minX) * canvasPixelSize[0]);
+    const regionH = Math.round((region.maxY - region.minY) * canvasPixelSize[1]);
+
+    const capReached = sampleCap > 0 && samples >= sampleCap;
+    const thresholdRaw = convergenceThreshold / 100.0;
+    const isConverged = convergence < thresholdRaw && samples > 2;
+
+    // Cycle through common sample caps on click
+    const cycleSampleCap = useCallback(() => {
+        const caps = [0, 64, 128, 256, 512, 1024, 2048, 4096];
+        const idx = caps.indexOf(sampleCap);
+        const next = idx >= 0 ? caps[(idx + 1) % caps.length] : 256;
+        setSampleCap(next);
+    }, [sampleCap, setSampleCap]);
+
+    const borderClass = isDrawing
+        ? 'border-cyan-400 border-dashed opacity-70'
+        : isGhostDragging
+            ? 'border-cyan-400 border-dashed opacity-80'
+            : 'border-cyan-500 opacity-100';
+
+    return (
+        <div
+            className={`absolute border-2 z-40 group/box region-box cursor-move transition-opacity duration-75 ${borderClass}`}
+            style={{
+                left: `${region.minX * 100}%`,
+                bottom: `${region.minY * 100}%`,
+                right: `${(1 - region.maxX) * 100}%`,
+                top: `${(1 - region.maxY) * 100}%`,
+            }}
+        >
+            {/* Header bar */}
+            {!isDrawing && (
+                <div className="absolute top-0 right-0 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-1.5 pointer-events-auto shadow-md select-none" style={{ backdropFilter: 'blur(4px)' }}>
+                    <span className="text-gray-400">{regionW}×{regionH}</span>
+                    <div className="w-px h-2.5 bg-white/10" />
+                    <span className={capReached ? 'text-green-400' : 'text-cyan-300'}>{samples}</span>
+                    <span className="text-gray-500">/ {sampleCap === 0 ? '∞' : sampleCap}</span>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); cycleSampleCap(); }}
+                        className="text-gray-500 hover:text-cyan-300 transition-colors px-0.5"
+                        title={`Sample cap: ${sampleCap === 0 ? 'Infinite' : sampleCap}. Click to cycle.`}
+                    >
+                        ⟳
+                    </button>
+                    <div className="w-px h-2.5 bg-white/10" />
+                    <span className={isConverged ? 'text-green-400' : 'text-gray-400'} title={`Convergence: ${(convergence * 100).toFixed(3)}% (threshold: ${convergenceThreshold.toFixed(2)}%)`}>
+                        {(convergence * 100).toFixed(2)}%
+                    </span>
+                    <span className="text-gray-600">/</span>
+                    <span className="text-gray-500">{convergenceThreshold.toFixed(2)}%</span>
+                    <div className="w-px h-2.5 bg-white/10" />
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onClear(); }}
+                        className="text-gray-400 hover:text-red-400 transition-colors"
+                        title="Clear Region"
+                    >✕</button>
+                </div>
+            )}
+
+            {/* Resize handles — only when not drawing and not ghost-dragging */}
+            {!isDrawing && !isGhostDragging && HANDLE_DIRS.map(dir => (
+                <div
+                    key={dir}
+                    data-handle={dir}
+                    className={`absolute w-2.5 h-2.5 bg-cyan-500 border border-cyan-300 rounded-sm pointer-events-auto opacity-0 group-hover/box:opacity-100 transition-opacity ${HANDLE_STYLES[dir]}`}
+                />
+            ))}
+        </div>
+    );
+};
 
 export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneReady }) => {
     const state = useFractalStore();
@@ -148,9 +211,9 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
     const isDrawingToolActive = drawing?.active;
     const isSelectingRegion = interactionMode === 'selecting_region';
 
-    const { visualRegion, isGhostDragging, renderRegion } = useRegionSelection(canvasContainerRef);
+    const { visualRegion, drawPreview, isGhostDragging, renderRegion } = useRegionSelection(canvasContainerRef);
     useInteractionManager(canvasContainerRef);
-    
+
     const { isMobile: isMobileDevice } = useMobileLayout();
     const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
 
@@ -164,18 +227,20 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
             }
         });
         observer.observe(viewportRef.current);
-        
+
         const rect = viewportRef.current.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
             setViewportSize({ w: rect.width, h: rect.height });
         }
-        
+
         return () => observer.disconnect();
     }, []);
 
     const isFixed = state.resolutionMode === 'Fixed';
     const [w, h] = state.fixedResolution;
-    const activeRegion = visualRegion || renderRegion;
+    // Priority: draw preview (while drawing) > visual region (while dragging) > committed region
+    const activeRegion = drawPreview || visualRegion || renderRegion;
+    const isDrawingPreview = !!drawPreview;
     const isCleanFeed = state.isBroadcastMode;
 
     const padding = 40; 
@@ -221,47 +286,46 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
             
             <div ref={canvasContainerRef} style={wrapperStyle} className="relative bg-[#111] group z-0">
                 {(isSelectingRegion || isDrawingToolActive) && <div className="absolute inset-0 z-50 cursor-crosshair bg-transparent pointer-events-none" />}
-                
-                {activeRegion && !isSelectingRegion && !isCleanFeed && (
-                    <div className={`absolute border-2 z-40 group/box region-box cursor-move transition-opacity duration-75 ${isGhostDragging ? 'border-cyan-400 border-dashed opacity-80' : 'border-cyan-500 opacity-100'}`} style={{ left: `${activeRegion.minX * 100}%`, bottom: `${activeRegion.minY * 100}%`, right: `${(1 - activeRegion.maxX) * 100}%`, top: `${(1 - activeRegion.maxY) * 100}%`, }} >
-                        <div className="absolute top-0 right-0 bg-cyan-600 text-white text-[9px] font-bold px-1.5 py-0.5 flex items-center gap-2 pointer-events-auto shadow-md">
-                            <span>{isGhostDragging ? 'Moving...' : 'Active Region'}</span>
-                            <div className="w-px h-2 bg-cyan-400/50" /><button onClick={(e) => { e.stopPropagation(); state.setRenderRegion(null); }} className="hover:text-black transition-colors" title="Clear Region" >✕</button>
-                        </div>
-                    </div>
+
+                {activeRegion && !isCleanFeed && (
+                    <RegionOverlay region={activeRegion} isGhostDragging={isGhostDragging} isDrawing={isDrawingPreview} onClear={() => state.setRenderRegion(null)} />
                 )}
-                
-                {/* Single Consolidated R3F Canvas */}
-                <Canvas 
-                    gl={{ 
-                        alpha: false, 
-                        depth: false, 
-                        antialias: false, 
+
+                {/* 2D canvas receives ImageBitmaps from render worker */}
+                {viewportSize.w > 0 && viewportSize.h > 0 && (
+                    <WorkerDisplay
+                        width={isFixed ? w : viewportSize.w}
+                        height={isFixed ? h : viewportSize.h}
+                    />
+                )}
+
+                {/* R3F Canvas — transparent overlay for gizmos, navigation, scene overlays */}
+                <Canvas
+                    gl={{
+                        alpha: true,
+                        depth: false,
+                        antialias: false,
                         powerPreference: "high-performance",
-                        // CRITICAL: Prevent auto-clear to allow manual loop control in MandelbulbScene
-                        preserveDrawingBuffer: true 
-                    }} 
-                    camera={{ position: [0,0,0], fov: 60 }} 
+                        preserveDrawingBuffer: false
+                    }}
+                    camera={{ position: [0,0,0], fov: 60 }}
                     style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}
                     dpr={state.dpr}
                     onPointerDown={(e) => (e.target as Element).setPointerCapture(e.pointerId)}
                     onPointerMove={handleInput}
                     onWheel={handleInput}
                 >
-                    <Navigation 
-                        mode={state.cameraMode} 
+                    <Navigation
+                        mode={state.cameraMode}
                         hudRefs={hudRefs}
                         onStart={(s) => state.handleInteractionStart(s)}
                         onEnd={() => state.handleInteractionEnd()}
                         setSceneOffset={state.setSceneOffset}
-                        fitScale={fitScale} 
+                        fitScale={fitScale}
                     />
-                    
-                    {/* The Scene renders the Fractal Quad in a portal */}
-                    <MandelbulbScene onLoaded={onSceneReady} />
-                    
-                    {/* Overlays render on top in the main scene */}
-                    <CameraSync />
+
+                    {/* WorkerTickScene drives animation/UI ticks and posts render data to worker */}
+                    <WorkerTickScene onLoaded={onSceneReady} />
                     <SceneOverlays />
                 </Canvas>
 

@@ -7,6 +7,7 @@ class Deck {
     public gainNode: GainNode | null = null;
     public fileUrl: string | null = null;
     public fileName: string | null = null;
+    public isActive: boolean = false;
 
     constructor(ctx: AudioContext) {
         this.element = new Audio();
@@ -15,12 +16,15 @@ class Deck {
         // Create nodes but don't connect yet
     }
 
+    get isPlaying() { return !this.element.paused && !!this.sourceNode; }
+
     load(file: File, ctx: AudioContext, dest: AudioNode) {
         if (this.fileUrl) URL.revokeObjectURL(this.fileUrl);
         this.fileUrl = URL.createObjectURL(file);
         this.fileName = file.name;
         this.element.src = this.fileUrl;
-        
+        this.isActive = true;
+
         if (!this.sourceNode) {
             this.sourceNode = ctx.createMediaElementSource(this.element);
             this.gainNode = ctx.createGain();
@@ -48,7 +52,7 @@ export class AudioAnalysisEngine {
     private decks: [Deck | null, Deck | null] = [null, null];
     private masterGain: GainNode | null = null;
 
-    private dataArray: Uint8Array | null = null;
+    private dataArray: Uint8Array<ArrayBuffer> | null = null;
     
     // State
     public isMicActive: boolean = false;
@@ -58,6 +62,7 @@ export class AudioAnalysisEngine {
         if (this.audioContext) return;
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         this.masterGain = this.audioContext.createGain();
+        this.masterGain.gain.value = 0.8; // Default volume
         this.masterGain.connect(this.audioContext.destination);
         
         this.analyser = this.audioContext.createAnalyser();
@@ -114,7 +119,6 @@ export class AudioAnalysisEngine {
         this.init();
         if (!this.audioContext) return;
         try {
-            // @ts-ignore
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             stream.getVideoTracks().forEach(track => track.stop());
             
@@ -127,7 +131,10 @@ export class AudioAnalysisEngine {
             
             this.isMicActive = true;
             if (this.audioContext.state === 'suspended') this.audioContext.resume();
-        } catch (e) {}
+        } catch (e) {
+            console.error("AudioEngine: System audio capture failed", e);
+            alert("System audio capture failed. Check browser permissions.");
+        }
     }
     
     public loadTrack(deckIndex: 0 | 1, file: File) {
@@ -150,6 +157,10 @@ export class AudioAnalysisEngine {
     public play(deckIndex: 0 | 1) { this.decks[deckIndex]?.play(); }
     public pause(deckIndex: 0 | 1) { this.decks[deckIndex]?.pause(); }
     public stop(deckIndex: 0 | 1) { this.decks[deckIndex]?.stop(); }
+    public deactivateDeck(deckIndex: 0 | 1) {
+        const d = this.decks[deckIndex];
+        if (d) { d.stop(); d.isActive = false; }
+    }
     public seek(deckIndex: 0 | 1, time: number) { this.decks[deckIndex]?.seek(time); }
     
     public getTrackInfo(deckIndex: 0 | 1) {
@@ -158,7 +169,9 @@ export class AudioAnalysisEngine {
             duration: d?.duration || 1,
             currentTime: d?.currentTime || 0,
             hasTrack: !!d?.sourceNode,
-            fileName: d?.fileName || null
+            fileName: d?.fileName || null,
+            isPlaying: d?.isPlaying || false,
+            isActive: d?.isActive || false
         };
     }
 
@@ -170,6 +183,12 @@ export class AudioAnalysisEngine {
         
         if (this.decks[0]) this.decks[0].setVolume(gainA);
         if (this.decks[1]) this.decks[1].setVolume(gainB);
+    }
+    
+    public setMasterGain(val: number) {
+        if (this.masterGain) {
+            this.masterGain.gain.setTargetAtTime(val, this.audioContext!.currentTime, 0.1);
+        }
     }
     
     public update() {

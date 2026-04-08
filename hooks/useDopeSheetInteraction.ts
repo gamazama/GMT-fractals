@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { animationEngine } from '../engine/AnimationEngine';
-import { Track, BezierHandle } from '../types';
+import { Track, BezierHandle, Keyframe, AnimationSequence } from '../types';
 import { constrainKeyframeHandles, scaleKeyframeHandles } from '../utils/timelineUtils';
 
 interface DopeSheetInteractionProps {
@@ -15,7 +15,7 @@ interface DopeSheetInteractionProps {
     TRACK_HEIGHT: number;
     organizedTracks: { groups: Record<string, string[]>, standalone: string[] };
     collapsedGroups: Set<string>;
-    sequence: any;
+    sequence: AnimationSequence;
     selectedTrackIds: string[];
 }
 
@@ -230,17 +230,17 @@ export const useDopeSheetInteraction = ({
                     draggedPositions.set(k.keyId, Math.max(0, k.startFrame + diffFrames));
                 });
 
-                const updates: any[] = [];
+                const updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[] = [];
 
                 // A. Update Dragged Keys
                 dragState.current.keys.forEach(k => {
                     const newFrame = Math.max(0, k.startFrame + diffFrames);
-                    const patch: Partial<any> = { frame: newFrame };
+                    const patch: Partial<Keyframe> = { frame: newFrame };
                     
                     const track = propsRef.current.sequence.tracks[k.trackId];
                     if (track) {
-                        const keysSorted = [...track.keyframes].sort((a:any, b:any) => a.frame - b.frame);
-                        const currentKey = keysSorted.find((key:any) => key.id === k.keyId);
+                        const keysSorted = [...track.keyframes].sort((a, b) => a.frame - b.frame);
+                        const currentKey = keysSorted.find((key) => key.id === k.keyId);
                         
                         if (currentKey) {
                              const idx = keysSorted.indexOf(currentKey);
@@ -273,7 +273,7 @@ export const useDopeSheetInteraction = ({
 
                 // B. Update Neighbors (The "In-between" tangents)
                 dragState.current.neighbors.forEach((neighbor) => {
-                    const patch: Partial<any> = {};
+                    const patch: Partial<Keyframe> = {};
                     
                     // 1. Right Tangent (Pointing to a dragged key on the right)
                     if (neighbor.rightReferenceKeyId && neighbor.startRightTan) {
@@ -326,7 +326,7 @@ export const useDopeSheetInteraction = ({
             if (transformState.current) {
                 const { type, startX, initialKeys, minFrame, maxFrame } = transformState.current;
                 const diffPx = e.clientX - startX;
-                const updates: any[] = [];
+                const updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[] = [];
                 
                 if (type === 'move') {
                     const diffFrames = Math.round(diffPx / currentFrameWidth);
@@ -440,7 +440,7 @@ export const useDopeSheetInteraction = ({
                     if (boxB > trackTop && boxY < trackBottom) {
                         const track = sequence.tracks[tid];
                         if (track) {
-                            track.keyframes.forEach((k: any) => {
+                            track.keyframes.forEach((k) => {
                                 const kx = SIDEBAR_WIDTH + k.frame * frameWidth;
                                 if (kx >= boxX && kx <= boxR) {
                                     newSelectedIds.add(`${tid}::${k.id}`);

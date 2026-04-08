@@ -1,61 +1,85 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useFractalStore, getShaderConfigFromState } from '../store/fractalStore';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { registry } from '../engine/FractalRegistry';
 import { parseShareString } from '../utils/Sharing';
-import { Preset } from '../types';
-import { ENGINE_PROFILES } from '../features/engine/profiles';
-
-const isMobileDevice = () => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
-};
+import type { Preset } from '../types';
+import { detectHardwareProfileMainThread } from '../engine/HardwareDetection';
 
 export const useAppStartup = (isSceneReady: boolean) => {
     const state = useFractalStore();
-    
-    // Store the exact preset used for booting (after optimizations)
-    const initialBootPreset = useRef<Preset | null>(null);
-    
-    // Store manually loaded presets (from LoadingScreen)
-    const pendingManualPreset = useRef<Preset | null>(null);
-    
+
     const [startupMode, setStartupMode] = useState<'default' | 'url'>('default');
+    const bootRequestedRef = useRef(false);
+    const hydratedRef = useRef(false);
 
     // 1. STABLE BOOT FUNCTION
-    const bootEngine = useCallback(() => {
-        if (engine.isBooted) return;
-        console.log("⚡ FractalEngine: Booting...");
-        
-        // Ensure we have a valid config before booting
-        const currentStore = useFractalStore.getState();
-        const startConfig = getShaderConfigFromState(currentStore);
-        
+    const bootEngine = useCallback((force?: boolean) => {
+        if (!force && (engine.isBooted || bootRequestedRef.current)) return;
+        bootRequestedRef.current = true;
+
         try {
-            // Critical: Yield to UI thread to allow spinner to render before heavy compile
+            // Yield to allow other useEffects (e.g. useAppStartup's loadPreset)
+            // to hydrate the store before we read it. Reading inside the callback
+            // guarantees we get the fully-hydrated state, not default values.
             setTimeout(() => {
-                engine.bootWithConfig(startConfig);
+                const currentStore = useFractalStore.getState();
+                const startConfig = getShaderConfigFromState(currentStore);
+                // Camera is always at origin; world position lives in sceneOffset.
+                const camRot = currentStore.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
+                const camFov = (currentStore as any).optics?.camFov ?? 60;
+                const initialCamera = {
+                    position: [0, 0, 0] as [number, number, number],
+                    quaternion: [camRot.x, camRot.y, camRot.z, camRot.w] as [number, number, number, number],
+                    fov: camFov
+                };
+                engine.bootWithConfig(startConfig, initialCamera);
+
+                // Push scene offset immediately — the treadmill engine keeps camera at
+                // origin and uses sceneOffset for the real position. Without this, the
+                // preview shader renders from the wrong viewpoint until onBooted fires.
+                const offset = currentStore.sceneOffset;
+                if (offset) {
+                    const precise = {
+                        x: offset.x, y: offset.y, z: offset.z,
+                        xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
+                    };
+                    engine.setShadowOffset(precise);
+                    engine.post({ type: 'OFFSET_SET', offset: precise });
+                }
+
+                // NOTE: camera_teleport is NOT emitted here — this 50ms timer
+                // fires before R3F's Navigation is guaranteed to be mounted.
+                // Instead, WorkerTickScene emits the teleport after boot+compile
+                // finishes, when Navigation is definitely listening.
             }, 50);
         } catch (e) {
             console.error("Critical Engine Boot Failure:", e);
+            bootRequestedRef.current = false;
         }
     }, []);
 
     useEffect(() => {
+        // Guard against React StrictMode re-running this effect.
+        // loadScene is idempotent but wasteful — fires all feature setters twice.
+        if (hydratedRef.current) return;
+        hydratedRef.current = true;
+
         // 2. Determine Initial Preset
         const hash = window.location.hash;
         let preset: Preset | null = null;
-        
+
         if (hash && hash.startsWith('#s=')) {
             const stateStr = hash.slice(3);
-            console.log("App: Found shared state in URL. Parsing...");
+            if (import.meta.env.DEV) console.log("App: Found shared state in URL. Parsing...");
             preset = parseShareString(stateStr);
             if (preset) {
                 setStartupMode('url');
             }
         }
-        
+
         // If no URL or parse failed, use default for Mandelbulb
         if (!preset) {
              const def = registry.get('Mandelbulb');
@@ -64,95 +88,30 @@ export const useAppStartup = (isSceneReady: boolean) => {
              }
         }
 
-        // 3. Environment Optimizations (Mobile)
-        if (preset && isMobileDevice()) {
-             console.log("App: Mobile detected. Enforcing Lite profile.");
-             if (!preset.features) preset.features = {};
-             const liteProfile = ENGINE_PROFILES.lite;
-             
-             Object.entries(liteProfile).forEach(([featureId, params]) => {
-                 if (!preset!.features![featureId]) {
-                     preset!.features![featureId] = {};
-                 }
-                 Object.assign(preset!.features![featureId], params);
-             });
+        // 3. Environment Optimizations — Non-destructive hardware detection
+        //    The preset is loaded UNMODIFIED into the store (authored intent preserved).
+        //    Hardware caps + viewport quality tiers are applied at getShaderConfigFromState().
+        const hwProfile = detectHardwareProfileMainThread();
+        state.setHardwareProfile(hwProfile);
+        if (hwProfile.isMobile) {
+            if (import.meta.env.DEV) console.log("App: Mobile detected. Setting Lite viewport quality.");
+            state.applyScalabilityPreset('lite');
         }
 
-        // 4. Load into Store (UI State)
+        // 4. Load into Store (UI State) via unified loadScene path.
+        //    loadScene detects the engine hasn't booted yet and skips CONFIG/OFFSET
+        //    events (they would just queue and cause a redundant second compile).
+        //    bootEngine() will push the full config + offset after the worker boots.
         if (preset) {
-            console.log("App: Hydrating Store from Preset...");
-            state.loadPreset(preset);
-            initialBootPreset.current = preset;
+            if (import.meta.env.DEV) console.log("App: Hydrating Store from Preset...");
+            state.loadScene({ preset });
         }
 
-        // Auto-Boot for URL mode (with delay to show spinner)
-        if (startupMode === 'url' && preset) {
-             // We use a longer delay for URL loads to ensure the heavy initial preset 
-             // doesn't freeze the browser before the spinner appears.
-             setTimeout(() => {
-                 bootEngine();
-             }, 500);
-        }
+        // Don't boot here — LoadingScreen will call bootEngine().
+        // Chrome: boots immediately (async compile won't stall WebGL spinner).
+        // Firefox: boots after cosmetic progress bar completes (synchronous compile
+        // would freeze the UI via shared GPU process).
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-        // FAILSAFE: If engine hasn't booted after 4 seconds, force it.
-        const safetyTimer = setTimeout(() => {
-            if (!engine.isBooted) {
-                console.warn("App: Loading Screen timeout. Forcing Engine Boot.");
-                bootEngine();
-            }
-        }, 4000);
-        
-        return () => clearTimeout(safetyTimer);
-    }, [startupMode]); // Added startupMode dependency to handle switch
-
-    // 5. Post-Load Sync
-    useEffect(() => {
-        if (isSceneReady && engine.isBooted) {
-            
-            if (initialBootPreset.current) {
-                console.log("App: Scene Ready - Syncing Camera/State...");
-
-                // Detect if user switched to Lite Mode during load
-                const currentStore = useFractalStore.getState();
-                const currentQuality = (currentStore as any).quality;
-                const isLiteActive = currentQuality?.precisionMode === 1.0; 
-
-                if (isLiteActive) {
-                     const p = initialBootPreset.current;
-                     const liteProfile = ENGINE_PROFILES.lite;
-                     if (!p.features) p.features = {};
-                     Object.entries(liteProfile).forEach(([featureId, params]) => {
-                         if (!p.features![featureId]) p.features![featureId] = {};
-                         Object.assign(p.features![featureId], params);
-                     });
-                }
-
-                state.loadPreset(initialBootPreset.current);
-                initialBootPreset.current = null;
-            }
-            
-            if (pendingManualPreset.current) {
-                console.log("App: Scene Ready - Applying Pending Manual Preset...");
-                let p = pendingManualPreset.current;
-                
-                if (isMobileDevice()) {
-                     const liteProfile = ENGINE_PROFILES.lite;
-                     if (!p.features) p.features = {};
-                     Object.entries(liteProfile).forEach(([featureId, params]) => {
-                         if (!p.features![featureId]) p.features![featureId] = {};
-                         Object.assign(p.features![featureId], params);
-                     });
-                }
-
-                state.loadPreset(p);
-                pendingManualPreset.current = null;
-            }
-        }
-    }, [isSceneReady]);
-
-    const queuePresetLoad = useCallback((p: Preset) => {
-        pendingManualPreset.current = p;
-    }, []);
-
-    return { startupMode, queuePresetLoad, bootEngine };
+    return { startupMode, bootEngine };
 };

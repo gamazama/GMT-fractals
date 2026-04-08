@@ -3,7 +3,8 @@ import { StateCreator } from 'zustand';
 import * as THREE from 'three';
 import { FractalStoreState, FractalActions, CameraState } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { featureRegistry } from '../../engine/FeatureSystem';
 
 export interface HistorySliceState {
@@ -16,7 +17,7 @@ export interface HistorySliceActions {
     undoParam: () => void;
     redoParam: () => void;
     resetParamHistory: () => void;
-    handleInteractionStart: (mode?: 'camera' | 'param' | CameraState | any) => void;
+    handleInteractionStart: (mode?: 'camera' | 'param' | CameraState) => void;
     handleInteractionEnd: () => void;
 }
 
@@ -36,11 +37,11 @@ const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
     // This removes the need to manually update this file when adding new features.
     const features = featureRegistry.getAll();
     features.forEach(feat => {
-        // @ts-ignore - Accessing dynamic slice key
+        // @ts-expect-error — DDFS dynamic slice key access
         const featureState = s[feat.id];
         if (featureState) {
             // Deep copy the feature state to prevent reference mutations in the stack
-            // @ts-ignore
+            // @ts-expect-error — DDFS dynamic slice key assignment
             snap[feat.id] = JSON.parse(JSON.stringify(featureState));
         }
     });
@@ -89,6 +90,13 @@ const applyStateRestore = (data: Partial<FractalStoreState>, set: any, get: any)
     engine.resetAccumulation();
 };
 
+// Minimum interval between camera undo pushes (ms).
+// Prevents micro-pauses during a single orbit/fly gesture from creating
+// multiple undo entries.  If a new snapshot arrives within this window,
+// the previous entry is *replaced* rather than a new one pushed.
+const CAMERA_UNDO_DEBOUNCE_MS = 1500;
+let lastCameraUndoPush = 0;
+
 export const createHistorySlice: StateCreator<FractalStoreState & FractalActions & HistorySlice, [["zustand/subscribeWithSelector", never]], [], HistorySlice> = (set, get) => ({
     paramUndoStack: [],
     paramRedoStack: [],
@@ -101,10 +109,26 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
         // Case 1: Camera Snapshot
         if (mode && typeof mode === 'object' && (mode as any).position) {
             const camState = mode as unknown as CameraState;
-            set((state) => ({
-                undoStack: [...state.undoStack, camState],
-                redoStack: []
-            }));
+            const now = Date.now();
+            const elapsed = now - lastCameraUndoPush;
+
+            if (elapsed < CAMERA_UNDO_DEBOUNCE_MS && get().undoStack.length > 0) {
+                // Within debounce window — replace the last entry instead of
+                // pushing a new one.  The last entry already holds the "before"
+                // state from the original gesture start; the user hasn't had
+                // time to settle, so we keep that original snapshot.
+                // (no-op: the existing top-of-stack is already correct)
+            } else {
+                // New gesture — push a fresh undo entry (capped at 50)
+                set((state) => {
+                    const newStack = [...state.undoStack, camState];
+                    return {
+                        undoStack: newStack.length > 50 ? newStack.slice(-50) : newStack,
+                        redoStack: []
+                    };
+                });
+                lastCameraUndoPush = now;
+            }
             return;
         }
 
@@ -138,7 +162,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
             const currVal = current[key];
             
             if (JSON.stringify(prevVal) !== JSON.stringify(currVal)) {
-                // @ts-ignore
+                // @ts-expect-error — DDFS dynamic diff key assignment
                 diff[key] = prevVal; 
                 hasChanges = true;
             }
@@ -165,7 +189,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
         const current = get();
         const redoItem: Partial<FractalStoreState> = {};
         Object.keys(undoItem).forEach(k => {
-            // @ts-ignore
+            // @ts-expect-error — DDFS dynamic key access for redo snapshot
             redoItem[k] = current[k];
         });
 
@@ -187,7 +211,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
         const current = get();
         const undoItem: Partial<FractalStoreState> = {};
         Object.keys(redoItem).forEach(k => {
-            // @ts-ignore
+            // @ts-expect-error — DDFS dynamic key access for undo snapshot
             undoItem[k] = current[k];
         });
 

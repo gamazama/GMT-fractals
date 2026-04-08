@@ -2,13 +2,14 @@
 import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LfoTarget, AnimationParams } from './animation';
 import { FractalGraph, PipelineNode } from './graph';
-import { Preset } from './fractal';
+import { Preset, FractalDefinition } from './fractal';
 import { ContextMenuItem } from './help';
-import { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
+import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
 import { LightParams } from './graphics';
 import { OpticsState } from '../features/optics';
+import type { ScalabilityState, HardwareProfile } from './viewport';
 
-export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager' | 'Sonification';
+export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
 
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region';
 
@@ -33,7 +34,7 @@ export interface CompositionOverlaySettings {
 }
 
 // Export helper types for components
-export { DrawnShape, ModulationRule }; 
+export type { DrawnShape, ModulationRule }; 
 
 // --- AUTO GENERATED ACTIONS ---
 type FeatureSetters = {
@@ -87,7 +88,10 @@ export interface FractalStoreState extends FeatureStateMap {
   isUserInteracting: boolean; // Global flag for slider/gizmo interaction
 
   // Active Viewport State
-  cameraPos: { x: number, y: number, z: number };
+  // NOTE: cameraPos was removed — it was always (0,0,0) at runtime.
+  // World position lives exclusively in sceneOffset. The field still exists
+  // in the Preset type (types/fractal.ts) for backwards-compatible serialization;
+  // PresetLogic absorbs it into sceneOffset on load.
   cameraRot: { x: number, y: number, z: number, w: number };
   targetDistance: number;
 
@@ -99,7 +103,8 @@ export interface FractalStoreState extends FeatureStateMap {
   bucketSize: number; 
   bucketUpscale: number; 
   convergenceThreshold: number;
-  samplesPerBucket: number; 
+  samplesPerBucket: number;
+  canvasPixelSize: [number, number]; // Actual physical pixel size of the render canvas
 
   advancedMode: boolean;
   showHints: boolean;
@@ -124,10 +129,11 @@ export interface FractalStoreState extends FeatureStateMap {
   
   showLightGizmo: boolean;
   isGizmoDragging: boolean;
-  draggedLightIndex: number | null;
+  draggedLightIndex: string | null;
   
   // Consolidated Interaction State
   interactionMode: InteractionMode;
+  focusLock: boolean;
   
   cameraMode: CameraMode; 
   sceneOffset: PreciseVector3;
@@ -177,6 +183,14 @@ export interface FractalStoreState extends FeatureStateMap {
   // Composition overlay for viewport
   compositionOverlay: CompositionOverlayType;
   compositionOverlaySettings: CompositionOverlaySettings;
+
+  // Formula Workshop
+  workshopOpen: boolean;
+  workshopEditFormula: string | undefined;
+
+  // Viewport Quality System
+  scalability: ScalabilityState;
+  hardwareProfile: HardwareProfile | null;
 }
 
 export type FractalState = FractalStoreState;
@@ -197,7 +211,6 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setAccumulation: (v: boolean) => void;
     setPreviewMode: (v: boolean) => void;
     setRenderMode: (v: 'Direct' | 'PathTracing') => void;
-    
     setIsPaused: (v: boolean) => void;
     setSampleCap: (v: number) => void;
     
@@ -206,6 +219,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setBucketUpscale: (v: number) => void;
     setConvergenceThreshold: (v: number) => void;
     setSamplesPerBucket: (v: number) => void;
+    setCanvasPixelSize: (w: number, h: number) => void;
 
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
@@ -227,9 +241,10 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     
     setShowLightGizmo: (v: boolean) => void;
     setGizmoDragging: (v: boolean) => void;
-    setDraggedLight: (index: number | null) => void;
+    setDraggedLight: (id: string | null) => void;
     
     setInteractionMode: (mode: InteractionMode) => void;
+    setFocusLock: (v: boolean) => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;
@@ -240,10 +255,10 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     refreshPipeline: () => void;
     setAutoCompile: (v: boolean) => void;
     loadPreset: (p: Preset) => void;
-    
-    getPreset: (options?: { includeScene?: boolean }) => Preset; 
+    loadScene: (args: { def?: FractalDefinition; preset: Preset }) => void;
+
+    getPreset: (options?: { includeScene?: boolean }) => Preset;
     getShareString: (options?: { includeAnimations?: boolean }) => string;
-    loadShareString: (str: string) => boolean;
     
     setHistogramData: (d: Float32Array | null) => void;
     setHistogramAutoUpdate: (v: boolean) => void;
@@ -281,11 +296,18 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
 
     resetCamera: () => void;
     
-    // Camera Manager Actions
-    addCamera: (nameOverride?: string) => void;
+    // Camera Primitives (generic store mutations)
+    setActiveCameraId: (id: string | null) => void;
+    applyCameraState: (state: CameraState) => void;
+    addSavedCamera: (cam: SavedCamera) => void;
     updateCamera: (id: string, updates: Partial<SavedCamera>) => void;
     deleteCamera: (id: string) => void;
+    reorderCameras: (fromIndex: number, toIndex: number) => void;
+
+    // Camera Manager (orchestration — composes primitives + events + optics)
+    addCamera: (nameOverride?: string) => void;
     selectCamera: (id: string | null) => void;
+    duplicateCamera: (id: string) => void;
 
     handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
     handleInteractionEnd: () => void;
@@ -300,7 +322,15 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     openContextMenu: (x: number, y: number, items: ContextMenuItem[], targetHelpIds?: string[]) => void;
     closeContextMenu: () => void;
 
+    openWorkshop: (editFormula?: string) => void;
+    closeWorkshop: () => void;
+
     // Composition overlay
     setCompositionOverlay: (type: CompositionOverlayType) => void;
     setCompositionOverlaySettings: (settings: Partial<CompositionOverlaySettings>) => void;
+
+    // Viewport Quality System
+    applyScalabilityPreset: (presetId: string) => void;
+    setSubsystemTier: (subsystemId: string, tier: number) => void;
+    setHardwareProfile: (profile: HardwareProfile) => void;
 }

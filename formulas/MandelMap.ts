@@ -6,6 +6,7 @@ export const MandelMap: FractalDefinition = {
     name: 'MandelMap (Unrolled)',
     shortDescription: 'Unrolls the Mandelbulb surface. Features Sphere, Cylinder, and Torus projections.',
     description: 'Maps the Mandelbulb 3D structure onto a 2D plane. Use "Projection" (Param D) to switch between Spherical (Standard), Cylindrical (Infinite Vertical), and Toroidal (Seamless) mappings.',
+    juliaType: 'julia',
 
     shader: {
         function: `
@@ -68,8 +69,8 @@ export const MandelMap: FractalDefinition = {
 
     void formula_MandelMap(inout vec4 z, inout float dr, inout float trap, inout vec4 c) {
         float power = uParamA;
-        float thetaPhase = uParamE;
-        float phiPhase = uParamF;
+        float thetaPhase = uVec2A.x;
+        float phiPhase = uVec2A.y;
 
         // Run transform only on the first iteration
         if (dr == 1.0) {
@@ -138,8 +139,7 @@ export const MandelMap: FractalDefinition = {
             { label: 'Cylindrical', value: 1.0 },
             { label: 'Toroidal', value: 2.0 }
         ]},
-        { label: 'Theta Phase', id: 'paramE', min: -3.14, max: 3.14, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Phi Phase', id: 'paramF', min: -6.28, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Phase (θ, φ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.1, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
     ],
 
     defaultPreset: {
@@ -153,8 +153,7 @@ export const MandelMap: FractalDefinition = {
       "paramB": 1.61,
       "paramC": 1,
       "paramD": 0,
-      "paramE": 0,
-      "paramF": 0
+      "vec2A": { "x": 0, "y": 0 }
     },
     "geometry": {
       "applyTransformLogic": true,
@@ -523,15 +522,6 @@ export const MandelMap: FractalDefinition = {
       "lowPass": 20000,
       "gain": 1
     },
-    "sonification": {
-      "isEnabled": false,
-      "active": true,
-      "baseFrequency": 220,
-      "masterGain": 0.5,
-      "scanArea": 0.1,
-      "harmonics": true,
-      "lastDimension": 0
-    },
     "drawing": {
       "activeTool": "rect",
       "enabled": false,
@@ -593,20 +583,6 @@ export const MandelMap: FractalDefinition = {
   },
   "targetDistance": 4.905199170112612,
   "cameraMode": "Orbit",
-  "lights": [],
-  "renderMode": "Direct",
-  "quality": {
-    "aaMode": "Always",
-    "aaLevel": 1,
-    "msaa": 1,
-    "accumulation": true
-  },
-  "animations": [],
-  "sequence": {
-    "durationFrames": 300,
-    "fps": 30,
-    "tracks": {}
-  },
-  "duration": 300
+  "lights": []
 }
 };

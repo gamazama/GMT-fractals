@@ -6,25 +6,27 @@ export const AmazingSurf: FractalDefinition = {
     name: 'Amazing Surf',
     shortDescription: 'Sinusoidal variation of the Amazing Box. Creates flowing, melted machinery.',
     description: 'A variant of the Amazing Box that introduces sinusoidal waves. Now with Wave Twist and Vertical Shift.',
+    juliaType: 'offset',
     
     shader: {
         function: `
     void formula_AmazingSurf(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
+        vec3 transform = uVec3A;
         float limit = 1.0;
         z3 = clamp(z3, -limit, limit) * 2.0 - z3;
         float r2 = max(dot(z3,z3), 1e-10);
         float mR2 = max(uParamB * uParamB, 1e-10);
-        if (r2 < mR2) { z3 *= (1.0/mR2); dr *= (1.0/mR2); }
-        else if (r2 < 1.0) { z3 *= (1.0/r2); dr *= (1.0/r2); }
+        float sphereK = clamp(1.0 / r2, 1.0, 1.0 / mR2);
+        z3 *= sphereK; dr *= sphereK;
         z3 = z3 * uParamA + c.xyz;
         
-        // Param E: Wave Twist
+        // Param X: Wave Twist
         float twist = 0.0;
-        if (abs(uParamE) > 0.001) twist = z3.z * uParamE;
+        if (abs(transform.x) > 0.001) twist = z3.z * transform.x;
         
-        // Param F: Vertical Shift
-        if (abs(uParamF) > 0.001) z3.y += uParamF;
+        // Param Y: Vertical Shift
+        if (abs(transform.y) > 0.001) z3.y += transform.y;
 
         z3 += vec3(sin(z3.y * uParamC + twist), cos(z3.x * uParamC + twist), 0.0) * uParamD * 0.1;
         dr = dr * abs(uParamA) + 1.0;
@@ -39,14 +41,13 @@ export const AmazingSurf: FractalDefinition = {
         { label: 'Min Radius', id: 'paramB', min: 0.0, max: 1.5, step: 0.001, default: 0.8 },
         { label: 'Wave Freq', id: 'paramC', min: 0.0, max: 10.0, step: 0.1, default: 6.0 },
         { label: 'Wave Amp', id: 'paramD', min: 0.0, max: 2.0, step: 0.01, default: 0.5 },
-        { label: 'Wave Twist', id: 'paramE', min: -5.0, max: 5.0, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Vert Shift', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Transform', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 0, y: 0, z: 0 } },
     ],
 
     defaultPreset: {
         formula: "AmazingSurf",
         features: {
-            coreMath: { iterations: 21, paramA: 3.03, paramB: 0.47, paramC: 1, paramD: 1, paramE: 0, paramF: 0 },
+            coreMath: { iterations: 21, paramA: 3.03, paramB: 0.47, paramC: 1, paramD: 1, vec3A: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 6, // Decomposition
                 repeats: 1, phase: 1.44, scale: 1, offset: 1.44, bias: 1, twist: 0, escape: 100,
@@ -89,8 +90,8 @@ export const AmazingSurf: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.06201624057047557, y: -0.0404139584830392, z: -0.6430434715537097 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FF9D7B", intensity: 5, falloff: 22, falloffType: "Quadratic", fixed: true, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

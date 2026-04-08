@@ -5,11 +5,12 @@ export interface QualityState {
     engineQuality: boolean; // Master Anchor
     fudgeFactor: number;
     stepRelaxation: number; // New: Dynamic Fudge
+    stepJitter: number; // Stochastic step jitter strength
     refinementSteps: number; // New: Edge Polish
     detail: number;
     pixelThreshold: number;
     maxSteps: number;
-    compilerHardCap: number; 
+    compilerHardCap: number;
     distanceMetric: number;
     precisionMode: number; // 0=High (Ray Epsilon), 1=Standard
     bufferPrecision: number; // 0=Float32, 1=HalfFloat16
@@ -45,9 +46,10 @@ export const QualityFeature: FeatureDefinition = {
             type: 'int', default: 500, label: 'Hard Loop Cap', shortId: 'hc',
             min: 64, max: 2000, step: 1, group: 'engine_settings',
             ui: 'numeric',
-            description: "Compile-time safety limit. Ray loop will never exceed this.",
+            description: "Safety limit for ray/DE loops (MAX_HARD_ITERATIONS define). Requires recompile but does not affect compile time — ANGLE/D3D does not unroll define-bounded loops.",
             onUpdate: 'compile',
-            noReset: true
+            noReset: true,
+            hidden: true  // Managed by Hardware Preferences modal
         },
         precisionMode: {
             type: 'float', default: 0.0, label: 'Ray Precision', shortId: 'pm',
@@ -55,7 +57,8 @@ export const QualityFeature: FeatureDefinition = {
             options: [{ label: 'High (Desktop)', value: 0.0 }, { label: 'Standard (Mobile)', value: 1.0 }],
             description: 'Sets the minimum epsilon (ray hit distance). Standard prevents GPU hangs on mobile.',
             onUpdate: 'compile',
-            noReset: true
+            noReset: true,
+            hidden: true  // Managed by Hardware Preferences modal
         },
         bufferPrecision: {
             type: 'float', default: 0.0, label: 'Texture Buffer', shortId: 'bp',
@@ -63,7 +66,8 @@ export const QualityFeature: FeatureDefinition = {
             options: [{ label: 'Float32 (HDR)', value: 0.0 }, { label: 'HalfFloat16', value: 1.0 }],
             description: 'Controls render target bit-depth. 16-bit is faster and required on some mobile GPUs.',
             onUpdate: 'compile',
-            noReset: true
+            noReset: true,
+            hidden: true  // Managed by Hardware Preferences modal
         },
 
         // --- RUNTIME (Quality Panel) ---
@@ -106,11 +110,17 @@ export const QualityFeature: FeatureDefinition = {
             description: 'Multiplies step size. Lower = Higher quality but slower. Set to < 0.2 for deep zooms.',
             format: (v) => v.toFixed(2)
         },
-        stepRelaxation: { 
-            type: 'float', default: 0.0, label: 'Step Relaxation', shortId: 'sr', uniform: 'uStepRelaxation', 
-            min: 0.0, max: 1.0, step: 0.01, group: 'kernel', 
+        stepRelaxation: {
+            type: 'float', default: 0.0, label: 'Step Relaxation', shortId: 'sr', uniform: 'uStepRelaxation',
+            min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
             description: 'Dynamic Step Size. 0 = Fixed Fudge. 1 = Variable (Fudge near surface, 1.0 in void). Saves steps.',
             isAdvanced: true
+        },
+        stepJitter: {
+            type: 'float', default: 0.15, label: 'Step Jitter', shortId: 'sj', uniform: 'uStepJitter',
+            min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
+            description: 'Stochastic step variation. Breaks banding artifacts. Higher = softer edges, artistic blur.',
+            format: (v: number) => v.toFixed(2)
         },
         refinementSteps: { 
             type: 'int', default: 0, label: 'Edge Polish', shortId: 'rf', uniform: 'uRefinementSteps', 

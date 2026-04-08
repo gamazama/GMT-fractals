@@ -95,7 +95,7 @@ const Joystick = ({ onMove, label, active }: { onMove: (x: number, y: number) =>
             <div className={`w-24 h-24 rounded-full border transition-all duration-500 flex items-center justify-center ${
                  isDragging ? 'bg-cyan-500/10 border-cyan-400' : 'bg-white/5 border-white/10'
             } ${active ? 'opacity-100' : 'opacity-0 scale-50'}`}>
-                <div className={`absolute -top-6 text-[8px] font-black uppercase tracking-widest pointer-events-none transition-colors ${isDragging ? 'text-cyan-400' : 'text-white/30'}`}>
+                <div className={`absolute -top-6 text-[8px] font-bold pointer-events-none transition-colors ${isDragging ? 'text-cyan-400' : 'text-white/30'}`}>
                     {label}
                 </div>
                 <div className="absolute inset-2 rounded-full border border-white/5 pointer-events-none" />
@@ -151,7 +151,7 @@ const MobileControls: React.FC = () => {
                     className="pointer-events-auto flex items-center gap-2 bg-black/80 border border-white/20 px-4 py-2.5 rounded-full backdrop-blur-xl shadow-2xl active:scale-90 transition-all active:border-cyan-400"
                 >
                     <div className={`w-2 h-2 rounded-full ${isFly ? 'bg-cyan-400 animate-pulse shadow-[0_0_5px_cyan]' : 'bg-purple-400'}`} />
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                    <span className="text-[10px] font-bold text-white">
                         {cameraMode} Mode
                     </span>
                 </button>

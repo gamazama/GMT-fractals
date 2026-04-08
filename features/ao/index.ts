@@ -1,15 +1,17 @@
 
+import * as THREE from 'three';
 import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { getAOGLSL } from './shader';
 
 export interface AOState {
     aoIntensity: number;
     aoSpread: number;
-    aoSamples: number;     
-    aoMaxSamples: number; 
-    aoStochasticCp: boolean; 
-    aoMode: boolean;       
-    aoEnabled: boolean;    
+    aoSamples: number;
+    aoMaxSamples: number;
+    aoStochasticCp: boolean;
+    aoMode: boolean;
+    aoEnabled: boolean;
+    aoColor: THREE.Color;
 }
 
 export const AOFeature: FeatureDefinition = {
@@ -21,7 +23,7 @@ export const AOFeature: FeatureDefinition = {
         toggleParam: 'aoEnabled',
         mode: 'compile',
         label: 'Ambient Occlusion',
-        groupFilter: 'engine_settings' 
+        groupFilter: 'engine_settings'
     },
     params: {
         // --- SHADING PARAMETERS (Runtime, in Shading Panel) ---
@@ -48,14 +50,20 @@ export const AOFeature: FeatureDefinition = {
         },
         aoMode: {
             type: 'boolean', default: true, label: 'Stochastic Mode', shortId: 'am', uniform: 'uAOMode',
-            group: 'shading', 
+            group: 'shading',
             parentId: 'aoIntensity',
             condition: [
-                { param: 'aoEnabled', bool: true }, 
+                { param: 'aoEnabled', bool: true },
                 { param: 'aoIntensity', gt: 0.0 },
                 { param: 'aoStochasticCp', bool: true }
             ],
             description: "Switches between Fixed and Stochastic sampling at runtime."
+        },
+        aoColor: {
+            type: 'color', default: new THREE.Color(0, 0, 0), label: 'AO Tint', shortId: 'ac', uniform: 'uAOColor',
+            group: 'shading', parentId: 'aoIntensity',
+            condition: [{ param: 'aoEnabled', bool: true }, { param: 'aoIntensity', gt: 0.0 }],
+            description: "Black = classic darkening. Custom color = tinted occlusion in shadowed areas."
         },
 
         // --- ENGINE PARAMETERS (Engine Panel) ---
@@ -82,7 +90,8 @@ export const AOFeature: FeatureDefinition = {
         aoEnabled: {
             type: 'boolean', default: true, label: 'Enable AO', shortId: 'ae', group: 'main',
             hidden: true, noReset: true,
-            onUpdate: 'compile'
+            onUpdate: 'compile',
+            estCompileMs: 200
         }
     },
     inject: (builder, config, variant) => {

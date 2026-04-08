@@ -104,9 +104,34 @@ void applyWaterMaterial(inout vec3 albedo, inout float roughness, inout vec3 nor
 }
 `;
 
-const WATER_GLSL_STUBS = `
-float mapWater(vec3 p) { return 1e10; }
-void applyWaterMaterial(inout vec3 albedo, inout float roughness, inout vec3 normal, vec3 p) {}
+// GLSL injected into map() — water distance check with material sentinel
+const WATER_POST_MAP_CODE = `
+    // --- Water Plane (feature-injected) ---
+    float dWater = mapWater(p_fractal);
+    if (dWater < finalD) {
+        finalD = dWater;
+        decomp = MATERIAL_WATER;
+        smoothIter = 0.0;
+        outTrap = 0.0;
+    }
+`;
+
+// GLSL injected into mapDist() — geometry-only water distance check
+const WATER_POST_DIST_CODE = `
+    // --- Water Plane (feature-injected) ---
+    float dWater = mapWater(p_fractal);
+    if (dWater < finalD) {
+        finalD = dWater;
+    }
+`;
+
+// GLSL injected into getSurfaceMaterial() — water material override
+const WATER_MATERIAL_LOGIC = `
+    // --- Water Plane Material (feature-injected) ---
+    if (result.w >= 5.0) {
+        applyWaterMaterial(albedo, roughness, n, p_fractal);
+        emission = vec3(0.0);
+    }
 `;
 
 export const WaterPlaneFeature: FeatureDefinition = {
@@ -126,10 +151,10 @@ export const WaterPlaneFeature: FeatureDefinition = {
             type: 'boolean', default: false, label: 'Enable Water', shortId: 'we', group: 'engine_settings',
             onUpdate: 'compile', noReset: true, hidden: true
         },
-        
+
         // --- RUNTIME SWITCH ---
         active: { type: 'boolean', default: true, label: 'Visible', shortId: 'on', uniform: 'uWaterActive', group: 'main', condition: { param: 'waterEnabled', bool: true }, noReset: true },
-        
+
         height: { type: 'float', default: -2.0, label: 'Height (Y)', shortId: 'ht', uniform: 'uWaterHeight', min: -10.0, max: 10.0, step: 0.01, group: 'geometry', condition: { param: 'active', bool: true } },
         color: { type: 'color', default: new THREE.Color('#001133'), label: 'Water Color', shortId: 'cl', uniform: 'uWaterColor', group: 'material', condition: { param: 'active', bool: true } },
         roughness: { type: 'float', default: 0.02, label: 'Roughness', shortId: 'ro', uniform: 'uWaterRoughness', min: 0.0, max: 1.0, step: 0.01, group: 'material', condition: { param: 'active', bool: true } },
@@ -139,14 +164,21 @@ export const WaterPlaneFeature: FeatureDefinition = {
     },
     inject: (builder, config, variant) => {
         const state = config.waterPlane as WaterPlaneState;
-        
-        // CONDITIONAL COMPILATION:
+
         if (state && state.waterEnabled && variant === 'Main') {
-            builder.addDefine('WATER_ENABLED', '1');
+            // Define material sentinel
+            builder.addDefine('MATERIAL_WATER', '10.0');
+
+            // Inject water GLSL functions (pre-DE, position 8)
             builder.addFunction(WATER_GLSL_FUNCS);
-        } else {
-            // Inject Stubs to satisfy function calls in de.ts / material_eval.ts
-            builder.addFunction(WATER_GLSL_STUBS);
+
+            // Inject distance checks into map() and mapDist() (position 9, accumulative)
+            builder.addPostMapCode(WATER_POST_MAP_CODE);
+            builder.addPostDistCode(WATER_POST_DIST_CODE);
+
+            // Inject material override into getSurfaceMaterial() (position 11)
+            builder.addMaterialLogic(WATER_MATERIAL_LOGIC);
         }
+        // No stubs needed — water call sites are no longer hardcoded in core files
     }
 };

@@ -8,7 +8,7 @@ export const useInputController = (
     mode: CameraMode, 
     speed: number, 
     setSpeed: (v: number) => void,
-    hudRefs?: any // Optional 4th argument to handle UI exclusions
+    hudRefs?: Record<string, React.RefObject<HTMLElement | null>> // Optional 4th argument to handle UI exclusions
 ) => {
     const { gl } = useThree();
     const invertY = useFractalStore(s => s.invertY);
@@ -58,10 +58,11 @@ export const useInputController = (
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+            const t = e.target as HTMLElement;
+            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.cm-editor')) return;
             if ((e.ctrlKey || e.metaKey) && (e.key === 'w' || e.code === 'KeyW')) e.preventDefault();
-            
-            // Prevent Spacebar scrolling
+
+            // Prevent Spacebar scrolling (only when not in a text editor)
             if (e.code === 'Space') e.preventDefault();
 
             // Prevent Alt menu
@@ -91,7 +92,8 @@ export const useInputController = (
         
         const handleKeyUp = (e: KeyboardEvent) => {
             if (e.key === 'Alt') e.preventDefault();
-            
+            const t = e.target as HTMLElement;
+            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.cm-editor')) return;
             switch(e.code) {
                 case 'KeyW': moveState.current.forward = false; break;
                 case 'KeyS': moveState.current.backward = false; break;
@@ -149,8 +151,8 @@ export const useInputController = (
             };
         };
 
-        const handleJoyMove = (e: any) => { joystickMove.current = e.detail; markActivity(); };
-        const handleJoyLook = (e: any) => { joystickLook.current = e.detail; markActivity(); };
+        const handleJoyMove = (e: Event) => { joystickMove.current = (e as CustomEvent).detail; markActivity(); };
+        const handleJoyLook = (e: Event) => { joystickLook.current = (e as CustomEvent).detail; markActivity(); };
 
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
@@ -187,14 +189,14 @@ export const useInputController = (
             // Check Exclusion (HUD elements)
             if (hudRefs) {
                 // If any HUD ref contains the target, ignore
-                const isHudClick = Object.values(hudRefs).some((ref: any) => ref.current && ref.current.contains(e.target as Node));
+                const isHudClick = Object.values(hudRefs).some((ref) => ref.current && ref.current.contains(e.target as Node));
                 if (isHudClick) return;
             } else {
                 // Fallback: Check for class
                 if ((e.target as HTMLElement).closest('.pointer-events-auto')) return;
             }
             
-            const isMobile = debugMobileLayout || window.innerWidth < 768 || (e as any).pointerType === 'touch';
+            const isMobile = debugMobileLayout || window.innerWidth < 768 || (e as MouseEvent & { pointerType?: string }).pointerType === 'touch';
             if (isMobile && mode === 'Fly') return;
 
             markActivity();
@@ -214,8 +216,13 @@ export const useInputController = (
                 mousePos.current = { x, y };
                 markActivity();
             } else if (mode === 'Orbit' && e.buttons > 0) {
-                // Orbit Mode Drag (Left/Right/Middle)
-                markActivity();
+                // Orbit Mode Drag — only mark activity if the drag originated on the canvas,
+                // not on UI elements (buttons, sliders, menus). Without this guard,
+                // clicking any UI button while in Orbit mode triggers markActivity →
+                // isCameraInteracting → dynamic scaling resolution change → accumulation reset.
+                if (e.target === domElement || domElement.contains(e.target as Node)) {
+                    markActivity();
+                }
             }
         };
         

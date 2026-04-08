@@ -2,7 +2,7 @@
 
 ## 🎯 Introduction to GMT
 
-**GMT (GPU Mandelbulb Tracer)** is a professional-grade, real-time 3D fractal engineering tool running entirely in the browser. It combines high-performance GPU Raymarching with a reactive, data-driven UI to render complex mathematical structures (Mandelbulbs, Mandelboxes, IFS) with photorealistic lighting, Path Tracing, and infinite zoom capabilities.
+**GMT (Fractal Explorer)** is a professional-grade, real-time 3D fractal engineering tool running entirely in the browser. It combines high-performance GPU Raymarching with a reactive, data-driven UI to render complex mathematical structures (Mandelbulbs, Mandelboxes, IFS) with photorealistic lighting, Path Tracing, and infinite zoom capabilities.
 
 This documentation system provides comprehensive information for developers working on GMT. Whether you're fixing bugs, adding features, or understanding the architecture, this index will guide you to the right resources.
 
@@ -13,7 +13,7 @@ The GMT documentation is organized into several complementary systems:
 1. **Technical Documentation** (this folder): Detailed architecture, rendering, and implementation guides
 2. **In-App Help System** (`data/help/`): User-facing documentation accessible from the application
 3. **README.md**: Project overview, quick start, and high-level documentation
-4. **Context Files** (`context.md`, `context2.md`): Condensed architecture overviews for AI sessions
+4. **CLAUDE.md**: Condensed architecture overview and instructions for AI sessions
 
 ## 📖 Technical Documentation - Table of Contents
 
@@ -21,7 +21,7 @@ The GMT documentation is organized into several complementary systems:
 | File | Purpose | Key Topics |
 |------|---------|-------------|
 | [01_System_Architecture.md](01_System_Architecture.md) | **Foundation** | Engine-Bridge pattern, DDFS, render loop, state management |
-| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, path tracing, precision math, accumulation, bucket rendering (4K-10K support) |
+| [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, Cook-Torrance PBR, reflection tracing, path tracing, fog system, precision math, accumulation, bucket rendering |
 | [03_Modular_System.md](03_Modular_System.md) | **Node Graph** | Graph compiler, JIT GLSL generation, uniform flattening |
 | [04_Animation_Engine.md](04_Animation_Engine.md) | **Timeline** | Keyframes, interpolation, unified camera, offline rendering |
 | [05_Data_and_Export.md](05_Data_and_Export.md) | **I/O System** | Video export, presets, GMF format, storage strategies |
@@ -29,11 +29,22 @@ The GMT documentation is organized into several complementary systems:
 | [07_Code_Health.md](07_Code_Health.md) | **Maintenance** | Technical debt, refactor status, optimization opportunities |
 | [08_File_Structure.md](08_File_Structure.md) | **Reference** | Complete file map with responsibilities |
 
-### Specialized Reports
+### Fragmentarium Importer & Formulas
 | File | Purpose |
 |------|---------|
-| [09_Mapping_Modes_Report.md](09_Mapping_Modes_Report.md) | Analysis of coloring mapping modes |
-| [10_Shader_Architecture_Refactor.md](10_Shader_Architecture_Refactor.md) | Shader composition and injection patterns |
+| [21_Frag_Importer_Current_Status.md](21_Frag_Importer_Current_Status.md) | **⚠️ START HERE — current status and known issues** |
+| [22_Frag_to_Native_Formula_Conversion.md](22_Frag_to_Native_Formula_Conversion.md) | Guide: converting .frag formulas to native GMT .ts formulas |
+| [23_Formula_Audit.md](23_Formula_Audit.md) | Formula correctness audit: naming, descriptions, params, DE |
+| [24_Formula_Interlace_System.md](24_Formula_Interlace_System.md) | Interlace architecture, preambleVars contract, quirks, improvement suggestions |
+| [25_Formula_Dev_Reference.md](25_Formula_Dev_Reference.md) | **Unified formula writing reference**: full API surface, shader fields, parameters, GLSL built-ins, quirks & gotchas, templates |
+
+### Archive
+Historical design docs, completed reports, and superseded references are in [`docs/archive/`](archive/).
+
+### Changelog
+| File | Purpose |
+|------|---------|
+| [CHANGELOG_DEV.md](CHANGELOG_DEV.md) | Development changelog for current dev branch (v0.9.0) |
 
 ## 🚀 Getting Started
 
@@ -73,8 +84,9 @@ The GMT documentation is organized into several complementary systems:
 | Store & State | `store/fractalStore.ts` |
 | Shader Assembly | `engine/ShaderFactory.ts` |
 | Animation Timeline | `engine/AnimationEngine.ts` |
-| Video Export | `engine/VideoExporter.ts` |
+| Video Export | `engine/worker/WorkerExporter.ts` |
 | Auto-Generated UI | `components/AutoFeaturePanel.tsx` |
+| Compilable Feature UI | `components/CompilableFeatureSection.tsx` |
 
 ### User Documentation
 The in-app help system is located in `data/help/`. Topics include:
@@ -91,7 +103,7 @@ The in-app help system is located in `data/help/`. Topics include:
 1. **Start with the README** for project overview and quick start
 2. **Use the Table of Contents** to find relevant technical guides
 3. **Follow cross-references** between different documentation types
-4. **Check context files** for AI session overviews
+4. **Check CLAUDE.md** for AI session context
 
 ### Updating Documentation
 When making changes to GMT:
@@ -129,7 +141,7 @@ When making changes to GMT:
 2. Use Shader Debugger (`components/ShaderDebugger.tsx`)
 3. Check State Debugger for feature parameter values
 4. Use Performance Monitor to identify bottlenecks
-5. Try "Lite Mode" to isolate GPU-related issues
+5. Try the "Fastest" or "Preview" viewport quality preset to isolate GPU-related issues
 
 ## 📚 Additional Resources
 
@@ -139,15 +151,56 @@ When making changes to GMT:
 
 ---
 
-*Last updated: February 2026*
+*Last updated: March 2026 (viewport quality system added)*
 
 ## 11. Recent Changes Summary
+
+### 2026-03-27 Viewport Quality System
+| Category | Change | Files |
+|----------|--------|-------|
+| **Scalability** | Per-subsystem tier model replaces flat ENGINE_PROFILES. Four subsystems (Shadows, Reflections, Lighting, Atmosphere) with ordered quality tiers. Six master presets (Preview→Ultra). | `types/viewport.ts` (NEW) |
+| **Store Slice** | Scalability slice manages tier state, writes overrides to store via DDFS feature setters. Late-bound `bindGetShaderConfig()` breaks circular dep. | `store/slices/scalabilitySlice.ts` (NEW) |
+| **Top Bar UI** | ViewportQuality dropdown with preset selection, per-subsystem tiers, PT-aware controls (runtime sliders + compile toggles), compile estimates, and batched Apply. | `components/topbar/ViewportQuality.tsx` (NEW) |
+| **Hardware Detection** | Boot-time GPU probing (Float32 support, mobile detection, tier classification). Hardware caps applied as ceiling in `getShaderConfigFromState()`. | `engine/HardwareDetection.ts` (NEW) |
+| **Hardware Prefs** | Modal for overriding detected precision, buffer format, and hard loop cap. Portal-rendered for correct stacking. | `components/panels/HardwarePreferences.tsx` (NEW) |
+| **Engine Panel** | Moved to advanced mode. Old preset dropdown removed from SystemMenu. Hardware params hidden from DDFS. | `SystemMenu.tsx`, `EnginePanel.tsx`, `features/quality.ts` |
+| **Config Pipeline** | Three-stage: authored state → subsystem tier overrides (store writes) → hardware caps (overlay). Shallow cloning in `getShaderConfigFromState()` for Stage 3 safety. | `store/fractalStore.ts`, `types/store.ts` |
+| **TSS Removed** | TSS toggle removed from top bar and Quality panel — accumulation is always on. | `RenderTools.tsx`, `QualityPanel.tsx` |
+| **Top Bar Layout** | Reordered: FPS → Pause → Viewport Quality → PT toggle. Tighter spacing. | `RenderTools.tsx` |
+
+### 2026-03-21 GMF as Primary Save Format
+| Category | Change | Files |
+|----------|--------|-------|
+| **Save Format** | GMF replaces JSON for all scene saves — embeds formula shader code + full scene state | `utils/FormulaFormat.ts` |
+| **PNG Metadata** | Snapshots/bucket renders embed GMF instead of JSON — imported formulas survive roundtrips | `CameraTools.tsx`, `BucketRenderer.ts`, `WorkerProxy.ts` |
+| **Load Paths** | All load paths (SystemMenu, LoadingScreen, FormulaGallery, FormulaSelect) use `loadGMFScene()` with format detection | Multiple |
+| **URL Sharing** | Disabled for imported formulas (tooltip: "N/A (Imported)") | `SystemMenu.tsx` |
+| **Backward Compat** | Legacy `.json` presets, old GMFs, and old JSON-metadata PNGs all load correctly | `FormulaFormat.ts`, `fractalStore.ts` |
+
+### 2026-03-20 Formula Workshop & V3 Importer
+| Category | Change | Files |
+|----------|--------|-------|
+| **V3 Pipeline** | New AST-based analysis + generation pipeline (64/64 tests passing) | `v3/analyze/`, `v3/generate/`, `v3/compat.ts` |
+| **Formula Library** | Categorized index of 494 verified formulas (178 frag + 316 DEC) with artist attribution | `formula-library.ts`, `passing-formulas.ts` |
+| **Workshop UI** | Browse Library button, Random Frag/DEC, resizable source editor, Preview button restored | `FormulaWorkshop.tsx` |
+| **Coloring Fix** | Strip `vec4 g_orbitTrap` shadow declarations to fix orbit trap coloring on imports | `v3/generate/index.ts`, `v3/generate/full-de.ts` |
+| **Degree/Radian** | `isDegrees` auto-detection; new `scale: 'degrees'` keeps internal degrees, displays π notation | `v3/analyze/params.ts`, `workshop/param-builder.ts`, `FormulaPanel.tsx` |
+
+### 2026-03-03 Vector Controls Enhancement
+| Category | Change | Files |
+|----------|--------|-------|
+| **Vector3/Vec2 Controls** | Added rotation mode with heliotrope direction visualizer | `components/vector-input/RotationHeliotrope.tsx`, `BaseVectorInput.tsx` |
+| **Vector3/Vec2 Controls** | Unit toggle (degrees/radians) via right-click context menu | `BaseVectorInput.tsx` |
+| **Vector3/Vec2 Controls** | Double-click axis labels to reset to default value | `VectorAxisCell.tsx` |
+| **Slider/Vector Input** | Alt-drag now skips step quantization for full precision | `components/inputs/hooks/useDragValue.ts` |
+| **Slider/Vector Input** | Fixed double-mapping bug where slider min/max were mapped twice | `components/Slider.tsx`, `ScalarInput.tsx` |
+| **Formula Panel** | Rotation parameters auto-detected with word boundary regex | `FormulaPanel.tsx` |
 
 ### 2026-02-24 Fixes
 | Category | Change | Files |
 |----------|--------|-------|
 | **Video Export** | Bitrate auto-scales with resolution (40 Mbps base for 1080p) | `data/constants.ts`, `components/timeline/RenderPopup.tsx` |
-| **Video Export** | Viewport state restoration after render | `engine/VideoExporter.ts` |
+| **Video Export** | Viewport state restoration after render | `engine/worker/WorkerExporter.ts` |
 | **Sliders** | Removed log scaling from roughness, AO intensity, AO spread | `features/materials.ts`, `features/ao/index.ts` |
 | **Sliders** | Increased precision (min 0.001, step 0.001) for roughness and AO spread | `features/materials.ts`, `features/ao/index.ts` |
 | **Graph Editor** | Fixed browser drag-to-copy interference | `components/panels/flow/FlowEditor.tsx` |

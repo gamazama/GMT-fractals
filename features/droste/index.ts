@@ -31,7 +31,7 @@ export const DrosteFeature: FeatureDefinition = {
         active: {
             type: 'boolean',
             default: false,
-            label: 'Enable Droste',
+            label: 'Droste Effect',
             shortId: 'ac',
             uniform: 'uDrosteActive',
             group: 'main', 
@@ -88,17 +88,6 @@ export const DrosteFeature: FeatureDefinition = {
             condition: { param: 'active', bool: true },
             noReset: true
         },
-        periodicity: {
-            type: 'float',
-            default: 2.0,
-            label: 'Periodicity',
-            shortId: 'p1',
-            uniform: 'uDrostePeriodicity',
-            min: -10, max: 10, step: 0.1,
-            group: 'structure',
-            condition: [{ param: 'active', bool: true }, { param: 'autoPeriodicity', bool: false }], 
-            noReset: true
-        },
         strands: {
             type: 'float',
             default: 2.0,
@@ -107,6 +96,17 @@ export const DrosteFeature: FeatureDefinition = {
             uniform: 'uDrosteStrands',
             min: -12, max: 12, step: 1,
             group: 'structure',
+            condition: { param: 'active', bool: true },
+            noReset: true
+        },
+        strandMirror: {
+            type: 'boolean',
+            default: false,
+            label: 'Mirror Strand',
+            shortId: 'sm',
+            uniform: 'uDrosteMirror',
+            group: 'structure',
+            parentId: 'strands',
             condition: { param: 'active', bool: true },
             noReset: true
         },
@@ -120,14 +120,16 @@ export const DrosteFeature: FeatureDefinition = {
             condition: { param: 'active', bool: true },
             noReset: true
         },
-        strandMirror: {
-            type: 'boolean',
-            default: false,
-            label: 'Mirror Strand',
-            shortId: 'sm',
-            uniform: 'uDrosteMirror',
+        periodicity: {
+            type: 'float',
+            default: 2.0,
+            label: 'Periodicity',
+            shortId: 'p1',
+            uniform: 'uDrostePeriodicity',
+            min: -10, max: 10, step: 0.1,
             group: 'structure',
-            condition: { param: 'active', bool: true },
+            parentId: 'autoPeriodicity',
+            condition: [{ param: 'active', bool: true }, { param: 'autoPeriodicity', bool: false }],
             noReset: true
         },
         zoom: {
@@ -202,11 +204,12 @@ export const DrosteFeature: FeatureDefinition = {
             uniform: 'uDrosteFractal',
             min: 0, max: 10, step: 1,
             group: 'transform',
+            parentId: 'hyperDroste',
             condition: [{ param: 'active', bool: true }, { param: 'hyperDroste', bool: true }],
             noReset: true
         }
     },
-    shader: {
+    postShader: {
         functions: DROSTE_MATH,
         mainUV: `
             if (uDrosteActive > 0.5) {

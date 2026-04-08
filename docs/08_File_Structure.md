@@ -7,6 +7,7 @@
 *   `App.tsx`: Main Layout (Loading, TopBar, Viewport, Controls, Timeline).
 *   `metadata.json`: PWA manifest and permissions.
 *   `types.ts`: Aggregates all type definitions.
+*   `types/viewport.ts`: Viewport quality types — `SubsystemDefinition`, `ScalabilityPreset`, `ScalabilityState`, `HardwareProfile`. Contains subsystem definitions (tiers, overrides), master presets, and helper functions.
 *   `vite.config.ts`: Build configuration.
 *   `server/server.js`: Custom Express server for dev/prod serving.
 
@@ -16,6 +17,7 @@ The imperative WebGL system.
 *   `RenderPipeline.ts`: Manages resolution, ping-pong buffers, and TSS accumulation.
 *   `ShaderFactory.ts`: Generates GLSL strings from Config + DDFS Features.
 *   `ShaderBuilder.ts`: Builder pattern for composing shaders from feature injections.
+*   `ShaderConfig.ts`: Extracted `ShaderConfig` type — shared between `ShaderFactory`, `ShaderBuilder`, and feature `inject()` contracts.
 *   `FeatureSystem.ts`: **Core DDFS Architecture**. Defines interfaces for features.
 *   `FractalRegistry.ts`: Database of available Fractal Formulas.
 *   `FractalEvents.ts`: Event bus for UI-to-Engine communication.
@@ -25,11 +27,21 @@ The imperative WebGL system.
 *   `MaterialController.ts`: Manages Three.js materials (Direct, PT, Physics).
 *   `SceneController.ts`: Manages Three.js scenes/cameras.
 *   `AnimationEngine.ts`: Handles timeline playback and value interpolation.
-*   `VideoExporter.ts`: Offline rendering pipeline (Seek -> Accumulate -> Encode). Uses `mediabunny` library.
+*   `codec/VideoExportTypes.ts`: Shared `VideoExportConfig` interface for export pipeline.
+*   `codec/H264Converter.ts`: H264 AnnexB → AVCC conversion + Halton sequence for TAA jitter.
 *   `BucketRenderer.ts`: Tiled high-res rendering logic.
 *   `LoadingRenderer.ts`: Standalone raw WebGL renderer for the splash screen.
+*   `LoadingRendererCPU.ts`: CPU-based fallback loading renderer.
+*   `TickRegistry.ts`: Phase-based tick orchestrator (SNAPSHOT → ANIMATE → OVERLAY → UI).
 *   `NodeRegistry.ts`: Database of Modular Graph nodes.
 *   `BezierMath.ts`: Cubic Bezier curve solving for animation.
+*   **`worker/`**: Web Worker rendering subsystem.
+    *   `renderWorker.ts`: Worker entry point — boots FractalEngine on OffscreenCanvas.
+    *   `WorkerProxy.ts`: Main-thread proxy for posting messages to the worker.
+    *   `WorkerProtocol.ts`: Message type definitions and protocol constants.
+    *   `WorkerExporter.ts`: Worker-side video export coordination.
+    *   `ViewportRefs.ts`: Shared viewport dimension/canvas references.
+*   `HardwareDetection.ts`: GPU capability probing — Float32 support, mobile detection, tier classification. Called once at boot from `useAppStartup`.
 *   **`controllers/`**:
     *   `CameraController.ts`: Physics for Fly/Orbit movement.
     *   `PickingController.ts`: Handles depth-buffer reading for focus/interaction.
@@ -45,8 +57,34 @@ The imperative WebGL system.
 Self-contained modules defining State, UI, and Shaders.
 *   `features/index.ts`: Registration entry point.
 *   `features/types.ts`: Aggregate state types.
+*   **`fragmentarium_import/`**: Fragmentarium .frag file importer (AST-based)
+    *   `FormulaWorkshop.tsx`: UI dialog for importing formulas; drives the full parse → map → transform pipeline.
+    *   `index.ts`: Barrel export.
+    *   `types.ts`: Shared type definitions.
+    *   `TESTING_GUIDE.md`: Test suite documentation.
+    *   `reference/`: Sample .frag files and expected GMF outputs for regression testing.
+    *   **`parsers/`**: GLSL parsing subsystem.
+        *   `ast-parser.ts`: AST-based parser via `@shaderfrog/glsl-parser`.
+        *   `preprocessor.ts`: GLSL preprocessor (#define, #include handling).
+        *   `dec-detector.ts`: DEC (Distance Estimated Coloring) pattern detection.
+        *   `dec-preprocessor.ts`: DEC-specific preprocessing transforms.
+        *   `uniform-parser.ts`: Uniform extraction from GLSL source.
+        *   `builtins.ts`: Built-in GLSL function/type definitions.
+    *   **`transform/`**: Code transformation pipeline.
+        *   `code-generator.ts`: GLSL code generation from AST.
+        *   `init-generator.ts`: Initialization code generation.
+        *   `loop-extractor.ts`: Fractal iteration loop extraction.
+        *   `pattern-detector.ts`: Formula pattern recognition.
+        *   `variable-renamer.ts`: Safe variable renaming (avoids z.z→z_local.z_local bugs).
+    *   **`workshop/`**: Formula workshop UI helpers.
+        *   `detection.ts`: Formula type auto-detection.
+        *   `param-builder.ts`: Parameter mapping builder.
+        *   `preview.ts`: Live preview generation.
 *   **`core_math`**: Iterations, Params A-F.
-*   **`geometry`**: Julia, Hybrid (Box), Pre-Rotation.
+*   **`geometry/`**: Julia, Hybrid (Box), Pre-Rotation, and modular fold system.
+    *   `index.ts`: Feature definition and fold registration.
+    *   `types.ts`: Geometry type definitions.
+    *   **`folds/`**: Modular fold implementations (tetra, standard, half, decoupled, mirror, octa, icosa, menger, kali).
 *   **`lighting`**: Light studio, Shadows, Falloff. Includes `LightGizmo.tsx`, `LightPanel.tsx` (in `features/lighting/`).
 *   **`materials`**: PBR Surface, Emission, Environment.
 *   **`atmosphere`**: Fog, Volumetric Glow.
@@ -64,10 +102,10 @@ Self-contained modules defining State, UI, and Shaders.
 *   **`debug_tools`**: Shader/State debuggers. Includes `DebugToolsOverlay.tsx`.
 *   **`ao`**: Ambient Occlusion logic.
 *   **`reflections`**: Raymarched reflections logic.
-*   **`water_plane`**: Infinite ocean plane logic.
-*   **`sonification`**: FHBT audio feedback from fractal data. Includes `SonificationEngine.ts`, `FHBTProbe.tsx`.
-*   **`camera_manager`**: Camera position management and keyframing.
-*   **`engine`**: Master configuration profiles (Lite/Balanced/Ultra).
+*   **`water_plane.ts`**: Infinite ocean plane logic.
+*   **`volumetric/`**: Volumetric rendering effects (fog density, scatter).
+*   **`camera_manager`**: Camera position management — saved cameras with thumbnails, drag-to-reorder, duplicate, smooth transitions, Ctrl+1-9 shortcuts, export/import, composition overlays. Persists into presets/PNG snapshots.
+*   **`engine`**: Master configuration profiles (legacy — superseded by viewport quality system).
 
 ## 4. State Management (`store/`)
 *   `fractalStore.ts`: Main Zustand store.
@@ -78,6 +116,7 @@ Self-contained modules defining State, UI, and Shaders.
     *   `cameraSlice.ts`: Position, Rotation, History.
     *   `uiSlice.ts`: Panel visibility, Layout.
     *   `historySlice.ts`: Parameter Undo/Redo stack.
+    *   `scalabilitySlice.ts`: Viewport quality tiers, hardware profile. Writes tier overrides to store via feature setters; uses `bindGetShaderConfig()` pattern for circular dep with `fractalStore.ts`.
 *   **`animation/`**:
     *   `playbackSlice.ts`: Play/Pause/Seek.
     *   `sequenceSlice.ts`: Track/Keyframe CRUD.
@@ -85,21 +124,35 @@ Self-contained modules defining State, UI, and Shaders.
     *   `types.ts`: Animation type definitions.
 
 ## 5. Components (`components/`)
-*   **Core**: `ViewportArea`, `Controls`, `Timeline`, `TopBar`, `MobileControls`, `App`.
-*   **Primitives**: `Slider`, `Knob`, `Vector3Input`, `Vector2Pad`, `ToggleSwitch`, `Button`, `Dropdown`.
+*   **Core**: `ViewportArea`, `Controls`, `Timeline`, `TopBar`, `MobileControls`.
+*   **Primitives**: `Slider`, `Knob`, `ToggleSwitch`, `Button`, `Dropdown`, `CollapsibleSection`, `PanelHeader`, `Popover`, `SectionLabel`, `StatusDot`, `TabBar`.
+*   **`inputs/`**: Unified scalar/vector input primitives.
+    *   `ScalarInput.tsx`: Core draggable-number primitive with fill bar. Manages refs for direct DOM updates during drag (`fillBarRef`, `fullTrackFillRef`, `rangeInputRef`). Passes `onImmediateChange` to DraggableNumber.
+    *   `VectorInput.tsx`: Thin wrapper that delegates to `vector-input/` components.
+    *   `types.ts`, `index.ts`: Shared types and barrel export.
+    *   `primitives/DraggableNumber.tsx`: Drag-to-adjust + click-to-edit number. Updates display text via direct DOM manipulation (`displayRef.textContent`) during drag for instant feedback.
+    *   `primitives/FormatUtils.ts`: Value formatting, mapping (pi/degrees/log), and `computePercentage()` utility shared by ScalarInput and BaseVectorInput.
+    *   `hooks/useDragValue.ts`: Core drag logic. Exposes `immediateValueRef` for synchronous value reads during drag.
+*   **`vector-input/`**: Rich vector controls (replaces deleted `Vector2Pad.tsx` / `Vector3Input.tsx`).
+    *   `BaseVectorInput.tsx`: Shared layout for Vec2, Vec3, and Vec4 modes. Uses `pushAxisToDOM()` for direct DOM updates when drag source is DualAxisPad, rotation heliotrope, or linked mode (queries axis cells by `data-axis-index` attribute).
+    *   `VectorAxisCell.tsx`: Individual axis cell (label + draggable number + reset). Exposes `data-axis-index` attribute for parent DOM queries.
+    *   `RotationHeliotrope.tsx`: Circular 3D-direction visualiser for rotation params.
+    *   `DualAxisPad.tsx`: XY/WZ manipulation pad.
+    *   `index.tsx`, `types.ts`: Public API and types.
 *   **Pickers**: `SmallColorPicker`, `EmbeddedColorPicker`, `AdvancedGradientEditor`.
-*   **Panels**: `FormulaPanel`, `ScenePanel`, `LightPanel`, `RenderPanel`, `QualityPanel`, `EnginePanel`.
-*   **Visuals**: `MandelbulbScene`, `HudOverlay`, `CompilingIndicator`, `PerformanceMonitor`, `LoadingScreen`.
+*   **Panels**: `FormulaPanel`, `ScenePanel`, `LightPanel`, `RenderPanel`, `QualityPanel`, `EnginePanel`, `HardwarePreferences` (modal for hardware caps — precision, buffer format, loop cap).
+*   **Visuals**: `HudOverlay`, `CompilingIndicator`, `PerformanceMonitor`, `LoadingScreen`.
+*   **Worker**: `WorkerDisplay`, `WorkerTickScene`, `StandaloneTickLoop`.
 *   **Timeline**: `DopeSheet`, `GraphEditor`, `TimeNavigator`, `TimelineRuler`, `KeyframeInspector`, `TimelineToolbar`, `RenderPopup`, `KeyframeContextMenu`.
 *   **Flow**: `FlowEditor`, `ShaderNode` (Modular Graph).
 *   **Registry**: `ComponentRegistry` (Maps strings to React components for DDFS).
 *   **Graph**: `GraphCanvas`, `GraphSidebar`, `GraphToolbar`.
-*   **TopBar**: `SystemMenu`, `CameraTools`, `RenderTools`, `FpsCounter`, `CenterHUD`, `BucketRenderControls`.
+*   **TopBar**: `SystemMenu`, `CameraTools`, `RenderTools`, `FpsCounter`, `CenterHUD`, `BucketRenderControls`, `ViewportQuality` (viewport quality dropdown with subsystem tiers, PT controls, and batched apply).
 *   **Viewport**: `FixedResolutionControls`.
 *   **Layout**: `Dock`, `DropZones`.
 *   **Gradient**: `GradientContextMenu`.
 *   **Node Editor**: `NodeParams`.
-*   **Other**: `AnimationSystem`, `DraggableWindow`, `FeatureSection`, `GlobalContextMenu`, `HelpBrowser`, `Histogram`, `HistogramProbe`, `Icons`, `InteractionPicker`, `KeyframeButton`, `ParameterSelector`, `PopupSliderSystem`, `ShaderDebugger`, `StateDebugger`.
+*   **Other**: `AnimationSystem`, `CategoryPickerMenu`, `DraggableWindow`, `FeatureSection`, `GlobalContextMenu`, `HelpBrowser`, `Histogram`, `HistogramProbe`, `Icons`, `InteractionPicker`, `KeyframeButton`, `ParameterSelector`, `PopupSliderSystem`, `ShaderDebugger`, `StateDebugger`.
 
 ## 6. Shaders (`shaders/`)
 *   `chunks/`: Reusable GLSL snippets (Math, SDFs, Lighting, Raymarching).
@@ -121,6 +174,8 @@ Self-contained modules defining State, UI, and Shaders.
         *   `pbr.ts`: PBR lighting.
         *   `shading.ts`: Shading calculations.
         *   `shadows.ts`: Shadow computation.
+        *   `volumetric_scatter.ts`: Henyey-Greenstein single-scatter GLSL body, injected into the march loop when `PT_VOLUMETRIC` is defined.
+        *   `shared.ts`: Shared lighting utilities and constants.
 
 ## 7. Utils (`utils/`)
 *   `CameraUtils.ts`: Unified coordinate math.
@@ -129,17 +184,17 @@ Self-contained modules defining State, UI, and Shaders.
 *   `GraphCompiler.ts`: Modular graph to GLSL transpiler.
 *   `GraphRenderer.ts`: Graph rendering utilities.
 *   `GraphUtils.ts`: Graph utility functions.
-*   `graphAlg.ts`: Graph algorithms.
-*   `GraphAlgorithms.ts`: Additional graph algorithms.
-*   `PresetLogic.ts`: State hydration/sanitization.
+*   `graphAlg.ts`: Graph algorithms (cycle detection, topological sort).
+*   `keyframeViewBounds.ts`: Keyframe dope sheet view bounds calculation.
 *   `Sharing.ts` / `UrlStateEncoder.ts`: URL compression.
 *   `fileUtils.ts`: Filename generation.
-*   `pngMetadata.ts`: Steganography (Data in PNG).
+*   `pngMetadata.ts`: PNG iTXt chunk injection/extraction for embedding scene data in snapshots.
 *   `histogramUtils.ts`: Auto-levels analysis.
 *   `timelineUtils.ts`: Keyframe helpers.
 *   `colorUtils.ts`: Color utilities.
 *   `helpUtils.ts`: Help system utilities.
-*   `FormulaFormat.ts`: GMF (GPU Mandelbulb Format) parser/generator.
+*   `FormulaFormat.ts`: GMF (GPU Mandelbulb Format) — primary save format. Contains `saveGMFScene()` (save), `loadGMFScene()` (load with format detection), `generateGMF()` / `parseGMF()` (formula-level), `isGMFFormat()` (format detection). See `docs/05_Data_and_Export.md` for full format spec.
+*   `PresetLogic.ts`: State hydration/sanitization — `applyPresetState()` applies a Preset to the store (camera, features, lights, animations).
 
 ## 8. Vite Build Configuration
 **File:** `vite.config.ts`

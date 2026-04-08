@@ -5,66 +5,48 @@ export const MandelBolic: FractalDefinition = {
     name: 'MandelBolic',
     shortDescription: 'A true 3D geometric extension of the Mandelbrot set into Hyperbolic 3-Space.',
     description: 'Bypasses the limitations of 3D algebra by using the Poincaré-Ahlfors extension into Hyperbolic 3-Space. This preserves perfect spherical bulbs, exact periodicity, and the true 3D cardioid core without the "smeared" artifacts of standard 3D fractals. Now features generalized Power and Hyperbolic distortion parameters.',
+    juliaType: 'julia',
     
     shader: {
         function: `
         void formula_MandelBolic(inout vec4 z, inout float dr, inout float trap, vec4 c) {
             vec3 z3 = z.xyz;
-            float r = length(z3);
-            
             float power = uParamA;
-            
+
             // Z is the 2D complex plane (x, y), T is the hyperbolic height (z)
             float rxy2 = z3.x*z3.x + z3.y*z3.y;
             float rxy = sqrt(rxy2);
-            
-            // Derivative calculation using full 3D magnitude
-            dr = power * pow(r, power - 1.0) * dr + 1.0;
-            
+
             // Ahlfors Extension multiplier: M = (|Z|^2 - T^2) / |Z|^2
             // uParamC (Conformal Shift) distorts the hyperbolic mapping
             float m = (rxy2 - uParamC * z3.z*z3.z) / (rxy2 + 1e-20);
-            
+
+            // Shared rxy^(p-1) — used by both derivative and Z mapping
+            float rxy_pm1 = pow(max(rxy, 1e-10), power - 1.0);
+            float rxy_p = rxy_pm1 * rxy;
+
+            // Derivative: account for split XY/Z Jacobian
+            // XY stretch: p * rxy^(p-1) * |m|  (conformal distortion)
+            // Z  stretch: p * rxy^(p-1) * |B|  (hyperbolic scaling)
+            // Use max for conservative bound on largest singular value
+            float stretch = power * rxy_pm1 * max(abs(m), abs(uParamB));
+            dr = stretch * dr + 1.0;
+
             // Apply the conformal 3D power with Phase Twist (uParamD)
             float theta = atan(z3.y, z3.x) * power + uParamD;
-            float rxy_p = pow(rxy, power);
-            
+
             // Z_{n+1} = Z_n^p * M + C_z
             float nx = rxy_p * cos(theta) * m + c.x;
             float ny = rxy_p * sin(theta) * m + c.y;
-            
+
             // T_{n+1} = p * |Z_n|^(p-1) * T_n + C_t
             // uParamB scales the hyperbolic height growth, uParamE adds a constant Z-offset
-            float nz = power * pow(rxy, power - 1.0) * z3.z * uParamB + c.z + uParamE;
-            
-            z3 = vec3(nx, ny, nz);
-            
-            z.xyz = z3;
-            trap = min(trap, length(z3) * uParamF);
+            float nz = power * rxy_pm1 * z3.z * uParamB + c.z + uParamE;
+
+            z.xyz = vec3(nx, ny, nz);
+            trap = min(trap, length(z.xyz) * uParamF);
         }`,
-        loopBody: `formula_MandelBolic(z, dr, trap, c);`,
-        getDist: `
-            float m2 = r * r;
-            if (m2 < 1.0e-20) return vec2(0.0, iter);
-            
-            // Log Smoothing Calculation (Shared)
-            // Guarded: Only calculate log smoothing if we have actually escaped (> 1.0)
-            float smoothIter = iter;
-            if (m2 > 1.0) {
-                float threshLog = log2(max(uEscapeThresh, 1.1));
-                smoothIter = iter + 1.0 - log2(log2(m2) / threshLog);
-            }
-            
-            float d = 0.0;
-            float dr_safe = max(abs(dr), 1.0e-20);
-            
-            // Custom distance estimator for MandelBolic
-            // Optimized for hyperbolic geometry - use log-based estimator for all regions
-            float logR2 = log2(m2);
-            d = 0.17328679 * logR2 * r / dr_safe;
-            
-            return vec2(d, smoothIter);
-        `
+        loopBody: `formula_MandelBolic(z, dr, trap, c);`
     },
 
     parameters: [
@@ -331,15 +313,6 @@ export const MandelBolic: FractalDefinition = {
                 lowPass: 20000,
                 gain: 1
             },
-            sonification: {
-                isEnabled: false,
-                active: true,
-                baseFrequency: 220,
-                masterGain: 0.5,
-                scanArea: 0.1,
-                harmonics: true,
-                lastDimension: 0
-            },
             drawing: {
                 activeTool: "rect",
                 enabled: false,
@@ -385,189 +358,6 @@ export const MandelBolic: FractalDefinition = {
         sceneOffset: { x: -1.9531606435775757, y: 1.1919928789138794, z: -1.096980132162571, xL: -0.41618868170671375, yL: -0.030576279777909363, zL: 0.3954860597472547 },
         targetDistance: 2.4710260497199164,
         cameraMode: "Fly",
-        lights: [],
-        renderMode: "Direct",
-        quality: {
-            aaMode: "Always",
-            aaLevel: 1,
-            msaa: 1,
-            accumulation: true
-        },
-        animations: [],
-        sequence: {
-            durationFrames: 300,
-            fps: 30,
-            tracks: {
-                "camera.unified.x": {
-                    id: "camera.unified.x",
-                    type: "float",
-                    label: "Position X",
-                    keyframes: [
-                        {
-                            id: "K_3Us2DNYcHZyIwka_uuq",
-                            frame: 0,
-                            value: -1.7201625603807942,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -10, y: 0 },
-                            rightTangent: { x: 48.951, y: 0 }
-                        },
-                        {
-                            id: "odTd7X1107yeLfH9FK5aA",
-                            frame: 147,
-                            value: -1.6980158112292516,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -48.951, y: 0 },
-                            rightTangent: { x: 10, y: 0 }
-                        }
-                    ],
-                    hidden: false
-                },
-                "camera.unified.y": {
-                    id: "camera.unified.y",
-                    type: "float",
-                    label: "Position Y",
-                    keyframes: [
-                        {
-                            id: "8RswhxI4H-B1jp30d0_tB",
-                            frame: 0,
-                            value: 0.06091210123685605,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -10, y: 0 },
-                            rightTangent: { x: 48.951, y: 0 }
-                        },
-                        {
-                            id: "Y4DuM9kqQELrT8wtkrNfn",
-                            frame: 147,
-                            value: 0.12378730479642533,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -48.951, y: 0 },
-                            rightTangent: { x: 10, y: 0 }
-                        }
-                    ],
-                    hidden: false
-                },
-                "camera.unified.z": {
-                    id: "camera.unified.z",
-                    type: "float",
-                    label: "Position Z",
-                    keyframes: [
-                        {
-                            id: "xAB-5DFGdS6bkihuF8OsC",
-                            frame: 0,
-                            value: -0.15881702211000104,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -10, y: 0 },
-                            rightTangent: { x: 48.951, y: 0 }
-                        },
-                        {
-                            id: "DAF_P4oTGG75Hsx1AsrRY",
-                            frame: 147,
-                            value: -0.011418242797758438,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -48.951, y: 0 },
-                            rightTangent: { x: 10, y: 0 }
-                        }
-                    ],
-                    hidden: false
-                },
-                "camera.rotation.x": {
-                    id: "camera.rotation.x",
-                    type: "float",
-                    label: "Rotation X",
-                    keyframes: [
-                        {
-                            id: "TeO7ekSi3R-H4hMrtFwAE",
-                            frame: 0,
-                            value: -2.4946725811260992,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -10, y: 0 },
-                            rightTangent: { x: 48.951, y: 0 }
-                        },
-                        {
-                            id: "8d0b5xWCbgu3uTnAgDlXz",
-                            frame: 147,
-                            value: -1.2608810934530643,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -48.951, y: 0 },
-                            rightTangent: { x: 10, y: 0 }
-                        }
-                    ],
-                    hidden: false
-                },
-                "camera.rotation.y": {
-                    id: "camera.rotation.y",
-                    type: "float",
-                    label: "Rotation Y",
-                    keyframes: [
-                        {
-                            id: "LbvOs-fAlGz_3QJaS3mZJ",
-                            frame: 0,
-                            value: 0.2399686287878261,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -10, y: 0 },
-                            rightTangent: { x: 48.951, y: 0 }
-                        },
-                        {
-                            id: "vtyfLR6bU-95GzHTczuWf",
-                            frame: 147,
-                            value: 0.35920958243574597,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -48.951, y: 0 },
-                            rightTangent: { x: 10, y: 0 }
-                        }
-                    ],
-                    hidden: false
-                },
-                "camera.rotation.z": {
-                    id: "camera.rotation.z",
-                    type: "float",
-                    label: "Rotation Z",
-                    keyframes: [
-                        {
-                            id: "R5V5ISxjfkqp24bTHbENo",
-                            frame: 0,
-                            value: 0.265482333717115,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -10, y: 0 },
-                            rightTangent: { x: 48.951, y: 0 }
-                        },
-                        {
-                            id: "6rTTGg-w5Pmu5rzjJzMCh",
-                            frame: 147,
-                            value: -0.12791460575119148,
-                            interpolation: "Bezier",
-                            autoTangent: false,
-                            brokenTangents: false,
-                            leftTangent: { x: -48.951, y: 0 },
-                            rightTangent: { x: 10, y: 0 }
-                        }
-                    ],
-                    hidden: false
-                }
-            }
-        },
-        duration: 147
+        lights: []
     }
 };

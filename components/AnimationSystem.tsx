@@ -4,7 +4,8 @@ import * as THREE from 'three';
 import { animationEngine } from '../engine/AnimationEngine';
 import { useFractalStore } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { featureRegistry } from '../engine/FeatureSystem';
 import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
@@ -117,17 +118,36 @@ export const tick = (delta: number) => {
             const feature = featureRegistry.get(featureId);
             const slice = (storeState as any)[featureId];
             if (feature && slice) {
-                const paramConfig = feature.params[paramId];
-                if (paramConfig) {
-                    // 1. Get Base Value
-                    if (typeof slice[paramId] === 'number') {
-                        resolvedBase = slice[paramId];
+                // Check for vector component target (e.g., vec3A_x, vec2B_y)
+                const vectorMatch = paramId.match(/^(vec[23][ABC])_(x|y|z)$/);
+                if (vectorMatch) {
+                    const vectorName = vectorMatch[1];
+                    const axis = vectorMatch[2];
+                    const paramConfig = feature.params[vectorName];
+                    if (paramConfig) {
+                        const vector = slice[vectorName];
+                        if (vector && typeof vector === 'object') {
+                            resolvedBase = (vector as any)[axis] || 0;
+                        }
+                        if (paramConfig.uniform) {
+                            // Map to individual uniform components
+                            uniformName = `${paramConfig.uniform}_${axis}`;
+                        }
+                        if (paramConfig.noReset) isNoReset = true;
                     }
-                    // 2. Get Uniform Name
-                    if (paramConfig.uniform) {
-                        uniformName = paramConfig.uniform;
+                } else {
+                    const paramConfig = feature.params[paramId];
+                    if (paramConfig) {
+                        // 1. Get Base Value
+                        if (typeof slice[paramId] === 'number') {
+                            resolvedBase = slice[paramId];
+                        }
+                        // 2. Get Uniform Name
+                        if (paramConfig.uniform) {
+                            uniformName = paramConfig.uniform;
+                        }
+                        if (paramConfig.noReset) isNoReset = true;
                     }
-                    if (paramConfig.noReset) isNoReset = true;
                 }
             }
         } else {
@@ -299,6 +319,42 @@ export const tick = (delta: number) => {
                         engine.modulations[targetKey] = offset; 
                     }
                 }
+            }
+            return;
+        }
+        
+        // F. Vector Params (vec3A_x, vec3A_y, vec3A_z pattern)
+        const vectorMatch = targetKey.match(/^(coreMath|geometry)\.(vec[23][ABC])_(x|y|z)$/);
+        if (vectorMatch) {
+            const featureId = vectorMatch[1];
+            const paramName = vectorMatch[2]; // e.g., 'vec3A'
+            const axis = vectorMatch[3]; // 'x', 'y', or 'z'
+            
+            const slice = (storeState as any)[featureId];
+            if (slice && slice[paramName]) {
+                const vec = slice[paramName];
+                const baseVal = vec[axis] ?? 0;
+                const finalVal = baseVal + offset;
+                
+                if (shouldRecord) {
+                    let cleanBase = baseVal;
+                    if (animStore.recordingSnapshot && animStore.recordingSnapshot.tracks[targetKey]) {
+                        cleanBase = evaluateTrackValue(animStore.recordingSnapshot.tracks[targetKey].keyframes, animStore.currentFrame, false);
+                    } else {
+                        if (initialStaticValues.current[targetKey] === undefined) initialStaticValues.current[targetKey] = baseVal;
+                        cleanBase = initialStaticValues.current[targetKey];
+                    }
+                    keysToRecord.push({ trackId: targetKey, value: cleanBase + offset });
+                    liveModulations[targetKey] = cleanBase + offset;
+                } else {
+                    liveModulations[targetKey] = finalVal;
+                }
+                
+                // Apply to uniform (uVec3A, uVec3B, etc.)
+                const uniformName = 'u' + paramName.charAt(0).toUpperCase() + paramName.slice(1);
+                // Build full vec3 for uniform
+                const fullVec = { ...vec, [axis]: finalVal };
+                engine.setUniform(uniformName, fullVec);
             }
             return;
         }

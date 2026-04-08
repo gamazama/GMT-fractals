@@ -6,20 +6,21 @@ export const Kleinian: FractalDefinition = {
     name: 'Kleinian',
     shortDescription: 'Inversion fractal. Resembles organic structures, coral, and sponge tissues.',
     description: 'Based on Kleinian groups and inversion in a sphere. Creates intricate, bubbly, sponge-like structures.',
+    juliaType: 'offset',
     
     shader: {
         function: `
-    void formula_Kleinian(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+        void formula_Kleinian(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        float limit = uParamC;
+        float limit = uParamB;
         z3 = clamp(z3, -limit, limit) * 2.0 - z3;
         float r2 = max(dot(z3, z3), 1e-10);
-        float k = max(uParamD / r2, 1.0);
+        float k = max(uParamC / r2, 1.0);
         z3 *= k;
         dr *= k;
         
-        // Apply Scale (A) and Offset (B)
-        z3 = z3 * uParamA + vec3(uParamB, 0.0, 0.0) + c.xyz;
+        // Apply Scale (A) and Offset (vec3A)
+        z3 = z3 * uParamA + uVec3A + c.xyz;
         dr = dr * abs(uParamA) + 1.0;
         
         z.xyz = z3;
@@ -30,15 +31,15 @@ export const Kleinian: FractalDefinition = {
 
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 2.5, step: 0.001, default: 1.8 },
-        { label: 'X Offset', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: 0.0 }, 
-        { label: 'Fold Size', id: 'paramC', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
-        { label: 'K Factor', id: 'paramD', min: 0.5, max: 2.0, step: 0.001, default: 1.2 },
+        { label: 'Offset', id: 'vec3A', type: 'vec3', min: -2.0, max: 2.0, step: 0.001, default: { x: 0, y: 0, z: 0 } },
+        { label: 'Fold Size', id: 'paramB', min: 0.0, max: 2.0, step: 0.001, default: 1.0 },
+        { label: 'K Factor', id: 'paramC', min: 0.5, max: 2.0, step: 0.001, default: 1.2 },
     ],
 
     defaultPreset: {
         formula: "Kleinian",
         features: {
-            coreMath: { iterations: 53, paramA: 2.058, paramB: 0, paramC: 0.907, paramD: 0.976, paramE: 1, paramF: 1 },
+            coreMath: { iterations: 53, paramA: 2.058, paramB: 0.907, paramC: 0.976, vec3A: { x: 0, y: 0, z: 0 } },
             coloring: {
                 mode: 3, // Z-Depth
                 repeats: 100, phase: 0, scale: 126.58, offset: 67.08, bias: 1, twist: 0, escape: 2,
@@ -82,7 +83,7 @@ export const Kleinian: FractalDefinition = {
         lights: [
             { type: 'Point', position: { x: 0.06202062498807429, y: 0.022274010144572264, z: 3.439439471330585 }, rotation: { x: 0, y: 0, z: 0 }, color: "#8FA9FF", intensity: 0.4, falloff: 0.6760000000000002, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
             { type: 'Point', position: { x: 0.00041247989335695644, y: -0.00142172416335363, z: 3.0187219870917428 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFB333", intensity: 5, falloff: 142.88399999999996, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: -0.12319987256138526, y: -0.0954216385692699, z: 2.9890303407494763 }, rotation: { x: 0, y: 0, z: 0 }, color: "#3636FF", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true }
+            { type: 'Point', position: { x: -0.12319987256138526, y: -0.0954216385692699, z: 2.9890303407494763 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E8F0FF", useTemperature: true, temperature: 7000, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: true }
         ]
     }
 };

@@ -17,6 +17,9 @@ export const MAX_LIGHTS = 8;
 
 export const DEFAULT_PIPELINE_REVISION = 1;
 
+/** Maximum valid depth — anything ≥ this is treated as a sky hit (no surface). */
+export const MAX_SKY_DISTANCE = 50.0;
+
 // MP4 Export Configuration
 export const VIDEO_CONFIG = {
     BITRATE_MULTIPLIER: 1_000_000, // Mbps to bps

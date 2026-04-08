@@ -8,7 +8,7 @@ import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { GradientStop, GradientConfig } from '../types';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
 import { generatePostProcessFrag } from '../shaders/chunks/post_process';
-import { FractalEvents } from './FractalEvents';
+import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
 import { LightingState } from '../features/lighting';
 import { createBlueNoiseTexture } from '../data/BlueNoiseData';
@@ -59,13 +59,21 @@ export class MaterialController {
     private lastGeneratedFrag: string = "";
     private activeDirectChecksum: string = "";
     private activePTChecksum: string = "";
-    
+
     private currentMode: 'Direct' | 'PathTracing' = 'Direct';
-    
+
     // Lazy Compilation State
     private storedConfig: ShaderConfig | null = null;
     private directDirty: boolean = true;
     private ptDirty: boolean = true;
+
+    // Tracks whether compileDirect/compilePT produced a new shader.
+    // Three.js Material.needsUpdate is a write-only setter (no getter), so we can't
+    // read it back to detect changes. This flag is the reliable alternative.
+    public shaderDirty: boolean = false;
+
+    // Two-stage compile: tracks whether we're currently showing a preview shader
+    public isPreviewActive: boolean = false;
     
     constructor(initialConfig: ShaderConfig) {
         const baseUniforms = createUniforms();
@@ -126,11 +134,6 @@ export class MaterialController {
     }
 
     public getMaterial(mode: 'Direct' | 'PathTracing') {
-        console.log('getMaterial called with mode:', mode);
-        console.log('directDirty:', this.directDirty);
-        console.log('ptDirty:', this.ptDirty);
-        console.log('Stack trace:', new Error().stack);
-        
         this.currentMode = mode;
         
         // Lazy Load: If switching to a mode that is dirty, compile it now
@@ -147,7 +150,8 @@ export class MaterialController {
         const uniforms: { [key: string]: THREE.IUniform } = {
             map: { value: null },
             uResolution: { value: new THREE.Vector2(1,1) },
-            uEncodeOutput: { value: encodeSRGB }
+            uEncodeOutput: { value: encodeSRGB },
+            uBloomTexture: { value: null }  // Set by BloomPass in worker
         };
 
         // SHARED REFERENCE OPTIMIZATION:
@@ -192,20 +196,12 @@ export class MaterialController {
              this.currentMode = config.renderMode || 'Direct';
         }
 
-        // CRITICAL: Always compile shader with depth output enabled
-        // This ensures the shader is compiled with the correct output configuration
-        // from the beginning, preventing recompilation when physics probe reads depth
-        const configWithDepth = {
-            ...config,
-            forceDepthOutput: true
-        };
-
         // LAZY LOGIC: Only compile the ACTIVE shader. Mark other as dirty.
         if (this.currentMode === 'Direct') {
-            this.compileDirect(configWithDepth);
+            this.compileDirect(config);
             this.ptDirty = true;
         } else {
-            this.compilePT(configWithDepth);
+            this.compilePT(config);
             this.directDirty = true;
         }
 
@@ -224,37 +220,30 @@ export class MaterialController {
     }
     
     private compileDirect(config: ShaderConfig) {
-        const configDirect = { 
-            ...config, 
+        const configDirect = {
+            ...config,
             renderMode: 'Direct' as const,
             lighting: { ...(config.lighting || {}), renderMode: 0.0 } // Force DDFS value
         };
         const fragDirect = ShaderFactory.generateFragmentShader(configDirect);
         const checksum = cyrb53(fragDirect).toString(16);
-        
+
         if (checksum !== this.activeDirectChecksum) {
-            console.log('=== Shader Recompilation ===');
-            console.log('Previous checksum:', this.activeDirectChecksum);
-            console.log('New checksum:', checksum);
-            console.log('Shader length:', fragDirect.length);
-            console.log('Stack trace:', new Error().stack);
-            
             this.materialDirect.fragmentShader = fragDirect;
             this.materialDirect.needsUpdate = true;
             this.activeDirectChecksum = checksum;
-            
-            console.log(`[Shader Generated] Direct | Hash: ${checksum.substring(0, 8)} | Size: ${(fragDirect.length/1024).toFixed(1)}kb`);
-            FractalEvents.emit('shader_code', fragDirect);
-        } else {
-            console.log('=== Shader Unchanged ===');
+            this.shaderDirty = true;
+
+            if (import.meta.env.DEV) console.log(`[Shader Generated] Direct | Hash: ${checksum.substring(0, 8)} | Size: ${(fragDirect.length/1024).toFixed(1)}kb`);
+            FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragDirect);
         }
         this.lastGeneratedFrag = fragDirect;
         this.directDirty = false;
     }
 
     private compilePT(config: ShaderConfig) {
-        const configPT = { 
-            ...config, 
+        const configPT = {
+            ...config,
             renderMode: 'PathTracing' as const,
             lighting: { ...(config.lighting || {}), renderMode: 1.0 } // Force DDFS value
         };
@@ -265,12 +254,130 @@ export class MaterialController {
             this.materialPT.fragmentShader = fragPT;
             this.materialPT.needsUpdate = true;
             this.activePTChecksum = checksum;
-            
-            console.log(`[Shader Generated] PathTracing | Hash: ${checksum.substring(0, 8)} | Size: ${(fragPT.length/1024).toFixed(1)}kb`);
-            FractalEvents.emit('shader_code', fragPT);
+            this.shaderDirty = true;
+
+            if (import.meta.env.DEV) console.log(`[Shader Generated] PathTracing | Hash: ${checksum.substring(0, 8)} | Size: ${(fragPT.length/1024).toFixed(1)}kb`);
+            FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragPT);
         }
         this.lastGeneratedFrag = fragPT;
         this.ptDirty = false;
+    }
+
+    /**
+     * Two-stage compile: Stage 1 — Generate and apply a preview shader with lighting stubs.
+     * This compiles in <1s on Windows/Chrome (fxc DCEs all formula copies from lighting paths).
+     * Returns true if a new preview shader was actually generated.
+     */
+    public compilePreview(config: ShaderConfig): boolean {
+        this.storedConfig = config;
+
+        const lighting = config.lighting as LightingState;
+        if (lighting && lighting.renderMode !== undefined) {
+            this.currentMode = lighting.renderMode === 1.0 ? 'PathTracing' : 'Direct';
+        } else {
+            this.currentMode = config.renderMode || 'Direct';
+        }
+
+        // If lighting is already disabled, preview === full — skip two-stage
+        if (lighting && !lighting.advancedLighting) {
+            return false;
+        }
+
+        // Build preview config with advancedLighting forced off
+        const previewConfig: ShaderConfig = {
+            ...config,
+            lighting: { ...(config.lighting || {}), advancedLighting: false }
+        };
+
+        if (this.currentMode === 'Direct') {
+            this.compileDirect(previewConfig);
+            this.ptDirty = true;
+        } else {
+            this.compilePT(previewConfig);
+            this.directDirty = true;
+        }
+
+        // Sync uniforms (formulas, etc.)
+        this.syncConfigUniforms(config);
+
+        // Update histogram (always uses Direct mode)
+        const configAux = {
+            ...config,
+            renderMode: 'Direct' as const,
+            lighting: { ...(config.lighting || {}), renderMode: 0.0 }
+        };
+        this.histogramMaterial.fragmentShader = ShaderFactory.generateHistogramShader(configAux);
+        this.histogramMaterial.needsUpdate = true;
+
+        this.isPreviewActive = true;
+        return true;
+    }
+
+    /**
+     * Two-stage compile: Stage 2 — Build a full-quality ShaderMaterial for async compilation.
+     * Returns a new material (sharing mainUniforms) that can be compiled on a dummy scene
+     * via renderer.compileAsync() without blocking the render loop.
+     */
+    public buildFullMaterial(config: ShaderConfig): THREE.ShaderMaterial {
+        const lighting = config.lighting as LightingState;
+        let targetMode: 'Direct' | 'PathTracing';
+        if (lighting && lighting.renderMode !== undefined) {
+            targetMode = lighting.renderMode === 1.0 ? 'PathTracing' : 'Direct';
+        } else {
+            targetMode = config.renderMode || 'Direct';
+        }
+
+        const modeConfig = targetMode === 'Direct'
+            ? { ...config, renderMode: 'Direct' as const, lighting: { ...(config.lighting || {}), renderMode: 0.0 } }
+            : { ...config, renderMode: 'PathTracing' as const, lighting: { ...(config.lighting || {}), renderMode: 1.0 } };
+
+        const frag = ShaderFactory.generateFragmentShader(modeConfig);
+        const checksum = cyrb53(frag).toString(16);
+        if (import.meta.env.DEV) console.log(`[Shader Generated] Full ${targetMode} | Hash: ${checksum.substring(0, 8)} | Size: ${(frag.length/1024).toFixed(1)}kb`);
+
+        const fullMat = new THREE.ShaderMaterial({
+            vertexShader: VERTEX_SHADER,
+            fragmentShader: frag,
+            uniforms: this.mainUniforms, // Share uniforms — no duplication
+            depthWrite: false, depthTest: false,
+            blending: THREE.NoBlending,
+            glslVersion: THREE.GLSL3
+        });
+
+        // Store metadata for swapFullMaterial
+        (fullMat as any)._gmtChecksum = checksum;
+        (fullMat as any)._gmtFrag = frag;
+        (fullMat as any)._gmtMode = targetMode;
+
+        return fullMat;
+    }
+
+    /**
+     * Two-stage compile: Swap the async-compiled full material into the active slot.
+     * Called after renderer.compileAsync() resolves.
+     */
+    public swapFullMaterial(fullMat: THREE.ShaderMaterial): void {
+        const checksum = (fullMat as any)._gmtChecksum as string;
+        const frag = (fullMat as any)._gmtFrag as string;
+        const targetMode = (fullMat as any)._gmtMode as 'Direct' | 'PathTracing' || this.currentMode;
+        this.currentMode = targetMode;
+
+        if (targetMode === 'Direct') {
+            this.materialDirect.dispose();
+            this.materialDirect = fullMat;
+            this.activeDirectChecksum = checksum;
+            this.directDirty = false;
+        } else {
+            this.materialPT.dispose();
+            this.materialPT = fullMat;
+            this.activePTChecksum = checksum;
+            this.ptDirty = false;
+        }
+
+        this.lastGeneratedFrag = frag;
+        this.isPreviewActive = false;
+        this.shaderDirty = true;
+        FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, frag);
     }
     
     public setUniform(key: string, value: any) {
@@ -345,30 +452,45 @@ export class MaterialController {
             }
 
             // Robust update logic
+            // NOTE: After postMessage, THREE types lose prototypes (plain {x,y,z} objects).
+            // Always check for plain object fallback to support worker-bridged uniforms.
             if (cur instanceof THREE.Vector3) {
                 if (value instanceof THREE.Vector3) cur.copy(value);
+                else if (value && typeof value.x === 'number' && typeof value.y === 'number' && typeof value.z === 'number') cur.set(value.x, value.y, value.z);
                 else if (typeof value === 'number') cur.setScalar(value);
             }
             else if (cur instanceof THREE.Vector2) {
                 if (value instanceof THREE.Vector2) cur.copy(value);
+                else if (value && typeof value.x === 'number' && typeof value.y === 'number') cur.set(value.x, value.y);
             }
             else if (cur instanceof THREE.Color) {
                 if (value instanceof THREE.Color) cur.copy(value);
-                else cur.set(value); 
+                else if (value && typeof value.r === 'number') cur.setRGB(value.r, value.g, value.b);
+                else cur.set(value);
             }
             // CRITICAL: Matrix Support for AnimationSystem optimization
-            else if (cur instanceof THREE.Matrix3 && value instanceof THREE.Matrix3) {
-                 cur.copy(value);
+            // After postMessage, THREE types lose prototypes — handle plain {elements} fallback.
+            else if (cur instanceof THREE.Matrix3) {
+                 if (value instanceof THREE.Matrix3) cur.copy(value);
+                 else if (value && Array.isArray(value.elements)) cur.fromArray(value.elements);
             }
-            else if (cur instanceof THREE.Matrix4 && value instanceof THREE.Matrix4) {
-                 cur.copy(value);
+            else if (cur instanceof THREE.Matrix4) {
+                 if (value instanceof THREE.Matrix4) cur.copy(value);
+                 else if (value && Array.isArray(value.elements)) cur.fromArray(value.elements);
             }
             else if (Array.isArray(cur) && Array.isArray(value)) {
                 for(let i=0; i<cur.length; i++) {
                     if (value[i] === undefined) continue;
-                    if (cur[i] instanceof THREE.Vector3) cur[i].copy(value[i]);
-                    else if (cur[i] instanceof THREE.Color) cur[i].copy(value[i]);
-                    else cur[i] = value[i];
+                    const v = value[i];
+                    if (cur[i] instanceof THREE.Vector3) {
+                        if (v instanceof THREE.Vector3) cur[i].copy(v);
+                        else if (v && typeof v.x === 'number') cur[i].set(v.x, v.y, v.z);
+                    }
+                    else if (cur[i] instanceof THREE.Color) {
+                        if (v instanceof THREE.Color) cur[i].copy(v);
+                        else if (v && typeof v.r === 'number') cur[i].setRGB(v.r, v.g, v.b);
+                    }
+                    else cur[i] = v;
                 }
             } else {
                 s[key].value = valToAssign;
@@ -420,11 +542,31 @@ export class MaterialController {
 
     public syncConfigUniforms(config: ShaderConfig) {
         const features = featureRegistry.getAll();
-        
+
         features.forEach(feat => {
             const featureData = (config as any)[feat.id];
             if (featureData) {
                 Object.entries(feat.params).forEach(([key, paramConfig]) => {
+                    // Skip image types — they need dedicated texture transfer (data URLs)
+                    if (paramConfig.type === 'image') return;
+                    if (paramConfig.type === 'gradient' && paramConfig.uniform && featureData[key]) {
+                        // Convert gradient stop array to texture buffer
+                        const buffer = generateGradientTextureBuffer(featureData[key]);
+                        this.setUniform(paramConfig.uniform, { isGradientBuffer: true, buffer });
+                        return;
+                    }
+                    // composeFrom params: recompose from individual component values
+                    if (paramConfig.composeFrom && paramConfig.uniform) {
+                        const values = paramConfig.composeFrom.map((k: string) => featureData[k]);
+                        if (values.every((v: unknown) => v !== undefined)) {
+                            if (paramConfig.type === 'vec3') {
+                                this.setUniform(paramConfig.uniform, new THREE.Vector3(values[0] as number, values[1] as number, values[2] as number));
+                            } else if (paramConfig.type === 'vec2') {
+                                this.setUniform(paramConfig.uniform, new THREE.Vector2(values[0] as number, values[1] as number));
+                            }
+                        }
+                        return;
+                    }
                     if (paramConfig.uniform && featureData[key] !== undefined) {
                         this.setUniform(paramConfig.uniform, featureData[key]);
                     }

@@ -1,26 +1,32 @@
 
 import { Preset } from '../types';
-import { engine } from '../engine/FractalEngine';
+import type { FractalActions } from '../types/store';
+import type { LightParams } from '../types/graphics';
+import type { FormulaType } from '../types/common';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import { FractalEvents } from '../engine/FractalEvents';
 import { useAnimationStore } from '../store/animationStore';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
 import { VirtualSpace } from '../engine/PrecisionMath'; // Added Import
 import * as THREE from 'three';
+import { ensureLightIds } from '../features/lighting/index';
 
 // Helper to clean up Three.js objects for JSON serialization
-export const sanitizeFeatureState = (state: any) => {
-    const out: any = {};
+export const sanitizeFeatureState = (state: Record<string, unknown>) => {
+    const out: Record<string, unknown> = {};
     if (!state) return out;
     Object.keys(state).forEach(key => {
         if (key.startsWith('is')) return;
-        const val = state[key];
-        if (val && typeof val === 'object' && val.isColor) {
-            out[key] = '#' + val.getHexString();
-        } else if (val && typeof val === 'object' && (val.isVector2 || val.isVector3)) {
-            out[key] = { ...val };
-            delete out[key].isVector2;
-            delete out[key].isVector3;
+        const val = state[key] as Record<string, unknown>;
+        if (val && typeof val === 'object' && 'isColor' in val) {
+            out[key] = '#' + (val as unknown as THREE.Color).getHexString();
+        } else if (val && typeof val === 'object' && ('isVector2' in val || 'isVector3' in val)) {
+            const cleaned = { ...val };
+            delete cleaned.isVector2;
+            delete cleaned.isVector3;
+            out[key] = cleaned;
         } else {
             out[key] = val;
         }
@@ -29,17 +35,17 @@ export const sanitizeFeatureState = (state: any) => {
 };
 
 export const getFullDefaultPreset = (formula: string): Preset => {
-    const def = registry.get(formula as any);
-    const formulaDefault: Partial<Preset> = (def && def.defaultPreset) ? def.defaultPreset : { formula: formula as any };
+    const def = registry.get(formula);
+    const formulaDefault: Partial<Preset> = (def && def.defaultPreset) ? def.defaultPreset : { formula: formula as FormulaType };
     const full: Preset = {
         version: 5,
-        name: formula, // Default name matches formula ID
-        formula: formula as any,
+        name: formula,
+        formula: formula as FormulaType,
         features: {}
     };
 
     featureRegistry.getAll().forEach(feat => {
-        const featDefaults: any = {};
+        const featDefaults: Record<string, unknown> = {};
         Object.entries(feat.params).forEach(([key, config]) => {
             if (!config.composeFrom) featDefaults[key] = config.default;
         });
@@ -74,6 +80,8 @@ export const getFullDefaultPreset = (formula: string): Preset => {
     full.animations = formulaDefault.animations || [];
     full.navigation = { flySpeed: 0.5, autoSlow: true, ...(formulaDefault.navigation || {}) };
     full.sceneOffset = formulaDefault.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+    // cameraPos is a preset-format-only field for backwards compatibility.
+    // At runtime the store has no cameraPos — applyPresetState() absorbs it into sceneOffset.
     full.cameraPos = formulaDefault.cameraPos || { x: 0, y: 0, z: 3.5 };
     full.cameraRot = formulaDefault.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
     full.targetDistance = formulaDefault.targetDistance || 3.5;
@@ -82,7 +90,7 @@ export const getFullDefaultPreset = (formula: string): Preset => {
     return full;
 };
 
-export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
+export const applyPresetState = (p: Partial<Preset>, set: (partial: Record<string, unknown>) => void, get: () => Record<string, unknown>) => {
     const actions = get();
 
     // Create map of features
@@ -99,7 +107,7 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
 
     // MIGRATION: AO from Atmosphere -> AO Feature
     if (features.atmosphere && !features.ao) {
-        const aoData: any = {};
+        const aoData: Record<string, unknown> = {};
         if (features.atmosphere.aoIntensity !== undefined) aoData.aoIntensity = features.atmosphere.aoIntensity;
         if (features.atmosphere.aoSpread !== undefined) aoData.aoSpread = features.atmosphere.aoSpread;
         if (features.atmosphere.aoMode !== undefined) aoData.aoMode = features.atmosphere.aoMode;
@@ -110,17 +118,29 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
         }
     }
 
+    // Hardware-managed params are owned by the hardware profile, not by scenes.
+    // Preserve current store values so loading a formula/scene doesn't downgrade them.
+    const HARDWARE_MANAGED_PARAMS = new Set(['compilerHardCap', 'precisionMode', 'bufferPrecision']);
+
     featureRegistry.getAll().forEach(feat => {
         const setterName = `set${feat.id.charAt(0).toUpperCase() + feat.id.slice(1)}`;
         const setter = (actions as any)[setterName];
-        
+
         if (typeof setter === 'function') {
             const incomingData = features[feat.id];
-            const nextState: Record<string, any> = {};
+            const nextState: Record<string, unknown> = {};
+            // Snapshot current quality slice so we can preserve hardware-managed params
+            const currentSlice = feat.id === 'quality' ? (get() as any).quality : null;
 
             if (feat.state) Object.assign(nextState, feat.state);
-            
+
             Object.entries(feat.params).forEach(([key, config]) => {
+                // Hardware-managed params: keep current store value, ignore scene data
+                if (feat.id === 'quality' && HARDWARE_MANAGED_PARAMS.has(key) && currentSlice) {
+                    nextState[key] = currentSlice[key];
+                    return;
+                }
+
                 if (incomingData && incomingData[key] !== undefined) {
                     let val = incomingData[key];
                     // Sanitize incoming vectors/colors back to THREE objects if needed
@@ -146,12 +166,12 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
             // Consolidated Lighting Migration
             if (feat.id === 'lighting' && incomingData) {
                 if (incomingData.lights) {
-                    // Populate missing new fields (type, rotation)
-                    nextState.lights = incomingData.lights.map((l: any) => ({
+                    // Populate missing new fields (type, rotation) and ensure stable IDs
+                    nextState.lights = ensureLightIds(incomingData.lights.map((l: Record<string, unknown>) => ({
                         ...l,
                         type: l.type || 'Point',
                         rotation: l.rotation || { x: 0, y: 0, z: 0 }
-                    }));
+                    })) as any);
                 } else if (incomingData.light0_posX !== undefined) {
                     // V2 Legacy Migration
                     const newLights = [];
@@ -192,24 +212,33 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
 
     // Root Legacy Lights Array Migration
     if (p.lights && p.lights.length > 0) {
-        if (actions.setLighting) {
-             const migratedLights = p.lights.map((l: any) => ({
+        const setLightingFn = (actions as Record<string, unknown>).setLighting;
+        if (typeof setLightingFn === 'function') {
+             const migratedLights = ensureLightIds(p.lights.map((l) => ({
                  ...l,
                  type: l.type || 'Point',
                  rotation: l.rotation || { x: 0, y: 0, z: 0 }
-             }));
-             actions.setLighting({ lights: migratedLights });
+             })) as LightParams[]);
+             (setLightingFn as (v: { lights: LightParams[] }) => void)({ lights: migratedLights });
         }
     }
     
     // Animations & Timeline
     if (p.sequence) useAnimationStore.getState().setSequence(p.sequence);
-    actions.setAnimations(p.animations || []);
+    (actions as unknown as FractalActions).setAnimations(p.animations || []);
     
+    // --- RESTORE SAVED CAMERAS ---
+    if (p.savedCameras && Array.isArray(p.savedCameras) && p.savedCameras.length > 0) {
+        set({
+            savedCameras: p.savedCameras as any,
+            activeCameraId: p.savedCameras[0].id || null
+        });
+    }
+
     // --- CORE SCENE STATE NORMALIZATION ---
-    // Critical Fix: Ensure camera is at (0,0,0) locally for the Treadmill Engine.
-    // We absorb the Preset's Camera Position into the Scene Offset.
-    
+    // Presets may carry a non-zero cameraPos (legacy format / formula defaults).
+    // We absorb it into sceneOffset so the runtime camera stays at origin.
+
     const rawPos = p.cameraPos || { x: 0, y: 0, z: 3.5 };
     const rawOffset = p.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
     const dist = p.targetDistance || 3.5;
@@ -230,38 +259,39 @@ export const applyPresetState = (p: Partial<Preset>, set: any, get: any) => {
         xL: sX.low, yL: sY.low, zL: sZ.low 
     };
     
-    // Camera stays at origin
-    const finalPos = { x: 0, y: 0, z: 0 };
-
     set({
-        cameraPos: finalPos,
         cameraRot: rot,
         targetDistance: dist,
         sceneOffset: finalOffset,
         cameraMode: p.cameraMode || get().cameraMode
     });
 
-    if (engine.activeCamera) {
+    if (engine.activeCamera && engine.virtualSpace) {
         // Apply to Engine
         engine.virtualSpace.applyCameraState(engine.activeCamera, {
-            position: finalPos, 
+            position: { x: 0, y: 0, z: 0 }, 
             rotation: rot, 
             sceneOffset: finalOffset, 
             targetDistance: dist
         });
     }
     
-    // Emit teleport with the CLEAN (Zeroed) position to update Navigation/OrbitControls
-    FractalEvents.emit('camera_teleport', { 
-        position: finalPos, 
-        rotation: rot, 
-        sceneOffset: finalOffset, 
-        targetDistance: dist 
-    });
+    // Stash + emit teleport with the CLEAN (Zeroed) position.
+    // The stash on WorkerProxy ensures WorkerTickScene can re-emit this exact
+    // payload at boot-ready time — avoiding races with Navigation mount timing
+    // and any store drift from orbit/physics ticks.
+    const teleport = {
+        position: { x: 0, y: 0, z: 0 },
+        rotation: rot,
+        sceneOffset: finalOffset,
+        targetDistance: dist
+    };
+    engine.pendingTeleport = teleport;
+    FractalEvents.emit('camera_teleport', teleport);
 
     if (p.duration) useAnimationStore.getState().setDuration(p.duration);
-    if (p.formula === 'Modular') actions.refreshPipeline();
-    
-    actions.refreshHistogram();
+    if (p.formula === 'Modular') (actions as unknown as FractalActions).refreshPipeline();
+
+    (actions as unknown as FractalActions).refreshHistogram();
     FractalEvents.emit('reset_accum', undefined);
 };

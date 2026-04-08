@@ -4,11 +4,11 @@ import { useAnimationStore } from '../store/animationStore';
 import { calculateEulerUpdates, calculateSmoothingUpdates, calculateResampleUpdates, evaluateTrackValue } from '../utils/timelineUtils';
 import { calculateConstrainedSmoothing } from '../utils/ConstrainedSmoothing';
 import { simplifyTrack } from '../utils/CurveFitting';
-import { Keyframe } from '../types';
+import { Keyframe, AnimationSequence } from '../types';
 import { GraphViewTransform, valueToPixel, pixelToFrame } from '../utils/GraphUtils';
 
 interface GraphToolsProps {
-    sequence: any;
+    sequence: AnimationSequence;
     trackIds: string[]; // Visible tracks
     selectedTrackIds: string[];
     selectedKeyframeIds: string[];
@@ -47,7 +47,7 @@ export const useGraphTools = ({
 
     // --- INTERNAL REFS ---
     const toolStartRef = useRef({ x: 0, y: 0 });
-    const originalSequenceRef = useRef<any>(null);
+    const originalSequenceRef = useRef<AnimationSequence | null>(null);
     const simplifyTargetsRef = useRef<string[]>([]);
 
     // --- HELPERS ---
@@ -110,20 +110,20 @@ export const useGraphTools = ({
         simplifyTargetsRef.current.forEach(id => { if (id) trackIdsToProcess.add(id.split('::')[0]); });
 
         trackIdsToProcess.forEach(tid => {
-            const origTrack = originalSequenceRef.current.tracks[tid];
+            const origTrack = originalSequenceRef.current!.tracks[tid];
             if(!origTrack) return;
-            const selectedKeys = origTrack.keyframes.filter((k: any) => targetSet.has(`${tid}::${k.id}`));
-            if (selectedKeys.length < 2) return; 
-            
-            const sortedSelection = selectedKeys.sort((a:any,b:any) => a.frame - b.frame);
+            const selectedKeys = origTrack.keyframes.filter((k: Keyframe) => targetSet.has(`${tid}::${k.id}`));
+            if (selectedKeys.length < 2) return;
+
+            const sortedSelection = selectedKeys.sort((a, b) => a.frame - b.frame);
             const startFrame = sortedSelection[0].frame;
             const endFrame = sortedSelection[sortedSelection.length-1].frame;
-            
-            const preKeys = origTrack.keyframes.filter((k: any) => k.frame < startFrame - 0.0001);
-            const postKeys = origTrack.keyframes.filter((k: any) => k.frame > endFrame + 0.0001);
-            
+
+            const preKeys = origTrack.keyframes.filter((k: Keyframe) => k.frame < startFrame - 0.0001);
+            const postKeys = origTrack.keyframes.filter((k: Keyframe) => k.frame > endFrame + 0.0001);
+
             const simplified = simplifyTrack(sortedSelection, 0.01, strength);
-            const newKeys = [...preKeys, ...simplified, ...postKeys].sort((a:any,b:any) => a.frame - b.frame);
+            const newKeys = [...preKeys, ...simplified, ...postKeys].sort((a, b) => a.frame - b.frame);
             
             updates.push({ trackId: tid, newKeys });
             simplified.forEach(k => allNewKeyIds.push(`${tid}::${k.id}`));
@@ -215,7 +215,7 @@ export const useGraphTools = ({
             let keysToSmooth = selectedKeyframeIds;
             if (keysToSmooth.length === 0) keysToSmooth = getTargetKeys();
 
-            let updates: any[] = [];
+            let updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[] = [];
             if (r > 0) {
                 updates = calculateConstrainedSmoothing(targets, originalSequenceRef.current, keysToSmooth, r);
             } else {

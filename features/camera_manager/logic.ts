@@ -1,6 +1,8 @@
 
 import * as THREE from 'three';
 import { CameraUtils } from '../../utils/CameraUtils';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
 
 // Helper to determine direction name
 export const getDirectionName = (rot: { x: number, y: number, z: number, w: number }): string | null => {
@@ -37,12 +39,22 @@ export const calculateDirectionalView = (
     currentOptics: any
 ): DirectionalViewResult => {
     
-    // 1. Determine Distance from World Center (Preserve "Altitude")
+    // 1. Determine distance — use the current camera-to-origin distance so the
+    //    directional view lands at a comparable distance from the fractal center.
+    //    Also read the physics probe (surface distance) so we can set targetDistance
+    //    correctly for detail/speed calculations.
     const currentUnified = CameraUtils.getUnifiedFromEngine();
     let distToCenter = currentUnified.length();
-    
+
     // Fallback for startup or zero-pos
     if (distToCenter < 0.001) distToCenter = 3.5;
+
+    // Surface distance from physics probe — controls rendering detail & fly speed
+    let surfaceDist = engine.lastMeasuredDistance;
+    // Guard: if sky/miss sentinel or unavailable, fall back to distToCenter
+    if (!surfaceDist || surfaceDist >= 1000 || surfaceDist <= 0) {
+        surfaceDist = distToCenter;
+    }
     
     // 2. Set Pivot to World Origin
     const lookTarget = new THREE.Vector3(0, 0, 0);
@@ -96,17 +108,13 @@ export const calculateDirectionalView = (
     let opticsUpdates = undefined;
 
     if (isAxial) {
-        // Switching TO Ortho
-        if (!currentOptics || currentOptics.camType < 0.5) {
-             // Was Perspective -> Switching to Ortho -> Use Distance Heuristic
-             targetOrthoScale = distToCenter;
-        }
-        // Ortho presets should be sharp
+        // Ortho presets should be sharp. orthoScale auto-adjustment when switching
+        // from perspective is handled by the store subscription in fractalStore.ts
         targetDofStrength = 0.0;
-        
+
         opticsUpdates = {
             camType: targetCamType,
-            orthoScale: targetOrthoScale,
+            orthoScale: targetOrthoScale,  // Preserved if already ortho; subscription adjusts if switching
             dofStrength: targetDofStrength
         };
     }
@@ -114,7 +122,7 @@ export const calculateDirectionalView = (
     return {
         position: newUnifiedPos,
         rotation: { x: q.x, y: q.y, z: q.z, w: q.w },
-        targetDistance: distToCenter,
+        targetDistance: surfaceDist,
         optics: opticsUpdates
     };
 };

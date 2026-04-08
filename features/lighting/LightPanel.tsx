@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { FractalState, FractalActions } from '../../types';
 import Slider from '../../components/Slider';
-import { Vector3Input } from '../../components/Vector3Input';
+import { Vector3Input } from '../../components/vector-input';
 import EmbeddedColorPicker from '../../components/EmbeddedColorPicker';
 import ToggleSwitch from '../../components/ToggleSwitch';
 import { useFractalStore } from '../../store/fractalStore';
@@ -10,22 +10,33 @@ import { collectHelpIds } from '../../utils/helpUtils';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { getLightFromSlice } from './index';
 import { PlusIcon, TrashIcon } from '../../components/Icons';
+import { SectionLabel } from '../../components/SectionLabel';
 import { MAX_LIGHTS } from '../../data/constants';
 import * as THREE from 'three';
-import { engine } from '../../engine/FractalEngine';
+import { getProxy } from '../../engine/worker/WorkerProxy';
+const engine = getProxy();
+import { getViewportCamera } from '../../engine/worker/ViewportRefs';
 import { LightDirectionControl } from './components/LightDirectionControl';
+import type { ContextMenuItem } from '../../types/help';
+import type { FalloffType, IntensityUnit } from '../../types/graphics';
 
+/**
+ * Advanced/debug light panel — exposed in Advanced Mode via the dock tab system.
+ * The primary user-facing light UI is the Light Studio in the top bar (CenterHUD.tsx),
+ * which shows light orbs with hover popups (LightSettingsPopup in LightControls.tsx).
+ * Right-click context menu on light orbs provides falloff curve, intensity unit, and batch options.
+ */
 const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
   const [activeLight, setActiveLight] = useState(0);
   const lighting = state.lighting;
   const liveModulations = state.liveModulations;
-  
+
   useEffect(() => {
       if (activeLight >= lighting.lights.length && lighting.lights.length > 0) {
           setActiveLight(lighting.lights.length - 1);
       }
   }, [lighting.lights.length, activeLight]);
-  
+
   const currentLight = getLightFromSlice(lighting, activeLight);
   const openGlobalMenu = useFractalStore(s => s.openContextMenu);
 
@@ -36,6 +47,55 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
           e.stopPropagation();
           openGlobalMenu(e.clientX, e.clientY, [], ids);
       }
+  };
+
+  const handleLightStudioMenu = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const light = getLightFromSlice(lighting, activeLight);
+      const items: ContextMenuItem[] = [
+          { label: 'Light Studio', isHeader: true },
+          { label: 'Intensity Unit', isHeader: true },
+          {
+              label: 'Raw (Linear)',
+              checked: (light.intensityUnit ?? 'raw') === 'raw',
+              action: () => actions.updateLight({ index: activeLight, params: { intensityUnit: 'raw' as IntensityUnit } })
+          },
+          {
+              label: 'Exposure (EV)',
+              checked: light.intensityUnit === 'ev',
+              action: () => {
+                  // Convert current raw intensity to EV: ev = log2(intensity), clamp to sane range
+                  const ev = light.intensity > 0 ? Math.max(-4, Math.min(10, Math.log2(light.intensity))) : 0;
+                  actions.updateLight({ index: activeLight, params: { intensityUnit: 'ev' as IntensityUnit, intensity: Math.round(ev * 10) / 10 } });
+              }
+          },
+          { label: 'Falloff Preset', isHeader: true },
+          {
+              label: 'Quadratic (Smooth)',
+              checked: (light.falloffType ?? 'Quadratic') === 'Quadratic',
+              action: () => actions.updateLight({ index: activeLight, params: { falloffType: 'Quadratic' as FalloffType } })
+          },
+          {
+              label: 'Linear (Artistic)',
+              checked: light.falloffType === 'Linear',
+              action: () => actions.updateLight({ index: activeLight, params: { falloffType: 'Linear' as FalloffType } })
+          },
+          { label: 'Batch', isHeader: true },
+          {
+              label: 'Apply to all lights',
+              action: () => {
+                  lighting.lights.forEach((_, i) => {
+                      actions.updateLight({ index: i, params: {
+                          falloffType: light.falloffType,
+                          intensityUnit: light.intensityUnit,
+                          range: light.range
+                      }});
+                  });
+              }
+          }
+      ];
+      openGlobalMenu(e.clientX, e.clientY, items, ['panel.light']);
   };
   
   const handleAddLight = () => {
@@ -54,30 +114,48 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
   };
 
   const handleToggleFixed = () => {
-     if (!engine.activeCamera) return;
      const current = getLightFromSlice(state.lighting, activeLight);
      const wasFixed = current.fixed;
-     
+     const cam = getViewportCamera();
+
      let newPos = current.position;
      let newRot = current.rotation;
 
-     if (current.type === 'Point') {
-        newPos = engine.virtualSpace.resolveRealWorldPosition(current.position, wasFixed, engine.activeCamera);
-     } else {
-        newRot = engine.virtualSpace.resolveRealWorldRotation(current.rotation, wasFixed, engine.activeCamera);
+     if (cam) {
+         if (current.type === 'Point') {
+             const o = engine.sceneOffset;
+             if (wasFixed) {
+                 const worldPos = new THREE.Vector3(newPos.x, newPos.y, newPos.z);
+                 worldPos.applyQuaternion(cam.quaternion);
+                 worldPos.add(cam.position);
+                 newPos = { x: worldPos.x + o.x + (o.xL ?? 0), y: worldPos.y + o.y + (o.yL ?? 0), z: worldPos.z + o.z + (o.zL ?? 0) };
+             } else {
+                 const worldPos = new THREE.Vector3(newPos.x - o.x - (o.xL ?? 0), newPos.y - o.y - (o.yL ?? 0), newPos.z - o.z - (o.zL ?? 0));
+                 worldPos.sub(cam.position);
+                 worldPos.applyQuaternion(cam.quaternion.clone().invert());
+                 newPos = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+             }
+         } else {
+             // Directional: convert rotation direction between camera-local and world space
+             const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(newRot.x, newRot.y, newRot.z, 'YXZ'));
+             dir.applyQuaternion(wasFixed ? cam.quaternion : cam.quaternion.clone().invert());
+             const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+             const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+             newRot = { x: e.x, y: e.y, z: e.z };
+         }
      }
-     
+
      actions.updateLight({ index: activeLight, params: { fixed: !wasFixed, position: newPos, rotation: newRot } });
   };
   
   const handleTypeChange = (newType: 'Point' | 'Directional') => {
-      if (!engine.activeCamera) {
+      const cam = getViewportCamera();
+      if (!cam) {
           actions.updateLight({ index: activeLight, params: { type: newType } });
           return;
       }
-      
+
       const current = getLightFromSlice(state.lighting, activeLight);
-      const cam = engine.activeCamera;
       
       let targetOrigin = new THREE.Vector3(0,0,0);
       
@@ -135,14 +213,14 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
   const posVec = new THREE.Vector3(mixedPosition.x, mixedPosition.y, mixedPosition.z);
 
   return (
- <div className="animate-fade-in">
+ <div className="animate-fade-in" onContextMenu={handleLightStudioMenu}>
    <div className="mb-4">
       <div className="flex flex-wrap gap-1 bg-black/40 p-1 rounded border border-white/5">
           {lighting.lights.map((l, i) => (
               <button
                 key={i}
                 onClick={() => setActiveLight(i)}
-                className={`flex-1 min-w-[60px] py-1.5 px-2 text-[9px] font-bold uppercase rounded border transition-all relative ${
+                className={`flex-1 min-w-[60px] py-1.5 px-2 text-[9px] font-bold rounded border transition-all relative ${
                     activeLight === i 
                     ? 'bg-cyan-900/50 border-cyan-500/50 text-cyan-200 shadow-sm' 
                     : 'bg-transparent border-transparent text-gray-500 hover:bg-white/5 hover:text-gray-300'
@@ -240,54 +318,72 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                </div>
            )}
            
-           <Slider 
-             label="Intensity" 
-             value={currentLight.intensity} 
-             min={0} max={100} step={0.1} 
-             onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })} 
-             customMapping={{
-                 min: 0, max: 100,
-                 toSlider: (val) => Math.sqrt(val / 100) * 100,
-                 fromSlider: (val) => (val * val) / 100
-             }}
-             overrideInputText={formatValue(currentLight.intensity)}
-             dataHelpId="light.intensity"
-             trackId={`${prefix}_intensity`}
-             liveValue={liveModulations[`${prefix}_intensity`]}
-           />
-           
-           {currentLight.type === 'Point' && (
-                <>
-                   <div className="mt-2 mb-1 px-3" data-help-id="light.falloff" onContextMenu={handleHeaderContextMenu}>
-                        <ToggleSwitch 
-                            label="Falloff Type"
-                            value={currentLight.falloffType}
-                            onChange={(v) => actions.updateLight({ index: activeLight, params: { falloffType: v } })}
-                            options={[
-                                { label: 'Quad', value: 'Quadratic' },
-                                { label: 'Linear', value: 'Linear' }
-                            ]}
-                            helpId="light.falloff"
-                        />
-                   </div>
+           {/* --- Power slider (all modes) --- */}
+           {currentLight.intensityUnit === 'ev' ? (
+               <Slider
+                 label="Power (EV)"
+                 value={currentLight.intensity}
+                 min={-4} max={10} step={0.1}
+                 onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })}
+                 mapTextInput={false}
+                 overrideInputText={`${formatValue(currentLight.intensity)} EV`}
+                 dataHelpId="light.intensity"
+                 trackId={`${prefix}_intensity`}
+                 liveValue={liveModulations[`${prefix}_intensity`]}
+               />
+           ) : (
+               <Slider
+                 label="Power"
+                 value={currentLight.intensity}
+                 min={0} max={100} step={0.1}
+                 onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })}
+                 customMapping={{
+                     min: 0, max: 100,
+                     toSlider: (val) => Math.sqrt(val / 100) * 100,
+                     fromSlider: (val) => (val * val) / 100
+                 }}
+                 mapTextInput={false}
+                 overrideInputText={formatValue(currentLight.intensity)}
+                 dataHelpId="light.intensity"
+                 trackId={`${prefix}_intensity`}
+                 liveValue={liveModulations[`${prefix}_intensity`]}
+               />
+           )}
 
-                   <Slider 
-                     label="Falloff (Decay)" 
-                     value={currentLight.falloff} 
-                     min={0} max={500.0} step={0.1} 
-                     onChange={(v) => actions.updateLight({ index: activeLight, params: { falloff: v } })} 
+           {/* --- Range slider + Falloff type (Point lights only) --- */}
+           {currentLight.type === 'Point' && (
+               <>
+                   <Slider
+                     label="Range"
+                     value={currentLight.range ?? 0}
+                     min={0} max={100} step={0.1}
+                     onChange={(v) => actions.updateLight({ index: activeLight, params: { range: v } })}
                      customMapping={{
                          min: 0, max: 100,
-                         toSlider: (val) => (Math.log10(val + 1) / Math.log10(501)) * 100,
-                         fromSlider: (val) => Math.pow(501, val / 100) - 1
+                         toSlider: (val) => (Math.log10(val + 1) / Math.log10(101)) * 100,
+                         fromSlider: (val) => Math.pow(101, val / 100) - 1
                      }}
-                     overrideInputText={currentLight.falloff < 0.01 ? "Infinite" : currentLight.falloff.toFixed(2)}
+                     mapTextInput={false}
+                     overrideInputText={(currentLight.range ?? 0) < 0.01 ? 'Infinite' : formatValue(currentLight.range ?? 0)}
                      dataHelpId="light.falloff"
                      trackId={`${prefix}_falloff`}
                      liveValue={liveModulations[`${prefix}_falloff`]}
                    />
-                   <p className="text-[9px] text-gray-500 mb-2 -mt-2">0 = No decay (Sun). Higher = shorter range.</p>
-                </>
+                   <p className="text-[9px] text-gray-500 mb-2 -mt-2">0 = Infinite reach. Sets distance where light fades to ~1%.</p>
+
+                   <div className="mb-1 px-3" data-help-id="light.falloff">
+                       <ToggleSwitch
+                           label="Falloff Curve"
+                           value={currentLight.falloffType}
+                           onChange={(v) => actions.updateLight({ index: activeLight, params: { falloffType: v } })}
+                           options={[
+                               { label: 'Quadratic', value: 'Quadratic' },
+                               { label: 'Linear', value: 'Linear' }
+                           ]}
+                           helpId="light.falloff"
+                       />
+                   </div>
+               </>
            )}
 
            <div className="mt-4 pt-3 border-t border-white/10 space-y-2">
@@ -328,7 +424,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
    {lighting && (
         <div className="mt-4 p-3 bg-gray-800/50 rounded-lg" data-help-id="shadows">
              <div className="flex items-center justify-between mb-2">
-                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shadows (Global)</label>
+                 <SectionLabel>Shadows (Global)</SectionLabel>
                  <div className="w-[60px]">
                      <ToggleSwitch 
                         value={lighting.shadows}

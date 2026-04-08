@@ -71,7 +71,7 @@ const PickerPortal = ({
             style={{ left: coords.x, top: coords.y }}
             onMouseDown={(e) => e.stopPropagation()} 
         >
-            {label && <div className="text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest text-center">{label}</div>}
+            {label && <div className="text-[10px] font-bold text-gray-500 mb-2 text-center">{label}</div>}
             <EmbeddedColorPicker color={color} onColorChange={onChange} />
         </div>,
         document.body
@@ -103,7 +103,7 @@ export const SmallColorPicker: React.FC<SmallColorPickerProps> = ({ color, onCha
                 style={{ backgroundColor: color }}
                 title={label || "Pick Color"}
             >
-                <div className="text-[8px] font-mono font-black mix-blend-difference text-white uppercase">{color}</div>
+                <div className="text-[8px] font-mono font-bold mix-blend-difference text-white">{color}</div>
             </button>
             
             {isOpen && (

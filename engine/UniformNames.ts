@@ -28,11 +28,12 @@ export const Uniforms = {
     LightShadows: 'uLightShadows',
     LightFalloff: 'uLightFalloff',
     LightFalloffType: 'uLightFalloffType',
+    LightRadius: 'uLightRadius',
+    LightSoftness: 'uLightSoftness',
 
     // Accumulation & History
     HistoryTexture: 'uHistoryTexture',
     BlendFactor: 'uBlendFactor',
-    ExtraSeed: 'uExtraSeed',
     Jitter: 'uJitter',
     BlueNoiseTexture: 'uBlueNoiseTexture',
     BlueNoiseResolution: 'uBlueNoiseResolution', // Added
@@ -43,15 +44,35 @@ export const Uniforms = {
     // Environment
     EnvMapTexture: 'uEnvMapTexture',
     EnvRotationMatrix: 'uEnvRotationMatrix', // CPU Optimization
+    FogColorLinear: 'uFogColorLinear', // CPU: InverseACESFilm(uFogColor)
 
     // Debug Tools
     HistogramLayer: 'uHistogramLayer',
     
-    // Geometry Transforms (CPU Optimization)
+    // Geometry Transforms (CPU Optimization — branchless 3-stage rotation)
     PreRotMatrix: 'uPreRotMatrix',
+    PostRotMatrix: 'uPostRotMatrix',
+    WorldRotMatrix: 'uWorldRotMatrix',
     
+    // Interlace
+    InterlaceEnabled: 'uInterlaceEnabled',
+    InterlaceInterval: 'uInterlaceInterval',
+    InterlaceStartIter: 'uInterlaceStartIter',
+
     // Export/Render Scale
-    InternalScale: 'uInternalScale'
+    InternalScale: 'uInternalScale',
+    PixelSizeBase: 'uPixelSizeBase',
+    
+    // Vector Formula Parameters (NEW)
+    Vec2A: 'uVec2A',
+    Vec2B: 'uVec2B',
+    Vec2C: 'uVec2C',
+    Vec3A: 'uVec3A',
+    Vec3B: 'uVec3B',
+    Vec3C: 'uVec3C',
+    Vec4A: 'uVec4A',
+    Vec4B: 'uVec4B',
+    Vec4C: 'uVec4C',
 } as const;
 
 export type UniformName = typeof Uniforms[keyof typeof Uniforms];

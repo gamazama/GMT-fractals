@@ -109,7 +109,7 @@ export const GraphContextMenu: React.FC<GraphContextMenuProps> = ({
                 ) : (
                     Object.entries(groups).map(([category, ids]) => (
                         <div key={category} className="mb-1">
-                            <div className="px-3 py-1 text-[9px] font-bold text-gray-500 uppercase tracking-wider bg-white/5">{category}</div>
+                            <div className="px-3 py-1 text-[9px] font-bold text-gray-500 bg-white/5">{category}</div>
                             {ids.map(id => {
                                 const def = nodeRegistry.get(id);
                                 return (

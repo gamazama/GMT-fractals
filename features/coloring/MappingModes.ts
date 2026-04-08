@@ -96,6 +96,30 @@ export const MAPPING_MODES: MappingDefinition[] = [
             // When wrapped by the gradient, this creates spirals.
             v = result.w + result.z;
         `
+    },
+    {
+        value: 10.0,
+        label: 'Orbit X (YZ plane)',
+        description: 'Per-component orbit trap: closest approach to the YZ plane (abs x).',
+        glsl: `v = log(max(1.0e-5, g_orbitTrap.x)) * -0.2;`
+    },
+    {
+        value: 11.0,
+        label: 'Orbit Y (XZ plane)',
+        description: 'Per-component orbit trap: closest approach to the XZ plane (abs y).',
+        glsl: `v = log(max(1.0e-5, g_orbitTrap.y)) * -0.2;`
+    },
+    {
+        value: 12.0,
+        label: 'Orbit Z (XY plane)',
+        description: 'Per-component orbit trap: closest approach to the XY plane (abs z).',
+        glsl: `v = log(max(1.0e-5, g_orbitTrap.z)) * -0.2;`
+    },
+    {
+        value: 13.0,
+        label: 'Orbit W (Origin)',
+        description: 'Per-component orbit trap: closest squared distance to the origin.',
+        glsl: `v = log(max(1.0e-5, g_orbitTrap.w)) * -0.2;`
     }
 ];
 
@@ -103,25 +127,22 @@ export const generateMappingShader = () => {
     let code = `
     float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale) {
         float v = 0.0;
-        
-        // Mode Selection Ladder
+
+        // Mode Selection (switch for jump-table codegen)
+        switch(int(mode + 0.1)) {
     `;
 
-    MAPPING_MODES.forEach((mode, index) => {
-        const isFirst = index === 0;
-        const condition = `if (mode < ${mode.value}.5)`;
-        const block = `
-        ${isFirst ? condition : 'else ' + condition} {
-            // ${mode.label}
+    MAPPING_MODES.forEach((mode) => {
+        code += `
+        case ${Math.round(mode.value)}: { // ${mode.label}
             ${mode.glsl}
-        }`;
-        code += block;
+        } break;`;
     });
 
     code += `
-        // Fallback
-        else {
+        default: // Fallback
             v = result.z;
+            break;
         }
 
         // Safety Clamp

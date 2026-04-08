@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { FractalEvents } from '../engine/FractalEvents';
-import { engine } from '../engine/FractalEngine';
+import { getProxy } from '../engine/worker/WorkerProxy';
+const engine = getProxy();
 import DraggableWindow from './DraggableWindow';
 import { useFractalStore } from '../store/fractalStore';
 
@@ -16,8 +17,7 @@ export const ShaderDebuggerGlobalWrapper = () => {
     };
     
     useEffect(() => {
-        // @ts-ignore
-        window.openShaderDebugger = () => setIsOpen(true);
+        (window as Window & { openShaderDebugger: () => void }).openShaderDebugger = () => setIsOpen(true);
     }, []);
 
     if (!isOpen) return null;
@@ -136,9 +136,8 @@ My Request:
         URL.revokeObjectURL(url);
     };
 
-    const fetchCompiled = () => {
-        console.log("ShaderDebugger: Fetching compiled GLSL...");
-        const compiled = engine.getCompiledFragmentShader();
+    const fetchCompiled = async () => {
+        const compiled = await engine.getCompiledFragmentShader();
         if (compiled) {
             setCode(compiled);
             setSourceType('GLSL');
@@ -146,10 +145,9 @@ My Request:
             alert("Could not fetch compiled source. Is the renderer active?");
         }
     };
-    
-    const fetchTranslated = () => {
-        console.log("ShaderDebugger: Fetching translated source (ANGLE)...");
-        const translated = engine.getTranslatedFragmentShader();
+
+    const fetchTranslated = async () => {
+        const translated = await engine.getTranslatedFragmentShader();
         if (translated) {
             setCode(translated);
             setSourceType('Translated');
@@ -168,13 +166,13 @@ My Request:
             <div className="flex flex-col gap-2 mb-2 bg-black/20 p-2 rounded">
                 <div className="flex justify-between items-center">
                     <div className="flex gap-1">
-                        <button onClick={showGenerator} className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded border transition-colors ${sourceType === 'Generator' ? 'bg-cyan-900/40 border-cyan-600 text-cyan-200' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
+                        <button onClick={showGenerator} className={`px-3 py-1.5 text-[10px] font-bold rounded border transition-colors ${sourceType === 'Generator' ? 'bg-cyan-900/40 border-cyan-600 text-cyan-200' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
                             Generator
                         </button>
-                        <button onClick={fetchCompiled} className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded border transition-colors ${sourceType === 'GLSL' ? 'bg-green-900/40 border-green-600 text-green-200' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
+                        <button onClick={fetchCompiled} className={`px-3 py-1.5 text-[10px] font-bold rounded border transition-colors ${sourceType === 'GLSL' ? 'bg-green-900/40 border-green-600 text-green-200' : 'bg-gray-800 border-gray-600 text-gray-400'}`}>
                             Driver GLSL
                         </button>
-                        <button onClick={fetchTranslated} className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded border transition-colors ${sourceType === 'Translated' ? 'bg-amber-900/40 border-amber-600 text-amber-200' : 'bg-gray-800 border-gray-600 text-gray-400'}`} title="View ANGLE/HLSL output to check loop unrolling">
+                        <button onClick={fetchTranslated} className={`px-3 py-1.5 text-[10px] font-bold rounded border transition-colors ${sourceType === 'Translated' ? 'bg-amber-900/40 border-amber-600 text-amber-200' : 'bg-gray-800 border-gray-600 text-gray-400'}`} title="View ANGLE/HLSL output to check loop unrolling">
                             Translated (ANGLE)
                         </button>
                     </div>
@@ -203,7 +201,7 @@ My Request:
                         <span>Size: <span className="text-white">{(stats.size / 1024).toFixed(1)} KB</span></span>
                     </div>
                     
-                    <div className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border flex items-center gap-2 ${
+                    <div className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-2 ${
                         stats.health === 'Good' ? 'bg-green-900/20 text-green-400 border-green-500/30' :
                         stats.health === 'Warn' ? 'bg-yellow-900/20 text-yellow-400 border-yellow-500/30' :
                         'bg-red-900/20 text-red-400 border-red-500/30'
@@ -221,7 +219,7 @@ My Request:
             <div className="relative flex-1 min-h-0">
                 {sourceType !== 'Generator' && (
                     <div className="absolute top-2 right-4 pointer-events-none bg-amber-500/10 text-amber-500 px-2 py-1 rounded text-[8px] font-bold border border-amber-500/20 backdrop-blur-sm z-10">
-                        READ ONLY (GPU MEMORY)
+                        Read Only (GPU Memory)
                     </div>
                 )}
                 <textarea 

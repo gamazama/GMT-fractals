@@ -4,17 +4,18 @@ import { FractalDefinition } from '../types';
 export const Bristorbrot: FractalDefinition = {
     id: 'Bristorbrot',
     name: 'Bristorbrot',
-    shortDescription: 'Analytic hybrid. Mixes sharp edges with smooth bulbous forms.',
-    description: 'A hybrid formula that mixes folding and analytical functions.',
+    shortDescription: 'Custom 3D polynomial with sharp edges and smooth bulbous forms.',
+    description: 'A custom polynomial fractal: x²-y²-z², y(2x-z), z(2x+y). No folding — the asymmetric cross-terms between axes create sharp crystalline edges mixed with smooth bulb regions. Supports scale, rotation, twist, and shift.',
+    juliaType: 'offset',
     
     shader: {
         function: `
     void formula_Bristorbrot(inout vec4 z, inout float dr, inout float trap, vec4 c, mat2 rotX, mat2 rotZ) {
         vec3 z3 = z.xyz;
         
-        // Twist F
-        if (abs(uParamF) > 0.001) {
-            float ang = z3.z * uParamF;
+        // Twist D
+        if (abs(uParamD) > 0.001) {
+            float ang = z3.z * uParamD;
             float s = sin(ang); float co = cos(ang);
             z3.xy = mat2(co, -s, s, co) * z3.xy;
         }
@@ -29,8 +30,8 @@ export const Bristorbrot: FractalDefinition = {
         dr = 2.0 * r * dr + 1.0;
         z3 = z3 * uParamA + c.xyz;
         
-        // Shift E (X)
-        if (abs(uParamE) > 0.001) z3.x += uParamE;
+        // Shift C (X)
+        if (abs(uParamC) > 0.001) z3.x += uParamC;
         
         // Offset B (Y)
         if (abs(uParamB) > 0.001) z3.y += uParamB;
@@ -40,11 +41,11 @@ export const Bristorbrot: FractalDefinition = {
         trap = min(trap, dot(z3,z3));
     }`,
         loopInit: `
-        float angC = uParamC;
+        float angC = uVec3A.x;
         float sC = sin(angC), cC = cos(angC);
         mat2 rotX = mat2(cC, -sC, sC, cC);
         
-        float angD = uParamD;
+        float angD = uVec3A.z;
         float sD = sin(angD), cD = cos(angD);
         mat2 rotZ = mat2(cD, -sD, sD, cD);
         `,
@@ -54,16 +55,15 @@ export const Bristorbrot: FractalDefinition = {
     parameters: [
         { label: 'Scale', id: 'paramA', min: 0.5, max: 3.0, step: 0.001, default: 1.0 },
         { label: 'Offset', id: 'paramB', min: -2.0, max: 2.0, step: 0.001, default: 0.0 }, 
-        { label: 'Rot X', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot Z', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Shift X', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
-        { label: 'Twist', id: 'paramF', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0, z: 0.0 }, scale: 'pi', mode: 'rotation' },
+        { label: 'Shift X', id: 'paramC', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Twist', id: 'paramD', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
     defaultPreset: {
         formula: "Bristorbrot",
         features: {
-            coreMath: { iterations: 21, paramA: 0.738, paramB: 0, paramC: 0, paramD: 1.2, paramE: 0.98, paramF: 0.97 },
+            coreMath: { iterations: 21, paramA: 0.738, paramB: 0, vec3A: { x: 0, y: 0, z: 1.2 }, paramC: 0.98, paramD: 0.97 },
             coloring: {
                 mode: 1, // Iterations
                 repeats: 24.4, phase: 3.9, scale: 24.415, offset: 3.906, bias: 1, twist: 0, escape: 4,
@@ -95,7 +95,7 @@ export const Bristorbrot: FractalDefinition = {
             },
             geometry: {
                 juliaMode: true, juliaX: 1.04, juliaY: 0.21, juliaZ: 0.81,
-                hybridMode: true, hybridIter: 1, hybridScale: 1, hybridMinR: 0.79, hybridFixedR: 1.08, hybridFoldLimit: 0.87, hybridSwap: false
+                hybridCompiled: true, hybridMode: true, hybridIter: 1, hybridScale: 1, hybridMinR: 0.79, hybridFixedR: 1.08, hybridFoldLimit: 0.87, hybridSwap: false
             },
             lighting: { shadows: true, shadowSoftness: 2, shadowIntensity: 0.92, shadowBias: 0.015 },
             // Lowered fudgeFactor to 0.6 to fix slicing artifacts
@@ -109,11 +109,8 @@ export const Bristorbrot: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.16245054993746125, y: 0.326925950685747, z: -2.2309267197330493 }, rotation: { x: 0, y: 0, z: 0 }, color: "#99A4FF", intensity: 39.8, falloff: 0.6, falloffType: "Quadratic", fixed: true, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 0.738, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

@@ -8,7 +8,7 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
         // Always apply DOF noise for blur preview - even during navigation
         if (uDOFStrength > 0.00001) needNoise = true;
         if (!isMoving) needNoise = true;  // Other effects need noise when stationary
-        if (uPTStochasticShadows > 0.5) needNoise = true;
+        if (uAreaLights > 0.5) needNoise = true;
         `;
 
     return `
@@ -16,7 +16,7 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
 // STAGE 1: RAY GENERATION
 // Handles Camera Basis and Depth of Field
 // ------------------------------------------------------------------
-void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float stochasticSeed) {
+void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSeed, out vec3 roClean, out vec3 rdClean) {
     vec2 uv = uvCoord * 2.0 - 1.0;
     
     // Store original UV for stable noise lookup (before jitter)
@@ -58,7 +58,7 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
     // --- PROJECTION SWITCH ---
     if (uCamType > 1.5) {
         // EQUIRECTANGULAR (360 SKYBOX)
-        float lambda = uv.x * 3.1415926535; 
+        float lambda = uv.x * PI;
         float phi = uv.y * 1.5707963268;
         float cPhi = cos(phi);
         vec3 localRd = vec3(
@@ -83,6 +83,10 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
         ro = vec3(0.0);
     }
 
+    // Save clean ray before DoF jitter — used for stable depth readback
+    roClean = ro;
+    rdClean = rd;
+
     // --- DEPTH OF FIELD ---
     // DOF noise behavior:
     // - During navigation (isMoving): Stable per-pixel noise for blur preview
@@ -96,14 +100,13 @@ void getCameraRay(vec2 uvCoord, float seed, out vec3 ro, out vec3 rd, out float 
                              : getBlueNoise4(noiseCoord * uResolution);
         
         float r = sqrt(blue.r);
-        float theta = blue.g * 6.283185;
-        
+        float theta = blue.g * TAU;
+
         // Polygonal Bokeh Shape (Hexagon)
-        float blades = 6.0; 
-        float pi = 3.14159265;
-        float segment = 2.0 * pi / blades;
+        float blades = 6.0;
+        float segment = TAU / blades;
         float localTheta = mod(theta, segment) - (segment * 0.5);
-        float polyRadius = cos(pi / blades) / cos(localTheta);
+        float polyRadius = cos(PI / blades) / cos(localTheta);
         r *= polyRadius;
         
         theta += 0.26; // Rotation offset

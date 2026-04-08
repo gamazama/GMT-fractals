@@ -1,7 +1,6 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, Suspense } from 'react';
 import Controls from './components/Controls';
 import TopBar from './components/TopBar';
-import Timeline from './components/Timeline'; 
 import MobileControls from './components/MobileControls';
 import { LoadingScreen } from './components/LoadingScreen';
 import { useFractalStore } from './store/fractalStore';
@@ -9,11 +8,17 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { ViewportArea } from './components/ViewportArea';
 import { useGlobalContextMenu } from './hooks/useGlobalContextMenu';
 import GlobalContextMenu from './components/GlobalContextMenu';
-import HelpBrowser from './components/HelpBrowser';
 import { PopupSliderSystem } from './components/PopupSliderSystem';
 import { SmartphoneRotateIcon, TimelineOpenIcon, AlertIcon, CheckIcon } from './components/Icons';
 import { EngineBridge } from './components/EngineBridge';
 import { useAppStartup } from './hooks/useAppStartup';
+
+// --- Code-split: loaded on demand ---
+const Timeline = React.lazy(() => import('./components/Timeline'));
+const HelpBrowser = React.lazy(() => import('./components/HelpBrowser'));
+const FormulaWorkshop = React.lazy(() =>
+    import('./features/fragmentarium_import/FormulaWorkshop').then(m => ({ default: m.FormulaWorkshop }))
+);
 import { useMobileLayout } from './hooks/useMobileLayout';
 import { QualityState } from './features/quality';
 import { FractalEvents } from './engine/FractalEvents';
@@ -48,7 +53,7 @@ const App: React.FC = () => {
   }), []);
 
   // --- Logic Hooks ---
-  const { startupMode, queuePresetLoad, bootEngine } = useAppStartup(isSceneReady);
+  const { startupMode, bootEngine } = useAppStartup(isSceneReady);
   const { isMobile, isPortrait } = useMobileLayout();
   useKeyboardShortcuts(showTimeline, setShowTimeline);
   useGlobalContextMenu();
@@ -69,7 +74,7 @@ const App: React.FC = () => {
   const handleLiteToggle = () => {
       const mode = isLiteRender ? 'balanced' : 'lite';
       FractalEvents.emit('is_compiling', `Switching to ${mode} mode...`);
-      // @ts-ignore
+      // @ts-expect-error — DDFS dynamic store action
       const applyPreset = state.applyPreset;
       if (applyPreset) {
           applyPreset({ mode, actions: state });
@@ -78,12 +83,6 @@ const App: React.FC = () => {
   
   const handleLoadingFinished = () => {
       setIsLoadingVisible(false);
-      FractalEvents.emit('camera_teleport', {
-          position: state.cameraPos,
-          rotation: state.cameraRot,
-          sceneOffset: state.sceneOffset,
-          targetDistance: state.targetDistance
-      });
   };
 
   const rootClass = isCurrentlyMobile && !isBroadcast
@@ -113,7 +112,7 @@ const App: React.FC = () => {
                 <>
                     <div className="flex items-center gap-2 text-amber-500 mb-1">
                         <AlertIcon />
-                        <span className="text-xs font-black uppercase tracking-widest">Lite Render Mode</span>
+                        <span className="text-xs font-bold">Lite Render Mode</span>
                     </div>
                     <p className="text-[10px] text-gray-400 leading-relaxed max-w-[320px]">
                         Running lightweight engine.<br/>
@@ -122,13 +121,13 @@ const App: React.FC = () => {
              ) : (
                 <>
                     <div className="flex items-center gap-2 text-cyan-500 mb-1">
-                        <span className="text-xs font-black uppercase tracking-widest">High Quality Mode</span>
+                        <span className="text-xs font-bold">High Quality Mode</span>
                     </div>
                 </>
              )}
              <button 
                 onClick={handleLiteToggle}
-                className="mt-2 px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest rounded border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
+                className="mt-2 px-3 py-1.5 text-[9px] font-bold rounded border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
              >
                  {isLiteRender ? "Switch to High Quality" : "Switch to Lite Mode"}
              </button>
@@ -144,54 +143,58 @@ const App: React.FC = () => {
             isReady={isSceneReady} 
             onFinished={handleLoadingFinished} 
             startupMode={startupMode} 
-            onPresetLoaded={queuePresetLoad}
             bootEngine={bootEngine}
         />
         
         {isCurrentlyMobile && isPortrait && !isLoadingVisible && !isBroadcast && (
             <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-10 text-center text-white">
                 <div className="text-cyan-400 mb-6 animate-bounce"><SmartphoneRotateIcon /></div>
-                <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">Landscape Recommended</h2>
-                <p className="text-gray-500 text-sm font-mono tracking-widest">Rotate device to access controls.</p>
+                <h2 className="text-2xl font-bold tracking-tight mb-2">Landscape Recommended</h2>
+                <p className="text-gray-500 text-sm font-mono">Rotate device to access controls.</p>
             </div>
         )}
-        
-        {!isLoadingVisible && (
-          <>
-            {!isBroadcast && <TopBar />}
-            
-            {/* MAIN CONTENT AREA: 3-COLUMN LAYOUT */}
-            <div className="flex-1 flex overflow-hidden relative">
-                
-                {/* LEFT DOCK */}
-                {!isBroadcast && !isCurrentlyMobile && (
-                    <Dock side="left" />
-                )}
 
-                {/* VIEWPORT (Flex-1 to take available space) */}
-                <ViewportArea hudRefs={hudRefs} onSceneReady={() => setIsSceneReady(true)} />
-                
-                {/* RIGHT DOCK */}
-                {!isBroadcast && (
-                    <Dock side="right" />
-                )}
-            </div>
-            
-            {!isBroadcast && <MobileControls />}
-            {!isBroadcast && <PopupSliderSystem />}
-            {state.contextMenu.visible && !isBroadcast && (
-                <GlobalContextMenu x={state.contextMenu.x} y={state.contextMenu.y} items={state.contextMenu.items} targetHelpIds={state.contextMenu.targetHelpIds} onClose={state.closeContextMenu} onOpenHelp={state.openHelp} />
+        {/* UI mounts immediately — loading screen (z-100) overlays until fade-out.
+            This lets the worker boot + compile while the loading animation plays. */}
+        {!isBroadcast && <TopBar />}
+
+        {/* MAIN CONTENT AREA: 3-COLUMN LAYOUT */}
+        <div className="flex-1 flex overflow-hidden relative">
+
+            {/* LEFT DOCK — replaced by Workshop when open */}
+            {state.workshopOpen ? (
+                <Suspense fallback={null}>
+                    <FormulaWorkshop
+                        onClose={state.closeWorkshop}
+                        editFormula={state.workshopEditFormula}
+                    />
+                </Suspense>
+            ) : (
+                !isBroadcast && !isCurrentlyMobile && <Dock side="left" />
             )}
-            {state.helpWindow.visible && <HelpBrowser activeTopicId={state.helpWindow.activeTopicId} onClose={state.closeHelp} onNavigate={state.openHelp} />}
-            
-            {!showTimeline && !isFlyMobile && !isBroadcast && (
-                <div className={`fixed bottom-4 left-4 z-50 flex gap-2 transition-all duration-500`}>
-                    <button onClick={() => setShowTimeline(true)} onContextMenu={handleTimelineContextMenu} className={`p-2 rounded-full border shadow-lg transition-all bg-gray-800 border-gray-600 text-gray-400 hover:text-white`} title="Open Timeline (T)"><TimelineOpenIcon /></button>
-                </div>
+
+            {/* VIEWPORT (Flex-1 to take available space) */}
+            <ViewportArea hudRefs={hudRefs} onSceneReady={() => setIsSceneReady(true)} />
+
+            {/* RIGHT DOCK */}
+            {!isBroadcast && (
+                <Dock side="right" />
             )}
-            {showTimeline && !isBroadcast && <Timeline onClose={() => setShowTimeline(false)} />}
-          </>
+        </div>
+
+        {!isBroadcast && <MobileControls />}
+        {!isBroadcast && <PopupSliderSystem />}
+        {state.contextMenu.visible && !isBroadcast && (
+            <GlobalContextMenu x={state.contextMenu.x} y={state.contextMenu.y} items={state.contextMenu.items} targetHelpIds={state.contextMenu.targetHelpIds} onClose={state.closeContextMenu} onOpenHelp={state.openHelp} />
         )}
+        {state.helpWindow.visible && <Suspense fallback={null}><HelpBrowser activeTopicId={state.helpWindow.activeTopicId} onClose={state.closeHelp} onNavigate={state.openHelp} /></Suspense>}
+
+        {!showTimeline && !isFlyMobile && !isBroadcast && (
+            <div className={`fixed bottom-4 left-4 z-50 flex gap-2 transition-all duration-500`}>
+                <button onClick={() => setShowTimeline(true)} onContextMenu={handleTimelineContextMenu} className={`p-2 rounded-full border shadow-lg transition-all bg-gray-800 border-gray-600 text-gray-400 hover:text-white`} title="Open Timeline (T)"><TimelineOpenIcon /></button>
+            </div>
+        )}
+        {showTimeline && !isBroadcast && <Suspense fallback={null}><Timeline onClose={() => setShowTimeline(false)} /></Suspense>}
       </div>
     </div>
   );

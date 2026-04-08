@@ -420,7 +420,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
                 <div 
                     className="sticky left-0 z-20 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 select-none" 
                 >
-                    <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest pl-4">Global Summary</span>
+                    <span className="text-[10px] font-bold text-cyan-400 pl-4">Global Summary</span>
                 </div>
                 <div className="flex-1 relative group/track">
                     {getRootKeyframes().map(frame => (

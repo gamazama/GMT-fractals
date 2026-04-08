@@ -6,58 +6,77 @@ export const MarbleMarcher: FractalDefinition = {
     name: 'Marble Marcher',
     shortDescription: 'The dynamic fractal from the game Marble Marcher. Fast rendering, geometric feel.',
     description: 'The dynamic fractal from the game Marble Marcher. A specialized Menger Sponge IFS with rotation and shifting steps.',
-    
+    juliaType: 'offset',
+
     shader: {
+        preamble: `
+    // MarbleMarcher: Pre-calculated rotation matrices (computed once per frame)
+    // Two separate rotations at different algorithm stages
+    float uMM_sZ = 0.0, uMM_cZ = 1.0;
+    float uMM_sX = 0.0, uMM_cX = 1.0;
+    float uMM_sY = 0.0, uMM_cY = 1.0;
+
+    void MarbleMarcher_precalcRotation() {
+        if (abs(uVec3B.x) > 0.001) {
+            uMM_sZ = sin(uVec3B.x);
+            uMM_cZ = cos(uVec3B.x);
+        }
+        if (abs(uVec3B.y) > 0.001) {
+            uMM_sX = sin(uVec3B.y);
+            uMM_cX = cos(uVec3B.y);
+        }
+        if (abs(uVec3B.z) > 0.001) {
+            uMM_sY = sin(uVec3B.z);
+            uMM_cY = cos(uVec3B.z);
+        }
+    }`,
         function: `
     void formula_MarbleMarcher(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
-        
+
         // 1. Abs
         z3 = abs(z3);
-        
-        // 2. Rot Z (Param C)
-        float ang1 = uParamC;
-        if (abs(ang1) > 0.001) {
-            float s1 = sin(ang1), c1 = cos(ang1);
-            z3.xy = mat2(c1, s1, -s1, c1) * z3.xy;
+
+        // 2. Rot Z (Vec3B.x) — applied after abs
+        if (abs(uVec3B.x) > 0.001) {
+            z3.xy = mat2(uMM_cZ, uMM_sZ, -uMM_sZ, uMM_cZ) * z3.xy;
         }
-        
-        // 3. Menger Fold
-        // Equivalent to: if (x<y) swap; if (x<z) swap; if (y<z) swap;
+
+        // 3. Menger Fold (sort descending)
         float a = min(z3.x - z3.y, 0.0); z3.x -= a; z3.y += a;
         a = min(z3.x - z3.z, 0.0); z3.x -= a; z3.z += a;
         a = min(z3.y - z3.z, 0.0); z3.y -= a; z3.z += a;
-        
-        // 4. Rot X (Param D)
-        float ang2 = uParamD;
-        if (abs(ang2) > 0.001) {
-            float s2 = sin(ang2), c2 = cos(ang2);
-            z3.yz = mat2(c2, s2, -s2, c2) * z3.yz;
+
+        // 4. Rot X (Vec3B.y) — applied after Menger fold
+        if (abs(uVec3B.y) > 0.001) {
+            z3.yz = mat2(uMM_cX, uMM_sX, -uMM_sX, uMM_cX) * z3.yz;
         }
-        
+
+        // 4b. Rot Y (Vec3B.z) — applied after X rotation
+        if (abs(uVec3B.z) > 0.001) {
+            z3.xz = mat2(uMM_cY, uMM_sY, -uMM_sY, uMM_cY) * z3.xz;
+        }
+
         // 5. Scale (Param A)
         float scale = uParamA;
         z3 *= scale;
-        dr *= abs(scale); // Standard IFS scaling
-        
-        // 6. Shift (Params B, E, F)
-        // Original game uses a single vec3 shift. We map params.
-        vec3 shift = vec3(uParamB, uParamE, uParamF);
-        z3 += shift;
-        
+        dr *= abs(scale);
+
+        // 6. Vec3A: Shift X/Y/Z
+        z3 += uVec3A;
+
         if (uJuliaMode > 0.5) z3 += c.xyz;
 
         z.xyz = z3;
-        
-        // Use a box trap for coloring to match geometric nature
+
+        // Box trap for coloring
         vec3 boxDist = abs(z3) - vec3(1.0);
         trap = min(trap, length(max(boxDist, 0.0)) + min(max(boxDist.x, max(boxDist.y, boxDist.z)), 0.0));
     }`,
         loopBody: `formula_MarbleMarcher(z, dr, trap, c);`,
+        loopInit: `MarbleMarcher_precalcRotation();`,
+        preambleVars: ['uMM_sZ', 'uMM_cZ', 'uMM_sX', 'uMM_cX', 'uMM_sY', 'uMM_cY'],
         getDist: `
-            // The original used a hardcoded Box SDF: length(max(abs(z)-6.0, 0.0))
-            // We now use 'r' which comes from DE_MASTER and respects the global Distance Metric.
-            // NOTE: Select 'Chebyshev' in Quality settings for the classic look!
             float limit = 6.0;
             return vec2((r - limit) / dr, iter);
         `
@@ -65,17 +84,14 @@ export const MarbleMarcher: FractalDefinition = {
 
     parameters: [
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 2.0 },
-        { label: 'Shift X', id: 'paramB', min: -5.0, max: 5.0, step: 0.01, default: -2.0 },
-        { label: 'Rot Z', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot X', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Shift Y', id: 'paramE', min: -5.0, max: 5.0, step: 0.01, default: -2.0 },
-        { label: 'Shift Z', id: 'paramF', min: -5.0, max: 5.0, step: 0.01, default: -2.0 },
+        { label: 'Shift', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: -2.0, y: -2.0, z: -2.0 } },
+        { label: 'Rotation (Z, X, Y)', id: 'vec3B', type: 'vec3', min: -6.28, max: 6.28, step: 0.01, default: { x: 0, y: 0, z: 0 }, mode: 'axes', scale: 'pi' },
     ],
 
     defaultPreset: {
         formula: "MarbleMarcher",
         features: {
-            coreMath: { iterations: 21, paramA: 1.89, paramB: -2.16, paramC: -0.047, paramD: 0.025, paramE: -2.84, paramF: -2.47 },
+            coreMath: { iterations: 21, paramA: 1.89, vec3A: { x: -2.16, y: -2.84, z: -2.47 }, vec3B: { x: -0.047, y: 0.025, z: 0 } },
             coloring: {
                 mode: 6, // Decomposition
                 repeats: 2.5, phase: 0, scale: 1, offset: 0, bias: 1, twist: 0, escape: 16.18,
@@ -108,7 +124,6 @@ export const MarbleMarcher: FractalDefinition = {
             },
             geometry: { juliaMode: false, juliaX: -2, juliaY: 0.86, juliaZ: -2, hybridMode: false, hybridIter: 2, hybridScale: 2, hybridMinR: 0.5, hybridFixedR: 1, hybridFoldLimit: 1 },
             lighting: { shadows: true, shadowSoftness: 16, shadowIntensity: 1, shadowBias: 0.0007 },
-            // UPDATED: Default to Chebyshev (1.0) so it looks correct out of the box
             quality: { detail: 1.1, fudgeFactor: 0.62, pixelThreshold: 0.5, maxSteps: 300, distanceMetric: 1.0 },
             optics: { dofStrength: 0, dofFocus: 4.65 }
         },
@@ -120,11 +135,8 @@ export const MarbleMarcher: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: 0.936, y: -2.75, z: 6.21 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 8, falloff: 0.67, falloffType: "Linear", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: -5, y: -2, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff8800", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0, y: 0, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0044ff", intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "2JfG4QE8x4GkvGQU5DKqx", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: 1.89, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: -5, y: -2, z: 2 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0, y: 0, z: -5 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 1, falloff: 0, falloffType: "Linear", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

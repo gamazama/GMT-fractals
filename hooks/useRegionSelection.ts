@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 
 type DragMode = 'draw' | 'move' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null;
@@ -7,11 +7,13 @@ type DragMode = 'draw' | 'move' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | '
 export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) => {
     const { interactionMode, setInteractionMode, setRenderRegion, renderRegion } = useFractalStore();
     const isSelectingRegion = interactionMode === 'selecting_region';
-    
+
     const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null);
     const [currentPos, setCurrentPos] = useState<{x: number, y: number} | null>(null);
     const [visualRegion, setVisualRegion] = useState<{minX: number, minY: number, maxX: number, maxY: number} | null>(null);
-    
+    // Container dimensions for pixel→normalized conversion during draw
+    const [containerSize, setContainerSize] = useState<{w: number, h: number}>({ w: 1, h: 1 });
+
     const dragMode = useRef<DragMode>(null);
     const initialRegion = useRef<{minX: number, minY: number, maxX: number, maxY: number} | null>(null);
     const currentDragRegion = useRef<{minX: number, minY: number, maxX: number, maxY: number} | null>(null);
@@ -20,6 +22,24 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
         x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
         y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
     });
+
+    // Compute draw preview region from pixel coords
+    const drawPreview = useMemo(() => {
+        if (dragMode.current !== 'draw' || !startPos || !currentPos) return null;
+        const { w, h } = containerSize;
+        if (w < 1 || h < 1) return null;
+        const x1 = Math.min(startPos.x, currentPos.x);
+        const x2 = Math.max(startPos.x, currentPos.x);
+        const y1 = Math.min(startPos.y, currentPos.y);
+        const y2 = Math.max(startPos.y, currentPos.y);
+        if (x2 - x1 < 4 || y2 - y1 < 4) return null;
+        return {
+            minX: x1 / w,
+            maxX: x2 / w,
+            minY: 1.0 - (y2 / h),
+            maxY: 1.0 - (y1 / h),
+        };
+    }, [startPos, currentPos, containerSize]);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -52,14 +72,15 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
                 const pxY = e.clientY - rect.top;
                 setStartPos({ x: pxX, y: pxY });
                 setCurrentPos({ x: pxX, y: pxY });
+                setContainerSize({ w: rect.width, h: rect.height });
             }
         };
 
         const onMove = (e: MouseEvent) => {
             if (!dragMode.current) return;
-            e.stopPropagation(); 
+            e.stopPropagation();
             e.preventDefault();
-            
+
             const rect = el.getBoundingClientRect();
 
             if (dragMode.current === 'draw') {
@@ -69,7 +90,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
             } else if (initialRegion.current && startPos) {
                 const norm = getNormPos(e, rect);
                 const dx = norm.x - startPos.x;
-                const dy = (1 - norm.y) - (1 - startPos.y); 
+                const dy = (1 - norm.y) - (1 - startPos.y);
                 let newR = { ...initialRegion.current };
                 const mode = dragMode.current;
 
@@ -87,11 +108,11 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
                     if (mode?.includes('n')) newR.maxY = Math.min(1, initialRegion.current.maxY + dy);
                     if (mode?.includes('s')) newR.minY = Math.max(0, initialRegion.current.minY + dy);
                 }
-                
+
                 const finalR = { minX: Math.min(newR.minX, newR.maxX), maxX: Math.max(newR.minX, newR.maxX), minY: Math.min(newR.minY, newR.maxY), maxY: Math.max(newR.minY, newR.maxY) };
                 if (finalR.maxX - finalR.minX < 0.01) finalR.maxX = finalR.minX + 0.01;
                 if (finalR.maxY - finalR.minY < 0.01) finalR.maxY = finalR.minY + 0.01;
-                setVisualRegion(finalR); 
+                setVisualRegion(finalR);
                 currentDragRegion.current = finalR;
             }
         };
@@ -99,7 +120,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
         const onUp = (e: MouseEvent) => {
             if (!dragMode.current) return;
             e.stopPropagation();
-            
+
             if (dragMode.current === 'draw' && startPos && currentPos) {
                 const rect = el.getBoundingClientRect();
                 const x1 = Math.min(startPos.x, currentPos.x); const x2 = Math.max(startPos.x, currentPos.x);
@@ -114,27 +135,28 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
             } else if (currentDragRegion.current) {
                 setRenderRegion(currentDragRegion.current);
             }
-            
-            dragMode.current = null; 
-            setStartPos(null); 
-            setCurrentPos(null); 
-            initialRegion.current = null; 
-            setVisualRegion(null); 
+
+            dragMode.current = null;
+            setStartPos(null);
+            setCurrentPos(null);
+            initialRegion.current = null;
+            setVisualRegion(null);
             currentDragRegion.current = null;
         };
 
-        el.addEventListener('mousedown', onDown); 
-        window.addEventListener('mousemove', onMove); 
+        el.addEventListener('mousedown', onDown);
+        window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
-        return () => { 
-            el.removeEventListener('mousedown', onDown); 
-            window.removeEventListener('mousemove', onMove); 
-            window.removeEventListener('mouseup', onUp); 
+        return () => {
+            el.removeEventListener('mousedown', onDown);
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
         };
     }, [isSelectingRegion, renderRegion, startPos, currentPos, setInteractionMode, setRenderRegion, containerRef]);
 
     return {
         visualRegion,
+        drawPreview,
         isGhostDragging: !!visualRegion,
         renderRegion,
         isSelectingRegion

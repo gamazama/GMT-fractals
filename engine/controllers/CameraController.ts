@@ -25,18 +25,21 @@ export class CameraController {
     private rollVelocity = 0;
     
     // Smoothed distance for speed calculation (lerp when increasing)
-    private smoothedDistEstimate = 10.0;
-    
+    private smoothedDistEstimate = 1.0;
+
     // Config
     private readonly ROTATION_SMOOTHING = 20.0;
     private readonly ROLL_SMOOTHING = 3.0; // Decay rate
     private readonly SENSITIVITY = 2.5;
-    private readonly DIST_INCREASE_LERP_RATE = 8.0; // Lerp speed when DST increases
+    // Lerp rate when DST increases — lower = slower speed ramp-up (prevents sudden 100x jumps when panning to open space)
+    // At 1.2: ~2.5s to reach 95% of target distance. Immediate on decrease (safety).
+    // Probe already applies its own smoothing, so this is a second layer of damping.
+    private readonly DIST_INCREASE_LERP_RATE = 1.2;
 
     public reset() {
         this.currentRotVelocity.set(0, 0, 0);
         this.rollVelocity = 0;
-        this.smoothedDistEstimate = 10.0;
+        this.smoothedDistEstimate = 1.0;
     }
 
     private applyCurve(v: number): number {

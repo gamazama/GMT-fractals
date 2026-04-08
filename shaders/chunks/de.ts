@@ -1,13 +1,23 @@
 
 export const DE_MASTER = (
-    formulaBody: string, 
-    loopInit: string = '', 
-    getDistBody: string, 
+    formulaBody: string,
+    loopInit: string = '',
+    getDistBody: string,
     hybridInit: string = '',
     hybridPreLoop: string = '',
-    hybridInLoop: string = ''
+    hybridInLoop: string = '',
+    distOverrideInit: string = '',
+    distOverrideInLoopFull: string = '',
+    distOverrideInLoopGeom: string = '',
+    distOverridePostFull: string = '',
+    distOverridePostGeom: string = '',
+    postMapCode: string = '',
+    postDistCode: string = ''
 ) => {
-    
+    // When hybridInLoop sets skipMainFormula, we need the variable and if-wrapper.
+    // Otherwise emit the formula body directly — saves a bool + branch per iteration.
+    const needsSkip = hybridInLoop.includes('skipMainFormula');
+
     return `
 ${getDistBody}
 
@@ -16,62 +26,55 @@ ${getDistBody}
 vec4 map(vec3 p) {
     // 1. Apply Precision Offset
     vec3 p_fractal = applyPrecisionOffset(p, uSceneOffsetLow, uSceneOffsetHigh);
-    
-    vec4 z = vec4(p_fractal, uParamB); 
+
+    applyWorldRotation(p_fractal);
+
+    vec4 z = vec4(p_fractal, uParamB);
     vec4 c = mix(z, vec4(uJulia, uParamA), step(0.5, uJuliaMode));
-    
+
     float dr = 1.0;
     float trap = 1e10;
-    
-    float iter = 0.0; 
+    g_orbitTrap = vec4(1e10);
+
+    float iter = 0.0;
     float smoothIter = 0.0;
-    
+
     float decomp = 0.0;
     float lastLength = 0.0;
     bool decompCaptured = false;
-    
-    bool rotated = false; 
 
-    #if defined(FORMULA_ID) && FORMULA_ID == 14
-        float distOverride = 1e10; 
-    #endif
-    
+    // Color iteration limit: snapshot coloring state at boundary (branchless)
+    vec4 savedOrbitTrap = vec4(1e10);
+    float savedTrap = 1e10;
+    float savedIter = 0.0;
+
+    ${distOverrideInit}
     ${loopInit}
     ${hybridPreLoop}
 
-    if (uHybridProtect > 0.5 && uPreRotEnabled > 0.5) {
-         applyLocalRotation(z.xyz);
-         rotated = true;
-    }
-    
     bool escaped = false;
+    // Bailout must exceed escape threshold so coloring captures the last pre-escape state.
+    // +100 buffer prevents premature bailout on slowly-escaping orbits.
     float bailout = max(100.0, uEscapeThresh + 100.0);
-    
+
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
 
-        iter = float(i);
-        bool skipMainFormula = false;
-        
-        ${hybridInLoop}
-        
-        if (!skipMainFormula) {
-            if (uHybridProtect < 0.5) {
-                 applyLocalRotation(z.xyz);
-            } else if (!rotated) {
-                 applyLocalRotation(z.xyz);
-                 rotated = true;
-            }
+        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
 
-            float d_metric = getLength(z.xyz);
-            float r2_check = d_metric * d_metric;
+        ${hybridInLoop}
+
+        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
+            applyPreRotation(z.xyz);
+
+            float r2_check = dot(z.xyz, z.xyz);
 
             if (!decompCaptured && r2_check > uEscapeThresh) {
-                decomp = atan(z.y, z.x) * 0.15915494 + 0.5; 
-                lastLength = d_metric; 
+                decomp = atan(z.y, z.x) * INV_TAU + 0.5;
+                lastLength = sqrt(r2_check);
                 decompCaptured = true;
             }
-            
+
             // --- OPTIMIZATION: EARLY BAILOUT ---
             // Check if point has escaped BEFORE running expensive math (pow/sin/cos).
             // Some formulas (JuliaMorph) opt-out of this via define.
@@ -81,69 +84,75 @@ vec4 map(vec3 p) {
                 break;
             }
             #endif
-            
+
             ${formulaBody}
-        }
-        
-        float d_metric = getLength(z.xyz);
-        float r2 = d_metric * d_metric;
-        
+
+            applyPostRotation(z.xyz);
+        ${needsSkip ? '}' : ''}
+
+        // Count completed iterations. After uIterations runs iter == uIterations,
+        // which matches Fragmentarium's n counter used in explicit getDist expressions.
+        iter += 1.0;
+
+        float r2 = dot(z.xyz, z.xyz);
+        g_orbitTrap = min(g_orbitTrap, abs(vec4(z.xyz, r2)));
+
+        // Branchless color iteration snapshot: keep updating until iter exceeds limit
+        float colorGate = step(iter, uColorIter);  // 1.0 while iter <= uColorIter, 0.0 after
+        savedOrbitTrap = mix(savedOrbitTrap, g_orbitTrap, colorGate);
+        savedTrap = mix(savedTrap, trap, colorGate);
+        savedIter = mix(savedIter, iter, colorGate);
+
         if (!decompCaptured && r2 > uEscapeThresh) {
-            decomp = atan(z.y, z.x) * 0.15915494 + 0.5; 
-            lastLength = d_metric;
+            decomp = atan(z.y, z.x) * INV_TAU + 0.5;
+            lastLength = sqrt(r2);
             decompCaptured = true;
         }
-        
+
         if (dr > 1.0e10 || r2 > bailout) {
             escaped = true;
             break;
         }
-        
-        #if defined(FORMULA_ID) && FORMULA_ID == 14
-        if (distOverride < 999.0) { escaped = true; break; }
-        #endif
+
+        ${distOverrideInLoopFull}
     }
-    
+
     float r = getLength(z.xyz);
     float safeDr = max(abs(dr), 1.0e-10);
-    
+
     if (!decompCaptured) {
-        decomp = atan(z.y, z.x) * 0.15915494 + 0.5;
+        decomp = atan(z.y, z.x) * INV_TAU + 0.5;
         lastLength = r;
     }
-    
+
     vec2 distRes = getDist(r, safeDr, iter, z);
-    
+
     float finalD = distRes.x;
     smoothIter = distRes.y;
-    
-    #if defined(FORMULA_ID) && FORMULA_ID == 14
-        if (distOverride < 999.0) { finalD = distOverride; smoothIter = iter; }
-    #endif
-    
+
+    ${distOverridePostFull}
+
+    // Restore saved coloring state if color iteration limit was active
+    // When uColorIter > 0, use the frozen snapshot; otherwise keep full-iteration values
+    float useColorSnap = step(0.5, uColorIter);
+    g_orbitTrap = mix(g_orbitTrap, savedOrbitTrap, useColorSnap);
+    trap = mix(trap, savedTrap, useColorSnap);
+
+    // Color mode 8 = LLI (Last Length Iteration) decomposition — needs lastLength from escape check
     bool useLLI = (abs(uColorMode - 8.0) < 0.1) || (abs(uColorMode2 - 8.0) < 0.1);
     if (uUseTexture > 0.5) {
         if (abs(uTextureModeU - 8.0) < 0.1) useLLI = true;
         if (abs(uTextureModeV - 8.0) < 0.1) useLLI = true;
     }
     float outTrap = useLLI ? lastLength : trap;
-    
-    // --- HOOK: Water Plane ---
-    // Wrapped in ifdef to ensure it is optimized out if feature disabled
-    #ifdef WATER_ENABLED
-    float dWater = mapWater(p_fractal);
-    if (dWater < finalD) {
-        finalD = dWater;
-        // Signal Water material via magic decomp value
-        // Note: Features should ideally modify a dedicated material ID channel, 
-        // but packing into W is the current architecture.
-        decomp = 12345.0; 
-        smoothIter = 0.0;
-        outTrap = 0.0;
-    }
-    #endif
 
-    return vec4(finalD, outTrap, smoothIter / max(1.0, uIterations), decomp);
+    // --- FEATURE INJECTION: POST-MAP (accumulative) ---
+    // Variables in scope: p_fractal, finalD, decomp, smoothIter, outTrap
+    ${postMapCode}
+
+    // When color iteration limit is active, use capped iter for normalized coloring value
+    float colorIterNorm = mix(smoothIter / max(1.0, uIterations), savedIter / max(1.0, uColorIter), useColorSnap);
+    return vec4(finalD, outTrap, colorIterNorm, decomp);
 }
 
 // --- OPTIMIZED GEOMETRY-ONLY ESTIMATOR ---
@@ -151,8 +160,9 @@ vec4 map(vec3 p) {
 // Used for Shadows, AO, and Normals.
 float mapDist(vec3 p) {
     vec3 p_fractal = applyPrecisionOffset(p, uSceneOffsetLow, uSceneOffsetHigh);
-    
-    vec4 z = vec4(p_fractal, uParamB); 
+    applyWorldRotation(p_fractal);
+
+    vec4 z = vec4(p_fractal, uParamB);
     vec4 c = mix(z, vec4(uJulia, uParamA), step(0.5, uJuliaMode));
     
     float dr = 1.0;
@@ -161,72 +171,53 @@ float mapDist(vec3 p) {
     
     // Add missing iter definition for compatibility with loopInit chunks that might expect it
     float iter = 0.0;
-    
-    bool rotated = false;
-    
-    #if defined(FORMULA_ID) && FORMULA_ID == 14
-        float distOverride = 1e10; 
-    #endif
-    
+
+    ${distOverrideInit}
     ${loopInit}
     ${hybridPreLoop}
 
-    if (uHybridProtect > 0.5 && uPreRotEnabled > 0.5) {
-         applyLocalRotation(z.xyz);
-         rotated = true;
-    }
-    
     float bailout = max(100.0, uEscapeThresh + 100.0);
-    
+
     // Geometry Loop
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
 
-        bool skipMainFormula = false;
-        
+        ${needsSkip ? 'bool skipMainFormula = false;' : ''}
+
         ${hybridInLoop}
-        
-        if (!skipMainFormula) {
-            if (uHybridProtect < 0.5) {
-                 applyLocalRotation(z.xyz);
-            } else if (!rotated) {
-                 applyLocalRotation(z.xyz);
-                 rotated = true;
-            }
+
+        ${needsSkip ? 'if (!skipMainFormula) {' : '// --- Main Formula ---'}
+            applyPreRotation(z.xyz);
 
             #ifndef SKIP_PRE_BAILOUT
             if (dot(z.xyz, z.xyz) > bailout) break;
             #endif
-            
+
             ${formulaBody}
-        }
-        
+
+            applyPostRotation(z.xyz);
+        ${needsSkip ? '}' : ''}
+
+        // Track completed iterations so getDist expressions that use iter
+        // (e.g. r * pow(Scale, -iter)) receive the correct count for shadow marching.
+        iter += 1.0;
+
         if (dr > 1.0e10 || dot(z.xyz, z.xyz) > bailout) break;
-        
-        #if defined(FORMULA_ID) && FORMULA_ID == 14
-        if (distOverride < 999.0) break;
-        #endif
+
+        ${distOverrideInLoopGeom}
     }
-    
+
     float r = getLength(z.xyz);
     float safeDr = max(abs(dr), 1.0e-10);
-    
-    // We use 0.0 for iter because smooth iteration isn't needed for pure distance
-    vec2 distRes = getDist(r, safeDr, 0.0, z);
-    
+
+    vec2 distRes = getDist(r, safeDr, iter, z);
+
     float finalD = distRes.x;
-    
-    #if defined(FORMULA_ID) && FORMULA_ID == 14
-        if (distOverride < 999.0) finalD = distOverride;
-    #endif
-    
-    // --- HOOK: Water Plane ---
-    #ifdef WATER_ENABLED
-    float dWater = mapWater(p_fractal);
-    if (dWater < finalD) {
-        finalD = dWater;
-    }
-    #endif
+
+    ${distOverridePostGeom}
+
+    // --- FEATURE INJECTION: POST-DIST (accumulative) ---
+    ${postDistCode}
 
     return finalD;
 }

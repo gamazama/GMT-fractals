@@ -1,0 +1,389 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1DB7F010243C0C50006ECCCF /* 3D-XId.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFF5243C0C4F006ECCCF /* 3D-XId.frag */; };
+		1DB7F011243C0C50006ECCCF /* Apollonian2.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFF6243C0C4F006ECCCF /* Apollonian2.frag */; };
+		1DB7F012243C0C50006ECCCF /* Monster.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFF7243C0C4F006ECCCF /* Monster.frag */; };
+		1DB7F013243C0C50006ECCCF /* Floral.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFF8243C0C4F006ECCCF /* Floral.frag */; };
+		1DB7F014243C0C50006ECCCF /* KaliBox.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFF9243C0C4F006ECCCF /* KaliBox.frag */; };
+		1DB7F015243C0C50006ECCCF /* Quaternion.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFFA243C0C4F006ECCCF /* Quaternion.frag */; };
+		1DB7F016243C0C50006ECCCF /* KIFS.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFFB243C0C4F006ECCCF /* KIFS.frag */; };
+		1DB7F017243C0C50006ECCCF /* SpudsVille.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFFC243C0C4F006ECCCF /* SpudsVille.frag */; };
+		1DB7F018243C0C50006ECCCF /* EvilSpuds.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFFD243C0C4F006ECCCF /* EvilSpuds.frag */; };
+		1DB7F019243C0C50006ECCCF /* SierpinskTetra.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFFE243C0C4F006ECCCF /* SierpinskTetra.frag */; };
+		1DB7F01A243C0C50006ECCCF /* Apollonian2-FirstSurface.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7EFFF243C0C4F006ECCCF /* Apollonian2-FirstSurface.frag */; };
+		1DB7F01B243C0C50006ECCCF /* Apollonian.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F000243C0C4F006ECCCF /* Apollonian.frag */; };
+		1DB7F01C243C0C50006ECCCF /* DE-Raytracer-XId.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F001243C0C4F006ECCCF /* DE-Raytracer-XId.frag */; };
+		1DB7F01D243C0C50006ECCCF /* Mandelbulb.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F002243C0C4F006ECCCF /* Mandelbulb.frag */; };
+		1DB7F01E243C0C50006ECCCF /* DE-Raytracer-FirstSurface.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F003243C0C4F006ECCCF /* DE-Raytracer-FirstSurface.frag */; };
+		1DB7F01F243C0C50006ECCCF /* Tower.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F004243C0C4F006ECCCF /* Tower.frag */; };
+		1DB7F020243C0C50006ECCCF /* Vertebrae.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F005243C0C4F006ECCCF /* Vertebrae.frag */; };
+		1DB7F021243C0C50006ECCCF /* Flower.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F006243C0C4F006ECCCF /* Flower.frag */; };
+		1DB7F022243C0C50006ECCCF /* Geode.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F007243C0C50006ECCCF /* Geode.frag */; };
+		1DB7F023243C0C50006ECCCF /* Sponge.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F008243C0C50006ECCCF /* Sponge.frag */; };
+		1DB7F024243C0C50006ECCCF /* Rontgen.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F009243C0C50006ECCCF /* Rontgen.frag */; };
+		1DB7F025243C0C50006ECCCF /* PseudoKleinian-FirstSurface.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F00A243C0C50006ECCCF /* PseudoKleinian-FirstSurface.frag */; };
+		1DB7F026243C0C50006ECCCF /* HalfTetra.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F00B243C0C50006ECCCF /* HalfTetra.frag */; };
+		1DB7F027243C0C50006ECCCF /* PseudoKleinianMenger-FirstSurface.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F00C243C0C50006ECCCF /* PseudoKleinianMenger-FirstSurface.frag */; };
+		1DB7F028243C0C50006ECCCF /* PlanetEarth.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F00D243C0C50006ECCCF /* PlanetEarth.frag */; };
+		1DB7F029243C0C50006ECCCF /* Gold.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F00E243C0C50006ECCCF /* Gold.frag */; };
+		1DB7F02A243C0C50006ECCCF /* Kleinian.frag in Resources */ = {isa = PBXBuildFile; fileRef = 1DB7F00F243C0C50006ECCCF /* Kleinian.frag */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1DB7EFDC243C0C1E006ECCCF /* KosalosFrags.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = KosalosFrags.app; path = "/Users/harrykosalos/SourceCode/OSX/KosalosFrags/build/Debug-iphoneos/KosalosFrags.app"; sourceTree = "<absolute>"; };
+		1DB7EFF5243C0C4F006ECCCF /* 3D-XId.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = "3D-XId.frag"; sourceTree = "<group>"; };
+		1DB7EFF6243C0C4F006ECCCF /* Apollonian2.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Apollonian2.frag; sourceTree = "<group>"; };
+		1DB7EFF7243C0C4F006ECCCF /* Monster.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Monster.frag; sourceTree = "<group>"; };
+		1DB7EFF8243C0C4F006ECCCF /* Floral.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Floral.frag; sourceTree = "<group>"; };
+		1DB7EFF9243C0C4F006ECCCF /* KaliBox.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = KaliBox.frag; sourceTree = "<group>"; };
+		1DB7EFFA243C0C4F006ECCCF /* Quaternion.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Quaternion.frag; sourceTree = "<group>"; };
+		1DB7EFFB243C0C4F006ECCCF /* KIFS.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = KIFS.frag; sourceTree = "<group>"; };
+		1DB7EFFC243C0C4F006ECCCF /* SpudsVille.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = SpudsVille.frag; sourceTree = "<group>"; };
+		1DB7EFFD243C0C4F006ECCCF /* EvilSpuds.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = EvilSpuds.frag; sourceTree = "<group>"; };
+		1DB7EFFE243C0C4F006ECCCF /* SierpinskTetra.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = SierpinskTetra.frag; sourceTree = "<group>"; };
+		1DB7EFFF243C0C4F006ECCCF /* Apollonian2-FirstSurface.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = "Apollonian2-FirstSurface.frag"; sourceTree = "<group>"; };
+		1DB7F000243C0C4F006ECCCF /* Apollonian.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Apollonian.frag; sourceTree = "<group>"; };
+		1DB7F001243C0C4F006ECCCF /* DE-Raytracer-XId.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = "DE-Raytracer-XId.frag"; sourceTree = "<group>"; };
+		1DB7F002243C0C4F006ECCCF /* Mandelbulb.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Mandelbulb.frag; sourceTree = "<group>"; };
+		1DB7F003243C0C4F006ECCCF /* DE-Raytracer-FirstSurface.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = "DE-Raytracer-FirstSurface.frag"; sourceTree = "<group>"; };
+		1DB7F004243C0C4F006ECCCF /* Tower.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Tower.frag; sourceTree = "<group>"; };
+		1DB7F005243C0C4F006ECCCF /* Vertebrae.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Vertebrae.frag; sourceTree = "<group>"; };
+		1DB7F006243C0C4F006ECCCF /* Flower.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Flower.frag; sourceTree = "<group>"; };
+		1DB7F007243C0C50006ECCCF /* Geode.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Geode.frag; sourceTree = "<group>"; };
+		1DB7F008243C0C50006ECCCF /* Sponge.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Sponge.frag; sourceTree = "<group>"; };
+		1DB7F009243C0C50006ECCCF /* Rontgen.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Rontgen.frag; sourceTree = "<group>"; };
+		1DB7F00A243C0C50006ECCCF /* PseudoKleinian-FirstSurface.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = "PseudoKleinian-FirstSurface.frag"; sourceTree = "<group>"; };
+		1DB7F00B243C0C50006ECCCF /* HalfTetra.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = HalfTetra.frag; sourceTree = "<group>"; };
+		1DB7F00C243C0C50006ECCCF /* PseudoKleinianMenger-FirstSurface.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = "PseudoKleinianMenger-FirstSurface.frag"; sourceTree = "<group>"; };
+		1DB7F00D243C0C50006ECCCF /* PlanetEarth.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = PlanetEarth.frag; sourceTree = "<group>"; };
+		1DB7F00E243C0C50006ECCCF /* Gold.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Gold.frag; sourceTree = "<group>"; };
+		1DB7F00F243C0C50006ECCCF /* Kleinian.frag */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Kleinian.frag; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1DB7EFD9243C0C1E006ECCCF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1DB7EFD3243C0C1E006ECCCF = {
+			isa = PBXGroup;
+			children = (
+				1DB7EFF5243C0C4F006ECCCF /* 3D-XId.frag */,
+				1DB7F000243C0C4F006ECCCF /* Apollonian.frag */,
+				1DB7EFFF243C0C4F006ECCCF /* Apollonian2-FirstSurface.frag */,
+				1DB7EFF6243C0C4F006ECCCF /* Apollonian2.frag */,
+				1DB7F003243C0C4F006ECCCF /* DE-Raytracer-FirstSurface.frag */,
+				1DB7F001243C0C4F006ECCCF /* DE-Raytracer-XId.frag */,
+				1DB7EFFD243C0C4F006ECCCF /* EvilSpuds.frag */,
+				1DB7EFF8243C0C4F006ECCCF /* Floral.frag */,
+				1DB7F006243C0C4F006ECCCF /* Flower.frag */,
+				1DB7F007243C0C50006ECCCF /* Geode.frag */,
+				1DB7F00E243C0C50006ECCCF /* Gold.frag */,
+				1DB7F00B243C0C50006ECCCF /* HalfTetra.frag */,
+				1DB7EFF9243C0C4F006ECCCF /* KaliBox.frag */,
+				1DB7EFFB243C0C4F006ECCCF /* KIFS.frag */,
+				1DB7F00F243C0C50006ECCCF /* Kleinian.frag */,
+				1DB7F002243C0C4F006ECCCF /* Mandelbulb.frag */,
+				1DB7EFF7243C0C4F006ECCCF /* Monster.frag */,
+				1DB7F00D243C0C50006ECCCF /* PlanetEarth.frag */,
+				1DB7F00A243C0C50006ECCCF /* PseudoKleinian-FirstSurface.frag */,
+				1DB7F00C243C0C50006ECCCF /* PseudoKleinianMenger-FirstSurface.frag */,
+				1DB7EFFA243C0C4F006ECCCF /* Quaternion.frag */,
+				1DB7F009243C0C50006ECCCF /* Rontgen.frag */,
+				1DB7EFFE243C0C4F006ECCCF /* SierpinskTetra.frag */,
+				1DB7F008243C0C50006ECCCF /* Sponge.frag */,
+				1DB7EFFC243C0C4F006ECCCF /* SpudsVille.frag */,
+				1DB7F004243C0C4F006ECCCF /* Tower.frag */,
+				1DB7F005243C0C4F006ECCCF /* Vertebrae.frag */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1DB7EFDB243C0C1E006ECCCF /* KosalosFrags */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1DB7EFF2243C0C21006ECCCF /* Build configuration list for PBXNativeTarget "KosalosFrags" */;
+			buildPhases = (
+				1DB7EFD8243C0C1E006ECCCF /* Sources */,
+				1DB7EFD9243C0C1E006ECCCF /* Frameworks */,
+				1DB7EFDA243C0C1E006ECCCF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KosalosFrags;
+			productName = KosalosFrags;
+			productReference = 1DB7EFDC243C0C1E006ECCCF /* KosalosFrags.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1DB7EFD4243C0C1E006ECCCF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1130;
+				LastUpgradeCheck = 1130;
+				ORGANIZATIONNAME = "Harry Kosalos";
+				TargetAttributes = {
+					1DB7EFDB243C0C1E006ECCCF = {
+						CreatedOnToolsVersion = 11.3.1;
+					};
+				};
+			};
+			buildConfigurationList = 1DB7EFD7243C0C1E006ECCCF /* Build configuration list for PBXProject "KosalosFrags" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1DB7EFD3243C0C1E006ECCCF;
+			productRefGroup = 1DB7EFD3243C0C1E006ECCCF;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1DB7EFDB243C0C1E006ECCCF /* KosalosFrags */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1DB7EFDA243C0C1E006ECCCF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1DB7F017243C0C50006ECCCF /* SpudsVille.frag in Resources */,
+				1DB7F016243C0C50006ECCCF /* KIFS.frag in Resources */,
+				1DB7F021243C0C50006ECCCF /* Flower.frag in Resources */,
+				1DB7F027243C0C50006ECCCF /* PseudoKleinianMenger-FirstSurface.frag in Resources */,
+				1DB7F01C243C0C50006ECCCF /* DE-Raytracer-XId.frag in Resources */,
+				1DB7F010243C0C50006ECCCF /* 3D-XId.frag in Resources */,
+				1DB7F023243C0C50006ECCCF /* Sponge.frag in Resources */,
+				1DB7F013243C0C50006ECCCF /* Floral.frag in Resources */,
+				1DB7F011243C0C50006ECCCF /* Apollonian2.frag in Resources */,
+				1DB7F028243C0C50006ECCCF /* PlanetEarth.frag in Resources */,
+				1DB7F015243C0C50006ECCCF /* Quaternion.frag in Resources */,
+				1DB7F020243C0C50006ECCCF /* Vertebrae.frag in Resources */,
+				1DB7F022243C0C50006ECCCF /* Geode.frag in Resources */,
+				1DB7F01E243C0C50006ECCCF /* DE-Raytracer-FirstSurface.frag in Resources */,
+				1DB7F025243C0C50006ECCCF /* PseudoKleinian-FirstSurface.frag in Resources */,
+				1DB7F014243C0C50006ECCCF /* KaliBox.frag in Resources */,
+				1DB7F01F243C0C50006ECCCF /* Tower.frag in Resources */,
+				1DB7F02A243C0C50006ECCCF /* Kleinian.frag in Resources */,
+				1DB7F019243C0C50006ECCCF /* SierpinskTetra.frag in Resources */,
+				1DB7F024243C0C50006ECCCF /* Rontgen.frag in Resources */,
+				1DB7F018243C0C50006ECCCF /* EvilSpuds.frag in Resources */,
+				1DB7F01A243C0C50006ECCCF /* Apollonian2-FirstSurface.frag in Resources */,
+				1DB7F01B243C0C50006ECCCF /* Apollonian.frag in Resources */,
+				1DB7F012243C0C50006ECCCF /* Monster.frag in Resources */,
+				1DB7F029243C0C50006ECCCF /* Gold.frag in Resources */,
+				1DB7F01D243C0C50006ECCCF /* Mandelbulb.frag in Resources */,
+				1DB7F026243C0C50006ECCCF /* HalfTetra.frag in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1DB7EFD8243C0C1E006ECCCF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1DB7EFF0243C0C21006ECCCF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.2;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1DB7EFF1243C0C21006ECCCF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.2;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1DB7EFF3243C0C21006ECCCF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7237X7VY2S;
+				INFOPLIST_FILE = KosalosFrags/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = Harry.com.KosalosFrags;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1DB7EFF4243C0C21006ECCCF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7237X7VY2S;
+				INFOPLIST_FILE = KosalosFrags/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = Harry.com.KosalosFrags;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1DB7EFD7243C0C1E006ECCCF /* Build configuration list for PBXProject "KosalosFrags" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DB7EFF0243C0C21006ECCCF /* Debug */,
+				1DB7EFF1243C0C21006ECCCF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1DB7EFF2243C0C21006ECCCF /* Build configuration list for PBXNativeTarget "KosalosFrags" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DB7EFF3243C0C21006ECCCF /* Debug */,
+				1DB7EFF4243C0C21006ECCCF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1DB7EFD4243C0C1E006ECCCF /* Project object */;
+}

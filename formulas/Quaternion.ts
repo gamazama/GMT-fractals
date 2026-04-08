@@ -5,36 +5,39 @@ export const Quaternion: FractalDefinition = {
     id: 'Quaternion',
     name: 'Quaternion',
     shortDescription: 'A 3D slice of a 4D Julia set. Use the "Slice W" and Rotations to morph the object.',
-    description: 'A 4D Julia set projected into 3D. Now features 4D rotations to explore the hyperslice.',
+    description: 'A 4D Julia set projected into 3D. Features 4D rotations, iteration damping for smooth variants, and optional spherical inversion (Kosalos) for inside-out effects.',
+    juliaType: 'julia',
     
     shader: {
         function: `
+    vec4 quatSquare(vec4 q) {
+        return vec4(q.x*q.x - q.y*q.y - q.z*q.z - q.w*q.w, 2.0*q.x*q.y, 2.0*q.x*q.z, 2.0*q.x*q.w);
+    }
+
     void formula_Quaternion(inout vec4 z, inout float dr, inout float trap, vec4 c) {
-        // 4D Rotation Injection
-        // We rotate the 4D vector z before squaring.
-        // Param C: XY, Param D: XZ, Param E: XW, Param F: YW
-        
-        float angXY = uParamC;
+        // 3D Rotations (vec2A: XY, XZ)
+        float angXY = uVec2A.x;
         if (abs(angXY) > 0.0) {
             float s = sin(angXY), c_ = cos(angXY);
             z.xy = mat2(c_, -s, s, c_) * z.xy;
         }
-        
-        float angXZ = uParamD;
+
+        float angXZ = uVec2A.y;
         if (abs(angXZ) > 0.0) {
             float s = sin(angXZ), c_ = cos(angXZ);
             z.xz = mat2(c_, -s, s, c_) * z.xz;
         }
-        
-        float angXW = uParamE;
+
+        // 4D Rotations (vec2B: XW, YW)
+        float angXW = uVec2B.x;
         if (abs(angXW) > 0.0) {
             float s = sin(angXW), c_ = cos(angXW);
             vec2 xw = vec2(z.x, z.w);
             xw = mat2(c_, -s, s, c_) * xw;
             z.x = xw.x; z.w = xw.y;
         }
-        
-        float angYW = uParamF;
+
+        float angYW = uVec2B.y;
         if (abs(angYW) > 0.0) {
             float s = sin(angYW), c_ = cos(angYW);
             vec2 yw = vec2(z.y, z.w);
@@ -42,27 +45,65 @@ export const Quaternion: FractalDefinition = {
             z.y = yw.x; z.w = yw.y;
         }
 
+        // Save pre-iteration state for damping
+        vec4 oldZ = z;
+
         // Chain Rule: Magnitude increases by 2*|z| + 1 (from +c)
         dr = 2.0 * length(z) * dr + 1.0;
         z = quatSquare(z) + c;
+
+        // Iteration Damping (Kosalos variant)
+        // Adds momentum feedback: smooths iteration trajectory
+        if (abs(uParamC) > 0.001) {
+            float den = 2.0 + abs(uParamC) * 100.0;
+            z += (z - oldZ) / den;
+        }
+
         trap = min(trap, dot(z,z));
     }`,
-        loopBody: `formula_Quaternion(z, dr, trap, c);`
+        loopBody: `formula_Quaternion(z, dr, trap, c);`,
+        loopInit: `
+        // Spherical Inversion pre-transform (Kosalos variant)
+        // Inverts space around a center point, creating inside-out shapes
+        // Smooth blend: mix between original and inverted based on radius
+        if (uParamD > 0.001) {
+            vec3 invCenter = uVec3A;
+            float invRadius = uParamD;
+            float invAngle = uParamE;
+            vec3 offset = z.xyz - invCenter;
+            float r = length(offset);
+            float r2 = max(r * r, 1.0e-8);
+            vec3 inverted = (invRadius * invRadius / r2) * offset + invCenter;
+            // Smooth blend: ramp from 0..1 over radius 0..1 to avoid hard pop
+            float blend = smoothstep(0.0, 1.0, invRadius);
+            z.xyz = mix(z.xyz, inverted, blend);
+            // Optional angular twist
+            if (abs(invAngle) > 0.001) {
+                float an = atan(z.y, z.x) + invAngle;
+                float ra = length(z.xy);
+                z.x = cos(an) * ra;
+                z.y = sin(an) * ra;
+            }
+            // Re-derive c after inversion (position changed)
+            c = mix(vec4(z.xyz, uParamB), vec4(uJulia, uParamA), step(0.5, uJuliaMode));
+        }`
     },
 
     parameters: [
-        { label: 'Julia C (W)', id: 'paramA', min: -1.0, max: 1.0, step: 0.001, default: -0.5 },
-        { label: 'Slice W', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: 0.0 },
-        { label: 'Rot XY', id: 'paramC', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot XZ', id: 'paramD', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot XW (4D)', id: 'paramE', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
-        { label: 'Rot YW (4D)', id: 'paramF', min: 0.0, max: 6.28, step: 0.01, default: 0.0, scale: 'pi' },
+        { label: 'Julia C (W)', id: 'paramA', min: -1.0, max: 1.0, step: 0.001, default: -0.252 },
+        { label: 'Slice W', id: 'paramB', min: -1.0, max: 1.0, step: 0.001, default: -0.222 },
+        { label: 'Damping', id: 'paramC', min: 0.0, max: 5.0, step: 0.01, default: 0.0 },
+        { label: 'Inversion Radius', id: 'paramD', min: 0.0, max: 10.0, step: 0.01, default: 0.0 },
+        { label: 'Inversion Angle', id: 'paramE', min: -10.0, max: 10.0, step: 0.01, default: 0.0 },
+        { label: 'Rot 3D (XY, XZ)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -6.44, y: 0.29 }, scale: 'pi' },
+        { label: 'Rot 4D (XW, YW)', id: 'vec2B', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: -0.21, y: 0.05 }, scale: 'pi' },
+        { label: 'Inversion Center', id: 'vec3A', type: 'vec3', min: -5.0, max: 5.0, step: 0.01, default: { x: 0.612, y: 0.381, z: 0.786 } },
     ],
 
     defaultPreset: {
         formula: "Quaternion",
         features: {
-            coreMath: { iterations: 20, paramA: -0.252, paramB: -0.222, paramC: -6.44, paramD: 0.29, paramE: -0.21, paramF: 0.05 },
+            coreMath: { iterations: 20, paramA: -0.252, paramB: -0.222, paramC: 0, paramD: 0, paramE: 0, vec2A: { x: -6.44, y: 0.29 }, vec2B: { x: -0.21, y: 0.05 }, vec3A: { x: 0.612, y: 0.381, z: 0.786 } },
             coloring: {
                 mode: 6, // Decomposition
                 repeats: 1, phase: 0.73, scale: 1, offset: 0.73, bias: 1, twist: 0, escape: 54.95,
@@ -107,11 +148,8 @@ export const Quaternion: FractalDefinition = {
         cameraMode: "Orbit",
         lights: [
             { type: 'Point', position: { x: -2.0026065897203154, y: 0.7668302923678636, z: 0.21579993050482316 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ffffff", intensity: 1, falloff: 1, falloffType: "Quadratic", fixed: false, visible: true, castShadow: true },
-            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#ff0000", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
-            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#0000ff", intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
-        ],
-        animations: [
-            { id: "4yFFplV3QPo3KoNaGJwfX", enabled: false, target: "coreMath.paramA", shape: "Sine", period: 5, amplitude: 1, baseValue: -0.252, phase: 0, smoothing: 0.5 }
+            { type: 'Point', position: { x: 0.05, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#FFD6AA", useTemperature: true, temperature: 3500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false },
+            { type: 'Point', position: { x: 0.25, y: 0.075, z: -0.1 }, rotation: { x: 0, y: 0, z: 0 }, color: "#E0EEFF", useTemperature: true, temperature: 7500, intensity: 0.5, falloff: 0.5, falloffType: "Quadratic", fixed: false, visible: false, castShadow: false }
         ]
     }
 };

@@ -1,18 +1,24 @@
 
 import { ShaderConfig } from '../ShaderFactory';
 import { featureRegistry } from '../FeatureSystem';
+import { detectEngineProfile, estimateCompileTime } from '../../features/engine/profiles';
+import { FractalEvents } from '../FractalEvents';
 import * as THREE from 'three';
 
 export interface ConfigUpdateResult {
     rebuildNeeded: boolean;
     uniformUpdate: boolean;
     modeChanged: boolean;
+    needsAccumReset: boolean;
 }
 
 export class ConfigManager {
     public config: ShaderConfig;
     // Map uniform name -> { featureId, paramId, isCompileTime }
     private uniformToPath: Map<string, { featureId: string, paramId: string, isCompileTime: boolean }> = new Map();
+    // Batched log: accumulates compile changes across rapid successive update() calls
+    private pendingLogChanges: string[] = [];
+    private logFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(initialConfig: ShaderConfig) {
         this.config = { ...initialConfig };
@@ -39,11 +45,28 @@ export class ConfigManager {
         });
     }
 
+    private flushRebuildLog() {
+        this.logFlushTimer = null;
+        if (this.pendingLogChanges.length === 0) return;
+
+        const changes = this.pendingLogChanges.splice(0);
+        const profile = detectEngineProfile(this.config);
+        const profileLabel = profile === 'custom' ? 'Custom' : profile.charAt(0).toUpperCase() + profile.slice(1);
+        const estMs = estimateCompileTime(this.config);
+        if (import.meta.env.DEV) console.log(`[ConfigManager] Rebuild: ${changes.length} change(s) → Profile: ${profileLabel} (~${(estMs / 1000).toFixed(1)}s) | ${changes.join(' | ')}`);
+        FractalEvents.emit('compile_estimate', estMs);
+    }
+
     public syncUniform(uniformName: string, value: any) {
         const path = this.uniformToPath.get(uniformName);
         if (path) {
             // Skip update if this param requires compilation logic
             if (path.isCompileTime) return;
+
+            // Skip gradient buffers — they're derived values (Uint8Array textures),
+            // not source data (GradientStop[]). Storing them would corrupt the config
+            // and cause syncConfigUniforms to misinterpret gradient data.
+            if (value && value.isGradientBuffer) return;
 
             const { featureId, paramId } = path;
             if (!(this.config as any)[featureId]) {
@@ -66,9 +89,9 @@ export class ConfigManager {
 
         // Handle Three.js Types (Color, Vector)
         if (typeof a === 'object' && typeof b === 'object') {
-            // Color
+            // Color — compare raw r/g/b to handle deserialized plain objects
             if (a.isColor && b.isColor) {
-                return a.getHex() === b.getHex();
+                return Math.abs(a.r - b.r) < 1e-6 && Math.abs(a.g - b.g) < 1e-6 && Math.abs(a.b - b.b) < 1e-6;
             }
             // Vector3
             if (a.isVector3 && b.isVector3) {
@@ -92,7 +115,7 @@ export class ConfigManager {
             if (a.isColor || b.isColor) {
                 const ca = a.isColor ? a : new THREE.Color(a);
                 const cb = b.isColor ? b : new THREE.Color(b);
-                return ca.getHex() === cb.getHex();
+                return Math.abs(ca.r - cb.r) < 1e-6 && Math.abs(ca.g - cb.g) < 1e-6 && Math.abs(ca.b - cb.b) < 1e-6;
             }
             // Array (Simple shallow check for now)
             if (Array.isArray(a) && Array.isArray(b)) {
@@ -122,15 +145,17 @@ export class ConfigManager {
         let rebuildNeeded = false;
         let uniformUpdate = false;
         let modeChanged = false;
-        
+        let needsAccumReset = false;
+        const compileChanges: string[] = []; // Collect all compile-trigger changes for grouped log
+
         // --- GENERIC DDFS DIFFING ---
         const allFeatures = featureRegistry.getAll();
-        
+
         for (const feat of allFeatures) {
             if ((newConfig as any)[feat.id]) {
                 const newFeatData = (newConfig as any)[feat.id];
                 const oldFeatData = (this.config as any)[feat.id] || {};
-                
+
                 // Special Handling: Lighting Render Mode Sync
                 if (feat.id === 'lighting' && newFeatData.renderMode !== undefined) {
                     const oldMode = oldFeatData.renderMode;
@@ -140,20 +165,28 @@ export class ConfigManager {
                     }
                 }
 
-                // Check for compile-triggers BEFORE merging
+                // Check for compile-triggers and accumulation reset BEFORE merging
                 for (const paramKey in newFeatData) {
                     const paramConfig = feat.params[paramKey];
                     if (paramConfig && paramConfig.onUpdate === 'compile') {
                         const newVal = newFeatData[paramKey];
                         // Fix: Fallback to default if old value is missing (initial boot scenario)
                         const oldVal = oldFeatData[paramKey] !== undefined ? oldFeatData[paramKey] : paramConfig.default;
-                        
+
                         if (!this.areValuesEqual(newVal, oldVal)) {
-                            // Only log if it's not the initial hydration
+                            // Collect for grouped log (skip initial hydration)
                             if (Object.keys(oldFeatData).length > 0) {
-                                console.log(`[ConfigManager] Rebuild triggered by ${feat.id}.${paramKey}:`, oldVal, '->', newVal);
+                                compileChanges.push(`${feat.id}.${paramKey}: ${oldVal} → ${newVal}`);
                             }
                             rebuildNeeded = true;
+                        }
+                    }
+                    // Track whether any non-noReset param actually changed
+                    if (paramConfig && !paramConfig.noReset) {
+                        const newVal = newFeatData[paramKey];
+                        const oldVal = oldFeatData[paramKey] !== undefined ? oldFeatData[paramKey] : paramConfig.default;
+                        if (!this.areValuesEqual(newVal, oldVal)) {
+                            needsAccumReset = true;
                         }
                     }
                 }
@@ -163,12 +196,20 @@ export class ConfigManager {
                 uniformUpdate = true;
             }
         }
+
+        // Batch compile changes for grouped log (collapses rapid successive update() calls)
+        // Uses setTimeout to survive synchronous shader rebuilds between update() calls
+        if (rebuildNeeded && compileChanges.length > 0) {
+            this.pendingLogChanges.push(...compileChanges);
+            if (this.logFlushTimer) clearTimeout(this.logFlushTimer);
+            this.logFlushTimer = setTimeout(() => this.flushRebuildLog(), 50);
+        }
         
         // --- CORE SYSTEM DIFFS ---
         
         // Formula Switch
         if (newConfig.formula && newConfig.formula !== this.config.formula) { 
-            console.log(`[ConfigManager] Formula changed: ${this.config.formula} -> ${newConfig.formula}`);
+            if (import.meta.env.DEV) console.log(`[ConfigManager] Formula changed: ${this.config.formula} -> ${newConfig.formula}`);
             this.config.formula = newConfig.formula; 
             rebuildNeeded = true; 
         }
@@ -210,6 +251,6 @@ export class ConfigManager {
             uniformUpdate = true;
         }
         
-        return { rebuildNeeded, uniformUpdate, modeChanged };
+        return { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset };
     }
 }

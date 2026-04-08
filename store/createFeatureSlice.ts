@@ -2,6 +2,7 @@
 import { StateCreator } from 'zustand';
 import * as THREE from 'three';
 import { featureRegistry } from '../engine/FeatureSystem';
+import { registerFeatures } from '../features';
 import { FractalEvents } from '../engine/FractalEvents';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 
@@ -10,8 +11,11 @@ export interface FeatureSlice {
     [key: string]: any; 
 }
 
-export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelector", never]], [], any> = (set, get) => {
+export const createFeatureSlice: StateCreator<any> = (set, get) => {
     const slice: any = {};
+    // Ensure features are registered before building slices —
+    // module evaluation order can vary due to circular dependencies
+    registerFeatures();
     const features = featureRegistry.getAll();
 
     features.forEach(feat => {
@@ -70,6 +74,22 @@ export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelec
                     }
                 });
 
+                // Apply onSet hooks: params can inject extra state updates when their value changes.
+                // Only apply extras for keys NOT already in the original updates — this prevents
+                // onSet from overwriting explicitly provided values (e.g. during preset load where
+                // interlaceFormula + interlaceParamA are both in the same update batch).
+                Object.keys(sanitized).forEach(paramKey => {
+                    const config = feat.params[paramKey];
+                    if (config?.onSet) {
+                        const extras = config.onSet(sanitized[paramKey], current);
+                        if (extras) {
+                            Object.entries(extras).forEach(([k, v]) => {
+                                if (updates[k] === undefined) sanitized[k] = v;
+                            });
+                        }
+                    }
+                });
+
                 const next = { ...current, ...sanitized };
                 const compositesToUpdate = new Set<string>();
 
@@ -83,8 +103,13 @@ export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelec
                     if (config) {
                         if (!config.noReset) shouldReset = true;
 
-                        // CRITICAL FIX: Detect 'compile' params and queue for engine config update
-                        if (config.onUpdate === 'compile') {
+                        // Sync ALL changed params to ConfigManager via CONFIG event.
+                        // ConfigManager.update() only triggers recompile for onUpdate:'compile'
+                        // params — runtime params are merged without rebuild. This ensures
+                        // configManager.config is always the source of truth (e.g. gradient
+                        // stop arrays survive through syncConfigUniforms after recompilation).
+                        // Skip images (large data URLs handled via separate texture channel).
+                        if (config.type !== 'image') {
                             if (!configUpdates[feat.id]) configUpdates[feat.id] = {};
                             configUpdates[feat.id][paramKey] = next[paramKey];
                         }
@@ -93,19 +118,36 @@ export const createFeatureSlice: StateCreator<any, [["zustand/subscribeWithSelec
                             const val = next[paramKey];
                             
                             if (config.type === 'image') {
+                                // Determine texture type from uniform name
+                                const textureType: 'color' | 'env' = config.uniform!.toLowerCase().includes('env') ? 'env' : 'color';
+
                                 if (val && typeof val === 'string') {
-                                    const loader = new THREE.TextureLoader();
-                                    loader.load(val, (tex) => {
-                                        const s = config.textureSettings || {};
-                                        if (s.wrapS) tex.wrapS = s.wrapS;
-                                        if (s.wrapT) tex.wrapT = s.wrapT;
-                                        if (s.minFilter) tex.minFilter = s.minFilter;
-                                        if (s.magFilter) tex.magFilter = s.magFilter;
-                                        tex.needsUpdate = true;
-                                        FractalEvents.emit('uniform', { key: config.uniform!, value: tex, noReset: !!config.noReset });
-                                    });
+                                    // Send data URL to worker — it handles ImageBitmap conversion + texture creation
+                                    FractalEvents.emit('texture', { textureType, dataUrl: val });
+
+                                    // Auto-enable environment map when image is loaded
+                                    if (paramKey === 'envMapData' && next['useEnvMap'] === false) {
+                                        next['useEnvMap'] = true;
+                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 1.0, noReset: false });
+                                    }
+                                    // Auto-enable texturing when image is loaded
+                                    if (paramKey === 'layer1Data' && next['active'] === false) {
+                                        next['active'] = true;
+                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 1.0, noReset: false });
+                                    }
                                 } else {
-                                    FractalEvents.emit('uniform', { key: config.uniform!, value: null, noReset: !!config.noReset });
+                                    FractalEvents.emit('texture', { textureType, dataUrl: null });
+
+                                    // Auto-disable environment map when image is cleared
+                                    if (paramKey === 'envMapData' && next['useEnvMap'] === true) {
+                                        next['useEnvMap'] = false;
+                                        FractalEvents.emit('uniform', { key: 'uUseEnvMap', value: 0.0, noReset: false });
+                                    }
+                                    // Auto-disable texturing when image is cleared
+                                    if (paramKey === 'layer1Data' && next['active'] === true) {
+                                        next['active'] = false;
+                                        FractalEvents.emit('uniform', { key: 'uUseTexture', value: 0.0, noReset: false });
+                                    }
                                 }
                             }
                             else if (config.type === 'gradient') {

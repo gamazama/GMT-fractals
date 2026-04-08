@@ -4,7 +4,6 @@ import Histogram from '../../Histogram';
 import Slider from '../../Slider';
 import { analyzeHistogram, calculateSmartLevels } from '../../../utils/histogramUtils';
 import { ColoringState } from '../../../features/coloring';
-import AdvancedGradientEditor from '../../AdvancedGradientEditor';
 
 interface ColoringHistogramProps {
     layer: 1 | 2;
@@ -115,7 +114,7 @@ export const ColoringHistogram: React.FC<ColoringHistogramProps> = ({
     const rangeEnd = rangeStart + (repeats / scale);
 
     return (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col">
              {/* Histogram Bridge - Removed redundant Gradient Editor */}
              <Histogram 
                 data={histogramData} 

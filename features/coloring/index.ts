@@ -14,6 +14,7 @@ export interface ColoringState {
     bias: number;
     twist: number;
     escape: number;
+    colorIter: number;
     gradient2: GradientStop[] | GradientConfig;
     mode2: number;
     scale2: number;
@@ -29,6 +30,7 @@ export interface ColoringState {
     layer3Strength: number;
     layer3Bump: number;
     layer3Turbulence: number;
+    layer3Enabled: boolean;
 }
 
 const mappingOptions = MAPPING_MODES.map(m => ({ label: m.label, value: m.value }));
@@ -81,6 +83,38 @@ export const ColoringFeature: FeatureDefinition = {
         phase: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p1', min: -1.0, max: 1.0, step: 0.01, group: 'layer1_hist', hidden: true },
         
         bias: { type: 'float', default: 1.0, label: 'Gamma', shortId: 'b1', uniform: 'uGradientBias', min: 0.1, max: 10.0, step: 0.01, group: 'layer1_hist', hidden: true },
+        colorIter: {
+            type: 'float',
+            default: 0.0,
+            label: 'Color Iterations',
+            shortId: 'ci',
+            uniform: 'uColorIter',
+            min: 0, max: 24, step: 1,
+            group: 'layer1_bottom',
+            description: 'Stop orbit trap capture at this iteration (0 = use all iterations)',
+            condition: {
+                or: [
+                    { param: 'mode', eq: 0.0 },   // Orbit Trap
+                    { param: 'mode', eq: 1.0 },   // Iterations
+                    { param: 'mode', eq: 7.0 },   // Raw Iterations
+                    { param: 'mode', eq: 8.0 },   // Potential
+                    { param: 'mode', eq: 9.0 },   // Flow
+                    { param: 'mode', eq: 10.0 },  // Orbit X
+                    { param: 'mode', eq: 11.0 },  // Orbit Y
+                    { param: 'mode', eq: 12.0 },  // Orbit Z
+                    { param: 'mode', eq: 13.0 },  // Orbit W
+                    { param: 'mode2', eq: 0.0 },
+                    { param: 'mode2', eq: 1.0 },
+                    { param: 'mode2', eq: 7.0 },
+                    { param: 'mode2', eq: 8.0 },
+                    { param: 'mode2', eq: 9.0 },
+                    { param: 'mode2', eq: 10.0 },
+                    { param: 'mode2', eq: 11.0 },
+                    { param: 'mode2', eq: 12.0 },
+                    { param: 'mode2', eq: 13.0 }
+                ]
+            }
+        },
         twist: {
             type: 'float',
             default: 0.0,
@@ -192,12 +226,33 @@ export const ColoringFeature: FeatureDefinition = {
         layer3Scale: { type: 'float', default: 2.0, label: 'Noise Scale', shortId: 'n3s', uniform: 'uLayer3Scale', min: 0.1, max: 2000, step: 0.1, scale: 'log', group: 'noise' },
         layer3Strength: { type: 'float', default: 0.0, label: 'Mix Strength', shortId: 'n3a', uniform: 'uLayer3Strength', min: 0, max: 1, step: 0.01, group: 'noise' },
         layer3Bump: { type: 'float', default: 0.0, label: 'Bump', shortId: 'n3b', uniform: 'uLayer3Bump', min: -1, max: 1, step: 0.01, group: 'noise' },
-        layer3Turbulence: { type: 'float', default: 0.0, label: 'Turbulence', shortId: 'n3t', uniform: 'uLayer3Turbulence', min: 0, max: 2, step: 0.01, group: 'noise' }
+        layer3Turbulence: { type: 'float', default: 0.0, label: 'Turbulence', shortId: 'n3t', uniform: 'uLayer3Turbulence', min: 0, max: 2, step: 0.01, group: 'noise' },
+
+        // --- ENGINE (Compile-time) ---
+        layer3Enabled: {
+            type: 'boolean', default: true, label: 'Load Noise (Layer 3)', shortId: 'l3e',
+            group: 'engine_settings',
+            ui: 'checkbox',
+            description: 'Compiles simplex noise into the shader. Disable to reduce compile time when Layer 3 is not needed.',
+            onUpdate: 'compile',
+            noReset: true
+        }
     },
     inject: (builder, config, variant) => {
+        const state = config.coloring as ColoringState;
+        if (state?.layer3Enabled !== false) {
+            builder.addDefine('LAYER3_ENABLED', '1');
+        }
+
+        // Per-component orbit trap global — must be declared before getMappingValue (which reads it)
+        // and before DE_MASTER (which writes it). Preambles come before both.
+        builder.addPreamble('vec4 g_orbitTrap = vec4(1e10);');
+        // Float accumulator used by some imported DEC formulas for orbit trap coloring
+        builder.addPreamble('float escape = 0.0;');
+
         // Histogram variant needs the mapping logic to show meaningful data distributions
         if (variant === 'Main' || variant === 'Histogram') {
-            builder.addFunction(generateMappingShader()); 
+            builder.addFunction(generateMappingShader());
         } else {
             // Physics probe only needs distance/depth, so we can stub mapping
             builder.addFunction(`

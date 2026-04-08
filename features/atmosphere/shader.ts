@@ -43,12 +43,6 @@ export const ATMOSPHERE_VOLUME_FINALIZE = `
             
             // Prevent blowout
             accColor += glowCol * min(accAlpha, 100.0);
-            
-            // Clear alpha
-            accAlpha = 0.0;
         }
     #endif
 `;
-
-// Clear out unused exports to prevent import errors if any
-export const ATMOSPHERE_VOLUME_FUNC = ``;

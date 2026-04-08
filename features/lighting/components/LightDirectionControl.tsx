@@ -5,6 +5,7 @@ import { useAnimationStore } from '../../../store/animationStore';
 import { KeyframeButton } from '../../../components/KeyframeButton';
 import { KeyStatus } from '../../../components/Icons';
 import * as THREE from 'three';
+import { CameraUtils } from '../../../utils/CameraUtils';
 import { evaluateTrackValue } from '../../../utils/timelineUtils';
 import { DraggableNumber } from '../../../components/Slider';
 
@@ -46,7 +47,11 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
     
     // Stores
     const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
-    const cameraRot = useFractalStore(s => s.cameraRot);
+    // Read live camera rotation — store values lag behind teleports/transitions
+    const getCameraQuat = () => {
+        const rot = CameraUtils.getRotationFromEngine();
+        return new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+    };
     const { sequence, currentFrame, isPlaying, addTrack, addKeyframe, removeKeyframe, snapshot, isRecording } = useAnimationStore();
 
     // --- MATH HELPERS ---
@@ -65,8 +70,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
 
         // If World Mode (!isFixed), we must transform the World Vector into Camera View Space
         if (!isFixed) {
-             const camQ = new THREE.Quaternion(cameraRot.x, cameraRot.y, cameraRot.z, cameraRot.w);
-             viewSpaceVec.applyQuaternion(camQ.clone().invert());
+             viewSpaceVec.applyQuaternion(getCameraQuat().invert());
         }
         
         // Standard (0,0,-1) -> Angle to Forward is 0.
@@ -127,8 +131,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
         let finalDir = viewSpaceDir;
 
         if (!isFixed) {
-            const camQ = new THREE.Quaternion(cameraRot.x, cameraRot.y, cameraRot.z, cameraRot.w);
-            finalDir.applyQuaternion(camQ);
+            finalDir.applyQuaternion(getCameraQuat());
         }
         
         // Convert Vector to Euler
@@ -226,7 +229,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
     return (
         <div className="flex flex-col items-center mb-2">
             <div className="w-full flex justify-between items-center mb-1 px-1">
-                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Heliotrope</label>
+                <label className="text-[9px] font-bold text-gray-500">Heliotrope</label>
                 <KeyframeButton status={keyStatus} onClick={handleKeyToggle} />
             </div>
             

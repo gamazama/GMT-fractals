@@ -68,20 +68,21 @@ float GetAO(vec3 p_ray, vec3 n, float seed) {
             // Use Green and Alpha channels for 2D direction sampling
             dir = getCosHemisphereDir(n, blueNoise.ga);
         } else if (isStochastic) {
-            dir = normalize(mix(n, getCosHemisphereDir(n, vec2(0.123, 0.456)), 0.5));
+            // Stochastic enabled but camera moving (non-PT): use blue noise for stable bias
+            dir = normalize(mix(n, getCosHemisphereDir(n, blueNoise.ga), 0.5));
         }
     #endif
     
     vec3 p_bias = p_ray;
     float totalWeight = 0.0;
     int limit = uAOSamples;
+    float jitterBias = isMoving ? 0.0 : jitter * 0.1 * spread;
 
     // Use dynamic limit injected from DDFS
     for(int i = 0; i < ${maxSamples}; i++) {
         if (i >= limit) break;
 
-        float h = (0.1 + 0.5 * float(i) / 4.0) * spread;
-        h += (jitter * 0.1) * spread; 
+        float h = (0.1 + 0.125 * float(i)) * spread + jitterBias;
         
         vec3 aopos = p_bias + dir * h;
         

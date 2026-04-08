@@ -82,6 +82,21 @@ export const useKeyboardShortcuts = (
                 }
             }
 
+            // --- CAMERA SLOT SHORTCUTS (Ctrl+1-9) ---
+            if (isCtrl && !isShift && !e.altKey) {
+                const digitMatch = e.code.match(/^Digit([1-9])$/);
+                if (digitMatch) {
+                    const slotIndex = parseInt(digitMatch[1]) - 1;
+                    const cameras = fractalStore.getState().savedCameras;
+                    if (slotIndex < cameras.length) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        fractalStore.getState().selectCamera(cameras[slotIndex].id);
+                    }
+                    return;
+                }
+            }
+
             // --- GENERAL SHORTCUTS ---
             switch (e.code) {
                 case 'Tab':

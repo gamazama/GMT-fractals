@@ -155,7 +155,7 @@ export const RawKnob: React.FC<KnobProps> = ({
             </div>
             
             {label && (
-                <span className="text-[8px] text-gray-500 font-bold uppercase tracking-wide group-hover:text-gray-300 transition-colors -mt-0.5">
+                <span className="text-[8px] text-gray-500 font-bold group-hover:text-gray-300 transition-colors -mt-0.5">
                     {label}
                 </span>
             )}

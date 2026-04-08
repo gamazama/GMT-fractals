@@ -1,7 +1,8 @@
 
+import * as THREE from 'three';
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
-import { FORMULA_ID_MODULAR, FORMULA_ID_GENERIC, MAX_MODULAR_PARAMS } from '../data/constants';
+import { MAX_MODULAR_PARAMS } from '../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
 import { QualityState } from './quality';
@@ -15,6 +16,16 @@ export interface CoreMathState {
     paramD: number;
     paramE: number;
     paramF: number;
+    // NEW: Vector Parameters
+    vec2A: { x: number; y: number };
+    vec2B: { x: number; y: number };
+    vec2C: { x: number; y: number };
+    vec3A: { x: number; y: number; z: number } | THREE.Vector3;
+    vec3B: { x: number; y: number; z: number } | THREE.Vector3;
+    vec3C: { x: number; y: number; z: number } | THREE.Vector3;
+    vec4A: { x: number; y: number; z: number; w: number } | THREE.Vector4;
+    vec4B: { x: number; y: number; z: number; w: number } | THREE.Vector4;
+    vec4C: { x: number; y: number; z: number; w: number } | THREE.Vector4;
 }
 
 // Generate optimized DE logic based on compile-time estimator type
@@ -27,6 +38,7 @@ const generateGetDist = (estimatorType: number) => {
         // d = 0.5 * r * log(r) / dr
         mathLine = `
         float logR2 = log2(m2);
+        // 0.5 * ln(2) / 2 ≈ 0.17328679 — converts log2(r²) to 0.5*r*ln(r) for DE formula
         d = 0.17328679 * logR2 * r / dr_safe;
         `;
     } else if (estimatorType < 1.5) {
@@ -42,6 +54,7 @@ const generateGetDist = (estimatorType: number) => {
         // d = 0.5 * r * log(r) / (dr + K)
         mathLine = `
         float logR2 = log2(m2);
+        // 0.5 * ln(2) ≈ 0.34657359 — converts log2(r²) to r*ln(r), then halved by dampening term
         d = 0.34657359 * logR2 * r / (dr_safe + 8.0);
         `;
     } else {
@@ -88,18 +101,25 @@ export const CoreMathFeature: FeatureDefinition = {
         paramC: { type: 'float', default: 0.0, label: 'Param C', shortId: 'pc', uniform: 'uParamC', min: -10, max: 10, step: 0.001, group: 'params' },
         paramD: { type: 'float', default: 0.0, label: 'Param D', shortId: 'pd', uniform: 'uParamD', min: -10, max: 10, step: 0.001, group: 'params' },
         paramE: { type: 'float', default: 0.0, label: 'Param E', shortId: 'pe', uniform: 'uParamE', min: -10, max: 10, step: 0.001, group: 'params' },
-        paramF: { type: 'float', default: 0.0, label: 'Param F', shortId: 'pf', uniform: 'uParamF', min: -10, max: 10, step: 0.001, group: 'params' }
+        paramF: { type: 'float', default: 0.0, label: 'Param F', shortId: 'pf', uniform: 'uParamF', min: -10, max: 10, step: 0.001, group: 'params' },
+        // NEW: Vector Parameters
+        vec2A: { type: 'vec2', default: { x: 0, y: 0 }, label: 'Vec2 A', shortId: 'v2a', uniform: 'uVec2A', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec2B: { type: 'vec2', default: { x: 0, y: 0 }, label: 'Vec2 B', shortId: 'v2b', uniform: 'uVec2B', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec2C: { type: 'vec2', default: { x: 0, y: 0 }, label: 'Vec2 C', shortId: 'v2c', uniform: 'uVec2C', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec3A: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Vec3 A', shortId: 'v3a', uniform: 'uVec3A', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec3B: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Vec3 B', shortId: 'v3b', uniform: 'uVec3B', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec3C: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Vec3 C', shortId: 'v3c', uniform: 'uVec3C', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec4A: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 A', shortId: 'v4a', uniform: 'uVec4A', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec4B: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 B', shortId: 'v4b', uniform: 'uVec4B', min: -10, max: 10, step: 0.001, group: 'params' },
+        vec4C: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 C', shortId: 'v4c', uniform: 'uVec4C', min: -10, max: 10, step: 0.001, group: 'params' }
     },
     inject: (builder, config) => {
         const formula = config.formula as FormulaType;
         const quality = config.quality as QualityState;
         
-        // 1. Set Formula ID Define
+        // 1. Modular pipeline revision (forces recompile when graph changes)
         if (formula === 'Modular') {
-            builder.addDefine('FORMULA_ID', FORMULA_ID_MODULAR.toString());
             builder.addDefine('PIPELINE_REV', (config.pipelineRevision || 0).toString());
-        } else {
-            builder.addDefine('FORMULA_ID', FORMULA_ID_GENERIC.toString());
         }
 
         // 2. Analytic Opt-in
@@ -122,12 +142,22 @@ export const CoreMathFeature: FeatureDefinition = {
             const modularCode = compileGraph(config.pipeline || [], config.graph?.edges || []);
             functions += modularCode + "\n";
             loopBody = `formula_Modular(z, dr, trap, distOverride, c, i);`;
-            
+            builder.setDistOverride({
+                init: 'float distOverride = 1e10;',
+                inLoopFull: 'if (distOverride < 999.0) { escaped = true; break; }',
+                inLoopGeom: 'if (distOverride < 999.0) break;',
+                postFull: 'if (distOverride < 999.0) { finalD = distOverride; smoothIter = iter; }',
+                postGeom: 'if (distOverride < 999.0) finalD = distOverride;',
+            });
             // Modular also uses Dynamic DE Logic
         } else if (def) {
             functions += def.shader.function + "\n";
             loopBody = def.shader.loopBody;
             loopInit = def.shader.loopInit || "";
+            // Inject preamble if present (for pre-calculation at global scope)
+            if (def.shader.preamble) {
+                builder.addPreamble(def.shader.preamble);
+            }
             // Use custom getDist if defined, else use dynamic
             if (def.shader.getDist) {
                  getDistBody = `vec2 getDist(float r, float dr, float iter, vec4 z) { ${def.shader.getDist} }`;

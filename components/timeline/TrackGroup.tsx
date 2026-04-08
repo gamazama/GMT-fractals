@@ -1,8 +1,37 @@
 
-import React, { memo } from 'react';
-import { TrackRow } from './TrackRow';
+import React, { memo, useRef, useEffect } from 'react';
+import { TrackRow, groupDiamondState } from './TrackRow';
 import { AnimationSequence } from '../../types';
 import { FolderIcon } from '../Icons';
+
+// Group diamond that registers with tick system for dirty-state coloring
+const GroupDiamond = ({ groupName, frame, frameWidth, tids, onMouseDown }: {
+    groupName: string;
+    frame: number;
+    frameWidth: number;
+    tids: string[];
+    onMouseDown: (e: React.MouseEvent) => void;
+}) => {
+    const ref = useRef<HTMLDivElement>(null);
+    const compositeKey = `${groupName}::${frame}`;
+
+    useEffect(() => {
+        if (ref.current) {
+            groupDiamondState.diamonds.set(compositeKey, { el: ref.current, frame, tids });
+        }
+        return () => { groupDiamondState.diamonds.delete(compositeKey); };
+    }, [compositeKey, frame, tids]);
+
+    return (
+        <div
+            ref={ref}
+            className="absolute top-1/2 -mt-1.5 w-3 h-3 bg-gray-500/50 border border-gray-400/50 rotate-45 cursor-grab hover:bg-white hover:border-white hover:scale-125 z-10"
+            style={{ left: `${frame * frameWidth - 6}px` }}
+            onMouseDown={onMouseDown}
+            data-help-id="anim.keyframes"
+        />
+    );
+};
 
 interface TrackGroupProps {
     groupName: string;
@@ -50,16 +79,17 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
                     data-help-id="anim.tracks"
                 >
                     <span className="text-gray-500 w-4"><FolderIcon open={!collapsed} /></span>
-                    <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">{groupName}</span>
+                    <span className="text-[10px] font-bold text-gray-300">{groupName}</span>
                 </div>
                 <div className="flex-1 relative group/track">
                     {groupKeyframes.map(frame => (
-                        <div 
+                        <GroupDiamond
                             key={frame}
-                            className="absolute top-1/2 -mt-1.5 w-3 h-3 bg-gray-500/50 border border-gray-400/50 rotate-45 cursor-grab hover:bg-white hover:border-white hover:scale-125 z-10"
-                            style={{ left: `${frame * frameWidth - 6}px` }}
+                            groupName={groupName}
+                            frame={frame}
+                            frameWidth={frameWidth}
+                            tids={trackIds}
                             onMouseDown={(e) => onGroupKeyMouseDown(e, trackIds, frame)}
-                            data-help-id="anim.keyframes"
                         />
                     ))}
                 </div>

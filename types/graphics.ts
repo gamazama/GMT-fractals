@@ -3,6 +3,7 @@ export type ColorMapping = 'Trap' | 'Iterations' | 'Radial' | 'Z-Depth' | 'Angle
 export type BlendMode = 'Mix' | 'Add' | 'Multiply' | 'Overlay' | 'Screen' | 'Bump';
 export type AAMode = 'Off' | 'Auto' | 'Always';
 export type FalloffType = 'Linear' | 'Quadratic';
+export type IntensityUnit = 'raw' | 'ev';
 export type EmissionMode = 'Full' | 'Layer1' | 'Layer2' | 'Layer3' | 'Solid';
 export type DrosteTiling = 'Repeat' | 'Mirror' | 'Clamp' | 'Transparent';
 
@@ -24,7 +25,16 @@ export interface GradientConfig {
 
 export type LightType = 'Point' | 'Directional';
 
+// Monotonic counter for generating stable light IDs
+let _lightIdCounter = 0;
+export function generateLightId(): string {
+    return `l${++_lightIdCounter}`;
+}
+
 export interface LightParams {
+    /** Stable identity — survives array reorder, used for React keys & gizmo refs.
+     *  Optional in formula defaults — generated at runtime by ensureLightIds(). */
+    id?: string;
     type: LightType;
     position: { x: number, y: number, z: number };
     rotation: { x: number, y: number, z: number };
@@ -38,4 +48,12 @@ export interface LightParams {
     // Temperature in Kelvin (1000K - 40000K, typical usable range 1000-10000K)
     temperature?: number;
     useTemperature?: boolean;
+    // Power+Range model: max light distance. 0 = infinite (no range cutoff).
+    range?: number;
+    // Intensity unit: 'raw' = linear multiplier, 'ev' = exposure value (stops, 2^ev).
+    intensityUnit?: IntensityUnit;
+    // Visible radius in world-space units. 0 = invisible analytical light.
+    radius?: number;
+    // Soft edge width as a fraction of radius. 0 = hard edge, 1 = fade extends one full radius beyond sphere.
+    softness?: number;
 }

@@ -35,19 +35,18 @@ export const InteractionPicker: React.FC<InteractionPickerProps> = ({
     };
 
     return (
-        <div className="flex flex-col mb-2 animate-fade-in">
+        <div className="flex flex-col animate-fade-in">
              {isActive && helpText && (
-                 <div className="mb-2 p-2 bg-green-900/30 border border-green-500/30 rounded text-[9px] text-green-200 animate-pulse text-center leading-tight">
+                 <div className="mb-px p-2 bg-green-900/30 border border-green-500/30 rounded text-[9px] text-green-200 animate-pulse text-center leading-tight">
                      {helpText}
                  </div>
              )}
-             <Button 
+             <Button
                 onClick={handleToggle}
                 label={isActive ? (activeLabel || "Cancel") : label}
                 variant={isActive ? "success" : variant}
                 fullWidth
              />
-             <div className="h-px bg-white/10 my-2" />
         </div>
     );
 };
