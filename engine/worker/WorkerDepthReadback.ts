@@ -13,14 +13,13 @@ import type * as THREE from 'three';
 import type { FractalEngine } from '../FractalEngine';
 import type { WorkerToMainMessage } from './WorkerProtocol';
 
+import { MAX_SKY_DISTANCE } from '../../data/constants';
+
 type PostMsgFn = (msg: WorkerToMainMessage, transfer?: Transferable[]) => void;
 
 type FocusPickState =
     | { phase: 'pending'; id: string; x: number; y: number }
     | { phase: 'ready'; width: number; height: number; depthData: Float32Array };
-
-// Maximum valid distance for navigation speed — anything above = sky hit
-const MAX_NAV_DISTANCE = 10.0;
 
 export class WorkerDepthReadback {
     // Async PBO state
@@ -73,12 +72,12 @@ export class WorkerDepthReadback {
             if      (exp === 0)  d = (sign ? -1 : 1) * mant * Math.pow(2, -24);
             else if (exp === 31) d = NaN;
             else                 d = (sign ? -1 : 1) * Math.pow(2, exp - 15) * (1 + mant / 1024);
-            if (d > 0 && d < MAX_NAV_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
+            if (d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
         } else {
             const floatBuf = new Float32Array(4);
             gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, floatBuf);
             const d = floatBuf[3];
-            if (d > 0 && d < MAX_NAV_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
+            if (d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
         }
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
         gl.deleteSync(this._depthFence);
@@ -124,7 +123,7 @@ export class WorkerDepthReadback {
             const ok = engine.pipeline.readPixels?.(renderer, cx, cy, 1, 1, buf);
             if (ok) {
                 const d = buf[3];
-                if (d > 0 && d < MAX_NAV_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
+                if (d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
             }
         }
     }

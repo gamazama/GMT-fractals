@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import type { FractalEngine } from '../FractalEngine';
 import type { VideoExportConfig } from '../codec/VideoExportTypes';
 import type { EngineRenderState } from '../FractalEngine';
-import { VIDEO_CONFIG, VIDEO_FORMATS } from '../../data/constants';
+import { VIDEO_CONFIG, VIDEO_FORMATS, MAX_SKY_DISTANCE } from '../../data/constants';
 import * as Mediabunny from 'mediabunny';
 import { H264Converter, halton } from '../codec/H264Converter';
 import { BloomPass } from '../BloomPass';
@@ -283,7 +283,7 @@ export class WorkerExporter {
         const cy = Math.floor(sess.renderHeight / 2);
         this.renderer.readRenderTargetPixels(lastWrite, cx, cy, 1, 1, depthBuf);
         const measuredDist = depthBuf[3]; // alpha = distance
-        if (measuredDist > 0 && measuredDist < 10.0 && Number.isFinite(measuredDist)) {
+        if (measuredDist > 0 && measuredDist < MAX_SKY_DISTANCE && Number.isFinite(measuredDist)) {
             this.engine.lastMeasuredDistance = measuredDist;
         }
         // 8c. Bloom pass (matches preview pipeline)

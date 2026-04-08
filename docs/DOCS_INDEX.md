@@ -35,6 +35,8 @@ The GMT documentation is organized into several complementary systems:
 | [21_Frag_Importer_Current_Status.md](21_Frag_Importer_Current_Status.md) | **⚠️ START HERE — current status and known issues** |
 | [22_Frag_to_Native_Formula_Conversion.md](22_Frag_to_Native_Formula_Conversion.md) | Guide: converting .frag formulas to native GMT .ts formulas |
 | [23_Formula_Audit.md](23_Formula_Audit.md) | Formula correctness audit: naming, descriptions, params, DE |
+| [24_Formula_Interlace_System.md](24_Formula_Interlace_System.md) | Interlace architecture, preambleVars contract, quirks, improvement suggestions |
+| [25_Formula_Dev_Reference.md](25_Formula_Dev_Reference.md) | **Unified formula writing reference**: full API surface, shader fields, parameters, GLSL built-ins, quirks & gotchas, templates |
 
 ### Archive
 Historical design docs, completed reports, and superseded references are in [`docs/archive/`](archive/).

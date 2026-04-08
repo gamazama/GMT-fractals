@@ -4,9 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { useFractalStore } from '../store/fractalStore';
-
-// Maximum valid distance — anything above is treated as a sky hit
-const MAX_VALID_DISTANCE = 10.0;
+import { MAX_SKY_DISTANCE } from '../data/constants';
 
 /** Format a distance value for the HUD */
 const formatDist = (d: number) => d < 0.001 ? d.toExponential(2) : d.toFixed(4);
@@ -41,13 +39,13 @@ export const usePhysicsProbe = (
 
     const updateResetButton = (dist: number) => {
         if (hudRefs.reset.current) {
-            hudRefs.reset.current.style.display = (dist > MAX_VALID_DISTANCE || dist < 0.001) ? 'block' : 'none';
+            hudRefs.reset.current.style.display = (dist > MAX_SKY_DISTANCE || dist < 0.001) ? 'block' : 'none';
         }
     };
 
     const processDepthData = (depthValue: number) => {
         // Sky or invalid — keep last valid measurement, default to 1.0 if none
-        if (depthValue < 0 || depthValue >= MAX_VALID_DISTANCE || !Number.isFinite(depthValue)) {
+        if (depthValue < 0 || depthValue >= MAX_SKY_DISTANCE || !Number.isFinite(depthValue)) {
             if (!hasValidMeasurement.current) {
                 distAverageRef.current = 1.0;
                 engine.lastMeasuredDistance = 1.0;
@@ -114,7 +112,7 @@ export const usePhysicsProbe = (
                 // Focus Lock: sync dofFocus when distance changes meaningfully (>1%)
                 const smoothedDist = distAverageRef.current;
                 const store = useFractalStore.getState();
-                if (store.focusLock && smoothedDist > 0 && smoothedDist < MAX_VALID_DISTANCE) {
+                if (store.focusLock && smoothedDist > 0 && smoothedDist < MAX_SKY_DISTANCE) {
                     const currentFocus = (store as any).optics?.dofFocus ?? 0;
                     const relChange = Math.abs(smoothedDist - currentFocus) / Math.max(currentFocus, 0.0001);
                     if (relChange > 0.01) {
@@ -153,7 +151,7 @@ export const usePhysicsProbe = (
                     const success = engine.pipeline?.readPixels?.(renderer, sx, sy, 1, 1, readBuffer.current);
                     if (success) {
                         const depth = readBuffer.current[3];
-                        if (depth > 0 && depth < MAX_VALID_DISTANCE && Number.isFinite(depth)) {
+                        if (depth > 0 && depth < MAX_SKY_DISTANCE && Number.isFinite(depth)) {
                             validDepthSum += depth;
                             validCount++;
                         }

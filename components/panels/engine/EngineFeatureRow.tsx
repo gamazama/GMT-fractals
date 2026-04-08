@@ -9,7 +9,7 @@ export interface EngineFeatureRowProps {
     label: string;
     isActive: boolean;
     onToggle: (v: boolean) => void;
-    numericValue?: number;
+    numericValue?: number | string;
     onNumericChange?: (v: number) => void;
     options?: { label: string; value: any }[];
     onOptionChange?: (v: any) => void;
@@ -133,7 +133,11 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                             <select
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                 value={numericValue}
-                                onChange={(e) => onOptionChange(Number(e.target.value))}
+                                onChange={(e) => {
+                                    const raw = e.target.value;
+                                    const asNum = Number(raw);
+                                    onOptionChange(isNaN(asNum) ? raw : asNum);
+                                }}
                             >
                                 {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
@@ -142,10 +146,10 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
                                  <span className="text-[6px] text-gray-500">▼</span>
                             </div>
                          </div>
-                    ) : onNumericChange && numericValue !== undefined && (
+                    ) : onNumericChange && numericValue !== undefined && typeof numericValue === 'number' && (
                         <div className="w-10 h-4 bg-black/40 border border-white/10 relative overflow-hidden rounded-sm">
-                             <DraggableNumber 
-                                value={numericValue} 
+                             <DraggableNumber
+                                value={numericValue}
                                 onChange={onNumericChange} 
                                 step={safeStep} 
                                 min={min}

@@ -345,7 +345,7 @@ Distance is read from the **alpha channel of the main render target** (MRT locat
 
 ### 4.2 Sky Threshold
 
-`MAX_VALID_DISTANCE = 10.0` — any depth value ≥ 10 is treated as a sky hit (open space, no surface). This prevents navigation speed from exploding when the camera looks at empty space.
+`MAX_SKY_DISTANCE = 50.0` (in `data/constants.ts`) — any depth value ≥ 50 is treated as a sky hit (open space, no surface). This prevents navigation speed from exploding when the camera looks at empty space. Shared by `usePhysicsProbe`, `WorkerDepthReadback`, and `WorkerExporter`.
 
 **Sky hit behavior:**
 - If no valid measurement has ever been received → defaults to `1.0`
