@@ -1,9 +1,9 @@
 
-name: Deploy Dev to GitHub Pages
+name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ["dev"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to GitHub Pages (dev subfolder)
+      - name: Deploy to root
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          keep_files: true
+
+      - name: Deploy to dev subfolder
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
