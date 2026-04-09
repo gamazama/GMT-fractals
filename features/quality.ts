@@ -1,5 +1,6 @@
 
 import { FeatureDefinition } from '../engine/FeatureSystem';
+import { DEFAULT_HARD_CAP } from '../data/constants';
 
 export interface QualityState {
     engineQuality: boolean; // Master Anchor
@@ -43,8 +44,8 @@ export const QualityFeature: FeatureDefinition = {
 
         // --- KERNEL (Engine Panel) ---
         compilerHardCap: {
-            type: 'int', default: 500, label: 'Hard Loop Cap', shortId: 'hc',
-            min: 64, max: 2000, step: 1, group: 'engine_settings',
+            type: 'int', default: DEFAULT_HARD_CAP, label: 'Hard Loop Cap', shortId: 'hc',
+            min: 64, max: DEFAULT_HARD_CAP, step: 1, group: 'engine_settings',
             ui: 'numeric',
             description: "Safety limit for ray/DE loops (MAX_HARD_ITERATIONS define). Requires recompile but does not affect compile time — ANGLE/D3D does not unroll define-bounded loops.",
             onUpdate: 'compile',
@@ -71,11 +72,10 @@ export const QualityFeature: FeatureDefinition = {
         },
 
         // --- RUNTIME (Quality Panel) ---
-        maxSteps: { 
-            type: 'int', default: 300, label: 'Max Ray Steps', shortId: 'ms', uniform: 'uMaxSteps', 
-            min: 32, max: 2000, step: 1, group: 'kernel',
+        maxSteps: {
+            type: 'int', default: 300, label: 'Max Ray Steps', shortId: 'ms', uniform: 'uMaxSteps',
+            min: 32, max: DEFAULT_HARD_CAP, step: 1, group: 'kernel',
             description: 'Runtime limit. Rays stop after this many steps. Artistic tool for limiting depth. Maximum is limited by Hard Loop Cap.',
-            isAdvanced: true,
             dynamicMaxRef: 'compilerHardCap'
         },
         distanceMetric: { 
@@ -194,7 +194,7 @@ export const QualityFeature: FeatureDefinition = {
         const state = config.quality as QualityState;
         // Inject MAX_HARD_ITERATIONS for all variants (Physics/Main/Histogram)
         // This controls the unrolled loop size in DE.ts
-        const cap = state?.compilerHardCap || 500;
+        const cap = state?.compilerHardCap || DEFAULT_HARD_CAP;
         builder.addDefine('MAX_HARD_ITERATIONS', Math.floor(cap).toString());
     }
 };

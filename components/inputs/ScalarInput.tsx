@@ -21,20 +21,20 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     onChange,
     onDragStart,
     onDragEnd,
-    
+
     // Bounds and step
     step = 0.01,
     min,
     max,
     hardMin,
     hardMax,
-    
+
     // Mapping and format
     mapping,
     format,
     overrideText,
     mapTextInput,
-    
+
     // Visual
     label,
     labelSuffix,
@@ -44,15 +44,15 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     trackHeight = 20,
     variant = 'full',
     className = '',
-    
+
     // Default value
     defaultValue,
     onReset,
-    
+
     // Live value
     liveValue,
     showLiveIndicator = true,
-    
+
     // Interaction
     onContextMenu,
     dataHelpId,
@@ -62,7 +62,16 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     // Refs for direct DOM updates during drag (bypasses React render cycle)
     const fillBarRef = React.useRef<HTMLDivElement>(null);
     const fullTrackFillRef = React.useRef<HTMLDivElement>(null);
-    const rangeInputRef = React.useRef<HTMLInputElement>(null);
+    const trackContainerRef = React.useRef<HTMLDivElement>(null);
+
+    // Track drag state (delta-based with Alt/Shift precision)
+    const trackDrag = React.useRef({
+        active: false,
+        startX: 0,
+        startValue: 0, // display-space value at drag start
+        lastShift: false,
+        lastAlt: false,
+    });
 
     // Calculate track percentage
     const hasBounds = min !== undefined && max !== undefined && min !== max;
@@ -97,24 +106,104 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         return computePercentage(v, min, max, mapping);
     }, [hasBounds, min, max, mapping]);
 
-    // Direct DOM update for fill bars during drag — called synchronously from DraggableNumber
+    // Direct DOM update for fill bars and thumb during drag — bypasses React render cycle
     const handleImmediateChange = React.useCallback((v: number) => {
         const pct = computePct(v);
         const w = `${pct}%`;
         if (fillBarRef.current) fillBarRef.current.style.width = w;
         if (fullTrackFillRef.current) fullTrackFillRef.current.style.width = w;
-        if (rangeInputRef.current) {
-            rangeInputRef.current.value = String(mapping ? mapping.toDisplay(v) : v);
-        }
-    }, [computePct, mapping]);
+        // Update thumb position via the track container's first thumb child
+        const thumb = trackContainerRef.current?.querySelector<HTMLDivElement>('[data-role="thumb"]');
+        if (thumb) thumb.style.left = `calc(${pct}% - 8px)`;
+    }, [computePct]);
 
-    // Handle track click
-    const handleTrackChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        if (disabled) return;
-        const raw = parseFloat(e.target.value);
-        const output = mapping ? mapping.fromDisplay(raw) : raw;
-        onChange(output);
-    }, [disabled, mapping, onChange]);
+    // Track pointer handlers — delta-based drag with Alt/Shift precision modifiers
+    const handleTrackPointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+        if (disabled || !hasBounds) return;
+        if (e.button !== 0) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.setPointerCapture(e.pointerId);
+
+        // Calculate value from click position
+        const rect = e.currentTarget.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const displayMin = mapping ? mapping.toDisplay(min!) : min!;
+        const displayMax = mapping ? mapping.toDisplay(max!) : max!;
+        const clickedDisplayValue = displayMin + pct * (displayMax - displayMin);
+
+        // Set value to clicked position immediately
+        let clickedValue = mapping ? mapping.fromDisplay(clickedDisplayValue) : clickedDisplayValue;
+        if (hardMin !== undefined) clickedValue = Math.max(hardMin, clickedValue);
+        if (hardMax !== undefined) clickedValue = Math.min(hardMax, clickedValue);
+        onChange(clickedValue);
+        handleImmediateChange(clickedValue);
+
+        // Init drag state for subsequent movement
+        const drag = trackDrag.current;
+        drag.active = true;
+        drag.startX = e.clientX;
+        drag.startValue = clickedDisplayValue;
+        drag.lastShift = e.shiftKey;
+        drag.lastAlt = e.altKey;
+
+        onDragStart?.();
+    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, onDragStart, handleImmediateChange]);
+
+    const handleTrackPointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+        const drag = trackDrag.current;
+        if (!drag.active || disabled || !hasBounds) return;
+
+        e.preventDefault();
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const trackWidth = rect.width;
+        const displayMin = mapping ? mapping.toDisplay(min!) : min!;
+        const displayMax = mapping ? mapping.toDisplay(max!) : max!;
+        const displayRange = displayMax - displayMin;
+
+        // Base sensitivity: full track width = full range
+        const baseSens = displayRange / trackWidth;
+
+        // Check if modifiers changed — bake current value as new anchor
+        if (drag.lastShift !== e.shiftKey || drag.lastAlt !== e.altKey) {
+            const oldSens = baseSens * (drag.lastShift ? 10 : 1) * (drag.lastAlt ? 0.1 : 1);
+            const dx = e.clientX - drag.startX;
+            drag.startValue = drag.startValue + dx * oldSens;
+            drag.startX = e.clientX;
+            drag.lastShift = e.shiftKey;
+            drag.lastAlt = e.altKey;
+        }
+
+        let sens = baseSens;
+        if (e.shiftKey) sens *= 10;
+        if (e.altKey) sens *= 0.1;
+
+        const dx = e.clientX - drag.startX;
+        let nextDisplayValue = drag.startValue + dx * sens;
+
+        // Clamp to display range
+        nextDisplayValue = Math.max(displayMin, Math.min(displayMax, nextDisplayValue));
+
+        let finalValue = mapping ? mapping.fromDisplay(nextDisplayValue) : nextDisplayValue;
+        if (hardMin !== undefined) finalValue = Math.max(hardMin, finalValue);
+        if (hardMax !== undefined) finalValue = Math.min(hardMax, finalValue);
+
+        if (!isNaN(finalValue)) {
+            onChange(finalValue);
+            handleImmediateChange(finalValue);
+        }
+    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, handleImmediateChange]);
+
+    const handleTrackPointerUp = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+        const drag = trackDrag.current;
+        if (!drag.active) return;
+
+        drag.active = false;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        onDragEnd?.();
+    }, [onDragEnd]);
     
     // Handle reset
     const handleReset = React.useCallback(() => {
@@ -270,41 +359,32 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             {/* Track */}
             {showTrack && hasBounds && (
                 <div
-                    className="relative flex items-center touch-none overflow-hidden"
+                    ref={trackContainerRef}
+                    className={`relative flex items-center touch-none overflow-hidden ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
                     style={{ touchAction: 'none', height: trackHeight }}
+                    onPointerDown={handleTrackPointerDown}
+                    onPointerMove={handleTrackPointerMove}
+                    onPointerUp={handleTrackPointerUp}
                 >
-                    {/* Range input */}
-                    <input
-                        ref={rangeInputRef}
-                        type="range"
-                        min={mapping ? mapping.toDisplay(min!) : min}
-                        max={mapping ? mapping.toDisplay(max!) : max}
-                        step={step}
-                        value={mapping ? mapping.toDisplay(value) : value}
-                        onChange={handleTrackChange}
-                        disabled={disabled}
-                        onPointerDown={(e) => {
-                            if (disabled) return;
-                            e.stopPropagation();
-                            onDragStart?.();
-                        }}
-                        onPointerUp={() => {
-                            if (!disabled) onDragEnd?.();
-                        }}
-                        className={`precision-slider w-full h-full appearance-none cursor-pointer focus:outline-none z-10 ${isActive && !disabled ? 'accent-cyan-500' : 'accent-gray-400'}`}
-                        style={{ background: 'transparent', touchAction: 'none' }}
-                        tabIndex={-1}
-                    />
-
                     {/* Background track */}
-                    <div className="absolute inset-0 bg-white/10 pointer-events-none">
+                    <div className="absolute inset-0 bg-white/10">
                         <div ref={fullTrackFillRef} className={`absolute top-0 bottom-0 left-0 ${disabled ? 'bg-gray-400/20' : 'bg-cyan-500/30'}`} style={{ width: `${valuePct}%` }} />
-                        
+
                         {/* Live value indicator */}
                         {showLiveIndicator && liveValue !== undefined && !disabled && (
                             <div className="absolute top-0 bottom-0 w-1.5 bg-purple-500 blur-[1px] transition-all duration-75 ease-out z-0" style={{ left: `calc(${livePct}% - 0.75px)` }} />
                         )}
                     </div>
+
+                    {/* Thumb indicator */}
+                    <div
+                        data-role="thumb"
+                        className="absolute top-0 bottom-0 w-4 z-10 pointer-events-none border-l border-r transition-colors"
+                        style={{
+                            left: `calc(${valuePct}% - 8px)`,
+                            borderColor: disabled ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.25)',
+                        }}
+                    />
                     
                     {/* Default value marker */}
                     {defaultPct !== null && (

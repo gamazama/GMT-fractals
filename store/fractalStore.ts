@@ -23,6 +23,7 @@ import { pipelineToGraph, isStructureEqual, isPipelineEqual, topologicalSort } f
 import { JULIA_REPEATER_PIPELINE } from '../data/initialPipelines';
 import '../features'; // Ensure features are registered
 import { PreciseVector3 } from '../types';
+import { DEFAULT_HARD_CAP } from '../data/constants';
 import { OpticsState } from '../features/optics';
 
 export const useFractalStore = create<FractalStoreState & FractalActions>()(subscribeWithSelector((set, get, api) => ({
@@ -414,7 +415,7 @@ export const getShaderConfigFromState = (state: FractalStoreState): ShaderConfig
             q.precisionMode = Math.max(q.precisionMode ?? 0, hw.caps.precisionMode);
             q.bufferPrecision = Math.max(q.bufferPrecision ?? 0, hw.caps.bufferPrecision);
             // Hard cap: take the min (device ceiling)
-            q.compilerHardCap = Math.min(q.compilerHardCap ?? 500, hw.caps.compilerHardCap);
+            q.compilerHardCap = Math.min(q.compilerHardCap ?? DEFAULT_HARD_CAP, hw.caps.compilerHardCap);
         }
         config.compilerHardCap = (config as any).quality?.compilerHardCap ?? config.compilerHardCap;
     }

@@ -294,11 +294,24 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
              <SectionDivider />
 
              {/* Raymarching Controls - Runtime */}
-             <div className="flex flex-col" data-help-id="quality.steps quality.detail quality.fudge quality.threshold quality.metric quality.estimator quality.jitter quality.relaxation">
-                {quality && (
-                    <AutoFeaturePanel featureId="quality" groupFilter="kernel" />
-                )}
-             </div>
+             {quality && (
+                <div className="flex flex-col" data-help-id="quality.steps quality.detail quality.fudge quality.threshold quality.metric quality.estimator quality.jitter quality.relaxation">
+                    {/* Max Ray Steps */}
+                    <AutoFeaturePanel featureId="quality" whitelistParams={['maxSteps']} />
+
+                    {/* Step tuning group */}
+                    <AutoFeaturePanel featureId="quality" whitelistParams={['fudgeFactor', 'stepRelaxation', 'stepJitter']} />
+                    <SectionDivider />
+
+                    {/* Detail & threshold group */}
+                    <AutoFeaturePanel featureId="quality" whitelistParams={['refinementSteps', 'detail', 'pixelThreshold', 'overstepTolerance']} />
+                    <SectionDivider />
+
+                    {/* Distance metric & estimator */}
+                    <AutoFeaturePanel featureId="quality" whitelistParams={['distanceMetric', 'estimator']} />
+                    <SectionDivider />
+                </div>
+             )}
         </div>
     );
 };

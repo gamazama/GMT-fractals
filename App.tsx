@@ -12,6 +12,7 @@ import { PopupSliderSystem } from './components/PopupSliderSystem';
 import { SmartphoneRotateIcon, TimelineOpenIcon, AlertIcon, CheckIcon } from './components/Icons';
 import { EngineBridge } from './components/EngineBridge';
 import { useAppStartup } from './hooks/useAppStartup';
+import { useTutorialHints } from './hooks/useTutorialHints';
 
 // --- Code-split: loaded on demand ---
 const Timeline = React.lazy(() => import('./components/Timeline'));
@@ -57,6 +58,7 @@ const App: React.FC = () => {
   const { isMobile, isPortrait } = useMobileLayout();
   useKeyboardShortcuts(showTimeline, setShowTimeline);
   useGlobalContextMenu();
+  const { activeHint, dismissHint } = useTutorialHints(showTimeline);
 
   // --- Computed UI State ---
   const isCurrentlyMobile = isMobile || state.debugMobileLayout;
@@ -174,7 +176,7 @@ const App: React.FC = () => {
             )}
 
             {/* VIEWPORT (Flex-1 to take available space) */}
-            <ViewportArea hudRefs={hudRefs} onSceneReady={() => setIsSceneReady(true)} />
+            <ViewportArea hudRefs={hudRefs} onSceneReady={() => setIsSceneReady(true)} activeHint={activeHint} onDismissHint={dismissHint} />
 
             {/* RIGHT DOCK */}
             {!isBroadcast && (

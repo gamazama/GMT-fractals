@@ -123,7 +123,7 @@ export const createScalabilitySlice = (set: any, get: any) => ({
 
         // Push hardware caps into the quality slice so the store value
         // matches the hardware-detected (or user-chosen) capability.
-        // Without this, quality.compilerHardCap stays at its default (500)
+        // Without this, quality.compilerHardCap stays at its default (DEFAULT_HARD_CAP)
         // and Math.min(500, 2000) in Stage 3 never raises the actual cap.
         const state = get();
         const setQuality = state.setQuality;

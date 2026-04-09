@@ -6,6 +6,7 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { detectHardwareProfileMainThread } from '../../engine/HardwareDetection';
 import type { HardwareProfile } from '../../types/viewport';
 import Dropdown from '../Dropdown';
+import { DEFAULT_HARD_CAP } from '../../data/constants';
 
 interface HardwarePreferencesProps {
     onClose: () => void;
@@ -23,12 +24,12 @@ export const HardwarePreferences: React.FC<HardwarePreferencesProps> = ({ onClos
 
     // Local pending state — changes staged until Apply
     const [pending, setPending] = useState<HardwareProfile['caps'] | null>(null);
-    const effective = pending ?? hardwareProfile?.caps ?? { precisionMode: 0, bufferPrecision: 0, compilerHardCap: 500 };
+    const effective = pending ?? hardwareProfile?.caps ?? { precisionMode: 0, bufferPrecision: 0, compilerHardCap: DEFAULT_HARD_CAP };
 
     const hasPending = pending !== null;
 
     const handleChange = (key: keyof HardwareProfile['caps'], value: number) => {
-        const base = pending ?? { ...hardwareProfile?.caps ?? { precisionMode: 0, bufferPrecision: 0, compilerHardCap: 500 } };
+        const base = pending ?? { ...hardwareProfile?.caps ?? { precisionMode: 0, bufferPrecision: 0, compilerHardCap: DEFAULT_HARD_CAP } };
         setPending({ ...base, [key]: value });
     };
 
@@ -93,10 +94,10 @@ export const HardwarePreferences: React.FC<HardwarePreferencesProps> = ({ onClos
                         <input
                             type="number"
                             value={effective.compilerHardCap}
-                            onChange={(e) => handleChange('compilerHardCap', Math.max(64, Math.min(2000, parseInt(e.target.value) || 500)))}
+                            onChange={(e) => handleChange('compilerHardCap', Math.max(64, Math.min(DEFAULT_HARD_CAP, parseInt(e.target.value) || DEFAULT_HARD_CAP)))}
                             className="w-full bg-gray-800 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500"
                             min={64}
-                            max={2000}
+                            max={DEFAULT_HARD_CAP}
                         />
                     </div>
                 </div>

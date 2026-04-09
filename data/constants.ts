@@ -15,6 +15,11 @@ export const FORMULA_ID_MODULAR = 14;
 export const MAX_MODULAR_PARAMS = 64;
 export const MAX_LIGHTS = 8;
 
+/** Default MAX_HARD_ITERATIONS for desktop GPUs — safety loop cap for ray/DE loops. */
+export const DEFAULT_HARD_CAP = 2000;
+/** Reduced loop cap for mobile GPUs to prevent GPU hangs. */
+export const MOBILE_HARD_CAP = 256;
+
 export const DEFAULT_PIPELINE_REVISION = 1;
 
 /** Maximum valid depth — anything ≥ this is treated as a sky hit (no surface). */

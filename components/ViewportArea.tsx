@@ -4,6 +4,7 @@ import { Canvas } from '@react-three/fiber';
 import { useFractalStore } from '../store/fractalStore';
 import HistogramProbe from './HistogramProbe';
 import HudOverlay from './HudOverlay';
+import type { ActiveHint } from '../hooks/useTutorialHints';
 import { AnimationSystem } from './AnimationSystem';
 import { useInteractionManager } from '../hooks/useInteractionManager';
 import { useRegionSelection } from '../hooks/useRegionSelection';
@@ -36,6 +37,8 @@ interface HudRefs {
 interface ViewportAreaProps {
     hudRefs: HudRefs;
     onSceneReady: () => void;
+    activeHint?: ActiveHint | null;
+    onDismissHint?: () => void;
 }
 
 // Renders HTML overlays (Webcam, Debuggers)
@@ -202,7 +205,7 @@ const RegionOverlay: React.FC<{
     );
 };
 
-export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneReady }) => {
+export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneReady, activeHint, onDismissHint }) => {
     const state = useFractalStore();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
@@ -277,7 +280,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
         <div ref={viewportRef} className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${isSelectingRegion ? 'cursor-crosshair' : (isDrawingToolActive ? 'cursor-crosshair' : '')}`} style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} >
             {isFixed && <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '40px 40px' }} />}
             
-            {!isCleanFeed && <HudOverlay state={state} actions={state} isMobile={state.debugMobileLayout || isMobileDevice} hudRefs={hudRefs} />}
+            {!isCleanFeed && <HudOverlay state={state} actions={state} isMobile={state.debugMobileLayout || isMobileDevice} activeHint={activeHint} onDismissHint={onDismissHint} hudRefs={hudRefs} />}
             
             {!isCleanFeed && <CompilingIndicator />}
             

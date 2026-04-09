@@ -4,6 +4,7 @@ import { featureRegistry } from '../FeatureSystem';
 import { detectEngineProfile, estimateCompileTime } from '../../features/engine/profiles';
 import { FractalEvents } from '../FractalEvents';
 import * as THREE from 'three';
+import { DEFAULT_HARD_CAP } from '../../data/constants';
 
 export interface ConfigUpdateResult {
     rebuildNeeded: boolean;
@@ -136,7 +137,7 @@ export class ConfigManager {
 
         // Fallback to runtime state for critical compiler defines if missing in update
         if (newConfig.compilerHardCap === undefined) {
-            newConfig.compilerHardCap = runtimeState.quality?.compilerHardCap || runtimeState.compilerHardCap || 500;
+            newConfig.compilerHardCap = runtimeState.quality?.compilerHardCap || runtimeState.compilerHardCap || DEFAULT_HARD_CAP;
         }
         
         if (newConfig.renderMode === undefined) newConfig.renderMode = runtimeState.renderMode;

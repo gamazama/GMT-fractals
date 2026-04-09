@@ -13,6 +13,7 @@ import { registry } from '../../engine/FractalRegistry';
 import { Popover } from '../Popover';
 import { HardwarePreferences } from '../panels/HardwarePreferences';
 import { DonateButton } from '../DonateButton';
+import { getResetHintsFn } from '../../hooks/useTutorialHints';
 
 interface SystemMenuProps {
     isMobileMode: boolean;
@@ -335,6 +336,10 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                                 <span className="text-xs text-gray-300 font-bold">Show Hints <span className="text-gray-500 font-normal">[H]</span></span>
                                 <span className={`px-2 py-0.5 text-[8px] font-bold rounded-sm border transition-all ${state.showHints ? 'bg-green-500/30 text-green-300 border-green-500/40' : 'bg-white/[0.04] text-gray-600 border-white/5'}`}>{state.showHints ? 'ON' : 'OFF'}</span>
                             </div>
+
+                            <button onClick={(e) => { e.stopPropagation(); vibrate(5); const reset = getResetHintsFn(); if (reset) reset(); }} className="w-full flex items-center p-2 rounded hover:bg-white/5 text-gray-400 hover:text-gray-200 transition-colors">
+                                <span className="text-xs">Reset Tips</span>
+                            </button>
                             
                             <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.openHelp('general.shortcuts'); setShowSystemMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-cyan-400 transition-colors group">
                                 <span className="text-xs font-bold group-hover:text-cyan-200">Help</span>

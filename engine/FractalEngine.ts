@@ -13,6 +13,7 @@ import { bucketRenderer, BucketRenderConfig } from './BucketRenderer';
 import { UniformManager } from './managers/UniformManager';
 import { ConfigManager } from './managers/ConfigManager';
 import { OpticsState } from '../features/optics';
+import { DEFAULT_HARD_CAP } from '../data/constants';
 import { LightingState } from '../features/lighting';
 import { QualityState } from '../features/quality';
 import type { GeometryState } from '../features/geometry';
@@ -147,7 +148,7 @@ export class FractalEngine {
             previewMode: false, 
             maxSteps: 300,
             renderMode: 'Direct',
-            compilerHardCap: 500,
+            compilerHardCap: DEFAULT_HARD_CAP,
             shadows: true
         };
 

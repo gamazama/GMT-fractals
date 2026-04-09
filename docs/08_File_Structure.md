@@ -133,7 +133,7 @@ Self-contained modules defining State, UI, and Shaders.
 *   **Core**: `ViewportArea`, `Controls`, `Timeline`, `TopBar`, `MobileControls`.
 *   **Primitives**: `Slider`, `Knob`, `ToggleSwitch`, `Button`, `Dropdown`, `CollapsibleSection`, `PanelHeader`, `Popover`, `SectionLabel`, `StatusDot`, `TabBar`.
 *   **`inputs/`**: Unified scalar/vector input primitives.
-    *   `ScalarInput.tsx`: Core draggable-number primitive with fill bar. Manages refs for direct DOM updates during drag (`fillBarRef`, `fullTrackFillRef`, `rangeInputRef`). Passes `onImmediateChange` to DraggableNumber.
+    *   `ScalarInput.tsx`: Core draggable-number primitive with fill bar and custom pointer-capture track (click-to-set, delta drag with Shift/Alt precision modifiers). Manages refs for direct DOM updates during drag (`fillBarRef`, `fullTrackFillRef`, `trackContainerRef`). Passes `onImmediateChange` to DraggableNumber.
     *   `VectorInput.tsx`: Thin wrapper that delegates to `vector-input/` components.
     *   `types.ts`, `index.ts`: Shared types and barrel export.
     *   `primitives/DraggableNumber.tsx`: Drag-to-adjust + click-to-edit number. Updates display text via direct DOM manipulation (`displayRef.textContent`) during drag for instant feedback.
@@ -158,6 +158,7 @@ Self-contained modules defining State, UI, and Shaders.
 *   **Layout**: `Dock`, `DropZones`.
 *   **Gradient**: `GradientContextMenu`.
 *   **Node Editor**: `NodeParams`.
+*   **Tutorial**: `tutorial/HintDisplay.tsx` (fade-transition contextual hint display with help link).
 *   **Other**: `AnimationSystem`, `CategoryPickerMenu`, `DraggableWindow`, `FeatureSection`, `GlobalContextMenu`, `HelpBrowser`, `Histogram`, `HistogramProbe`, `Icons`, `InteractionPicker`, `KeyframeButton`, `ParameterSelector`, `PopupSliderSystem`, `ShaderDebugger`, `StateDebugger`.
 
 ## 6. Shaders (`shaders/`)

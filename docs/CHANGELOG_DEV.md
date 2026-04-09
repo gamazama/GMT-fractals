@@ -2,6 +2,39 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-09
+
+### Tutorial Hints — Contextual Whisper System
+- **Behavior-adaptive hints**: 32 contextual tips that surface in the HUD based on user activity — tracks panels opened, parameters changed, formulas switched, snapshots taken, and session age
+- **Progressive disclosure**: Hints are prioritized and gated by preconditions (e.g. "discover panels" only fires if the user hasn't opened any yet; "path tracing" only after advanced mode + lighting engagement)
+- **Persistence**: Behavioral profile and show counts persist to localStorage; hints respect `maxShows` limits and cooldowns to avoid repetition
+- **Smooth transitions**: `HintDisplay` component fades between hints; falls back to static navigation cheat-sheet when no contextual hint is active
+- **Dismiss to advance**: Clicking a hint skips to the next eligible one; dismissed hints are excluded from the current rotation cycle
+- **Help integration**: Hints with `helpTopicId` show a "?" button that opens the relevant help topic
+- **Reset Tips**: New button in System Menu clears all hint history and behavioral profile via `getResetHintsFn()` module-level ref
+- Files: `data/tutorialHints.ts` (NEW), `hooks/useTutorialHints.ts` (NEW), `components/tutorial/HintDisplay.tsx` (NEW), `App.tsx`, `components/ViewportArea.tsx`, `components/HudOverlay.tsx`, `components/topbar/SystemMenu.tsx`
+
+### HUD Overlay — Split Fade Timing
+- **Two-layer fade**: Crosshair fades after 2s of inactivity (unchanged), bottom pill cluster (speed, distance, hints, reset button) now stays visible for 10s before fading
+- **Independent refs**: `crosshairFadeTimeout` and `bottomFadeTimeout` replace the single `fadeTimeout`; `bottomClusterRef` wraps the bottom section as a separate opacity target
+- Files: `components/HudOverlay.tsx`
+
+### ScalarInput — Custom Track Interaction
+- **Replaced `<input type="range">`** with pointer-capture drag system for consistent cross-browser behavior
+- **Click-to-set**: Clicking anywhere on the track jumps to that value immediately, then transitions to drag mode
+- **Precision modifiers**: Hold Shift for 10× speed, Alt for 0.1× precision — modifier changes mid-drag re-anchor correctly
+- **Custom thumb**: `data-role="thumb"` element with `cursor-ew-resize` replaces browser-native slider thumb
+- Files: `components/inputs/ScalarInput.tsx`
+
+### Quality Panel — Grouped Raymarching Controls
+- **Whitelist-based grouping**: Raymarching section now uses `whitelistParams` to show controls in logical groups: Max Ray Steps | Step tuning (fudge, relaxation, jitter) | Detail & threshold | Distance metric & estimator
+- **Max Steps always visible**: Removed `isAdvanced: true` from `maxSteps` param — now shown in all modes
+- Files: `components/panels/QualityPanel.tsx`, `features/quality.ts`
+
+### Hard Cap Constants
+- **Extracted magic numbers**: `DEFAULT_HARD_CAP` (2000) and `MOBILE_HARD_CAP` (256) defined in `data/constants.ts`, replacing scattered `500`/`2000`/`256` literals across engine, store, and UI code
+- Files: `data/constants.ts`, `engine/FractalEngine.ts`, `engine/HardwareDetection.ts`, `engine/managers/ConfigManager.ts`, `features/quality.ts`, `store/fractalStore.ts`, `components/panels/HardwarePreferences.tsx`
+
 ## 2026-04-08
 
 ### Mesh Export — Preview Camera Overhaul

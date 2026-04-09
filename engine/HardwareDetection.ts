@@ -1,5 +1,6 @@
 
 import type { HardwareProfile } from '../types/viewport';
+import { DEFAULT_HARD_CAP, MOBILE_HARD_CAP } from '../data/constants';
 
 /**
  * Detect device hardware capabilities.
@@ -49,7 +50,7 @@ export function detectHardwareProfile(gl?: WebGL2RenderingContext): HardwareProf
         caps: {
             precisionMode: isMobile ? 1.0 : 0.0,
             bufferPrecision: supportsFloat32 ? 0.0 : 1.0,
-            compilerHardCap: isMobile ? 256 : 2000,
+            compilerHardCap: isMobile ? MOBILE_HARD_CAP : DEFAULT_HARD_CAP,
         },
     };
 }
