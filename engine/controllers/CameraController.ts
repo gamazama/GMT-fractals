@@ -30,7 +30,7 @@ export class CameraController {
     // Config
     private readonly ROTATION_SMOOTHING = 20.0;
     private readonly ROLL_SMOOTHING = 3.0; // Decay rate
-    private readonly SENSITIVITY = 2.5;
+    private readonly SENSITIVITY = 1.0;
     // Lerp rate when DST increases — lower = slower speed ramp-up (prevents sudden 100x jumps when panning to open space)
     // At 1.2: ~2.5s to reach 95% of target distance. Immediate on decrease (safety).
     // Probe already applies its own smoothing, so this is a second layer of damping.
@@ -84,8 +84,11 @@ export class CameraController {
 
         // --- 1. LINEAR MOVEMENT ---
         const boost = inputs.move.boost ? 4.0 : 1.0;
-        const targetSpeed = settings.autoSlow 
-            ? Math.max(effectiveDist * settings.baseSpeed * boost, 1e-6) 
+        // Shift guarantees a minimum effective distance so you can always move, even at DST~0
+        const minDist = inputs.move.boost ? 1e-4 : 0;
+        const clampedDist = Math.max(effectiveDist, minDist);
+        const targetSpeed = settings.autoSlow
+            ? Math.max(clampedDist * settings.baseSpeed * boost, 1e-6)
             : 2.0 * settings.baseSpeed * boost;
 
         const tv = new THREE.Vector3(0, 0, 0);
@@ -145,7 +148,7 @@ export class CameraController {
         }
 
         // Apply Roll
-        tr.z = this.rollVelocity * 0.62;
+        tr.z = this.rollVelocity * 1.24;
 
         // Smoothing (Frame-rate independent)
         const rotSmoothFactor = 1.0 - Math.exp(-this.ROTATION_SMOOTHING * safeDelta);

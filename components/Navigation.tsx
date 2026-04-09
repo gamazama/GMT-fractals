@@ -510,9 +510,21 @@ const Navigation: React.FC<NavigationProps> = ({
       
       if (mode === 'Fly') {
           if (disableMovement) return;
-          
+
           const dragDx = isDraggingRef.current ? mousePos.current.x - dragStart.current.x : 0;
           const dragDy = isDraggingRef.current ? mousePos.current.y - dragStart.current.y : 0;
+
+          // Drive reticle to show drag offset from center
+          if (hudRefs.reticle.current) {
+              if (isDraggingRef.current && (Math.abs(dragDx) > 0.001 || Math.abs(dragDy) > 0.001)) {
+                  const vw = gl.domElement.clientWidth * 0.5;
+                  const vh = gl.domElement.clientHeight * 0.5;
+                  hudRefs.reticle.current.style.opacity = '1';
+                  hudRefs.reticle.current.style.transform = `translate(calc(-50% + ${dragDx * vw}px), calc(-50% + ${-dragDy * vh}px))`;
+              } else {
+                  hudRefs.reticle.current.style.opacity = '0';
+              }
+          }
 
           flyController.current.update(
               camera,

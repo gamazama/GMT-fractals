@@ -49,6 +49,10 @@ export const usePhysicsProbe = (
             if (!hasValidMeasurement.current) {
                 distAverageRef.current = 1.0;
                 engine.lastMeasuredDistance = 1.0;
+            } else {
+                // Floor retained distance so we can always move when pointing at sky
+                distAverageRef.current = Math.max(distAverageRef.current, 1e-4);
+                engine.lastMeasuredDistance = distAverageRef.current;
             }
             updateDistHud(distAverageRef.current, '(sky)', '#888');
             if (hudRefs.reset.current) hudRefs.reset.current.style.display = 'block';
@@ -57,16 +61,14 @@ export const usePhysicsProbe = (
 
         hasValidMeasurement.current = true;
 
-        // Asymmetric smoothing: slow ramp-up prevents speed explosion, fast decrease for safety
+        // Asymmetric smoothing: slow ramp-up prevents speed explosion, instant decrease for safety
         const prev = distAverageRef.current;
         let smoothed = depthValue;
         if (prev > 0 && depthValue > prev * 1.5) {
             // Large increase — blend at ~8% per frame (~60 frames to converge)
             smoothed = prev + (depthValue - prev) * 0.08;
-        } else if (depthValue < prev) {
-            // Decrease — respond quickly but smooth to avoid jitter
-            smoothed = prev + (depthValue - prev) * 0.4;
         }
+        // Decrease: instant snap — no lag so speed drops immediately when approaching surfaces
 
         distAverageRef.current = smoothed;
         engine.lastMeasuredDistance = smoothed;

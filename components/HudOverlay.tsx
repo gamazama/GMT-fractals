@@ -46,7 +46,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
                         if (fadeTimeout.current) clearTimeout(fadeTimeout.current);
                         fadeTimeout.current = window.setTimeout(() => {
                             if (hudRefs.container.current) {
-                                hudRefs.container.current.style.opacity = '0';
+                                hudRefs.container.current.style.opacity = '0.3';
                             }
                         }, 2000);
                     }
@@ -102,31 +102,32 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
     return (
         <div 
             ref={hudRefs.container} 
-            className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-500 opacity-0"
+            className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-500 opacity-30"
         >
             <div className="absolute inset-0 flex items-center justify-center">
                 
                 {/* Center Crosshair */}
-                <div className="absolute pointer-events-none opacity-20">
+                <div className="absolute pointer-events-none opacity-50" style={{ filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.8))' }}>
                     {state.cameraMode === 'Fly' ? (
                         <>
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40px] h-[1px] bg-cyan-400" />
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[40px] bg-cyan-400" />
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40px] h-[2px] bg-cyan-400" />
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-[40px] bg-cyan-400" />
                         </>
                     ) : (
                         <div className="relative flex items-center justify-center">
                             {/* Orbit Mode: Smaller Cross + Circle */}
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[20px] h-[1px] bg-cyan-400" />
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1px] h-[20px] bg-cyan-400" />
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[20px] h-[2px] bg-cyan-400" />
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[2px] h-[20px] bg-cyan-400" />
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[24px] h-[24px] rounded-full border border-cyan-400 opacity-60" />
                         </div>
                     )}
                 </div>
 
                 {/* Inertial Reticle (Managed imperatively by Navigation loop via ref, Fly Mode Only) */}
-                <div 
-                    ref={hudRefs.reticle} 
-                    className="absolute w-8 h-8 pointer-events-none opacity-0 transition-opacity duration-150 ease-out will-change-transform"
+                <div
+                    ref={hudRefs.reticle}
+                    className="absolute top-1/2 left-1/2 w-8 h-8 pointer-events-none opacity-0 transition-opacity duration-150 ease-out will-change-transform"
+                    style={{ transform: 'translate(-50%, -50%)' }}
                 >
                     <div className="absolute inset-0 border-2 border-cyan-400 rounded-full shadow-[0_0_15px_cyan] opacity-80"></div>
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 bg-white rounded-full"></div>
@@ -168,7 +169,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
                         )}
 
                         {/* Distance Display (Updated by usePhysicsProbe) */}
-                        <div className="px-6 py-3 bg-white/5 flex items-center min-w-[100px] justify-center">
+                        <div className={`px-6 py-3 bg-white/5 flex items-center min-w-[100px] justify-center ${state.cameraMode === 'Orbit' ? 'ring-1 ring-cyan-400/40 rounded-r-full' : ''}`}>
                             <span ref={hudRefs.dist} className="text-cyan-500/80 font-mono text-[10px]">
                                 Dst ---
                             </span>
@@ -177,7 +178,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, hudRe
 
                     {/* Navigation Hints */}
                     {state.showHints && !isMobile && (
-                        <div className="mt-3 text-[9px] font-medium text-white/40 text-center animate-fade-in text-shadow-sm whitespace-nowrap">
+                        <div className="mt-3 text-[9px] font-medium text-white/60 text-center animate-fade-in whitespace-nowrap" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
                             <span className="text-cyan-400/60 font-bold mr-2">[{state.cameraMode}]</span>
                             {state.cameraMode === 'Fly'
                                 ? "WASD Move · Space/C Vert · Shift Boost"
