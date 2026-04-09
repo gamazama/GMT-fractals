@@ -400,6 +400,10 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                                 style={{ left: `${defaultPct}%` }}
                             />
                             <button
+                                onPointerDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }}
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
