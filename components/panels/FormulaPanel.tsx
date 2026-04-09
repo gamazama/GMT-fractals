@@ -188,7 +188,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
           };
 
           return (
-              <div key={p.id} className="mb-px">
+              <div key={p.id} className="mb-px" data-tut={p.id}>
                   <Vector3Input
                       label={p.label}
                       value={vec}
@@ -214,7 +214,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
           const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`, `${p.trackId}_w`];
           const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`, `${p.label} W`];
           return (
-              <div key={p.id} className="mb-px">
+              <div key={p.id} className="mb-px" data-tut={p.id}>
                   <Vector4Input
                       label={p.label}
                       value={vec}
@@ -238,7 +238,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
           const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`];
           const trackLabels = [`${p.label} X`, `${p.label} Y`];
           return (
-              <div key={p.id} className="mb-px">
+              <div key={p.id} className="mb-px" data-tut={p.id}>
                   <Vector2Input
                       label={p.label}
                       value={new THREE.Vector2(v2.x, v2.y)}
@@ -280,19 +280,21 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
       // Explicit PI scaling based on definition, NOT on name regex.
       if (p.scale === 'pi') {
           return (
-              <Slider 
-                 key={p.id} label={p.label} value={val} min={p.min} max={p.max} step={0.01} 
-                 onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} 
-                 trackId={p.trackId} liveValue={liveVal} 
-                 customMapping={{ 
-                     min: p.min / Math.PI, 
-                     max: p.max / Math.PI, 
-                     toSlider: (v) => v / Math.PI, 
-                     fromSlider: (v) => v * Math.PI 
-                 }} 
-                 mapTextInput={true} 
+              <div key={p.id} data-tut={p.id}>
+              <Slider
+                 label={p.label} value={val} min={p.min} max={p.max} step={0.01}
+                 onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
+                 trackId={p.trackId} liveValue={liveVal}
+                 customMapping={{
+                     min: p.min / Math.PI,
+                     max: p.max / Math.PI,
+                     toSlider: (v) => v / Math.PI,
+                     fromSlider: (v) => v * Math.PI
+                 }}
+                 mapTextInput={true}
                  overrideInputText={`${(val / Math.PI).toFixed(2)}π`}
               />
+              </div>
           );
       }
       // Degrees scale: internal value is in degrees (for Fragmentarium GLSL), display as π notation.
@@ -300,8 +302,9 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
       if (p.scale === 'degrees') {
           const D2PI = 1 / 180; // degrees → π coefficient
           return (
+              <div key={p.id} data-tut={p.id}>
               <Slider
-                 key={p.id} label={p.label} value={val} min={p.min} max={p.max} step={p.step}
+                 label={p.label} value={val} min={p.min} max={p.max} step={p.step}
                  onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
                  trackId={p.trackId} liveValue={liveVal}
                  customMapping={{
@@ -313,10 +316,11 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
                  mapTextInput={true}
                  overrideInputText={`${(val * D2PI).toFixed(2)}π`}
               />
+              </div>
           );
       }
       // Standard or Log
-      return <Slider key={p.id} label={p.label} value={val} min={p.min} max={p.max} step={p.step} onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} trackId={p.trackId} liveValue={liveVal} />;
+      return <div key={p.id} data-tut={p.id}><Slider label={p.label} value={val} min={p.min} max={p.max} step={p.step} onChange={p.set} defaultValue={p.def as number} highlight={hasLfo || (p.id === 'paramA' && !hasLfo)} trackId={p.trackId} liveValue={liveVal} /></div>;
   };
 
   const switchFormula = (f: FormulaType) => { actions.setFormula(f); if (f === 'Modular' && onSwitchTab) onSwitchTab('Graph'); };
@@ -332,7 +336,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
        </div>
        
         <div className="flex flex-col" data-help-id={`panel.formula formula.${state.formula?.toLowerCase() || 'mandelbulb'}`}>
-             <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1} onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })} highlight defaultValue={32} customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }} mapTextInput={false} trackId="coreMath.iterations" liveValue={state.liveModulations['coreMath.iterations']} />
+             <div data-tut="iterations"><Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1} onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })} highlight defaultValue={32} customMapping={{ min: 0, max: 100, toSlider: (val) => 100 * Math.pow((val - 1) / 499, 1/3), fromSlider: (val) => 1 + 499 * Math.pow(val / 100, 3) }} mapTextInput={false} trackId="coreMath.iterations" liveValue={state.liveModulations['coreMath.iterations']} /></div>
              {/* Formula params (scalar and vector) rendered via getParams/renderControl */}
              <>{params.map(p => renderControl(p))}</>
         </div>
@@ -355,7 +359,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
            if (jt === 'none') return null;
            const isOffset = jt === 'offset';
            return (
-               <div className={`border-t ${themeBorder.subtle}`} data-help-id="julia.mode">
+               <div className={`border-t ${themeBorder.subtle}`} data-help-id="julia.mode" data-tut="juliaMode">
                    <AutoFeaturePanel
                        featureId="geometry"
                        groupFilter="julia"

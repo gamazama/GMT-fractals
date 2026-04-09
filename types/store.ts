@@ -191,6 +191,12 @@ export interface FractalStoreState extends FeatureStateMap {
   // Viewport Quality System
   scalability: ScalabilityState;
   hardwareProfile: HardwareProfile | null;
+
+  // Tutorial System
+  tutorialActive: boolean;
+  tutorialLessonId: number | null;
+  tutorialStepIndex: number;
+  tutorialCompleted: number[];
 }
 
 export type FractalState = FractalStoreState;
@@ -333,4 +339,10 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     applyScalabilityPreset: (presetId: string) => void;
     setSubsystemTier: (subsystemId: string, tier: number) => void;
     setHardwareProfile: (profile: HardwareProfile) => void;
+
+    // Tutorial System
+    startTutorial: (lessonId: number) => void;
+    advanceTutorialStep: () => void;
+    skipTutorial: () => void;
+    completeTutorial: () => void;
 }

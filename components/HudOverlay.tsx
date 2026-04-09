@@ -157,6 +157,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                         {/* Reset Button (Appears based on distance threshold set by physics hook) */}
                         <button
                             ref={hudRefs.reset}
+                            data-tut="reset-camera"
                             onClick={() => { actions.resetCamera(); if (navigator.vibrate) navigator.vibrate(30); }}
                             className="pointer-events-auto px-4 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-t-lg border-x border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl mb-[-1px]"
                         >
@@ -169,6 +170,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                                 <>
                                     <div
                                         ref={hudSpeedSliderRef}
+                                        data-tut="speed-slider"
                                         onPointerDown={handleHudSpeedInteraction}
                                         className="relative flex items-center px-6 py-3 cursor-ew-resize group min-w-[120px]"
                                     >

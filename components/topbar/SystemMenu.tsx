@@ -5,7 +5,7 @@ import { featureRegistry } from '../../engine/FeatureSystem';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { FractalEvents } from '../../engine/FractalEvents';
-import { MenuIcon, SaveIcon, LoadIcon, CodeIcon, HelpIcon, InfoIcon, FullscreenIcon, SmileyIcon, LinkIcon } from '../Icons';
+import { MenuIcon, SaveIcon, LoadIcon, CodeIcon, HelpIcon, InfoIcon, FullscreenIcon, SmileyIcon, LinkIcon, CheckIcon } from '../Icons';
 import { extractMetadata } from '../../utils/pngMetadata';
 import { getExportFileName } from '../../utils/fileUtils';
 import { saveGMFScene, loadGMFScene } from '../../utils/FormulaFormat';
@@ -340,7 +340,19 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                             <button onClick={(e) => { e.stopPropagation(); vibrate(5); const reset = getResetHintsFn(); if (reset) reset(); }} className="w-full flex items-center p-2 rounded hover:bg-white/5 text-gray-400 hover:text-gray-200 transition-colors">
                                 <span className="text-xs">Reset Tips</span>
                             </button>
-                            
+
+                            <div className="h-px bg-white/10 my-1" />
+                            <div className="text-[9px] font-bold text-gray-500 px-2 py-1">Tutorials</div>
+                            <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.startTutorial(1); setShowSystemMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
+                                <span className="text-xs font-bold group-hover:text-cyan-400">Lesson 1: The Mandelbulb</span>
+                                {state.tutorialCompleted.includes(1) && <CheckIcon />}
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.startTutorial(2); setShowSystemMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
+                                <span className="text-xs font-bold group-hover:text-cyan-400">Lesson 2: It's Time to Fly</span>
+                                {state.tutorialCompleted.includes(2) && <CheckIcon />}
+                            </button>
+                            <div className="h-px bg-white/10 my-1" />
+
                             <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.openHelp('general.shortcuts'); setShowSystemMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-cyan-400 transition-colors group">
                                 <span className="text-xs font-bold group-hover:text-cyan-200">Help</span>
                                 <HelpIcon />

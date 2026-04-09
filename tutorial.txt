@@ -1,0 +1,283 @@
+Lesson 1 (navigation not yet active, elements are highlighted with a white square outline only)
+
+
+The Mandelbulb (and slider controls)
+'Once thought to be the holy grail of the mandelbrot set in 3D'
+
+-Iterations
+Fractals are recursive mathematical structures. Try decreasing iterations to see how this one forms.
+(complete trigger - 1 iteration)
+(transition)
+-Power
+Power is a variable in the mathematical function that creates this shape (Zⁿ) Set it to 5.
+Use alt/shift while setting a parameter to use 10x/0.1x precision.
+-Phase
+The controls the position of the mathematical 'landscape' relative to the sphere!
+Try the dual axis pad (also with alt/shift) to control both variables at once.
+-Twist and Radiolaria
+The sliders in GMT have no min/max - you can set them to any value by dragging on the textured area.
+->
+Look at those slicing artifacts! Part of rendering fractals fast - is estimating the depth of the fractal from the camera. If the estimate cant account for twist and radiolaria, we need to head to the quality tab.
+->
+Quality:
+step jitter blends those slices smoothly. lets turn that off.
+its overshooting the fractal surface, so it gets sliced. reduce the slice optimization. to take smaller steps
+(trigger - stop at slice optimization 0.05)
+Now whats happening - is we dont have enough ray steps to get to the fractal with such small slices. increase the max.
+
+things are going to run a bit slow with these settings. we'll set back to reasonable and move on.
+(default with slice optimization at 0.5)
+
+lets try julia mode - this is available for some fractals, and uses a static coordinate in the calculation
+try picking a coordinate by dragging over the fractal
+
+Lesson 2 (formula controls are active)
+Its time to fly
+Press tab to enter fly mode
+
+And fly in with wasd key
+
+drag the mouse to look around
+
+hold shift to boost
+
+space and c move up/down
+
+q and e to roll
+
+finetune by reducing speed (highlight SPD)
+(you can also scroll the mouse)
+
+when dist < e-5
+highlight reset camera
+This button appear when to close or too far, but you can also rest from the camera menu
+(show camera menu open with button highlighted)
+
+after camera static for 3s
+press tab to switch back to orbit camera and perfect your shot
+right mouse to pan
+scroll to zoom
+leftclick to orbit the point at the centre
+(its DiSTance away is shown at the bottom)
+
+
+next steps: (mouse over each one highlights the corresponding UI)
+(snapshot button) save a snaphot,
+(bucket render) do a hires render,
+(scene) adjust camera blur/color, effects and fog
+(shader) change the look of the material
+(gradients) adjust surface colors
+(quality) change artistic quality parameters and resolution
+-future tutorials coming soon
+
+
+(these two lessons to be available from the system menu tutorials -> lesson 1 )
+
+
+Lesson 3: The Look (Shader & Lighting)
+'Shaping light on mathematical surfaces'
+
+-Materials
+The Shader tab controls how the surface responds to light. Open the Shader tab.
+(trigger - Shader tab open)
+
+-Diffuse & Specular
+Diffuse controls overall brightness. Specular controls how shiny the surface is — increase it for a wet or polished look.
+Try adjusting both.
+
+-Roughness
+Roughness controls how sharp reflections are. 0 is mirror-smooth, 1 is matte like chalk.
+Set it below 0.3 to see sharp highlights.
+
+-Metallic
+Metallic changes the reflection model. At 0 the surface is plastic or stone. At 1 it reflects its own colour like chrome or gold.
+Try setting it to 1.
+
+-Rim Light
+Rim Light adds a glow around edges — a Fresnel effect. Increase the intensity and adjust sharpness.
+
+-Emission
+Self-Illumination makes the surface glow. Try switching the source to Layer 1 — only the gradient colour will emit light.
+
+-Ambient Occlusion
+AO darkens crevices and holes. Increase intensity and spread to see the effect. Try the AO Tint colour to shade shadows.
+
+-Lighting
+Open the Light tab. GMT has up to 8 lights in a PBR studio.
+(trigger - Light tab open)
+
+-Light Types
+Light 1 is the key light. Try dragging the gizmo sphere in the viewport to reposition it.
+Toggle between Point and Directional (Sun) to see the difference.
+
+-Colour & Intensity
+Change the light colour. Try a warm orange. Increase intensity above 2 for bloom.
+Switch to Colour Temperature mode for a Kelvin slider (3000K warm, 6500K daylight, 9000K cool).
+
+-Shadows
+Enable shadows on Light 1. Increase softness for area-light penumbra.
+If you see black speckles (shadow acne), increase the Bias slightly.
+
+-Attachment Mode
+Toggle between Headlamp (moves with camera) and World (fixed in scene). Headlamp is great for exploration, World for cinematic setups.
+
+
+Lesson 4: Colour & Gradients
+'Painting with mathematics'
+
+-Gradient Basics
+Open the Gradient tab. Colour in GMT comes from mapping a mathematical value to a gradient.
+(trigger - Gradient tab open)
+
+-Mapping Modes
+The dropdown at the top selects what value drives the colour. Try switching between Orbit Trap, Iterations, and Radial to see very different looks from the same gradient.
+
+-Editing Knots
+Click the gradient bar to add a colour stop. Drag it to reposition. Click a knot to open the colour picker.
+Drag a knot off the bar to delete it. Try making a 3-colour gradient.
+
+-Scale & Offset
+Scale stretches the pattern (more repetitions). Offset shifts it along the surface. Phase rotates the starting point.
+Use the histogram to see the distribution while adjusting.
+
+-Bias Handles
+Right-click the gradient to enable bias handles. The diamond between knots shifts the interpolation midpoint — great for fine-tuning transitions.
+
+-Layer 2
+Layer 2 adds a second colour layer with its own mapping and gradient. Set a blend mode — try Add for glowing veins or Multiply for grime.
+
+-Procedural Noise (Layer 3)
+The noise layer adds 3D simplex noise. Increase Scale for fine grain (metallic), decrease for large blobs. Bump adds surface displacement — essential for rock and rust.
+
+-Image Texturing
+Load an image texture for photo-real surfaces. U and V mapping control how the image wraps. Try Decomposition (U) + Iterations (V) for natural flow.
+
+
+Lesson 5: Scene & Atmosphere
+'Setting the stage'
+
+-Scene Panel
+Open the Scene tab. This controls camera optics, atmosphere, colour correction, and world transforms.
+(trigger - Scene tab open)
+
+-Depth of Field
+Camera Blur adds defocus. Set a value above 0, then use Pick Focus to click a surface point. The fractal converges when the camera is still (needs temporal accumulation).
+
+-Fog
+Scroll down to Atmosphere. Increase Fog Density and set a Fog Colour. Adjust Start and End distance to control the rolloff. Dark fog creates depth, bright fog creates mist.
+
+-Volumetric Scatter (God Rays)
+If enabled in Engine settings, Volumetric Scatter adds light shafts through fog. Adjust Density and Anisotropy — positive g scatters forward (sun shafts), negative g scatters backward.
+
+-Colour Grading
+Under Effects, try different Tone Mapping modes: ACES for cinematic warmth, AgX for modern filmic. Adjust Saturation and Levels (black/white points).
+
+-Bloom
+Bloom adds glow around bright areas. Works best with high specular or emission. Set a Threshold and increase Intensity.
+
+-Chromatic Aberration
+Adds colour fringing at the edges of the frame. Subtle values look photographic, high values are stylised.
+
+-Composition Overlays
+From the Camera menu, enable a composition guide: Rule of Thirds, Golden Ratio, or Spiral. Use these to frame your shot before a snapshot or render.
+
+
+Lesson 6: Animation & Timeline
+'Bringing fractals to life'
+
+-Opening the Timeline
+Press T to open the Timeline. The toolbar has playback controls, recording, and export.
+(trigger - Timeline visible)
+
+-Recording Keyframes
+Click the red Record button. Move the playhead to a frame, then change any slider — a keyframe is created automatically. Move the playhead again and change the value. Press Space to play.
+
+-Camera Keyframes
+Use the KEY CAM button to capture position, rotation, and zoom as a single keyframe. Record a camera path in Fly mode, then refine in the Graph Editor.
+
+-Graph Editor
+Click the curve icon to switch to the Graph Editor. Here you can see and edit animation curves. Drag tangent handles to control easing. Try Smooth and Bounce tools from the toolbar.
+
+-Interpolation
+Select keyframes and change interpolation: Bezier (smooth), Linear (constant speed), Step (instant jump). Use Flat tangents for ease-in/ease-out.
+
+-LFO Modulators
+Add an LFO from the modulation panel. Choose a waveform (Sine, Triangle, Sawtooth, Noise), set a target parameter, and adjust Period and Strength. LFOs add automatic rhythmic animation without keyframes.
+
+-Video Export
+Click the Render button in the timeline toolbar. Choose resolution, format, bitrate, and samples per frame. Higher samples = cleaner frames but slower export. Use Disk Mode on Chrome for large exports.
+
+
+Lesson 7: Advanced Features
+'Power user tools'
+
+-Advanced Mode
+Press ` (backtick) to toggle Advanced Mode. This unlocks Engine Settings, compile-time features, and additional controls in every panel.
+
+-Engine Settings
+Open Engine Settings from the System Menu. The status dots show which changes need recompilation (yellow = pending). Click Apply to recompile.
+Compile-time features include: Raymarched Reflections, Volumetric Scatter, Stochastic Shadows, Water Plane.
+
+-Reflections
+Enable Raymarched Reflections in Engine Settings. Set Metallic high and Roughness low in the Shader tab to see mirror-like surfaces. Adjust Max Bounces and Trace Steps for quality vs speed.
+
+-Water Plane
+Enable Water Plane in Engine Settings. Adjust Height to position the water level. Wave Strength, Speed, and Frequency control the surface. Works best with Reflections enabled.
+
+-Modular Graph Builder
+Switch the formula to Modular. The Graph tab opens a node editor. Add nodes from the dropdown — Transforms, Folds, Fractals, CSG combiners. Wire them together to build custom fractal formulas. Bind node parameters to global sliders (Param A-D) for animation.
+
+-Path Tracing
+Switch Render Mode to Path Tracing for physically-accurate global illumination. It's slow — the image converges over time via accumulation. Use for final stills, not exploration. Emission becomes true light in this mode.
+
+-Bucket Rendering
+Click the grid icon for high-quality tiled rendering. Set Export Scale (2x = 4K from 1080p). Lower the Convergence Threshold for production quality (0.1%). The viewport locks during render.
+
+-Formula Workshop
+Open Formula Workshop from the System Menu. Import .frag files from Fragmentarium or edit GLSL formulas directly. GMT can convert many fragment shaders to native formulas automatically.
+
+-Audio Reactivity
+Enable Audio from the System Menu. Choose a source (microphone, system audio, or audio file). Create links from frequency ranges to any parameter. Use Attack/Decay/Smooth to shape the response. Bass for kicks, mids for vocals, treble for hats.
+
+-Hybrid/Box Fold
+In the Formula panel, the Hybrid Box section injects geometric folding before the main formula. Try different fold types (Tetra, Octa, Menger) to create fractal-within-fractal structures. Use the Lock icon for advanced interleaved mixing.
+
+-Camera Slots
+Press Ctrl+1 through Ctrl+9 to save camera positions. Press the number key alone to recall. Use the Camera Manager panel for named cameras with thumbnails and Quick Views (Front, Top, Isometric, etc).
+
+-Broadcast Mode
+Press B to hide all UI for a clean viewport. Press B again or Esc to return. Perfect for screenshots, presentations, or streaming.
+
+-Saving & Sharing
+Save your work as .gmf from the System Menu. Share a URL link (copies to clipboard). Snapshots (camera icon) save PNG files with embedded scene data — load any snapshot to restore the full scene.
+
+
+Lesson 8: Formulas & Exploration
+'A gallery of infinite worlds'
+
+-Formula Library
+GMT includes 40+ fractal formulas across several categories. Open the formula dropdown to browse the gallery.
+
+-Featured Fractals
+Mandelbulb: The classic 3D Mandelbrot extension. Power controls the symmetry fold.
+Mandelbox: A box-folding fractal with Scale as the primary control. Scale near -1.5 creates intricate folded structures.
+Menger Sponge: A cube with recursive holes. Perfect cube geometry at integer iterations.
+
+-Geometric & Folding
+Sierpinski: Triangular recursive subdivision. Icosahedral variants create 20-sided symmetry.
+Kaleidoscopic IFS: Infinite reflections with fold operations. Great for crystalline and architectural forms.
+Polyhedra: Platonic solids as fractal seeds — Dodecahedron, Icosahedron, Octahedron, and more.
+
+-Hybrids & Experiments
+AmazingBox: The Amazing Surface formula with box/sphere folds.
+Bristorbrot: A triplex variant creating organic branching.
+Pseudo Kleinian: Creates infinite repeating structures and pseudo-Kleinian limit sets.
+
+-Exploration Tips
+Every formula responds differently to the same parameters. When you switch formulas, the default preset loads — it's a curated starting point.
+Use Julia Mode on any formula to access a hidden dimension of shapes.
+Combine formulas with Hybrid Box Fold for unique structures.
+Try extreme parameter values — fractals often have interesting behaviour at the boundaries.
+
+-Quick Edit
+Hover the viewport and press 1-6 to pop up a slider for Param A-F at your cursor. No need to open the panel.

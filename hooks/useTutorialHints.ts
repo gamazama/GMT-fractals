@@ -187,6 +187,8 @@ export function useTutorialHints(showTimeline: boolean): TutorialHintsAPI {
 
     const evaluateNext = useCallback((skipId?: string) => {
         const store = useFractalStore.getState();
+        // Suppress contextual hints while guided tutorial is active
+        if (store.tutorialActive) { setActiveHint(null); return; }
         const p = profileRef.current;
         const now = Date.now();
         const sessionAge = (now - sessionStartRef.current) / 1000;

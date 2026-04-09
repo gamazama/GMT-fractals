@@ -35,7 +35,7 @@ export const InteractionPicker: React.FC<InteractionPickerProps> = ({
     };
 
     return (
-        <div className="flex flex-col animate-fade-in">
+        <div className="flex flex-col animate-fade-in" data-tut={`pick-${targetMode.replace('picking_', '')}`}>
              {isActive && helpText && (
                  <div className="mb-px p-2 bg-green-900/30 border border-green-500/30 rounded text-[9px] text-green-200 animate-pulse text-center leading-tight">
                      {helpText}

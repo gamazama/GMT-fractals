@@ -253,6 +253,7 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                         
                         <div className="relative" ref={bucketMenuRef}>
                             <button
+                                data-tut="bucket-btn"
                                 onClick={(e) => { e.stopPropagation(); vibrate(5); setShowBucketMenu(!showBucketMenu); }}
                                 className={`bucket-toggle-btn p-0.5 rounded transition-colors ${
                                     state.isBucketRendering 

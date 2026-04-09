@@ -138,6 +138,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                     return (
                         <button
                             key={p.id}
+                            data-tut={`tab-${p.id}`}
                             onClick={() => togglePanel(p.id, true)}
                             onContextMenu={(e) => handleContextMenu(e, p.id)}
                             onMouseEnter={() => {

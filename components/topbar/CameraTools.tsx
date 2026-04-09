@@ -142,8 +142,9 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                 onMouseEnter={handleCamMouseEnter} 
                 onMouseLeave={handleCamMouseLeave}
             >
-            <button 
-                onClick={handleInteraction} 
+            <button
+                data-tut="snapshot-btn"
+                onClick={handleInteraction}
                 className={`camera-menu-trigger ${btnBase} ${showCameraMenu ? btnActive : btnInactive}`}
                 title={isMobileMode ? "Camera Menu" : "Click: Take Snapshot / Hover: Camera Menu"}
             >

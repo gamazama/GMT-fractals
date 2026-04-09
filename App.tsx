@@ -13,6 +13,7 @@ import { SmartphoneRotateIcon, TimelineOpenIcon, AlertIcon, CheckIcon } from './
 import { EngineBridge } from './components/EngineBridge';
 import { useAppStartup } from './hooks/useAppStartup';
 import { useTutorialHints } from './hooks/useTutorialHints';
+import TutorialOverlay from './components/tutorial/TutorialOverlay';
 
 // --- Code-split: loaded on demand ---
 const Timeline = React.lazy(() => import('./components/Timeline'));
@@ -186,6 +187,7 @@ const App: React.FC = () => {
 
         {!isBroadcast && <MobileControls />}
         {!isBroadcast && <PopupSliderSystem />}
+        <TutorialOverlay />
         {state.contextMenu.visible && !isBroadcast && (
             <GlobalContextMenu x={state.contextMenu.x} y={state.contextMenu.y} items={state.contextMenu.items} targetHelpIds={state.contextMenu.targetHelpIds} onClose={state.closeContextMenu} onOpenHelp={state.openHelp} />
         )}

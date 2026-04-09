@@ -31,7 +31,9 @@ export type UISlice = Pick<FractalStoreState,
     // New Layout Props
     'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
     'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
-    'workshopOpen' | 'workshopEditFormula'
+    'workshopOpen' | 'workshopEditFormula' |
+    // Tutorial
+    'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
 > & Pick<FractalActions,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
@@ -52,7 +54,9 @@ export type UISlice = Pick<FractalStoreState,
     // Legacy Mappers
     'setActiveTab' | 'floatTab' | 'dockTab' |
     // Workshop
-    'openWorkshop' | 'closeWorkshop'
+    'openWorkshop' | 'closeWorkshop' |
+    // Tutorial
+    'startTutorial' | 'advanceTutorialStep' | 'skipTutorial' | 'completeTutorial'
 >;
 
 const getUrlParam = (key: string) => {
@@ -147,6 +151,17 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     // Workshop
     workshopOpen: false,
     workshopEditFormula: undefined,
+
+    // Tutorial System
+    tutorialActive: false,
+    tutorialLessonId: null,
+    tutorialStepIndex: 0,
+    tutorialCompleted: (() => {
+        try {
+            const stored = localStorage.getItem('gmt-tutorials');
+            return stored ? JSON.parse(stored).completed || [] : [];
+        } catch { return []; }
+    })(),
 
     // --- ACTIONS ---
 
@@ -348,5 +363,35 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setCompositionOverlay: (type) => set({ compositionOverlay: type }),
     setCompositionOverlaySettings: (settings) => set(state => ({
         compositionOverlaySettings: { ...state.compositionOverlaySettings, ...settings }
-    }))
+    })),
+
+    // --- TUTORIAL ACTIONS ---
+    startTutorial: (lessonId) => set({
+        tutorialActive: true,
+        tutorialLessonId: lessonId,
+        tutorialStepIndex: 0,
+        showHints: false,
+    }),
+    advanceTutorialStep: () => set(state => ({
+        tutorialStepIndex: state.tutorialStepIndex + 1
+    })),
+    skipTutorial: () => set({
+        tutorialActive: false,
+        tutorialLessonId: null,
+        tutorialStepIndex: 0,
+        showHints: true,
+    }),
+    completeTutorial: () => set(state => {
+        const completed = state.tutorialLessonId !== null && !state.tutorialCompleted.includes(state.tutorialLessonId)
+            ? [...state.tutorialCompleted, state.tutorialLessonId]
+            : state.tutorialCompleted;
+        try { localStorage.setItem('gmt-tutorials', JSON.stringify({ completed })); } catch {}
+        return {
+            tutorialActive: false,
+            tutorialLessonId: null,
+            tutorialStepIndex: 0,
+            tutorialCompleted: completed,
+            showHints: true,
+        };
+    }),
 });

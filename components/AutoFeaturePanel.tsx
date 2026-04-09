@@ -495,7 +495,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
         const hasChildren = renderedChildren.length > 0;
         return (
-            <div key={id} className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}>
+            <div key={id} data-tut={id} className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}>
                 {isParentSlider && <div className={`absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
                 {showDescription && !isParentSlider && (

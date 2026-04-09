@@ -368,6 +368,7 @@ export const selectIsGlobalInteraction = (state: FractalStoreState) => {
 
 export const selectMovementLock = (state: FractalStoreState) => {
     if (state.isGizmoDragging || state.interactionMode !== 'none' || state.isExporting || state.isBucketRendering) return true;
+    if (state.tutorialActive && state.tutorialLessonId === 1) return true;
     const features = featureRegistry.getAll();
     for (const feat of features) {
         if (feat.interactionConfig?.blockCamera && feat.interactionConfig.activeParam) {

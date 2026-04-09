@@ -117,6 +117,12 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         if (thumb) thumb.style.left = `calc(${pct}% - 8px)`;
     }, [computePct]);
 
+    // Snap a value to the nearest step multiple
+    const quantize = React.useCallback((v: number): number => {
+        if (!step) return v;
+        return Math.round(v / step) * step;
+    }, [step]);
+
     // Track pointer handlers — delta-based drag with Alt/Shift precision modifiers
     const handleTrackPointerDown = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         if (disabled || !hasBounds) return;
@@ -131,7 +137,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const displayMin = mapping ? mapping.toDisplay(min!) : min!;
         const displayMax = mapping ? mapping.toDisplay(max!) : max!;
-        const clickedDisplayValue = displayMin + pct * (displayMax - displayMin);
+        const clickedDisplayValue = quantize(displayMin + pct * (displayMax - displayMin));
 
         // Set value to clicked position immediately
         let clickedValue = mapping ? mapping.fromDisplay(clickedDisplayValue) : clickedDisplayValue;
@@ -149,7 +155,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         drag.lastAlt = e.altKey;
 
         onDragStart?.();
-    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, onDragStart, handleImmediateChange]);
+    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, onDragStart, handleImmediateChange, quantize]);
 
     const handleTrackPointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         const drag = trackDrag.current;
@@ -181,7 +187,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         if (e.altKey) sens *= 0.1;
 
         const dx = e.clientX - drag.startX;
-        let nextDisplayValue = drag.startValue + dx * sens;
+        let nextDisplayValue = quantize(drag.startValue + dx * sens);
 
         // Clamp to display range
         nextDisplayValue = Math.max(displayMin, Math.min(displayMax, nextDisplayValue));
@@ -194,7 +200,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             onChange(finalValue);
             handleImmediateChange(finalValue);
         }
-    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, handleImmediateChange]);
+    }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, handleImmediateChange, quantize]);
 
     const handleTrackPointerUp = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
         const drag = trackDrag.current;
