@@ -163,7 +163,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
       }
   };
 
-  const formulas = useMemo(() => registry.getAll(), []);
+  // Registry is populated asynchronously (dynamic import in useAppStartup).
+  // Re-read when the menu opens to ensure formulas are available.
+  const formulas = useMemo(() => registry.getAll(), [isMenuOpen]);
 
   useEffect(() => {
     if (!fgCanvasRef.current) return;

@@ -67,50 +67,55 @@ export const useAppStartup = (isSceneReady: boolean) => {
         if (hydratedRef.current) return;
         hydratedRef.current = true;
 
-        // 2. Determine Initial Preset
-        const hash = window.location.hash;
-        let preset: Preset | null = null;
+        // Formulas are loaded via dynamic import so they're in a separate chunk,
+        // reducing the initial bundle size. Registration must complete before
+        // loadScene() calls registry.get().
+        import('../formulas').then(() => {
+            // 2. Determine Initial Preset
+            const hash = window.location.hash;
+            let preset: Preset | null = null;
 
-        if (hash && hash.startsWith('#s=')) {
-            const stateStr = hash.slice(3);
-            if (import.meta.env.DEV) console.log("App: Found shared state in URL. Parsing...");
-            preset = parseShareString(stateStr);
-            if (preset) {
-                setStartupMode('url');
+            if (hash && hash.startsWith('#s=')) {
+                const stateStr = hash.slice(3);
+                if (import.meta.env.DEV) console.log("App: Found shared state in URL. Parsing...");
+                preset = parseShareString(stateStr);
+                if (preset) {
+                    setStartupMode('url');
+                }
             }
-        }
 
-        // If no URL or parse failed, use default for Mandelbulb
-        if (!preset) {
-             const def = registry.get('Mandelbulb');
-             if (def && def.defaultPreset) {
-                 preset = JSON.parse(JSON.stringify(def.defaultPreset)) as Preset;
-             }
-        }
+            // If no URL or parse failed, use default for Mandelbulb
+            if (!preset) {
+                 const def = registry.get('Mandelbulb');
+                 if (def && def.defaultPreset) {
+                     preset = JSON.parse(JSON.stringify(def.defaultPreset)) as Preset;
+                 }
+            }
 
-        // 3. Environment Optimizations — Non-destructive hardware detection
-        //    The preset is loaded UNMODIFIED into the store (authored intent preserved).
-        //    Hardware caps + viewport quality tiers are applied at getShaderConfigFromState().
-        const hwProfile = detectHardwareProfileMainThread();
-        state.setHardwareProfile(hwProfile);
-        if (hwProfile.isMobile) {
-            if (import.meta.env.DEV) console.log("App: Mobile detected. Setting Lite viewport quality.");
-            state.applyScalabilityPreset('lite');
-        }
+            // 3. Environment Optimizations — Non-destructive hardware detection
+            //    The preset is loaded UNMODIFIED into the store (authored intent preserved).
+            //    Hardware caps + viewport quality tiers are applied at getShaderConfigFromState().
+            const hwProfile = detectHardwareProfileMainThread();
+            state.setHardwareProfile(hwProfile);
+            if (hwProfile.isMobile) {
+                if (import.meta.env.DEV) console.log("App: Mobile detected. Setting Lite viewport quality.");
+                state.applyScalabilityPreset('lite');
+            }
 
-        // 4. Load into Store (UI State) via unified loadScene path.
-        //    loadScene detects the engine hasn't booted yet and skips CONFIG/OFFSET
-        //    events (they would just queue and cause a redundant second compile).
-        //    bootEngine() will push the full config + offset after the worker boots.
-        if (preset) {
-            if (import.meta.env.DEV) console.log("App: Hydrating Store from Preset...");
-            state.loadScene({ preset });
-        }
+            // 4. Load into Store (UI State) via unified loadScene path.
+            //    loadScene detects the engine hasn't booted yet and skips CONFIG/OFFSET
+            //    events (they would just queue and cause a redundant second compile).
+            //    bootEngine() will push the full config + offset after the worker boots.
+            if (preset) {
+                if (import.meta.env.DEV) console.log("App: Hydrating Store from Preset...");
+                state.loadScene({ preset });
+            }
 
-        // Don't boot here — LoadingScreen will call bootEngine().
-        // Chrome: boots immediately (async compile won't stall WebGL spinner).
-        // Firefox: boots after cosmetic progress bar completes (synchronous compile
-        // would freeze the UI via shared GPU process).
+            // Don't boot here — LoadingScreen will call bootEngine().
+            // Chrome: boots immediately (async compile won't stall WebGL spinner).
+            // Firefox: boots after cosmetic progress bar completes (synchronous compile
+            // would freeze the UI via shared GPU process).
+        });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     return { startupMode, bootEngine };

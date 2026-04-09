@@ -43,7 +43,7 @@ GMT has a comprehensive documentation system. **Start with [DOCS_INDEX.md](docs/
 2.  **Technical Documentation**: Detailed architecture, rendering, and implementation guides (in `docs/` folder)
 3.  **In-App Help System**: User-facing documentation accessible from the application (`data/help/`)
 4.  **README.md**: This file - Project overview, quick start, and high-level documentation
-5.  **Context Files**: Condensed architecture overviews for AI sessions (`docs/context.md`, `docs/context2.md`)
+5.  **Context File**: Condensed architecture overview for AI sessions (`docs/archive/context2.md`)
 
 ### Key Technical Guides (available via DOCS_INDEX)
 - **System Architecture**: Engine-Bridge pattern, Data-Driven Feature System (DDFS)
@@ -82,7 +82,7 @@ GMT has a comprehensive documentation system. **Start with [DOCS_INDEX.md](docs/
 
 **GPL-3.0 License**
 
-Copyright (c) 2024 Guy Zack
+Copyright (c) 2024-2026 Guy Zack
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -94,29 +94,6 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-## 🤝 Contributing
-
-Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.
-1.  Fork the repo.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
-
-Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.
-1.  Fork the repo.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
-
-Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.
-1.  Fork the repo.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
-5.  Open a Pull Request.
 ## 🤝 Contributing
 
 Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.

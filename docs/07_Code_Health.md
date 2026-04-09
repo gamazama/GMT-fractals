@@ -2,7 +2,7 @@
 # Code Health Report
 
 **Status:** Stable (Post-DDFS Refactor & Cleanup)
-**Last Updated:** 2026-03-13
+**Last Updated:** 2026-04-09
 
 ## 1. Architecture ✅
 The codebase has been successfully migrated to the **Data-Driven Feature System (DDFS)**.
@@ -92,6 +92,47 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 
 ### Vec4 Type Fix
 *   Added `vec4A/B/C` to `FractalParameter.id` union and `'vec4'` to `type` union in `types/fractal.ts`. Resolves 4 TS errors in `FormulaPanel.tsx`.
+
+## 2.8 Recent Work (2026-03-17 to 2026-04-09)
+
+### Formula System Expansion
+*   **42 native formulas** now in `formulas/` — 13 new formulas added (polyhedra series: Cuboctahedron, RhombicDodecahedron, TruncatedIcosahedron, etc.; PseudoKleinianAdvanced; Claude; KaliBox).
+*   **Formula Audit** completed — all formulas reviewed for naming, math correctness, descriptions, params, DE compliance. See `docs/23_Formula_Audit.md`.
+*   **Formula Interlace System** — hybrid two-formula interlace with shared Rodrigues rotation helpers, preambleVars contract, mesh export support. See `docs/24_Formula_Interlace_System.md`.
+
+### Mesh Export Tool
+*   **Standalone mesh export** at `public/mesh-export/` — HTML + ES2020 (no React). 6-phase GPU pipeline: SDF sampling → dual contouring → Newton projection → post-processing → vertex coloring → export.
+*   **VDB export with color grids** — `Tree_float_5_4_3` density + optional `Cd` `Tree_vec3s_5_4_3` color grid.
+*   **Preview camera overhaul** — orbit, pan, zoom, preset views, controls hint overlay.
+
+### Viewport Quality System
+*   **Per-subsystem scalability** replaces flat ENGINE_PROFILES. Four subsystems (Shadows, Reflections, Lighting, Atmosphere) with ordered tiers.
+*   **Hardware detection** at boot — Float32 probe, mobile detection, GPU string analysis.
+*   **Engine Panel moved** to advanced mode; hardware params managed via dedicated modal.
+
+### CompilableFeatureSection Pattern
+*   **Reusable DDFS UI component** for features with compile/runtime split (`panelConfig` declarative config).
+*   Applied to Volumetric Scatter and Hybrid Box Fold.
+
+### Area Lights Two-Level Control
+*   Compile-time `ptStochasticShadows` + runtime `areaLights` uniform toggle.
+
+## 2.9 Bundle Optimization (2026-04-09)
+
+### Formula Chunk Split
+*   **Formula definitions deferred to async chunk.** All 42 formula files (403KB raw) were eagerly bundled into the `index` chunk via `FormulaGallery.tsx → formulas/index.ts` import chain. Fixed by:
+    1. Extracted `PREDEFINED_CATEGORIES` to `formulas/categories.ts` using string literal IDs (no formula imports)
+    2. Changed `FormulaGallery.tsx` to import from `formulas/categories` instead of `formulas/`
+    3. Changed formula registration in `useAppStartup.ts` to `import('../formulas').then(...)` — formulas load as a separate async chunk before boot
+*   **Impact:** `index` chunk: 600KB → 268KB raw (144KB → 54KB gzip). Formulas in separate 332KB async chunk (89KB gzip), loaded before boot.
+
+### Vendor Chunk Cleanup
+*   **`reactflow` removed from `manualChunks`** — only used by lazy-loaded `FlowEditor`. Now bundled with its consumer (-48KB gzip from initial load).
+*   **`mediabunny` removed from `manualChunks`** — only used by lazy-loaded `Timeline/RenderPopup` and worker. Now bundled with consumers (-3KB gzip from initial load).
+
+### Overall Initial Load Reduction
+*   **630KB → 484KB gzip (-23%)** for blocking initial load chunks.
+*   Files: `vite.config.ts`, `formulas/categories.ts` (NEW), `formulas/index.ts`, `components/panels/formula/FormulaGallery.tsx`, `hooks/useAppStartup.ts`, `components/LoadingScreen.tsx`
 
 ## 3. Technical Debt
 
@@ -317,7 +358,12 @@ The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full sh
 
 ### Long Term (High Effort)
 1. Generate TypeScript types from `FeatureRegistry` for full type safety
-2. Implement comprehensive test suite
+2. **Implement test suite** — No automated tests exist yet. The frag importer has its own test scripts (`debug/test-frag-*.mts`) but the core engine/store/compiler has zero tests. Highest ROI candidates for a first test suite:
+   - **`utils/GraphCompiler.ts`** — Pure function (`compileGraph` → GLSL string). Easy to test, critical correctness, catches regressions in modular formula compilation.
+   - **`engine/math/AnimationMath.ts`** — Stateless math (Bezier tangents, curve interpolation, soft selection falloff). Pure inputs/outputs, no mocking needed.
+   - **`utils/FormulaFormat.ts`** — GMF parse/serialize roundtrip tests. Ensures save/load fidelity across format versions.
+   - **`utils/graphAlg.ts`** — Cycle detection, topological sort. Small, deterministic, critical for modular graph correctness.
+   - **`store/createFeatureSlice.ts`** — DDFS slice generation. Verifies that feature definitions produce correct store shape and setter behavior.
 3. Consider migrating to `@react-three/fiber` built-in JSX types
 4. ✅ Engine–React decoupling: `CPUDistanceEstimator.ts` + `VideoExporter.ts` deleted (dead code); `AnimationEngine.ts` refactored to `connect()` injection
 5. Establish explicit camera ownership model with sync-back events (see Section 10.5)
@@ -335,7 +381,7 @@ The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full sh
 | `components/panels/formula/FormulaSelect.tsx` | ✅ 187 (split) | 4 | 2 | **Done** |
 | `engine/FractalEngine.ts` | 851 | 21 | 9 | No |
 | `engine/VideoExporter.ts` | ✅ Deleted (dead code, superseded by WorkerExporter) | — | — | **Removed** |
-| `engine/worker/renderWorker.ts` | 829 | 12 | 0 | Moderate |
+| `engine/worker/renderWorker.ts` | 829 | 12 | 0 | Moderate (not yet done) |
 | `features/fragmentarium_import/FormulaWorkshop.tsx` | 750 | 11 | 0 | No |
 | `engine/worker/WorkerProxy.ts` | 735 | 7 | 9 | No |
 | `features/fragmentarium_import/parsers/dec-preprocessor.ts` | 717 | 0 | 0 | No |
@@ -643,12 +689,12 @@ Both send `OFFSET_SET` to the worker during initialization. If they read differe
 | 3 | ✅ | Offset guard no timeout | Fixed: `WorkerProxy.setShadowOffset()` auto-clears after 2s | Done |
 | 4 | ✅ | `isOrbit` branching in VirtualSpace | Fixed: `updateSmoothing()` unified, no mode parameter | Done |
 | 5 | ✅ | Unified canonical state | Fixed: store always writes `cameraPos=(0,0,0)`, all position in `sceneOffset` | Done |
-| 6 | MEDIUM | Rapid teleport collision | 1-frame camera jump on preset load | Low — debounce or coalesce teleport events |
-| 5 | LOW | Subscriptions before worker | Messages lost silently | Already mitigated — BOOT carries config |
-| 6 | LOW | loadPreset vs initWorkerMode order | Worker INIT with stale config | Already mitigated — BOOT is authoritative |
-| 7 | LOW | 50ms setTimeout assumption | Fragile but practically safe | Low — add explicit ready signal |
-| 8 | LOW | renderMode subscription timing | Theoretically undefined, practically safe | Trivial — add `fireImmediately: false` |
-| 9 | LOW | Dual OFFSET_SET on boot | Redundant message, same data | Trivial — remove one |
+| 6 | ✅ | Rapid teleport collision | Not an issue: `applyPresetState` sets `activeCameraId` via direct `set()`, not `selectCamera()` — no second teleport event | N/A |
+| 7 | LOW | Subscriptions before worker | Messages lost silently | Already mitigated — BOOT carries config |
+| 8 | LOW | loadPreset vs initWorkerMode order | Worker INIT with stale config | Already mitigated — BOOT is authoritative |
+| 9 | LOW | 50ms setTimeout assumption | Fragile but practically safe | Low — add explicit ready signal |
+| 10 | ✅ | renderMode subscription timing | Fixed: added `if (val === undefined) return` guard in `fractalStore.ts` | Done |
+| 11 | ✅ | Dual OFFSET_SET on boot | Fixed: removed duplicate from `WorkerDisplay.tsx` — `useAppStartup.ts` is authoritative | Done |
 
 ### 10.5 Architectural Observation
 

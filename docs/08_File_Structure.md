@@ -1,5 +1,6 @@
 
 # Project File Map
+> Last updated: 2026-04-09 | GMT v0.9.1
 
 ## 1. Root Configuration
 *   `index.html`: Application entry point. Sets up DOM and Tailwind.
@@ -45,6 +46,8 @@ The imperative WebGL system.
 *   **`controllers/`**:
     *   `CameraController.ts`: Physics for Fly/Orbit movement.
     *   `PickingController.ts`: Handles depth-buffer reading for focus/interaction.
+*   **`overlay/`**:
+    *   `OverlayProjection.ts`: Shared 3D→2D projection for overlays (light gizmos, drawing tools).
 *   **`managers/`**:
     *   `UniformManager.ts`: Syncs CPU state to GPU uniforms per frame.
     *   `ConfigManager.ts`: Diffing logic for shader recompilation.
@@ -101,9 +104,12 @@ Self-contained modules defining State, UI, and Shaders.
 *   **`webcam`**: Overlay logic. Includes `WebcamOverlay.tsx`.
 *   **`debug_tools`**: Shader/State debuggers. Includes `DebugToolsOverlay.tsx`.
 *   **`ao`**: Ambient Occlusion logic.
-*   **`reflections`**: Raymarched reflections logic.
+*   **`reflections/`**: Raymarched reflections logic.
+    *   `index.ts`: DDFS definition + all reflection evaluation GLSL (env map, raymarched modes).
+    *   `shader.ts`: `traceReflectionRay()` — lightweight SDF marcher with hit refinement.
 *   **`water_plane.ts`**: Infinite ocean plane logic.
 *   **`volumetric/`**: Volumetric rendering effects (fog density, scatter).
+    *   `index.ts`: DDFS definition, `panelConfig` for compilable section UI, volume tracing injection.
 *   **`camera_manager`**: Camera position management — saved cameras with thumbnails, drag-to-reorder, duplicate, smooth transitions, Ctrl+1-9 shortcuts, export/import, composition overlays. Persists into presets/PNG snapshots.
 *   **`engine`**: Master configuration profiles (legacy — superseded by viewport quality system).
 
@@ -212,7 +218,27 @@ Self-contained modules defining State, UI, and Shaders.
 - The `webm-muxer` dependency was removed as it was not actually used in the codebase
 - Chunking strategy focuses on vendor libraries for better browser caching
 
-## 8. Data (`data/`)
+## 9. Mesh Export Tool (`public/mesh-export/`)
+Standalone HTML + ES2020 tool for exporting fractal geometry as meshes/VDB. No React — runs independently.
+*   `index.html`: Entry point.
+*   `gpu-pipeline.js`: GPU SDF sampling, voxel grid generation.
+*   `sdf-eval.js`: SDF evaluation utilities.
+*   `dc-core.js`: Dual contouring mesh extraction.
+*   `mesh-postprocess.js`: Newton projection, vertex welding, smoothing.
+*   `mesh-writers.js`: OBJ/STL/VDB export writers (including `Vec3VDBTree` for color grids).
+*   `mesh-preview.js`: WebGL wireframe preview renderer.
+*   `preview-camera.js`: Orbit/pan camera for preview canvas.
+*   `formula-system.js`: Formula shader integration (mirrors main app's `ShaderFactory` for SDF context).
+*   `pipeline.js`: End-to-end pipeline orchestrator.
+
+See [30_Mesh_Export_Prototype.md](30_Mesh_Export_Prototype.md) for architecture details.
+
+## 10. Prototypes (`prototype/`)
+Experimental work not integrated into the main app.
+*   **`restir-gi/`**: WIP ReSTIR GI global illumination prototype.
+*   **`deep-zoom/`**: Deep zoom precision experiments.
+
+## 11. Data (`data/`)
 *   `constants.ts`: Application constants.
 *   `BlueNoiseData.ts`: Blue noise texture data.
 *   `gradientPresets.ts`: Gradient presets.

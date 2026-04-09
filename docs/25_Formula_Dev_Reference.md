@@ -1,4 +1,5 @@
 # Formula Developer Reference
+> Last updated: 2026-04-08 | GMT v0.9.1
 
 Unified reference for writing, debugging, and maintaining GMT native formula files (`formulas/*.ts`). Covers the full API surface, quirks, workarounds, and common patterns.
 

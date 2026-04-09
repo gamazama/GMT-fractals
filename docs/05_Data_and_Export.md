@@ -1,5 +1,6 @@
 
 # Data I/O & Export
+> Last updated: 2026-04-09 | GMT v0.9.1
 
 ## 1. Video Export (`WorkerExporter.ts`)
 
@@ -105,3 +106,37 @@ Snapshots and bucket renders embed the full scene data as a GMF string in the PN
 Scene state is diff-compressed into the URL hash via `UrlStateEncoder`. This uses the Preset object directly (not GMF).
 - **Imported formulas cannot be shared via URL** — the shader code is too large for URL length limits. The share button shows "N/A (Imported)" for Workshop-imported formulas.
 - If the scene is too complex (e.g., many keyframes), animation data is automatically stripped to fit the URL limit.
+
+### 2.5 VDB Export (Mesh Export Tool)
+
+The mesh export tool (`public/mesh-export/`) can export fractal geometry as OpenVDB `.vdb` files for use in Houdini, Blender, and other 3D tools.
+
+**Density grid:** SDF values sampled on a GPU voxel grid, stored as `Tree_float_5_4_3` (standard OpenVDB float tree). Resolution options from 64 to 512 voxels per axis.
+
+**Color grid (optional):** When "Include color grids" is enabled, GPU orbit-trap colors are sampled for all active density voxels and stored as a `Cd` grid (`Tree_vec3s_5_4_3`). This adds a second sampling pass but produces colored volumes natively in VDB-compatible tools.
+
+**File naming:** `{formula}-{resolution}-{content}-{timestamp}.vdb` where content is `density` or `density-color`.
+
+See [30_Mesh_Export_Prototype.md](30_Mesh_Export_Prototype.md) for the full pipeline architecture.
+
+## 3. Bucket Rendering
+
+For resolutions higher than the GPU limit (e.g., 8K), the bucket renderer tiles the viewport into small buckets and renders each to convergence.
+
+### Key Features
+- **Scissor-based compositing**: Integer pixel bounds for pixel-perfect tile boundaries (no float UV artifacts)
+- **Half-pixel region expansion**: Render region padded by 0.5px so boundary pixels are always rendered
+- **Adaptive convergence**: Each tile renders until converged or max samples reached (async GPU fence readback)
+- **Center-first spiral order**: Renders from center outward for faster visual feedback
+- **Offline post-processing**: Bloom, chromatic aberration, color grading, and tone mapping applied once after all tiles complete (not per-bucket)
+- **SSAA pixelSizeBase override**: During supersampled renders, trace precision is kept at viewport resolution to prevent artifacts
+- **Three-layer state lock**: Worker message filter + UI lock (`isExporting`) + resize guard prevent mid-render corruption
+- **Export scales**: 1x (viewport), 2x (4K from 1080p), 4x (8K), 8x (10K+)
+
+### Convergence Threshold
+- `0.1%` = Production quality (more samples)
+- `0.25%` = Default — good balance
+- `0.5%` = Balanced quality
+- `1.0%` = Fast preview
+
+See [02_Rendering_Internals.md](02_Rendering_Internals.md) §5 for full bucket renderer architecture.

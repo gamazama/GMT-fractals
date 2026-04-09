@@ -1,6 +1,11 @@
-# Formula Audit Report (2026-03-08)
+# Formula Audit Report
+> Last updated: 2026-04-09 | GMT v0.9.1
 
-Systematic audit of all 28 GMT native formulas. Covers naming accuracy, mathematical correctness, description quality, parameter usage, and cross-reference against Fragmentarium originals.
+Systematic audit of all 42 GMT native formulas. Covers naming accuracy, mathematical correctness, description quality, parameter usage, preambleVars/usesSharedRotation compliance, and cross-reference against Fragmentarium originals.
+
+**Audit history:**
+- 2026-03-08: Initial audit of 28 formulas
+- 2026-04-09: Added 13 new formulas (polyhedra, PseudoKleinian variants, KaliBox, Claude). Verified deferred Phase 1-2 items.
 
 ## Audit Methodology
 
@@ -104,23 +109,23 @@ These GMT formulas have no matching .frag in the reference collection — they a
 
 ## Needs Description Fix
 
-| Formula | Issue | Current Description | Suggested Fix |
-|---------|-------|-------------------|---------------|
-| **Bristorbrot** | FIX-DESC | "A hybrid formula that mixes folding and analytical functions" | No folding in code. Actually a custom polynomial: `x²-y²-z², y(2x-z), z(2x+y)`. Describe the actual math. |
-| **Appell** | FIX-DESC | References "Clifford Analysis" | Implementation is simplified Appell polynomial, not full Clifford analysis. Tone down the description. |
+| Formula | Issue | Status |
+|---------|-------|--------|
+| **Bristorbrot** | FIX-DESC | ✅ Fixed — now reads "A custom polynomial fractal: x²-y²-z², y(2x-z), z(2x+y)..." |
+| **Appell** | FIX-DESC | ✅ Fixed — now reads "simplified Appell polynomial: P(x) = x^n - k|x|^2..." |
 
 ---
 
 ## Needs Parameter Refactor (vec2/vec3 upgrade)
 
-| Formula | Current | Opportunity | Priority |
-|---------|---------|-------------|----------|
-| **MarbleMarcher** | 6 scalar (Shift X/Y/Z + Rot X/Z + Scale) | Shift X/Y/Z → **vec3A**, Rot X/Z → **vec3B** (mode:'rotation') | **HIGH** — 3 shift params + 2 rot params = 5 scalars → 2 vec3 |
-| **MakinBrot** | 6 scalar (Scale + Offset + Rot X/Z + Shift Y + Twist) | Rot X/Z → **vec3A** (mode:'rotation'), could add Shift Y to vec3 | **MEDIUM** — 2 rotation params wasted as scalars |
-| **Mandelbar3D** | 6 scalar (Scale + Offset X/Z + Rot X/Z + Twist) | Rot X/Z → **vec3A** (mode:'rotation'), Offsets → **vec3B** | **MEDIUM** — same pattern as MakinBrot |
-| **Dodecahedron** | 6 scalar (Scale + Offset + Rot X/Z + Z Shift + Twist) | Will be redesigned when fold structure is fixed | **BLOCKED** — fix math first |
-| **Tetrabrot** | 4 scalar (Julia W + Slice W + Rot X/Z) | Rot X/Z → **vec3A** (mode:'rotation') | **LOW** — only 2 params affected |
-| **Quaternion** | 6 scalar (Julia W + Slice W + 4 rotation planes) | 4D rotations are inherently complex; low priority | **LOW** — 4D rotation planes don't map cleanly to vec3 |
+| Formula | Status | Notes |
+|---------|--------|-------|
+| **MarbleMarcher** | ✅ Done | Now uses vec3A (Shift) + vec3B (Rotation, mode: 'axes') |
+| **MakinBrot** | ✅ Done | Now uses vec3A (Shift) + vec3B (Rotation, mode: 'rotation') |
+| **Mandelbar3D** | ✅ Done | Now uses vec3A (Offset) + vec3B (Rotation, mode: 'rotation') |
+| **Dodecahedron** | ✅ Done | Math fixed + now uses vec3B (Rotation) + vec3A (Shift) |
+| **Tetrabrot** | Still pending | Rot X/Z still scalar params — LOW priority |
+| **Quaternion** | Still pending | 4D rotation planes don't map cleanly to vec3 — LOW priority |
 
 ---
 
@@ -150,24 +155,60 @@ Established pattern from SierpinskiTetrahedron and MixPinski:
 
 ## Refactor Priority Queue
 
-### Phase 0 — Critical Math Fixes (algorithm is wrong)
-1. **Dodecahedron** — Rewrite with correct 3 normals (golden-ratio), 3×3 fold pattern, remove abs+sort
-2. **Buffalo** — Remove non-original Menger fold, add per-axis abs toggles, fix derivative
+### Phase 0 — Critical Math Fixes ✅ COMPLETE
+1. ✅ **Dodecahedron** — Rewritten with correct 3 golden-ratio normals, 3×3 fold pattern
+2. ✅ **Buffalo** — Menger fold removed, per-axis abs toggles added
 
-### Phase 1 — Quick Wins (description fixes only)
-1. **Bristorbrot** — rewrite description to match actual polynomial
-2. **Appell** — tone down Clifford Analysis claim
+### Phase 1 — Description Fixes ✅ COMPLETE
+1. ✅ **Bristorbrot** — description rewritten to match actual polynomial
+2. ✅ **Appell** — Clifford Analysis claim toned down
 
-### Phase 2 — Parameter Consolidation (shader changes)
-1. **MarbleMarcher** — consolidate 3 shift + 2 rot into 2 vec3 params
-2. **MakinBrot** — consolidate 2 rot into vec3 with rotation mode
-3. **Mandelbar3D** — consolidate 2 rot + 2 offsets into vec3 params
+### Phase 2 — Parameter Consolidation ✅ COMPLETE
+1. ✅ **MarbleMarcher** — Shift → vec3A, Rotation → vec3B
+2. ✅ **MakinBrot** — Shift → vec3A, Rotation → vec3B (mode: 'rotation')
+3. ✅ **Mandelbar3D** — Offset → vec3A, Rotation → vec3B (mode: 'rotation')
 
-### Phase 3 — Enhancement (optional)
-1. **Tetrabrot** — consolidate rotations
-2. **Quaternion** — complex 4D rotation, lower priority
-3. Add `linkable: true` to scale params where applicable
-4. **Mandelbulb** — consider adding DerivativeBias parameter
+### Phase 3 — Enhancement (still open)
+1. **Tetrabrot** — consolidate rotations to vec3 (LOW)
+2. **Quaternion** — complex 4D rotation, lower priority (LOW)
+3. Add `linkable: true` to scale params where applicable (LOW)
+4. **Mandelbulb** — consider adding DerivativeBias parameter (LOW)
+5. **Octahedron, Icosahedron, TruncatedIcosahedron** — add cutting-plane `getDist` blocks to match RhombicDodecahedron/RhombicTriacontahedron pattern (MEDIUM — would give tighter surface bounds)
+
+---
+
+## New Formulas Audit (2026-04-09)
+
+13 formulas added since the original audit, mostly polyhedra from the 2026-04-03 session.
+
+### Polyhedra — All OK
+
+All polyhedra formulas follow a consistent pattern: icosahedral/octahedral symmetry folds + scale + offset + shared Rodrigues rotation + twist + shift. All have `usesSharedRotation: true`, accurate descriptions, and good parameter ranges.
+
+| Formula | preambleVars | getDist | Estimator | Notes |
+|---------|-------------|---------|-----------|-------|
+| **Apollonian** | ✅ (5 vars) | N/A (custom DE inline) | 0.375×abs(z.y)/dr | Inversion mode with separate params. Complex but correct. |
+| **Coxeter** | ✅ (6 vars) | ✅ Custom | Cutting-plane | Parameterized Symmetry N (3→tet, 4→oct, 5→ico). Elegant. |
+| **Cuboctahedron** | ✅ (3 vars) | ✅ Custom | Cutting-plane | Octahedral fold + cutting-plane DE. |
+| **GreatStellatedDodecahedron** | ✅ (5 vars) | ✅ Custom | Cutting-plane | Icosahedral + stellation param. |
+| **Icosahedron** | N/A | No getDist | `estimator: 2` (r/dr) | Works, but could benefit from cutting-plane getDist like siblings. |
+| **Octahedron** | N/A | No getDist | `estimator: 2` (r/dr) | Same — works fine but lacks cutting-plane precision. |
+| **RhombicDodecahedron** | ✅ (3 vars) | ✅ Custom | Cutting-plane | RD face-normal folds. Excellent geometry docs in comments. |
+| **RhombicTriacontahedron** | ✅ (3 vars) | ✅ Custom | Cutting-plane | Golden-ratio default scale (1.618). |
+| **TruncatedIcosahedron** | N/A | No getDist | `estimator: 2` (r/dr) | Truncation param (0→ico, 1→soccer ball). Works but could add cutting-plane. |
+
+### Other New Formulas — All OK
+
+| Formula | preambleVars | usesSharedRotation | getDist | Notes |
+|---------|-------------|-------------------|---------|-------|
+| **Claude** | ✅ (2 vars) | ✅ | No (default) | Harmonic icosahedral fold — unique innovation. Clean. |
+| **KaliBox** | ✅ (2 vars) | No (own rotation) | No (default) | Mandelbox variant. Uses private rotation, not shared Rodrigues. Correct. |
+| **PseudoKleinianAdv** | ✅ (2 vars) | No | ✅ Custom (Thingy DE) | Full Knighty/Theli-at box+sphere fold. Complex but correct. |
+| **PseudoKleinianMod4** | ✅ (1 var) | No | ✅ Custom (3 DE shapes) | Mandelbulber Mod4 variant. paramA selects DE shape via options dropdown. |
+
+### Enhancement Opportunities (not bugs)
+
+- **Icosahedron, Octahedron, TruncatedIcosahedron**: Could add cutting-plane `getDist` blocks to match their sibling polyhedra (RhombicDodecahedron, Cuboctahedron, etc.). Currently use `estimator: 2` (r/dr) which works but gives less precise surface bounds. See Phase 3 above.
 
 ---
 
@@ -177,4 +218,7 @@ These are correct, well-described, and already use good parameter patterns:
 - Mandelbulb, MandelBolic, Phoenix, Borromean, JuliaMorph, MandelTerrain, Mandelorus, MandelMap, ArisBrot
 - MengerSponge, MengerAdvanced, BoxBulb, Kleinian, PseudoKleinian
 - AmazingBox, AmazingSurf, AmazingSurface
-- SierpinskiTetrahedron, MixPinski (both fixed this session)
+- SierpinskiTetrahedron, MixPinski
+- Bristorbrot ✅, Appell ✅ (descriptions fixed)
+- MarbleMarcher ✅, MakinBrot ✅, Mandelbar3D ✅ (params consolidated to vec3)
+- All 13 new formulas (see above)

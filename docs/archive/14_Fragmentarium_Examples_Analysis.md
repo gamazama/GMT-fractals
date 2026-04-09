@@ -1,5 +1,8 @@
 # Fragmentarium Examples Analysis
 
+> **📋 Reference Material** — Pattern catalog from initial importer development. The V3 pipeline now handles
+> all these patterns. See [21_Frag_Importer_Current_Status.md](../21_Frag_Importer_Current_Status.md) for current status.
+
 ## Overview
 
 This document catalogs the patterns found in over 100 Fragmentarium formulas from the `features/fragmentarium_import/reference/Examples/` directory. These patterns inform the implementation of the generic Fragmentarium parser.

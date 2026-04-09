@@ -1,5 +1,6 @@
 
 # Troubleshooting & Quirks
+> Last updated: 2026-03-27 | GMT v0.9.1
 
 ## 1. WebGL & GPU Issues
 

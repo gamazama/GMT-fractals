@@ -1,5 +1,11 @@
 # GLSL Parser Integration Summary
 
+> **⚠️ SUPERSEDED** — This was a proof-of-concept for `@shaderfrog/glsl-parser` integration.
+> The parser is now fully integrated in the V3 importer pipeline. See:
+> - [21_Frag_Importer_Current_Status.md](../21_Frag_Importer_Current_Status.md) — current V3 pipeline status
+>
+> Kept for historical context only.
+
 ## What Was Accomplished
 
 ### 1. Installed @shaderfrog/glsl-parser

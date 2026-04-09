@@ -1,6 +1,7 @@
 # Mesh Export Prototype — Architecture & Reference
+> Last updated: 2026-04-08 | GMT v0.9.1
 
-> Standalone browser tool for converting GMT fractals (SDF) into triangle meshes (GLB/STL).
+> Standalone browser tool for converting GMT fractals (SDF) into triangle meshes (GLB/STL/VDB).
 > Located in `public/mesh-export/` — `index.html` loads 8 JS modules via `<script>` tags. Accessible from the app via System Menu → Advanced → Mesh Export.
 > No bundler, no React — runs as plain HTML + ES2020 scripts.
 

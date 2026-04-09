@@ -32,16 +32,16 @@ export default defineConfig({
       },
       output: {
         manualChunks: {
-          // Core vendor libraries
+          // Core vendor libraries (eagerly loaded)
           'three': ['three'],
           'react': ['react', 'react-dom'],
-          'reactflow': ['reactflow'],
           'three-drei': ['@react-three/drei'],
           'three-fiber': ['@react-three/fiber'],
-          // Media and encoding libraries
-          'mediabunny': ['mediabunny'],
-          // Compression and utilities
+          // Compression (needed at startup for URL parsing)
           'pako': ['pako'],
+          // Note: reactflow and mediabunny intentionally omitted —
+          // they're only used by lazy-loaded components (FlowEditor, RenderPopup)
+          // so Vite naturally bundles them with their consumers.
         }
       }
     }

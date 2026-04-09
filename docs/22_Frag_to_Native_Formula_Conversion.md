@@ -1,4 +1,5 @@
 # Fragmentarium → GMT Native Formula Conversion Guide
+> Last updated: 2026-04-09 | GMT v0.9.1
 
 This document describes the process of converting a Fragmentarium `.frag` formula into a native GMT formula `.ts` file. The process was developed during the MixPinski conversion (2026-03-08) and serves as a repeatable template.
 
@@ -166,6 +167,8 @@ npm run dev               # Visual test in browser
 - [ ] Orbit trap coloring preserved
 - [ ] Rotation optimized (preamble pre-calc if needed)
 - [ ] Custom getDist if non-standard DE
+- [ ] `preambleVars` declared if preamble has mutable variables
+- [ ] `usesSharedRotation: true` if using shared Rodrigues rotation
 - [ ] Default preset with tuned camera, colors, quality
 - [ ] Registered in FormulaType union, index.ts, and categories
 - [ ] TypeScript compiles clean
@@ -184,3 +187,43 @@ npm run dev               # Visual test in browser
 - Chebyshev 4D DE → custom `getDist` with `max(abs(z.xyzw))`
 - 4D rotation (6 planes) → simplified to 3D Rodrigues via `vec3C` (mode: 'rotation')
 - Old formula renamed to `SierpinskiTetrahedron` (what it actually was)
+
+## Important: Interlace & Shared Rotation Support
+
+Since 2026-04-03, formulas that participate in the interlace (two-formula hybrid) system need additional declarations:
+
+### `preambleVars`
+
+If your formula's `shader.preamble` declares mutable variables (anything that's not `const`), you **must** list them in `shader.preambleVars`. The interlace system uses this list to scope variables correctly when combining two formulas in a single shader.
+
+```ts
+shader: {
+  preamble: `
+    float myScale = uParamA;
+    vec3 myOffset = uVec3A;
+  `,
+  preambleVars: ['myScale', 'myOffset'],
+  // ...
+}
+```
+
+Without `preambleVars`, the interlace system may produce shader compilation errors from variable redefinition. A dev-mode `console.warn` fires when mutable preamble variables are detected without a matching declaration.
+
+### `usesSharedRotation`
+
+If your formula uses Rodrigues rotation via the shared `gmt_precalcRodrigues()` transform (from `features/geometry/transforms.ts`), set:
+
+```ts
+shader: {
+  usesSharedRotation: true,
+  // ...
+}
+```
+
+This tells the interlace system to save/restore rotation state between the primary and secondary formula.
+
+### Cross-references
+
+- Full interlace architecture: [`docs/24_Formula_Interlace_System.md`](24_Formula_Interlace_System.md)
+- Complete formula API surface: [`docs/25_Formula_Dev_Reference.md`](25_Formula_Dev_Reference.md)
+- GLSL quirks (const restriction, preamble assembly order): [`docs/25_Formula_Dev_Reference.md` §8](25_Formula_Dev_Reference.md)

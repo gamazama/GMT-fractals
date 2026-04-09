@@ -3,7 +3,7 @@ import React, { useRef, useEffect, useState, useMemo, useLayoutEffect } from 're
 import { createPortal } from 'react-dom';
 import { registry } from '../../../engine/FractalRegistry';
 import { FormulaType } from '../../../types';
-import { PREDEFINED_CATEGORIES } from '../../../formulas';
+import { PREDEFINED_CATEGORIES } from '../../../formulas/categories';
 import { loadGMFScene } from '../../../utils/FormulaFormat';
 import { UploadIcon, NetworkIcon, ChevronDown, CheckIcon, CubeIcon, LoadIcon, CodeIcon } from '../../Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';

@@ -1,5 +1,11 @@
 # Fragmentarium Importer Formula Analysis
 
+> **⚠️ SUPERSEDED** — This analysis was for the V2 parser. The V3 pipeline is now the primary importer
+> with 64/64 test formulas passing and 494 verified library formulas. See:
+> - [21_Frag_Importer_Current_Status.md](../21_Frag_Importer_Current_Status.md) — current status
+>
+> Kept for historical context only.
+
 ## Analysis of Testing Guide Formulas - V2 Parser Compatibility
 
 This document reviews each formula from the TESTING_GUIDE.md and assesses V2 parser compatibility.

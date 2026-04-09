@@ -92,16 +92,8 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
         // Set initial canvas pixel size for UI estimates
         state.setCanvasPixelSize(Math.floor(initW * dpr), Math.floor(initH * dpr));
 
-        // Send initial offset so the worker starts at the correct position
-        const offset = state.sceneOffset;
-        if (offset) {
-            const precise = {
-                x: offset.x, y: offset.y, z: offset.z,
-                xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
-            };
-            proxy.setShadowOffset(precise);
-            proxy.post({ type: 'OFFSET_SET', offset: precise });
-        }
+        // Initial offset is sent by useAppStartup's bootEngine() after full
+        // store hydration — no need to duplicate it here (RC-5).
 
         // Watch container for post-init layout shifts (dock transitions, panel
         // opening, etc.) and push the corrected size to the worker so the very

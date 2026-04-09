@@ -1,6 +1,10 @@
 
 # Context: Current State & Architecture
 
+> **📸 Historical Snapshot (March 2026)** — This file captures the project state at a point in time.
+> For current architecture, see [01_System_Architecture.md](../01_System_Architecture.md).
+> For current project status, see [DOCS_INDEX.md](../DOCS_INDEX.md).
+
 **Current Status:** DDFS Migration Complete. All core features migrated to Data-Driven Feature System.
 
 ---
@@ -94,12 +98,12 @@ A built-in tool for importing Fragmentarium `.frag` files has been added:
 4. Adjust uniform → param mappings in the workshop UI
 5. Import and compile
 
-### Current Status: 🟢 40/40 tests passing
+### Current Status: 🟢 64/64 tests passing (V3 pipeline)
 
 Run `npx tsx debug/test-frag-importer.mts` to verify. See `docs/21_Frag_Importer_Current_Status.md` for details and remaining open issues.
 
 ### Technical Notes (Architecture — Not Broken)
-- V2 uses `@shaderfrog/glsl-parser` for AST-level renaming, loop extraction, and helper function transformation — eliminates regex bugs (e.g., `z.z → z_local.z_local`)
+- V3 uses `@shaderfrog/glsl-parser` for AST-level renaming, loop extraction, and helper function transformation — eliminates regex bugs (e.g., `z.z → z_local.z_local`)
 - Automatic pattern detection: `MENGER`, `MANDELBOX`, `AMAZING_SURFACE`, `GENERIC`
 - Vec2/Vec3 slot mapping in UI is implemented (`vec2A/B/C`, `vec3A/B/C`)
 - `providesInit` body inlining is implemented but untested on real files

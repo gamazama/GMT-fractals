@@ -470,6 +470,7 @@ export const bindStoreToEngine = () => {
 
     // Sync renderMode UI state when lighting.renderMode changes (compile-time toggle)
     useFractalStore.subscribe(state => (state as any).lighting?.renderMode, (val) => {
+        if (val === undefined) return; // Feature not yet initialized
         const mode = val === 1.0 ? 'PathTracing' : 'Direct';
         if (useFractalStore.getState().renderMode !== mode) {
             useFractalStore.setState({ renderMode: mode });

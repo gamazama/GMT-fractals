@@ -1,5 +1,6 @@
 
 # Rendering Internals
+> Last updated: 2026-04-08 | GMT v0.9.1
 
 GMT uses a Fullscreen Quad Raymarcher. There is no traditional geometry; the entire scene is a mathematical volume rendered on two triangles covering the screen.
 

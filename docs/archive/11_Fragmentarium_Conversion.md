@@ -1,5 +1,12 @@
 # Fragmentarium to GMF Conversion Guide
 
+> **⚠️ SUPERSEDED** — This document is from the early importer era. For current conversion guidance, see:
+> - [21_Frag_Importer_Current_Status.md](../21_Frag_Importer_Current_Status.md) — current importer status (V3 pipeline, 64/64 passing)
+> - [22_Frag_to_Native_Formula_Conversion.md](../22_Frag_to_Native_Formula_Conversion.md) — step-by-step native formula conversion
+> - [25_Formula_Dev_Reference.md](../25_Formula_Dev_Reference.md) — full formula API reference
+>
+> Kept for historical context only.
+
 This document explains how to convert Fragmentarium (`.frag`) shader files to GMT's GMF (GPU Mandelbulb Format) for use in the gallery.
 
 ## Overview

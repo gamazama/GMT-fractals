@@ -13,7 +13,7 @@ Before making ANY code changes, you MUST read the relevant documentation using t
 |---------------|-----------|
 | Engine, render loop, state | `docs/01_System_Architecture.md` |
 | Raymarching, SDF, path tracing, accumulation | `docs/02_Rendering_Internals.md` |
-| Feature system (DDFS), adding features | `docs/03_Modular_System.md` |
+| Modular graph builder, node-to-GLSL | `docs/03_Modular_System.md` |
 | Animation, keyframes, timeline | `docs/04_Animation_Engine.md` |
 | Video export, presets, GMF format | `docs/05_Data_and_Export.md` |
 | Debugging, WebGL issues | `docs/06_Troubleshooting_and_Quirks.md` |
@@ -62,9 +62,9 @@ After making changes, update the relevant docs if you discovered new patterns, q
 - No test suite exists yet — be careful with refactors, test manually
 
 ## Formulas & File I/O
-- 30 formula files in `formulas/` (.ts with embedded GLSL)
+- 42 formula files in `formulas/` (.ts with embedded GLSL)
 - GMF format files in `public/gmf/` (formula library)
-- Frag importer test suite: `npx tsx debug/test-frag-importer.mts` (40/40 passing)
+- Frag importer test suite: `npx tsx debug/test-frag-importer.mts` (64/64 passing)
 - **GMF is the primary save format** — all scenes save as `.gmf` (formula shader + full scene state). JSON is load-only for backward compat. PNG snapshots embed GMF in metadata. See `docs/05_Data_and_Export.md`.
 - Key functions: `saveGMFScene()` / `loadGMFScene()` in `utils/FormulaFormat.ts`
 

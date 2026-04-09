@@ -1,6 +1,6 @@
-# GMT Development Changelog (v0.9.0 dev)
+# GMT Development Changelog (v0.9.1 dev)
 
-Chronological log of significant changes during the v0.9.0 development cycle (uncommitted on `dev` branch).
+Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
 ## 2026-04-08
 
