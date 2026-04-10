@@ -144,7 +144,7 @@ export function rewriteLoopBody(loopBody: string, formulaId: string): string {
  * Rewrite a formula's loopInit for interlacing.
  * Remaps function calls that reference the formula name and remap uniforms.
  */
-export function rewriteLoopInit(loopInit: string, formulaId: string): string {
+export function rewriteLoopInit(loopInit: string, formulaId: string, preambleVars?: string[]): string {
     let result = loopInit;
 
     // Rename precalc function calls (e.g. KaliBox_precalcRotation -> interlace_KaliBox_precalcRotation)
@@ -155,6 +155,11 @@ export function rewriteLoopInit(loopInit: string, formulaId: string): string {
 
     // Remap uniforms in loopInit
     result = applyUniformMap(result);
+
+    // Rename preamble global references (e.g. gsd_dmin -> interlace_gsd_dmin)
+    if (preambleVars && preambleVars.length > 0) {
+        result = applyPreambleVarRenames(result, preambleVars);
+    }
 
     return result;
 }

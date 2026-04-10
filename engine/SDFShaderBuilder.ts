@@ -165,7 +165,7 @@ function buildInterlaceGLSL(interlace: MeshInterlaceConfig): { preamble: string;
   const func = rewriteFormulaFunction(def.shader.function, def.id, def.shader.preambleVars);
   let loopInit = '';
   if (def.shader.loopInit) {
-    loopInit = rewriteLoopInit(def.shader.loopInit, def.id);
+    loopInit = rewriteLoopInit(def.shader.loopInit, def.id, def.shader.preambleVars);
   }
   return { preamble, func, loopInit };
 }
@@ -180,7 +180,7 @@ function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?
     const rewrittenBody = rewriteLoopBody(interlace.definition.shader.loopBody, interlace.definition.id);
     let interlaceInit = '';
     if (interlace.definition.shader.loopInit) {
-      interlaceInit = rewriteLoopInit(interlace.definition.shader.loopInit, interlace.definition.id);
+      interlaceInit = rewriteLoopInit(interlace.definition.shader.loopInit, interlace.definition.id, interlace.definition.shader.preambleVars);
     }
     const needsRotSwap = !!interlace.definition.shader.usesSharedRotation;
     ({ preLoop: interlacePreLoop, inLoop: interlaceInLoop } = buildInterlaceLoopGLSL(

@@ -325,7 +325,7 @@ export const InterlaceFeature: FeatureDefinition = {
         // Build loopInit for the secondary formula
         let interlaceInit = '';
         if (def.shader.loopInit) {
-            interlaceInit = rewriteLoopInit(def.shader.loopInit, def.id);
+            interlaceInit = rewriteLoopInit(def.shader.loopInit, def.id, def.shader.preambleVars);
         }
 
         const needsRotSwap = !!def.shader.usesSharedRotation;
