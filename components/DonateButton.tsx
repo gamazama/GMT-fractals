@@ -1,40 +1,13 @@
-// DonateButton.tsx — PayPal hosted donate button wrapper with hover photo reveal
-import React, { useEffect, useRef, useState } from 'react';
+// DonateButton.tsx — Ko-fi donate button with hover photo reveal
+import React from 'react';
 
-const PAYPAL_SDK_SRC = 'https://www.paypal.com/sdk/js?client-id=BAAfzB8VTLfRpVGvukApMACe-CnkEJY7H9a3DJ-IxKOf5Eye1X_Ed8LPBpw1FaZRKFedMi3HuWuEp2M7fo&components=hosted-buttons&disable-funding=venmo&currency=USD';
-const HOSTED_BUTTON_ID = 'WHMZWATKN6GEY';
-const DONATE_URL = 'https://www.paypal.com/ncp/payment/WHMZWATKN6GEY';
-
-let sdkPromise: Promise<void> | null = null;
-
-/** Load the PayPal SDK script once, shared across all instances */
-function loadPayPalSDK(): Promise<void> {
-  if (sdkPromise) return sdkPromise;
-  if ((window as any).paypal?.HostedButtons) {
-    sdkPromise = Promise.resolve();
-    return sdkPromise;
-  }
-  sdkPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = PAYPAL_SDK_SRC;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      sdkPromise = null;
-      reject(new Error('Failed to load PayPal SDK'));
-    };
-    document.head.appendChild(script);
-  });
-  return sdkPromise;
-}
+const KOFI_URL = 'https://ko-fi.com/gmtfractals';
 
 /** Photo: slide+clip intro, scale outro */
 const GuyReveal: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const h = compact ? 48 : 64;
   const clipRef = React.useRef<HTMLDivElement>(null);
   const imgRef = React.useRef<HTMLImageElement>(null);
-  const timerRef = React.useRef(0);
-  const isHovered = React.useRef(false);
 
   React.useEffect(() => {
     const clip = clipRef.current;
@@ -43,8 +16,6 @@ const GuyReveal: React.FC<{ compact?: boolean }> = ({ compact }) => {
     if (!clip || !img || !group) return;
 
     const onEnter = () => {
-      isHovered.current = true;
-      clearTimeout(timerRef.current);
       // Reset scale instantly, then slide open
       img.style.transition = 'none';
       img.style.transform = 'scale(1)';
@@ -54,7 +25,6 @@ const GuyReveal: React.FC<{ compact?: boolean }> = ({ compact }) => {
       clip.style.maxHeight = '100px';
     };
     const onLeave = () => {
-      isHovered.current = false;
       // Scale down from bottom
       img.style.transition = 'transform 0.3s ease-in';
       img.style.transform = 'scale(0)';
@@ -92,86 +62,44 @@ const GuyReveal: React.FC<{ compact?: boolean }> = ({ compact }) => {
   );
 };
 
-interface DonateButtonProps {
-  /** Compact mode for tight spaces (e.g. header bars) */
-  compact?: boolean;
-}
+const PAYPAL_URL = 'https://www.paypal.com/ncp/payment/WHMZWATKN6GEY';
 
-export const DonateButton: React.FC<DonateButtonProps> = ({ compact = false }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const renderedRef = useRef(false);
+/** Ko-fi + PayPal buttons for modal/panel use */
+export const DonateButton: React.FC = () => (
+  <div className="flex flex-col gap-2">
+    <a
+      href={KOFI_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#13C3FF] hover:bg-[#00b0f0] text-white text-xs font-bold transition-colors"
+    >
+      <img src="https://storage.ko-fi.com/cdn/cup-border.png" alt="" className="h-4 w-auto" />
+      Support on Ko-fi
+    </a>
+    <a
+      href={PAYPAL_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] text-white text-xs font-bold transition-colors"
+    >
+      <img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="" className="h-4 w-auto" />
+      Support via PayPal
+    </a>
+  </div>
+);
 
-  useEffect(() => {
-    if (renderedRef.current) return;
-    let cancelled = false;
-
-    loadPayPalSDK()
-      .then(() => {
-        if (cancelled || !containerRef.current || renderedRef.current) return;
-        renderedRef.current = true;
-        const paypal = (window as any).paypal;
-        if (paypal?.HostedButtons) {
-          paypal.HostedButtons({ hostedButtonId: HOSTED_BUTTON_ID })
-            .render(containerRef.current)
-            .then(() => { if (!cancelled) setState('ready'); })
-            .catch(() => { if (!cancelled) setState('error'); });
-        } else {
-          setState('error');
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setState('error');
-      });
-
-    return () => { cancelled = true; };
-  }, []);
-
-  // Fallback link if SDK fails (e.g. adblocker)
-  if (state === 'error') {
-    return (
-      <div className="group relative">
-        <GuyReveal compact={compact} />
-        <a
-          href={DONATE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`inline-flex items-center gap-1.5 rounded transition-colors ${
-            compact
-              ? 'px-3 py-1 text-[11px] bg-amber-600/80 hover:bg-amber-500 text-white font-bold'
-              : 'px-3 py-1.5 text-[11px] bg-amber-600/80 hover:bg-amber-500 text-white font-bold'
-          }`}
-        >
-          Donate via PayPal
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="group relative">
-      <GuyReveal compact={compact} />
-      <div
-        ref={containerRef}
-        className={`transition-opacity ${state === 'loading' ? 'opacity-40' : 'opacity-100'}`}
-        style={compact ? { maxWidth: 160 } : { maxWidth: 220 }}
-      />
-    </div>
-  );
-};
-
-/** Simple link-style donate button with hover photo reveal (no PayPal SDK needed) */
+/** Simple link-style donate button with hover photo reveal */
 export const DonateLink: React.FC<{ compact?: boolean }> = ({ compact = false }) => (
   <div className="group relative">
     <GuyReveal compact={compact} />
     <a
-      href={DONATE_URL}
+      href={KOFI_URL}
       target="_blank"
       rel="noopener noreferrer"
       className={`inline-flex items-center gap-2 rounded transition-colors font-bold ${
         compact
-          ? 'px-3 py-1 text-[11px] bg-amber-600/80 hover:bg-amber-500 text-white'
-          : 'px-3 py-1.5 text-[11px] bg-amber-600/80 hover:bg-amber-500 text-white'
+          ? 'px-3 py-1 text-[11px] bg-[#13C3FF] hover:bg-[#00b0f0] text-white'
+          : 'px-3 py-1.5 text-[11px] bg-[#13C3FF] hover:bg-[#00b0f0] text-white'
       }`}
     >
       Support GMT

@@ -122,10 +122,10 @@ function MeshDonateButton() {
         />
       </div>
       <a
-        href="https://www.paypal.com/ncp/payment/WHMZWATKN6GEY"
+        href="https://ko-fi.com/gmtfractals"
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-3 py-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white text-[11px] font-bold transition-colors"
+        className="inline-flex items-center gap-2 px-3 py-1 rounded bg-[#13C3FF] hover:bg-[#00b0f0] text-white text-[11px] font-bold transition-colors"
       >
         Support GMT
       </a>
