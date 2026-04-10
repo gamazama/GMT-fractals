@@ -72,15 +72,25 @@ export function rewritePreamble(preamble: string, formulaId: string, preambleVar
     // Dev-mode: warn if the preamble declares mutable globals not listed in preambleVars.
     // Missing entries mean the interlace shader will silently use the wrong variable names.
     if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
-        const declPattern = /^\s*(?:vec[234]|float|int|mat[234]|bool)\s+(?!const\b)(\w+)/gm;
-        let m;
-        while ((m = declPattern.exec(preamble)) !== null) {
-            const name = m[1];
-            if (!(preambleVars ?? []).includes(name)) {
-                console.warn(
-                    `[interlace] Formula "${formulaId}" declares preamble var "${name}" ` +
-                    `not listed in shader.preambleVars — interlace renaming will be incomplete.`
-                );
+        // Only scan top-level declarations (brace depth 0), skip function bodies
+        const declPattern = /^\s*(?:vec[234]|float|int|mat[234]|bool)\s+(?!const\b)(\w+)/;
+        let depth = 0;
+        for (const line of preamble.split('\n')) {
+            if (depth === 0) {
+                const m = declPattern.exec(line);
+                if (m) {
+                    const name = m[1];
+                    if (!(preambleVars ?? []).includes(name)) {
+                        console.warn(
+                            `[interlace] Formula "${formulaId}" declares preamble var "${name}" ` +
+                            `not listed in shader.preambleVars — interlace renaming will be incomplete.`
+                        );
+                    }
+                }
+            }
+            for (const ch of line) {
+                if (ch === '{') depth++;
+                else if (ch === '}') depth--;
             }
         }
     }
