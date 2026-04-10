@@ -32,6 +32,7 @@ export interface EngineRenderState {
     isGizmoInteracting: boolean;
     isCameraInteracting: boolean;
     isMobile: boolean;
+    mouseOverCanvas: boolean;
     optics: OpticsState | null;
     lighting: LightingState | null;
     quality: QualityState | null;
@@ -79,6 +80,7 @@ export class FractalEngine {
         isGizmoInteracting: false,
         isCameraInteracting: false,
         isMobile: false,
+        mouseOverCanvas: true,
         optics: null,
         lighting: null,
         quality: null,

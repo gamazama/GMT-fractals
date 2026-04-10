@@ -390,7 +390,40 @@ When `focusLock` is enabled in the store, the probe syncs `dofFocus` to the smoo
 | `engine/controllers/CameraController.ts` | Second smoothing layer, speed calculation |
 | `components/Navigation.tsx` | Consumes `distAverageRef` for camera physics |
 
-## 5. Bucket Renderer
+## 5. Adaptive Resolution
+
+Context-aware dynamic resolution scaling, enabled by default. Adjusts the internal render resolution to maintain a target FPS (default 30), then restores full resolution when idle.
+
+### Behavior
+
+Depends on mouse position (tracked via `mouseOverCanvas` in the render state):
+- **Mouse on canvas:** Active during camera/gizmo interaction. After interaction stops, an FPS-based grace period runs before restoring full resolution (1fps→2s, 10fps→200ms, 30fps+→100ms minimum).
+- **Mouse on UI** (panels, menus, timelines): Always-on — keeps resolution reduced so slider drags and menu interactions stay responsive. Any accumulation reset (parameter change, formula switch) is detected as activity.
+
+### FPS Control Loop
+
+Runs inside `UniformManager.syncFrame()` every frame:
+1. **Measure FPS** every 500ms using frame timestamps.
+2. **Adjust scale** proportionally: `idealScale = currentScale * sqrt(targetFPS / measuredFPS)`, smoothed with 70/30 blend to avoid oscillation.
+3. **Dead zone:** Skip resize if resulting pixel dimensions change by less than 5% — avoids constant accumulation resets from tiny fluctuations.
+4. **Seed on start:** When interaction begins, immediately seed the scale from the still-frame FPS so the first frame renders at an appropriate resolution (no slow ramp-up).
+5. **Clamp** between 1x (full res) and 4x downscale.
+
+### Safety
+
+Disabled during bucket rendering and video export (`isExporting || isBucketRendering` guard in `UniformManager.syncFrame()`). Self-caused accumulation resets (from resolution changes) are flagged via `_selfResized` to prevent feedback loops.
+
+### Key Files
+
+| File | Role |
+|------|------|
+| `engine/managers/UniformManager.ts` | FPS measurement, scale adjustment, resolution application |
+| `features/quality.ts` | `dynamicScaling`, `adaptiveTarget`, `interactionDownsample` params |
+| `components/topbar/AdaptiveResolution.tsx` | Top bar toggle icon (cyan=auto, amber=always) |
+| `engine/worker/ViewportRefs.ts` | `mouseOverCanvas` tracking |
+| `components/PerformanceMonitor.tsx` | Low FPS warning with "Adaptive Resolution" suggestion |
+
+## 6. Bucket Renderer
 For resolutions higher than the GPU limit (e.g., 8K), or to prevent TDR (Timeout Detection Recovery) crashes:
 1.  **Tiling:** The screen is divided into small buckets (e.g., 128x128).
 2.  **Scissor:** The projection matrix is skewed to render *only* that tiny window.
@@ -398,7 +431,7 @@ For resolutions higher than the GPU limit (e.g., 8K), or to prevent TDR (Timeout
 4.  **Composite:** The result is copied to a final canvas. (may need more work to ensure it can handle large files)
 5.  **Repeat:** Move to next bucket.
 
-### 5.1 Bucket Renderer Architecture (Updated 2026-03)
+### 6.1 Bucket Renderer Architecture (Updated 2026-03)
 
 The bucket renderer handles high-resolution output (4K-10K+):
 
@@ -448,7 +481,7 @@ Note: The worker's own `engine.state.isExporting` stays `false` so `update()` an
 - `4x` = 8K from 1080p viewport
 - `8x` = 10K+ from 1080p viewport
 
-### 5.2 Region Rendering
+### 6.2 Region Rendering
 
 The viewport supports a **render region** — a user-drawn rectangle that constrains accumulation to a sub-area while preserving the rest of the image from history.
 
@@ -479,7 +512,7 @@ The region overlay displays live stats:
 - **Sample cap** with click-to-cycle control (0/64/128/256/512/1024/2048/4096)
 - **Live convergence** value vs threshold — turns green when converged
 
-### 5.3 Convergence Measurement
+### 6.3 Convergence Measurement
 
 A single convergence system shared by both bucket rendering and viewport accumulation.
 

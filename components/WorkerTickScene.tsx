@@ -20,7 +20,7 @@ import { useFractalStore } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import type { SerializedCamera, SerializedOffset } from '../engine/worker/WorkerProtocol';
-import { setViewportCamera, setViewportCanvas, snapshotDisplayCamera, getViewportCamera } from '../engine/worker/ViewportRefs';
+import { setViewportCamera, setViewportCanvas, snapshotDisplayCamera, getViewportCamera, isMouseOverCanvas } from '../engine/worker/ViewportRefs';
 import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 
 // Tick implementations
@@ -218,6 +218,7 @@ const WorkerTickScene: React.FC<WorkerTickSceneProps> = ({ onLoaded }) => {
             cameraMode: storeState.cameraMode,
             isCameraInteracting: useAnimationStore.getState().isCameraInteracting,
             isGizmoInteracting: proxy.isGizmoInteracting,
+            mouseOverCanvas: isMouseOverCanvas(),
             optics: (storeState as any).optics ?? null,
             lighting: (storeState as any).lighting ?? null,
             quality: (storeState as any).quality ?? null,

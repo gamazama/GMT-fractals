@@ -12,6 +12,7 @@ import Slider, { DraggableNumber } from '../Slider';
 import { Popover } from '../../components/Popover';
 import { LightingState } from '../../features/lighting';
 import { ViewportQuality } from './ViewportQuality';
+import { AdaptiveResolution } from './AdaptiveResolution';
 
 export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void }> = ({ isMobileMode, vibrate }) => {
     const state = useFractalStore();
@@ -214,6 +215,7 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                 <div className="h-6 w-px bg-white/10" />
 
                 <ViewportQuality />
+                <AdaptiveResolution />
 
                 <button
                     onClick={toggleRenderMode}

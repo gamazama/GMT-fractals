@@ -188,6 +188,20 @@ This ensures:
 *   **Cause:** Resize, uniform, config, or offset messages reaching the worker mid-render corrupt the pipeline state.
 *   **Fix:** Three-layer lock: (1) worker message filter drops all messages except `BUCKET_STOP`/`RENDER_TICK`, (2) main thread sets `isExporting=true` to lock UI via `selectMovementLock`, (3) WorkerDisplay ResizeObserver skips during `isBucketRendering`.
 
+### Firefox ~50% Lower FPS Than Chrome (Platform Limitation)
+*   **Cause:** Firefox's OffscreenCanvas presentation path adds ~16ms of invisible GPU overhead per frame, halving the effective frame rate. This is a **Firefox platform limitation**, not a bug in our code.
+*   **Root cause — presentation architecture:**
+    - **Chrome:** WebGL renders into a texture shared with the compositor via GPU-native D3D11 shared handles — effectively **zero-copy**. The rendered texture goes directly from worker GPU context to compositor.
+    - **Firefox:** WebGL runs in a separate compositor process. Frame presentation goes through `SharedSurface` + `RemoteTextureMap` IPC, which involves an implicit GPU synchronization (fence/finish equivalent) per frame. This adds ~16ms of GPU sync overhead that is invisible in CPU-side timing but delays the compositor.
+    - The overhead specifically occurs when rendering to the OffscreenCanvas default framebuffer (`setRenderTarget(null)` + `render()`). Rendering to FBOs (the fractal compute) runs at full speed on both browsers.
+*   **Confirmed by testing:** Skipping the canvas blit restores 60fps on Firefox with the worker still computing at full speed. No code-level workaround was found — the overhead is in Firefox's `SharedSurface` swap/present mechanism.
+*   **Mitigation:** Adaptive Resolution (enabled by default) auto-adjusts the internal render resolution to maintain a target FPS. This significantly improves interactivity on Firefox by reducing the pixel count that passes through the slow presentation path. The top bar icon shows the current state (cyan = auto, amber = always-on).
+*   **Status:** No code-level fix for the presentation overhead. Firefox Bugzilla references:
+    - [Bug 1657125](https://bugzilla.mozilla.org/show_bug.cgi?id=1657125) — "insufficient concurrency between client and host" in out-of-process WebGL
+    - [Bug 1788206](https://bugzilla.mozilla.org/show_bug.cgi?id=1788206) — `transferToImageBitmap` also broken (CPU readback, 25-30ms)
+    - [Bug 1791693](https://bugzilla.mozilla.org/show_bug.cgi?id=1791693) — RemoteTexture sync present (22-68% improvement on some platforms, but not sufficient)
+*   **Note:** Firefox also lacks `KHR_parallel_shader_compile`, so `compileAsync` degrades to synchronous. This affects compile latency but not per-frame FPS.
+
 ## 10. HalfFloat16 Buffer Handling
 
 ### Reading Depth from HalfFloat16 Buffers

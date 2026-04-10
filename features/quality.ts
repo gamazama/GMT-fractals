@@ -17,6 +17,7 @@ export interface QualityState {
     bufferPrecision: number; // 0=Float32, 1=HalfFloat16
     dynamicScaling: boolean;
     interactionDownsample: number;
+    adaptiveTarget: number; // Smart adaptive target FPS (0=off, >0=auto-adjust)
     estimator: number; // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
     overstepTolerance: number; // Candidate Recovery Threshold
     physicsProbeMode: number; // 0=GPU Probe, 1=CPU Calculation, 2=Manual
@@ -144,7 +145,7 @@ export const QualityFeature: FeatureDefinition = {
         
         dynamicScaling: {
             type: 'boolean',
-            default: false,
+            default: true,
             label: 'Adaptive Resolution',
             shortId: 'ds',
             group: 'performance',
@@ -157,8 +158,18 @@ export const QualityFeature: FeatureDefinition = {
             shortId: 'id',
             min: 1.0, max: 4.0, step: 0.5,
             group: 'performance',
-            condition: { param: 'dynamicScaling', bool: true },
+            condition: { and: [{ param: 'dynamicScaling', bool: true }, { param: 'adaptiveTarget', eq: 0 }] },
             format: (v) => `1/${v}x`,
+            noReset: true
+        },
+        adaptiveTarget: {
+            type: 'float',
+            default: 30,
+            label: 'Target FPS',
+            shortId: 'at',
+            min: 15, max: 60, step: 5,
+            group: 'performance',
+            condition: { param: 'dynamicScaling', bool: true },
             noReset: true
         },
         physicsProbeMode: {

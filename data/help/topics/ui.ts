@@ -302,7 +302,8 @@ This panel is for advanced users who want fine control over individual compile-t
 The system automatically detects sustained low framerates.
 
 - **Low FPS Warning**: Appears if the renderer struggles to maintain a usable frame rate.
-- **Suggestion Buttons**: One or more actions are offered depending on the situation — **Reset Scale**, **Reduce Quality**, or **Reduce Resolution** (reduces internal resolution by ~33%) — to help restore interactivity.
+- **Suggestion Buttons**: One or more actions are offered depending on the situation — **Adaptive Resolution** (auto-adjusts resolution to target FPS), **Reset Scale**, **Reduce Quality**, or **Reduce Resolution** (reduces internal resolution by ~33%).
+- **Firefox Note**: On Firefox, a note explains that OffscreenCanvas has a known rendering overhead that reduces frame rate. This is a browser platform limitation, not a bug in GMT.
 - **Dismiss**: Ignores the warning for this session.
 `
     }

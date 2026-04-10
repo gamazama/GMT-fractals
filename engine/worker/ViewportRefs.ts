@@ -114,3 +114,9 @@ export function getDisplayCamera(): THREE.Camera | null {
     if (_isOrthoActive) return _displayOrthoCamera || _camera;
     return _displayPerspCamera || _camera;
 }
+
+// Track whether the mouse is over the viewport canvas (vs UI panels/menus).
+// Used by adaptive resolution to decide grace period behavior.
+let _mouseOverCanvas = false;
+export function setMouseOverCanvas(over: boolean) { _mouseOverCanvas = over; }
+export function isMouseOverCanvas(): boolean { return _mouseOverCanvas; }

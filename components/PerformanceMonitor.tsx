@@ -8,6 +8,8 @@ import { AlertIcon, CloseIcon, CheckIcon, LayersIcon, CubeIcon } from './Icons';
 import { collectHelpIds } from '../utils/helpUtils';
 import { QualityState } from '../features/quality';
 
+const _isFirefox = /Firefox/i.test(navigator.userAgent);
+
 // Global refs to track performance across ticks
 const performanceState = {
     lowFpsBuffer: 0,
@@ -193,16 +195,25 @@ export const PerformanceMonitor = () => {
     const qState = quality as QualityState;
     const isLite = qState?.precisionMode === 1.0;
     const canSwitchLite = !isLite;
-    
+
     const handleLiteMode = () => {
-        // We use the Engine Settings logic via a direct action if possible, 
+        // We use the Engine Settings logic via a direct action if possible,
         // or just manually set the critical params to save perf.
         const setQuality = (useFractalStore.getState() as any).setQuality;
         const setLighting = (useFractalStore.getState() as any).setLighting;
-        
+
         if (setQuality) setQuality({ precisionMode: 1.0, bufferPrecision: 1.0 });
         if (setLighting) setLighting({ shadows: false }); // Disable shadows for massive gain
-        
+
+        dismissTemporarily();
+    };
+
+    // 4. Adaptive Resolution (especially useful on Firefox)
+    const dynamicScaling = (qState as any)?.dynamicScaling;
+    const canEnableAdaptive = !dynamicScaling;
+    const handleAdaptive = () => {
+        const setQuality = (useFractalStore.getState() as any).setQuality;
+        if (setQuality) setQuality({ dynamicScaling: true, adaptiveTarget: 30 });
         dismissTemporarily();
     };
 
@@ -236,9 +247,25 @@ export const PerformanceMonitor = () => {
                     </button>
                 </div>
                 
+                {_isFirefox && (
+                    <p className="text-red-300/70 text-[8px] leading-tight mb-0.5">
+                        Firefox has a known rendering overhead with OffscreenCanvas that reduces frame rate.
+                    </p>
+                )}
+
                 <div className="flex flex-col gap-1">
+                    {canEnableAdaptive && (
+                        <button
+                            onClick={handleAdaptive}
+                            className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
+                        >
+                            <span className="flex items-center gap-1.5"><CheckIcon /> Adaptive Resolution</span>
+                            <span className="text-cyan-400 font-bold">Fix</span>
+                        </button>
+                    )}
+
                     {canResetScale && (
-                        <button 
+                        <button
                             onClick={handleResetScale}
                             className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
                         >
@@ -248,7 +275,7 @@ export const PerformanceMonitor = () => {
                     )}
 
                     {canSwitchLite && (
-                        <button 
+                        <button
                             onClick={handleLiteMode}
                             className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
                         >
@@ -258,7 +285,7 @@ export const PerformanceMonitor = () => {
                     )}
 
                     {canReduce && (
-                        <button 
+                        <button
                             onClick={handleReduce}
                             className="flex items-center justify-between bg-black/40 hover:bg-white/10 text-gray-300 text-[9px] px-2 py-1.5 rounded transition-colors border border-white/5"
                         >

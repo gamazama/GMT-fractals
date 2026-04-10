@@ -19,6 +19,7 @@ import { CompilingIndicator } from './CompilingIndicator';
 import WorkerTickScene from './WorkerTickScene';
 import { WorkerDisplay } from './WorkerDisplay';
 import { getProxy } from '../engine/worker/WorkerProxy';
+import { setMouseOverCanvas } from '../engine/worker/ViewportRefs';
 
 const engine = getProxy();
 
@@ -277,7 +278,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
     const handleInput = (e: React.PointerEvent | React.WheelEvent) => {};
 
     return (
-        <div ref={viewportRef} className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${isSelectingRegion ? 'cursor-crosshair' : (isDrawingToolActive ? 'cursor-crosshair' : '')}`} style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} >
+        <div ref={viewportRef} className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${isSelectingRegion ? 'cursor-crosshair' : (isDrawingToolActive ? 'cursor-crosshair' : '')}`} style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} onMouseEnter={() => setMouseOverCanvas(true)} onMouseLeave={() => setMouseOverCanvas(false)} >
             {isFixed && <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '40px 40px' }} />}
             
             {!isCleanFeed && <HudOverlay state={state} actions={state} isMobile={state.debugMobileLayout || isMobileDevice} activeHint={activeHint} onDismissHint={onDismissHint} hudRefs={hudRefs} />}

@@ -530,9 +530,17 @@ When enabled, the raymarcher takes larger steps in open space (where it is safe)
         title: 'Adaptive Resolution',
         parentId: 'panel.quality',
         content: `
-Dynamically lowers the rendering resolution while the camera is moving, then snaps back to full resolution when you stop.
+Automatically adjusts the rendering resolution to maintain a target frame rate (default 30 FPS). Enabled by default — toggle via the top bar icon.
 
-This gives you smoother, more responsive interaction when orbiting or flying through complex scenes, without permanently sacrificing image quality. The resolution recovers instantly once movement stops and Temporal AA cleans up the image.
+**Context-aware behavior:**
+- **Mouse on canvas**: Lowers resolution during camera movement or gizmo interaction. Restores full resolution after a grace period that scales with scene complexity (slow scenes get more time before restoring).
+- **Mouse on UI** (panels, menus, sliders): Keeps adaptive resolution active continuously so parameter adjustments and menu interactions stay responsive.
+
+**How it works:** The system measures FPS every 500ms and adjusts the internal render scale (1x–4x downsample) proportionally. A 5% dead zone prevents tiny fluctuations from causing constant resolution changes. On interaction start, the scale is immediately seeded from the current still-frame FPS so there's no slow ramp-up period.
+
+**Target FPS** can be adjusted in the Quality panel. The top bar icon shows the current state: **cyan** = auto mode (will restore full res), **amber** = always-on mode (mouse over UI).
+
+Disabled automatically during bucket rendering and video export.
 `
     },
     'export.video': {
