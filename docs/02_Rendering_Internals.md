@@ -411,7 +411,7 @@ Runs inside `UniformManager.syncFrame()` every frame:
 
 ### Safety
 
-Disabled during bucket rendering and video export (`isExporting || isBucketRendering` guard in `UniformManager.syncFrame()`). Self-caused accumulation resets (from resolution changes) are flagged via `_selfResized` to prevent feedback loops.
+Disabled during bucket rendering and video export (`isExporting || isBucketRendering` guard in `UniformManager.syncFrame()`). Self-caused accumulation resets (from resolution changes) are flagged via `_selfResized` to prevent feedback loops. **Full-res accumulation guard:** once the scene has accumulated ~1s of full-resolution frames (FPS-scaled threshold, 8–50 samples), adaptive locks off globally — moving the mouse to click snapshot or other UI buttons won't destroy the quality result. Only full-res samples count (`_fullResAccum`); reduced-res accumulation is ignored, preventing flicker cycles.
 
 ### Key Files
 

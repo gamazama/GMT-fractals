@@ -49,6 +49,7 @@ export class UniformManager {
     private _lastActivityTime = 0;      // Timestamp of last scene disturbance
     private _prevAccumCount = 0;        // Track accumulation resets from external sources
     private _selfResized = false;       // Flag to ignore self-caused accumulation resets
+    private _fullResAccum = 0;          // Accumulation count at full resolution only
 
     constructor(
         uniforms: { [key: string]: THREE.IUniform }, 
@@ -112,10 +113,28 @@ export class UniformManager {
             const autoGrace = Math.max(100, Math.min(3000, 2000 / Math.max(1, this._adaptiveStillFps)));
             const timeSinceActivity = now - this._lastActivityTime;
 
+            // Track full-res accumulation separately: only samples rendered at full
+            // resolution count toward the protection threshold. Samples accumulated at
+            // reduced resolution don't represent quality worth protecting.
+            if (this._adaptiveScale <= 1.001) {
+                this._fullResAccum = accumCount;
+            } else {
+                this._fullResAccum = 0;
+            }
+
+            // Don't disrupt meaningful full-res accumulation — threshold scales with FPS:
+            // at 1fps ~8 samples (8s wait), at 60fps ~50 samples (<1s).
+            const accumThreshold = Math.max(8, Math.min(50, Math.round(this._adaptiveStillFps)));
+            const isDeepAccumulation = this._fullResAccum >= accumThreshold;
+
             // Context-aware:
-            // Mouse on UI → always keep adaptive (no grace period timeout)
-            // Mouse on canvas → use FPS-based grace period, then restore full res
-            const needsAdaptive = runtimeState.quality?.dynamicScaling && (
+            // Deep full-res accumulation → adaptive OFF everywhere. Protects quality
+            //   results when user moves mouse to UI to click snapshot/buttons.
+            //   Only full-res samples count — reduced-res accumulation stays at 0,
+            //   so no flicker cycle when adaptive is active.
+            // Mouse on UI (no deep accum) → always adaptive for responsive feedback.
+            // Mouse on canvas (no deep accum) → FPS-based grace period.
+            const needsAdaptive = runtimeState.quality?.dynamicScaling && !isDeepAccumulation && (
                 !mouseOnCanvas || timeSinceActivity < autoGrace
             );
 
@@ -180,6 +199,7 @@ export class UniformManager {
                     this._adaptiveStillLast = now;
                 }
                 // Reset adaptive state so next disturbance re-seeds
+                this._adaptiveScale = 1.0;
                 this._adaptiveFrames = 0;
                 this._adaptiveLast = 0;
             }

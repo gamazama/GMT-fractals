@@ -2,7 +2,10 @@
 import React from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { isMouseOverCanvas } from '../../engine/worker/ViewportRefs';
+import { getProxy } from '../../engine/worker/WorkerProxy';
 import type { QualityState } from '../../features/quality';
+
+const engine = getProxy();
 
 const AdaptiveIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -29,13 +32,21 @@ export const AdaptiveResolution: React.FC = () => {
 
     // Icon color reflects current state:
     // - Off (gray): disabled
-    // - Auto/canvas (cyan): active with grace period, will restore full res
-    // - Always/UI (amber): active without grace period, continuously reduced
+    // - Guarded (green): full-res accumulation locked, image protected
+    // - Auto/canvas (cyan): active with grace period
+    // - Always/UI (amber): active without grace period
     const onCanvas = isMouseOverCanvas();
+    const accumCount = engine.accumulationCount;
+    // Approximate the worker's threshold (same formula: ~1s of frames, clamped 8-50)
+    const isGuarded = isActive && accumCount >= 8;
+
     let colorClass = 'text-gray-600 hover:text-gray-400';
     let stateLabel = 'Off';
     if (isActive) {
-        if (onCanvas) {
+        if (isGuarded) {
+            colorClass = 'text-green-400 bg-green-900/30 border border-green-500/30';
+            stateLabel = 'Locked';
+        } else if (onCanvas) {
             colorClass = 'text-cyan-400 bg-cyan-900/30 border border-cyan-500/30';
             stateLabel = 'Auto';
         } else {
