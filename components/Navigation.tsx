@@ -197,6 +197,9 @@ const Navigation: React.FC<NavigationProps> = ({
           if (mode === 'Orbit') {
                const d = newState.targetDistance || distAverageRef.current || 3.5;
                orbitRadiusRef.current = d;
+               // Update camera.up to preserve roll (Q/E rotation) through OrbitControls' lookAt.
+               // Without this, lookAt uses the stale up vector and strips roll.
+               camera.up.copy(new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion));
                // Update orbit target so it's correct if OrbitControls reads it before next onStart
                const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
                orbitTargetZero.current.copy(camera.position).addScaledVector(fwd, d);

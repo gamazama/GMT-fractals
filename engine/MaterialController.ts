@@ -234,7 +234,7 @@ export class MaterialController {
             this.activeDirectChecksum = checksum;
             this.shaderDirty = true;
 
-            if (import.meta.env.DEV) console.log(`[Shader Generated] Direct | Hash: ${checksum.substring(0, 8)} | Size: ${(fragDirect.length/1024).toFixed(1)}kb`);
+            // if (import.meta.env.DEV) console.log(`[Shader Generated] Direct | Hash: ${checksum.substring(0, 8)} | Size: ${(fragDirect.length/1024).toFixed(1)}kb`);
             FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragDirect);
         }
         this.lastGeneratedFrag = fragDirect;
@@ -256,7 +256,7 @@ export class MaterialController {
             this.activePTChecksum = checksum;
             this.shaderDirty = true;
 
-            if (import.meta.env.DEV) console.log(`[Shader Generated] PathTracing | Hash: ${checksum.substring(0, 8)} | Size: ${(fragPT.length/1024).toFixed(1)}kb`);
+            // if (import.meta.env.DEV) console.log(`[Shader Generated] PathTracing | Hash: ${checksum.substring(0, 8)} | Size: ${(fragPT.length/1024).toFixed(1)}kb`);
             FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragPT);
         }
         this.lastGeneratedFrag = fragPT;
@@ -333,7 +333,7 @@ export class MaterialController {
 
         const frag = ShaderFactory.generateFragmentShader(modeConfig);
         const checksum = cyrb53(frag).toString(16);
-        if (import.meta.env.DEV) console.log(`[Shader Generated] Full ${targetMode} | Hash: ${checksum.substring(0, 8)} | Size: ${(frag.length/1024).toFixed(1)}kb`);
+        // if (import.meta.env.DEV) console.log(`[Shader Generated] Full ${targetMode} | Hash: ${checksum.substring(0, 8)} | Size: ${(frag.length/1024).toFixed(1)}kb`);
 
         const fullMat = new THREE.ShaderMaterial({
             vertexShader: VERTEX_SHADER,

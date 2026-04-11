@@ -55,7 +55,7 @@ const App: React.FC = () => {
   }), []);
 
   // --- Logic Hooks ---
-  const { startupMode, bootEngine } = useAppStartup(isSceneReady);
+  const { startupMode, bootEngine, isHydrated } = useAppStartup(isSceneReady);
   const { isMobile, isPortrait } = useMobileLayout();
   useKeyboardShortcuts(showTimeline, setShowTimeline);
   useGlobalContextMenu();
@@ -142,11 +142,12 @@ const App: React.FC = () => {
           className={`relative bg-black select-none ${showCrosshair ? 'cursor-crosshair' : ''} flex flex-col ${isCurrentlyMobile && !isBroadcast ? 'h-[100vh] sticky top-0 overflow-hidden shadow-2xl' : 'w-full h-full'}`} 
           onContextMenu={(e) => e.preventDefault()}
       >
-        <LoadingScreen 
-            isReady={isSceneReady} 
-            onFinished={handleLoadingFinished} 
-            startupMode={startupMode} 
+        <LoadingScreen
+            isReady={isSceneReady}
+            onFinished={handleLoadingFinished}
+            startupMode={startupMode}
             bootEngine={bootEngine}
+            isHydrated={isHydrated}
         />
         
         {isCurrentlyMobile && isPortrait && !isLoadingVisible && !isBroadcast && (

@@ -2,6 +2,37 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-11
+
+### URL Sharing — Fix Formula Loading from Shared Links
+- **Bug**: Loading a scene from a `#s=` URL link loaded the default Mandelbulb instead of the correct formula
+- **Root cause**: `bootEngine()` (50ms timeout) raced with `import('../formulas')` (async chunk load). When the formula chunk took >50ms, boot read the store while it still had default state. The subsequent CONFIG from `loadScene` was dropped because `proxy.isBooted` was false.
+- **Fix**: `useAppStartup` exposes an `isHydrated` flag set after formula import + URL parse + `loadScene` completes. `LoadingScreen` gates `bootEngine()` on this flag.
+- Files: `hooks/useAppStartup.ts`, `App.tsx`, `components/LoadingScreen.tsx`
+
+### Camera Roll (Q/E) — Fix Rotation Lost on Scene Load
+- **Bug**: Loading a scene file in Orbit mode stripped the roll (Q/E) component of the camera rotation
+- **Root cause**: The teleport handler updated the orbit target but not `camera.up`. OrbitControls' `lookAt` used the stale up vector `(0,1,0)` and stripped roll.
+- **Fix**: `camera.up` is now updated from the teleported quaternion before the orbit target update, matching what `initOrbitPivot` already does.
+- Files: `components/Navigation.tsx`
+
+### Compile Spinner Gate — Event-Driven Compile Sequencing
+- **Problem**: The "Loading Preview..." spinner wasn't visible before GPU-blocking preview shader compilation. Various timing approaches (setTimeout, rAF, double-rAF, worker ACK) all had race conditions.
+- **Solution**: Event-driven architecture where the spinner literally causes compilation:
+  1. `setFormula`/`loadScene` call `queueCompileAfterSpinner()` which stores compile work and emits `IS_COMPILING` — no CONFIG is sent yet
+  2. `CompilingIndicator` renders, its ref callback (`pingRef`) fires when the DOM is committed
+  3. After `rAF → setTimeout(0)` (browser has painted), `flushCompileWork()` sends all CONFIGs + `CONFIG_DONE` to the worker
+  4. Worker receives `CONFIG_DONE` → `fireCompile()` → deterministic compile start
+- **State machine**: `consumeNewCycle()` flag distinguishes user-initiated cycles from worker status updates. `awaitingFlushRef` blocks stale `false` events from previous compiles. `statusRef` prevents false→false transitions from flashing the green bar.
+- **Debounce**: `scheduleCompile` no longer emits `IS_COMPILING` (main thread handles it). 200ms fallback timer for non-gated compiles (feature toggles). `CONFIG_DONE` cancels the timer for deterministic start.
+- **Redundant preview fix**: `_lastCompiledFormula` set before yields so concurrent `performCompilation` takes `keepCurrent` path instead of doing a second preview.
+- Files: `store/fractalStore.ts`, `components/CompilingIndicator.tsx`, `engine/FractalEngine.ts`, `engine/worker/renderWorker.ts`, `engine/worker/WorkerProtocol.ts`
+
+### Compile Timing Logs
+- Permanent (not DEV-gated) `console.log` for every compile: `[Compile] Preview:`, `[Compile] Single-stage:`, `[Compile] Two-stage:` with formula name and per-phase breakdown.
+- Silenced verbose DEV logs from `ShaderBuilder`, `MaterialController`, and `FractalEngine` intermediate stages.
+- Files: `engine/FractalEngine.ts`, `engine/ShaderBuilder.ts`, `engine/MaterialController.ts`
+
 ## 2026-04-09
 
 ### Tutorial Hints — Contextual Whisper System

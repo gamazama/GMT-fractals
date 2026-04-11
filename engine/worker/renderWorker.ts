@@ -160,7 +160,7 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     FractalEvents.on(FRACTAL_EVENTS.COMPILE_TIME, (duration) => {
         postMsg({ type: 'COMPILE_TIME', duration });
     });
-    FractalEvents.on(FRACTAL_EVENTS.SHADER_CODE, (code) => {
+FractalEvents.on(FRACTAL_EVENTS.SHADER_CODE, (code) => {
         postMsg({ type: 'SHADER_CODE', code });
     });
 
@@ -408,6 +408,12 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     // Forward config update through internal event system
                     FractalEvents.emit(FRACTAL_EVENTS.CONFIG, msg.config);
                 }
+                break;
+
+            case 'CONFIG_DONE':
+                // Main thread finished sending all CONFIGs — compile now.
+                // Cancels the fallback timer and fires immediately.
+                engine?.fireCompile();
                 break;
 
             case 'UNIFORM':

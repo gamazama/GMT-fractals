@@ -82,7 +82,8 @@ export type MainToWorkerMessage =
     // ─── Dynamic Formula Registration ───
     | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string } }
     // ─── Shader Debug ───
-    | { type: 'GET_SHADER_SOURCE'; id: string; variant: 'compiled' | 'translated' };
+    | { type: 'GET_SHADER_SOURCE'; id: string; variant: 'compiled' | 'translated' }
+    | { type: 'CONFIG_DONE' };
 
 // ─── Worker → Main Thread ───────────────────────────────────────────────
 

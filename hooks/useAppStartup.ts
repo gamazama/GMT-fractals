@@ -12,6 +12,7 @@ export const useAppStartup = (isSceneReady: boolean) => {
     const state = useFractalStore();
 
     const [startupMode, setStartupMode] = useState<'default' | 'url'>('default');
+    const [isHydrated, setIsHydrated] = useState(false);
     const bootRequestedRef = useRef(false);
     const hydratedRef = useRef(false);
 
@@ -21,9 +22,10 @@ export const useAppStartup = (isSceneReady: boolean) => {
         bootRequestedRef.current = true;
 
         try {
-            // Yield to allow other useEffects (e.g. useAppStartup's loadPreset)
-            // to hydrate the store before we read it. Reading inside the callback
-            // guarantees we get the fully-hydrated state, not default values.
+            // Short yield to let React flush any pending state updates from
+            // loadScene before we read the store. The hydration gate in
+            // LoadingScreen already ensures formulas are imported and URL
+            // preset is applied before bootEngine is called.
             setTimeout(() => {
                 const currentStore = useFractalStore.getState();
                 const startConfig = getShaderConfigFromState(currentStore);
@@ -111,12 +113,12 @@ export const useAppStartup = (isSceneReady: boolean) => {
                 state.loadScene({ preset });
             }
 
-            // Don't boot here — LoadingScreen will call bootEngine().
-            // Chrome: boots immediately (async compile won't stall WebGL spinner).
-            // Firefox: boots after cosmetic progress bar completes (synchronous compile
-            // would freeze the UI via shared GPU process).
+            // Signal that the store is hydrated — LoadingScreen gates boot on this
+            // to avoid a race where bootEngine reads the store before formulas are
+            // imported and the URL preset is applied.
+            setIsHydrated(true);
         });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return { startupMode, bootEngine };
+    return { startupMode, bootEngine, isHydrated };
 };

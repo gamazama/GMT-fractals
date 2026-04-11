@@ -267,24 +267,67 @@ Formula changes trigger a full shader rebuild. On Windows/Chrome, the `fxc` comp
 | keepCurrent | Same formula, engine setting change | Keep current material visible, compile new one async |
 | Single-stage | Fallback (first boot, errors) | Traditional blocking compile |
 
+### Compile Spinner Gate (Main Thread → Worker Handshake)
+
+The preview shader compile is GPU-blocking — the worker thread stalls for 1-4s. To ensure the compile spinner is visible before this stall, the main thread and worker use an event-driven handshake:
+
+```
+Main Thread                              Worker Thread
+┌─────────────────────────────┐          ┌─────────────────────────┐
+│ setFormula / loadScene       │          │                         │
+│  → queueCompileAfterSpinner()│          │                         │
+│    stores work, emits        │          │                         │
+│    IS_COMPILING              │          │                         │
+│                              │          │                         │
+│ React renders spinner        │          │                         │
+│ pingRef fires (DOM committed)│          │                         │
+│ rAF → setTimeout(0)         │          │                         │
+│ Browser PAINTS spinner       │          │                         │
+│                              │          │                         │
+│ flushCompileWork()           │          │                         │
+│  → CONFIG #1..#N ──────────────────────▶│ handleConfigChange ×N   │
+│  → CONFIG_DONE  ──────────────────────▶│ fireCompile()           │
+│                              │          │  → performCompilation() │
+│                              │          │    (GPU blocks — but    │
+│                              │          │     spinner is painted) │
+└─────────────────────────────┘          └─────────────────────────┘
+```
+
+**Key design decisions:**
+- `queueCompileAfterSpinner()` (`store/fractalStore.ts`) stores the compile work and emits `IS_COMPILING`. The work is NOT executed yet.
+- `CompilingIndicator.tsx` uses a **ref callback** (`pingRef`) that fires when the spinner DOM is committed. After `rAF → setTimeout(0)` (guarantees browser has painted), it calls `flushCompileWork()` which sends all CONFIGs + `CONFIG_DONE` to the worker.
+- The worker's `scheduleCompile()` does NOT emit `IS_COMPILING` — the main thread handles spinner visibility. `scheduleCompile` sets a 200ms fallback timer for non-gated compiles (feature toggles) that don't go through `queueCompileAfterSpinner`.
+- `CONFIG_DONE` message tells the worker all CONFIGs have arrived — `fireCompile()` cancels the fallback timer and starts immediately. This is deterministic, not timer-based.
+- `consumeNewCycle()` flag distinguishes user-initiated cycles (formula switch) from worker status updates ("Compiling Shader..." → "Compiling Lighting..."). Only new cycles reset the progress bar.
+
 ### Stale Compile Cancellation
 
-A generation counter (`_compileGeneration`) increments on each compile request. If a user rapidly switches formulas, stale compiles are detected and discarded when they complete.
+A generation counter (`_compileGeneration`) increments on each `scheduleCompile` call. If a user rapidly switches formulas, stale compiles are detected and discarded at yield points. Generation check early-returns do NOT emit `IS_COMPILING false` — the newer `scheduleCompile` already owns the spinner state. `_lastCompiledFormula` is set immediately after the first `pipelineRender` (before any yields) so concurrent `performCompilation` calls see the updated formula and take the `keepCurrent` path instead of redundantly compiling the preview.
 
 ### UI Feedback
 
 `CompilingIndicator.tsx` shows status centered under the top bar:
-- "Compiling Lighting..." — two-stage (preview is rendering)
-- "Compiling Shader..." — keepCurrent path
+- "Loading Preview..." — preview shader compiling (GPU blocks)
+- "Compiling Lighting..." — two-stage, full shader compiling async
+- "Compiling Shader..." — keepCurrent path, full shader compiling async
+
+### Permanent Compile Timing Logs
+
+Always-on `console.log` entries (not DEV-gated — do not remove):
+- `[Compile] Preview: Xms (Formula)` — preview shader ready
+- `[Compile] Single-stage: Xms (Formula)` — single-stage done
+- `[Compile] Two-stage: Xms (Formula, gen=Xms, gpu=Xms)` — full shader done with breakdown
 
 ### Key Files
 
 | File | Role |
 |------|------|
+| `store/fractalStore.ts` | `queueCompileAfterSpinner()`, `flushCompileWork()`, `consumeNewCycle()` — spinner gate |
+| `engine/FractalEngine.ts` | `scheduleCompile()`, `fireCompile()`, `performCompilation()` — three-path dispatch |
 | `engine/MaterialController.ts` | `compilePreview()`, `buildFullMaterial()`, `swapFullMaterial()` |
-| `engine/FractalEngine.ts` | `performCompilation()` — three-path dispatch |
+| `engine/worker/renderWorker.ts` | `CONFIG_DONE` handler calls `fireCompile()` |
 | `features/lighting/index.ts` | Preview shader stub (colored N·L) |
-| `components/CompilingIndicator.tsx` | Compile status UI |
+| `components/CompilingIndicator.tsx` | Compile status UI + spinner gate (pingRef, cycle state machine) |
 
 ## 2.8 TickRegistry — Frame Orchestration
 

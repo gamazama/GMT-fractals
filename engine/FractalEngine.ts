@@ -258,6 +258,7 @@ export class FractalEngine {
     public get activeCamera() { return this.sceneCtrl.activeCamera; }
     public get lastGeneratedFrag() { return this.materials.getLastFrag(); }
     public get isCompiling() { return this._isCompiling; }
+
     public get sceneOffset() { return this.virtualSpace.state; }
     public get isExporting() { return this.state.isExporting; }
     public get isBucketRendering() { return this.state.isBucketRendering; }
@@ -384,29 +385,43 @@ export class FractalEngine {
     private scheduleCompile() {
         this._isCompiling = true;
         this._compileGeneration++;
-        FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Shader...");
-
-        // Debounce: coalesce rapid config updates (e.g. loadPreset fires many feature setters)
-        // into a single compile. Each call resets the timer; only the last one fires.
+        // Don't emit IS_COMPILING here — for gated compiles (formula switch, scene load),
+        // the main thread already showed the spinner via queueCompileAfterSpinner.
+        // For non-gated compiles (feature toggles), performCompilation emits the status
+        // when it actually starts. Emitting here caused a spinner flash on every
+        // compile-time parameter adjustment during the debounce window.
+        //
+        // Don't compile yet — wait for CONFIG_DONE from the main thread, which signals
+        // all CONFIGs have been sent. This is deterministic (no timer guessing).
+        // Fallback timer handles non-gated compiles (feature toggles, engine panel)
+        // that don't go through queueCompileAfterSpinner and never send CONFIG_DONE.
         if (this._compileTimer !== null) {
             clearTimeout(this._compileTimer);
         }
         this._compileTimer = setTimeout(() => {
             this._compileTimer = null;
-            void (async () => {
-                // Wait for renderer if not yet available (initial boot)
-                while (!this.renderer) {
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                }
-                try {
-                    await this.performCompilation();
-                } catch (e) {
-                    console.error('[FractalEngine] performCompilation failed:', e);
-                    this._isCompiling = false;
-                    FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-                }
-            })();
-        }, 0);
+            this.fireCompile();
+        }, 200);
+    }
+
+    /** Called by CONFIG_DONE message or fallback timer. Fires the actual compile. */
+    public fireCompile() {
+        if (this._compileTimer !== null) {
+            clearTimeout(this._compileTimer);
+            this._compileTimer = null;
+        }
+        void (async () => {
+            while (!this.renderer) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            try {
+                await this.performCompilation();
+            } catch (e) {
+                console.error('[FractalEngine] performCompilation failed:', e);
+                this._isCompiling = false;
+                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
+            }
+        })();
     }
 
     private async performCompilation() {
@@ -449,6 +464,10 @@ export class FractalEngine {
         const keepCurrent = this.hasCompiledShader && this._hasParallelCompile && !formulaChanged;
 
         if (!keepCurrent) {
+            // The main thread already showed the spinner before sending CONFIG.
+            // Update the status text and proceed — no gate needed.
+            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Loading Preview...");
+
             // compilePreview returns false if lighting is already off (preview === full)
             const useTwoStage = this._hasParallelCompile && this.materials.compilePreview(config);
             if (!useTwoStage) {
@@ -457,7 +476,6 @@ export class FractalEngine {
             }
 
             const needsCompile = !this.hasCompiledShader || this.materials.shaderDirty;
-            await new Promise(resolve => setTimeout(resolve, 0));
 
             // Sync uniforms so preview shader renders with correct parameters
             // (fractal power, iterations, colors, etc.) instead of defaults.
@@ -468,26 +486,33 @@ export class FractalEngine {
 
             if (needsCompile) {
                 this.pipelineRender(this.renderer);
-                await new Promise(resolve => setTimeout(resolve, 20));
-                this.pipelineRender(this.renderer);
-                if (useTwoStage) await new Promise(resolve => setTimeout(resolve, 50));
 
+                // Mark compiled BEFORE yielding — a concurrent performCompilation
+                // can start during the yields below and must see the updated formula
+                // key, otherwise it thinks the formula changed and does a redundant preview.
                 this.hasCompiledShader = true;
                 this._lastCompiledFormula = compiledFormulaKey;
                 this.materials.shaderDirty = false;
                 this.lastCompileDuration = (performance.now() - t0) / 1000;
+
+                await new Promise(resolve => setTimeout(resolve, 20));
+                this.pipelineRender(this.renderer);
+                if (useTwoStage) await new Promise(resolve => setTimeout(resolve, 50));
             }
 
             if (!useTwoStage) {
                 // Single-stage done
                 this.lastCompileDuration = (performance.now() - t0) / 1000;
-                if (import.meta.env.DEV) console.log(`[Compile] Single-stage: ${(this.lastCompileDuration * 1000).toFixed(0)}ms`);
+                // Permanent compile timing log — do not remove
+                console.log(`[Compile] Single-stage: ${(this.lastCompileDuration * 1000).toFixed(0)}ms (${config.formula})`);
                 this._isCompiling = false;
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
                 FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
                 if (this.lastCompileDuration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, this.lastCompileDuration);
                 return;
             }
+            // Permanent compile timing log — do not remove
+            console.log(`[Compile] Preview: ${(performance.now() - t0).toFixed(0)}ms (${config.formula})`);
         } else {
             // keepCurrent: sync uniforms so current shader has up-to-date values,
             // but don't touch the active material or scene mesh
@@ -496,7 +521,8 @@ export class FractalEngine {
         }
 
         // Current or preview shader is live. Proceed to async Stage 2.
-        this._isCompiling = false;
+        // Keep _isCompiling = true so handleConfigChange doesn't emit IS_COMPILING false
+        // during the async compile, which would kill the spinner.
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, keepCurrent ? "Compiling Shader..." : "Compiling Lighting...");
 
         // Yield 3 animation frames — each lets handleRenderTick run (compute + blit + flush).
@@ -508,11 +534,10 @@ export class FractalEngine {
             }
         }
 
-        // Check if a newer compile was triggered while we were yielding
+        // Check if a newer compile was triggered while we were yielding.
+        // Don't emit IS_COMPILING false — the newer scheduleCompile already emitted
+        // its own status. Emitting false here would create a gap that kills the spinner.
         if (generation !== this._compileGeneration) {
-            // Ensure IS_COMPILING false is emitted so BOOTED can fire
-            this._isCompiling = false;
-            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
             return;
         }
 
@@ -520,7 +545,7 @@ export class FractalEngine {
         const tGenStart = performance.now();
         const fullMat = this.materials.buildFullMaterial(config);
         const tGenEnd = performance.now();
-        if (import.meta.env.DEV) console.log(`[Compile] JS generation: ${(tGenEnd - tGenStart).toFixed(0)}ms`);
+        // if (import.meta.env.DEV) console.log(`[Compile] JS generation: ${(tGenEnd - tGenStart).toFixed(0)}ms`);
 
         // Lazy-init the dummy compile scene (reused across compiles)
         if (!this._compileScene) {
@@ -544,13 +569,12 @@ export class FractalEngine {
             this.renderer.compile(this._compileScene!, this._compileCamera!);
         }
         const tGpuEnd = performance.now();
-        if (import.meta.env.DEV) console.log(`[Compile] GPU compile: ${(tGpuEnd - tGpuStart).toFixed(0)}ms`);
+        // if (import.meta.env.DEV) console.log(`[Compile] GPU compile: ${(tGpuEnd - tGpuStart).toFixed(0)}ms`);
 
-        // Check if a newer compile was triggered while we were compiling
+        // Check if a newer compile was triggered while we were compiling.
+        // Don't emit IS_COMPILING false — the newer scheduleCompile handles state.
         if (generation !== this._compileGeneration) {
             fullMat.dispose();
-            this._isCompiling = false;
-            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
             return;
         }
 
@@ -564,9 +588,11 @@ export class FractalEngine {
 
         const totalElapsed = performance.now() - t0;
         this.lastCompileDuration = totalElapsed / 1000;
-        if (import.meta.env.DEV) console.log(`[Compile] Done — two-stage: ${totalElapsed.toFixed(0)}ms`);
+        // Permanent compile timing log — do not remove
+        console.log(`[Compile] Two-stage: ${totalElapsed.toFixed(0)}ms (${config.formula}, gen=${tGenEnd - tGenStart | 0}ms, gpu=${tGpuEnd - tGpuStart | 0}ms)`);
         if (totalElapsed / 1000 > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, totalElapsed / 1000);
 
+        this._isCompiling = false;
         FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
         FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
     }

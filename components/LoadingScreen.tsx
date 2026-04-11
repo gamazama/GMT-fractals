@@ -60,9 +60,10 @@ interface LoadingScreenProps {
   onFinished: () => void;
   startupMode: 'default' | 'url';
   bootEngine: (force?: boolean) => void;
+  isHydrated: boolean;
 }
 
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinished, startupMode, bootEngine }) => {
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinished, startupMode, bootEngine, isHydrated }) => {
   const fgCanvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<LoadingRendererCPU | null>(null);
 
@@ -71,10 +72,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
   const isReadyRef = useRef(isReady);
   const bootEngineRef = useRef(bootEngine);
   const hasBootedRef = useRef(false);
+  const isHydratedRef = useRef(isHydrated);
 
   // Sync refs
   useEffect(() => { isReadyRef.current = isReady; }, [isReady]);
   useEffect(() => { bootEngineRef.current = bootEngine; }, [bootEngine]);
+  useEffect(() => { isHydratedRef.current = isHydrated; }, [isHydrated]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -201,7 +204,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
           rendererRef.current.render(time, currentProgress / 100.0);
       }
 
-      if (currentProgress >= 100 && !menuOpen) {
+      if (currentProgress >= 100 && !menuOpen && isHydratedRef.current) {
         triggerBoot();
 
         if (isReadyRef.current) {
@@ -233,8 +236,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     };
   }, []);
 
-  // Boot immediately — CPU spinner has no GPU contention.
-  useEffect(() => { triggerBoot(); }, []);
+  // Boot after store hydration — ensures the correct formula/preset is loaded
+  // before the worker reads the store for the BOOT config. Without this gate,
+  // a slow formula chunk import can cause boot to read stale default state.
+  useEffect(() => {
+      if (isHydrated) triggerBoot();
+  }, [isHydrated]);
 
   if (!isVisible) return null;
 

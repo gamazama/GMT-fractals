@@ -23,6 +23,41 @@ import { pipelineToGraph, isStructureEqual, isPipelineEqual, topologicalSort } f
 import { JULIA_REPEATER_PIPELINE } from '../data/initialPipelines';
 import '../features'; // Ensure features are registered
 import { PreciseVector3 } from '../types';
+
+// ── Compile Spinner Gate ─────────────────────────────────────────────────
+// Ensures the compile spinner is painted before GPU-blocking work begins.
+// setFormula/loadScene call queueCompileAfterSpinner() which emits IS_COMPILING
+// and stores the compile work. CompilingIndicator calls flushCompileWork() after
+// React renders and the browser paints, which executes the queued work.
+
+let _pendingCompileWork: (() => void) | null = null;
+let _newCyclePending = false;
+
+/** Queue compile work to run after the spinner is painted.
+ *  Sets _newCyclePending so the handler knows this is a user-initiated cycle
+ *  (not a worker status update). The handler resets the spinner and the ref
+ *  callback flushes the work after paint. */
+export function queueCompileAfterSpinner(message: string, work: () => void) {
+    _pendingCompileWork = work;
+    _newCyclePending = true;
+    FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, message);
+}
+
+/** Check and consume the new-cycle flag. Called by CompilingIndicator's handler. */
+export function consumeNewCycle(): boolean {
+    if (_newCyclePending) { _newCyclePending = false; return true; }
+    return false;
+}
+
+/** Called by CompilingIndicator after it has rendered and the browser has painted. */
+export function flushCompileWork() {
+    if (_pendingCompileWork) {
+        const work = _pendingCompileWork;
+        _pendingCompileWork = null;
+        work();
+    }
+}
+
 import { DEFAULT_HARD_CAP } from '../data/constants';
 import { OpticsState } from '../features/optics';
 
@@ -64,67 +99,69 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         }
 
         set({ formula: f, projectSettings: { ...s.projectSettings, name: newName } });
-        
-        FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { 
-            formula: f,
-            pipeline: s.pipeline,
-            graph: s.graph
-        });
-        
-        if (f !== 'Modular' && !options.skipDefaultPreset) {
-            const def = registry.get(f);
-            const formulaPreset: Preset = (def && def.defaultPreset) ? JSON.parse(JSON.stringify(def.defaultPreset)) : { formula: f };
-            
-            // Preserve compile-time engine params from current state, but only when
-            // the formula preset doesn't specify its own values. Formula presets contain
-            // tuned engine settings (estimator, distanceMetric, etc.) that must not be
-            // overwritten by the previous formula's state.
-            if (!formulaPreset.features) formulaPreset.features = {};
-            const currentState = get();
-            featureRegistry.getEngineFeatures().forEach(feat => {
-                const currentSlice = (currentState as any)[feat.id];
-                if (!currentSlice) return;
-                const presetBlock = formulaPreset.features![feat.id] || {};
-                const engineParams: Record<string, any> = {};
-                // Preserve the master toggle only if the preset doesn't set it
-                const toggleParam = feat.engineConfig!.toggleParam;
-                if (currentSlice[toggleParam] !== undefined && presetBlock[toggleParam] === undefined) {
-                    engineParams[toggleParam] = currentSlice[toggleParam];
-                }
-                // Preserve compile-time params only if the preset doesn't set them
-                Object.entries(feat.params).forEach(([key, config]) => {
-                    if (config.onUpdate === 'compile' && currentSlice[key] !== undefined && presetBlock[key] === undefined) {
-                        engineParams[key] = currentSlice[key];
-                    }
-                });
-                if (!formulaPreset.features![feat.id]) formulaPreset.features![feat.id] = {};
-                Object.assign(formulaPreset.features![feat.id], engineParams);
+
+        // Show spinner immediately — this triggers a React render + browser paint.
+        // Defer all compile-triggering work (CONFIG + loadPreset) to after paint
+        // via requestAnimationFrame, so the spinner is guaranteed visible before
+        // the GPU-blocking preview compile starts on the worker.
+        // Show spinner, then defer compile work until the spinner confirms it's painted.
+        // queueCompileAfterSpinner emits IS_COMPILING and executes the callback only
+        // after CompilingIndicator has rendered and the browser has composited.
+        queueCompileAfterSpinner("Loading Preview...", () => {
+            FractalEvents.emit(FRACTAL_EVENTS.CONFIG, {
+                formula: f,
+                pipeline: s.pipeline,
+                graph: s.graph
             });
 
-            const lockScene = get().lockSceneOnSwitch;
-            
-            if (lockScene) {
-                const current = get().getPreset(); 
-                
-                const mergedFeatures = { ...(current.features || {}) };
-                const newFeatures = formulaPreset.features || {};
-                
-                if (newFeatures.coreMath) mergedFeatures.coreMath = newFeatures.coreMath;
-                if (newFeatures.geometry) mergedFeatures.geometry = newFeatures.geometry;
-                
-                const merged: any = {
-                    ...current, 
-                    formula: f,
-                    features: mergedFeatures
-                };
-                
-                get().loadPreset(merged as Preset);
-            } else {
-                get().loadPreset(formulaPreset as Preset);
+            if (f !== 'Modular' && !options.skipDefaultPreset) {
+                const def = registry.get(f);
+                const formulaPreset: Preset = (def && def.defaultPreset) ? JSON.parse(JSON.stringify(def.defaultPreset)) : { formula: f };
+
+                // Preserve compile-time engine params from current state, but only when
+                // the formula preset doesn't specify its own values. Formula presets contain
+                // tuned engine settings (estimator, distanceMetric, etc.) that must not be
+                // overwritten by the previous formula's state.
+                if (!formulaPreset.features) formulaPreset.features = {};
+                const currentState = get();
+                featureRegistry.getEngineFeatures().forEach(feat => {
+                    const currentSlice = (currentState as any)[feat.id];
+                    if (!currentSlice) return;
+                    const presetBlock = formulaPreset.features![feat.id] || {};
+                    const engineParams: Record<string, any> = {};
+                    const toggleParam = feat.engineConfig!.toggleParam;
+                    if (currentSlice[toggleParam] !== undefined && presetBlock[toggleParam] === undefined) {
+                        engineParams[toggleParam] = currentSlice[toggleParam];
+                    }
+                    Object.entries(feat.params).forEach(([key, config]) => {
+                        if (config.onUpdate === 'compile' && currentSlice[key] !== undefined && presetBlock[key] === undefined) {
+                            engineParams[key] = currentSlice[key];
+                        }
+                    });
+                    if (!formulaPreset.features![feat.id]) formulaPreset.features![feat.id] = {};
+                    Object.assign(formulaPreset.features![feat.id], engineParams);
+                });
+
+                const lockScene = get().lockSceneOnSwitch;
+
+                if (lockScene) {
+                    const current = get().getPreset();
+                    const mergedFeatures = { ...(current.features || {}) };
+                    const newFeatures = formulaPreset.features || {};
+                    if (newFeatures.coreMath) mergedFeatures.coreMath = newFeatures.coreMath;
+                    if (newFeatures.geometry) mergedFeatures.geometry = newFeatures.geometry;
+                    const merged: any = { ...current, formula: f, features: mergedFeatures };
+                    get().loadPreset(merged as Preset);
+                } else {
+                    get().loadPreset(formulaPreset as Preset);
+                }
             }
-        }
-        
-        get().handleInteractionEnd();
+
+            get().handleInteractionEnd();
+
+            // Signal the worker that all CONFIGs have been sent — compile now.
+            engine.post({ type: 'CONFIG_DONE' });
+        });
     },
 
     setProjectSettings: (s) => set((prev) => {
@@ -244,39 +281,42 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
             FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
         }
 
-        // 2. Hydrate store — setter chain emits per-feature CONFIG events that
-        //    ConfigManager diffs individually (compile-time vs runtime).
-        get().loadPreset(preset);
-
-        // If the engine hasn't booted yet (initial startup), skip the CONFIG
-        // flush and OFFSET push — bootEngine() will send the full config + offset
-        // as part of the BOOT message, and any CONFIG events from the setter chain
-        // above just queue up as redundant work that causes a double compile.
+        // Initial startup: hydrate store immediately, no spinner needed
+        // (loading screen is visible). bootEngine() sends the full config.
         if (!engine.isBooted && !engine.bootSent) {
+            get().loadPreset(preset);
             return;
         }
 
-        // 3. Full config flush — guarantees the worker sees the complete picture.
-        //    The setter chain sends partial CONFIGs per-feature; ConfigManager
-        //    was already updated incrementally, so this flush is usually a no-op.
-        //    But it catches edge cases: params missing from the old config (first
-        //    load of a feature), or setters that were skipped because the feature
-        //    wasn't registered at applyPresetState time.
-        const fullConfig = getShaderConfigFromState(get());
-        FractalEvents.emit(FRACTAL_EVENTS.CONFIG, fullConfig);
+        // Post-boot: show spinner immediately, defer compile-triggering work
+        // to after the browser paints so the spinner is guaranteed visible
+        // before the GPU-blocking preview compile starts on the worker.
+        // Show spinner, then defer compile work until the spinner confirms it's painted.
+        queueCompileAfterSpinner("Loading Preview...", () => {
+            // 2. Hydrate store — setter chain emits per-feature CONFIG events that
+            //    ConfigManager diffs individually (compile-time vs runtime).
+            get().loadPreset(preset);
 
-        // 4. Push offset to worker — ensures the first rendered frame after
-        //    recompilation uses the correct viewpoint, not a stale offset that
-        //    would persist until the next RENDER_TICK arrives.
-        const offset = get().sceneOffset;
-        if (offset) {
-            const precise = {
-                x: offset.x, y: offset.y, z: offset.z,
-                xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
-            };
-            engine.setShadowOffset(precise);
-            engine.post({ type: 'OFFSET_SET', offset: precise });
-        }
+            // 3. Full config flush — guarantees the worker sees the complete picture.
+            const fullConfig = getShaderConfigFromState(get());
+            FractalEvents.emit(FRACTAL_EVENTS.CONFIG, fullConfig);
+
+            // 4. Push offset to worker — ensures the first rendered frame after
+            //    recompilation uses the correct viewpoint, not a stale offset that
+            //    would persist until the next RENDER_TICK arrives.
+            const offset = get().sceneOffset;
+            if (offset) {
+                const precise = {
+                    x: offset.x, y: offset.y, z: offset.z,
+                    xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
+                };
+                engine.setShadowOffset(precise);
+                engine.post({ type: 'OFFSET_SET', offset: precise });
+            }
+
+            // Signal the worker that all CONFIGs have been sent — compile now.
+            engine.post({ type: 'CONFIG_DONE' });
+        });
     },
 
     getPreset: (options) => {

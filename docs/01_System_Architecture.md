@@ -182,13 +182,18 @@ Main Thread                          Worker Thread
 |----------|----------|---------|
 | Boot | `BOOTED` | Worker reports GPU info, ready state |
 | Render | `RENDER_TICK` | Per-frame state snapshot (camera, params) |
+| Config | `CONFIG`, `CONFIG_DONE` | Shader config updates; `CONFIG_DONE` signals all CONFIGs sent (deterministic compile trigger) |
 | Bucket | `BUCKET_START/STOP/STATUS/IMAGE` | Tiled high-res rendering |
 | Video | `VIDEO_START/STOP/FRAME` | Offline video export |
 | Focus Pick | `FOCUS_PICK_START/SAMPLE/END` | DoF focus distance from depth buffer |
 | Histogram | `HISTOGRAM_REQUEST/RESULT` | Probe RPC for histogram data |
 | Snapshot | `SNAPSHOT_REQUEST/RESULT` | Screenshot capture |
 
-### 4.3 Worker-Mode Gotchas
+### 4.3 Boot Hydration Gate
+
+Formulas are loaded via dynamic `import('../formulas')` (separate chunk). URL-shared scenes are parsed in the `.then()` callback. `useAppStartup` exposes an `isHydrated` flag that is set after formula import + URL parsing + `loadScene()` completes. `LoadingScreen` gates `bootEngine()` on this flag — without it, `bootEngine`'s 50ms `setTimeout` could read the store while it still has default Mandelbulb state, causing the wrong formula to compile on boot.
+
+### 4.4 Worker-Mode Gotchas
 
 - `engine.renderer` is always `null` on main thread — use `engine.isBooted` for guards
 - `engine.pipeline` is not accessible — use `engine.accumulationCount` (shadow state)

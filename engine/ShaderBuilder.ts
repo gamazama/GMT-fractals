@@ -599,7 +599,7 @@ void main() {
             .map(([name, s]) => `${name}: ${(s.length / 1024).toFixed(1)}kb`)
             .join(' | ');
         const totalSize = sections.reduce((sum, [, s]) => sum + s.length, 0);
-        if (import.meta.env.DEV) console.log(`[Shader Profile] ${(totalSize / 1024).toFixed(1)}kb — ${profile}`);
+        // if (import.meta.env.DEV) console.log(`[Shader Profile] ${(totalSize / 1024).toFixed(1)}kb — ${profile}`);
 
         return `
 ${defines}
