@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { GradientStop, GradientConfig, ColorSpaceMode } from '../types';
-import { hexToRgb, rgbToHex, lerpRGB, getGradientCssString } from '../utils/colorUtils';
+import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
+import { hexToRgb, rgbToHex, getGradientCssString, blendLerp } from '../utils/colorUtils';
 import Slider from './Slider';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
@@ -43,7 +43,7 @@ const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boole
         k.id === b[i].id && k.position === b[i].position && k.color === b[i].color && k.bias === b[i].bias && k.interpolation === b[i].interpolation
     );
 
-const getInterpolatedColor = (knots: AdvancedGradientKnot[], pos: number): string => {
+const getInterpolatedColor = (knots: AdvancedGradientKnot[], pos: number, blend: BlendColorSpace = 'oklab'): string => {
     const sorted = [...knots].sort((a, b) => a.position - b.position);
     if (sorted.length === 0) return '#FFFFFF';
     if (pos <= sorted[0].position) return sorted[0].color;
@@ -51,14 +51,13 @@ const getInterpolatedColor = (knots: AdvancedGradientKnot[], pos: number): strin
 
     for (let i = 0; i < sorted.length - 1; i++) {
         if (pos >= sorted[i].position && pos <= sorted[i + 1].position) {
-            // Step mode: hold the left knot's color for the full segment
             if (sorted[i].interpolation === 'step') {
                 return sorted[i].color;
             }
             const t = (pos - sorted[i].position) / (sorted[i + 1].position - sorted[i].position);
             const c1 = hexToRgb(sorted[i].color) || { r: 255, g: 255, b: 255 };
             const c2 = hexToRgb(sorted[i + 1].color) || { r: 255, g: 255, b: 255 };
-            return rgbToHex(lerpRGB(c1, c2, t));
+            return rgbToHex(blendLerp(c1, c2, t, blend));
         }
     }
     return '#FFFFFF';
@@ -84,11 +83,11 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
 const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId }) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
-    const { stops, colorSpace } = useMemo(() => {
+    const { stops, colorSpace, blendSpace } = useMemo(() => {
         if (Array.isArray(value)) {
-            return { stops: value, colorSpace: 'srgb' as ColorSpaceMode };
+            return { stops: value, colorSpace: 'srgb' as ColorSpaceMode, blendSpace: 'oklab' as BlendColorSpace };
         } else {
-            return { stops: value.stops, colorSpace: value.colorSpace };
+            return { stops: value.stops, colorSpace: value.colorSpace, blendSpace: value.blendSpace || 'oklab' as BlendColorSpace };
         }
     }, [value]);
 
@@ -135,24 +134,33 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     // or if the input was already an object.
     // For safety, we simply ALWAYS emit the object now. The utils handle it fine.
     // The Store handles saving it.
-    const emitChange = useCallback((newKnots: AdvancedGradientKnot[], newColorSpace?: ColorSpaceMode) => {
+    const emitChange = useCallback((newKnots: AdvancedGradientKnot[], newColorSpace?: ColorSpaceMode, newBlendSpace?: BlendColorSpace) => {
         const sorted = [...newKnots].sort((a, b) => a.position - b.position);
         setKnots(sorted);
-        
-        const newStops = sorted.map(({ id, position, color, bias, interpolation }) => ({ 
-            id, position, color, bias, interpolation 
+
+        const newStops = sorted.map(({ id, position, color, bias, interpolation }) => ({
+            id, position, color, bias, interpolation
         }));
 
         onChangeRef.current({
             stops: newStops,
-            colorSpace: newColorSpace || colorSpace
+            colorSpace: newColorSpace || colorSpace,
+            blendSpace: newBlendSpace ?? blendSpace
         });
-    }, [colorSpace]);
+    }, [colorSpace, blendSpace]);
 
     const cycleColorSpace = () => {
         handleInteractionStart('param');
         const nextMode = colorSpace === 'srgb' ? 'linear' : colorSpace === 'linear' ? 'aces_inverse' : 'srgb';
         emitChange(knots, nextMode);
+        handleInteractionEnd();
+    };
+
+    const cycleBlendSpace = () => {
+        handleInteractionStart('param');
+        const order: BlendColorSpace[] = ['rgb', 'hsv', 'hsv-far', 'oklab'];
+        const next = order[(order.indexOf(blendSpace) + 1) % order.length];
+        emitChange(knots, undefined, next);
         handleInteractionEnd();
     };
 
@@ -165,10 +173,11 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const handleCopy = useCallback(() => {
         const data = JSON.stringify({
             stops: knotsRef.current.map(({ position, color, bias, interpolation }) => ({ position, color, bias, interpolation })),
-            colorSpace
+            colorSpace,
+            blendSpace
         });
         navigator.clipboard.writeText(data);
-    }, [colorSpace]);
+    }, [colorSpace, blendSpace]);
 
     const handlePaste = useCallback(async () => {
         try {
@@ -178,12 +187,14 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             // Support pasting legacy array OR new object
             let newStops = [];
             let newSpace: ColorSpaceMode = 'srgb';
+            let newBlend: BlendColorSpace = 'rgb';
 
             if (Array.isArray(data)) {
                 newStops = data;
             } else if (data.stops) {
                 newStops = data.stops;
                 newSpace = data.colorSpace || 'srgb';
+                newBlend = data.blendSpace || 'oklab';
             }
 
             if (newStops.length >= 2) {
@@ -195,7 +206,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     bias: k.bias ?? 0.5,
                     interpolation: (k.interpolation as InterpolationMode) ?? 'linear'
                 }));
-                emitChange(newKnots, newSpace);
+                emitChange(newKnots, newSpace, newBlend);
                 setSelectedIds(new Set());
                 handleInteractionEnd();
             }
@@ -382,7 +393,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
         const rect = knotTrackRef.current.getBoundingClientRect();
         const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const color = getInterpolatedColor(knots, pos);
+        const color = getInterpolatedColor(knots, pos, blendSpace);
         
         const sortedKnots = [...knots].sort((a, b) => a.position - b.position);
         
@@ -519,21 +530,42 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             { 
                 label: 'Reset Default', 
                 danger: true, 
-                action: wrapAction(() => { emitChange([{ id: '1', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' }, { id: '2', position: 1, color: '#FFFFFF', bias: 0.5, interpolation: 'linear' }], 'srgb'); setSelectedIds(new Set<string>()); })
+                action: wrapAction(() => { emitChange([{ id: '1', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' }, { id: '2', position: 1, color: '#FFFFFF', bias: 0.5, interpolation: 'linear' }], 'srgb', 'oklab'); setSelectedIds(new Set<string>()); })
+            },
+            { label: 'Blend Mode', action: () => {}, isHeader: true },
+            {
+                label: 'RGB (Standard)',
+                checked: blendSpace === 'rgb',
+                action: wrapAction(() => emitChange(knots, undefined, 'rgb'))
+            },
+            {
+                label: 'HSV (Short Path)',
+                checked: blendSpace === 'hsv',
+                action: wrapAction(() => emitChange(knots, undefined, 'hsv'))
+            },
+            {
+                label: 'HSV (Long Path)',
+                checked: blendSpace === 'hsv-far',
+                action: wrapAction(() => emitChange(knots, undefined, 'hsv-far'))
+            },
+            {
+                label: 'Oklab (Perceptual)',
+                checked: blendSpace === 'oklab',
+                action: wrapAction(() => emitChange(knots, undefined, 'oklab'))
             },
             { label: 'Output Mode', action: () => {}, isHeader: true },
-            { 
-                label: 'sRGB (Standard)', 
+            {
+                label: 'sRGB (Standard)',
                 checked: colorSpace === 'srgb',
                 action: wrapAction(() => emitChange(knots, 'srgb'))
             },
-            { 
-                label: 'Linear (Physical)', 
+            {
+                label: 'Linear (Physical)',
                 checked: colorSpace === 'linear',
                 action: wrapAction(() => emitChange(knots, 'linear'))
             },
-            { 
-                label: 'Inverse ACES', 
+            {
+                label: 'Inverse ACES',
                 checked: colorSpace === 'aces_inverse',
                 action: wrapAction(() => emitChange(knots, 'aces_inverse'))
             }
@@ -577,21 +609,32 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             }}
         >
             <div className="flex items-center justify-between mb-1">
-                <div 
-                    className="flex items-center gap-2 cursor-pointer text-[10px] font-semibold text-gray-400 hover:text-white gradient-interactive-element" 
-                    onClick={() => setIsExpanded(!isExpanded)}
-                >
-                    <span className={`transform transition-transform duration-200 text-base ${isExpanded ? 'rotate-90' : ''}`}>›</span>
-                </div>
-                
                 <div className="flex items-center gap-2">
-                    {/* Visual Indicator of current mode */}
-                    <div 
+                    <div
+                        className="flex items-center cursor-pointer text-[10px] font-semibold text-gray-400 hover:text-white gradient-interactive-element"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                    >
+                        <span className={`transform transition-transform duration-200 text-base ${isExpanded ? 'rotate-90' : ''}`}>›</span>
+                    </div>
+
+                    {/* Blend space indicator */}
+                    <div
+                        className={`text-[8px] font-bold cursor-pointer transition-colors select-none ${blendSpace === 'oklab' ? 'text-gray-600 hover:text-cyan-400' : 'text-cyan-400 hover:text-cyan-300'}`}
+                        onClick={cycleBlendSpace}
+                        title="Click to switch Blend Mode (RGB → HSV → HSV Far → Oklab)"
+                    >
+                        {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    {/* Output color space indicator */}
+                    <div
                         className="text-[8px] font-bold text-gray-600 cursor-pointer hover:text-cyan-400 transition-colors select-none"
                         onClick={cycleColorSpace}
-                        title="Click to switch Color Profile"
+                        title="Click to switch Output Color Profile"
                     >
-                        {colorSpace === 'srgb' ? 'Standard' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
+                        {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
                     </div>
 
                     {/* Presets Button */}
@@ -618,7 +661,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             <div className="relative px-2" onContextMenu={openTrackContextMenu}>
                 <div 
                     className="h-8 w-full rounded-t border border-white/20 relative mb-0 cursor-pointer" 
-                    style={{ background: getGradientCssString(knots) }} 
+                    style={{ background: getGradientCssString({ stops: knots, colorSpace, blendSpace }) }}
                     onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }} 
                     title="Double-click to select all"
                 >

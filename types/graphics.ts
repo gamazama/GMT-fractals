@@ -17,10 +17,14 @@ export interface GradientStop {
 
 export type ColorSpaceMode = 'srgb' | 'linear' | 'aces_inverse';
 
+/** How colors blend between gradient stops */
+export type BlendColorSpace = 'rgb' | 'hsv' | 'hsv-far' | 'oklab';
+
 // The new Rich Object container
 export interface GradientConfig {
     stops: GradientStop[];
     colorSpace: ColorSpaceMode;
+    blendSpace: BlendColorSpace;
 }
 
 export type LightType = 'Point' | 'Directional';

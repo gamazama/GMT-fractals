@@ -4,6 +4,15 @@ Chronological log of significant changes during the v0.9.1 development cycle (un
 
 ## 2026-04-11
 
+### Gradient Blend Space — HSV / Oklab Interpolation
+- **Feature**: Gradient stop interpolation now supports 4 blend modes: RGB, HSV (shortest hue path), HSV Far (longest hue path), and Oklab (perceptually uniform, default).
+- **Problem solved**: RGB interpolation produces muddy, desaturated midpoints when blending between saturated colors (e.g. red→cyan → grey). Oklab maintains perceptual lightness and chroma.
+- **Implementation**: Uses Oklch (cylindrical Oklab) for interpolation — hue angle, chroma, and lightness are interpolated separately to preserve saturation. Falls back to rectangular Oklab for near-achromatic colors where hue is undefined.
+- **UI**: Clickable blend space label on the left side of the gradient editor header. Cycles through RGB → HSV → HSV Far → Oklab. Also available in the gradient right-click context menu under "Blend Mode". Non-default modes highlight in cyan.
+- **Architecture**: `BlendColorSpace` type added to `GradientConfig` as `blendSpace` property. `blendLerp()` dispatcher in colorUtils handles all interpolation routing. CSS preview approximates non-RGB blends by sampling 12 intermediate stops per segment.
+- **Default**: Oklab is the default for new and existing gradients without an explicit `blendSpace`. Backward compatible — existing scenes with authored RGB gradients will see slightly different (generally improved) blending.
+- Files: `types/graphics.ts`, `utils/colorUtils.ts`, `components/AdvancedGradientEditor.tsx`
+
 ### URL Sharing — Fix Formula Loading from Shared Links
 - **Bug**: Loading a scene from a `#s=` URL link loaded the default Mandelbulb instead of the correct formula
 - **Root cause**: `bootEngine()` (50ms timeout) raced with `import('../formulas')` (async chunk load). When the formula chunk took >50ms, boot read the store while it still had default state. The subsequent CONFIG from `loadScene` was dropped because `proxy.isBooted` was false.

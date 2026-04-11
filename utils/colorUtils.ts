@@ -1,5 +1,5 @@
 
-import { GradientStop, GradientConfig, ColorSpaceMode } from '../types';
+import { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 import * as THREE from 'three';
 
 export const hexToRgb = (hex: string) => {
@@ -65,6 +65,112 @@ export const lerpRGB = (c1: {r:number, g:number, b:number}, c2: {r:number, g:num
   };
 };
 
+// --- HSV interpolation (shortest hue path) ---
+export const lerpHSV = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} => {
+    const hsv1 = rgbToHsv(c1);
+    const hsv2 = rgbToHsv(c2);
+    let dh = hsv2.h - hsv1.h;
+    if (dh > 180) dh -= 360;
+    if (dh < -180) dh += 360;
+    const h = ((hsv1.h + dh * t) % 360 + 360) % 360;
+    const s = hsv1.s + (hsv2.s - hsv1.s) * t;
+    const v = hsv1.v + (hsv2.v - hsv1.v) * t;
+    return hsvToRgb(h, s, v);
+};
+
+// --- HSV interpolation (longest / far hue path) ---
+export const lerpHSVFar = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} => {
+    const hsv1 = rgbToHsv(c1);
+    const hsv2 = rgbToHsv(c2);
+    let dh = hsv2.h - hsv1.h;
+    // Take the LONG way around
+    if (dh >= 0 && dh <= 180) dh -= 360;
+    if (dh < 0 && dh >= -180) dh += 360;
+    const h = ((hsv1.h + dh * t) % 360 + 360) % 360;
+    const s = hsv1.s + (hsv2.s - hsv1.s) * t;
+    const v = hsv1.v + (hsv2.v - hsv1.v) * t;
+    return hsvToRgb(h, s, v);
+};
+
+// --- Oklab color space ---
+// sRGB [0-255] -> linear [0-1]
+const srgbToLinear01 = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+};
+
+// linear [0-1] -> sRGB [0-255]
+const linear01ToSrgb = (c: number) => {
+    const v = Math.max(0, Math.min(1, c));
+    return (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255;
+};
+
+const rgbToOklab = (c: {r:number, g:number, b:number}): {L:number, a:number, b:number} => {
+    const lr = srgbToLinear01(c.r), lg = srgbToLinear01(c.g), lb = srgbToLinear01(c.b);
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+    const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+    const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    return {
+        L: 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        a: 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        b: 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    };
+};
+
+const oklabToRgb = (lab: {L:number, a:number, b:number}): {r:number, g:number, b:number} => {
+    const l = lab.L + 0.3963377774 * lab.a + 0.2158037573 * lab.b;
+    const m = lab.L - 0.1055613458 * lab.a - 0.0638541728 * lab.b;
+    const s = lab.L - 0.0894841775 * lab.a - 1.2914855480 * lab.b;
+    const l3 = l * l * l, m3 = m * m * m, s3 = s * s * s;
+    return {
+        r: linear01ToSrgb(+4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3),
+        g: linear01ToSrgb(-1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3),
+        b: linear01ToSrgb(-0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3)
+    };
+};
+
+export const lerpOklab = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} => {
+    const lab1 = rgbToOklab(c1);
+    const lab2 = rgbToOklab(c2);
+
+    // Use Oklch (polar) interpolation to preserve chroma/saturation.
+    // Rectangular a,b lerp cuts through the achromatic axis, causing grey midpoints.
+    const c1Chroma = Math.sqrt(lab1.a * lab1.a + lab1.b * lab1.b);
+    const c2Chroma = Math.sqrt(lab2.a * lab2.a + lab2.b * lab2.b);
+
+    // If either color is near-achromatic, fall back to rectangular lerp
+    // (hue is undefined for greys)
+    if (c1Chroma < 0.005 || c2Chroma < 0.005) {
+        return oklabToRgb({
+            L: lab1.L + (lab2.L - lab1.L) * t,
+            a: lab1.a + (lab2.a - lab1.a) * t,
+            b: lab1.b + (lab2.b - lab1.b) * t
+        });
+    }
+
+    const h1 = Math.atan2(lab1.b, lab1.a);
+    const h2 = Math.atan2(lab2.b, lab2.a);
+    let dh = h2 - h1;
+    if (dh > Math.PI) dh -= 2 * Math.PI;
+    if (dh < -Math.PI) dh += 2 * Math.PI;
+
+    const h = h1 + dh * t;
+    const c = c1Chroma + (c2Chroma - c1Chroma) * t;
+    const L = lab1.L + (lab2.L - lab1.L) * t;
+
+    return oklabToRgb({ L, a: c * Math.cos(h), b: c * Math.sin(h) });
+};
+
+/** Dispatch color interpolation based on blend space */
+export const blendLerp = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number, space: BlendColorSpace): {r:number, g:number, b:number} => {
+    switch (space) {
+        case 'hsv':     return lerpHSV(c1, c2, t);
+        case 'hsv-far': return lerpHSVFar(c1, c2, t);
+        case 'oklab':   return lerpOklab(c1, c2, t);
+        default:        return lerpRGB(c1, c2, t);
+    }
+};
+
 // Bias Helper: Maps t [0,1] such that input 'bias' maps to 0.5 output
 const applyBias = (t: number, bias: number) => {
     if (Math.abs(bias - 0.5) < 0.001) return t;
@@ -75,29 +181,32 @@ const applyBias = (t: number, bias: number) => {
 
 export const getGradientCssString = (input: GradientStop[] | GradientConfig | undefined, viewGamma: number = 1.0): string => {
   let stops: GradientStop[];
+  let blend: BlendColorSpace = 'rgb';
 
   if (!input) return 'linear-gradient(90deg, #000 0%, #fff 100%)';
-  
+
   if (Array.isArray(input)) {
       stops = input;
   } else if (input && Array.isArray((input as GradientConfig).stops)) {
       stops = (input as GradientConfig).stops;
+      blend = (input as GradientConfig).blendSpace || 'oklab';
   } else {
       // Fallback for malformed data
       return 'linear-gradient(90deg, #000 0%, #fff 100%)';
   }
 
   if (!stops || stops.length === 0) return 'linear-gradient(90deg, #000 0%, #fff 100%)';
-  
+
   const sorted = [...stops].sort((a, b) => a.position - b.position);
+  const needsSampling = blend !== 'rgb';
   const parts: string[] = [];
 
   for (let i = 0; i < sorted.length; i++) {
       const s = sorted[i];
-      
+
       let pos = Math.pow(s.position, 1.0 / viewGamma);
       pos = Math.max(0, Math.min(1, pos)) * 100;
-      
+
       parts.push(`${s.color} ${pos.toFixed(2)}%`);
 
       if (i < sorted.length - 1) {
@@ -106,14 +215,27 @@ export const getGradientCssString = (input: GradientStop[] | GradientConfig | un
           const interpolation = s.interpolation || 'linear';
 
           if (interpolation === 'step') {
-               // Step mode: color stays constant until the next knot position
-               // The switch happens exactly at the next knot position, not at bias
                let nextPos = Math.pow(next.position, 1.0 / viewGamma);
                nextPos = Math.max(0, Math.min(1, nextPos)) * 100;
-
                parts.push(`${s.color} ${nextPos.toFixed(2)}%`);
                parts.push(`${next.color} ${nextPos.toFixed(2)}%`);
-          } 
+          }
+          else if (needsSampling) {
+              // Non-RGB blend: approximate by sampling intermediate colors
+              const c1 = hexToRgb(s.color) || {r:0,g:0,b:0};
+              const c2 = hexToRgb(next.color) || {r:0,g:0,b:0};
+              const SAMPLES = 12;
+              for (let j = 1; j < SAMPLES; j++) {
+                  let t = j / SAMPLES;
+                  if (Math.abs(segmentBias - 0.5) > 0.001) t = applyBias(t, segmentBias);
+                  if (interpolation === 'smooth' || interpolation === 'cubic') t = t * t * (3 - 2 * t);
+                  const midColor = blendLerp(c1, c2, t, blend);
+                  const midPos = s.position + (next.position - s.position) * (j / SAMPLES);
+                  let viewMidPos = Math.pow(midPos, 1.0 / viewGamma) * 100;
+                  viewMidPos = Math.max(0, Math.min(100, viewMidPos));
+                  parts.push(`${rgbToHex(midColor)} ${viewMidPos.toFixed(2)}%`);
+              }
+          }
           else {
               if (Math.abs(segmentBias - 0.5) > 0.001) {
                   const absHintPos = s.position + (next.position - s.position) * segmentBias;
@@ -124,7 +246,7 @@ export const getGradientCssString = (input: GradientStop[] | GradientConfig | un
           }
       }
   }
-  
+
   return `linear-gradient(90deg, ${parts.join(', ')})`;
 };
 
@@ -146,12 +268,15 @@ export const generateGradientTextureBuffer = (input: GradientStop[] | GradientCo
   let stops: GradientStop[];
   let colorSpace: ColorSpaceMode = 'srgb';
 
+  let blendSpace: BlendColorSpace = 'oklab';
+
   // Polymorphic Handling
   if (Array.isArray(input)) {
       stops = input;
   } else if (input && Array.isArray(input.stops)) {
       stops = input.stops;
       colorSpace = input.colorSpace || 'srgb';
+      blendSpace = input.blendSpace || 'oklab';
   } else {
       // Fallback
       return data;
@@ -197,7 +322,7 @@ export const generateGradientTextureBuffer = (input: GradientStop[] | GradientCo
 
                 const c1 = hexToRgb(s1.color) || {r:0,g:0,b:0};
                 const c2 = hexToRgb(s2.color) || {r:0,g:0,b:0};
-                rawColor = lerpRGB(c1, c2, t);
+                rawColor = blendLerp(c1, c2, t, blendSpace);
                 break;
             }
         }
