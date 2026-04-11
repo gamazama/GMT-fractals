@@ -10,9 +10,16 @@
 
 export const ATMOSPHERE_VOLUME_BODY = `
     if (uGlowIntensity > 0.0001) {
-        float sharpness = max(1.0, uGlowSharpness);
-        // Boost factor for visibility.
-        float gFactor = exp(-sharpness * max(h.x, 0.0)) * uFudgeFactor * 0.4;
+        float dist = max(h.x, 0.0);
+        // Aura mode: glow peaks AWAY from surface (tightness < 1)
+        float k = max(uGlowSharpness, 0.01);
+        float aura = dist * k * 2.718 * exp(-k * dist);
+        // Standard mode: glow hugs the surface (tightness >= 1)
+        float standard = exp(-uGlowSharpness * dist);
+        // Blend between aura and standard in the 0.75-1.0 range
+        float blend = smoothstep(0.75, 1.0, uGlowSharpness);
+        float gFactor = mix(aura, standard, blend);
+        gFactor *= uFudgeFactor * 0.4;
         
         #ifdef GLOW_FAST
             // Fast Mode: Accumulate scalar intensity only

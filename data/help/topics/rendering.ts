@@ -288,9 +288,10 @@ Useful for making metals look realistic by giving them something to reflect, eve
 Accumulates light along the ray as it passes *near* fractal surfaces (without hitting them).
 
 - **Intensity**: How bright the air is.
-- **Tightness**: How close to the surface the glow hugs. 
-  - **Low**: General foggy haze.
-  - **High**: Neon outlines around geometry (Tron look).
+- **Tightness**: Controls where glow appears relative to the fractal surface.
+  - **< 1 (Aura mode)**: Glow is suppressed near the surface and peaks further away, creating an outer aura effect. Lower values push the glow peak further out.
+  - **1–1000 (Standard)**: Glow hugs the surface. Low values give a general foggy haze, high values give neon outlines around geometry (Tron look).
+  - The transition between aura and standard mode blends smoothly in the 0.75–1.0 range.
 `
     },
     'mat.ao': {
