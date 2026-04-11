@@ -84,8 +84,7 @@ rd_dmin = -1e10;
 rd_scale = 1.0;
 rd_trap = 1e10;`,
         getDist: `
-        float rd_metric = r / max(length(z.xyz), 1e-10);
-        return vec2(abs(rd_dmin) * rd_metric, rd_trap);
+        return vec2(abs(rd_dmin), rd_trap);
     `,
         usesSharedRotation: true,
     },
@@ -140,7 +139,7 @@ rd_trap = 1e10;`,
             },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 250, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 7.5, fudgeFactor: 0.6, pixelThreshold: 2, maxSteps: 400, distanceMetric: 0, stepJitter: 0.15, estimator: 2 },
+            quality: { detail: 7.5, fudgeFactor: 0.6, pixelThreshold: 2, maxSteps: 400, distanceMetric: 0, stepJitter: 0.15, estimator: 1 },
             colorGrading: { saturation: 1.1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 38, dofStrength: 0, dofFocus: 5 }
         },

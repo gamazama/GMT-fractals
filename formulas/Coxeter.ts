@@ -81,8 +81,7 @@ cox_dmin = -1e10;
 cox_scale = 1.0;
 cox_trap = 1e10;`,
         getDist: `
-        float cox_metric = r / max(length(z.xyz), 1e-10);
-        return vec2(abs(cox_dmin) * cox_metric, cox_trap);
+        return vec2(abs(cox_dmin), cox_trap);
     `,
         usesSharedRotation: true,
     },
@@ -147,7 +146,7 @@ cox_trap = 1e10;`,
             },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 250, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 3, fudgeFactor: 1, pixelThreshold: 2, maxSteps: 400, distanceMetric: 1, stepJitter: 0.15, estimator: 2 },
+            quality: { detail: 3, fudgeFactor: 1, pixelThreshold: 2, maxSteps: 400, distanceMetric: 1, stepJitter: 0.15, estimator: 1 },
             colorGrading: { active: true, saturation: 1.1, levelsMin: 0, levelsMax: 0.537, levelsGamma: 0.966 },
             optics: { camFov: 36, dofStrength: 0, dofFocus: 5 }
         },

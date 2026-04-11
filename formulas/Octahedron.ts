@@ -35,7 +35,7 @@ export const Octahedron: FractalDefinition = {
         if (uJuliaMode > 0.5) z3 += c.xyz;
         dr = dr * abs(scale);
         z.xyz = z3;
-        trap = min(trap, length(z3));
+        trap = min(trap, getLength(z3));
     }`,
         loopBody: `formula_Octahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
@@ -210,7 +210,7 @@ export const Octahedron: FractalDefinition = {
                 bufferPrecision: 0,
                 maxSteps: 300,
                 distanceMetric: 2,
-                estimator: 2,
+                estimator: 1,
                 fudgeFactor: 0.9,
                 stepRelaxation: 0,
                 stepJitter: 0.15,

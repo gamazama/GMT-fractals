@@ -76,8 +76,7 @@ cp_dmin = -1e10;
 cp_scale = 1.0;
 cp_trap = 1e10;`,
         getDist: `
-        float cp_metric = r / max(length(z.xyz), 1e-10);
-        return vec2(abs(cp_dmin) * cp_metric, cp_trap);
+        return vec2(abs(cp_dmin), cp_trap);
     `,
         usesSharedRotation: true,
     },
@@ -248,7 +247,7 @@ cp_trap = 1e10;`,
                 bufferPrecision: 0,
                 maxSteps: 400,
                 distanceMetric: 0,
-                estimator: 2,
+                estimator: 1,
                 fudgeFactor: 0.6,
                 stepRelaxation: 0,
                 stepJitter: 0.15,

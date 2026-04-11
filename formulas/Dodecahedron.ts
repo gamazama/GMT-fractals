@@ -47,7 +47,7 @@ export const Dodecahedron: FractalDefinition = {
 
         dr = dr * abs(scale);
         z.xyz = z3;
-        trap = min(trap, length(z3));
+        trap = min(trap, getLength(z3));
     }`,
         loopBody: `formula_Dodecahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
@@ -115,7 +115,7 @@ export const Dodecahedron: FractalDefinition = {
             },
             geometry: { juliaMode: false, juliaX: -0.495, juliaY: 0.43, juliaZ: -0.07, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 538, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 2, fudgeFactor: 0.618, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 2, stepJitter: 0.15, estimator: 2 },
+            quality: { detail: 2, fudgeFactor: 0.618, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 3, stepJitter: 0.15, estimator: 4 },
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 30, dofStrength: 0, dofFocus: 5.416511696387403 }
         },

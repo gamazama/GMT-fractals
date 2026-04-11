@@ -105,8 +105,7 @@ gsd_dmin = -1e10;
 gsd_scale = 1.0;
 gsd_trap = 1e10;`,
         getDist: `
-        float gsd_metric = r / max(length(z.xyz), 1e-10);
-        return vec2(abs(gsd_dmin) * gsd_metric, gsd_trap);
+        return vec2(abs(gsd_dmin), gsd_trap);
     `,
         usesSharedRotation: true,
     },
@@ -164,7 +163,7 @@ gsd_trap = 1e10;`,
             },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 200, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 2, fudgeFactor: 0.6, pixelThreshold: 0.2, maxSteps: 400, distanceMetric: 0, stepJitter: 0.15, estimator: 2 },
+            quality: { detail: 2, fudgeFactor: 0.6, pixelThreshold: 0.2, maxSteps: 400, distanceMetric: 0, stepJitter: 0.15, estimator: 1 },
             colorGrading: { saturation: 1.1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 36, dofStrength: 0, dofFocus: 5 }
         },

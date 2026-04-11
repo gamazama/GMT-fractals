@@ -50,7 +50,7 @@ export const TruncatedIcosahedron: FractalDefinition = {
         if (uJuliaMode > 0.5) z3 += c.xyz;
         dr = dr * abs(scale);
         z.xyz = z3;
-        trap = min(trap, dot(z3, z3));
+        trap = min(trap, getLength(z3));
     }`,
         loopBody: `formula_TruncatedIcosahedron(z, dr, trap, c);`,
         loopInit: `
@@ -235,8 +235,8 @@ export const TruncatedIcosahedron: FractalDefinition = {
                 precisionMode: 0,
                 bufferPrecision: 0,
                 maxSteps: 300,
-                distanceMetric: 2,
-                estimator: 2,
+                distanceMetric: 0,
+                estimator: 1,
                 fudgeFactor: 0.8,
                 stepRelaxation: 0,
                 stepJitter: 0.1,
