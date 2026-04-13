@@ -134,6 +134,51 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 *   **630KB → 484KB gzip (-23%)** for blocking initial load chunks.
 *   Files: `vite.config.ts`, `formulas/categories.ts` (NEW), `formulas/index.ts`, `components/panels/formula/FormulaGallery.tsx`, `hooks/useAppStartup.ts`, `components/LoadingScreen.tsx`
 
+## 2.10 Redundancy & Dead Code Cleanup (2026-04-12)
+
+**Net: -319 lines** across 65 files. Systematic codebase scan for duplication, dead code, and consolidation opportunities.
+
+### Dead Code Removed
+*   **Dead file:** `Controls.tsx` (deprecated placeholder rendering `null`) + import from `App.tsx`
+*   **Dead methods:** `MaterialController.updatePostProcessUniforms()`, `VirtualSpace.updateCameraBasis()`, `WorkerProxy.setWorkerModePending()` (no-op stub)
+*   **Dead store actions:** `setActiveCameraId`, `applyCameraState`, `addSavedCamera` (superseded by higher-level `addCamera`/`selectCamera`), `setCompilerHardCap` (never implemented)
+*   **Dead state fields:** `playbackSlice.zoomLevel` (never read/written), `UniformManager.lastWidth`/`lastHeight`/`lastIsGizmoInteracting` (written but never read)
+*   **Dead interfaces:** `UIStateLocal`/`UIActionsLocal` in `uiSlice.ts` (exported but never imported)
+*   **Dead export:** `generateShareString` in `Sharing.ts` (always throws, tells callers to use `generateShareStringFromPreset`)
+*   **Dead parameter:** `encodeSRGB` on `createPostProcessMaterial` (always `1.0`, overridden externally anyway)
+*   **Dead code blocks:** Blue Noise size sync in UniformManager (uniform unused by IGN shader), empty `onResetAccum` subscription in Navigation, legacy toggle stubs in `useDockInteraction`, stale `isMinimized` dep
+*   **Commented-out code:** 6 commented `console.log` lines in ShaderBuilder/MaterialController/FractalEngine (duplicating active compile logs)
+*   **Dead ternary:** `currentLight.fixed ? 10 : 10` in LightPanel (collapsed to `10`)
+
+### Shared Helpers Extracted
+*   **`useHelpContextMenu(extraIds?)`** (`hooks/useHelpContextMenu.ts`) — Replaced 10 copy-pasted `collectHelpIds → openContextMenu` handlers in Button, Dropdown, ToggleSwitch, SmallColorPicker, TrackRow, TimelineToolbar, FixedResolutionControls, ScenePanel, RenderPanel, QualityPanel.
+*   **`isRotationTrack(trackId)`** (`utils/timelineUtils.ts`) — Replaced 5 inline `/rotation|rot|phase|twist/i.test(tid) || /param[C-F]/i.test(tid)` occurrences across timelineUtils, useGraphTools, useTrackAnimation.
+*   **`buildMapping(customMapping)`** (`components/Slider.tsx`) — Deduplicated identical `useMemo` blocks in BaseSlider and Slider components.
+*   **`OnOffBadge` component** (`components/topbar/SystemMenu.tsx`) — Replaced 5 copy-pasted badge `<span>` elements with parameterized color variants (cyan/purple/green).
+*   **`beginDragTool(e, onMove, onUp)`** (`hooks/useGraphTools.ts`) — Collapsed 3 identical pointer-drag setup/teardown blocks (smooth/bake/simplify tools).
+
+### Consolidation
+*   **`halton()` dedup:** `FractalEngine.ts` now imports from `codec/H264Converter.ts` instead of maintaining a local copy.
+*   **Mobile detection dedup:** `FractalEngine` constructor now uses `detectHardwareProfileMainThread().isMobile` from `HardwareDetection.ts` instead of inline `matchMedia` check.
+*   **`compileDirect`/`compilePT` merge:** Unified into shared `compileMode(config, mode)` in `MaterialController.ts`, eliminating 20 lines of near-identical code.
+*   **Gradient texture helper:** Extracted `_makeGradientTexture(buffer)` in MaterialController — collapsed 4 identical DataTexture creation blocks.
+*   **sRGB converter consolidation:** Replaced gamma-2.2 approximation in `colorUtils.ts` with the accurate IEC 61966 piecewise function already in the file.
+*   **`<SectionDivider />` reuse:** Replaced 2 inline gradient `<div>` elements in AutoFeaturePanel and QualityPanel with the existing `SectionDivider` component.
+
+### Store Consistency Fixes
+*   **Sequence undo/redo standardized to LIFO:** `sequenceSlice.ts` redo stack was FIFO (pop from front, push to front) while camera/param stacks were LIFO (pop from end, push to end). Now all three are LIFO.
+*   **`paramUndoStack` capped at 50 entries:** Was unbounded unlike camera (50) and sequence (50) stacks. Each entry is a deep-cloned `Partial<FractalStoreState>`.
+
+### Remaining Consolidation Opportunities
+
+These are deferred — high value but require focused testing:
+
+| Item | Location | Why deferred |
+|------|----------|-------------|
+| ✅ **Fullscreen quad utility** | 10 sites consolidated into `createFullscreenPass()` in `engine/utils/FullscreenQuad.ts` | Done. All sites share a single `PlaneGeometry` instance. Also fixed: geometry leaks in 9/10 sites, mesh churn in WorkerHistogram, throwaway objects in BucketRenderer.readCompositePixels(). |
+| **NeighborKeyData extraction** | `useDopeSheetInteraction.ts` + `useGraphInteraction.ts` | Identical interface (7 fields), collection algorithm, and tangent ratio-scaling loop duplicated across both hooks. DopeSheet is 1D, Graph is 2D — need to preserve that distinction. Extract to `utils/timelineUtils.ts`. |
+| **World-to-store position helper** | `useInteractionManager`, `LightPanel`, `LightGizmo` (4 sites) | `x + so.x + (so.xL ?? 0)` pattern repeated for all axes. Touches interaction and gizmo hot paths — needs light drag + picking regression testing. |
+
 ## 3. Technical Debt
 
 ### High Priority
@@ -355,6 +400,9 @@ The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full sh
 2. ✅ Split `FormulaSelect.tsx` → `FormulaContextMenu.tsx` + `FormulaGallery.tsx` (see Section 8)
 3. ✅ Extract shared `H264Converter` + `halton` from both exporters → `engine/codec/H264Converter.ts`
 4. ✅ Extract `applyExportModulations` + time helpers from `RenderPopup.tsx` (see Section 8)
+5. ✅ Extract `FullscreenQuad` utility → `engine/utils/FullscreenQuad.ts` — 10 sites consolidated, shared geometry, 3 bugs fixed.
+6. Extract `NeighborKeyData` + drag-neighbor collection from `useDopeSheetInteraction`/`useGraphInteraction` into `timelineUtils.ts`. See Section 2.10.
+7. Extract `worldToStorePos(worldPos, offset)` helper — `x + so.x + (so.xL ?? 0)` pattern in 4+ sites across interaction/lighting code.
 
 ### Long Term (High Effort)
 1. Generate TypeScript types from `FeatureRegistry` for full type safety
@@ -472,7 +520,6 @@ The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full sh
 
 | File | Line | Context | Swallowed Error | Risk | Recommendation |
 |------|------|---------|-----------------|------|----------------|
-| `index.tsx` | 14 | Service worker cleanup `.catch(() => {})` | SW API unavailable | None — cleanup of legacy SW | **OK as-is** |
 | `components/ShaderDebugger.tsx` | 95, 122 | `navigator.clipboard.writeText().catch(() => {})` | Clipboard API blocked by permissions | Already handled: `document.execCommand('copy')` runs first as fallback | **OK as-is** |
 
 #### Summary
@@ -481,8 +528,8 @@ The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full sh
 |----------|-------|---------------|
 | HIGH | 2 | Add error logging/user feedback |
 | MEDIUM | 6 | 2 need comments, 4 are correct patterns |
-| LOW | 3 | No action needed |
-| **Total** | **13** | **2 require fixes** |
+| LOW | 2 | No action needed |
+| **Total** | **12** | **2 require fixes** |
 
 ### 9.2 Unhandled Async — `await` Without Error Handling
 

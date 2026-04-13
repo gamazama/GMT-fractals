@@ -6,7 +6,7 @@
 *   `index.html`: Application entry point. Sets up DOM and Tailwind.
 *   `index.tsx`: React root. Mounts `App` and initializes registries.
 *   `App.tsx`: Main Layout (Loading, TopBar, Viewport, Controls, Timeline).
-*   `metadata.json`: PWA manifest and permissions.
+*   `metadata.json`: Legacy stub — `requestFramePermissions` for the Claude.ai embed context. **Not** the active PWA manifest (that is generated at build time by `vite-plugin-pwa` as `dist/manifest.webmanifest`).
 *   `types.ts`: Aggregates all type definitions.
 *   `types/viewport.ts`: Viewport quality types — `SubsystemDefinition`, `ScalabilityPreset`, `ScalabilityState`, `HardwareProfile`. Contains subsystem definitions (tiers, overrides), master presets, and helper functions.
 *   `vite.config.ts`: Build configuration.
@@ -205,7 +205,7 @@ Self-contained modules defining State, UI, and Shaders.
 
 ## 8. Vite Build Configuration
 **File:** `vite.config.ts`
-- Manages build optimization and chunking
+- Manages build optimization, chunking, and PWA generation
 - Key Chunks:
   - `three`: Three.js library (3D rendering core)
   - `react`: React and React DOM
@@ -218,6 +218,37 @@ Self-contained modules defining State, UI, and Shaders.
 **Optimization Notes:**
 - The `webm-muxer` dependency was removed as it was not actually used in the codebase
 - Chunking strategy focuses on vendor libraries for better browser caching
+
+### PWA (`vite-plugin-pwa`)
+
+GMT ships as a Progressive Web App via `vite-plugin-pwa` (Workbox). The manifest and service worker are generated at build time.
+
+**Key settings:**
+- `registerType: 'prompt'` — new SW waits for user approval before activating. Prevents silent stale-cache breakage on shader/formula deploys. The update prompt surfaces as an amber "Update available — reload" button at the top of the System Menu (`components/topbar/SystemMenu.tsx`).
+- `devOptions: { enabled: false }` — SW is disabled in dev mode to avoid conflicts with the Express middleware server.
+- `base: './'` — all asset paths are relative, making the build safe for both root and subdirectory deployments (e.g. GitHub Pages).
+
+**Precache manifest (~9MB, 269 entries):**
+
+| Pattern | Contents |
+|---------|----------|
+| `**/*.{js,css,html}` | All Vite-built and hashed assets |
+| `blueNoise.png` | Engine noise texture |
+| `formulas/**/*.{frag,json}` | 178 formula shaders + manifest/dec index |
+| `thumbnails/**/*.jpg` | Formula picker thumbnails |
+| `gmf/**/*.{gmf,json}` | Preset gallery scenes |
+
+**Runtime cache:**
+- CDN assets (`cdn.tailwindcss.com`, `cdn.jsdelivr.net`) — `NetworkFirst` with 7-day expiry. These are cached after the first online page load and served from cache when offline.
+
+**Icons:** `public/icon-192.png` and `public/icon-512.png`. Replace with purpose-built exports from your icon source if adding maskable icon support.
+
+**Screenshots:** `public/screenshots/desktop.png` (900×600). Replace with an actual app screenshot for the Richer Install UI in Chrome/Edge. Mobile screenshot omitted — landscape-only layout makes a portrait screenshot impractical.
+
+**Browser support:**
+- Chrome/Edge: full install prompt, standalone window, update flow ✓
+- Safari macOS Sonoma+: installable via Share → Add to Dock; no address-bar prompt
+- Firefox: no install support; SW caching still active
 
 ## 9. Mesh Export Tool (`public/mesh-export/`)
 Standalone HTML + ES2020 tool for exporting fractal geometry as meshes/VDB. No React — runs independently.
