@@ -76,14 +76,28 @@ export const Mandelorus: FractalDefinition = {
             // 4. Solenoidal Wrapping (The Base Iteration)
             // phi -> n * phi + turn
             phi = phi * power + ringPhase;
-            
+
             // 5. Reconstruction (Map back to 3D)
             vec2 ringPos = vec2(cos(phi), sin(phi));
-            
+
             vec3 p_next;
             p_next.xy = ringPos * (R + q.x); // Expand ring by new q.x
-            p_next.z = q.y; 
-            
+            p_next.z = q.y;
+
+            // --- RADIOLARIA MUTATION (Tom Beddard) ---
+            // Sculpt strand thickness symmetrically. Branchless, seam-free at y=0.
+            // Positive limit L:  sign(y) * min(|y|, L)         — cap |y| at L (flatten/squeeze inward)
+            // Negative limit L:  sign(y) * |y|*|L| / (1+|L|)  — scale toward identity as |L| grows
+            //   At L→0-: approaches 0 (flat, continuous with positive side).
+            //   At L→-∞: approaches |y| (full shape, no modification).
+            //   Denominator (1 - L) is always > 1 for L < 0, so no division-by-zero risk.
+            if (uVec2B.x > 0.5) {
+                float radLimit = uVec2B.y;
+                float ay = abs(p_next.y);
+                float radT = step(0.0, radLimit);
+                p_next.y = sign(p_next.y) * mix(ay * (-radLimit) / (1.0 - radLimit), min(ay, radLimit), radT);
+            }
+
             // 6. Addition of C
             p_next += c.xyz;
             
@@ -101,6 +115,7 @@ export const Mandelorus: FractalDefinition = {
         { label: 'Power', id: 'paramC', min: 1.0, max: 16.0, step: 0.01, default: 8.0 },
         { label: 'Phase (Ring, Cross)', id: 'vec2A', type: 'vec2', min: -6.28, max: 6.28, step: 0.01, default: { x: 0.0, y: 0.0 }, scale: 'pi' },
         { label: 'Vert Scale', id: 'paramF', min: -0.9, max: 2.0, step: 0.01, default: 0.0 },
+        { label: 'Radiolaria', id: 'vec2B', type: 'vec2', min: -2.0, max: 2.0, step: 0.01, default: { x: 0, y: 0.5 }, mode: 'mixed' },
     ],
 
     defaultPreset: {
@@ -114,7 +129,8 @@ export const Mandelorus: FractalDefinition = {
       "paramB": 0,
       "paramC": 5,
       "paramF": 0,
-      "vec2A": { "x": 0, "y": -1.159203974648639 }
+      "vec2A": { "x": 0, "y": -1.159203974648639 },
+      "vec2B": { "x": 0, "y": 0.5 }
     },
     "geometry": {
       "applyTransformLogic": true,
