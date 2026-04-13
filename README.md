@@ -12,8 +12,8 @@
 *   **Fragmentarium and formula import:** through the Formula Workshop.
 *   **Video Export:** Offline rendering pipeline supporting 4K+ resolution and high-bitrate WebM/MP4 export (using WebCodecs).
 *   **Environment Features:**
-    *   **Water Plane:** Infinite ocean with procedural waves.
     *   **Volumetrics:** Atmospheric fog and glow.
+    *   **HDRI maps**
 *   **Data-Driven Architecture:** Features are defined in a registry, automatically generating UI, State, and Shaders.
 *   **Modular Builder:** A node-based graph editor to construct custom fractal formulas (JIT Compiled to GLSL).
 
