@@ -7,14 +7,15 @@
 *   **Hybrid Render Engine:**
     *   **Direct Mode:** 60FPS real-time raymarching with soft shadows, reflections, and ambient occlusion.
     *   **Path Tracer:** Physically-based Monte Carlo rendering with Global Illumination (GI) and emissive materials.
-*   **High Zoom:** Uses a custom "Split-Float" precision system to exceed standard WebGL limits ($10^{15}$ zoom factor).
-*   **Modular Builder:** A node-based graph editor to construct custom fractal formulas (JIT Compiled to GLSL).
+*   **High Zoom:** Uses a custom "Split-Float" precision system to exceed standard WebGL limits ($10^{5}$ zoom factor).
 *   **Animation Studio:** Full keyframe timeline with Bezier curves, Dope Sheet, and Graph Editor.
+*   **Fragmentarium and formula import:** through the Formula Workshop.
 *   **Video Export:** Offline rendering pipeline supporting 4K+ resolution and high-bitrate WebM/MP4 export (using WebCodecs).
 *   **Environment Features:**
     *   **Water Plane:** Infinite ocean with procedural waves.
     *   **Volumetrics:** Atmospheric fog and glow.
 *   **Data-Driven Architecture:** Features are defined in a registry, automatically generating UI, State, and Shaders.
+*   **Modular Builder:** A node-based graph editor to construct custom fractal formulas (JIT Compiled to GLSL).
 
 ## 🚀 Quick Start
 
