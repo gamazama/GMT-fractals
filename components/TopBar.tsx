@@ -5,6 +5,7 @@ import { RenderTools } from './topbar/RenderTools';
 import { CenterHUD } from './topbar/CenterHUD';
 import { CameraTools } from './topbar/CameraTools';
 import { SystemMenu } from './topbar/SystemMenu';
+import { HelpMenu } from './topbar/HelpMenu';
 
 const TopBar = () => {
     const state = useFractalStore();
@@ -49,12 +50,18 @@ const TopBar = () => {
                 
                 <div className="h-6 w-px bg-white/10 mx-1" />
                 
-                <SystemMenu 
-                    isMobileMode={isMobileMode} 
-                    vibrate={vibrate} 
-                    btnBase={btnBase} 
-                    btnActive={btnActive} 
-                    btnInactive={btnInactive} 
+                <SystemMenu
+                    isMobileMode={isMobileMode}
+                    vibrate={vibrate}
+                    btnBase={btnBase}
+                    btnActive={btnActive}
+                    btnInactive={btnInactive}
+                />
+                <HelpMenu
+                    vibrate={vibrate}
+                    btnBase={btnBase}
+                    btnActive={btnActive}
+                    btnInactive={btnInactive}
                 />
             </div>
         </header>

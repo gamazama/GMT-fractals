@@ -153,13 +153,13 @@ Self-contained modules defining State, UI, and Shaders.
 *   **Flow**: `FlowEditor`, `ShaderNode` (Modular Graph).
 *   **Registry**: `ComponentRegistry` (Maps strings to React components for DDFS).
 *   **Graph**: `GraphCanvas`, `GraphSidebar`, `GraphToolbar`.
-*   **TopBar**: `SystemMenu`, `CameraTools`, `RenderTools`, `FpsCounter`, `CenterHUD`, `BucketRenderControls`, `ViewportQuality` (viewport quality dropdown with subsystem tiers, PT controls, and batched apply).
+*   **TopBar**: `SystemMenu` (hamburger — file I/O, feature toggles, hardware/workshop/advanced settings), `HelpMenu` (? button — help browser, tutorials, hints, donate, about), `CameraTools`, `RenderTools`, `FpsCounter`, `CenterHUD`, `BucketRenderControls`, `ViewportQuality` (viewport quality dropdown with subsystem tiers, PT controls, and batched apply).
 *   **Viewport**: `FixedResolutionControls`.
 *   **Layout**: `Dock`, `DropZones`.
 *   **Gradient**: `GradientContextMenu`.
 *   **Node Editor**: `NodeParams`.
 *   **Tutorial**: `tutorial/HintDisplay.tsx` (fade-transition contextual hint display with help link).
-*   **Other**: `AnimationSystem`, `CategoryPickerMenu`, `DraggableWindow`, `FeatureSection`, `GlobalContextMenu`, `HelpBrowser`, `Histogram`, `HistogramProbe`, `Icons`, `InteractionPicker`, `KeyframeButton`, `ParameterSelector`, `PopupSliderSystem`, `ShaderDebugger`, `StateDebugger`.
+*   **Other**: `AnimationSystem`, `CategoryPickerMenu`, `DraggableWindow`, `FeatureSection`, `GlobalContextMenu`, `HelpBrowser`, `Histogram`, `HistogramProbe`, `Icons`, `Icons2` (supplemental icons — `HelpMenuIcon`, `BookIcon`), `InteractionPicker`, `KeyframeButton`, `ParameterSelector`, `PopupSliderSystem`, `ShaderDebugger`, `StateDebugger`.
 
 ## 6. Shaders (`shaders/`)
 *   `chunks/`: Reusable GLSL snippets (Math, SDFs, Lighting, Raymarching).
