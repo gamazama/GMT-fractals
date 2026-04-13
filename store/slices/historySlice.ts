@@ -169,11 +169,14 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
         });
 
         if (hasChanges) {
-            set(state => ({
-                paramUndoStack: [...state.paramUndoStack, diff],
-                paramRedoStack: [],
-                interactionSnapshot: null
-            }));
+            set(state => {
+                const newStack = [...state.paramUndoStack, diff];
+                return {
+                    paramUndoStack: newStack.length > 50 ? newStack.slice(-50) : newStack,
+                    paramRedoStack: [],
+                    interactionSnapshot: null
+                };
+            });
         } else {
             set({ interactionSnapshot: null });
         }

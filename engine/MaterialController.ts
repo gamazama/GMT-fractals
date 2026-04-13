@@ -112,8 +112,8 @@ export class MaterialController {
             glslVersion: THREE.GLSL3
         });
 
-        this.displayMaterial = this.createPostProcessMaterial(1.0);
-        this.exportMaterial = this.createPostProcessMaterial(1.0);
+        this.displayMaterial = this.createPostProcessMaterial();
+        this.exportMaterial = this.createPostProcessMaterial();
         
         // Sync Initial Uniforms ONLY (No Shader Build)
         this.syncConfigUniforms(initialConfig);
@@ -146,11 +146,11 @@ export class MaterialController {
         return mode === 'PathTracing' ? this.materialPT : this.materialDirect;
     }
     
-    private createPostProcessMaterial(encodeSRGB: number): THREE.ShaderMaterial {
+    private createPostProcessMaterial(): THREE.ShaderMaterial {
         const uniforms: { [key: string]: THREE.IUniform } = {
             map: { value: null },
             uResolution: { value: new THREE.Vector2(1,1) },
-            uEncodeOutput: { value: encodeSRGB },
+            uEncodeOutput: { value: 1.0 },
             uBloomTexture: { value: null }  // Set by BloomPass in worker
         };
 
@@ -174,14 +174,6 @@ export class MaterialController {
         });
     }
 
-    public updatePostProcessUniforms(state: any) {
-        [this.displayMaterial, this.exportMaterial].forEach(mat => {
-            if (this.mainUniforms.uResolution.value) {
-                mat.uniforms.uResolution.value.copy(this.mainUniforms.uResolution.value);
-            }
-        });
-    }
-    
     public getLastFrag(): string { return this.lastGeneratedFrag; }
     
     public updateConfig(config: ShaderConfig) {
@@ -219,49 +211,33 @@ export class MaterialController {
         this.syncConfigUniforms(config);
     }
     
-    private compileDirect(config: ShaderConfig) {
-        const configDirect = {
+    private compileMode(config: ShaderConfig, mode: 'Direct' | 'PathTracing') {
+        const modeConfig = {
             ...config,
-            renderMode: 'Direct' as const,
-            lighting: { ...(config.lighting || {}), renderMode: 0.0 } // Force DDFS value
+            renderMode: mode,
+            lighting: { ...(config.lighting || {}), renderMode: mode === 'PathTracing' ? 1.0 : 0.0 }
         };
-        const fragDirect = ShaderFactory.generateFragmentShader(configDirect);
-        const checksum = cyrb53(fragDirect).toString(16);
+        const frag = ShaderFactory.generateFragmentShader(modeConfig);
+        const checksum = cyrb53(frag).toString(16);
 
-        if (checksum !== this.activeDirectChecksum) {
-            this.materialDirect.fragmentShader = fragDirect;
-            this.materialDirect.needsUpdate = true;
-            this.activeDirectChecksum = checksum;
+        const mat = mode === 'Direct' ? this.materialDirect : this.materialPT;
+        const prevChecksum = mode === 'Direct' ? this.activeDirectChecksum : this.activePTChecksum;
+
+        if (checksum !== prevChecksum) {
+            mat.fragmentShader = frag;
+            mat.needsUpdate = true;
+            if (mode === 'Direct') this.activeDirectChecksum = checksum;
+            else this.activePTChecksum = checksum;
             this.shaderDirty = true;
-
-            // if (import.meta.env.DEV) console.log(`[Shader Generated] Direct | Hash: ${checksum.substring(0, 8)} | Size: ${(fragDirect.length/1024).toFixed(1)}kb`);
-            FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragDirect);
+            FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, frag);
         }
-        this.lastGeneratedFrag = fragDirect;
-        this.directDirty = false;
+        this.lastGeneratedFrag = frag;
+        if (mode === 'Direct') this.directDirty = false;
+        else this.ptDirty = false;
     }
 
-    private compilePT(config: ShaderConfig) {
-        const configPT = {
-            ...config,
-            renderMode: 'PathTracing' as const,
-            lighting: { ...(config.lighting || {}), renderMode: 1.0 } // Force DDFS value
-        };
-        const fragPT = ShaderFactory.generateFragmentShader(configPT);
-        const checksum = cyrb53(fragPT).toString(16);
-
-        if (checksum !== this.activePTChecksum) {
-            this.materialPT.fragmentShader = fragPT;
-            this.materialPT.needsUpdate = true;
-            this.activePTChecksum = checksum;
-            this.shaderDirty = true;
-
-            // if (import.meta.env.DEV) console.log(`[Shader Generated] PathTracing | Hash: ${checksum.substring(0, 8)} | Size: ${(fragPT.length/1024).toFixed(1)}kb`);
-            FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, fragPT);
-        }
-        this.lastGeneratedFrag = fragPT;
-        this.ptDirty = false;
-    }
+    private compileDirect(config: ShaderConfig) { this.compileMode(config, 'Direct'); }
+    private compilePT(config: ShaderConfig) { this.compileMode(config, 'PathTracing'); }
 
     /**
      * Two-stage compile: Stage 1 — Generate and apply a preview shader with lighting stubs.
@@ -333,7 +309,6 @@ export class MaterialController {
 
         const frag = ShaderFactory.generateFragmentShader(modeConfig);
         const checksum = cyrb53(frag).toString(16);
-        // if (import.meta.env.DEV) console.log(`[Shader Generated] Full ${targetMode} | Hash: ${checksum.substring(0, 8)} | Size: ${(frag.length/1024).toFixed(1)}kb`);
 
         const fullMat = new THREE.ShaderMaterial({
             vertexShader: VERTEX_SHADER,
@@ -380,6 +355,15 @@ export class MaterialController {
         FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, frag);
     }
     
+    private _makeGradientTexture(buffer: Uint8Array): THREE.DataTexture {
+        const tex = new THREE.DataTexture(buffer as any, 256, 1, THREE.RGBAFormat);
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.needsUpdate = true;
+        return tex;
+    }
+
     public setUniform(key: string, value: any) {
         let valToAssign = value;
 
@@ -391,44 +375,13 @@ export class MaterialController {
         // 1. Handle Gradient Buffer Optimization or Array of Stops
         if (value && value.isGradientBuffer) {
              const existingTex = this.mainUniforms[key]?.value;
-             if (existingTex instanceof THREE.DataTexture) {
-                 // Create new texture with updated data instead of modifying read-only property
-                 const tex = new THREE.DataTexture(value.buffer as any, 256, 1, THREE.RGBAFormat);
-                 tex.minFilter = THREE.LinearFilter;
-                 tex.magFilter = THREE.LinearFilter;
-                 tex.wrapS = THREE.RepeatWrapping;
-                 tex.needsUpdate = true;
-                 existingTex.dispose();
-                 valToAssign = tex;
-             } else {
-                 const tex = new THREE.DataTexture(value.buffer as any, 256, 1, THREE.RGBAFormat);
-                 tex.minFilter = THREE.LinearFilter;
-                 tex.magFilter = THREE.LinearFilter;
-                 tex.wrapS = THREE.RepeatWrapping;
-                 tex.needsUpdate = true;
-                 valToAssign = tex;
-             }
+             if (existingTex instanceof THREE.DataTexture) existingTex.dispose();
+             valToAssign = this._makeGradientTexture(value.buffer);
         } else if (Array.isArray(value) && value.length > 0 && (value[0] as GradientStop).color) {
-            // Auto-detect array of GradientStops and convert to buffer
             const buffer = generateGradientTextureBuffer(value);
             const existingTex = this.mainUniforms[key]?.value;
-            if (existingTex instanceof THREE.DataTexture) {
-                 // Create new texture with updated data instead of modifying read-only property
-                 const tex = new THREE.DataTexture(buffer as any, 256, 1, THREE.RGBAFormat);
-                 tex.minFilter = THREE.LinearFilter;
-                 tex.magFilter = THREE.LinearFilter;
-                 tex.wrapS = THREE.RepeatWrapping;
-                 tex.needsUpdate = true;
-                 existingTex.dispose();
-                 valToAssign = tex;
-             } else {
-                 const tex = new THREE.DataTexture(buffer as any, 256, 1, THREE.RGBAFormat);
-                 tex.minFilter = THREE.LinearFilter;
-                 tex.magFilter = THREE.LinearFilter;
-                 tex.wrapS = THREE.RepeatWrapping;
-                 tex.needsUpdate = true;
-                 valToAssign = tex;
-             }
+            if (existingTex instanceof THREE.DataTexture) existingTex.dispose();
+            valToAssign = this._makeGradientTexture(buffer);
         }
 
         const targets = [

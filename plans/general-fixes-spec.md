@@ -340,39 +340,28 @@ This means higher internal scale = more precision per output pixel (supersamplin
 
 ---
 
-## Implementation Priority
+## Status (Updated April 2026)
 
-### High Priority (User Experience)
-1. Snapshot "Capturing..." indicator (#12)
-2. Left pane auto-open (#5)
-3. Histogram improvements (#8)
-4. Gradient editor fixes (#9)
+### Completed ✅
+| # | Item | Notes |
+|---|------|-------|
+| 2 | Engine Panel compile state | Apply button disables during compile, visual feedback |
+| 3 | Local rotation | Fixed — rotation matrix calculated in UniformManager.syncFrame() |
+| 4 | Speed lerped DST | Asymmetric smoothing: 8%/frame ramp-up, instant decrease |
+| 5 | Left pane auto-open | togglePanel sets isLeftDockCollapsed: false |
+| 6 | Estimator recompile | Has onUpdate: 'compile', UI shows compile indicator |
+| 8 | Histogram improvements | Stale indicator, 0-1 reset button |
+| 9 | Gradient editor fixes | Delete key, context menu close |
+| 10 | Q/E rotation with SPD | Speed-scaled roll via speedRef.current |
+| 11 | Mandelorus naming | Preset name updated |
+| 12 | Snapshot capturing indicator | "Capturing..." overlay with spinner |
+| 13 | Camera overlays | Full composition overlay system (grid, spiral, golden ratio) |
+| 14 | Light temperature | Kelvin slider + color presets in LightControls |
+| 15 | Bucket render large images | Fixed — post-processing chain + composite buffer architecture |
+| 16 | Internal scale fix | pixelSizeScale separated from uInternalScale |
 
-### Medium Priority (Functionality)
-5. Q/E rotation with SPD (#10)
-6. Mandelorus naming (#11)
-7. Light temperature (#14)
-8. Estimator recompile feedback (#6)
-
-### Lower Priority (Enhancements)
-9. Camera manager overlays (#13)
-10. Internal scale fix (#16)
-11. Bucket render large images (#15)
-12. Tooltips with shortcuts (#7)
-13. Speed lerped DST (#4)
-14. Lite mode float depth (#1)
-15. Engine panel compile state (#2)
-16. Local rotation (#3) - needs investigation
-
----
-
-## Questions for Clarification
-
-~~1. **Local Rotation (#3)** - What is this feature? Object pivot rotation? Camera local axis rotation?~~
-**ANSWERED**: Geometry feature for fractal rotation in GLSL render loop with hybrid mode adjustment.
-
-~~2. **Bucket Render (#15)** - What specific resolution fails? What error occurs?~~
-**ANSWERED**: Above 3K resolution, older tiles become corrupt and low quality as render progresses.
-
-~~3. **Camera Manager Overlays (#13)** - Should these be viewport overlays or export overlays?~~
-**ANSWERED**: Viewport only during editing, adjustable/collapsible via DDFS UI.
+### Remaining
+| # | Item | Priority |
+|---|------|----------|
+| 1 | Lite mode float depth & alpha | Low — mobile edge case |
+| 7 | Tooltips with shortcuts | Low — partially done (CameraTools only) |

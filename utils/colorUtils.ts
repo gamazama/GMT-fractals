@@ -250,7 +250,7 @@ export const getGradientCssString = (input: GradientStop[] | GradientConfig | un
   return `linear-gradient(90deg, ${parts.join(', ')})`;
 };
 
-const sRGBToLinear = (c: number) => Math.pow(c / 255.0, 2.2) * 255.0;
+const sRGBToLinear = (c: number) => srgbToLinear01(c) * 255.0;
 
 const inverseACES = (c: number) => {
     const y = c / 255.0;

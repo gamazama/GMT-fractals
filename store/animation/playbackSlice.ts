@@ -11,7 +11,6 @@ export const createPlaybackSlice: StateCreator<AnimationStore, [["zustand/subscr
     currentFrame: 0,
     fps: 30,
     durationFrames: 300,
-    zoomLevel: 1.0,
     loopMode: 'Loop',
     isArmingModulation: false,
     isRecordingModulation: false,

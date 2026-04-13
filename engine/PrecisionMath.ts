@@ -188,22 +188,6 @@ export class VirtualSpace {
         uniformLow.set(totalX - highX, totalY - highY, totalZ - highZ);
     }
 
-    public updateCameraBasis(camera: THREE.Camera, uniforms: { [key: string]: THREE.IUniform }, params?: { isOrtho: boolean, orthoScale: number }) {
-        const cam = camera as THREE.PerspectiveCamera;
-        this._rotMatrix.makeRotationFromQuaternion(cam.quaternion);
-        const e = this._rotMatrix.elements;
-        this._camRight.set(e[0], e[1], e[2]);
-        this._camUp.set(e[4], e[5], e[6]);
-        this._camForward.set(-e[8], -e[9], -e[10]);
-        let width = 1.0; let height = 1.0;
-        if (params && params.isOrtho) { height = params.orthoScale / 2.0; width = height * cam.aspect; }
-        else { const tanFov = Math.tan(THREE.MathUtils.degToRad(cam.fov) * 0.5); height = tanFov; width = height * cam.aspect; }
-        uniforms[Uniforms.CamBasisX].value.copy(this._camRight).multiplyScalar(width);
-        uniforms[Uniforms.CamBasisY].value.copy(this._camUp).multiplyScalar(height);
-        uniforms[Uniforms.CamForward].value.copy(this._camForward);
-        uniforms[Uniforms.CameraPosition].value.set(0, 0, 0);
-    }
-
     public getLightShaderVector(lightPos: {x:number, y:number, z:number}, isFixed: boolean, camera: THREE.Camera, targetVec: THREE.Vector3) {
         const so = this.offset;
         if (isFixed) {

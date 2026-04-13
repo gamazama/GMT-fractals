@@ -9,20 +9,18 @@
 import * as THREE from 'three';
 import type { FractalEngine } from '../FractalEngine';
 import type { WorkerToMainMessage } from './WorkerProtocol';
+import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
 
 const HISTOGRAM_SIZE = 128;
 
-let histogramScene: THREE.Scene | null = null;
-let histogramCamera: THREE.OrthographicCamera | null = null;
+let histogramPass: FullscreenPass | null = null;
 let histogramRT: THREE.WebGLRenderTarget | null = null;
 let histogramPixelBuffer: Float32Array | null = null;
 let histogramColorMaterial: THREE.ShaderMaterial | null = null;
-let histogramMesh: THREE.Mesh | null = null;
 
 function initHistogramResources() {
-    if (histogramScene) return;
-    histogramScene = new THREE.Scene();
-    histogramCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    if (histogramPass) return;
+    histogramPass = createFullscreenPass();
     histogramRT = new THREE.WebGLRenderTarget(HISTOGRAM_SIZE, HISTOGRAM_SIZE, {
         minFilter: THREE.NearestFilter,
         magFilter: THREE.NearestFilter,
@@ -52,12 +50,8 @@ export function handleHistogramReadback(
 ): void {
     initHistogramResources();
 
-    const geom = histogramMesh?.geometry || new THREE.PlaneGeometry(2, 2);
     if (source === 'geometry') {
-        if (histogramMesh) histogramScene!.remove(histogramMesh);
-        histogramMesh = new THREE.Mesh(geom, engine.histogramMaterial);
-        histogramMesh.frustumCulled = false;
-        histogramScene!.add(histogramMesh);
+        histogramPass!.mesh.material = engine.histogramMaterial;
 
         const uniforms = engine.histogramUniforms;
         engine.virtualSpace.updateShaderUniforms(
@@ -80,17 +74,14 @@ export function handleHistogramReadback(
             postMsg({ type: 'HISTOGRAM_RESULT', id, data: new Float32Array(0) });
             return;
         }
-        if (histogramMesh) histogramScene!.remove(histogramMesh);
-        histogramMesh = new THREE.Mesh(geom, histogramColorMaterial!);
-        histogramMesh.frustumCulled = false;
-        histogramScene!.add(histogramMesh);
+        histogramPass!.mesh.material = histogramColorMaterial!;
         histogramColorMaterial!.uniforms.tMap.value = tex;
     }
 
     const originalTarget = renderer.getRenderTarget();
     renderer.setRenderTarget(histogramRT!);
     renderer.clear();
-    renderer.render(histogramScene!, histogramCamera!);
+    renderer.render(histogramPass!.scene, histogramPass!.camera);
     renderer.readRenderTargetPixels(histogramRT!, 0, 0, HISTOGRAM_SIZE, HISTOGRAM_SIZE, histogramPixelBuffer!);
     renderer.setRenderTarget(originalTarget);
 

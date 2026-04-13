@@ -17,6 +17,7 @@ import { bucketRenderer } from '../BucketRenderer';
 import { handleHistogramReadback } from './WorkerHistogram';
 import { WorkerDepthReadback } from './WorkerDepthReadback';
 import { BloomPass } from '../BloomPass';
+import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
 
 let engine: FractalEngine | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -25,6 +26,7 @@ let camera: THREE.PerspectiveCamera | null = null;
 let exporter: WorkerExporter | null = null;
 
 // Display scene for blitting output texture to the OffscreenCanvas
+let displayPass: FullscreenPass | null = null;
 let displayScene: THREE.Scene | null = null;
 let displayCamera: THREE.OrthographicCamera | null = null;
 let displayMesh: THREE.Mesh | null = null;
@@ -69,10 +71,12 @@ function getShadowState(): WorkerShadowState {
 }
 
 function initDisplayScene() {
-    displayScene = new THREE.Scene();
-    displayCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    // Mesh is created after engine boots — uses engine.materials.displayMaterial
+    // Mesh material is assigned after engine boots — uses engine.materials.displayMaterial
     // which includes full post-processing (ACES tone mapping, sRGB, color grading)
+    displayPass = createFullscreenPass();
+    displayScene = displayPass.scene;
+    displayCamera = displayPass.camera;
+    displayMesh = displayPass.mesh;
 }
 
 // Deferred init state — holds INIT params until BOOT triggers full setup.
@@ -248,14 +252,9 @@ function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK
     const outputTex = engine.pipeline.getOutputTexture();
     _tickCount++;
     if (outputTex && canvas) {
-        // Lazy-create display mesh with engine's post-process material
-        if (!displayMesh && displayScene) {
-            displayMesh = new THREE.Mesh(
-                new THREE.PlaneGeometry(2, 2),
-                engine.materials.displayMaterial
-            );
-            displayMesh.frustumCulled = false;
-            displayScene.add(displayMesh);
+        // Assign display material on first frame after engine boot
+        if (displayMesh && displayMesh.material !== engine.materials.displayMaterial) {
+            displayMesh.material = engine.materials.displayMaterial;
         }
 
         // ── Multi-pass bloom (skipped when intensity = 0) ──
@@ -559,7 +558,9 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
 
             case 'PICK_WORLD_POSITION':
                 if (engine) {
-                    const pos = engine.pickWorldPosition(msg.x, msg.y);
+                    const pos = msg.fast
+                        ? engine.pickWorldPositionFast(msg.x, msg.y)
+                        : engine.pickWorldPosition(msg.x, msg.y);
                     postMsg({
                         type: 'PICK_RESULT',
                         id: msg.id,

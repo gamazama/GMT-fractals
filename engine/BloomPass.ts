@@ -11,6 +11,7 @@
  */
 
 import * as THREE from 'three';
+import { createFullscreenPass, type FullscreenPass } from './utils/FullscreenQuad';
 
 const MIP_COUNT = 7;
 
@@ -164,13 +165,14 @@ export class BloomPass {
     private width = 0;
     private height = 0;
 
+    private pass: FullscreenPass;
+
     constructor() {
         // Scene setup (shared across all passes)
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
-        this.mesh.frustumCulled = false;
-        this.scene.add(this.mesh);
+        this.pass = createFullscreenPass();
+        this.scene = this.pass.scene;
+        this.camera = this.pass.camera;
+        this.mesh = this.pass.mesh;
 
         // Materials
         this.brightPassMat = new THREE.ShaderMaterial({
@@ -343,7 +345,7 @@ export class BloomPass {
         this.downsampleMat.dispose();
         this.blurMat.dispose();
         this.upsampleMat.dispose();
-        this.mesh.geometry.dispose();
+        // Geometry is shared across all fullscreen passes — don't dispose it
         this.outputTexture = null;
     }
 }

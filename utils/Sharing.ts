@@ -1,5 +1,5 @@
 
-import { FractalStoreState, Preset } from '../types';
+import { Preset } from '../types';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { UrlStateEncoder } from './UrlStateEncoder';
 import { getFullDefaultPreset } from './PresetLogic';
@@ -11,21 +11,6 @@ const ROOT_SKELETON: Partial<Preset> = {
     sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 },
     targetDistance: 3.5,
     cameraMode: 'Orbit'
-};
-
-export const generateShareString = (state: FractalStoreState, options: { includeAnimations?: boolean } = { includeAnimations: true }): string => {
-    try {
-        // Use the store's getPreset via a passed-in function or accessing the full object structure manually?
-        // Since we passed 'state', we assume it's the full store state. 
-        // Ideally we shouldn't depend on store methods here, so we partially replicate getPreset logic OR 
-        // we accept the Preset object as input. Let's accept State and use getPreset from the store actions if available,
-        // but here we are in a utility.
-        // Better: The caller should pass the *Preset* object, not the State.
-        // Wait, the store calls this. Let's make it accept the Preset.
-        throw new Error("Use generateShareStringFromPreset instead");
-    } catch (e) {
-        return "";
-    }
 };
 
 export const generateShareStringFromPreset = (preset: Preset, advancedMode: boolean, options: { includeAnimations?: boolean } = { includeAnimations: true }): string => {

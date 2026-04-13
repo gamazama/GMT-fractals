@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useFractalStore } from '../store/fractalStore';
-import { collectHelpIds } from '../utils/helpUtils';
+import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
 import { GenericDropdown } from './GenericDropdown';
 import type { GenericDropdownOption } from './GenericDropdown';
 
@@ -23,16 +23,8 @@ interface DropdownProps<T> {
 }
 
 export function Dropdown<T extends string | number>({ label, value, options, onChange, helpId, fullWidth, className = '', selectClassName = '', labelSuffix }: DropdownProps<T>) {
-    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        const ids = collectHelpIds(e.currentTarget);
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openContextMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
+    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const handleContextMenu = useHelpContextMenu();
 
     const handleChange = (val: T) => {
         handleInteractionStart('param');

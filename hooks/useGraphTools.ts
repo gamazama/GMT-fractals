@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { useAnimationStore } from '../store/animationStore';
-import { calculateEulerUpdates, calculateSmoothingUpdates, calculateResampleUpdates, evaluateTrackValue } from '../utils/timelineUtils';
+import { calculateEulerUpdates, calculateSmoothingUpdates, calculateResampleUpdates, evaluateTrackValue, isRotationTrack } from '../utils/timelineUtils';
 import { calculateConstrainedSmoothing } from '../utils/ConstrainedSmoothing';
 import { simplifyTrack } from '../utils/CurveFitting';
 import { Keyframe, AnimationSequence } from '../types';
@@ -163,7 +163,7 @@ export const useGraphTools = ({
         targetKeys.forEach(id => {
             if (!id) return;
             const [tid, kid] = id.split('::');
-            if (/rotation|rot|phase|twist/i.test(tid) || /param[C-F]/i.test(tid)) {
+            if (isRotationTrack(tid)) {
                 if(!tracksToScan[tid]) tracksToScan[tid] = [];
                 const track = sequence.tracks[tid];
                 if (!track) return;
@@ -183,24 +183,23 @@ export const useGraphTools = ({
 
     // --- INTERACTIVE TOOL HANDLERS ---
 
-    const handleSmoothDown = (e: React.PointerEvent) => {
-        const targets = getTargetTracks();
-        if (targets.length === 0) return;
-        
+    /** Shared setup for pointer-drag tools: capture, snapshot, start tracking */
+    const beginDragTool = (e: React.PointerEvent, onMove: (e: PointerEvent) => void, onUp: () => void) => {
         e.preventDefault(); e.stopPropagation();
         (e.target as Element).setPointerCapture(e.pointerId);
-        
         snapshot();
         originalSequenceRef.current = JSON.parse(JSON.stringify(sequence));
         toolStartRef.current = { x: e.clientX, y: e.clientY };
-        
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+    };
+
+    const handleSmoothDown = (e: React.PointerEvent) => {
+        const targets = getTargetTracks();
+        if (targets.length === 0) return;
+        beginDragTool(e, handleSmoothMove, handleSmoothUp);
         setSmoothingRadius(0.1);
         setIsSmoothing(true);
-        
-        // Note: Smooth tool logic doesn't apply immediately on click (radius 0.1), only on drag
-        
-        window.addEventListener('pointermove', handleSmoothMove);
-        window.addEventListener('pointerup', handleSmoothUp);
     };
 
     const handleSmoothMove = (e: PointerEvent) => {
@@ -238,16 +237,10 @@ export const useGraphTools = ({
     const handleBakeDown = (e: React.PointerEvent) => {
         const targets = getTargetTracks();
         if (targets.length === 0) return;
-        e.preventDefault(); e.stopPropagation();
-        (e.target as Element).setPointerCapture(e.pointerId);
-        snapshot();
-        originalSequenceRef.current = JSON.parse(JSON.stringify(sequence));
-        toolStartRef.current = { x: e.clientX, y: e.clientY };
+        beginDragTool(e, handleBakeMove, handleBakeUp);
         setBakeStep(1);
         setIsBaking(true);
-        performBake(1); // Execute immediately on click
-        window.addEventListener('pointermove', handleBakeMove);
-        window.addEventListener('pointerup', handleBakeUp);
+        performBake(1);
     };
 
     const handleBakeMove = (e: PointerEvent) => {
@@ -270,21 +263,11 @@ export const useGraphTools = ({
         let targets = selectedKeyframeIds;
         if (targets.length < 2) targets = getTargetKeys();
         if (targets.length < 2) return;
-
-        e.preventDefault(); e.stopPropagation();
-        (e.target as Element).setPointerCapture(e.pointerId);
-        
-        snapshot();
-        originalSequenceRef.current = JSON.parse(JSON.stringify(sequence));
-        toolStartRef.current = { x: e.clientX, y: e.clientY };
-        simplifyTargetsRef.current = [...targets]; 
-        
-        setSimplifyStrength(1.0); 
+        beginDragTool(e, handleSimplifyMove, handleSimplifyUp);
+        simplifyTargetsRef.current = [...targets];
+        setSimplifyStrength(1.0);
         setIsSimplifying(true);
-        performSimplify(1.0); // Execute immediately on click
-        
-        window.addEventListener('pointermove', handleSimplifyMove);
-        window.addEventListener('pointerup', handleSimplifyUp);
+        performSimplify(1.0);
     };
 
     const handleSimplifyMove = (e: PointerEvent) => {
@@ -320,8 +303,7 @@ export const useGraphTools = ({
         trackIds.forEach(tid => {
             const track = sequence.tracks[tid];
             if (!track || track.keyframes.length === 0) return;
-            const isRotation = /rotation|rot|phase|twist/i.test(tid) || /param[C-F]/i.test(tid);
-            const val = evaluateTrackValue(track.keyframes, frame, isRotation);
+            const val = evaluateTrackValue(track.keyframes, frame, isRotationTrack(tid));
             const py = v2p(val, tid);
             const dist = Math.abs(my - py);
             

@@ -5,17 +5,9 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
-export interface UIStateLocal {
-    draggedLightIndex: string | null;
-}
-
-export interface UIActionsLocal {
-    setDraggedLight: (id: string | null) => void;
-}
-
 export type UISlice = Pick<FractalStoreState,
     'showLightGizmo' | 'isGizmoDragging' | 
-    'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' |
+    'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
     'draggedLightIndex' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
     'resolutionMode' | 'fixedResolution' |
@@ -36,7 +28,7 @@ export type UISlice = Pick<FractalStoreState,
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
 > & Pick<FractalActions,
     'setShowLightGizmo' | 'setGizmoDragging' | 
-    'setHistogramData' | 'setHistogramAutoUpdate' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
+    'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
     'setDraggedLight' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
     'setResolutionMode' | 'setFixedResolution' |
@@ -62,7 +54,8 @@ export type UISlice = Pick<FractalStoreState,
 const getUrlParam = (key: string) => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
-    return params.has(key) && params.get(key) !== 'false' && params.get(key) !== '0';
+    const val = params.get(key);
+    return params.has(key) && val?.toLowerCase() !== 'false' && val !== '0';
 };
 
 // INITIAL LAYOUT DEFINITION
@@ -91,7 +84,7 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     interactionMode: 'none',
     focusLock: false,
 
-    histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0, histogramActiveCount: 0,
+    histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0, histogramActiveCount: 0, histogramLoading: false,
     sceneHistogramData: null, sceneHistogramTrigger: 0, sceneHistogramActiveCount: 0,
     draggedLightIndex: null,
     autoCompile: false,
@@ -170,7 +163,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setInteractionMode: (mode) => set({ interactionMode: mode }),
     setFocusLock: (v) => set({ focusLock: v }),
 
-    setHistogramData: (d) => set({ histogramData: d }),
+    setHistogramData: (d) => set({ histogramData: d, histogramLoading: false }),
+    setHistogramLoading: (v: boolean) => set({ histogramLoading: v }),
     setHistogramAutoUpdate: (v) => set({ histogramAutoUpdate: v }),
     refreshHistogram: () => set((state) => ({ histogramTrigger: state.histogramTrigger + 1 })),
     

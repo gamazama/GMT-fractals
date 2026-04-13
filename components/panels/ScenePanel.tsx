@@ -5,8 +5,7 @@
 import React from 'react';
 import { FractalState, FractalActions } from '../../types';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
-import { useFractalStore } from '../../store/fractalStore';
-import { collectHelpIds } from '../../utils/helpUtils';
+import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { FeatureSection } from '../FeatureSection';
 import { CompilableFeatureSection } from '../CompilableFeatureSection';
 import { SectionLabel, SectionDivider } from '../SectionLabel';
@@ -15,22 +14,13 @@ import { WaterPlaneState } from '../../features/water_plane';
 import { nestedContainer, border as themeBorder } from '../../data/theme';
 
 const ScenePanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
-  const openGlobalMenu = useFractalStore(s => s.openContextMenu);
-  
+  const handleHeaderContextMenu = useHelpContextMenu();
+
   // Access state slices to check existence (for safe rendering)
-  const droste = state.droste; 
+  const droste = state.droste;
   const grading = state.colorGrading;
-  const optics = state.optics; 
+  const optics = state.optics;
   const waterPlane = state.waterPlane as WaterPlaneState;
-  
-  const handleHeaderContextMenu = (e: React.MouseEvent) => {
-      const ids = collectHelpIds(e.currentTarget);
-      if (ids.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          openGlobalMenu(e.clientX, e.clientY, [], ids);
-      }
-  };
 
   return (
   <div className="animate-fade-in -mx-4 -mt-4 flex flex-col">

@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from '../Icons';
 import { useFractalStore } from '../../store/fractalStore';
-import { collectHelpIds } from '../../utils/helpUtils';
+import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 
 const RATIO_PRESETS: { label: string; ratio: number | 'Max' }[] = [
     { label: 'Maximum', ratio: 'Max' },
@@ -35,7 +35,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
     // Track X and Y start positions
     const dragResRef = useRef<{ startX: number, startY: number, startW: number, startH: number, hasMoved: boolean } | null>(null);
     
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const handleContextMenu = useHelpContextMenu();
 
     useEffect(() => {
         if (!showResMenu) return;
@@ -47,15 +47,6 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
         window.addEventListener('mousedown', handleClick);
         return () => window.removeEventListener('mousedown', handleClick);
     }, [showResMenu]);
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        const ids = collectHelpIds(e.currentTarget);
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openGlobalMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
 
     const handleResDown = (e: React.PointerEvent) => {
         e.preventDefault();

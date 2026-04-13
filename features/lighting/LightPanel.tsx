@@ -195,7 +195,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
 
   if (!currentLight) return null;
 
-  const range = currentLight.fixed ? 10 : 10;
+  const range = 10;
   const prefix = `lighting.light${activeLight}`;
 
   const mixedRotation = {

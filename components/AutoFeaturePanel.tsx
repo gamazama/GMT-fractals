@@ -17,10 +17,11 @@ import { AlertIcon, CloseIcon } from './Icons';
 // Code-split: gradient editor only renders for gradient params
 const AdvancedGradientEditor = React.lazy(() => import('./AdvancedGradientEditor'));
 import { FractalEvents } from '../engine/FractalEvents';
-import { SectionLabel } from './SectionLabel';
+import { SectionLabel, SectionDivider } from './SectionLabel';
 import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
 import { EngineFeatureRow, EngineStatus } from './panels/engine/EngineFeatureRow';
+import { checkParamActive } from '../utils/paramConditions';
 import * as THREE from 'three';
 
 interface AutoFeaturePanelProps {
@@ -38,73 +39,6 @@ interface AutoFeaturePanelProps {
     onChangeOverride?: (key: string, value: any) => void;
     pendingChanges?: Record<string, any>; 
 }
-
-// Evaluates a single condition
-const evaluateCondition = (condition: ParamCondition, sliceState: any, globalState: any, parentId?: string): boolean => {
-    if (condition.or) {
-        return condition.or.some(subCond => evaluateCondition(subCond, sliceState, globalState, parentId));
-    }
-    if (condition.and) {
-        return condition.and.every(subCond => evaluateCondition(subCond, sliceState, globalState, parentId));
-    }
-
-    let targetParam = condition.param || parentId;
-    let val: any;
-
-    if (targetParam && targetParam.startsWith('$')) {
-        const key = targetParam.slice(1);
-        if (key.includes('.')) {
-            const parts = key.split('.');
-            let ptr = globalState;
-            for (const part of parts) {
-                if (ptr === undefined || ptr === null) { ptr = undefined; break; }
-                ptr = ptr[part];
-            }
-            val = ptr;
-        } else {
-            val = globalState[key];
-        }
-    } else if (targetParam) {
-        val = sliceState[targetParam];
-    } else {
-        return true;
-    }
-
-    if (condition.eq === undefined && condition.neq === undefined && condition.gt === undefined && condition.lt === undefined && condition.bool === undefined) {
-         if (typeof val === 'boolean') return val;
-         if (typeof val === 'number') return val > 0;
-         return !!val;
-    }
-
-    if (condition.eq !== undefined || condition.neq !== undefined) {
-         let compVal = val;
-         if (typeof val === 'object' && val && val.getHexString) compVal = '#' + val.getHexString();
-         if (condition.eq !== undefined) return compVal == condition.eq;
-         if (condition.neq !== undefined) return compVal != condition.neq;
-    }
-
-    if (condition.bool !== undefined) return !!val === condition.bool;
-    if (condition.gt !== undefined) return val > condition.gt;
-    if (condition.lt !== undefined) return val < condition.lt;
-    
-    return true;
-};
-
-const checkVisibility = (condition: ParamCondition | ParamCondition[] | undefined, sliceState: any, globalState: any, parentId?: string): boolean => {
-    if (!condition) {
-        if (parentId) {
-            const pVal = sliceState[parentId];
-            if (typeof pVal === 'boolean') return pVal;
-            if (typeof pVal === 'number') return pVal > 0; 
-            return !!pVal;
-        }
-        return true;
-    }
-    if (Array.isArray(condition)) {
-        return condition.every(cond => evaluateCondition(cond, sliceState, globalState, parentId));
-    }
-    return evaluateCondition(condition, sliceState, globalState, parentId);
-};
 
 const getMapping = (config: ParamConfig) => {
     const min = config.min ?? 0;
@@ -379,7 +313,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (config.type === 'vec2') {
             const x = val?.x ?? config.default?.x ?? 0;
             const y = val?.y ?? config.default?.y ?? 0;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
+            const liveVec2 = liveModulations[`${featureId}.${key}_x`] !== undefined || liveModulations[`${featureId}.${key}_y`] !== undefined
+                ? new THREE.Vector2(liveModulations[`${featureId}.${key}_x`], liveModulations[`${featureId}.${key}_y`])
+                : undefined;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec2} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec3') {
              const x = val?.x ?? config.default?.x ?? 0;
@@ -393,7 +330,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
              const trackLabels = config.composeFrom
                  ? undefined
                  : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`];
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
+             const liveVec3 = liveModulations[trackKeys[0]] !== undefined || liveModulations[trackKeys[1]] !== undefined || liveModulations[trackKeys[2]] !== undefined
+                 ? new THREE.Vector3(liveModulations[trackKeys[0]], liveModulations[trackKeys[1]], liveModulations[trackKeys[2]])
+                 : undefined;
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec4') {
              const x = val?.x ?? config.default?.x ?? 0;
@@ -407,7 +347,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
              const trackLabels = config.composeFrom
                  ? undefined
                  : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`, `${config.label} W`];
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} /></div>;
+             const liveVec4 = liveModulations[trackKeys[0]] !== undefined || liveModulations[trackKeys[1]] !== undefined || liveModulations[trackKeys[2]] !== undefined || liveModulations[trackKeys[3]] !== undefined
+                 ? new THREE.Vector4(liveModulations[trackKeys[0]], liveModulations[trackKeys[1]], liveModulations[trackKeys[2]], liveModulations[trackKeys[3]])
+                 : undefined;
+             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
         }
 
         if (config.type === 'image') {
@@ -463,7 +406,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     const renderNode = (id: string, isHalfWidth: boolean = false) => {
         const config = feature.params[id];
         // EXCLUSION CHECK
-        if (!config || config.hidden || excludeParams.includes(id) || !checkVisibility(config.condition, sliceState, globalState, config.parentId)) return null;
+        if (!config || config.hidden || excludeParams.includes(id) || !checkParamActive(config.condition, sliceState, globalState, config.parentId)) return null;
         // Dynamic visibility (DDFS) — checked after condition
         if (config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
         if (config.isAdvanced && !advancedMode) return null;
@@ -474,7 +417,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         feature.customUI?.forEach((c) => {
             if (c.parentId !== id) return;
             if (groupFilter && c.group !== groupFilter) return;
-            if (!checkVisibility(c.condition, sliceState, globalState, c.parentId)) return;
+            if (!checkParamActive(c.condition, sliceState, globalState, c.parentId)) return;
             const Component = componentRegistry.get(c.componentId);
             if (Component) renderedChildren.push(<div key={`custom-${c.componentId}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
         });
@@ -515,7 +458,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                                 </div>
                             );
                         })}
-                        <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
+                        <SectionDivider />
                     </div>
                 )}
             </div>
@@ -544,12 +487,12 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         for (let i = 0; i < roots.length; i++) {
             const id = roots[i];
             const config = feature.params[id];
-            if (config.hidden || excludeParams.includes(id) || !checkVisibility(config.condition, sliceState, globalState)) continue;
+            if (config.hidden || excludeParams.includes(id) || !checkParamActive(config.condition, sliceState, globalState)) continue;
             if (config.dynamicVisible && !config.dynamicVisible(sliceState)) continue;
             if (config.layout === 'half' && variant !== 'dense') {
                 let nextId = roots[i + 1];
                 let nextConfig = nextId ? feature.params[nextId] : null;
-                if (nextConfig && nextConfig.layout === 'half' && !nextConfig.hidden && !excludeParams.includes(nextId!) && checkVisibility(nextConfig.condition, sliceState, globalState)) {
+                if (nextConfig && nextConfig.layout === 'half' && !nextConfig.hidden && !excludeParams.includes(nextId!) && checkParamActive(nextConfig.condition, sliceState, globalState)) {
                     items.push(<div key={`${id}-${nextId}`} className="flex gap-0.5 mb-px">{renderNode(id, true)}{renderNode(nextId, true)}</div>);
                     i++; continue;
                 }
@@ -640,7 +583,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         // Skip entries handled by renderNode tree-nesting
         if (c.parentId) return;
         if (groupFilter && c.group !== groupFilter) return;
-        if (!checkVisibility(c.condition, sliceState, globalState)) return;
+        if (!checkParamActive(c.condition, sliceState, globalState)) return;
         const Component = componentRegistry.get(c.componentId);
         if (Component) renderItems.push(<div key={`custom-${c.componentId}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
     });

@@ -18,10 +18,6 @@ import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, Seria
 import { injectMetadata } from '../../utils/pngMetadata';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 
-// Worker frame counter callback — registered lazily to avoid circular imports
-let _onWorkerFrame: (() => void) | null = null;
-export function registerWorkerFrameCounter(cb: () => void) { _onWorkerFrame = cb; }
-
 export class WorkerProxy {
     // ─── Stub properties ─────────────────────────────────────────────
     // These exist on FractalEngine but not on WorkerProxy.  UI code guards
@@ -65,6 +61,10 @@ export class WorkerProxy {
     private _pendingShaderSource: Map<string, (code: string | null) => void> = new Map();
     private _gpuInfo: string = '';
     private _lastGeneratedFrag: string = '';
+    private _onWorkerFrame: (() => void) | null = null;
+    private _pendingTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
+    private _exportStartTimer: ReturnType<typeof setTimeout> | null = null;
+    private _exportFinishTimer: ReturnType<typeof setTimeout> | null = null;
 
     /** Modulation offsets set by AnimationSystem — forwarded to worker via EXPORT_RENDER_FRAME */
     modulations: Record<string, number> = {};
@@ -78,12 +78,6 @@ export class WorkerProxy {
     private _exportFrameDone: ((data: { frameIndex: number; progress: number; measuredDistance: number }) => void) | null = null;
     private _exportComplete: ((blob: ArrayBuffer | null) => void) | null = null;
     private _exportError: ((msg: string) => void) | null = null;
-
-    /** Mark proxy as pending worker init — early calls become safe no-ops */
-    setWorkerModePending() {
-        // No-op: worker mode is the only mode now.
-        // Kept for call-site compatibility during init sequence.
-    }
 
     // ─── Worker Init ─────────────────────────────────────────────────────
 
@@ -143,7 +137,8 @@ export class WorkerProxy {
     restart(newConfig: ShaderConfig, initialCamera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number }) {
         if (!this._container || !this._lastInitArgs) return;
 
-        // 1. Kill old worker
+        // 1. Kill old worker and clear orphaned timers
+        this._clearAllTimers();
         if (this._worker) {
             this._worker.onmessage = null;
             this._worker.onerror = null;
@@ -200,6 +195,7 @@ export class WorkerProxy {
     set onCompiling(cb: ((status: boolean | string) => void) | null) { this._onCompiling = cb; }
     set onCompileTime(cb: ((duration: number) => void) | null) { this._onCompileTime = cb; }
     set onShaderCode(cb: ((code: string) => void) | null) { this._onShaderCode = cb; }
+    registerFrameCounter(cb: (() => void) | null) { this._onWorkerFrame = cb; }
 
     private _handleWorkerMessage(msg: WorkerToMainMessage) {
         switch (msg.type) {
@@ -223,7 +219,7 @@ export class WorkerProxy {
                     }
                 }
                 // Count every worker frame for FPS display
-                if (_onWorkerFrame) _onWorkerFrame();
+                if (this._onWorkerFrame) this._onWorkerFrame();
                 break;
             case 'COMPILING':
                 this._shadow.isCompiling = !!msg.status;
@@ -241,11 +237,9 @@ export class WorkerProxy {
                 if (this._onShaderCode) this._onShaderCode(msg.code);
                 FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, msg.code);
                 break;
-            case 'SHADER_SOURCE_RESULT': {
-                const srcResolve = this._pendingShaderSource.get(msg.id);
-                if (srcResolve) { srcResolve(msg.code); this._pendingShaderSource.delete(msg.id); }
+            case 'SHADER_SOURCE_RESULT':
+                this._resolveRequest(msg.id, this._pendingShaderSource, msg.code);
                 break;
-            }
             case 'BOOTED':
                 this._shadow.isBooted = true;
                 if (msg.gpuInfo) this._gpuInfo = msg.gpuInfo;
@@ -256,38 +250,26 @@ export class WorkerProxy {
             case 'GPU_INFO':
                 this._gpuInfo = msg.info;
                 break;
-            case 'HISTOGRAM_RESULT': {
-                const histResolve = this._pendingHistograms.get(msg.id);
-                if (histResolve) { histResolve(msg.data); this._pendingHistograms.delete(msg.id); }
+            case 'HISTOGRAM_RESULT':
+                this._resolveRequest(msg.id, this._pendingHistograms, msg.data);
                 break;
-            }
-            case 'SNAPSHOT_RESULT': {
-                const resolve = this._pendingSnapshots.get(msg.id);
-                if (resolve) { resolve(msg.blob); this._pendingSnapshots.delete(msg.id); }
+            case 'SNAPSHOT_RESULT':
+                this._resolveRequest(msg.id, this._pendingSnapshots, msg.blob);
                 break;
-            }
-            case 'PICK_RESULT': {
-                const resolve = this._pendingPicks.get(msg.id);
-                if (resolve) {
-                    resolve(msg.position ? new THREE.Vector3(msg.position[0], msg.position[1], msg.position[2]) : null);
-                    this._pendingPicks.delete(msg.id);
-                }
+            case 'PICK_RESULT':
+                this._resolveRequest(msg.id, this._pendingPicks,
+                    msg.position ? new THREE.Vector3(msg.position[0], msg.position[1], msg.position[2]) : null);
                 break;
-            }
-            case 'FOCUS_RESULT': {
-                const resolve = this._pendingFocusPicks.get(msg.id);
-                if (resolve) {
-                    resolve(msg.distance);
-                    this._pendingFocusPicks.delete(msg.id);
-                }
+            case 'FOCUS_RESULT':
+                this._resolveRequest(msg.id, this._pendingFocusPicks, msg.distance);
                 break;
-            }
             case 'ERROR':
                 console.error('[WorkerProxy] Worker error:', msg.message);
                 break;
 
             // ─── Video Export ───
             case 'EXPORT_READY':
+                if (this._exportStartTimer) { clearTimeout(this._exportStartTimer); this._exportStartTimer = null; }
                 if (this._exportReady) this._exportReady();
                 break;
             case 'EXPORT_FRAME_DONE':
@@ -297,10 +279,13 @@ export class WorkerProxy {
                 break;
             case 'EXPORT_COMPLETE':
                 this._isExporting = false;
+                if (this._exportFinishTimer) { clearTimeout(this._exportFinishTimer); this._exportFinishTimer = null; }
                 if (this._exportComplete) this._exportComplete(msg.blob ?? null);
                 break;
             case 'EXPORT_ERROR':
                 this._isExporting = false;
+                if (this._exportStartTimer) { clearTimeout(this._exportStartTimer); this._exportStartTimer = null; }
+                if (this._exportFinishTimer) { clearTimeout(this._exportFinishTimer); this._exportFinishTimer = null; }
                 console.error('[WorkerProxy] Export error:', msg.message);
                 if (this._exportError) this._exportError(msg.message);
                 break;
@@ -329,6 +314,49 @@ export class WorkerProxy {
         }
     }
 
+    // ─── Timeout & Request Helpers ──────────────────────────────────────
+
+    /** Create a pending request: register in map, post message, set timeout fallback. */
+    private _pendingRequest<T>(
+        pendingMap: Map<string, (value: T) => void>,
+        msg: (id: string) => MainToWorkerMessage,
+        fallback: T,
+        timeoutMs: number
+    ): Promise<T> {
+        const id = crypto.randomUUID();
+        return new Promise<T>((resolve) => {
+            pendingMap.set(id, resolve);
+            this.post(msg(id));
+            this._pendingTimeouts.set(id, setTimeout(() => {
+                this._pendingTimeouts.delete(id);
+                if (pendingMap.has(id)) { pendingMap.delete(id); resolve(fallback); }
+            }, timeoutMs));
+        });
+    }
+
+    /** Resolve a pending request by id, cancel its timeout, and clean up. */
+    private _resolveRequest<T>(id: string, pendingMap: Map<string, (value: T) => void>, value: T) {
+        const resolve = pendingMap.get(id);
+        if (resolve) {
+            resolve(value);
+            pendingMap.delete(id);
+        }
+        const timer = this._pendingTimeouts.get(id);
+        if (timer) {
+            clearTimeout(timer);
+            this._pendingTimeouts.delete(id);
+        }
+    }
+
+    /** Clear all pending timeouts — called on crash and restart. */
+    private _clearAllTimers() {
+        this._pendingTimeouts.forEach(timer => clearTimeout(timer));
+        this._pendingTimeouts.clear();
+        if (this._offsetGuardTimer) { clearTimeout(this._offsetGuardTimer); this._offsetGuardTimer = null; }
+        if (this._exportStartTimer) { clearTimeout(this._exportStartTimer); this._exportStartTimer = null; }
+        if (this._exportFinishTimer) { clearTimeout(this._exportFinishTimer); this._exportFinishTimer = null; }
+    }
+
     // ─── Error Recovery ────────────────────────────────────────────────
 
     private _onCrash: ((reason: string) => void) | null = null;
@@ -341,6 +369,7 @@ export class WorkerProxy {
             this._worker.terminate();
             this._worker = null;
         }
+        this._clearAllTimers();
         // Clear pending promises
         this._pendingSnapshots.forEach(resolve => resolve(null as any));
         this._pendingSnapshots.clear();
@@ -350,6 +379,13 @@ export class WorkerProxy {
         this._pendingFocusPicks.clear();
         this._pendingHistograms.forEach(resolve => resolve(new Float32Array(0)));
         this._pendingHistograms.clear();
+        this._pendingShaderSource.forEach(resolve => resolve(null));
+        this._pendingShaderSource.clear();
+        // Reject pending export promises
+        if (this._exportReady) { this._exportReady = null; }
+        if (this._exportComplete) { this._exportComplete = null; }
+        if (this._exportFrameDone) { this._exportFrameDone = null; }
+        if (this._exportError) { this._exportError = null; }
         if (this._onCrash) this._onCrash(reason);
     }
 
@@ -510,46 +546,24 @@ export class WorkerProxy {
     }
 
     pickWorldPosition(x: number, y: number): THREE.Vector3 | null;
-    pickWorldPosition(x: number, y: number, async: true): Promise<THREE.Vector3 | null>;
-    pickWorldPosition(x: number, y: number, async?: boolean): THREE.Vector3 | null | Promise<THREE.Vector3 | null> {
+    pickWorldPosition(x: number, y: number, async: true, fast?: boolean): Promise<THREE.Vector3 | null>;
+    pickWorldPosition(x: number, y: number, async?: boolean, fast?: boolean): THREE.Vector3 | null | Promise<THREE.Vector3 | null> {
         if (!async) return null;
-        const id = crypto.randomUUID();
-        return new Promise<THREE.Vector3 | null>((resolve) => {
-            this._pendingPicks.set(id, resolve);
-            this.post({ type: 'PICK_WORLD_POSITION', id, x, y });
-            setTimeout(() => {
-                if (this._pendingPicks.has(id)) { this._pendingPicks.delete(id); resolve(null); }
-            }, 5000);
-        });
+        return this._pendingRequest(this._pendingPicks,
+            id => ({ type: 'PICK_WORLD_POSITION', id, x, y, fast: fast || undefined }),
+            null, 5000);
     }
 
-    /**
-     * Start focus picking: captures depth snapshot from current frame.
-     * Returns the initial focus distance at (x, y).
-     */
+    /** Start focus picking: captures depth snapshot from current frame. */
     startFocusPick(x: number, y: number): Promise<number> {
-        const id = crypto.randomUUID();
-        return new Promise<number>((resolve) => {
-            this._pendingFocusPicks.set(id, resolve);
-            this.post({ type: 'FOCUS_PICK_START', id, x, y });
-            setTimeout(() => {
-                if (this._pendingFocusPicks.has(id)) { this._pendingFocusPicks.delete(id); resolve(-1); }
-            }, 5000);
-        });
+        return this._pendingRequest(this._pendingFocusPicks,
+            id => ({ type: 'FOCUS_PICK_START', id, x, y }), -1, 5000);
     }
 
-    /**
-     * Sample from the captured depth snapshot at (x, y). No re-rendering needed.
-     */
+    /** Sample from the captured depth snapshot at (x, y). No re-rendering needed. */
     sampleFocusPick(x: number, y: number): Promise<number> {
-        const id = crypto.randomUUID();
-        return new Promise<number>((resolve) => {
-            this._pendingFocusPicks.set(id, resolve);
-            this.post({ type: 'FOCUS_PICK_SAMPLE', id, x, y });
-            setTimeout(() => {
-                if (this._pendingFocusPicks.has(id)) { this._pendingFocusPicks.delete(id); resolve(-1); }
-            }, 2000);
-        });
+        return this._pendingRequest(this._pendingFocusPicks,
+            id => ({ type: 'FOCUS_PICK_SAMPLE', id, x, y }), -1, 2000);
     }
 
     /** End focus picking and discard the depth snapshot. */
@@ -558,14 +572,8 @@ export class WorkerProxy {
     }
 
     captureSnapshot(): Promise<Blob | null> {
-        const id = crypto.randomUUID();
-        return new Promise((resolve) => {
-            this._pendingSnapshots.set(id, resolve as any);
-            this.post({ type: 'CAPTURE_SNAPSHOT', id });
-            setTimeout(() => {
-                if (this._pendingSnapshots.has(id)) { this._pendingSnapshots.delete(id); resolve(null); }
-            }, 10000);
-        });
+        return this._pendingRequest(this._pendingSnapshots as Map<string, (v: Blob | null) => void>,
+            id => ({ type: 'CAPTURE_SNAPSHOT', id }), null, 10000);
     }
 
     get gpuInfo(): string {
@@ -573,38 +581,18 @@ export class WorkerProxy {
     }
 
     requestHistogramReadback(source: 'geometry' | 'color'): Promise<Float32Array> {
-        const id = crypto.randomUUID();
-        return new Promise((resolve) => {
-            this._pendingHistograms.set(id, resolve);
-            this.post({ type: 'HISTOGRAM_READBACK', id, source });
-            setTimeout(() => {
-                if (this._pendingHistograms.has(id)) {
-                    this._pendingHistograms.delete(id);
-                    resolve(new Float32Array(0));
-                }
-            }, 5000);
-        });
+        return this._pendingRequest(this._pendingHistograms,
+            id => ({ type: 'HISTOGRAM_READBACK', id, source }), new Float32Array(0), 5000);
     }
 
     getCompiledFragmentShader(): Promise<string | null> {
-        const id = crypto.randomUUID();
-        return new Promise((resolve) => {
-            this._pendingShaderSource.set(id, resolve);
-            this.post({ type: 'GET_SHADER_SOURCE', id, variant: 'compiled' } as any);
-            setTimeout(() => {
-                if (this._pendingShaderSource.has(id)) { this._pendingShaderSource.delete(id); resolve(null); }
-            }, 5000);
-        });
+        return this._pendingRequest(this._pendingShaderSource,
+            id => ({ type: 'GET_SHADER_SOURCE', id, variant: 'compiled' } as any), null, 5000);
     }
+
     getTranslatedFragmentShader(): Promise<string | null> {
-        const id = crypto.randomUUID();
-        return new Promise((resolve) => {
-            this._pendingShaderSource.set(id, resolve);
-            this.post({ type: 'GET_SHADER_SOURCE', id, variant: 'translated' } as any);
-            setTimeout(() => {
-                if (this._pendingShaderSource.has(id)) { this._pendingShaderSource.delete(id); resolve(null); }
-            }, 5000);
-        });
+        return this._pendingRequest(this._pendingShaderSource,
+            id => ({ type: 'GET_SHADER_SOURCE', id, variant: 'translated' } as any), null, 5000);
     }
     checkHalfFloatAlphaSupport() { return true; }
 
@@ -664,7 +652,8 @@ export class WorkerProxy {
             if (transferStream) transfer.push(transferStream);
             this.post({ type: 'EXPORT_START', config, stream: transferStream }, transfer);
 
-            setTimeout(() => {
+            this._exportStartTimer = setTimeout(() => {
+                this._exportStartTimer = null;
                 if (this._exportReady) {
                     this._exportReady = null;
                     reject(new Error('Export start timed out'));
@@ -704,7 +693,8 @@ export class WorkerProxy {
             this._exportError = (msg) => { this._exportError = null; reject(new Error(msg)); };
             this.post({ type: 'EXPORT_FINISH' });
 
-            setTimeout(() => {
+            this._exportFinishTimer = setTimeout(() => {
+                this._exportFinishTimer = null;
                 if (this._exportComplete) {
                     this._exportComplete = null;
                     reject(new Error('Export finish timed out'));

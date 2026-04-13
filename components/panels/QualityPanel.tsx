@@ -7,8 +7,7 @@ import { FractalState, FractalActions } from '../../types';
 import Slider, { DraggableNumber } from '../Slider';
 import ToggleSwitch from '../ToggleSwitch';
 import Dropdown from '../Dropdown';
-import { useFractalStore } from '../../store/fractalStore';
-import { collectHelpIds } from '../../utils/helpUtils';
+import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { LightingState } from '../../features/lighting';
@@ -16,10 +15,10 @@ import { SectionLabel, SectionDivider } from '../SectionLabel';
 import { accent, secondary, text as themeText, surface, border as themeBorder, toggleActive, toggleInactive, toggleDisabled, gridBtnActive, gridBtnInactive } from '../../data/theme';
 
 const QualityPanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const handleHeaderContextMenu = useHelpContextMenu();
     const quality = state.quality;
     const lighting = (state as any).lighting as LightingState | undefined;
-    
+
     // Resolution Management
     const [w, h] = state.fixedResolution;
     const [aspectLock, setAspectLock] = useState<number | 'Free'>('Free');
@@ -31,21 +30,12 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
     const currentPreset = useMemo(() => {
         const s = `${w}x${h}`;
         const presets = [
-            '800x600', '1280x720', '1920x1080', '2560x1440', '3840x2160', 
+            '800x600', '1280x720', '1920x1080', '2560x1440', '3840x2160',
             '1080x1080', '1080x1350', '1080x1920',
             '2048x1024', '4096x2048'
         ];
         return presets.includes(s) ? s : 'Custom';
     }, [w, h]);
-
-    const handleHeaderContextMenu = (e: React.MouseEvent) => {
-        const ids = collectHelpIds(e.currentTarget);
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openGlobalMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
     
     const handleModeSwitch = async (mode: 'Direct' | 'PathTracing') => {
         if (state.renderMode === mode) return;
@@ -278,7 +268,7 @@ const QualityPanel = ({ state, actions }: { state: FractalState, actions: Fracta
                             );
                         });
                     })()}
-                    <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
+                    <SectionDivider />
                 </div>
              </div>
 

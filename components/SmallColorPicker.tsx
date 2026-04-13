@@ -2,8 +2,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
-import { useFractalStore } from '../store/fractalStore';
-import { collectHelpIds } from '../utils/helpUtils';
+import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
 
 interface SmallColorPickerProps {
     color: string;
@@ -81,17 +80,7 @@ const PickerPortal = ({
 export const SmallColorPicker: React.FC<SmallColorPickerProps> = ({ color, onChange, label }) => {
     const [isOpen, setIsOpen] = useState(false);
     const btnRef = useRef<HTMLButtonElement>(null);
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        const ids = collectHelpIds(e.currentTarget);
-        ids.unshift('ui.colorpicker');
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openGlobalMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
+    const handleContextMenu = useHelpContextMenu(['ui.colorpicker']);
 
     return (
         <>

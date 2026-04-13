@@ -19,6 +19,9 @@ import { QualityState } from '../features/quality';
 import type { GeometryState } from '../features/geometry';
 import '../formulas';
 import { featureRegistry } from './FeatureSystem';
+import { halton } from './codec/H264Converter';
+import { detectHardwareProfileMainThread } from './HardwareDetection';
+import { createFullscreenPass } from './utils/FullscreenQuad';
 
 /** Custom input event passed to FractalEngine.handleInput() from viewport interaction handlers. */
 export type EngineInputEvent =
@@ -40,19 +43,7 @@ export interface EngineRenderState {
     bucketConfig: BucketRenderConfig;
 }
 
-const halton = (index: number, base: number) => {
-    let result = 0;
-    let f = 1 / base;
-    let i = index;
-    while (i > 0) {
-        result = result + f * (i % base);
-        i = Math.floor(i / base);
-        f = f / base;
-    }
-    return result;
-};
-
-// Precompute 64 jitter values using Halton sequence for faster access
+// Precompute 2048 jitter values using Halton sequence for faster access
 const PRECOMPUTED_JITTER: THREE.Vector2[] = [];
 for (let i = 1; i <= 2048; i++) {
     const jX = halton(i, 2) * 2.0 - 1.0;
@@ -139,8 +130,7 @@ export class FractalEngine {
     };
 
     constructor() {
-        const isMobile = (typeof window !== 'undefined' && (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768));
-        this.state.isMobile = isMobile;
+        this.state.isMobile = detectHardwareProfileMainThread().isMobile;
 
         // --- DYNAMIC CONFIG GENERATION ---
         const initialConfig: any = { 
@@ -177,7 +167,7 @@ export class FractalEngine {
             initialConfig[feat.id] = cleanConfig;
         });
         
-        if (isMobile && initialConfig.quality) {
+        if (this.state.isMobile && initialConfig.quality) {
             initialConfig.quality.precisionMode = 1.0;
             // Use HalfFloat16 on mobile - works well on modern iOS devices
             initialConfig.quality.bufferPrecision = 1.0; // HalfFloat16
@@ -545,15 +535,13 @@ export class FractalEngine {
         const tGenStart = performance.now();
         const fullMat = this.materials.buildFullMaterial(config);
         const tGenEnd = performance.now();
-        // if (import.meta.env.DEV) console.log(`[Compile] JS generation: ${(tGenEnd - tGenStart).toFixed(0)}ms`);
 
         // Lazy-init the dummy compile scene (reused across compiles)
         if (!this._compileScene) {
-            this._compileScene = new THREE.Scene();
-            this._compileMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
-            this._compileMesh.frustumCulled = false;
-            this._compileScene.add(this._compileMesh);
-            this._compileCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const pass = createFullscreenPass();
+            this._compileScene = pass.scene;
+            this._compileMesh = pass.mesh;
+            this._compileCamera = pass.camera;
         }
         this._compileMesh!.material = fullMat;
 
@@ -569,7 +557,6 @@ export class FractalEngine {
             this.renderer.compile(this._compileScene!, this._compileCamera!);
         }
         const tGpuEnd = performance.now();
-        // if (import.meta.env.DEV) console.log(`[Compile] GPU compile: ${(tGpuEnd - tGpuStart).toFixed(0)}ms`);
 
         // Check if a newer compile was triggered while we were compiling.
         // Don't emit IS_COMPILING false — the newer scheduleCompile handles state.
@@ -789,6 +776,11 @@ export class FractalEngine {
     public pickWorldPosition(x: number, y: number): THREE.Vector3 | null {
         if (!this.renderer || !this.activeCamera) return null;
         return this.pickingCtrl.pickWorldPosition(x, y, this.renderer, this.activeCamera);
+    }
+
+    public pickWorldPositionFast(x: number, y: number): THREE.Vector3 | null {
+        if (!this.renderer || !this.activeCamera) return null;
+        return this.pickingCtrl.pickWorldPositionFast(x, y, this.renderer, this.activeCamera);
     }
     
     private getWebGLProgram(mat: THREE.Material | THREE.Material[]): any {

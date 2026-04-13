@@ -7,6 +7,20 @@ import { KeyframeButton } from './KeyframeButton';
 import { ScalarInput, getMapping, formatDisplay } from './inputs';
 import type { CustomMapping } from './inputs';
 
+/** Build a mapping object from legacy customMapping props */
+function buildMapping(customMapping: CustomMapping | undefined) {
+    if (!customMapping) return undefined;
+    return {
+        toDisplay: customMapping.toSlider,
+        fromDisplay: customMapping.fromSlider,
+        format: formatDisplay,
+        parseInput: (s: string) => {
+            const num = parseFloat(s);
+            return isNaN(num) ? null : num;
+        }
+    };
+}
+
 // Re-export for backward compatibility
 export { formatDisplay } from './inputs';
 
@@ -123,19 +137,7 @@ export const BaseSlider: React.FC<BaseSliderProps> = ({
     disabled = false,
     className = ''
 }) => {
-    // Convert legacy customMapping to new mapping format
-    const mapping = React.useMemo(() => {
-        if (!customMapping) return undefined;
-        return {
-            toDisplay: customMapping.toSlider,
-            fromDisplay: customMapping.fromSlider,
-            format: formatDisplay,
-            parseInput: (s: string) => {
-                const num = parseFloat(s);
-                return isNaN(num) ? null : num;
-            }
-        };
-    }, [customMapping]);
+    const mapping = React.useMemo(() => buildMapping(customMapping), [customMapping]);
 
     // Pass unmapped min/max - ScalarInput will handle mapping internally
     // This fixes double-mapping bug where min/max were converted twice
@@ -282,19 +284,7 @@ const Slider: React.FC<SliderProps> = ({
         </>
     ) : undefined;
 
-    // Convert customMapping to mapping format
-    const mapping = React.useMemo(() => {
-        if (!props.customMapping) return undefined;
-        return {
-            toDisplay: props.customMapping.toSlider,
-            fromDisplay: props.customMapping.fromSlider,
-            format: formatDisplay,
-            parseInput: (s: string) => {
-                const num = parseFloat(s);
-                return isNaN(num) ? null : num;
-            }
-        };
-    }, [props.customMapping]);
+    const mapping = React.useMemo(() => buildMapping(props.customMapping), [props.customMapping]);
 
     // Pass unmapped min/max - ScalarInput will handle mapping internally
     // This fixes double-mapping bug where min/max were converted twice

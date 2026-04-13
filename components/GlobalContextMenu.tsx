@@ -68,15 +68,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
         if (isSubmenu) return; // Submenus are managed by parent
 
         const handleDown = (e: MouseEvent) => {
-            // Check if click is inside this menu or any of its submenus
-            // Since submenus are portals (or recursive components), checking ref is tricky.
-            // But since we mount submenus *inside* the portal tree (recursively), `contains` might fail if using Portal.
-            // Wait, I am NOT using portal for submenus in the implementation below, just recursion.
-            // Actually, if I use recursion inside the same div, it works.
-            // BUT, visual stacking requires absolute positioning escaping the parent overflow.
-            // Best approach: Recursion returns a Portal for the submenu? 
-            
-            // SIMPLIFICATION: We check if target is inside `.fractal-context-menu`
+            // Submenus are recursive children (not portals), so a single class check suffices
             const target = e.target as HTMLElement;
             if (target.closest('.fractal-context-menu')) return;
             onClose();

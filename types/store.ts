@@ -123,6 +123,7 @@ export interface FractalStoreState extends FeatureStateMap {
   
   compilerHardCap: number;
   isExporting: boolean;
+  adaptiveSuppressed: boolean;
 
   lockSceneOnSwitch: boolean;
   exportIncludeScene: boolean;
@@ -145,6 +146,7 @@ export interface FractalStoreState extends FeatureStateMap {
   histogramTrigger: number;
   histogramLayer: 0 | 1;
   histogramActiveCount: number; // Ref count for probe activation
+  histogramLoading: boolean;
   
   sceneHistogramData: Float32Array | null;
   sceneHistogramTrigger: number;
@@ -239,8 +241,8 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     // setIsControlsDocked: (v: boolean) => void; // Deprecated
     setIsBroadcastMode: (v: boolean) => void;
 
-    setCompilerHardCap: (v: number) => void;
     setIsExporting: (v: boolean) => void;
+    setAdaptiveSuppressed: (v: boolean) => void;
 
     setLockSceneOnSwitch: (v: boolean) => void;
     setExportIncludeScene: (v: boolean) => void;
@@ -267,6 +269,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     getShareString: (options?: { includeAnimations?: boolean }) => string;
     
     setHistogramData: (d: Float32Array | null) => void;
+    setHistogramLoading: (v: boolean) => void;
     setHistogramAutoUpdate: (v: boolean) => void;
     refreshHistogram: () => void;
     setHistogramLayer: (v: 0 | 1) => void;
@@ -302,10 +305,6 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
 
     resetCamera: () => void;
     
-    // Camera Primitives (generic store mutations)
-    setActiveCameraId: (id: string | null) => void;
-    applyCameraState: (state: CameraState) => void;
-    addSavedCamera: (cam: SavedCamera) => void;
     updateCamera: (id: string, updates: Partial<SavedCamera>) => void;
     deleteCamera: (id: string) => void;
     reorderCameras: (fromIndex: number, toIndex: number) => void;

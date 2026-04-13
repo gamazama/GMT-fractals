@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Uniforms } from './UniformNames';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
 import { QualityState } from '../features/quality';
+import { createFullscreenPass } from './utils/FullscreenQuad';
 
 const CONVERGENCE_FRAG = `
 precision mediump float;
@@ -262,12 +263,9 @@ export class RenderPipeline {
                 depthWrite: false
             });
             
-            this.convergenceScene = new THREE.Scene();
-            const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.convergenceMaterial);
-            quad.frustumCulled = false;
-            this.convergenceScene.add(quad);
-            
-            this.convergenceCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const convPass = createFullscreenPass(this.convergenceMaterial);
+            this.convergenceScene = convPass.scene;
+            this.convergenceCamera = convPass.camera;
         }
         
         this.resetAccumulation();

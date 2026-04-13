@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useFractalStore } from '../store/fractalStore';
-import { collectHelpIds } from '../utils/helpUtils';
+import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
 import { GenericToggleSwitch } from './GenericToggleSwitch';
 import type { GenericToggleOption } from './GenericToggleSwitch';
 
@@ -40,17 +40,8 @@ function ToggleSwitch<T extends string | number | boolean>({
     variant = 'default',
     labelSuffix
 }: ToggleSwitchProps<T>) {
-    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        if (disabled) return;
-        const ids = collectHelpIds(e.currentTarget);
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openContextMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
+    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const handleContextMenu = useHelpContextMenu();
 
     const handleChange = (val: T) => {
         handleInteractionStart('param');

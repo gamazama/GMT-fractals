@@ -24,7 +24,6 @@ export interface PlaybackSliceState {
     currentFrame: number;
     fps: number;
     durationFrames: number;
-    zoomLevel: number;
     loopMode: LoopMode;
     isArmingModulation: boolean;
     isRecordingModulation: boolean;

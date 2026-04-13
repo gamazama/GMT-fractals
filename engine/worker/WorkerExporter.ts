@@ -13,6 +13,7 @@ import { VIDEO_CONFIG, VIDEO_FORMATS, MAX_SKY_DISTANCE } from '../../data/consta
 import * as Mediabunny from 'mediabunny';
 import { H264Converter, halton } from '../codec/H264Converter';
 import { BloomPass } from '../BloomPass';
+import { createFullscreenPass } from '../utils/FullscreenQuad';
 
 // ─── Export Session State ────────────────────────────────────────────
 
@@ -123,11 +124,9 @@ export class WorkerExporter {
         this.bloomPass.resize(renderW, renderH);
 
         // Post-processing scene (tone mapping + sRGB via exportMaterial)
-        const ppScene = new THREE.Scene();
-        const ppCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.engine.materials.exportMaterial);
-        quad.frustumCulled = false;
-        ppScene.add(quad);
+        const pp = createFullscreenPass(this.engine.materials.exportMaterial);
+        const ppScene = pp.scene;
+        const ppCamera = pp.camera;
 
         // Encoder + Muxer
         const formatDef = VIDEO_FORMATS[config.formatIndex] || VIDEO_FORMATS[0];

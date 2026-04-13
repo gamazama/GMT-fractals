@@ -15,8 +15,7 @@ import { VectorInputProps, AXIS_CONFIG } from './types';
 import { ScalarInput } from './ScalarInput';
 import { piMapping } from './primitives';
 
-// Placeholder for DualAxisPad - will be imported from vector-input
-// For now, we'll create a simple version or leave it for later integration
+// TODO: Replace with real DualAxisPad from vector-input/ once interface is aligned
 interface DualAxisPadProps {
     primaryAxis: 'x' | 'y' | 'z';
     secondaryAxis: 'x' | 'y' | 'z';
@@ -32,31 +31,23 @@ interface DualAxisPadProps {
     onHover?: (isHovering: boolean) => void;
 }
 
-// Simple DualAxisPad placeholder - will be replaced with actual component
-const DualAxisPad: React.FC<DualAxisPadProps> = ({ 
-    primaryAxis, 
-    secondaryAxis, 
-    onUpdate,
-    onDragStart,
-    onDragEnd,
+const DualAxisPad: React.FC<DualAxisPadProps> = ({
+    primaryAxis,
+    secondaryAxis,
     disabled,
     onHover
-}) => {
-    const [isDragging, setIsDragging] = React.useState(false);
-    
-    return (
-        <div 
-            className={`w-6 h-9 md:h-[26px] flex-shrink-0 cursor-move overflow-hidden transition-all duration-150 ease-out relative bg-white/[0.08] border border-white/5 ${isDragging ? 'bg-white/10 border-white/30' : ''} ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
-            onMouseEnter={() => onHover?.(true)}
-            onMouseLeave={() => !isDragging && onHover?.(false)}
-            title={`Drag: Horizontal=${primaryAxis.toUpperCase()}, Vertical=${secondaryAxis.toUpperCase()}`}
-        >
-            <div className="absolute inset-0 flex items-center justify-center opacity-50">
-                <div className="w-3 h-3 border border-white/20 rotate-45" />
-            </div>
+}) => (
+    <div
+        className={`w-6 h-9 md:h-[26px] flex-shrink-0 cursor-move overflow-hidden transition-all duration-150 ease-out relative bg-white/[0.08] border border-white/5 ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
+        onMouseEnter={() => onHover?.(true)}
+        onMouseLeave={() => onHover?.(false)}
+        title={`Drag: Horizontal=${primaryAxis.toUpperCase()}, Vertical=${secondaryAxis.toUpperCase()}`}
+    >
+        <div className="absolute inset-0 flex items-center justify-center opacity-50">
+            <div className="w-3 h-3 border border-white/20 rotate-45" />
         </div>
-    );
-};
+    </div>
+);
 
 export const VectorInput: React.FC<VectorInputProps> = ({
     value,

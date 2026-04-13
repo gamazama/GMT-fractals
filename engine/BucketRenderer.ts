@@ -8,6 +8,7 @@ import { saveGMFScene } from '../utils/FormulaFormat';
 import { Preset } from '../types';
 import type { RenderPipeline } from './RenderPipeline';
 import type { MaterialController } from './MaterialController';
+import { createFullscreenPass, type FullscreenPass } from './utils/FullscreenQuad';
 import type { BloomPass } from './BloomPass';
 // Note: BucketEngineRef is implemented by FractalEngine - avoids circular import
 
@@ -68,6 +69,7 @@ export class BucketRenderer {
     private compositeMaterial: THREE.ShaderMaterial | null = null;
     private compositeScene: THREE.Scene | null = null;
     private compositeCamera: THREE.OrthographicCamera | null = null;
+    private _readbackPass: FullscreenPass | null = null;
 
     // Cached config
     private config: BucketRenderConfig = {
@@ -251,12 +253,9 @@ export class BucketRenderer {
         });
 
         // Create scene for compositing
-        this.compositeScene = new THREE.Scene();
-        const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.compositeMaterial);
-        quad.frustumCulled = false;
-        this.compositeScene.add(quad);
-
-        this.compositeCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        const compPass = createFullscreenPass(this.compositeMaterial);
+        this.compositeScene = compPass.scene;
+        this.compositeCamera = compPass.camera;
     }
 
     /**
@@ -517,11 +516,9 @@ export class BucketRenderer {
         gl.setViewport(0, 0, w, h);
         gl.clear();
 
-        const scene = new THREE.Scene();
-        const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), exportMat);
-        scene.add(quad);
-        gl.render(scene, cam);
+        if (!this._readbackPass) this._readbackPass = createFullscreenPass(exportMat);
+        else this._readbackPass.mesh.material = exportMat;
+        gl.render(this._readbackPass.scene, this._readbackPass.camera);
 
         const buffer = new Uint8Array(w * h * 4);
         gl.readRenderTargetPixels(exportTarget, 0, 0, w, h, buffer);

@@ -6,7 +6,7 @@ import { useFractalStore } from '../../store/fractalStore';
 import { RenderPopup } from './RenderPopup';
 import { DraggableNumber } from '../Slider';
 import { animationEngine } from '../../engine/AnimationEngine';
-import { collectHelpIds } from '../../utils/helpUtils';
+import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { CloseIcon, MenuIcon, KeyStatus, LoopIcon, WaveRecordIcon } from '../Icons'; 
 import { KeyframeButton } from '../KeyframeButton'; 
 import { getLiveValue, evaluateTrackValue } from '../../utils/timelineUtils';
@@ -119,19 +119,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
         setLoopMode, toggleArmModulation
     } = useAnimationStore();
 
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const handleContextMenu = useHelpContextMenu();
     const [showRender, setShowRender] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        const ids = collectHelpIds(e.currentTarget);
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openGlobalMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
 
     // Click outside to close menu
     useEffect(() => {

@@ -1,6 +1,5 @@
 import React from 'react';
-import { useFractalStore } from '../store/fractalStore';
-import { collectHelpIds } from '../utils/helpUtils';
+import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     label?: string;
@@ -15,16 +14,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button: React.FC<ButtonProps> = ({
     label, active, variant = 'primary', size = 'default', icon, fullWidth, className, children, onClick, ...props
 }) => {
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        const ids = collectHelpIds(e.currentTarget);
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openGlobalMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
+    const handleContextMenu = useHelpContextMenu();
 
     let activeClass = 'bg-cyan-900 text-cyan-200 border-cyan-700 shadow-inner';
     if (variant === 'danger') activeClass = 'bg-red-900 text-red-200 border-red-700 shadow-inner';

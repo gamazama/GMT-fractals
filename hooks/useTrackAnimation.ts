@@ -2,7 +2,7 @@
 import { useAnimationStore } from '../store/animationStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { KeyStatus } from '../components/Icons';
-import { evaluateTrackValue } from '../utils/timelineUtils';
+import { evaluateTrackValue, isRotationTrack } from '../utils/timelineUtils';
 
 export const useTrackAnimation = (trackId: string | undefined, currentValue: number, label: string) => {
     const { sequence, currentFrame, addTrack, addKeyframe, removeKeyframe, isRecording, snapshot } = useAnimationStore();
@@ -19,8 +19,7 @@ export const useTrackAnimation = (trackId: string | undefined, currentValue: num
             return 'keyed';
         } else {
             // No key at this exact frame. Check interpolation.
-            const isRotation = /rotation|rot|phase|twist/i.test(trackId) || /param[C-F]/i.test(trackId);
-            const interpolated = evaluateTrackValue(track.keyframes, currentFrame, isRotation);
+            const interpolated = evaluateTrackValue(track.keyframes, currentFrame, isRotationTrack(trackId));
             
             // If the user's current value differs significantly from the timeline's interpolated value,
             // show as dirty (indicating a manual override or tweak).

@@ -21,9 +21,7 @@ export const useDockInteraction = ({ isDocked, isMinimized, actions, onDragStart
 
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         if (isDocked) {
-            // If docked, clicking header just toggles minimize (unless clicking buttons)
             if ((e.target as HTMLElement).closest('button')) return;
-            // Legacy toggle removed
             return;
         }
 
@@ -64,11 +62,6 @@ export const useDockInteraction = ({ isDocked, isMinimized, actions, onDragStart
             setIsDragging(false);
             if (onDragEnd) onDragEnd();
             
-            // If it was just a click (no drag), toggle minimize
-            if (dragRef.current && !dragRef.current.hasMoved) {
-                // Legacy toggle removed
-            }
-            
             dragRef.current = null;
             window.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
@@ -76,7 +69,7 @@ export const useDockInteraction = ({ isDocked, isMinimized, actions, onDragStart
         
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-    }, [isDocked, isMinimized, actions, onDragStart, onDragEnd]);
+    }, [isDocked, actions, onDragStart, onDragEnd]);
 
     const handleResizeDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault(); 

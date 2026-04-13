@@ -34,11 +34,6 @@ export class UniformManager {
     private rotScratch3 = new THREE.Matrix3();
     private identityMat3 = new THREE.Matrix3(); // Cached identity for disabled state
 
-    // Track previous resolution state to avoid redundant updates
-    private lastWidth: number = -1;
-    private lastHeight: number = -1;
-    private lastIsGizmoInteracting: boolean = false;
-
     // Smart adaptive resolution: auto-adjust downsample factor to hit target FPS
     private _adaptiveScale = 1.0;       // Current downsample factor (1.0 = full res)
     private _adaptiveFrames = 0;
@@ -219,23 +214,12 @@ export class UniformManager {
                     materials.exportMaterial.uniforms.uResolution.value.set(targetW, targetH);
                 }
                 
-                // Update tracking variables
-                this.lastWidth = targetW;
-                this.lastHeight = targetH;
             }
             
             const canvasAspect = w / h;
             if (Number.isFinite(canvasAspect) && Math.abs(cam.aspect - canvasAspect) > 0.001) {
                 cam.aspect = canvasAspect;
                 cam.updateProjectionMatrix();
-            }
-        }
-        
-        // Blue Noise Size Sync - Kept for compatibility but unused by IGN shader
-        if (this.uniforms[Uniforms.BlueNoiseTexture].value) {
-            const tex = this.uniforms[Uniforms.BlueNoiseTexture].value;
-            if (tex.image) {
-                this.uniforms[Uniforms.BlueNoiseResolution].value.set(tex.image.width || 128, tex.image.height || 128);
             }
         }
         

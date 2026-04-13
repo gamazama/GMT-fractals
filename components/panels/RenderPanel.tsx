@@ -2,27 +2,14 @@
 // Use DDFS (parentId, condition, group, hidden) to control visibility and nesting.
 // Import theme tokens from 'data/theme' instead of raw Tailwind color classes.
 
-import React, { useRef } from 'react';
+import React from 'react';
 import { FractalState, FractalActions } from '../../types';
-import Slider from '../Slider';
-import ToggleSwitch from '../ToggleSwitch';
-import { useFractalStore } from '../../store/fractalStore';
-import { collectHelpIds } from '../../utils/helpUtils';
+import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { AutoFeaturePanel } from '../AutoFeaturePanel';
 
 const RenderPanel = ({ state, actions }: { state: FractalState, actions: FractalActions }) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+  const handleHeaderContextMenu = useHelpContextMenu();
   const isMobile = state.debugMobileLayout || (typeof window !== 'undefined' && window.innerWidth < 768);
-
-  const handleHeaderContextMenu = (e: React.MouseEvent) => {
-      const ids = collectHelpIds(e.currentTarget);
-      if (ids.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          openGlobalMenu(e.clientX, e.clientY, [], ids);
-      }
-  };
 
   const mats = state.materials; 
   const atmos = state.atmosphere;

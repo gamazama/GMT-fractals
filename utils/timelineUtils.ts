@@ -8,6 +8,10 @@ import { featureRegistry } from '../engine/FeatureSystem';
 import { getLightFromSlice } from '../features/lighting';
 import { nanoid } from 'nanoid';
 import { AnimationMath } from '../engine/math/AnimationMath';
+
+/** Checks if a track ID represents a rotation-like parameter (needs euler unwrapping) */
+export const isRotationTrack = (trackId: string): boolean =>
+    /rotation|rot|phase|twist/i.test(trackId) || /param[C-F]/i.test(trackId);
 import { CameraUtils } from './CameraUtils';
 import { getViewportCamera } from '../engine/worker/ViewportRefs';
 
@@ -168,9 +172,7 @@ export const calculateEulerUpdates = (trackIds: string[], sequence: AnimationSeq
 
     trackIds.forEach(tid => {
         const track = sequence.tracks[tid];
-        const isRotation = /rotation|rot|phase|twist/i.test(tid) || /param[C-F]/i.test(tid); 
-        
-        if (track && track.keyframes.length > 1 && isRotation) {
+        if (track && track.keyframes.length > 1 && isRotationTrack(tid)) {
             const keys = [...track.keyframes].sort((a,b) => a.frame - b.frame);
             const values = keys.map(k => k.value);
             const unrolled = [...values];
@@ -243,9 +245,9 @@ export const calculateSmoothingUpdates = (
         const track = refSequence.tracks[tid];
         if (!track || track.keyframes.length < 2) return;
         
-        const isRotation = /rotation|rot|phase|twist/i.test(tid) || /param[C-F]/i.test(tid);
+        const isRotation = isRotationTrack(tid);
         const keys = [...track.keyframes].sort((a,b) => a.frame - b.frame);
-        
+
         // BOUNCE LOGIC (Simulated Spring)
         if (isBounce) {
             // Adjust Spring params based on drag radius

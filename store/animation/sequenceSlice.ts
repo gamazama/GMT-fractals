@@ -45,7 +45,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         const currentClone = JSON.parse(JSON.stringify(sequence));
         const redoItem: HistoryItem = { type: 'SEQUENCE', data: currentClone };
         
-        set({ sequence: item.data, undoStack: newUndo, redoStack: [redoItem, ...redoStack] });
+        set({ sequence: item.data, undoStack: newUndo, redoStack: [...redoStack, redoItem] });
         return true;
     },
 
@@ -53,8 +53,8 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         const { undoStack, redoStack, sequence } = get();
         if (redoStack.length === 0) return false;
 
-        const item = redoStack[0];
-        const newRedo = redoStack.slice(1);
+        const item = redoStack[redoStack.length - 1];
+        const newRedo = redoStack.slice(0, -1);
         
         const currentClone = JSON.parse(JSON.stringify(sequence));
         const undoItem: HistoryItem = { type: 'SEQUENCE', data: currentClone };

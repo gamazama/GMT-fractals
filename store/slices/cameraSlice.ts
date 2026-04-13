@@ -22,7 +22,6 @@ export type CameraSlice = Pick<FractalStoreState,
     'savedCameras' | 'activeCameraId'
 > & Pick<FractalActions,
     'setCameraMode' | 'setSceneOffset' | 'resetCamera' | 'undoCamera' | 'redoCamera' |
-    'setActiveCameraId' | 'applyCameraState' | 'addSavedCamera' |
     'updateCamera' | 'deleteCamera' | 'reorderCameras' |
     'addCamera' | 'selectCamera' | 'duplicateCamera'
 >;
@@ -54,25 +53,6 @@ export const createCameraSlice: StateCreator<FractalStoreState & FractalActions,
             set({ sceneOffset: precise });
             FractalEvents.emit('offset_set', precise);
         }
-    },
-
-    // --- GENERIC CAMERA PRIMITIVES ---
-
-    setActiveCameraId: (id) => set({ activeCameraId: id }),
-
-    applyCameraState: (state) => {
-        set({
-            cameraRot: state.rotation,
-            sceneOffset: state.sceneOffset,
-            targetDistance: state.targetDistance || 3.5,
-        });
-    },
-
-    addSavedCamera: (cam) => {
-        set(state => ({
-            savedCameras: [...state.savedCameras, cam],
-            activeCameraId: cam.id
-        }));
     },
 
     updateCamera: (id, updates) => {

@@ -1,9 +1,8 @@
 
 import React, { memo, useRef, useEffect, useCallback } from 'react';
 import { AnimationSequence } from '../../types';
-import { useFractalStore } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
-import { collectHelpIds } from '../../utils/helpUtils';
+import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { TrashIcon } from '../Icons';
 import { getLiveValue } from '../../utils/timelineUtils';
 
@@ -170,16 +169,7 @@ interface TrackRowProps {
 export const TrackRow: React.FC<TrackRowProps> = memo(({
     tid, sequence, frameWidth, isSelected, selectedKeys, onSelect, onRemove, onAddKey, onKeyMouseDown
 }) => {
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
-
-    const handleContextMenu = (e: React.MouseEvent) => {
-        const ids = collectHelpIds(e.currentTarget);
-        if (ids.length > 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            openGlobalMenu(e.clientX, e.clientY, [], ids);
-        }
-    };
+    const handleContextMenu = useHelpContextMenu();
 
     return (
         <div
