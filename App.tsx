@@ -1,5 +1,4 @@
 import React, { useState, useRef, useMemo, Suspense } from 'react';
-import Controls from './components/Controls';
 import TopBar from './components/TopBar';
 import MobileControls from './components/MobileControls';
 import { LoadingScreen } from './components/LoadingScreen';

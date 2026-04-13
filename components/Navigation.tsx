@@ -32,7 +32,14 @@ interface NavigationProps {
   fitScale?: number; 
 }
 
-const Navigation: React.FC<NavigationProps> = ({ 
+/** Compute orbit target at `camera.position + forward * distance`. */
+const calcOrbitTarget = (camera: THREE.Camera, dist: number, out?: THREE.Vector3): THREE.Vector3 => {
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const target = out || new THREE.Vector3();
+    return target.copy(camera.position).addScaledVector(fwd, dist);
+};
+
+const Navigation: React.FC<NavigationProps> = ({
   mode, 
   onStart, onEnd, hudRefs,
   setSceneOffset,
@@ -129,9 +136,7 @@ const Navigation: React.FC<NavigationProps> = ({
       let dist = overrideDistance || engine.lastMeasuredDistance;
       if (dist <= 1e-7 || dist >= 1000.0) dist = useFractalStore.getState().targetDistance || 3.5;
       orbitRadiusRef.current = dist;
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-      const target = new THREE.Vector3().copy(camera.position).addScaledVector(forward, dist);
-      orbitTargetZero.current.copy(target);
+      calcOrbitTarget(camera, dist, orbitTargetZero.current);
       setIsOrbitReady(true);
   };
 
@@ -201,8 +206,7 @@ const Navigation: React.FC<NavigationProps> = ({
                // Without this, lookAt uses the stale up vector and strips roll.
                camera.up.copy(new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion));
                // Update orbit target so it's correct if OrbitControls reads it before next onStart
-               const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-               orbitTargetZero.current.copy(camera.position).addScaledVector(fwd, d);
+               calcOrbitTarget(camera, d, orbitTargetZero.current);
                if (orbitRef.current) {
                    orbitRef.current.target.copy(orbitTargetZero.current);
                    orbitRef.current.update();
@@ -210,8 +214,6 @@ const Navigation: React.FC<NavigationProps> = ({
           }
       };
       
-      const onResetAccum = () => {};
-
       // Smooth camera transition (lerp/slerp over duration)
       const onTransition = (targetState: CameraState) => {
           if (!targetState.sceneOffset) {
@@ -255,9 +257,8 @@ const Navigation: React.FC<NavigationProps> = ({
       };
 
       const unsub1 = FractalEvents.on('camera_teleport', onTeleport);
-      const unsub2 = FractalEvents.on('reset_accum', onResetAccum);
       const unsub3 = FractalEvents.on('camera_transition', onTransition);
-      return () => { unsub1(); unsub2(); unsub3(); };
+      return () => { unsub1(); unsub3(); };
   }, [mode, camera]);
 
   const isPlaying = useAnimationStore(s => s.isPlaying);
@@ -377,8 +378,7 @@ const Navigation: React.FC<NavigationProps> = ({
           if (mode === 'Orbit') {
               const d = distAverageRef.current || engine.lastMeasuredDistance || 3.5;
               orbitRadiusRef.current = d;
-              const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-              orbitTargetZero.current.copy(camera.position).addScaledVector(fwd, d);
+              calcOrbitTarget(camera, d, orbitTargetZero.current);
               if (orbitRef.current) {
                   orbitRef.current.target.copy(orbitTargetZero.current);
                   orbitRef.current.update();
@@ -550,7 +550,9 @@ const Navigation: React.FC<NavigationProps> = ({
           );
 
       } else if (mode === 'Orbit' && orbitRef.current) {
-          orbitRef.current.enabled = !disableMovement && !isCameraLockedRef.current && (allowOrbitInteraction.current || isOrbitDragging.current || isScrollingRef.current);
+          // Read movement lock fresh — the React prop `disableMovement` may be stale in this closure
+          const movementLocked = selectMovementLock(useFractalStore.getState());
+          orbitRef.current.enabled = !movementLocked && !isCameraLockedRef.current && (allowOrbitInteraction.current || isOrbitDragging.current || isScrollingRef.current);
           orbitRef.current.zoomSpeed = currentZoomSensitivity.current;
           
           orbitRef.current.rotateSpeed = 1.0 / (fitScale || 1.0);
@@ -589,8 +591,7 @@ const Navigation: React.FC<NavigationProps> = ({
                 if (orbitRef.current) {
                     const dist = distAverageRef.current > 0 ? distAverageRef.current : (useFractalStore.getState().targetDistance || 3.5);
                     orbitRadiusRef.current = dist;
-                    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-                    const newTarget = new THREE.Vector3().copy(camera.position).addScaledVector(fwd, dist);
+                    const newTarget = calcOrbitTarget(camera, dist);
 
                     orbitRef.current.target.copy(newTarget);
                     orbitRef.current.update();

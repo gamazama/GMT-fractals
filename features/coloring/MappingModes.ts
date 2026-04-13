@@ -15,7 +15,7 @@ export const MAPPING_MODES: MappingDefinition[] = [
         value: 0.0,
         label: 'Orbit Trap',
         description: 'Colors based on how close the orbit came to the origin or geometric traps.',
-        glsl: `v = log(max(1.0e-5, result.y)) * -0.2;`
+        glsl: `v = logTrap(result.y);`
     },
     {
         value: 1.0,
@@ -29,7 +29,7 @@ export const MAPPING_MODES: MappingDefinition[] = [
             // the iteration count is constant (1.0). This looks flat.
             // If we hit max iterations (approx 1.0), mix in Orbit Trap (y) to provide texture.
             if (v > 0.99) {
-                float trap = log(max(1.0e-5, result.y)) * -0.2;
+                float trap = logTrap(result.y);
                 // Modulate the 1.0 base with the trap value
                 v = 0.95 + 0.05 * sin(trap * 10.0);
             }
@@ -101,30 +101,34 @@ export const MAPPING_MODES: MappingDefinition[] = [
         value: 10.0,
         label: 'Orbit X (YZ plane)',
         description: 'Per-component orbit trap: closest approach to the YZ plane (abs x).',
-        glsl: `v = log(max(1.0e-5, g_orbitTrap.x)) * -0.2;`
+        glsl: `v = logTrap(g_orbitTrap.x);`
     },
     {
         value: 11.0,
         label: 'Orbit Y (XZ plane)',
         description: 'Per-component orbit trap: closest approach to the XZ plane (abs y).',
-        glsl: `v = log(max(1.0e-5, g_orbitTrap.y)) * -0.2;`
+        glsl: `v = logTrap(g_orbitTrap.y);`
     },
     {
         value: 12.0,
         label: 'Orbit Z (XY plane)',
         description: 'Per-component orbit trap: closest approach to the XY plane (abs z).',
-        glsl: `v = log(max(1.0e-5, g_orbitTrap.z)) * -0.2;`
+        glsl: `v = logTrap(g_orbitTrap.z);`
     },
     {
         value: 13.0,
         label: 'Orbit W (Origin)',
         description: 'Per-component orbit trap: closest squared distance to the origin.',
-        glsl: `v = log(max(1.0e-5, g_orbitTrap.w)) * -0.2;`
+        glsl: `v = logTrap(g_orbitTrap.w);`
     }
 ];
 
 export const generateMappingShader = () => {
     let code = `
+    // Legacy scale factor (-0.2) kept for save file / preset compatibility.
+    // Arbitrary but baked into existing uColorScale values.
+    float logTrap(float t) { return log(max(1.0e-5, t)) * -0.2; }
+
     float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale) {
         float v = 0.0;
 

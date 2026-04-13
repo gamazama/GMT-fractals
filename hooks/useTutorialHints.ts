@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import { TUTORIAL_HINTS, type TutorialHint, type HintContext } from '../data/tutorialHints';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
 // ─── localStorage persistence ──────────────────────────────────────────
 
@@ -70,9 +71,6 @@ export interface TutorialHintsAPI {
     resetHints: () => void;
 }
 
-// Module-level ref so SystemMenu can call resetHints without prop drilling
-let _resetHintsFn: (() => void) | null = null;
-export function getResetHintsFn(): (() => void) | null { return _resetHintsFn; }
 
 export function useTutorialHints(showTimeline: boolean): TutorialHintsAPI {
     const profileRef = useRef<PersistedProfile>(loadProfile());
@@ -326,8 +324,10 @@ export function useTutorialHints(showTimeline: boolean): TutorialHintsAPI {
         setActiveHint(null);
     }, []);
 
-    // Expose to module-level ref for SystemMenu access
-    _resetHintsFn = resetHints;
+    // Listen for reset event from SystemMenu (decoupled via FractalEvents)
+    useEffect(() => {
+        return FractalEvents.on(FRACTAL_EVENTS.RESET_HINTS, resetHints);
+    }, [resetHints]);
 
     return { activeHint, dismissHint, resetHints };
 }

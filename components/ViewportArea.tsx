@@ -341,11 +341,12 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
                 )}
                 
                 {!isCleanFeed && state.histogramActiveCount > 0 && (
-                     <HistogramProbe 
-                        onUpdate={(d) => state.setHistogramData(d)} 
+                     <HistogramProbe
+                        onUpdate={(d) => state.setHistogramData(d)}
+                        onLoadingChange={(v) => state.setHistogramLoading(v)}
                         autoUpdate={state.histogramAutoUpdate}
                         trigger={state.histogramTrigger}
-                        source="geometry" 
+                        source="geometry"
                      />
                 )}
                 

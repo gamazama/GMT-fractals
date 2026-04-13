@@ -33,6 +33,7 @@ interface HistogramProps {
     
     // Data freshness (optional)
     isStale?: boolean;
+    isLoading?: boolean;
     
     // Styling
     height?: number;
@@ -54,7 +55,7 @@ const Histogram: React.FC<HistogramProps> = ({
     gradientStops,
     onChange,
     autoUpdate, onToggleAuto, onRefresh,
-    isStale = false,
+    isStale = false, isLoading = false,
     height = 48,
     labelTitle = "Levels",
     labelLeft = "Black",
@@ -287,7 +288,7 @@ const Histogram: React.FC<HistogramProps> = ({
                             onClick={onToggleAuto}
                             title="Auto-update histogram (Live)"
                         >
-                            <div className={`w-2 h-2 rounded-full transition-all duration-300 ${autoUpdate ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]' : 'bg-gray-600'}`} />
+                            <div className={`w-2 h-2 rounded-full transition-all duration-300 ${isLoading ? 'bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.8)]' : autoUpdate ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.8)]' : 'bg-gray-600'}`} />
                         </div>
                     )}
                     {onRefresh && !autoUpdate && (

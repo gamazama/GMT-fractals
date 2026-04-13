@@ -11,6 +11,7 @@ export interface MaterialState {
     roughness: number;
     rim: number;
     rimExponent: number;
+    rimColor: THREE.Color;
     envStrength: number;
     envBackgroundStrength: number; // Renamed UI label to BG Visibility
     envSource: number;
@@ -114,6 +115,16 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'rx',
             uniform: 'uRimExponent',
             min: 1.0, max: 16.0, step: 0.1,
+            group: 'surface',
+            parentId: 'rim',
+            condition: { gt: 0.0 }
+        },
+        rimColor: {
+            type: 'color',
+            default: new THREE.Color(0.5, 0.7, 1.0),
+            label: 'Rim Color',
+            shortId: 'rc',
+            uniform: 'uRimColor',
             group: 'surface',
             parentId: 'rim',
             condition: { gt: 0.0 }

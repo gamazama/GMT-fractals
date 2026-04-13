@@ -24,39 +24,7 @@ import { JULIA_REPEATER_PIPELINE } from '../data/initialPipelines';
 import '../features'; // Ensure features are registered
 import { PreciseVector3 } from '../types';
 
-// ── Compile Spinner Gate ─────────────────────────────────────────────────
-// Ensures the compile spinner is painted before GPU-blocking work begins.
-// setFormula/loadScene call queueCompileAfterSpinner() which emits IS_COMPILING
-// and stores the compile work. CompilingIndicator calls flushCompileWork() after
-// React renders and the browser paints, which executes the queued work.
-
-let _pendingCompileWork: (() => void) | null = null;
-let _newCyclePending = false;
-
-/** Queue compile work to run after the spinner is painted.
- *  Sets _newCyclePending so the handler knows this is a user-initiated cycle
- *  (not a worker status update). The handler resets the spinner and the ref
- *  callback flushes the work after paint. */
-export function queueCompileAfterSpinner(message: string, work: () => void) {
-    _pendingCompileWork = work;
-    _newCyclePending = true;
-    FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, message);
-}
-
-/** Check and consume the new-cycle flag. Called by CompilingIndicator's handler. */
-export function consumeNewCycle(): boolean {
-    if (_newCyclePending) { _newCyclePending = false; return true; }
-    return false;
-}
-
-/** Called by CompilingIndicator after it has rendered and the browser has painted. */
-export function flushCompileWork() {
-    if (_pendingCompileWork) {
-        const work = _pendingCompileWork;
-        _pendingCompileWork = null;
-        work();
-    }
-}
+import { compileGate } from './CompileGate';
 
 import { DEFAULT_HARD_CAP } from '../data/constants';
 import { OpticsState } from '../features/optics';
@@ -105,9 +73,9 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         // via requestAnimationFrame, so the spinner is guaranteed visible before
         // the GPU-blocking preview compile starts on the worker.
         // Show spinner, then defer compile work until the spinner confirms it's painted.
-        // queueCompileAfterSpinner emits IS_COMPILING and executes the callback only
+        // compileGate.queue emits IS_COMPILING and executes the callback only
         // after CompilingIndicator has rendered and the browser has composited.
-        queueCompileAfterSpinner("Loading Preview...", () => {
+        compileGate.queue("Loading Preview...", () => {
             FractalEvents.emit(FRACTAL_EVENTS.CONFIG, {
                 formula: f,
                 pipeline: s.pipeline,
@@ -292,7 +260,7 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         // to after the browser paints so the spinner is guaranteed visible
         // before the GPU-blocking preview compile starts on the worker.
         // Show spinner, then defer compile work until the spinner confirms it's painted.
-        queueCompileAfterSpinner("Loading Preview...", () => {
+        compileGate.queue("Loading Preview...", () => {
             // 2. Hydrate store — setter chain emits per-feature CONFIG events that
             //    ConfigManager diffs individually (compile-time vs runtime).
             get().loadPreset(preset);

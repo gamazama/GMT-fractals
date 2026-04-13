@@ -60,7 +60,7 @@ export type MainToWorkerMessage =
     | { type: 'CAPTURE_SNAPSHOT'; id: string }
     | { type: 'TEXTURE'; textureType: 'color' | 'env'; bitmap: ImageBitmap | null }
     | { type: 'TEXTURE_HDR'; textureType: 'color' | 'env'; buffer: ArrayBuffer }
-    | { type: 'PICK_WORLD_POSITION'; id: string; x: number; y: number }
+    | { type: 'PICK_WORLD_POSITION'; id: string; x: number; y: number; fast?: boolean }
     | { type: 'FOCUS_PICK_START'; id: string; x: number; y: number }
     | { type: 'FOCUS_PICK_SAMPLE'; id: string; x: number; y: number }
     | { type: 'FOCUS_PICK_END' }

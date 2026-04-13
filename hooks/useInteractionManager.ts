@@ -8,6 +8,20 @@ import { useFractalStore } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
 
 
+/** Record keyframe(s) if the animation system is in recording mode. */
+const recordPickKeyframes = (
+    animStore: typeof useAnimationStore,
+    tracks: { id: string; label: string; value: number }[]
+) => {
+    const { isRecording, isPlaying, addKeyframe, addTrack, currentFrame, sequence } = animStore.getState();
+    if (!isRecording) return;
+    const interp = isPlaying ? 'Linear' : 'Bezier';
+    for (const t of tracks) {
+        if (!sequence.tracks[t.id]) addTrack(t.id, t.label);
+        addKeyframe(t.id, currentFrame, t.value, interp);
+    }
+};
+
 export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     // Julia Drag State
     const isDraggingJuliaRef = useRef(false);
@@ -42,6 +56,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 // then samples from it as the user drags — no re-rendering needed.
                 // DoF is re-enabled immediately so the user sees a live blur preview.
                 if (mode === 'picking_focus') {
+                    state.handleInteractionStart('param');
                     isDraggingFocusRef.current = true;
                     let snapshotReady = false;
                     let pendingSample = false;
@@ -78,16 +93,9 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                                     lastFocusDist = dist;
                                     useFractalStore.getState().setOptics({ dofFocus: dist });
 
-                                    // Record Keyframe if Recording
-                                    const { isRecording, isPlaying, addKeyframe, addTrack, currentFrame, sequence } = animStore.getState();
-
-                                    if (isRecording) {
-                                        const trackId = 'optics.dofFocus';
-                                        if (!sequence.tracks[trackId]) addTrack(trackId, 'Focus Distance');
-
-                                        const interp = isPlaying ? 'Linear' : 'Bezier';
-                                        addKeyframe(trackId, currentFrame, dist, interp);
-                                    }
+                                    recordPickKeyframes(animStore, [
+                                        { id: 'optics.dofFocus', label: 'Focus Distance', value: dist }
+                                    ]);
                                 }
                             });
                         }
@@ -98,6 +106,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 
                 // Case 2: Julia Picking (Continuous Drag Mode, via worker RPC)
                 if (mode === 'picking_julia') {
+                    state.handleInteractionStart('param');
                     isDraggingJuliaRef.current = true;
 
                     // Sync start position from store to prevent jumping
@@ -123,7 +132,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                     };
 
                     // Initial Pick (async)
-                    engine.pickWorldPosition(x, y, true).then((pick) => {
+                    engine.pickWorldPosition(x, y, true, true).then((pick) => {
                         if (pick && isDraggingJuliaRef.current) {
                             applyPick(pick, state.formula, state);
                         }
@@ -137,7 +146,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                         // 1. Pick (async, throttled — skip if previous pick still pending)
                         if (!pendingPick) {
                             pendingPick = true;
-                            engine.pickWorldPosition(mousePosRef.current.x, mousePosRef.current.y, true).then((pickPos) => {
+                            engine.pickWorldPosition(mousePosRef.current.x, mousePosRef.current.y, true, true).then((pickPos) => {
                                 pendingPick = false;
                                 if (!isDraggingJuliaRef.current) return;
                                 if (pickPos) {
@@ -159,19 +168,11 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                                  juliaZ: currentJuliaRef.current.z
                              });
 
-                             // 4. Record Keyframe if Recording
-                             const { isRecording, isPlaying, addKeyframe, addTrack, currentFrame, sequence } = animStore.getState();
-
-                             if (isRecording) {
-                                 if (!sequence.tracks['geometry.juliaX']) addTrack('geometry.juliaX', 'Julia X');
-                                 if (!sequence.tracks['geometry.juliaY']) addTrack('geometry.juliaY', 'Julia Y');
-                                 if (!sequence.tracks['geometry.juliaZ']) addTrack('geometry.juliaZ', 'Julia Z');
-
-                                 const interp = isPlaying ? 'Linear' : 'Bezier';
-                                 addKeyframe('geometry.juliaX', currentFrame, currentJuliaRef.current.x, interp);
-                                 addKeyframe('geometry.juliaY', currentFrame, currentJuliaRef.current.y, interp);
-                                 addKeyframe('geometry.juliaZ', currentFrame, currentJuliaRef.current.z, interp);
-                             }
+                             recordPickKeyframes(animStore, [
+                                 { id: 'geometry.juliaX', label: 'Julia X', value: currentJuliaRef.current.x },
+                                 { id: 'geometry.juliaY', label: 'Julia Y', value: currentJuliaRef.current.y },
+                                 { id: 'geometry.juliaZ', label: 'Julia Z', value: currentJuliaRef.current.z },
+                             ]);
                         }
 
                         rafRef.current = requestAnimationFrame(loop);
@@ -245,12 +246,13 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
             if (isDraggingJuliaRef.current) {
                 isDraggingJuliaRef.current = false;
                 if (rafRef.current) cancelAnimationFrame(rafRef.current);
-                
+
                 // Exit picking mode on release
                 state.setInteractionMode('none');
+                state.handleInteractionEnd();
                 if (navigator.vibrate) navigator.vibrate(20);
             }
-            
+
             // End Focus Drag
             if (isDraggingFocusRef.current) {
                 isDraggingFocusRef.current = false;
@@ -259,6 +261,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
 
                 // Exit picking mode on release
                 state.setInteractionMode('none');
+                state.handleInteractionEnd();
                 if (navigator.vibrate) navigator.vibrate(20);
             }
         };

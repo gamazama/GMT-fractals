@@ -20,7 +20,8 @@ export const AdaptiveResolution: React.FC = () => {
 
     if (!quality || !setQuality) return null;
 
-    const isActive = quality.dynamicScaling && (quality.adaptiveTarget ?? 0) > 0;
+    const adaptiveSuppressed = useFractalStore(s => s.adaptiveSuppressed);
+    const isActive = quality.dynamicScaling && (quality.adaptiveTarget ?? 0) > 0 && !adaptiveSuppressed;
 
     const handleToggle = () => {
         if (isActive) {

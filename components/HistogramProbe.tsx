@@ -5,13 +5,14 @@ const engine = getProxy();
 
 interface HistogramProbeProps {
     onUpdate: (data: Float32Array) => void;
+    onLoadingChange?: (loading: boolean) => void;
     autoUpdate: boolean;
     trigger: number;
     source: 'geometry' | 'color';
 }
 
 const HistogramProbe: React.FC<HistogramProbeProps> = ({
-    onUpdate, autoUpdate, trigger, source
+    onUpdate, onLoadingChange, autoUpdate, trigger, source
 }) => {
     const prevTrigger = useRef(trigger);
 
@@ -27,8 +28,10 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
             const shouldRender = (autoUpdate && frameCount % 60 === 0) || triggerChanged;
 
             if (shouldRender) {
+                onLoadingChange?.(true);
                 engine.requestHistogramReadback(source).then(data => {
                     if (data.length > 0) onUpdate(data);
+                    onLoadingChange?.(false);
                 });
             }
 
@@ -37,7 +40,7 @@ const HistogramProbe: React.FC<HistogramProbeProps> = ({
 
         loop();
         return () => cancelAnimationFrame(frameId);
-    }, [autoUpdate, trigger, source, onUpdate]);
+    }, [autoUpdate, trigger, source, onUpdate, onLoadingChange]);
 
     return null;
 };

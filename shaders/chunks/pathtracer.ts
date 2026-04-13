@@ -114,7 +114,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         if (bounce == 0 && uRim > 0.01) {
             float NdotV_rim = max(0.0, dot(n, -currentRd));
             float rimFactor = pow(1.0 - NdotV_rim, uRimExponent) * uRim;
-            emission += vec3(0.5, 0.7, 1.0) * rimFactor;
+            emission += uRimColor * rimFactor;
         }
 
         roughness = max(roughness, 0.04);  // Minimum roughness — prevents NaN in GGX distribution denominator

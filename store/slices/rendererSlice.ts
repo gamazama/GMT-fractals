@@ -13,11 +13,11 @@ const isMobile = () => {
 
 export type RendererSlice = Pick<FractalStoreState,
     'dpr' | 'aaLevel' | 'msaaSamples' | 'aaMode' | 'accumulation' | 'previewMode' | 'renderMode' |
-    'isExporting' | 'renderRegion' | 'isBucketRendering' | 'bucketSize' | 'bucketUpscale' | 'convergenceThreshold' |
+    'isExporting' | 'adaptiveSuppressed' | 'renderRegion' | 'isBucketRendering' | 'bucketSize' | 'bucketUpscale' | 'convergenceThreshold' |
     'isPaused' | 'sampleCap' | 'samplesPerBucket' | 'canvasPixelSize'
 > & Pick<FractalActions,
     'setDpr' | 'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
-    'setIsExporting' | 'setRenderRegion' | 'setIsBucketRendering' | 'setBucketSize' | 'setBucketUpscale' | 'setConvergenceThreshold' |
+    'setIsExporting' | 'setAdaptiveSuppressed' | 'setRenderRegion' | 'setIsBucketRendering' | 'setBucketSize' | 'setBucketUpscale' | 'setConvergenceThreshold' |
     'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket' | 'setCanvasPixelSize'
 >;
 
@@ -38,6 +38,7 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     sampleCap: 256, // Default stop after 256 samples
 
     isExporting: false,
+    adaptiveSuppressed: false,
     renderRegion: null,
     
     // Bucket Rendering Defaults
@@ -115,4 +116,5 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     setCanvasPixelSize: (w, h) => set({ canvasPixelSize: [w, h] }),
 
     setIsExporting: (v) => set({ isExporting: v }),
+    setAdaptiveSuppressed: (v) => set({ adaptiveSuppressed: v }),
 });

@@ -39,6 +39,12 @@ const BucketRenderSettingsPopup = () => {
         });
     }, []);
 
+    // Suppress adaptive resolution while bucket render panel is open
+    useEffect(() => {
+        useFractalStore.getState().setAdaptiveSuppressed(true);
+        return () => { useFractalStore.getState().setAdaptiveSuppressed(false); };
+    }, []);
+
     // Estimate VRAM and output resolution using actual canvas pixel size.
     // In Fixed mode, derive from fixedResolution directly (ResizeObserver may lag).
     const vramInfo = useMemo(() => {
@@ -53,46 +59,40 @@ const BucketRenderSettingsPopup = () => {
         return { outW, outH, mb };
     }, [state.canvasPixelSize, state.bucketUpscale, state.resolutionMode, state.fixedResolution, state.dpr]);
 
-    // Explicit Start/Stop handlers to avoid race conditions with state toggles
-    const handleStartRefine = () => {
+    /** Wraps a render action with interaction start/end and stop-if-rendering guard. */
+    const withRenderAction = (action: () => void) => {
         state.handleInteractionStart('param');
         if (state.isBucketRendering) engine.stopBucketRender();
-        else {
-            // Viewport Refine: Always 1x
-            state.setBucketUpscale(1.0);
-            engine.startBucketRender(false, {
-                bucketSize: state.bucketSize,
-                bucketUpscale: 1.0,
-                convergenceThreshold: state.convergenceThreshold,
-                accumulation: state.accumulation,
-                samplesPerBucket: state.samplesPerBucket
-            });
-        }
+        else action();
         state.handleInteractionEnd();
     };
 
-    const handleExport = () => {
-        state.handleInteractionStart('param');
-        if (state.isBucketRendering) engine.stopBucketRender();
-        else {
-            // Gather Preset Data for Metadata injection
-            const preset = state.getPreset({ includeScene: true });
-            const currentVersion = state.prepareExport();
+    const handleStartRefine = () => withRenderAction(() => {
+        state.setBucketUpscale(1.0);
+        engine.startBucketRender(false, {
+            bucketSize: state.bucketSize,
+            bucketUpscale: 1.0,
+            convergenceThreshold: state.convergenceThreshold,
+            accumulation: state.accumulation,
+            samplesPerBucket: state.samplesPerBucket
+        });
+    });
 
-            engine.startBucketRender(true, {
-                bucketSize: state.bucketSize,
-                bucketUpscale: state.bucketUpscale,
-                convergenceThreshold: state.convergenceThreshold,
-                accumulation: state.accumulation,
-                samplesPerBucket: state.samplesPerBucket
-            }, {
-                preset,
-                name: state.projectSettings.name,
-                version: currentVersion
-            });
-        }
-        state.handleInteractionEnd();
-    };
+    const handleExport = () => withRenderAction(() => {
+        const preset = state.getPreset({ includeScene: true });
+        const currentVersion = state.prepareExport();
+        engine.startBucketRender(true, {
+            bucketSize: state.bucketSize,
+            bucketUpscale: state.bucketUpscale,
+            convergenceThreshold: state.convergenceThreshold,
+            accumulation: state.accumulation,
+            samplesPerBucket: state.samplesPerBucket
+        }, {
+            preset,
+            name: state.projectSettings.name,
+            version: currentVersion
+        });
+    });
 
     return (
         <Popover width="w-72">

@@ -72,7 +72,7 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
 
     // 6. Rim
     float fresnelTerm = pow(1.0 - NdotV, uRimExponent);
-    vec3 rimColor = vec3(0.5, 0.7, 1.0) * fresnelTerm * uRim;
+    vec3 rimColor = uRimColor * fresnelTerm * uRim;
 
     // 7. Ambient IBL
     if (uEnvStrength > 0.001) {

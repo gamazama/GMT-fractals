@@ -44,25 +44,27 @@ import { ColorGradingHistogram, OpticsControls, OpticsDofControls, NavigationCon
 
 // --- 4. Define Connectors (Wrappers that need Store access) ---
 
+/** Shared hook: register/unregister a histogram probe while the component is mounted. */
+const useHistogramRegistration = (
+    register: () => void,
+    unregister: () => void
+) => {
+    useEffect(() => { register(); return () => unregister(); }, [register, unregister]);
+};
+
 const ConnectedColoringHistogram: React.FC<FeatureComponentProps> = (props) => {
     const histogramData = useFractalStore(s => s.histogramData);
+    const histogramLoading = useFractalStore(s => s.histogramLoading);
     const autoUpdate = useFractalStore(s => s.histogramAutoUpdate);
     const setAuto = useFractalStore(s => s.setHistogramAutoUpdate);
     const refresh = useFractalStore(s => s.refreshHistogram);
     const liveModulations = useFractalStore(s => s.liveModulations);
-    
-    // Access full slice state to get colorSpace
-    // sliceState is passed from AutoFeaturePanel
-    
-    // Activation Logic
-    const register = useFractalStore(s => s.registerHistogram);
-    const unregister = useFractalStore(s => s.unregisterHistogram);
 
-    useEffect(() => {
-        register();
-        return () => unregister();
-    }, [register, unregister]);
-    
+    useHistogramRegistration(
+        useFractalStore(s => s.registerHistogram),
+        useFractalStore(s => s.unregisterHistogram)
+    );
+
     const handleChange = (partial: any) => {
         const setAction = useFractalStore.getState().setColoring;
         if (setAction) setAction(partial);
@@ -78,19 +80,16 @@ const ConnectedColoringHistogram: React.FC<FeatureComponentProps> = (props) => {
             autoUpdate={autoUpdate}
             onToggleAuto={() => setAuto(!autoUpdate)}
             liveModulations={liveModulations}
+            isLoading={histogramLoading}
         />
     );
 };
 
-// Wrapper for Grading Histogram to handle registration
 const ConnectedGradingHistogram: React.FC<FeatureComponentProps> = (props) => {
-    const register = useFractalStore(s => s.registerSceneHistogram);
-    const unregister = useFractalStore(s => s.unregisterSceneHistogram);
-
-    useEffect(() => {
-        register();
-        return () => unregister();
-    }, [register, unregister]);
+    useHistogramRegistration(
+        useFractalStore(s => s.registerSceneHistogram),
+        useFractalStore(s => s.unregisterSceneHistogram)
+    );
 
     return <ColorGradingHistogram {...props} />;
 };

@@ -14,10 +14,11 @@ interface ColoringHistogramProps {
     autoUpdate: boolean;
     onToggleAuto: () => void;
     liveModulations?: Partial<Record<string, number>>;
+    isLoading?: boolean;
 }
 
-export const ColoringHistogram: React.FC<ColoringHistogramProps> = ({ 
-    layer, state, histogramData, onChange, onRefresh, autoUpdate, onToggleAuto, liveModulations 
+export const ColoringHistogram: React.FC<ColoringHistogramProps> = ({
+    layer, state, histogramData, onChange, onRefresh, autoUpdate, onToggleAuto, liveModulations, isLoading
 }) => {
     const pendingAutoLevel = useRef(false);
     
@@ -145,6 +146,7 @@ export const ColoringHistogram: React.FC<ColoringHistogramProps> = ({
                 autoUpdate={autoUpdate}
                 onToggleAuto={onToggleAuto}
                 onRefresh={onRefresh}
+                isLoading={isLoading}
             />
 
             {/* Coupled Sliders */}

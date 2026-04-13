@@ -4,7 +4,7 @@ import { FractalEvents } from '../engine/FractalEvents';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { SpinnerIcon } from './Icons';
-import { flushCompileWork, consumeNewCycle } from '../store/fractalStore';
+import { compileGate } from '../store/CompileGate';
 
 export const CompilingIndicator: React.FC = () => {
     const [status, setStatus] = useState<boolean | string>(false);
@@ -38,7 +38,7 @@ export const CompilingIndicator: React.FC = () => {
             statusRef.current = val;
             setStatus(val);
 
-            if (consumeNewCycle()) {
+            if (compileGate.consumeNewCycle()) {
                 // ── NEW CYCLE (user switched formula / loaded scene) ──
                 // Reset everything: timers, progress, hiding. This is the
                 // definitive "reset the light" — only fires when
@@ -95,9 +95,9 @@ export const CompilingIndicator: React.FC = () => {
             awaitingFlushRef.current = false;
             clearTimeout(safetyTimer.current);
             requestAnimationFrame(() => {
-                setTimeout(() => flushCompileWork(), 0);
+                setTimeout(() => compileGate.flush(), 0);
             });
-            safetyTimer.current = setTimeout(() => flushCompileWork(), 300);
+            safetyTimer.current = setTimeout(() => compileGate.flush(), 300);
         }
     }, [cycleGen]);
 

@@ -275,7 +275,7 @@ The preview shader compile is GPU-blocking — the worker thread stalls for 1-4s
 Main Thread                              Worker Thread
 ┌─────────────────────────────┐          ┌─────────────────────────┐
 │ setFormula / loadScene       │          │                         │
-│  → queueCompileAfterSpinner()│          │                         │
+│  → compileGate.queue()       │          │                         │
 │    stores work, emits        │          │                         │
 │    IS_COMPILING              │          │                         │
 │                              │          │                         │
@@ -284,7 +284,7 @@ Main Thread                              Worker Thread
 │ rAF → setTimeout(0)         │          │                         │
 │ Browser PAINTS spinner       │          │                         │
 │                              │          │                         │
-│ flushCompileWork()           │          │                         │
+│ compileGate.flush()          │          │                         │
 │  → CONFIG #1..#N ──────────────────────▶│ handleConfigChange ×N   │
 │  → CONFIG_DONE  ──────────────────────▶│ fireCompile()           │
 │                              │          │  → performCompilation() │
@@ -294,11 +294,11 @@ Main Thread                              Worker Thread
 ```
 
 **Key design decisions:**
-- `queueCompileAfterSpinner()` (`store/fractalStore.ts`) stores the compile work and emits `IS_COMPILING`. The work is NOT executed yet.
-- `CompilingIndicator.tsx` uses a **ref callback** (`pingRef`) that fires when the spinner DOM is committed. After `rAF → setTimeout(0)` (guarantees browser has painted), it calls `flushCompileWork()` which sends all CONFIGs + `CONFIG_DONE` to the worker.
-- The worker's `scheduleCompile()` does NOT emit `IS_COMPILING` — the main thread handles spinner visibility. `scheduleCompile` sets a 200ms fallback timer for non-gated compiles (feature toggles) that don't go through `queueCompileAfterSpinner`.
+- `compileGate.queue(message, work)` (`store/CompileGate.ts`) stores the compile work and emits `IS_COMPILING`. The work is NOT executed yet.
+- `CompilingIndicator.tsx` uses a **ref callback** (`pingRef`) that fires when the spinner DOM is committed. After `rAF → setTimeout(0)` (guarantees browser has painted), it calls `compileGate.flush()` which sends all CONFIGs + `CONFIG_DONE` to the worker.
+- The worker's `scheduleCompile()` does NOT emit `IS_COMPILING` — the main thread handles spinner visibility. `scheduleCompile` sets a 200ms fallback timer for non-gated compiles (feature toggles) that don't go through `compileGate.queue`.
 - `CONFIG_DONE` message tells the worker all CONFIGs have arrived — `fireCompile()` cancels the fallback timer and starts immediately. This is deterministic, not timer-based.
-- `consumeNewCycle()` flag distinguishes user-initiated cycles (formula switch) from worker status updates ("Compiling Shader..." → "Compiling Lighting..."). Only new cycles reset the progress bar.
+- `compileGate.consumeNewCycle()` flag distinguishes user-initiated cycles (formula switch) from worker status updates ("Compiling Shader..." → "Compiling Lighting..."). Only new cycles reset the progress bar.
 
 ### Stale Compile Cancellation
 
@@ -322,7 +322,7 @@ Always-on `console.log` entries (not DEV-gated — do not remove):
 
 | File | Role |
 |------|------|
-| `store/fractalStore.ts` | `queueCompileAfterSpinner()`, `flushCompileWork()`, `consumeNewCycle()` — spinner gate |
+| `store/CompileGate.ts` | `compileGate.queue()`, `compileGate.flush()`, `compileGate.consumeNewCycle()` — spinner gate singleton |
 | `engine/FractalEngine.ts` | `scheduleCompile()`, `fireCompile()`, `performCompilation()` — three-path dispatch |
 | `engine/MaterialController.ts` | `compilePreview()`, `buildFullMaterial()`, `swapFullMaterial()` |
 | `engine/worker/renderWorker.ts` | `CONFIG_DONE` handler calls `fireCompile()` |

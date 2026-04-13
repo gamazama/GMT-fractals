@@ -11,16 +11,12 @@ import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
-import { GeometryState } from '../features/geometry';
 import { ColoringState } from '../features/coloring';
 import { evaluateTrackValue } from '../utils/timelineUtils';
 
 // Global refs for animation system state
 const activeTargetsRef = { current: new Set<string>() };
 const juliaScratch = new THREE.Vector3();
-const mat4Scratch = new THREE.Matrix4();
-const mat3Scratch = new THREE.Matrix3();
-const lastRotation = { current: new THREE.Vector3(-1000, -1000, -1000) };
 const lastFrameRecorded = { current: -1 };
 const initialStaticValues = { current: {} as Record<string, number> };
 
@@ -78,8 +74,6 @@ export const tick = (delta: number) => {
     let juliaX = 0, juliaY = 0, juliaZ = 0;
     let juliaDirty = false;
 
-    let rotXOffset = 0, rotYOffset = 0, rotZOffset = 0;
-    
     // Track if anything visual actually changed to reset accumulation
     let hasVisualChange = false;
     
@@ -119,7 +113,7 @@ export const tick = (delta: number) => {
             const slice = (storeState as any)[featureId];
             if (feature && slice) {
                 // Check for vector component target (e.g., vec3A_x, vec2B_y)
-                const vectorMatch = paramId.match(/^(vec[23][ABC])_(x|y|z)$/);
+                const vectorMatch = paramId.match(/^(vec[234][ABC])_(x|y|z|w)$/);
                 if (vectorMatch) {
                     const vectorName = vectorMatch[1];
                     const axis = vectorMatch[2];
@@ -269,11 +263,12 @@ export const tick = (delta: number) => {
             return;
         }
 
-        // D. Geometry Pre-Rotation
-        if (targetKey.startsWith('geometry.preRot')) {
-            if (targetKey.endsWith('X')) { rotXOffset = offset; liveModulations[targetKey] = offset; }
-            else if (targetKey.endsWith('Y')) { rotYOffset = offset; liveModulations[targetKey] = offset; }
-            else if (targetKey.endsWith('Z')) { rotZOffset = offset; liveModulations[targetKey] = offset; }
+        // D. Geometry Pre/Post/World Rotation — pass offsets to engine.modulations
+        //    UniformManager.syncFrame reads these to build rotation matrices
+        if (targetKey.startsWith('geometry.preRot') || targetKey.startsWith('geometry.postRot') || targetKey.startsWith('geometry.worldRot')) {
+            engine.modulations[targetKey] = offset;
+            if (!isRemoved) liveModulations[targetKey] = resolvedBase + offset;
+            if (Math.abs(offset) > 0.0001) hasVisualChange = true;
             return;
         }
 
@@ -323,12 +318,12 @@ export const tick = (delta: number) => {
             return;
         }
         
-        // F. Vector Params (vec3A_x, vec3A_y, vec3A_z pattern)
-        const vectorMatch = targetKey.match(/^(coreMath|geometry)\.(vec[23][ABC])_(x|y|z)$/);
-        if (vectorMatch) {
+        // F. Vector Params — any feature with vec2/3/4 params (e.g., coreMath.vec3A_x)
+        const vectorMatch = targetKey.match(/^(\w+)\.([\w]+)_(x|y|z|w)$/);
+        if (vectorMatch && uniformName.endsWith(`_${vectorMatch[3]}`)) {
             const featureId = vectorMatch[1];
             const paramName = vectorMatch[2]; // e.g., 'vec3A'
-            const axis = vectorMatch[3]; // 'x', 'y', or 'z'
+            const axis = vectorMatch[3]; // 'x', 'y', 'z', or 'w'
             
             const slice = (storeState as any)[featureId];
             if (slice && slice[paramName]) {
@@ -350,11 +345,10 @@ export const tick = (delta: number) => {
                     liveModulations[targetKey] = finalVal;
                 }
                 
-                // Apply to uniform (uVec3A, uVec3B, etc.)
-                const uniformName = 'u' + paramName.charAt(0).toUpperCase() + paramName.slice(1);
-                // Build full vec3 for uniform
+                // Apply full vector to uniform (strip axis suffix to get base uniform name)
+                const baseUniform = uniformName.replace(/_[xyzw]$/, '');
                 const fullVec = { ...vec, [axis]: finalVal };
-                engine.setUniform(uniformName, fullVec);
+                engine.setUniform(baseUniform, fullVec);
             }
             return;
         }
@@ -383,31 +377,6 @@ export const tick = (delta: number) => {
          
          juliaScratch.set(juliaX, juliaY, juliaZ);
          engine.setUniform('uJulia', juliaScratch);
-    }
-
-    // Apply Rotation Matrix Composite (Authoritative)
-    const geom = (storeState as any).geometry as GeometryState;
-    if (geom && geom.preRotMaster) {
-         const finalX = geom.preRotX + rotXOffset;
-         const finalY = geom.preRotY + rotYOffset;
-         const finalZ = geom.preRotZ + rotZOffset;
-
-         if (Math.abs(finalX - lastRotation.current.x) > 1e-6 || 
-             Math.abs(finalY - lastRotation.current.y) > 1e-6 || 
-             Math.abs(finalZ - lastRotation.current.z) > 1e-6) {
-             
-             const mx = new THREE.Matrix4().makeRotationX(finalX);
-             const my = new THREE.Matrix4().makeRotationY(finalY);
-             const mz = new THREE.Matrix4().makeRotationZ(finalZ);
-             
-             mat4Scratch.identity().multiply(mz).multiply(mx).multiply(my);
-             mat3Scratch.setFromMatrix4(mat4Scratch);
-             
-             engine.setUniform('uPreRotMatrix', mat3Scratch);
-             lastRotation.current.set(finalX, finalY, finalZ);
-             // Rotation definitely changes the image
-             hasVisualChange = true;
-         }
     }
 
     // --- CRITICAL: Reset Accumulation if Visuals Changed ---

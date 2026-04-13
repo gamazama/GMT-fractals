@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useFractalStore, selectIsGlobalInteraction } from '../../store/fractalStore';
 import { useAnimationStore } from '../../store/animationStore';
-import { registerWorkerFrameCounter } from '../../engine/worker/WorkerProxy';
+import { getProxy } from '../../engine/worker/WorkerProxy';
 
 // Global refs to track FPS across ticks
 const fpsState = {
@@ -12,8 +12,8 @@ const fpsState = {
     workerFrameCount: 0,  // Counts actual worker frames received
 };
 
-// Register frame counter with WorkerProxy (avoids circular import)
-registerWorkerFrameCounter(() => { fpsState.workerFrameCount++; });
+// Register frame counter with WorkerProxy
+getProxy().registerFrameCounter(() => { fpsState.workerFrameCount++; });
 
 // Export tick function for orchestrated updates
 export const tick = () => {

@@ -156,7 +156,9 @@ export const parseGMF = (content: string): FractalDefinition => {
         try {
             const json = JSON.parse(content);
             if (json.id && json.shader) return json as FractalDefinition;
-        } catch(e) {}
+        } catch {
+            // Not valid JSON either — fall through to throw GMF-specific error
+        }
         throw new Error("Invalid GMF: Missing Metadata tag");
     }
 

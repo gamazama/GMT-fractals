@@ -21,6 +21,14 @@ import type { SerializedCamera, SerializedOffset } from '../../engine/worker/Wor
 import type { EngineRenderState } from '../../engine/FractalEngine';
 import { applyExportModulations } from './exportModulations';
 import { formatTimeWithUnits, formatDurationMs } from './exportHelpers';
+import { getExportFileName } from '../../utils/fileUtils';
+
+/** Calculate ETA range from elapsed time and frames completed. */
+const calcEtaRange = (elapsedSec: number, framesDone: number, totalFrames: number) => {
+    if (framesDone <= 0) return { min: 0, max: 0 };
+    const eta = (totalFrames - framesDone) * (elapsedSec / framesDone);
+    return { min: eta * 0.9, max: eta * 1.1 };
+};
 
 interface RenderPopupProps {
     onClose: () => void;
@@ -119,6 +127,12 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     
     const [winSize, setWinSize] = useState({ width: BASE_WIDTH, height: BASE_HEIGHT });
 
+    // Suppress adaptive resolution while the render panel is open
+    useEffect(() => {
+        useFractalStore.getState().setAdaptiveSuppressed(true);
+        return () => { useFractalStore.getState().setAdaptiveSuppressed(false); };
+    }, []);
+
     useEffect(() => {
         // Feature Detection: Only Disk Mode if 'showSaveFilePicker' is available (Chromium)
         if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
@@ -190,16 +204,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                      lastFrameEnd = now;
                  }
 
-                 const avgTime = elapsed / framesDone;
-                 const remainingFrames = totalFrames - framesDone;
-                 
-                 const etaAvg = remainingFrames * avgTime;
-                 
-                 // Smoothing
-                 setEtaRange(prev => ({ 
-                     min: etaAvg * 0.9, 
-                     max: etaAvg * 1.1 
-                 }));
+                 setEtaRange(calcEtaRange(elapsed, framesDone, totalFrames));
              }
         });
         
@@ -237,16 +242,19 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
 
     const handleVideoExport = async () => {
         const selectedFormat = VIDEO_FORMATS[formatIndex];
-        
+        const state = useFractalStore.getState();
+        const exportVersion = state.prepareExport();
+        const exportFilename = getExportFileName(state.projectSettings.name, exportVersion, selectedFormat.ext, `${vidRes.w}x${vidRes.h}`);
+
         // --- STEP 1: OPEN SAVE DIALOG (MUST BE SYNCHRONOUS TO CLICK) ---
         let fileStream: any = null;
         let effectiveDiskMode = isDiskMode;
-        
+
         if (isDiskMode) {
             try {
                 // @ts-expect-error — File System Access API not in all TS lib targets
                 const handle = await window.showSaveFilePicker({
-                    suggestedName: `fractal_${vidRes.w}x${vidRes.h}.${selectedFormat.ext}`,
+                    suggestedName: exportFilename,
                     types: [{
                         description: selectedFormat.label,
                         accept: { [selectedFormat.mime]: [`.${selectedFormat.ext}`] },
@@ -392,11 +400,8 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                 setElapsedTime(elapsed);
 
                 const framesDone = i + 1;
-                const avgTime = elapsed / framesDone;
-                const remaining = totalFrames - framesDone;
-                const eta = remaining * avgTime;
-                setEtaRange({ min: eta * 0.9, max: eta * 1.1 });
-                setLastFrameTime(avgTime);
+                setEtaRange(calcEtaRange(elapsed, framesDone, totalFrames));
+                setLastFrameTime(elapsed / framesDone);
 
                 FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: true, progress: pct });
             }
@@ -415,7 +420,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                     const url = URL.createObjectURL(blobObj);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `fractal_${vidRes.w}x${vidRes.h}.${selectedFormat.ext}`;
+                    a.download = exportFilename;
                     a.click();
                     URL.revokeObjectURL(url);
                 }

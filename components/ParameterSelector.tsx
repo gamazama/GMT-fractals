@@ -6,6 +6,7 @@ import { MAX_LIGHTS } from '../data/constants';
 import { useFractalStore } from '../store/fractalStore';
 import { CategoryPickerMenu } from './CategoryPickerMenu';
 import type { PickerCategory, PickerItem } from './CategoryPickerMenu';
+import { checkParamActive } from '../utils/paramConditions';
 
 interface ParameterSelectorProps {
     value: string;
@@ -13,20 +14,10 @@ interface ParameterSelectorProps {
     className?: string;
 }
 
-// Updated exclusion list to hide non-modulatable groups
+// Features excluded from modulation (not visual params)
 const EXCLUDED_IDS = new Set(['audio', 'navigation', 'drawing', 'webcam', 'debugTools', 'engineSettings', 'quality', 'reflections']);
-// Strict ordering for the dropdown menu
+// Display ordering for the dropdown menu
 const PRIORITY_ORDER = ['coreMath', 'geometry', 'materials', 'coloring', 'atmosphere', 'lighting', 'optics'];
-
-// Hidden params that SHOULD be modulatable
-const WHITELIST_HIDDEN = new Set([
-    'repeats', 'phase', 'scale', 'offset', 'bias', // Coloring
-    'repeats2', 'phase2', 'scale2', 'offset2', 'bias2',
-    'levelsMin', 'levelsMax', 'levelsGamma', 'saturation', // Grading
-    'juliaX', 'juliaY', 'juliaZ', // Julia
-    'preRotX', 'preRotY', 'preRotZ', // Pre-rotation
-    'hybridFoldLimit' // Hybrid
-]);
 
 // Virtual Expansions for Array-based features
 const getVirtualParams = (featureId: string): { label: string, key: string }[] => {
@@ -43,9 +34,18 @@ const getVirtualParams = (featureId: string): { label: string, key: string }[] =
     return [];
 };
 
+/** Check if a param is modulatable: has a uniform, isn't compile-time, and is a numeric type */
+const isModulatable = (config: any): boolean => {
+    if (config.onUpdate === 'compile') return false;
+    // Skip vec params that are UI composites of individual floats (e.g., preRot composed from preRotX/Y/Z)
+    if (config.composeFrom) return false;
+    const type = config.type;
+    return type === 'float' || type === 'int' || type === 'vec2' || type === 'vec3' || type === 'vec4';
+};
+
 function buildCategories(): PickerCategory[] {
     const standardFeatures = featureRegistry.getAll()
-        .filter(f => !EXCLUDED_IDS.has(f.id) && (Object.values(f.params).some(p => p.type === 'float' || p.type === 'int') || f.id === 'lighting'))
+        .filter(f => !EXCLUDED_IDS.has(f.id) && (Object.values(f.params).some(p => isModulatable(p)) || f.id === 'lighting'))
         .sort((a, b) => {
             const pA = PRIORITY_ORDER.indexOf(a.id);
             const pB = PRIORITY_ORDER.indexOf(b.id);
@@ -61,7 +61,7 @@ function buildCategories(): PickerCategory[] {
     ];
 }
 
-function buildItems(catId: string, activeFormula: string): PickerItem[] {
+function buildItems(catId: string, activeFormula: string, storeState: any): PickerItem[] {
     if (catId === 'camera') {
         return [
             { key: 'camera.unified.x', label: 'Camera Pos X' },
@@ -78,21 +78,25 @@ function buildItems(catId: string, activeFormula: string): PickerItem[] {
 
     const virtuals = getVirtualParams(catId);
     const items: PickerItem[] = [];
+    const sliceState = storeState[catId] || {};
 
-    // For coreMath, get formula definition once to check which params are used
+    // For coreMath, get formula definition to check which params are used
     const formulaDef = catId === 'coreMath' && activeFormula ? registry.get(activeFormula) : null;
     const formulaParamIds = formulaDef?.parameters?.map(p => p?.id).filter(id => !!id) as string[] || [];
 
     Object.entries(feat.params).forEach(([key, config]) => {
-        if (config.onUpdate === 'compile') return;
-        if (config.hidden && !WHITELIST_HIDDEN.has(key)) return;
+        if (!isModulatable(config)) return;
 
+        // coreMath: only show params the active formula uses
         if (catId === 'coreMath' && formulaParamIds.length > 0) {
             if (!formulaParamIds.includes(key)) return;
         }
 
-        if (config.type === 'vec2' || config.type === 'vec3') {
-            const axes = config.type === 'vec2' ? ['x', 'y'] : ['x', 'y', 'z'];
+        // Check if the param's parent condition is active (e.g., juliaMode must be on for juliaX)
+        const isActive = checkParamActive(config.condition, sliceState, storeState, config.parentId);
+
+        if (config.type === 'vec2' || config.type === 'vec3' || config.type === 'vec4') {
+            const axes = config.type === 'vec2' ? ['x', 'y'] : config.type === 'vec3' ? ['x', 'y', 'z'] : ['x', 'y', 'z', 'w'];
             axes.forEach(axis => {
                 let label = `${config.label} ${axis.toUpperCase()}`;
                 if (catId === 'coreMath' && formulaDef) {
@@ -106,6 +110,8 @@ function buildItems(catId: string, activeFormula: string): PickerItem[] {
                     key: `${catId}.${key}_${axis}`,
                     label,
                     description: `${config.description || config.label} - ${axis.toUpperCase()} component`,
+                    disabled: !isActive,
+                    disabledSuffix: !isActive ? '(off)' : undefined,
                 });
             });
             return;
@@ -122,8 +128,20 @@ function buildItems(catId: string, activeFormula: string): PickerItem[] {
                     label = `(${config.label})`;
                 }
             }
-            items.push({ key: `${catId}.${key}`, label, description: config.description });
+            items.push({
+                key: `${catId}.${key}`,
+                label,
+                description: config.description,
+                disabled: !isActive,
+                disabledSuffix: !isActive ? '(off)' : undefined,
+            });
         }
+    });
+
+    // Sort: active items first, then inactive (greyed out)
+    items.sort((a, b) => {
+        if (a.disabled !== b.disabled) return a.disabled ? 1 : -1;
+        return 0; // Preserve DDFS definition order within each group
     });
 
     // Merge virtuals at the top
@@ -173,19 +191,24 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
         else {
              const feat = featureRegistry.get(fid);
              if (feat) {
-                 const param = feat.params[pid];
+                 // Check for vector axis target (e.g., vec3A_x → param vec3A, axis X)
+                 const vecAxisMatch = pid.match(/^(.+)_(x|y|z|w)$/);
+                 const baseParamId = vecAxisMatch ? vecAxisMatch[1] : pid;
+                 const axisLabel = vecAxisMatch ? ` ${vecAxisMatch[2].toUpperCase()}` : '';
+
+                 const param = feat.params[baseParamId];
                  if (param) {
                      if (fid === 'coreMath' && activeFormula) {
                          const formulaDef = registry.get(activeFormula);
-                         const pDef = formulaDef?.parameters.find(p => p?.id === pid);
+                         const pDef = formulaDef?.parameters.find(p => p?.id === baseParamId);
                          if (pDef) {
-                             const shortKey = pid.replace('param', 'P-');
-                             label = `${shortKey}: ${pDef.label}`;
+                             const shortKey = baseParamId.replace('param', 'P-').replace('vec', 'V-');
+                             label = `${shortKey}: ${pDef.label}${axisLabel}`;
                          } else {
-                             label = param.label;
+                             label = `${param.label}${axisLabel}`;
                          }
                      } else {
-                         label = `${feat.name}: ${param.label}`;
+                         label = `${feat.name}: ${param.label}${axisLabel}`;
                      }
                  } else {
                      label = `${feat.name}: ${pid}`;
@@ -195,7 +218,10 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
     }
 
     const categories = buildCategories();
-    const getItems = (catId: string) => buildItems(catId, activeFormula);
+    const getItems = (catId: string) => {
+        const storeState = useFractalStore.getState();
+        return buildItems(catId, activeFormula, storeState);
+    };
 
     return (
         <>

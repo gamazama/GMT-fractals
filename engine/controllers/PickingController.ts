@@ -96,25 +96,48 @@ export class PickingController {
     /**
      * converts a 2D screen point (NDC) into a 3D Unified World Coordinate.
      */
-    public pickWorldPosition(x: number, y: number, renderer: THREE.WebGLRenderer, activeCamera: THREE.Camera): THREE.Vector3 | null {
-        const dist = this.measureDistance(x, y, renderer, activeCamera);
-        
+    /**
+     * Single-pixel depth read — faster variant for continuous drag operations.
+     * Skips the 3x3 averaging neighborhood (9 readPixels → 1).
+     */
+    public measureDistanceFast(x: number, y: number, renderer: THREE.WebGLRenderer, _camera: THREE.Camera): number {
+        const width = renderer.domElement.width;
+        const height = renderer.domElement.height;
+        const px = Math.floor((x + 1) * 0.5 * width);
+        const py = Math.floor((y + 1) * 0.5 * height);
+
+        if (px < 0 || px >= width || py < 0 || py >= height) return -1;
+
+        const pixelBuffer = new Float32Array(4);
+        if (this.pipeline.readPixels(renderer, px, py, 1, 1, pixelBuffer)) {
+            const depth = pixelBuffer[3];
+            if (isFinite(depth) && depth > 0 && depth < 1000.0) return depth;
+        }
+        return -1;
+    }
+
+    private _pickFromDist(x: number, y: number, dist: number, camera: THREE.Camera): THREE.Vector3 | null {
         if (dist <= 0 || dist >= 1000.0) return null;
-        
-        // Reconstruct ray to find hit point relative to camera
-        const ray = this.getRay(x, y, activeCamera);
-        
-        // Calculate Local Position relative to camera
+
+        const ray = this.getRay(x, y, camera);
         const localPos = new THREE.Vector3()
             .copy(ray.origin)
             .add(ray.direction.multiplyScalar(dist));
-            
-        // Convert to Unified Space (World Offset + Local)
+
         const offset = this.virtualSpace.state;
-        const unifiedX = offset.x + offset.xL + localPos.x;
-        const unifiedY = offset.y + offset.yL + localPos.y;
-        const unifiedZ = offset.z + offset.zL + localPos.z;
-        
-        return new THREE.Vector3(unifiedX, unifiedY, unifiedZ);
+        return new THREE.Vector3(
+            offset.x + offset.xL + localPos.x,
+            offset.y + offset.yL + localPos.y,
+            offset.z + offset.zL + localPos.z
+        );
+    }
+
+    public pickWorldPosition(x: number, y: number, renderer: THREE.WebGLRenderer, activeCamera: THREE.Camera): THREE.Vector3 | null {
+        return this._pickFromDist(x, y, this.measureDistance(x, y, renderer, activeCamera), activeCamera);
+    }
+
+    /** Fast variant — single-pixel read, suitable for continuous drag. */
+    public pickWorldPositionFast(x: number, y: number, renderer: THREE.WebGLRenderer, activeCamera: THREE.Camera): THREE.Vector3 | null {
+        return this._pickFromDist(x, y, this.measureDistanceFast(x, y, renderer, activeCamera), activeCamera);
     }
 }

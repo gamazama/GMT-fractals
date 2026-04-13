@@ -2,6 +2,45 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-13
+
+### Fragility Refactors — Module-Level State, Worker Timeouts, Event Bus
+
+- **CompileGate extracted**: `store/CompileGate.ts` is now a standalone singleton (`compileGate`) replacing three module-level exports from `fractalStore.ts` (`queueCompileAfterSpinner`, `flushCompileWork`, `consumeNewCycle`). Eliminates circular-import risk and makes the gate unit-testable in isolation.
+- **WorkerProxy pending-request consolidation**: 7 copy-pasted async request patterns (each with its own Map + timeout + resolve) collapsed into `_pendingRequest<T>()` / `_resolveRequest<T>()` helpers. `_clearAllTimers()` added and called on crash/restart — previously timeouts leaked. `_exportStartTimer` / `_exportFinishTimer` moved from module-level to instance fields.
+- **FractalEvents for hint reset**: `useTutorialHints.ts` no longer exports a mutable function ref (`getResetHintsFn`). `SystemMenu` now fires `FractalEvents.emit(FRACTAL_EVENTS.RESET_HINTS)` and the hook subscribes/unsubscribes via `useEffect`. Decoupled and GC-safe.
+- **FpsCounter frame counter**: `registerWorkerFrameCounter` module-level export removed from `WorkerProxy.ts`; counter registration moved to `getProxy().registerFrameCounter(cb)` on the proxy instance.
+
+### Bug Fixes — Tester-Reported Issues
+
+- **Video export filename**: Both save-dialog and RAM-mode download paths now use `getExportFileName()` from `utils/fileUtils.ts` — produces `GMT_ProjectName_v1_1920x1080.mp4` matching snapshot and bucket render naming.
+- **Undo for world picking**: Focus-pick and Julia-pick now call `handleInteractionStart('param')` / `handleInteractionEnd()` so Ctrl+Z reverts both dofFocus and julia offset changes.
+- **Julia picking performance**: `PickingController` now has a `measureDistanceFast()` single-pixel path (vs the 3×3 neighborhood = 9 GPU readbacks used for accuracy). Threaded as `fast?: boolean` through `PICK_WORLD_POSITION`, `FractalEngine`, and `WorkerProxy`. Julia drag uses the fast path; initial click keeps the accurate 3×3 read. ~9× fewer GPU stalls per drag frame.
+- **Histogram loading indicator**: Auto-update dot on the histogram header is now **orange** while data is being fetched, green when idle+active, gray when off. `histogramLoading` state wired through `HistogramProbe → ViewportArea → features/ui.tsx → ColoringHistogram → Histogram`.
+- **Adaptive resolution suppression**: `adaptiveSuppressed` flag added to store. Set to `true` on mount by both `RenderPopup` (video export) and `BucketRenderControls`. `AdaptiveResolution` treats this as `dynamicScaling: false` regardless of user setting — prevents scaling from interfering with frame-time sampling during export setup.
+
+### Camera Lock — Orbit Controls Stale Closure Fix
+
+- **Root cause**: `useFrame` in `Navigation.tsx` overwrites `orbitRef.current.enabled` every frame using the captured `disableMovement` value from the render closure — which was always `false` at the time orbit controls mounted. Bucket render and video export started later, but the closure never updated.
+- **Fix**: Inside `useFrame`, `disableMovement` replaced with a fresh read: `selectMovementLock(useFractalStore.getState())`. `selectMovementLock` checks `isGizmoDragging`, `interactionMode`, `isExporting`, and `isBucketRendering` — single source of truth.
+- **Cleanup**: Removed the redundant `onStart` guard in OrbitControls (was a band-aid) and the unnecessary synchronous `setIsBucketRendering(true)` call in `BucketRenderControls`.
+
+### Bucket Render — Popover Stale Closure Fix
+
+- **Bug**: The bucket render popover closed when the user clicked outside during an active render — the outside-click handler checked `state.isBucketRendering` captured at render time (always `false` when menu first opened).
+- **Fix**: `useFractalStore.getState().isBucketRendering` read fresh at click time in `RenderTools.tsx`.
+
+### Code Deduplication — Shared Helpers
+
+- `WorkerProxy._pendingRequest()` — 7 async request patterns → 1 helper
+- `RenderPopup.calcEtaRange()` — inline ETA math deduplicated
+- `useInteractionManager.recordPickKeyframes()` — keyframe recording extracted
+- `Navigation.calcOrbitTarget()` — 4 instances of orbit target math unified
+- `features/ui.tsx useHistogramRegistration()` — register/unregister boilerplate extracted
+- `BucketRenderControls.withRenderAction()` — start/stop action wrapper extracted
+
+- Files: `store/CompileGate.ts` (NEW), `engine/worker/WorkerProxy.ts`, `engine/worker/WorkerProtocol.ts`, `engine/worker/renderWorker.ts`, `engine/FractalEngine.ts`, `engine/FractalEvents.ts`, `engine/controllers/PickingController.ts`, `hooks/useInteractionManager.ts`, `hooks/useTutorialHints.ts`, `components/Navigation.tsx`, `components/timeline/RenderPopup.tsx`, `components/topbar/SystemMenu.tsx`, `components/topbar/BucketRenderControls.tsx`, `components/topbar/RenderTools.tsx`, `components/topbar/AdaptiveResolution.tsx`, `components/topbar/FpsCounter.tsx`, `components/Histogram.tsx`, `components/HistogramProbe.tsx`, `components/ViewportArea.tsx`, `components/CompilingIndicator.tsx`, `components/panels/gradient/ColoringHistogram.tsx`, `features/ui.tsx`, `store/fractalStore.ts`, `store/slices/rendererSlice.ts`, `types/store.ts`
+
 ## 2026-04-11
 
 ### Gradient Blend Space — HSV / Oklab Interpolation
@@ -51,7 +90,7 @@ Chronological log of significant changes during the v0.9.1 development cycle (un
 - **Smooth transitions**: `HintDisplay` component fades between hints; falls back to static navigation cheat-sheet when no contextual hint is active
 - **Dismiss to advance**: Clicking a hint skips to the next eligible one; dismissed hints are excluded from the current rotation cycle
 - **Help integration**: Hints with `helpTopicId` show a "?" button that opens the relevant help topic
-- **Reset Tips**: New button in System Menu clears all hint history and behavioral profile via `getResetHintsFn()` module-level ref
+- **Reset Tips**: New button in System Menu clears all hint history and behavioral profile via `FractalEvents.emit(FRACTAL_EVENTS.RESET_HINTS)`
 - Files: `data/tutorialHints.ts` (NEW), `hooks/useTutorialHints.ts` (NEW), `components/tutorial/HintDisplay.tsx` (NEW), `App.tsx`, `components/ViewportArea.tsx`, `components/HudOverlay.tsx`, `components/topbar/SystemMenu.tsx`
 
 ### HUD Overlay — Split Fade Timing

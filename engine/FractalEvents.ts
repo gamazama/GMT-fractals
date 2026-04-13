@@ -23,7 +23,8 @@ export const FRACTAL_EVENTS = {
     TRACK_FOCUS: 'track_focus',
     TEXTURE: 'texture',
     ENGINE_QUEUE: 'engine_queue',
-    REGISTER_FORMULA: 'register_formula'
+    REGISTER_FORMULA: 'register_formula',
+    RESET_HINTS: 'reset_hints'
 } as const;
 
 type EventMap = {
@@ -47,6 +48,7 @@ type EventMap = {
     [FRACTAL_EVENTS.TEXTURE]: { textureType: 'color' | 'env'; dataUrl: string | null };
     [FRACTAL_EVENTS.ENGINE_QUEUE]: { featureId: string; param: string; value: any };
     [FRACTAL_EVENTS.REGISTER_FORMULA]: { id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string } };
+    [FRACTAL_EVENTS.RESET_HINTS]: void;
 };
 
 class FractalEventBus {
