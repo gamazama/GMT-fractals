@@ -230,7 +230,7 @@ export const LightingFeature: FeatureDefinition = {
             condition: { bool: true }
         },
         shadowSoftness: {
-            type: 'float', default: 16.0, label: 'Softness', shortId: 'ss', uniform: 'uShadowSoftness',
+            type: 'float', default: 16.0, label: 'Hardness', shortId: 'ss', uniform: 'uShadowSoftness',
             min: 2.0, max: 2000.0, step: 1.0, group: 'shadows', scale: 'log',
             condition: { bool: true }
         },
@@ -247,7 +247,7 @@ export const LightingFeature: FeatureDefinition = {
             type: 'float', default: 0.002, label: 'Bias', shortId: 'sb', uniform: 'uShadowBias',
             min: 0.0, max: 1.0, step: 0.000001, group: 'shadows', scale: 'log',
             condition: { bool: true },
-            description: 'Prevents surface acne.'
+            description: 'Too low: acne. Too high: detached.'
         },
         
         lights: { type: 'complex', default: DEFAULT_LIGHTS, label: 'Light List', shortId: 'll', group: 'data', hidden: true, noReset: true }
