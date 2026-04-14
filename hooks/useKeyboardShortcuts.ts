@@ -2,6 +2,9 @@
 import { useEffect } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
+// Feature shortcut handlers — logic lives with the feature, registration lives here.
+import { handleCameraSlotShortcut } from '../features/camera_manager/shortcuts';
+import { handleTimelineShortcut } from '../components/timeline/shortcuts';
 
 export const useKeyboardShortcuts = (
     showTimeline: boolean,
@@ -82,20 +85,10 @@ export const useKeyboardShortcuts = (
                 }
             }
 
-            // --- CAMERA SLOT SHORTCUTS (Ctrl+1-9) ---
-            if (isCtrl && !isShift && !e.altKey) {
-                const digitMatch = e.code.match(/^Digit([1-9])$/);
-                if (digitMatch) {
-                    const slotIndex = parseInt(digitMatch[1]) - 1;
-                    const cameras = fractalStore.getState().savedCameras;
-                    if (slotIndex < cameras.length) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        fractalStore.getState().selectCamera(cameras[slotIndex].id);
-                    }
-                    return;
-                }
-            }
+            // --- FEATURE SHORTCUTS ---
+            // Logic lives in each feature's shortcuts.ts; this file owns registration only.
+            if (handleCameraSlotShortcut(e)) return;
+            if (handleTimelineShortcut(e, showTimeline)) return;
 
             // --- GENERAL SHORTCUTS ---
             switch (e.code) {
@@ -128,36 +121,6 @@ export const useKeyboardShortcuts = (
                          // Toggle Broadcast (Clean Feed) Mode
                          const s = fractalStore.getState();
                          s.setIsBroadcastMode(!s.isBroadcastMode);
-                    }
-                    break;
-                case 'Space':
-                    // CONFLICT RESOLUTION: Spacebar is used for both "Fly Up" and "Play/Pause".
-                    
-                    const { cameraMode, isTimelineHovered } = fractalStore.getState();
-                    const { sequence, isPlaying } = animStore.getState();
-                    
-                    // Logic:
-                    // 1. If Timeline is OPEN:
-                    //    - Play if Hovered OR if mode is NOT Fly (Orbit mode assumes space=play)
-                    // 2. If Timeline is CLOSED:
-                    //    - Play only if Orbit Mode AND we have tracks (prevent accidental play of empty scene)
-                    //    - In Fly Mode, space is always UP (handled by input controller), unless explicit override needed (none here)
-                    
-                    let shouldTogglePlay = false;
-
-                    if (showTimeline) {
-                        shouldTogglePlay = (cameraMode !== 'Fly') || isTimelineHovered;
-                    } else {
-                        const hasTracks = Object.keys(sequence.tracks).length > 0;
-                        if (cameraMode !== 'Fly' && hasTracks) {
-                            shouldTogglePlay = true;
-                        }
-                    }
-                    
-                    if (shouldTogglePlay) {
-                        e.preventDefault(); // Prevent scroll
-                        if (isPlaying) animStore.getState().pause();
-                        else animStore.getState().play();
                     }
                     break;
             }

@@ -282,3 +282,11 @@ materials: {
     // ... other material props
 }
 ```
+
+## 13. Removed / Deprecated Features
+
+### Parameter Quick-Edit Popup Sliders (Keys 1–6) — Removed
+*   **What it was:** Pressing keys 1–6 opened a floating popup slider for formula parameters A–F at the cursor position (`PopupSliderSystem.tsx`).
+*   **Why removed:** The feature was non-functional in practice (key events were unreliable in the capture-phase handler stack), and keys 1–9 are now reserved for **Camera Slot** shortcuts (recall slots 1–9).
+*   **Replacement:** Camera slot recall via keys 1–9 (no modifier). Set slots via Ctrl+1–9.
+*   **Code:** `PopupSliderSystem.tsx` is retained but its keydown/keyup handlers have been removed. The component never opens.

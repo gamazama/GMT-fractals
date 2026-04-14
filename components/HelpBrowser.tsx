@@ -11,7 +11,7 @@ interface HelpBrowserProps {
     onNavigate: (id: string) => void;
 }
 
-const CATEGORY_ORDER = ['General', 'Formulas', 'Parameters', 'UI', 'Timeline', 'Graph', 'Animation', 'Lighting', 'Rendering', 'Coloring', 'Audio', 'Effects', 'Export'];
+const CATEGORY_ORDER = ['Getting Started', 'General', 'Formulas', 'Parameters', 'UI', 'Timeline', 'Graph', 'Animation', 'Lighting', 'Rendering', 'Coloring', 'Audio', 'Effects', 'Export'];
 
 const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNavigate }) => {
     const [searchTerm, setSearchTerm] = useState('');

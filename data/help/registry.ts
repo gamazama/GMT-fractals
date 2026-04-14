@@ -1,5 +1,6 @@
 
 import { HelpSection } from '../../types/help';
+import { GETTING_STARTED_TOPICS } from './topics/getting_started';
 import { GENERAL_TOPICS } from './topics/general';
 import { FORMULA_TOPICS } from './topics/formulas';
 import { FORMULA_LIBRARY } from './topics/formula_library';
@@ -16,6 +17,7 @@ import { AUDIO_TOPICS } from './topics/audio';
 
 // Combine all topic dictionaries
 export const HELP_TOPICS: Record<string, HelpSection> = {
+    ...GETTING_STARTED_TOPICS,
     ...GENERAL_TOPICS,
     ...FORMULA_TOPICS,
     ...FORMULA_LIBRARY,

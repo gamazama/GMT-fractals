@@ -40,75 +40,16 @@ export const PopupSliderSystem: React.FC = () => {
         '6': { key: 'paramF', setter: (v: number) => setCoreMath({ paramF: v }), val: coreMath.paramF },
     };
 
+    // Keys 1-6 are repurposed as camera slot shortcuts (handled by useKeyboardShortcuts).
+    // This component is kept but no longer opens on keypress.
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             mousePos.current = { x: e.clientX, y: e.clientY };
         };
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
-            
-            const key = e.key;
-            const map = paramMap[key];
-            
-            if (map && !activePopup) {
-                // Get definition
-                const def = registry.get(formula);
-                const idx = parseInt(key) - 1;
-                
-                // Fallback def if formula doesn't specify (e.g. Modular or sparse definition)
-                let paramDef = def?.parameters[idx];
-                
-                // If Modular, provide generic defs
-                if (formula === 'Modular') {
-                    paramDef = { label: `Param ${String.fromCharCode(65 + idx)}`, id: map.key as any, min: -5, max: 5, step: 0.01, default: 0 };
-                }
-
-                if (paramDef) {
-                    // Calculate alignment
-                    // We want the current value on the slider to be exactly at mousePos.x
-                    const range = paramDef.max - paramDef.min;
-                    const pct = (map.val - paramDef.min) / range;
-                    
-                    const effectiveWidth = WIDTH - 24; // Padding compensation
-                    const pixelOffset = 12 + (pct * effectiveWidth);
-                    
-                    let left = mousePos.current.x - pixelOffset;
-                    // Align the slider track (not the container top) with the cursor Y
-                    let top = mousePos.current.y - TRACK_Y_OFFSET;
-
-                    // Clamp to screen
-                    left = Math.max(10, Math.min(window.innerWidth - WIDTH - 10, left));
-                    top = Math.max(10, Math.min(window.innerHeight - HEIGHT - 10, top));
-
-                    setActivePopup({
-                        id: parseInt(key),
-                        paramKey: map.key as LfoTarget,
-                        label: paramDef.label,
-                        def: { min: paramDef.min, max: paramDef.max, step: paramDef.step },
-                        x: left,
-                        y: top
-                    });
-                }
-            }
-        };
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            if (activePopup && e.key === String(activePopup.id)) {
-                setActivePopup(null);
-            }
-        };
-
         window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-    }, [activePopup, formula, coreMath]);
+        return () => window.removeEventListener('mousemove', handleMouseMove);
+    }, []);
 
     if (!activePopup) return null;
 

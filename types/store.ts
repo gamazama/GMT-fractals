@@ -159,11 +159,12 @@ export interface FractalStoreState extends FeatureStateMap {
   paramUndoStack: Partial<FractalStoreState>[];
   paramRedoStack: Partial<FractalStoreState>[];
 
+  // --- MODULAR BUILDER STATE (managed by modularSlice + uiSlice) ---
   graph: FractalGraph;
-  pipeline: PipelineNode[]; 
+  pipeline: PipelineNode[];
   pipelineRevision: number;
   autoCompile: boolean;
-  
+
   isTimelineHovered: boolean;
   
   tabSwitchCount: number;
@@ -258,6 +259,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setSceneOffset: (v: any) => void;
     setAnimations: (v: AnimationParams[]) => void; 
     setLiveModulations: (v: Partial<Record<LfoTarget, number>>) => void;
+    // --- MODULAR BUILDER ACTIONS (managed by modularSlice) ---
     setGraph: (g: FractalGraph) => void;
     setPipeline: (v: PipelineNode[]) => void;
     refreshPipeline: () => void;
@@ -313,6 +315,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     addCamera: (nameOverride?: string) => void;
     selectCamera: (id: string | null) => void;
     duplicateCamera: (id: string) => void;
+    saveToSlot: (slotIndex: number) => void;
 
     handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
     handleInteractionEnd: () => void;

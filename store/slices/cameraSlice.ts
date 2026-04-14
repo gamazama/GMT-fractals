@@ -23,7 +23,7 @@ export type CameraSlice = Pick<FractalStoreState,
 > & Pick<FractalActions,
     'setCameraMode' | 'setSceneOffset' | 'resetCamera' | 'undoCamera' | 'redoCamera' |
     'updateCamera' | 'deleteCamera' | 'reorderCameras' |
-    'addCamera' | 'selectCamera' | 'duplicateCamera'
+    'addCamera' | 'selectCamera' | 'duplicateCamera' | 'saveToSlot'
 >;
 
 export const createCameraSlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], CameraSlice> = (set, get) => ({
@@ -119,6 +119,55 @@ export const createCameraSlice: StateCreator<FractalStoreState & FractalActions,
             savedCameras: [...state.savedCameras, newCam],
             activeCameraId: newCam.id
         }));
+    },
+
+    saveToSlot: (slotIndex: number) => {
+        const s = get();
+        const existing = s.savedCameras[slotIndex];
+
+        // Capture current engine camera state (same approach as addCamera)
+        const unifiedPos = CameraUtils.getUnifiedFromEngine();
+        const rot = CameraUtils.getRotationFromEngine();
+        const dist = engine.lastMeasuredDistance > 0 && engine.lastMeasuredDistance < 1000
+            ? engine.lastMeasuredDistance : s.targetDistance;
+        const sX = VirtualSpace.split(unifiedPos.x);
+        const sY = VirtualSpace.split(unifiedPos.y);
+        const sZ = VirtualSpace.split(unifiedPos.z);
+        const cameraState: CameraState = {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: rot.x, y: rot.y, z: rot.z, w: rot.w },
+            sceneOffset: { x: sX.high, y: sY.high, z: sZ.high, xL: sX.low, yL: sY.low, zL: sZ.low },
+            targetDistance: dist
+        };
+        const optics = { ...((s as FractalStoreState).optics) };
+
+        if (existing) {
+            // Overwrite in-place, preserving label and id
+            set(state => ({
+                savedCameras: state.savedCameras.map((c, i) =>
+                    i === slotIndex ? { ...c, ...cameraState, optics } : c
+                ),
+                activeCameraId: existing.id
+            }));
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_SLOT_SAVED, { slot: slotIndex + 1, label: existing.label });
+        } else {
+            // Append new camera named after its intended slot number
+            const label = `Camera ${slotIndex + 1}`;
+            const newCam: SavedCamera = {
+                id: nanoid(),
+                label,
+                position: cameraState.position,
+                rotation: cameraState.rotation,
+                sceneOffset: cameraState.sceneOffset,
+                targetDistance: cameraState.targetDistance,
+                optics
+            };
+            set(state => ({
+                savedCameras: [...state.savedCameras, newCam],
+                activeCameraId: newCam.id
+            }));
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_SLOT_SAVED, { slot: slotIndex + 1, label });
+        }
     },
 
     selectCamera: (id) => {

@@ -58,9 +58,12 @@ Tracks keyframes, tracks, and sequence data.
 - **Ctrl + Shift + Z**: Undo Camera Movement
 - **Ctrl + Shift + Y**: Redo Camera Movement
 
+## Camera Slots
+- **Ctrl + 1 – Ctrl + 9**: Save current view as camera slot 1–9 (creates if empty, overwrites if occupied)
+- **1 – 9**: Recall camera from slot 1–9
+- Slots are displayed and manageable in the **Camera Manager** panel (Camera icon → Camera Manager)
+
 ## Tools & UI
-- **1 - 6**: Open Quick-Edit Slider for Params A-F (at mouse cursor)
-- **Ctrl + 1 – Ctrl + 9**: Recall saved camera slots
 - **Tab**: Toggle between Orbit and Fly camera modes
 - **T**: Toggle Timeline Panel
 - **H**: Toggle UI Hints (Tooltip overlay)

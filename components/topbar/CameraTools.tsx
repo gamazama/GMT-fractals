@@ -8,14 +8,33 @@ import { injectMetadata } from '../../utils/pngMetadata';
 import { Popover } from '../../components/Popover';
 import { getExportFileName } from '../../utils/fileUtils';
 import { saveGMFScene } from '../../utils/FormulaFormat';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 
 export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void, btnBase: string, btnActive: string, btnInactive: string }> = ({ isMobileMode, vibrate, btnBase, btnActive, btnInactive }) => {
     const state = useFractalStore();
     const { movePanel } = state;
     const [showCameraMenu, setShowCameraMenu] = useState(false);
     const [isCapturing, setIsCapturing] = useState(false);
+    const [slotToast, setSlotToast] = useState<{ slot: number; label: string } | null>(null);
+    const [managerDot, setManagerDot] = useState(false);
     const camHoverTimeoutRef = useRef<number | null>(null);
+    const toastTimeoutRef = useRef<number | null>(null);
+    const dotTimeoutRef = useRef<number | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+
+    // Listen for camera slot saves
+    useEffect(() => {
+        return FractalEvents.on(FRACTAL_EVENTS.CAMERA_SLOT_SAVED, ({ slot, label }) => {
+            // Toast: show briefly then fade
+            setSlotToast({ slot, label });
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = window.setTimeout(() => setSlotToast(null), 2000);
+            // Notification dot on Camera Manager menu item
+            setManagerDot(true);
+            if (dotTimeoutRef.current) clearTimeout(dotTimeoutRef.current);
+            dotTimeoutRef.current = window.setTimeout(() => setManagerDot(false), 5000);
+        });
+    }, []);
 
     // Snapshot Handler
     const handleSnapshot = async () => {
@@ -150,6 +169,17 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
             >
                 <CameraIcon />
             </button>
+
+            {/* Camera slot saved toast */}
+            {slotToast && (
+                <div className="absolute right-0 top-full mt-2 z-[600] pointer-events-none animate-fade-in">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-900/95 border border-cyan-500/40 rounded-lg shadow-lg whitespace-nowrap">
+                        <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                        <span className="text-[10px] font-bold text-cyan-300">{slotToast.label} saved</span>
+                        <kbd className="text-[8px] text-gray-500 bg-gray-800 px-1 rounded ml-0.5">{slotToast.slot}</kbd>
+                    </div>
+                </div>
+            )}
             {showCameraMenu && (
                 <Popover width="w-48" align="end">
                     <div className="px-2 py-1 text-[10px] font-bold text-gray-500 border-b border-white/10 mb-1">Camera Tools</div>
@@ -162,6 +192,7 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                         
                         <button onClick={handleOpenManager} className="w-full flex items-center gap-2 p-2 rounded hover:bg-white/10 text-xs text-cyan-300 text-left">
                             <LayersIcon /> Camera Manager
+                            {managerDot && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />}
                         </button>
                         
                         <div className="h-px bg-white/10 my-1" />

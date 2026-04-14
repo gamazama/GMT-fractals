@@ -5,7 +5,7 @@ export interface HelpSection {
     id: string;
     title: string;
     content: string; // Markdown-like text
-    category: 'General' | 'Formulas' | 'Parameters' | 'UI' | 'Timeline' | 'Graph' | 'Animation' | 'Lighting' | 'Rendering' | 'Coloring' | 'Export' | 'Effects' | 'Audio';
+    category: 'Getting Started' | 'General' | 'Formulas' | 'Parameters' | 'UI' | 'Timeline' | 'Graph' | 'Animation' | 'Lighting' | 'Rendering' | 'Coloring' | 'Export' | 'Effects' | 'Audio';
     parentId?: string; // ID of the parent topic for tree view nesting
 }
 
