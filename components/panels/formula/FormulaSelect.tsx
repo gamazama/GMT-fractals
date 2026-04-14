@@ -5,7 +5,7 @@ import { FormulaType } from '../../../types';
 import { useFractalStore } from '../../../store/fractalStore';
 import { ContextMenuItem } from '../../../types/help';
 import { generateGMF, loadGMFScene } from '../../../utils/FormulaFormat';
-import { DownloadIcon, ChevronDown, CodeIcon } from '../../Icons';
+import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon } from '../../Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
 import { PortalDropdown } from './FormulaGallery';
@@ -16,6 +16,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
     const [isOpen, setIsOpen] = useState(false);
     const openWorkshop = useFractalStore(s => s.openWorkshop);
     const btnRef = useRef<HTMLButtonElement>(null);
+    const menuBtnRef = useRef<HTMLButtonElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
 
@@ -30,6 +31,14 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         e.stopPropagation();
         const items = buildFormulaContextMenu();
         openGlobalMenu(e.clientX, e.clientY, items, []);
+    };
+
+    const handleMenuButtonClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const r = menuBtnRef.current?.getBoundingClientRect();
+        if (!r) return;
+        const items = buildFormulaContextMenu();
+        openGlobalMenu(r.left, r.bottom + 4, items, []);
     };
 
     const toggle = () => {
@@ -133,7 +142,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                 ref={btnRef}
                 onClick={toggle}
                 onContextMenu={handleContextMenu}
-                className={`flex-1 flex items-center justify-between border text-xs text-white rounded-lg p-2.5 outline-none transition-all group ${
+                className={`flex-1 flex items-center justify-between border text-xs text-white rounded-lg px-2 py-1.5 outline-none transition-all group ${
                     isOpen
                     ? 'bg-gray-900 border-cyan-500 ring-1 ring-cyan-900'
                     : isModular
@@ -150,6 +159,15 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                     </span>
                 </div>
                 <div className={`w-3 h-3 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}><ChevronDown /></div>
+            </button>
+
+            <button
+                ref={menuBtnRef}
+                onClick={handleMenuButtonClick}
+                className="w-4 flex items-center justify-center bg-white/[0.04] border border-white/10 hover:border-white/20 hover:bg-white/[0.08] text-gray-400 hover:text-white rounded-lg transition-colors"
+                title="Formula options"
+            >
+                <MenuIcon />
             </button>
 
             {!isModular && advancedMode && (

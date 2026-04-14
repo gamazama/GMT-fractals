@@ -50,7 +50,7 @@ const MiniSlider = ({ value, onChange }: { value: number, onChange: (v: number) 
             <div className="absolute inset-0 bg-white/[0.12]" />
             <div className="absolute top-0 bottom-0 left-0 bg-cyan-500/20 transition-[width] duration-75 ease-out" style={{ width: `${fillPct}%` }} />
             <div className="absolute inset-0 flex items-center justify-between px-2 pointer-events-none">
-                <span className="text-[10px] text-gray-400 font-medium">Amount</span>
+                <span className="text-[10px] text-gray-400 font-medium">Random Strength</span>
                 <span className="text-[10px] text-gray-300 tabular-nums">{value >= 10 ? Math.round(value) : value.toFixed(2)}%</span>
             </div>
         </div>
