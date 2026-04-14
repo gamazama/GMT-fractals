@@ -191,7 +191,6 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
         const slice = fullState[feat.id || feat.featureId];
         if (!slice) return null;
         const isEnabled = !!slice[feat.toggleParam];
-        const color = feat.id === 'audio' ? 'bg-green-600' : 'bg-cyan-600';
         const textColor = feat.id === 'audio' ? 'text-green-400' : 'text-cyan-400';
         
         if (isSimple) {
@@ -242,7 +241,10 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
             <input ref={fileInputRef} type="file" accept=".gmf,.json,.png" className="hidden" onChange={handleFileSelect} />
 
             <div className="relative" ref={menuRef}>
-                <button onClick={toggleSystemMenu} className={`${btnBase} ${showSystemMenu ? btnActive : btnInactive}`}><MenuIcon /></button>
+                <button onClick={toggleSystemMenu} className={`${btnBase} ${showSystemMenu ? btnActive : btnInactive} relative`}>
+                    <MenuIcon />
+                    {needRefresh && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 pointer-events-none" />}
+                </button>
                 {showSystemMenu && (
                     <Popover width="w-64" align="end" className="p-2 custom-scroll overflow-y-auto max-h-[85vh]" onClose={() => setShowSystemMenu(false)}>
                         <div className="space-y-1">
