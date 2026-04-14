@@ -86,6 +86,7 @@ export class FractalEngine {
     public set isCameraInteracting(v: boolean) { this.state.isCameraInteracting = v; }
     public isPaused: boolean = false;
     private lastInteractionTime: number = 0;
+    private _lastCameraInteractingTime: number = 0;
 
     public shouldSnapCamera: boolean = false;
     public lastMeasuredDistance: number = 10.0;
@@ -358,7 +359,7 @@ export class FractalEngine {
             if (uniformUpdate) {
                 this.materials.syncConfigUniforms(this.configManager.config);
                 if (this.configManager.config.pipeline) {
-                    this.materials.syncModularUniforms(this.configManager.config.pipeline);
+                    this.materials.syncModularUniforms(this.configManager.config.pipeline, this.configManager.config.graph?.edges ?? []);
                 }
                 // Only reset accumulation if a non-noReset param actually changed.
                 // Post-process params (bloom, CA, color grading) are noReset and should
@@ -428,7 +429,6 @@ export class FractalEngine {
         );
 
         const config = this.configManager.config;
-        if (config.pipeline) this.materials.syncModularUniforms(config.pipeline);
         // Derive mode from DDFS lighting state (same logic as MaterialController)
         const lighting = config.lighting as any;
         const mode: 'Direct' | 'PathTracing' = (lighting && lighting.renderMode === 1.0) ? 'PathTracing' : (config.renderMode || 'Direct');
@@ -504,9 +504,12 @@ export class FractalEngine {
             // Permanent compile timing log — do not remove
             console.log(`[Compile] Preview: ${(performance.now() - t0).toFixed(0)}ms (${config.formula})`);
         } else {
-            // keepCurrent: sync uniforms so current shader has up-to-date values,
-            // but don't touch the active material or scene mesh
-            this.materials.syncConfigUniforms(config);
+            // keepCurrent: sync non-modular uniforms only.
+            // Do NOT sync uModularParams here — the old shader is still rendering and
+            // expects the old pipeline's param layout. syncModularUniforms zeros the
+            // array before refilling, which would corrupt the old shader's slot mapping.
+            // Modular params are synced after swapFullMaterial (new shader active).
+            this.materials.syncConfigUniforms(config, /* skipModularSync= */ true);
             this.resetAccumulation();
         }
 
@@ -568,6 +571,9 @@ export class FractalEngine {
         // Hot-swap: replace preview/current material with fully compiled material
         this.materials.swapFullMaterial(fullMat);
         this.sceneCtrl.setMaterial(this.materials.getMaterial(mode));
+        // Now the new shader is active — sync modular uniforms so the new pipeline's
+        // params are in place before the first render of the new shader.
+        if (config.pipeline) this.materials.syncModularUniforms(config.pipeline, config.graph?.edges ?? []);
         this.resetAccumulation();
         this.materials.shaderDirty = false;
         this._lastCompiledFormula = compiledFormulaKey;
@@ -663,9 +669,10 @@ export class FractalEngine {
     public compute(renderer: THREE.WebGLRenderer) {
         if (!this.isBooted || this.state.isExporting) return;
         
+        const now = performance.now();
+
         if (this.isPaused && !this.state.isBucketRendering) {
-             const timeSinceInteraction = performance.now() - this.lastInteractionTime;
-             if (timeSinceInteraction > 1000) return;
+             if (now - this.lastInteractionTime > 1000) return;
         }
 
         // Hold accumulation during camera interaction ONLY if DOF is disabled
@@ -673,7 +680,20 @@ export class FractalEngine {
         // During bucket rendering, never hold — the bucket renderer drives the pipeline.
         const dofEnabled = (this.state.optics?.dofStrength ?? 0) > 0.0001;
         const wasHolding = this.pipeline.isHolding;
-        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (this.state.isCameraInteracting || this.state.isGizmoInteracting);
+
+        const isCamInteracting = this.state.isCameraInteracting || this.state.isGizmoInteracting;
+        if (isCamInteracting) this._lastCameraInteractingTime = now;
+
+        // Extend hold until adaptive resolution has settled at full res.
+        // Without this, accumulation starts at reduced res, then the adaptive grace period
+        // expires and full res kicks in — resetting accumulation a second time (double kick).
+        // By keeping hold active for the adaptive grace period + a small buffer, the resize
+        // happens while hold is still active (a no-op), so accumulation starts once at full res.
+        const adaptiveEnabled = this.state.quality?.dynamicScaling ?? false;
+        const timeSinceCam = now - this._lastCameraInteractingTime;
+        const holdForAdaptive = adaptiveEnabled && timeSinceCam < this.uniformManager.getAdaptiveGrace() + 50;
+
+        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (isCamInteracting || holdForAdaptive);
         this.pipeline.setHold(shouldHold);
 
         // If we just started holding, reset accumulation for clean frame

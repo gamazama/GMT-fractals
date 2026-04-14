@@ -7,6 +7,7 @@ import { createUISlice } from './slices/uiSlice';
 import { createRendererSlice } from './slices/rendererSlice';
 import { createCameraSlice } from './slices/cameraSlice';
 import { createHistorySlice } from './slices/historySlice';
+import { createModularSlice } from './slices/modularSlice';
 import { createFeatureSlice } from './createFeatureSlice';
 import { createScalabilitySlice, bindGetShaderConfig } from './slices/scalabilitySlice';
 import { getProxy } from '../engine/worker/WorkerProxy';
@@ -19,8 +20,6 @@ import type { ShaderConfig } from '../engine/ShaderFactory';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { animationEngine } from '../engine/AnimationEngine';
 import { detectEngineProfile, ENGINE_PROFILES } from '../features/engine/profiles';
-import { pipelineToGraph, isStructureEqual, isPipelineEqual, topologicalSort } from '../utils/graphAlg';
-import { JULIA_REPEATER_PIPELINE } from '../data/initialPipelines';
 import '../features'; // Ensure features are registered
 import { PreciseVector3 } from '../types';
 
@@ -34,14 +33,12 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
     ...createRendererSlice(set, get, api),
     ...createCameraSlice(set, get, api),
     ...createHistorySlice(set, get, api),
+    ...createModularSlice(set, get, api),
     ...createFeatureSlice(set, get, api),
     ...createScalabilitySlice(set, get),
 
     // Initial State not covered by slices
     formula: 'Mandelbulb',
-    pipeline: JULIA_REPEATER_PIPELINE,
-    pipelineRevision: 1,
-    graph: pipelineToGraph(JULIA_REPEATER_PIPELINE),
     projectSettings: { name: 'Mandelbulb', version: 0 },
     lastSavedHash: null,
     
@@ -177,38 +174,6 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
     },
     
     setLiveModulations: (v) => set({ liveModulations: v }),
-
-    setGraph: (g) => {
-        const sortedPipeline = topologicalSort(g.nodes, g.edges);
-        const s = get();
-        if (!isStructureEqual(s.pipeline, sortedPipeline)) {
-            if (s.autoCompile) {
-                const nextRev = s.pipelineRevision + 1;
-                set({ graph: g, pipeline: sortedPipeline, pipelineRevision: nextRev });
-                FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { pipeline: sortedPipeline, graph: g, pipelineRevision: nextRev });
-            } else set({ graph: g });
-        } else {
-            if (!isPipelineEqual(s.pipeline, sortedPipeline)) {
-                set({ graph: g, pipeline: sortedPipeline });
-                FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { pipeline: sortedPipeline });
-            } else set({ graph: g });
-        }
-    },
-
-    setPipeline: (p) => {
-        const nextRev = get().pipelineRevision + 1;
-        const newGraph = pipelineToGraph(p);
-        set({ pipeline: p, graph: newGraph, pipelineRevision: nextRev });
-        FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { pipeline: p, graph: newGraph, pipelineRevision: nextRev });
-    },
-
-    refreshPipeline: () => {
-         const s = get();
-         const sorted = topologicalSort(s.graph.nodes, s.graph.edges);
-         const nextRev = s.pipelineRevision + 1;
-         set({ pipeline: sorted, pipelineRevision: nextRev });
-         FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { pipeline: sorted, graph: s.graph, pipelineRevision: nextRev });
-    },
 
     loadPreset: (p) => {
         // Legacy: handle embedded _formulaDef from old JSON presets

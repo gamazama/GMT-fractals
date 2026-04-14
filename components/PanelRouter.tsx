@@ -19,7 +19,7 @@ export const PanelRouter: React.FC<PanelRouterProps> = ({ activeTab, state, acti
     if (activeTab === 'Graph') {
         const GraphComponent = componentRegistry.get('panel-graph') as React.FC<any>;
         if (GraphComponent) {
-            return <div className="h-[600px] -m-4"><GraphComponent state={state} actions={actions} /></div>;
+            return <div className="h-full -mx-4 -mb-4 overflow-hidden"><GraphComponent state={state} actions={actions} /></div>;
         }
     }
 

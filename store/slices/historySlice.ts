@@ -6,6 +6,7 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { featureRegistry } from '../../engine/FeatureSystem';
+import { isStructureEqual } from '../../utils/graphAlg';
 
 export interface HistorySliceState {
     paramUndoStack: Partial<FractalStoreState>[];
@@ -28,6 +29,7 @@ const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
     const snap: Partial<FractalStoreState> = {
         formula: s.formula,
         pipeline: s.pipeline,
+        graph: JSON.parse(JSON.stringify(s.graph)), // Preserve node positions for Modular undo
         // Legacy lights removal: lights are now handled via 'lighting' feature slice below
         renderRegion: s.renderRegion ? { ...s.renderRegion } : null
     };
@@ -49,13 +51,27 @@ const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
     return snap;
 };
 
+/** Captures a snapshot of the current state for the keys present in `keys`. */
+const captureStateForKeys = (keys: string[], current: FractalStoreState): Partial<FractalStoreState> => {
+    const snap: Partial<FractalStoreState> = {};
+    keys.forEach(k => {
+        // @ts-expect-error — DDFS dynamic key access
+        snap[k] = current[k];
+    });
+    return snap;
+};
+
 const applyStateRestore = (data: Partial<FractalStoreState>, set: any, get: any) => {
     const actions = get();
 
+    // Capture pre-restore pipeline for structural change detection
+    const priorPipeline = data.pipeline ? (get().pipeline as any[] | undefined) : undefined;
+
     // 1. Bulk Update UI State
     set(data);
-    
+
     // 2. Trigger Side-Effects via Actions
+    let pipelineEmitted = false;
     Object.keys(data).forEach(k => {
         const key = k as keyof FractalStoreState;
         const val = data[key];
@@ -66,23 +82,36 @@ const applyStateRestore = (data: Partial<FractalStoreState>, set: any, get: any)
             return;
         }
 
-        // --- Generic Feature Restoration ---
-        // If the key corresponds to a feature, call its specific setter
-        // This ensures 'uniform' events are emitted to the Engine
-        const featureSetter = 'set' + key.charAt(0).toUpperCase() + key.slice(1);
-        if (typeof actions[featureSetter] === 'function') {
-            actions[featureSetter](val);
+        // --- Modular Pipeline/Graph Restoration ---
+        // Intercept before generic setter to avoid setPipeline bumping pipelineRevision
+        // (which would trigger a slow full recompile for every slider undo).
+        if (key === 'pipeline' && !pipelineEmitted) {
+            const restoredPipeline = val as any[];
+            const curr = get();
+            // If structure changed (nodes added/removed/reordered by edge change),
+            // we must recompile the shader. Otherwise, a fast uniform update suffices.
+            const structureChanged = priorPipeline && !isStructureEqual(priorPipeline, restoredPipeline);
+            if (structureChanged) {
+                const nextRev = curr.pipelineRevision + 1;
+                set({ pipelineRevision: nextRev });
+                FractalEvents.emit('config', { pipeline: restoredPipeline, graph: curr.graph, pipelineRevision: nextRev });
+            } else {
+                // Param-only change — update uniforms immediately without recompile
+                FractalEvents.emit('config', { pipeline: restoredPipeline });
+            }
+            pipelineEmitted = true;
+            return;
+        }
+        if (key === 'graph') {
+            // Positions don't affect rendering; React Flow re-syncs from state.graph ref change
             return;
         }
 
-        if (key === 'pipeline') { actions.setPipeline(val); return; }
-        if (key === 'graph') { actions.setGraph(val); return; }
-
-        // --- Generic Actions for remaining root props ---
-        // This is fallback for things like setParamA etc.
-        const setterName = 'set' + key.charAt(0).toUpperCase() + key.slice(1);
-        if (typeof actions[setterName] === 'function' && !featureRegistry.get(key)) {
-            actions[setterName](val);
+        // --- Generic Setter Restoration ---
+        // Calls the corresponding set<Key> action to ensure uniform events are emitted.
+        const featureSetter = 'set' + key.charAt(0).toUpperCase() + key.slice(1);
+        if (typeof actions[featureSetter] === 'function') {
+            actions[featureSetter](val);
         }
     });
 
@@ -188,13 +217,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
 
         const undoItem = paramUndoStack[paramUndoStack.length - 1];
         const newUndo = paramUndoStack.slice(0, -1);
-        
-        const current = get();
-        const redoItem: Partial<FractalStoreState> = {};
-        Object.keys(undoItem).forEach(k => {
-            // @ts-expect-error — DDFS dynamic key access for redo snapshot
-            redoItem[k] = current[k];
-        });
+        const redoItem = captureStateForKeys(Object.keys(undoItem), get());
 
         applyStateRestore(undoItem, set, get);
 
@@ -210,13 +233,7 @@ export const createHistorySlice: StateCreator<FractalStoreState & FractalActions
 
         const redoItem = paramRedoStack[paramRedoStack.length - 1];
         const newRedo = paramRedoStack.slice(0, -1);
-        
-        const current = get();
-        const undoItem: Partial<FractalStoreState> = {};
-        Object.keys(redoItem).forEach(k => {
-            // @ts-expect-error — DDFS dynamic key access for undo snapshot
-            undoItem[k] = current[k];
-        });
+        const undoItem = captureStateForKeys(Object.keys(redoItem), get());
 
         applyStateRestore(redoItem, set, get);
 

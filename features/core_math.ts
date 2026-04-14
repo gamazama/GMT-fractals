@@ -92,7 +92,9 @@ export const CoreMathFeature: FeatureDefinition = {
     category: 'Formulas',
     tabConfig: { label: 'Formula', componentId: 'panel-formula', order: 10 },
     extraUniforms: [
-        { name: Uniforms.ModularParams, type: 'float', arraySize: MAX_MODULAR_PARAMS, default: new Float32Array(MAX_MODULAR_PARAMS) }
+        // backingOnly: Three.js uniform object always exists for syncModularUniforms(),
+        // but GLSL declaration is injected conditionally in inject() only for Modular formula.
+        { name: Uniforms.ModularParams, type: 'float', arraySize: MAX_MODULAR_PARAMS, default: new Float32Array(MAX_MODULAR_PARAMS), backingOnly: true }
     ],
     params: {
         iterations: { type: 'float', default: 16, label: 'Iterations', shortId: 'it', uniform: 'uIterations', min: 1, max: 500, step: 1, group: 'main' },
@@ -120,6 +122,8 @@ export const CoreMathFeature: FeatureDefinition = {
         // 1. Modular pipeline revision (forces recompile when graph changes)
         if (formula === 'Modular') {
             builder.addDefine('PIPELINE_REV', (config.pipelineRevision || 0).toString());
+            // Declare uModularParams only for Modular shaders (backing always exists via extraUniforms)
+            builder.addUniform(Uniforms.ModularParams, 'float', MAX_MODULAR_PARAMS);
         }
 
         // 2. Analytic Opt-in

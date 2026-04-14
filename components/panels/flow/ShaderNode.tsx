@@ -9,8 +9,7 @@ import { CloseIcon } from '../../Icons';
 
 export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
     const node = data.node as PipelineNode;
-    const { updateParams, toggleBinding, updateNode, removeNode } = data.actions;
-    const index = data.index;
+    const { updateParams, setBinding, updateNode, removeNode } = data.actions;
 
     const def = nodeRegistry.get(node.type);
 
@@ -26,15 +25,20 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
 
     if (node.type === 'Mandelbulb') headerColor = "text-pink-400";
     if (def?.category === 'Folds') headerColor = "text-amber-400";
+    if (def?.category === 'Fractals') headerColor = "text-pink-400";
     if (def?.category === 'Transforms' || def?.category === 'Distortion') headerColor = "text-blue-400";
+    if (def?.category === 'Primitives') headerColor = "text-purple-400";
+    if (def?.category === 'Utils') headerColor = "text-gray-400";
     if (isCSG) {
         headerColor = "text-green-400";
         headerBg = "bg-green-900/20";
     }
 
+    const isDisabled = node.enabled === false;
+
     return (
-        <div className={`w-64 bg-gray-900/90 backdrop-blur-md rounded-lg border shadow-xl transition-all ${borderColor}`}>
-            
+        <div className={`w-64 bg-gray-900/90 backdrop-blur-md rounded-lg border shadow-xl transition-all ${borderColor} ${isDisabled ? 'opacity-40' : ''}`}>
+
             {/* Input Handles */}
             {isCSG ? (
                 <>
@@ -65,11 +69,19 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
             {/* Header */}
             <div className={`flex items-center justify-between px-3 py-2 border-b border-white/10 bg-white/5 rounded-t-lg handle cursor-move ${headerBg}`}>
                 <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold ${headerColor}`}>
+                    <input
+                        type="checkbox"
+                        checked={!isDisabled}
+                        onChange={(e) => { e.stopPropagation(); updateNode(id, { enabled: e.target.checked }); }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="cursor-pointer accent-cyan-500 w-3 h-3 shrink-0"
+                        title={isDisabled ? 'Enable node' : 'Disable node'}
+                    />
+                    <span className={`text-xs font-bold ${headerColor}`} title={def?.description}>
                         {def?.label || node.type}
                     </span>
                 </div>
-                <button 
+                <button
                     onClick={(e) => { e.stopPropagation(); removeNode(id); }}
                     className="text-gray-600 hover:text-red-400 transition-colors"
                 >
@@ -79,12 +91,13 @@ export const ShaderNode = memo(({ data, id, selected }: NodeProps) => {
 
             {/* Body */}
             <div className="p-3">
-                <NodeParams 
-                    node={node} 
-                    index={index} 
-                    updateParams={(i, p) => updateParams(id, p)} // Passing ID instead of index for stability
-                    toggleBinding={(i, k) => toggleBinding(id, k)}
-                    updateNode={(i, u) => updateNode(id, u)}
+                <NodeParams
+                    node={node}
+                    updateParams={(_, p) => updateParams(id, p)}
+                    setBinding={(_, k, v) => setBinding(id, k, v)}
+                    updateNode={(_, u) => updateNode(id, u)}
+                    onInteractionStart={data.actions.onInteractionStart}
+                    onInteractionEnd={data.actions.onInteractionEnd}
                 />
             </div>
 

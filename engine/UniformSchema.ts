@@ -13,9 +13,12 @@ export interface UniformDefinition {
     name: string;
     type: GLSLType;
     default: any;
-    arraySize?: number; 
+    arraySize?: number;
     precision?: 'highp' | 'mediump' | 'lowp';
     comment?: string;
+    /** If true, creates the Three.js uniform backing but skips GLSL declaration.
+     *  Use for uniforms that are only needed for specific formula variants (e.g. Modular). */
+    backingOnly?: boolean;
 }
 
 // Base Schema (Pure Core)

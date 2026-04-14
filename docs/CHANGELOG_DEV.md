@@ -2,6 +2,57 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-14
+
+### Modular Graph Builder — Correctness, Undo/Redo, UX Overhaul
+
+**Bug Fixes (Correctness)**
+
+- **DCE uniform mismatch fixed**: `updateModularUniforms` now performs the same backward dead-code-elimination walk as `compileGraph`. Previously, dead (disconnected) nodes consumed uniform slots differently from the compiler, causing live node params to read wrong values after a dead node's slider was adjusted. Fix: both now share `buildInputsByTarget` / `buildLiveNodeIds` utilities from `utils/GraphCompiler.ts`. (`engine/MaterialController.ts` updated to pass edges to `syncModularUniforms`.)
+- **Condition mod/rem as runtime uniforms**: Previously, `mod` and `rem` condition values were baked as GLSL integer literals — every slider drag caused a full shader recompile. Now they are allocated as `uModularParams[N]` / `uModularParams[N+1]` slots (written before the node's own params). Only toggling `condition.active` triggers recompile.
+- **`uModularParams` GLSL conditional declaration**: Added `backingOnly: true` flag to `UniformDefinition`. Uniform still creates a Three.js backing for all formulas, but the GLSL `uniform float uModularParams[64]` declaration is now only emitted for `formula === 'Modular'` shaders. Files: `engine/UniformSchema.ts`, `shaders/chunks/uniforms.ts`, `features/core_math.ts`.
+- **`isStructureEqual` refined**: `mod` and `rem` are no longer checked (they're runtime). Only `condition.active` is structural. Binding comparison simplified to `JSON.stringify(bindings ?? {})`.
+
+**Undo / Redo**
+
+- **Graph snapshot in history**: `getParamSnapshot` in `store/slices/historySlice.ts` now includes `graph` in the snapshot. Previously, undo restored the flat pipeline but reconstructed node positions via `pipelineToGraph` (vertical stack, losing user layout). Now undo restores exact node positions.
+- **Keyboard shortcuts**: Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z trigger `undoParam` / `redoParam` from within the graph editor (keydown listener, skips inputs/textareas).
+- **Interaction pairs**: All mutations in `FlowEditor` (connect, delete node, delete edge, node drag, param change) now call `handleInteractionStart('param')` before and `handleInteractionEnd()` after.
+- **`captureStateForKeys` helper**: Extracted from duplicated code in `undoParam` / `redoParam` in `historySlice.ts`.
+
+**Graph Editor UX**
+
+- **Panel height fixed**: `PanelRouter.tsx` hardcoded `h-[600px]` replaced with `h-full`. Graph editor now fills the available panel height.
+- **Tab zoom/pan persistence**: Zoom and pan position survive tab switches via module-level `persistedViewport` (a `useRef` would reset on unmount/remount). Restored via `reactFlowInstance.setViewport()` in `onInit`.
+- **Graph reference sync**: Store→Flow sync now triggers on `state.graph !== lastGraph.current` in addition to `pipelineRevision` change. Catches undo of drag-only changes (position moves) and structural changes when `autoCompile` is off.
+- **fitView removed from auto-update**: Only runs on initial mount (and "Reset View" if triggered); no longer disrupts user zoom on every node change.
+
+**Node UX**
+
+- **Node enable/disable toggle** (`ShaderNode.tsx`): Checkbox in header enables/disables the node. Card gets `opacity-40` when disabled. Disabled nodes are skipped by the compiler (no GLSL emitted, no uniform slots consumed).
+- **Category colors expanded**: Purple for Primitives, gray for Utils (previously un-colored). Description tooltip on header span (`title={def?.description}`).
+- **Binding changed to dropdown** (`NodeParams.tsx`): Replaced the link-icon cycle (click to advance through ParamA–ParamF) with an explicit `<select>` dropdown showing `—` / A / B / C / D / E / F. Clear by selecting `—`.
+- **Condition labels renamed**: "Modulo" → "Interval (every N iters)", "Remainder" → "Starting Iteration". Live description: `"Run every {mod} iterations, starting at #{rem}"`. `rem` clamped to `[0, mod-1]` when `mod` decreases. Condition sliders wired with `onDragStart`/`onDragEnd` for undo.
+- **GraphContextMenu Escape key** (`GraphContextMenu.tsx`): Escape closes the right-click add-node menu.
+- **Minimap category colors**: Color-coded node blobs in MiniMap by category (was all `#333`). Start/End nodes are green/pink.
+- **Cycle detection feedback**: When a connection would create a cycle, visible feedback via `openGlobalMenu` (previously silent — edge just disappeared).
+
+**Ghost Insert UX**
+
+- Selecting a node type from the dropdown or right-click context menu activates **ghost insert mode**: cursor becomes crosshair, ghost tooltip follows the mouse, all edges highlight cyan (non-CSG only).
+- Click a highlighted edge → inserts node between source and target (splits edge into two).
+- Click empty canvas → places node at cursor.
+- Escape → cancels.
+- CSG nodes (dual-input) skip edge highlighting; pane placement still works.
+- `clientToFlow(clientX, clientY)` helper added — subtracts container `getBoundingClientRect()` before calling `project()`. Fixes placement coordinates (raw `clientX/Y` are viewport-relative; `project()` expects container-relative).
+
+**Auto-Reconnect on Delete**
+
+- Deleting a non-CSG node via × button or context menu → the primary incoming edge and outgoing edge are bridged into a new direct connection. CSG nodes are excluded (ambiguous which input chain to reconnect).
+- `skipNextOnNodesDelete` ref prevents `onNodesDelete`'s `syncToStore` from racing against the bridge edge write in `handleRemoveNode`.
+
+- Files: `components/PanelRouter.tsx`, `components/panels/flow/FlowEditor.tsx`, `components/panels/flow/GraphContextMenu.tsx`, `components/panels/flow/ShaderNode.tsx`, `components/panels/node-editor/NodeParams.tsx`, `engine/FractalEngine.ts`, `engine/MaterialController.ts`, `engine/UniformSchema.ts`, `features/core_math.ts`, `shaders/chunks/uniforms.ts`, `store/slices/historySlice.ts`, `utils/GraphCompiler.ts`, `utils/graphAlg.ts`
+
 ## 2026-04-13
 
 ### Fragility Refactors — Module-Level State, Worker Timeouts, Event Bus

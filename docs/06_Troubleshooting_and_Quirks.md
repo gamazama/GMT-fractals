@@ -283,7 +283,46 @@ materials: {
 }
 ```
 
-## 13. Removed / Deprecated Features
+## 13. Modular Graph Builder Quirks
+
+### ReactFlow `project()` Coordinate Space (clientToFlow helper)
+*   **Issue:** ReactFlow v11's `project()` (from `useReactFlow()`) expects coordinates **relative to the ReactFlow container element**, not `clientX/Y` (which are viewport-relative). Passing `clientX/Y` directly causes nodes to be placed far off-canvas — the offset equals the container's page position (sidebar width + any layout offset).
+*   **Fix:** Use the `clientToFlow(clientX, clientY)` helper in `FlowEditor.tsx`, which subtracts `wrapperRef.current.getBoundingClientRect()` before calling `project`.
+*   **Pattern:**
+    ```typescript
+    // Wrong: clientX/Y are viewport-relative, not container-relative
+    const pos = project({ x: e.clientX, y: e.clientY }); // Off by container offset
+
+    // Correct: subtract container bounds first
+    const r = wrapperRef.current?.getBoundingClientRect();
+    const pos = project({ x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) });
+    ```
+*   **Applies to:** Any placement triggered by mouse events in the graph editor (pane click, edge click, context menu). The context menu's `paneX/paneY` also uses this helper.
+
+### `onNodesDelete` Races Against `handleRemoveNode` Bridge Edge
+*   **Issue:** When `handleRemoveNode` calls `setNodes` to remove a node, ReactFlow fires `onNodesDelete` before its internal edge store reflects the bridge edge added by the concurrent `setEdges` call. Without a guard, `onNodesDelete`'s `syncToStore(getNodes(), getEdges())` overwrites the store with old edges, removing the bridge connection.
+*   **Fix:** `skipNextOnNodesDelete` ref is set to `true` in `handleRemoveNode` before `setNodes`. `onNodesDelete` checks and clears this ref, skipping its sync when `handleRemoveNode` is doing its own authoritative sync.
+*   **Pattern:**
+    ```typescript
+    const skipNextOnNodesDelete = useRef(false);
+
+    const handleRemoveNode = (id: string) => {
+        skipNextOnNodesDelete.current = true; // we sync ourselves
+        setNodes(nds => { ...; setEdges(eds => { ...; syncToStore(...); return newEdges; }); ... });
+    };
+
+    const onNodesDelete = () => {
+        if (skipNextOnNodesDelete.current) { skipNextOnNodesDelete.current = false; return; }
+        setTimeout(() => syncToStore(getNodes(), getEdges()), 0);
+    };
+    ```
+*   **Applies to:** Any custom node deletion handler that adds/modifies edges before syncing. Keyboard-delete (Backspace/Delete) goes through `onNodesDelete` directly and does NOT get the bridge — auto-reconnect only works via the × button or context menu → Delete.
+
+### Ghost Insert — Dropdown Click Propagates to Pane Click
+*   **Issue:** When a user selects a node type from the `<select>` dropdown, the browser fires a click event after the `onChange` that can propagate through to ReactFlow's `onPaneClick`. If `onPaneClick` sees `pendingNodeType` already set (state updated synchronously), it immediately places the node at the dropdown's coordinates.
+*   **Fix:** Use `setTimeout(() => setPendingNodeType(type), 0)` in the `onChange` handler. This defers state update past the current event propagation cycle, so any propagated click fires while `pendingNodeType` is still `null`.
+
+## 14. Removed / Deprecated Features
 
 ### Parameter Quick-Edit Popup Sliders (Keys 1–6) — Removed
 *   **What it was:** Pressing keys 1–6 opened a floating popup slider for formula parameters A–F at the cursor position (`PopupSliderSystem.tsx`).

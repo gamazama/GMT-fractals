@@ -50,8 +50,15 @@ export const GraphContextMenu: React.FC<GraphContextMenuProps> = ({
         const handleClickOutside = (e: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
         };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
+        };
         document.addEventListener('mousedown', handleClickOutside, true);
-        return () => document.removeEventListener('mousedown', handleClickOutside, true);
+        document.addEventListener('keydown', handleKeyDown, true);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside, true);
+            document.removeEventListener('keydown', handleKeyDown, true);
+        };
     }, [onClose]);
 
     // Use Registry to build dynamic groups

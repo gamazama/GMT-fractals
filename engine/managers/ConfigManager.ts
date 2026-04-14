@@ -250,6 +250,7 @@ export class ConfigManager {
         } else if (newConfig.pipeline) {
             this.config.pipeline = newConfig.pipeline;
             uniformUpdate = true;
+            needsAccumReset = true; // Param-only change — new values must be visible immediately
         }
         
         return { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset };

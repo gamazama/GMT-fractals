@@ -117,15 +117,12 @@ export const isStructureEqual = (a: PipelineNode[], b: PipelineNode[]) => {
     for (let i = 0; i < a.length; i++) {
         const nA = a[i]; const nB = b[i];
         if (nA.id !== nB.id || nA.type !== nB.type || nA.enabled !== nB.enabled) return false; 
-        const binA = nA.bindings || {}; const binB = nB.bindings || {};
-        const keysA = Object.keys(binA).filter(k => binA[k] !== undefined);
-        const keysB = Object.keys(binB).filter(k => binB[k] !== undefined);
-        if (keysA.length !== keysB.length) return false;
-        for (const k of keysA) { if (binA[k] !== binB[k]) return false; }
-        const cA = nA.condition || { active: false, mod: 0, rem: 0 };
-        const cB = nB.condition || { active: false, mod: 0, rem: 0 };
-        if (cA.active !== cB.active) return false;
-        if (cA.active && (cA.mod !== cB.mod || cA.rem !== cB.rem)) return false;
+        if (JSON.stringify(nA.bindings ?? {}) !== JSON.stringify(nB.bindings ?? {})) return false;
+        // Only condition.active is structural (changes GLSL control flow).
+        // mod/rem are runtime uniforms — changing them triggers a param update, not recompile.
+        const activeA = nA.condition?.active ?? false;
+        const activeB = nB.condition?.active ?? false;
+        if (activeA !== activeB) return false;
     }
     return true;
 };

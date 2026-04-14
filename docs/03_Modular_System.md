@@ -38,6 +38,10 @@ uniform float uModularParams[64];
 
 The hard limit is `MAX_MODULAR_PARAMS = 64` total unbound parameters across the entire graph.
 
+`uModularParams` is now conditionally declared — the GLSL array is only emitted when `formula === 'Modular'`. For all other formulas, the Three.js uniform backing exists (for code path uniformity) but the GLSL declaration is skipped. This is implemented via the `backingOnly: true` flag on the `UniformDefinition` in `engine/UniformSchema.ts`, checked in `shaders/chunks/uniforms.ts`.
+
+Condition `mod`/`rem` values occupy `uModularParams` slots BEFORE the node's own params (since they are allocated first in `compileGraph`). So condition nodes consume 2 extra slots before their parameter slots.
+
 ### 1.4 Bindings (Node Params → Global Sliders)
 
 Any node parameter can be **bound** to one of the six global formula sliders (Param A–F). This replaces the `uModularParams[N]` reference with the named uniform (e.g., `uParamA`).
@@ -48,7 +52,7 @@ Any node parameter can be **bound** to one of the six global formula sliders (Pa
 - They don't consume a `uModularParams` slot.
 
 **Lifecycle:**
-1. User clicks the link icon on a node slider → cycles through `ParamA → ParamB → ... → ParamF → unbound`.
+1. User opens the binding **dropdown** on a node slider → selects from `—` (unbound), A, B, C, D, E, F. Can be cleared by selecting `—`.
 2. Stored in `node.bindings[paramKey]` (e.g., `{ 'z': 'ParamC' }`).
 3. During compilation, `getParam('z')` returns `"uParamC"` instead of `"uModularParams[N]"`.
 4. The binding is a structural change — triggers shader recompile.
@@ -240,7 +244,13 @@ Transforms a topologically sorted node array and edge list into a complete GLSL 
    - Declares `_p`, `_d`, `_dr` variables copying from upstream input A.
    - Resolves input B from the edge targeting handle `'b'` (for CSG nodes).
    - If `node.enabled` and a definition exists in the registry:
-     - If `node.condition.active`: wraps code in `if ((i - (i/mod)*mod) == rem)` (per-iteration conditional execution).
+     - If `node.condition.active`: allocates 2 slots — `uModularParams[N]` for `mod`, `uModularParams[N+1]` for `rem` — and emits:
+       ```glsl
+       int {varName}_cmod = max(1, int(uModularParams[N]));
+       int {varName}_crem = int(uModularParams[N+1]);
+       if ( (i - (i/{varName}_cmod)*{varName}_cmod) == {varName}_crem )
+       ```
+       These slots are filled by `updateModularUniforms` before the node's own params. Toggling `condition.active` is structural (triggers recompile); dragging Interval/Starting Iteration sliders only updates uniforms (no recompile).
      - Calls `def.glsl(ctx)` with the `getParam` closure.
    - `getParam(key)` resolution order:
      1. If `node.bindings[key]` is set → returns `u${binding}` (e.g., `"uParamA"`). No slot consumed.
@@ -262,18 +272,19 @@ Transforms a topologically sorted node array and edge list into a complete GLSL 
                         inout float distOverride, vec4 c, int i) { ... }
    ```
 
-### 5.2 `updateModularUniforms(pipeline, uniformArray)`
+### 5.2 `updateModularUniforms(pipeline, edges, uniformArray)`
 
-Runtime-only (no recompile). Iterates all nodes in the pipeline in topological order and writes each non-bound parameter value into the `Float32Array` in the same sequential order the compiler used.
+Runtime-only (no recompile). Now takes `edges: GraphEdge[]` as a second parameter. Applies the **same DCE walk** as `compileGraph` (backward traversal from `root-end`) so that disconnected nodes are skipped and uniform slot indices exactly match the compiled GLSL. Condition `mod`/`rem` are written before node params for conditional nodes.
 
 ```
-For each enabled node:
+Build liveNodeIds via backward walk from root-end (same as compileGraph DCE)
+For each enabled live node in pipeline order:
+    If node.condition.active:
+        write condition.mod, condition.rem to next two slots
     For each input in node definition:
-        If input is bound → skip (compiler also skips)
-        Else → write node.params[input.id] (or default) to uniformArray[idx++]
+        If input is bound → skip (no slot)
+        Else → write node.params[input.id] (or default)
 ```
-
-**Known caveat:** The compiler applies DCE (skips disconnected nodes) but `updateModularUniforms` iterates all nodes. If a dead node's slider is adjusted, its values write to the wrong indices. In practice this rarely matters — users don't adjust sliders on disconnected nodes. The source code documents this mismatch extensively (lines 141–172) with a potential fix noted.
 
 ## 6. Graph Algorithm Utilities (`utils/graphAlg.ts`)
 
@@ -295,7 +306,7 @@ Converts a linear `PipelineNode[]` (from presets or legacy saves) into a visual 
 
 | Function | Compares | Triggers |
 |----------|----------|----------|
-| `isStructureEqual(a, b)` | id, type, enabled, bindings, condition | Used by `setGraph()` — if false, increments `pipelineRevision` (shader recompile) |
+| `isStructureEqual(a, b)` | id, type, enabled, bindings, condition.**active** | Used by `setGraph()` — if false, increments `pipelineRevision` (shader recompile). Only `condition.active` is structural; `mod` and `rem` are runtime uniforms, not structural. |
 | `isPipelineEqual(a, b)` | Full JSON equality (including param values) | If false (but structure equal), emits CONFIG for uniform update only |
 
 ## 7. Graph Serialization and Persistence
@@ -395,9 +406,9 @@ if (distOverride < 999.0) { finalD = distOverride; smoothIter = iter; }
 
 On every frame (not just recompiles):
 ```
-MaterialController.syncModularUniforms(config.pipeline)
-  → updateModularUniforms(pipeline, Float32Array[64])
-  → Writes param values to sequential array slots
+MaterialController.syncModularUniforms(config.pipeline, config.graph?.edges ?? [])
+  → updateModularUniforms(pipeline, edges, Float32Array[64])
+  → Writes param values to sequential array slots (DCE-matched)
   → Sets mainUniforms['uModularParams'].value
 ```
 
@@ -420,26 +431,51 @@ Built on **React Flow v11**. Renders three custom node types:
 - **Flow → Store** (`syncToStore`): Called after every user interaction (connect, drag, delete, param change). Extracts `GraphNode[]` from React Flow, calls `actions.setGraph()`.
 
 **Toolbar controls:**
-- "Add Node" dropdown — grouped by category from `nodeRegistry.getGrouped()`
+- "Add Node" dropdown — activates **ghost insert mode** (cursor becomes crosshair, ghost tooltip follows mouse, edges highlight cyan). Click an edge to insert the node between source and target; click empty canvas to place freely; Escape cancels.
 - "Load Preset" dropdown — from `MODULAR_PRESETS`
 - "Auto Compile" checkbox — when off, structural changes don't auto-recompile
-- "Preview Mode" checkbox — lower-quality preview for faster iteration
-- "COMPILE" button — calls `refreshPipeline()`. Pulses amber when auto-compile is off and changes are pending.
+- "COMPILE" button — calls `refreshPipeline()`. Pulses amber when auto-compile is off.
+
+**Tab zoom/pan persistence:**
+Zoom level and pan position persist across tab switches via a module-level `persistedViewport` variable. `useRef` would reset on unmount; module-level survives. Restored via `reactFlowInstance.setViewport()` in `onInit`.
+
+**Undo/Redo:**
+Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z trigger `undoParam` / `redoParam` (keydown listener scoped to the graph editor, skips inputs/textareas). All mutations (connect, delete edge, delete node, drag, param slider change) are wrapped with `handleInteractionStart('param')` + `handleInteractionEnd()` pairs so they land in the undo stack.
+
+**Ghost insert UX:**
+When a node type is selected (from dropdown or right-click context menu), ghost mode activates:
+1. Cursor changes to crosshair
+2. Ghost tooltip follows the mouse: `+ NodeLabel / Click edge to insert · Click pane to place · Esc to cancel`
+3. All edges highlight cyan (non-CSG nodes only)
+4. Clicking a highlighted edge inserts the node between its source and target (splits the edge into two)
+5. Clicking the empty canvas places the node at that position
+6. Escape cancels
+
+CSG nodes (dual-input) can't be edge-inserted (they need two inputs); edges don't highlight for CSG, but pane placement still works.
+
+**Auto-reconnect on delete:**
+When a non-CSG node is deleted via the × button or context menu → Delete, `handleRemoveNode` finds the primary incoming edge (to handle `a` or no handle) and the outgoing edge, then creates a bridge edge connecting parent directly to child. CSG nodes are excluded (ambiguous which input to reconnect).
+
+**`clientToFlow(clientX, clientY)` coordinate helper:**
+ReactFlow v11's `project()` expects coordinates **relative to the ReactFlow container element**, not `clientX/Y` (viewport-relative). The helper subtracts `wrapperRef.current.getBoundingClientRect()` before calling `project`. Used everywhere a client coordinate is converted to flow space (pane click, edge click, context menu).
+
+**`skipNextOnNodesDelete` ref:**
+When `handleRemoveNode` calls `setNodes`, ReactFlow fires `onNodesDelete` before its internal edge store reflects the bridge edge added via `setEdges`. Without this guard, `onNodesDelete`'s `syncToStore(getNodes(), getEdges())` would overwrite the store with old edges, removing the bridge. The ref tells `onNodesDelete` to stand down when `handleRemoveNode` is doing its own sync.
 
 ### 9.2 ShaderNode (`components/panels/flow/ShaderNode.tsx`)
 
 Each node renders as a card with:
-- **Color-coded header** by category: pink (Fractals), amber (Folds), blue (Transforms/Distortion), green (CSG)
+- **Color-coded header** by category: pink (Fractals), amber (Folds), blue (Transforms/Distortion), green (CSG), purple (Primitives), gray (Utils). The header span has a `title={def?.description}` attribute for tooltip documentation.
 - **Handles:** Single top target + single bottom source for normal nodes. CSG nodes get two top handles (A left, B right).
 - **Body:** `NodeParams` component with sliders, binding toggles, and condition controls.
-- **Enable/disable** toggle and delete button.
+- **Enable/disable** toggle and delete button. The outer card has `opacity-40` when `node.enabled === false`.
 
 ### 9.3 NodeParams (`components/panels/node-editor/NodeParams.tsx`)
 
 Renders parameter sliders with optional binding toggles:
-- Each slider has a link icon. When bound, label shows `"Label (Bound to ParamX)"` with cyan highlight.
+- Each slider has a **dropdown** (A–F + `—` for unbound). When bound, label shows `"Label (→ ParamX)"` with cyan highlight.
 - Note nodes render a `<textarea>` instead of sliders.
-- **Condition section:** Collapsible "Logic / Condition" at the bottom. When active, shows `Modulo` (1–10) and `Remainder` (0 to mod-1) sliders with a preview: `if (iter % Mod == Rem)`.
+- **Condition section:** Collapsible "Logic / Condition" at the bottom. When active, shows **"Interval (every N iters)"** (1–10) and **"Starting Iteration"** (0 to mod-1) sliders with a description preview: `"Run every {mod} iterations, starting at #{rem}"`. `rem` is clamped to `[0, mod-1]` when `mod` is decreased.
 
 ### 9.4 GraphContextMenu (`components/panels/flow/GraphContextMenu.tsx`)
 
@@ -515,10 +551,14 @@ condition: {
 
 When active, the compiler wraps the node's GLSL in:
 ```glsl
-if ( (i - (i/3)*3) == 1 ) {   // Example: mod=3, rem=1
-    // Node code only runs on iterations 1, 4, 7, 10, ...
-}
+{ int v_node1_cmod = max(1, int(uModularParams[0]));
+  int v_node1_crem = int(uModularParams[1]);
+  if ( (i - (i/v_node1_cmod)*v_node1_cmod) == v_node1_crem ) {
+      // Node code only runs on matching iterations
+  }}
 ```
+
+Condition slots appear BEFORE the node's own param slots in the array. Only `active` is structural (recompiles). `mod`/`rem` are runtime — dragging sliders updates uniforms with no recompile.
 
 This enables **hybrid fractals** — different operations on different iterations of the fractal loop. For example: BoxFold on even iterations, SphereFold on odd ones.
 
@@ -528,7 +568,7 @@ This enables **hybrid fractals** — different operations on different iteration
 |----------|----------|
 | Empty/disconnected graph | `compileGraph` returns a safe no-op formula (`z += c; trap = length(z)`) |
 | Unknown node type | `nodeRegistry.get()` returns `undefined`; compiler skips code generation. UI shows `"Unknown Node Type: X"` in red. |
-| Cycle in graph | `hasCycle()` checked before every `addEdge`. Connection is rejected if it would create a cycle. |
+| Cycle in graph | `hasCycle()` checked before every `addEdge`. Connection is rejected if it would create a cycle. A toast/notification is shown via `openGlobalMenu` (previously silent). |
 | Param overflow (>64) | `getParam()` returns `"0.0"` literal instead of crashing |
 | Shader cache hit | `MaterialController` uses `cyrb53` hash of GLSL string. If hash matches, skips GPU recompile. |
 | Two-stage compilation | Preview shader renders immediately while full shader compiles async. Generation counter cancels stale compiles. |

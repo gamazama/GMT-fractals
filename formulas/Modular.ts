@@ -7,7 +7,7 @@ export const Modular: FractalDefinition = {
     name: 'Modular Builder',
     shortDescription: 'Construct custom fractal equations using a Node Graph.',
     description: 'Construct your own fractal equation by chaining operations together. Combine folds, rotations, and logic via the Graph tab.',
-    juliaType: 'none',
+    juliaType: 'julia',
     
     shader: {
         // Placeholders: The ShaderFactory intercepts 'Modular' ID 

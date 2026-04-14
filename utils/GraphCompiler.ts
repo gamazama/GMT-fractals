@@ -4,24 +4,39 @@ import { MAX_MODULAR_PARAMS } from '../data/constants';
 import { nodeRegistry } from '../engine/NodeRegistry';
 import '../data/nodes/definitions'; // Ensure registry is populated
 
-export const compileGraph = (sortedNodes: PipelineNode[], edges: GraphEdge[]): string => {
-    // 1. Dead Code Elimination (DCE)
+/** Build a Map<targetId, edges[]> for O(1) per-node lookup. */
+const buildInputsByTarget = (edges: GraphEdge[]): Map<string, GraphEdge[]> => {
+    const map = new Map<string, GraphEdge[]>();
+    edges.forEach(e => {
+        if (!map.has(e.target)) map.set(e.target, []);
+        map.get(e.target)!.push(e);
+    });
+    return map;
+};
+
+/** Walk backward from root-end to find all reachable (live) node IDs. */
+const buildLiveNodeIds = (inputsByTarget: Map<string, GraphEdge[]>): Set<string> => {
     const liveNodeIds = new Set<string>();
     const stack = ['root-end'];
     const visited = new Set<string>();
-
     while (stack.length > 0) {
         const currentId = stack.pop()!;
         if (visited.has(currentId)) continue;
         visited.add(currentId);
-        
         if (currentId !== 'root-end' && currentId !== 'root-start') {
             liveNodeIds.add(currentId);
         }
-
-        const inputEdges = edges.filter(e => e.target === currentId);
-        inputEdges.forEach(e => stack.push(e.source));
+        (inputsByTarget.get(currentId) ?? []).forEach(e => stack.push(e.source));
     }
+    return liveNodeIds;
+};
+
+export const compileGraph = (sortedNodes: PipelineNode[], edges: GraphEdge[]): string => {
+    // Pre-index edges by target — used for both DCE and per-node input resolution.
+    const inputsByTarget = buildInputsByTarget(edges);
+
+    // 1. Dead Code Elimination (DCE)
+    const liveNodeIds = buildLiveNodeIds(inputsByTarget);
 
     const activeNodes = sortedNodes.filter(n => liveNodeIds.has(n.id));
 
@@ -56,7 +71,7 @@ export const compileGraph = (sortedNodes: PipelineNode[], edges: GraphEdge[]): s
         const varName = `v_${safeId}`;
         varMap.set(node.id, varName);
 
-        const inputEdges = edges.filter(e => e.target === node.id);
+        const inputEdges = inputsByTarget.get(node.id) ?? [];
         const edgeA = inputEdges.find(e => !e.targetHandle || e.targetHandle === 'a');
         const edgeB = inputEdges.find(e => e.targetHandle === 'b');
         
@@ -74,11 +89,14 @@ export const compileGraph = (sortedNodes: PipelineNode[], edges: GraphEdge[]): s
             if (def) {
                 const hasCondition = node.condition && node.condition.active;
                 let indent = "    ";
-                
+
                 if (hasCondition) {
-                    const mod = Math.round(Math.max(1, node.condition!.mod));
-                    const rem = Math.round(node.condition!.rem);
-                    body += `    if ( (i - (i/${mod})*${mod}) == ${rem} ) {\n`;
+                    // mod/rem are runtime uniforms — dragging sliders updates them
+                    // without triggering a shader recompile. Only toggling `active` recompiles.
+                    const modSlot = paramCounter < MAX_MODULAR_PARAMS ? `uModularParams[${paramCounter++}]` : '2.0';
+                    const remSlot = paramCounter < MAX_MODULAR_PARAMS ? `uModularParams[${paramCounter++}]` : '0.0';
+                    body += `    { int ${varName}_cmod = max(1, int(${modSlot})); int ${varName}_crem = int(${remSlot});\n`;
+                    body += `    if ( (i - (i/${varName}_cmod)*${varName}_cmod) == ${varName}_crem ) {\n`;
                     indent = "        ";
                 }
 
@@ -104,7 +122,7 @@ export const compileGraph = (sortedNodes: PipelineNode[], edges: GraphEdge[]): s
                     indent
                 });
 
-                if (hasCondition) body += `    }\n`;
+                if (hasCondition) body += `    }}\n`;
             }
         }
         
@@ -139,48 +157,33 @@ ${body}
 };
 
 // --- RUNTIME UPDATE HELPER ---
-// Iterates the nodes in the exact same order as compilation (topological sort assumed for now) to map values
-export const updateModularUniforms = (pipeline: PipelineNode[], uniformArray: Float32Array) => {
+// Applies the same DCE logic as compileGraph so that uniform slot indices match exactly.
+// Pass the graph edges so that dead (disconnected) nodes are skipped — just like the compiler does.
+export const updateModularUniforms = (pipeline: PipelineNode[], edges: GraphEdge[], uniformArray: Float32Array) => {
     uniformArray.fill(0);
     let idx = 0;
     const setP = (v: number) => { if (idx < MAX_MODULAR_PARAMS) uniformArray[idx++] = v; };
 
-    // Warning: The array update logic assumes the pipeline array passed here matches
-    // the order of nodes used in 'compileGraph'. Since we store 'pipeline' as the sorted array,
-    // this usually works. But if DCE is active, we must match the filtering logic or indexes will drift.
-    
-    // NOTE: For robustness, we should ideally use the same 'activeNodes' filter.
-    // However, recreating that logic here is expensive every frame.
-    // Standard approach: 'updateModularUniforms' assumes ALL nodes in the sorted pipeline contribute
-    // or that the compiler assigns indexes even to dead nodes to keep order consistent.
-    // Currently, compiler ONLY assigns indexes to active nodes. 
-    // This creates a potential mismatch if the pipeline array contains dead nodes but compiler filtered them.
-    // BUT: The Store sets `pipeline` to `topologicalSort(nodes)`. It includes dead nodes.
-    // FIX: We must filter `pipeline` using the same logic as `compileGraph` OR change `compileGraph` to skip logic but burn params for consistency.
-    // BETTER FIX: Let's assume for now that if a node is in the pipeline but disconnected, the user probably won't be adjusting its sliders live 
-    // and expecting visual updates.
-    // However, if we slide a dead node, and it writes to uModularParams[N], but the shader thinks N belongs to a live node, CHAOS ensues.
-    //
-    // SOLUTION: Use the same dead-code check here.
-    // We need the edges to do DCE.
-    // If edges aren't available here, we have a problem.
-    // The store passes `config.pipeline`. `config.graph` is also available in ShaderConfig.
-    // We should update `MaterialController.ts` to pass the full graph if possible, or just the filtered active pipeline.
-    
-    // For now, we will simply iterate ALL nodes in the pipeline.
-    // IMPORTANT: The `compileGraph` function needs to change to iterate ALL sorted nodes 
-    // but just not generate code for dead ones, WHILE still incrementing the param counter.
-    // This wastes uniform slots but guarantees stability.
-    
+    // Replicate DCE: same upstream walk as compileGraph so slot indices match.
+    const liveNodeIds = buildLiveNodeIds(buildInputsByTarget(edges));
+
     pipeline.forEach(node => {
+        // Skip dead nodes (not reachable from root-end) — matches compileGraph DCE.
+        if (!liveNodeIds.has(node.id)) return;
+        // Skip disabled nodes — matches compileGraph behaviour (no GLSL emitted, no slots).
         if (!node.enabled) return;
-        
-        // We always increment counter to match compiler's robust mode
+
+        // Condition mod/rem occupy slots BEFORE node params (compiler allocates them first).
+        if (node.condition?.active) {
+            setP(Math.max(1, Math.round(node.condition.mod)));
+            setP(Math.max(0, Math.round(node.condition.rem)));
+        }
+
         const def = nodeRegistry.get(node.type);
         if (def) {
             def.inputs.forEach(input => {
                 if (node.bindings && node.bindings[input.id]) {
-                     // Bound params skip the array in compiler too
+                    // Bound params resolve to named uniforms in the compiler — no slot consumed.
                 } else {
                     const val = node.params[input.id] ?? input.default;
                     setP(val);

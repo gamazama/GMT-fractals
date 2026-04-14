@@ -5,6 +5,7 @@ const generateUniformsGLSL = () => {
     let glsl = `precision highp float;\nprecision highp int;\n\n`;
     
     UNIFORM_SCHEMA.forEach(u => {
+        if (u.backingOnly) return; // Three.js backing only — GLSL declaration injected conditionally by features
         if (u.arraySize) {
             glsl += `uniform ${u.type} ${u.name}[${u.arraySize}];\n`;
         } else {

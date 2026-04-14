@@ -491,14 +491,14 @@ export class MaterialController {
         this.setUniform(name, { isGradientBuffer: true, buffer });
     }
     
-    public syncModularUniforms(pipeline: any[]) {
+    public syncModularUniforms(pipeline: any[], edges: any[] = []) {
         const modularParams = this.mainUniforms[Uniforms.ModularParams].value as Float32Array;
-        updateModularUniforms(pipeline, modularParams);
-        
+        updateModularUniforms(pipeline, edges, modularParams);
+
         (this.histogramUniforms[Uniforms.ModularParams].value as Float32Array).set(modularParams);
     }
 
-    public syncConfigUniforms(config: ShaderConfig) {
+    public syncConfigUniforms(config: ShaderConfig, skipModularSync: boolean = false) {
         const features = featureRegistry.getAll();
 
         features.forEach(feat => {
@@ -532,8 +532,8 @@ export class MaterialController {
             }
         });
         
-        if (config.pipeline) {
-            this.syncModularUniforms(config.pipeline);
+        if (!skipModularSync && config.pipeline) {
+            this.syncModularUniforms(config.pipeline, config.graph?.edges ?? []);
         }
     }
 }

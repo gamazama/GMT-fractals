@@ -46,6 +46,12 @@ export class UniformManager {
     private _selfResized = false;       // Flag to ignore self-caused accumulation resets
     private _fullResAccum = 0;          // Accumulation count at full resolution only
 
+    /** Returns the current FPS-scaled adaptive grace period (ms). Used by FractalEngine
+     *  to hold accumulation until adaptive resolution has settled at full res. */
+    public getAdaptiveGrace(): number {
+        return Math.max(100, Math.min(3000, 2000 / Math.max(1, this._adaptiveStillFps)));
+    }
+
     constructor(
         uniforms: { [key: string]: THREE.IUniform }, 
         virtualSpace: VirtualSpace,
@@ -105,7 +111,7 @@ export class UniformManager {
             this._selfResized = false;
 
             // Auto grace period: scales with rendering cost
-            const autoGrace = Math.max(100, Math.min(3000, 2000 / Math.max(1, this._adaptiveStillFps)));
+            const autoGrace = this.getAdaptiveGrace();
             const timeSinceActivity = now - this._lastActivityTime;
 
             // Track full-res accumulation separately: only samples rendered at full
