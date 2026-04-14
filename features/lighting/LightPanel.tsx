@@ -81,19 +81,6 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
               checked: light.falloffType === 'Linear',
               action: () => actions.updateLight({ index: activeLight, params: { falloffType: 'Linear' as FalloffType } })
           },
-          { label: 'Batch', isHeader: true },
-          {
-              label: 'Apply to all lights',
-              action: () => {
-                  lighting.lights.forEach((_, i) => {
-                      actions.updateLight({ index: i, params: {
-                          falloffType: light.falloffType,
-                          intensityUnit: light.intensityUnit,
-                          range: light.range
-                      }});
-                  });
-              }
-          }
       ];
       openGlobalMenu(e.clientX, e.clientY, items, ['panel.light']);
   };

@@ -6,6 +6,7 @@ import ShadowSettingsPopup from '../../features/lighting/components/ShadowContro
 import { ShadowIcon, GizmoIcon, ChevronDown, ChevronUp, PlusIcon } from '../Icons';
 import { getLightFromSlice } from '../../features/lighting';
 import { activeLightPopup } from '../../features/lighting/utils/GizmoMath';
+import { buildCoreLightMenuItems } from '../../features/lighting/utils/lightMenuUtils';
 import { MAX_LIGHTS } from '../../data/constants';
 
 export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number | number[]) => void }> = ({ isMobileMode, vibrate }) => {
@@ -19,9 +20,22 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     const [isExpanded, setIsExpanded] = useState(false);
     
     const lightHoverTimeoutRef = useRef<number | null>(null);
+    const mouseInsideLightOrbRef = useRef(false);
     const shadowMenuRef = useRef<HTMLDivElement>(null);
     const hudRef = useRef<HTMLDivElement>(null);
     const expandRef = useRef<HTMLDivElement>(null);
+
+    // Keep popup alive while context menu is open; restart hide timer when it closes
+    const isContextMenuOpen = useFractalStore(s => s.contextMenu.visible);
+    const prevContextMenuOpenRef = useRef(false);
+    useEffect(() => {
+        const wasOpen = prevContextMenuOpenRef.current;
+        prevContextMenuOpenRef.current = isContextMenuOpen;
+        if (wasOpen && !isContextMenuOpen && hoveredLight !== null && !mouseInsideLightOrbRef.current) {
+            if (lightHoverTimeoutRef.current) clearTimeout(lightHoverTimeoutRef.current);
+            lightHoverTimeoutRef.current = window.setTimeout(() => setHoveredLight(null), 300);
+        }
+    }, [isContextMenuOpen, hoveredLight]);
 
     // Sync active light popup ref for gizmo range circle
     useEffect(() => {
@@ -71,74 +85,11 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     handleInteractionEnd();
                 }
             },
-            { label: 'Type', isHeader: true },
-            {
-                label: 'Point',
-                checked: light.type === 'Point',
-                action: () => {
-                    handleInteractionStart('param');
-                    state.updateLight({ index, params: { type: 'Point' } });
-                    handleInteractionEnd();
-                }
-            },
-            {
-                label: 'Directional (Sun)',
-                checked: light.type === 'Directional',
-                action: () => {
-                    handleInteractionStart('param');
-                    state.updateLight({ index, params: { type: 'Directional' } });
-                    handleInteractionEnd();
-                }
-            },
-            { label: 'Intensity Unit', isHeader: true },
-            {
-                label: 'Raw (Linear)',
-                checked: (light.intensityUnit ?? 'raw') === 'raw',
-                action: () => {
-                    handleInteractionStart('param');
-                    if (light.intensityUnit === 'ev') {
-                        // Convert EV back to linear: 2^ev
-                        const linear = Math.pow(2, light.intensity);
-                        state.updateLight({ index, params: { intensityUnit: 'raw', intensity: Math.round(linear * 100) / 100 } });
-                    } else {
-                        state.updateLight({ index, params: { intensityUnit: 'raw' } });
-                    }
-                    handleInteractionEnd();
-                }
-            },
-            {
-                label: 'Exposure (EV)',
-                checked: light.intensityUnit === 'ev',
-                action: () => {
-                    handleInteractionStart('param');
-                    if ((light.intensityUnit ?? 'raw') === 'raw') {
-                        const ev = light.intensity > 0 ? Math.max(-4, Math.min(10, Math.log2(light.intensity))) : 0;
-                        state.updateLight({ index, params: { intensityUnit: 'ev', intensity: Math.round(ev * 10) / 10 } });
-                    } else {
-                        state.updateLight({ index, params: { intensityUnit: 'ev' } });
-                    }
-                    handleInteractionEnd();
-                }
-            },
-            { label: 'Falloff Curve', isHeader: true },
-            {
-                label: 'Quadratic (Smooth)',
-                checked: (light.falloffType ?? 'Quadratic') === 'Quadratic',
-                action: () => {
-                    handleInteractionStart('param');
-                    state.updateLight({ index, params: { falloffType: 'Quadratic' } });
-                    handleInteractionEnd();
-                }
-            },
-            {
-                label: 'Linear (Artistic)',
-                checked: light.falloffType === 'Linear',
-                action: () => {
-                    handleInteractionStart('param');
-                    state.updateLight({ index, params: { falloffType: 'Linear' } });
-                    handleInteractionEnd();
-                }
-            }
+            ...buildCoreLightMenuItems(index, (params) => {
+                handleInteractionStart('param');
+                state.updateLight({ index, params });
+                handleInteractionEnd();
+            }),
         ];
 
         openContextMenu(e.clientX, e.clientY, items, ['panel.light']);
@@ -176,14 +127,19 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
     const handleLightMouseEnter = (index: number, e: React.MouseEvent) => {
         if (isMobileMode || (e.nativeEvent as any).pointerType === 'touch') return;
         if (lightHoverTimeoutRef.current) clearTimeout(lightHoverTimeoutRef.current);
+        mouseInsideLightOrbRef.current = true;
         setHoveredLight(index);
     };
 
     const handleLightMouseLeave = () => {
         if (isMobileMode) return;
+        mouseInsideLightOrbRef.current = false;
         lightHoverTimeoutRef.current = window.setTimeout(() => {
-            setHoveredLight(null);
-        }, 400); 
+            // Don't hide while the context menu is open — the popup stays until menu closes
+            if (!useFractalStore.getState().contextMenu.visible) {
+                setHoveredLight(null);
+            }
+        }, 400);
     };
     
     const handleDragStartLogic = (i: number) => {

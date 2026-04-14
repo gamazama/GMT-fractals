@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import * as THREE from 'three';
 import { useFractalStore } from '../../../store/fractalStore';
 import { useAnimationStore } from '../../../store/animationStore';
@@ -9,7 +9,8 @@ const engine = getProxy();
 import { getViewportCamera } from '../../../engine/worker/ViewportRefs';
 import Slider from '../../../components/Slider';
 import EmbeddedColorPicker from '../../../components/EmbeddedColorPicker';
-import { KeyIcon, TrashIcon, KeyStatus } from '../../../components/Icons';
+import { KeyIcon, KeyStatus, AnchorIcon, UnanchoredIcon, MenuIcon } from '../../../components/Icons';
+import { buildCoreLightMenuItems } from '../utils/lightMenuUtils';
 import { KeyframeButton } from '../../../components/KeyframeButton';
 import { evaluateTrackValue } from '../../../utils/timelineUtils';
 import { LightType } from '../../../types';
@@ -131,7 +132,10 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
     const updateLight = useFractalStore(s => s.updateLight);
     const removeLight = useFractalStore(s => s.removeLight);
     const duplicateLight = useFractalStore(s => s.duplicateLight);
+    const openContextMenu = useFractalStore(s => s.openContextMenu);
     const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+
+    const menuBtnRef = useRef<HTMLButtonElement>(null);
     
     // Animation Store for Keyframing
     const { addTrack, addKeyframe, currentFrame, sequence, isPlaying } = useAnimationStore();
@@ -139,6 +143,32 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
     // Temperature mode state - default to temperature if light has useTemperature flag
     const [useTempMode, setUseTempMode] = useState(light.useTemperature ?? false);
     const [tempKelvin, setTempKelvin] = useState(light.temperature ?? 6500);
+
+    const handleMenuClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const r = menuBtnRef.current?.getBoundingClientRect();
+        if (!r) return;
+        const allLights = useFractalStore.getState().lighting?.lights ?? [];
+        const items = [
+            ...buildCoreLightMenuItems(index, (params) => {
+                handleInteractionStart('param');
+                updateLight({ index, params });
+                handleInteractionEnd();
+            }),
+            { label: 'Light', isHeader: true },
+            {
+                label: 'Duplicate',
+                action: () => { handleInteractionStart('param'); duplicateLight(index); handleInteractionEnd(); }
+            },
+            {
+                label: 'Delete',
+                danger: true,
+                disabled: allLights.length <= 1,
+                action: () => { handleInteractionStart('param'); removeLight(index); handleInteractionEnd(); }
+            },
+        ];
+        openContextMenu(r.left, r.bottom + 4, items, ['panel.light']);
+    };
 
     if (!light.visible) return null;
 
@@ -245,38 +275,24 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                     </div>
                     <div className="flex items-center gap-1">
                         <button
-                             onClick={(e) => {
-                                 e.stopPropagation();
-                                 handleInteractionStart('param');
-                                 duplicateLight(index);
-                                 handleInteractionEnd();
-                             }}
-                             className="p-1 text-gray-400 hover:text-cyan-300 hover:bg-cyan-900/20 rounded transition-colors"
-                             title="Duplicate Light"
-                        >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-                        </button>
-                        <button
-                             onClick={(e) => {
-                                 e.stopPropagation();
-                                 handleInteractionStart('param');
-                                 removeLight(index);
-                                 handleInteractionEnd();
-                             }}
-                             className="p-1 text-red-500 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors"
-                             title="Remove Light"
-                        >
-                            <TrashIcon />
-                        </button>
-                        <button 
-                            onClick={() => {
+                            onClick={(e) => {
+                                e.stopPropagation();
                                 handleInteractionStart('param');
                                 handleToggleFixed();
                                 handleInteractionEnd();
                             }}
-                            className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${light.fixed ? 'bg-orange-500/20 text-orange-300 border-orange-500/50' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'}`}
+                            className={`p-1 rounded transition-colors ${light.fixed ? 'text-orange-300 hover:text-orange-200 hover:bg-orange-900/20' : 'text-cyan-400 hover:text-cyan-200 hover:bg-cyan-900/20'}`}
+                            title={light.fixed ? 'Attached to Camera (click to unanchor)' : 'World Anchored (click to attach to camera)'}
                         >
-                            {light.fixed ? 'ANCHORED' : 'FLOATING'}
+                            {light.fixed ? <UnanchoredIcon /> : <AnchorIcon />}
+                        </button>
+                        <button
+                            ref={menuBtnRef}
+                            onClick={handleMenuClick}
+                            className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
+                            title="Light options"
+                        >
+                            <MenuIcon />
                         </button>
                     </div>
                 </div>

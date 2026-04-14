@@ -30,7 +30,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         e.preventDefault();
         e.stopPropagation();
         const items = buildFormulaContextMenu();
-        openGlobalMenu(e.clientX, e.clientY, items, []);
+        openGlobalMenu(e.clientX, e.clientY, items, ['formula.active']);
     };
 
     const handleMenuButtonClick = (e: React.MouseEvent) => {
@@ -38,7 +38,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
         const r = menuBtnRef.current?.getBoundingClientRect();
         if (!r) return;
         const items = buildFormulaContextMenu();
-        openGlobalMenu(r.left, r.bottom + 4, items, []);
+        openGlobalMenu(r.left, r.bottom + 4, items, ['formula.active']);
     };
 
     const toggle = () => {

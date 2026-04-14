@@ -163,7 +163,7 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
     };
 
     const items: ContextMenuItem[] = [
-        { label: 'Import Options', action: () => {}, isHeader: true },
+        { label: 'Formula Loading', action: () => {}, isHeader: true },
         { label: 'Lock Scene Settings', checked: state.lockSceneOnSwitch, action: () => state.setLockSceneOnSwitch(!state.lockSceneOnSwitch) },
         { label: 'Randomize', action: () => {}, isHeader: true },
         { element: React.createElement(RandomizeSection, { onRandomizeParams: randomizeParams, onRandomizeFull: randomizeFull }), keepOpen: true, action: () => {} },

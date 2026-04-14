@@ -14,10 +14,13 @@ The engine utilizes a sophisticated **Physically Based Rendering (PBR)** approxi
 - **Directional (Sun)**: Parallel rays from infinity. Has rotation only. No falloff.
 
 ## Top Bar Interaction
-- **Light Orbs**: Toggle lights on/off by clicking the orbs in the top bar.
-- **Drag & Drop**: Drag a light orb from the top bar directly onto the 3D viewport to place a light on the surface at that point (Raycast placement).
-- **Context Menu**: Right-click the light orbs to access quick settings or help.
-- **Duplicate Light**: Use the duplicate button in a light's controls to copy its settings to a new light slot.
+- **Light Orbs**: Click an orb to toggle that light on/off.
+- **Hover Popup**: Hover over any orb to open its settings popup — Power, Range, Color/Temperature, Cast Shadows, and a direction control for Sun lights.
+- **Anchor Icon**: In the popup header, the anchor icon toggles between **World** (cyan) and **Headlamp** (orange) mode. See *Attachment Mode* below.
+- **☰ Menu**: Opens options for Light Type, Intensity Unit, Falloff Curve, Duplicate, and Delete.
+- **Right-click**: Opens the quick context menu (same options as ☰, plus a help section).
+- **Drag & Drop**: Drag a light orb onto the 3D viewport to place it near the visible surface. Automatically enables shadows and gizmos on drop.
+- **Expand (↓)**: The small chevron at the right of the light orbs expands the studio to show all 8 light slots.
 
 ## Lights
 You can enable up to **8 independent light sources** to sculpt the 3D form. The default setup uses a classic 3-point arrangement:
@@ -28,7 +31,7 @@ You can enable up to **8 independent light sources** to sculpt the 3D form. The 
 You can add more lights beyond these three for complex multi-light setups.
 
 ## Gizmos
-When the panel is open or **Show 3d helpers** is enabled, lights appear as glowing sprites in the viewport.
+When **Show 3D helpers** is enabled (in the Advanced Light panel), Point lights appear as draggable glowing sprites in the viewport with X/Y/Z axis handles.
 `
     },
     'light.type': {
@@ -113,19 +116,24 @@ This is a quick way to get natural-looking light colors without fiddling with th
         title: 'Attachment Mode (Headlamp vs World)',
         parentId: 'panel.light',
         content: `
-Every light can be anchored in two different coordinate spaces.
+Every light can be anchored in two different coordinate spaces. Toggle between them using the **anchor icon** in the top-left of the light's popup (or the Attachment Mode toggle in the Advanced Light panel).
 
-### Headlamp
+- **Cyan anchor icon** = World anchored. Click to switch to Headlamp.
+- **Orange crossed-anchor icon** = Attached to Camera (Headlamp). Click to switch to World.
+
+When switching modes the light's position is automatically converted so it stays in the same visual location.
+
+### Headlamp (Camera-attached)
 The light is parented to the **Camera**.
-- **Behavior**: If you move, the light moves with you.
-- **Coordinates**: $(0,0,0)$ places the light exactly inside the camera lens.
-- **Use Case**: Flashlights, exploration, ensuring the fractal is always visible while flying.
+- **Behavior**: Moves with you as you fly.
+- **Coordinates**: $(0,0,0)$ places the light exactly at the camera lens.
+- **Use Case**: Flashlights, exploration, ensuring a surface is always lit while navigating.
 
-### World
+### World (Scene-anchored)
 The light is parented to the **Fractal Universe**.
-- **Behavior**: The light exists at a specific coordinate. You can fly past it, orbit around it, or leave it behind.
+- **Behavior**: The light exists at a fixed coordinate. You can fly past it, orbit around it, or leave it behind.
 - **Use Case**: Suns, glowing artifacts, establishing a "sense of place" in a scene.
-- **Note**: If you reset the camera position, World lights might end up far away. Use the **Gizmo** to find them.
+- **Note**: If you reset the camera position, World lights might end up far away. Enable **Show 3D helpers** to locate them via their gizmo.
 `
     },
     'light.falloff': {
