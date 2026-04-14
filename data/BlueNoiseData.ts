@@ -7,22 +7,28 @@ const isWorkerContext = typeof document === 'undefined';
 /**
  * Creates a blue noise texture. Uses TextureLoader in main thread,
  * fetch + DataTexture in worker context (no DOM APIs available).
+ * onLoad is called with (width, height) once the real texture data is available,
+ * so callers can sync uBlueNoiseResolution to the actual texture size.
  */
-export const createBlueNoiseTexture = (): THREE.Texture => {
+export const createBlueNoiseTexture = (onLoad?: (w: number, h: number) => void): THREE.Texture => {
     if (isWorkerContext) {
-        return createBlueNoiseWorker();
+        return createBlueNoiseWorker(onLoad);
     }
-    return createBlueNoiseMainThread();
+    return createBlueNoiseMainThread(onLoad);
 };
 
-function createBlueNoiseMainThread(): THREE.Texture {
+function createBlueNoiseMainThread(onLoad?: (w: number, h: number) => void): THREE.Texture {
     const loader = new THREE.TextureLoader();
     loader.crossOrigin = 'anonymous';
 
     try {
         const texture = loader.load(
             'blueNoise.png',
-            undefined,
+            (tex) => {
+                if (onLoad && tex.image) {
+                    onLoad(tex.image.width, tex.image.height);
+                }
+            },
             undefined,
             () => {
                 // Fallback handled by catch path
@@ -44,7 +50,7 @@ function createBlueNoiseMainThread(): THREE.Texture {
     }
 }
 
-function createBlueNoiseWorker(): THREE.Texture {
+function createBlueNoiseWorker(onLoad?: (w: number, h: number) => void): THREE.Texture {
     // Create a placeholder texture immediately
     const placeholder = createProceduralFallback();
 
@@ -77,9 +83,9 @@ function createBlueNoiseWorker(): THREE.Texture {
             bitmap.close();
 
             // Update the placeholder texture with real data
-            // UniformManager auto-syncs resolution from tex.image each frame
             placeholder.image = { data: new Uint8ClampedArray(imageData.data.buffer), width: w, height: h };
             placeholder.needsUpdate = true;
+            onLoad?.(w, h);
         })
         .catch((err) => {
             console.warn('[BlueNoise] Failed to load PNG, using procedural fallback:', err);

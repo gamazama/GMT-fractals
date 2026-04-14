@@ -79,7 +79,12 @@ export class MaterialController {
         const baseUniforms = createUniforms();
         
         // Initialize Blue Noise Texture
-        const blueNoiseTex = createBlueNoiseTexture();
+        // onLoad callback syncs uBlueNoiseResolution to the actual texture dimensions.
+        // The default (128x128) handles the procedural fallback; this corrects it if
+        // the real PNG has different dimensions.
+        const blueNoiseTex = createBlueNoiseTexture((w, h) => {
+            this.mainUniforms[Uniforms.BlueNoiseResolution].value.set(w, h);
+        });
         baseUniforms[Uniforms.BlueNoiseTexture].value = blueNoiseTex;
 
         this.mainUniforms = cloneUniforms(baseUniforms);
