@@ -3,12 +3,18 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useFractalStore } from '../../store/fractalStore';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
-import { CameraIcon, UndoIcon, RedoIcon, ResetIcon, LayersIcon } from '../Icons';
+import { CameraIcon, UndoIcon, RedoIcon, ResetIcon, LayersIcon, ChevronRight } from '../Icons';
 import { injectMetadata } from '../../utils/pngMetadata';
 import { Popover } from '../../components/Popover';
 import { getExportFileName } from '../../utils/fileUtils';
 import { saveGMFScene } from '../../utils/FormulaFormat';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
+
+const BookmarkIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+    </svg>
+);
 
 export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number) => void, btnBase: string, btnActive: string, btnInactive: string }> = ({ isMobileMode, vibrate, btnBase, btnActive, btnInactive }) => {
     const state = useFractalStore();
@@ -17,10 +23,20 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
     const [isCapturing, setIsCapturing] = useState(false);
     const [slotToast, setSlotToast] = useState<{ slot: number; label: string } | null>(null);
     const [managerDot, setManagerDot] = useState(false);
+    const [showBookmarkMenu, setShowBookmarkMenu] = useState(false);
     const camHoverTimeoutRef = useRef<number | null>(null);
     const toastTimeoutRef = useRef<number | null>(null);
     const dotTimeoutRef = useRef<number | null>(null);
+    const bookmarkTimeoutRef = useRef<number | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+
+    const handleBookmarkEnter = () => {
+        if (bookmarkTimeoutRef.current) clearTimeout(bookmarkTimeoutRef.current);
+        setShowBookmarkMenu(true);
+    };
+    const handleBookmarkLeave = () => {
+        bookmarkTimeoutRef.current = window.setTimeout(() => setShowBookmarkMenu(false), 150);
+    };
 
     // Listen for camera slot saves
     useEffect(() => {
@@ -189,7 +205,39 @@ export const CameraTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
                         <button onClick={() => { vibrate(30); state.resetCamera(); state.setShowLightGizmo(false); }} className="w-full flex items-center gap-2 p-2 rounded hover:bg-white/10 text-xs text-gray-300 text-left"><ResetIcon /> Reset Position</button>
                         
                         <div className="h-px bg-white/10 my-1" />
-                        
+
+                        {/* Bookmark camera → submenu */}
+                        <div
+                            className="relative"
+                            onMouseEnter={handleBookmarkEnter}
+                            onMouseLeave={handleBookmarkLeave}
+                        >
+                            <div className="w-full flex items-center justify-between p-2 rounded hover:bg-white/10 text-xs text-gray-300 cursor-default select-none">
+                                <span className="flex items-center gap-2"><BookmarkIcon /> Bookmark camera</span>
+                                <ChevronRight />
+                            </div>
+                            {showBookmarkMenu && (
+                                <div className="absolute right-full top-0 mr-1 w-52 bg-black border border-white/20 rounded-xl p-2 shadow-2xl z-[80] animate-fade-in">
+                                    <div className="px-2 py-1 text-[10px] font-bold text-gray-500 border-b border-white/10 mb-1">Save to slot</div>
+                                    {Array.from({ length: 9 }, (_, i) => {
+                                        const cam = state.savedCameras[i];
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => { vibrate(5); state.saveToSlot(i); setShowCameraMenu(false); }}
+                                                className="w-full flex items-center justify-between p-2 rounded hover:bg-white/10 text-left group"
+                                            >
+                                                <span className={`text-xs truncate max-w-[120px] ${cam ? 'text-gray-200 group-hover:text-white' : 'text-gray-600'}`}>
+                                                    {cam ? cam.label : `Slot ${i + 1}`}
+                                                </span>
+                                                <kbd className="text-[8px] text-gray-500 bg-gray-800 px-1 rounded shrink-0 ml-2">Ctrl+{i + 1}</kbd>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
                         <button onClick={handleOpenManager} className="w-full flex items-center gap-2 p-2 rounded hover:bg-white/10 text-xs text-cyan-300 text-left">
                             <LayersIcon /> Camera Manager
                             {managerDot && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />}
