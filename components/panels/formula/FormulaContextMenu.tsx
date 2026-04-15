@@ -105,32 +105,53 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
 
         if (!curDef) { s.handleInteractionEnd(); return; }
         const cur = s.coreMath;
+        const randFloat = (cur: number, min: number, max: number, step: number) => {
+            const range = max - min;
+            let r: number;
+            if (pct >= 1) {
+                r = Math.random() * range + min;
+            } else {
+                r = cur + (Math.random() * 2 - 1) * range * pct;
+            }
+            const clamped = Math.max(min, Math.min(max, r));
+            return step > 0 ? Math.round(clamped / step) * step : clamped;
+        };
+
         curDef.parameters.forEach((p) => {
             if (!p) return;
-            const range = p.max - p.min;
-            if (p.type === 'vec3') {
+            // Skip pure toggle (boolean) parameters — randomizing 0/1 booleans is jarring
+            if (p.mode === 'toggle') return;
+
+            if (p.type === 'vec4') {
+                const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number; z: number; w: number } || { x: 0, y: 0, z: 0, w: 0 };
+                updates[p.id] = {
+                    x: randFloat(cv.x, p.min, p.max, p.step),
+                    y: randFloat(cv.y, p.min, p.max, p.step),
+                    z: randFloat(cv.z, p.min, p.max, p.step),
+                    w: randFloat(cv.w, p.min, p.max, p.step),
+                };
+            } else if (p.type === 'vec3') {
                 const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number; z: number } || { x: 0, y: 0, z: 0 };
                 updates[p.id] = {
-                    x: Math.max(p.min, Math.min(p.max, cv.x + (Math.random() * 2 - 1) * range * pct)),
-                    y: Math.max(p.min, Math.min(p.max, cv.y + (Math.random() * 2 - 1) * range * pct)),
-                    z: Math.max(p.min, Math.min(p.max, cv.z + (Math.random() * 2 - 1) * range * pct)),
+                    x: randFloat(cv.x, p.min, p.max, p.step),
+                    y: randFloat(cv.y, p.min, p.max, p.step),
+                    z: randFloat(cv.z, p.min, p.max, p.step),
                 };
             } else if (p.type === 'vec2') {
                 const cv = (cur as unknown as Record<string, unknown>)[p.id] as { x: number; y: number } || { x: 0, y: 0 };
-                updates[p.id] = {
-                    x: Math.max(p.min, Math.min(p.max, cv.x + (Math.random() * 2 - 1) * range * pct)),
-                    y: Math.max(p.min, Math.min(p.max, cv.y + (Math.random() * 2 - 1) * range * pct)),
-                };
-            } else {
-                if (pct >= 1) {
-                    const r = Math.random() * range + p.min;
-                    updates[p.id] = p.step > 0 ? Math.round(r / p.step) * p.step : r;
+                if (p.mode === 'mixed') {
+                    // x is a boolean toggle — preserve it; randomize only the float y
+                    updates[p.id] = { x: cv.x, y: randFloat(cv.y, p.min, p.max, p.step) };
                 } else {
-                    const cv = ((cur as unknown as Record<string, unknown>)[p.id] as number) ?? ((p.min + p.max) / 2);
-                    const r = cv + (Math.random() * 2 - 1) * range * pct;
-                    const clamped = Math.max(p.min, Math.min(p.max, r));
-                    updates[p.id] = p.step > 0 ? Math.round(clamped / p.step) * p.step : clamped;
+                    updates[p.id] = {
+                        x: randFloat(cv.x, p.min, p.max, p.step),
+                        y: randFloat(cv.y, p.min, p.max, p.step),
+                    };
                 }
+            } else {
+                // float
+                const cv = ((cur as unknown as Record<string, unknown>)[p.id] as number) ?? ((p.min + p.max) / 2);
+                updates[p.id] = randFloat(cv, p.min, p.max, p.step);
             }
         });
         s.setCoreMath(updates);
