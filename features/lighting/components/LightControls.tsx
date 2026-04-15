@@ -281,6 +281,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                                 handleToggleFixed();
                                 handleInteractionEnd();
                             }}
+                            data-tut="light-anchor"
                             className={`p-1 rounded transition-colors ${light.fixed ? 'text-orange-300 hover:text-orange-200 hover:bg-orange-900/20' : 'text-cyan-400 hover:text-cyan-200 hover:bg-cyan-900/20'}`}
                             title={light.fixed ? 'Attached to Camera (click to unanchor)' : 'World Anchored (click to attach to camera)'}
                         >
@@ -289,6 +290,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         <button
                             ref={menuBtnRef}
                             onClick={handleMenuClick}
+                            data-tut="light-popup-menu"
                             className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
                             title="Light options"
                         >

@@ -164,6 +164,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             <button
                 ref={menuBtnRef}
                 onClick={handleMenuButtonClick}
+                data-tut="formula-hamburger"
                 className="w-4 flex items-center justify-center bg-white/[0.04] border border-white/10 hover:border-white/20 hover:bg-white/[0.08] text-gray-400 hover:text-white rounded-lg transition-colors"
                 title="Formula options"
             >
