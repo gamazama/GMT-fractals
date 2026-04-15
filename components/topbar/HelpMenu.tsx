@@ -162,7 +162,7 @@ export const HelpMenu: React.FC<HelpMenuProps> = ({ vibrate, btnBase, btnActive,
                                                 <div className="text-[9px] text-green-400 font-mono break-all">{gpuInfo}</div>
                                             </div>
                                         )}
-                                        <p className="text-[9px] text-gray-500 font-mono mb-1">v0.9.1</p>
+                                        <p className="text-[9px] text-gray-500 font-mono mb-1">v0.9.2</p>
                                         <p>GMT was crafted with ❤️ by <span className="text-white font-bold">Guy Zack</span> using <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Gemini</a> and <a href="https://claude.ai" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Claude</a>.</p>
 
                                         <div className="pt-2 border-t border-white/10">
