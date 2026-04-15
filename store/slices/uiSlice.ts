@@ -9,7 +9,7 @@ export type UISlice = Pick<FractalStoreState,
     'showLightGizmo' | 'isGizmoDragging' | 
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
-    'draggedLightIndex' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
+    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
     'resolutionMode' | 'fixedResolution' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
@@ -30,7 +30,7 @@ export type UISlice = Pick<FractalStoreState,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
-    'setDraggedLight' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
+    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
     'setResolutionMode' | 'setFixedResolution' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
@@ -87,6 +87,9 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     histogramData: null, histogramAutoUpdate: true, histogramTrigger: 0, histogramLayer: 0, histogramActiveCount: 0, histogramLoading: false,
     sceneHistogramData: null, sceneHistogramTrigger: 0, sceneHistogramActiveCount: 0,
     draggedLightIndex: null,
+    openLightPopupIndex: -1,
+    shadowPanelOpen: false,
+    vpQualityOpen: false,
     autoCompile: false,
     
     isUserInteracting: false,
@@ -184,6 +187,9 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     unregisterSceneHistogram: () => set(s => ({ sceneHistogramActiveCount: Math.max(0, s.sceneHistogramActiveCount - 1) })),
     
     setDraggedLight: (index) => set({ draggedLightIndex: index }),
+    setOpenLightPopupIndex: (index) => set({ openLightPopupIndex: index }),
+    setShadowPanelOpen: (v) => set({ shadowPanelOpen: v }),
+    setVpQualityOpen: (v) => set({ vpQualityOpen: v }),
     setAutoCompile: (v) => set({ autoCompile: v }),
     setAdvancedMode: (v) => set({ advancedMode: v }),
     setShowHints: (v) => set({ showHints: v }),

@@ -127,9 +127,10 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
     }
 
     return (
-        <div 
+        <div
             className={`flex flex-col ${surface.dock} border-${side === 'left' ? 'r' : 'l'} ${border.standard} z-40 shrink-0 transition-all duration-75 relative`}
             style={{ width }}
+            data-tut={side === 'right' ? 'right-dock' : undefined}
         >
             {/* Header Tabs - Tighter Layout with reduced gap */}
             <div className={`flex flex-wrap gap-0.5 px-0.5 pt-1 ${surface.tabBar} border-b ${border.standard} shrink-0 relative items-end`}>

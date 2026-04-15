@@ -25,6 +25,7 @@ export const ViewportQuality: React.FC = () => {
     const setSubsystemTier = useFractalStore(s => s.setSubsystemTier);
     const setLighting = useFractalStore(s => (s as any).setLighting);
     const advancedMode = useFractalStore(s => s.advancedMode);
+    const setVpQualityOpen = useFractalStore(s => s.setVpQualityOpen);
 
     // PT state — determines which subsystems are visually active
     const ptEnabled = useFractalStore(s => (s as any).lighting?.ptEnabled ?? false);
@@ -39,6 +40,9 @@ export const ViewportQuality: React.FC = () => {
     const ptEnvNEE = useFractalStore(s => (s as any).lighting?.ptEnvNEE ?? false);
 
     const [isOpen, setIsOpen] = useState(false);
+
+    // Sync to store so tutorial triggers can observe panel open state
+    useEffect(() => { setVpQualityOpen(isOpen); }, [isOpen]);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Local pending state for batching (changes staged until Apply)
@@ -147,6 +151,7 @@ export const ViewportQuality: React.FC = () => {
         <div className="relative" ref={containerRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
+                data-tut="viewport-quality-btn"
                 className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
                     hasPending
                         ? 'text-amber-300 bg-amber-900/30 border border-amber-500/30'

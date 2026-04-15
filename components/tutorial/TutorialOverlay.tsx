@@ -14,43 +14,79 @@ const PANEL_WIDTH = 360;
 const PANEL_MARGIN = 14;
 const TRANSITION_MS = 200;
 
-function computePosition(targets: string[] | undefined): PanelPosition | null {
-    if (!targets || targets.length === 0) return null;
+// Resolve vertical center from the first visible highlightTarget (for Y alignment).
+function resolveVerticalCenter(targets: string[] | undefined): number | null {
+    if (!targets) return null;
+    for (const t of targets) {
+        const el = document.querySelector(`[data-tut="${t}"]`);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return r.top + r.height / 2;
+    }
+    return null;
+}
 
-    for (const target of targets) {
+function computePosition(targets: string[] | undefined, positionTarget?: string | string[], positionSide?: 'below', positionAlign?: 'start'): PanelPosition | null {
+    // When a positionTarget is set, use it only for horizontal placement.
+    // Vertical alignment comes from the first visible highlight target instead.
+    const ptArr = Array.isArray(positionTarget) ? positionTarget : positionTarget ? [positionTarget] : [];
+    const list = ptArr.length > 0 ? [...ptArr, ...(targets ?? [])] : (targets ?? []);
+    if (list.length === 0) return null;
+
+    // Pre-compute the Y override from highlight targets when positionTarget is provided.
+    const highlightCenterY = ptArr.length > 0 ? resolveVerticalCenter(targets) : null;
+
+    for (const target of list) {
         const el = document.querySelector(`[data-tut="${target}"]`);
         if (!el) continue;
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
 
         const centerX = r.left + r.width / 2;
-        const centerY = r.top + r.height / 2;
+        // Use highlight-target centerY when this is the positionTarget, otherwise use element's own center.
+        const centerY = (ptArr.length > 0 && ptArr.includes(target) && highlightCenterY !== null)
+            ? highlightCenterY
+            : r.top + r.height / 2;
         const spaceLeft = r.left;
         const spaceRight = window.innerWidth - r.right;
+        const spaceBelow = window.innerHeight - r.bottom;
 
-        if (spaceLeft > PANEL_WIDTH + PANEL_MARGIN * 2) {
+        // Small elements in the top bar (height < 80px, near top) should not get
+        // left/right placement — they'd land in the corner. Tall elements like dock
+        // panels are exempt and intentionally get LEFT/RIGHT placement.
+        const isTopBar = r.top < 120 && r.height < 80;
+        const skipSides = isTopBar || positionSide === 'below';
+
+        if (!skipSides && spaceLeft > PANEL_WIDTH + PANEL_MARGIN * 2) {
             return {
                 left: r.left - PANEL_WIDTH - PANEL_MARGIN,
                 top: Math.max(PANEL_MARGIN, Math.min(centerY - 60, window.innerHeight - 200)),
             };
-        } else if (spaceRight > PANEL_WIDTH + PANEL_MARGIN * 2) {
+        } else if (!skipSides && spaceRight > PANEL_WIDTH + PANEL_MARGIN * 2) {
             return {
                 left: r.right + PANEL_MARGIN,
                 top: Math.max(PANEL_MARGIN, Math.min(centerY - 60, window.innerHeight - 200)),
             };
+        } else if (spaceBelow > 120) {
+            const leftPos = positionAlign === 'start'
+                ? Math.max(PANEL_MARGIN, Math.min(r.left, window.innerWidth - PANEL_WIDTH - PANEL_MARGIN))
+                : Math.max(PANEL_MARGIN, Math.min(centerX - PANEL_WIDTH / 2, window.innerWidth - PANEL_WIDTH - PANEL_MARGIN));
+            return {
+                left: leftPos,
+                top: r.bottom + PANEL_MARGIN,
+            };
         } else {
-            const spaceBelow = window.innerHeight - r.bottom;
-            if (spaceBelow > 120) {
+            // Last resort: above the element, or fall back to left/right
+            if (spaceLeft > PANEL_WIDTH + PANEL_MARGIN * 2) {
                 return {
-                    left: Math.max(PANEL_MARGIN, Math.min(centerX - PANEL_WIDTH / 2, window.innerWidth - PANEL_WIDTH - PANEL_MARGIN)),
-                    top: r.bottom + PANEL_MARGIN,
-                };
-            } else {
-                return {
-                    left: Math.max(PANEL_MARGIN, Math.min(centerX - PANEL_WIDTH / 2, window.innerWidth - PANEL_WIDTH - PANEL_MARGIN)),
-                    top: Math.max(PANEL_MARGIN, r.top - 160),
+                    left: r.left - PANEL_WIDTH - PANEL_MARGIN,
+                    top: Math.max(PANEL_MARGIN, Math.min(centerY - 60, window.innerHeight - 200)),
                 };
             }
+            return {
+                left: Math.max(PANEL_MARGIN, Math.min(centerX - PANEL_WIDTH / 2, window.innerWidth - PANEL_WIDTH - PANEL_MARGIN)),
+                top: Math.max(PANEL_MARGIN, r.top - 160),
+            };
         }
     }
     return null;
@@ -143,8 +179,8 @@ const TutorialOverlay: React.FC = () => {
     // Recompute position when step changes
     const updatePos = useCallback(() => {
         if (!displayedStep) return;
-        setPos(computePosition(displayedStep.highlightTargets));
-    }, [displayedStep?.id, displayedStep?.highlightTargets]);
+        setPos(computePosition(displayedStep.highlightTargets, displayedStep.positionTarget, displayedStep.positionSide, displayedStep.positionAlign));
+    }, [displayedStep?.id, displayedStep?.highlightTargets, displayedStep?.positionTarget, displayedStep?.positionSide, displayedStep?.positionAlign]);
 
     useEffect(() => {
         updatePos();
@@ -161,11 +197,14 @@ const TutorialOverlay: React.FC = () => {
     const totalSteps = lesson.steps.length;
     const isLastStep = displayedIndex === totalSteps - 1;
 
+    const offsetX = displayedStep.positionOffset?.x ?? 0;
+    const offsetY = displayedStep.positionOffset?.y ?? 0;
+
     const posStyle: React.CSSProperties = pos
         ? {
             position: 'fixed',
-            left: pos.left,
-            top: pos.top,
+            left: pos.left + offsetX,
+            top: pos.top + offsetY,
             zIndex: 9998,
             pointerEvents: 'auto' as const,
             width: PANEL_WIDTH,
@@ -242,8 +281,10 @@ const TutorialOverlay: React.FC = () => {
 
                     {/* Subtext */}
                     {displayedStep.subtext && (
-                        <p style={{ fontSize: 10, color: 'rgba(103, 232, 249, 0.6)', margin: '4px 0 0', lineHeight: 1.4 }}>
-                            {displayedStep.subtext}
+                        <p style={{ fontSize: 12, color: 'rgba(103, 232, 249, 0.75)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                            {displayedStep.subtext.split('\n').map((line, i, arr) => (
+                                <React.Fragment key={i}>{line}{i < arr.length - 1 && <br />}</React.Fragment>
+                            ))}
                         </p>
                     )}
 
@@ -276,30 +317,65 @@ const TutorialOverlay: React.FC = () => {
                                     {'\u2022'} {item.label}
                                 </div>
                             ))}
-                            <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', margin: '8px 0 0', fontStyle: 'italic' }}>
-                                More tutorials coming soon
-                            </p>
                         </div>
                     )}
 
                     {/* Buttons */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-                        <button
-                            onClick={skipTutorial}
-                            style={{
-                                fontSize: 10,
-                                color: 'rgba(255,255,255,0.4)',
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: '4px 8px',
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-                            onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
-                        >
-                            Skip Tutorial
-                        </button>
-                        {(displayedStep.trigger.kind === 'manual' || displayedStep.allowManual) && (
+                        {!isLastStep && (
+                            <button
+                                onClick={skipTutorial}
+                                style={{
+                                    fontSize: 10,
+                                    color: 'rgba(255,255,255,0.4)',
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: '4px 8px',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
+                            >
+                                Skip Tutorial
+                            </button>
+                        )}
+                        {/* Last step with a continue-chain: show Finish + Continue as separate buttons */}
+                        {isLastStep && displayedStep.autoStartLesson ? (
+                            <>
+                                <button
+                                    onClick={completeTutorial}
+                                    style={{
+                                        fontSize: 10,
+                                        color: 'rgba(255,255,255,0.4)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px 8px',
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
+                                >
+                                    Finish
+                                </button>
+                                <button
+                                    onClick={advanceTutorialStep}
+                                    style={{
+                                        fontSize: 10,
+                                        color: 'rgba(103, 232, 249, 0.9)',
+                                        background: 'rgba(103, 232, 249, 0.1)',
+                                        border: '1px solid rgba(103, 232, 249, 0.3)',
+                                        borderRadius: 4,
+                                        cursor: 'pointer',
+                                        padding: '4px 12px',
+                                        fontWeight: 600,
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(103, 232, 249, 0.2)'; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(103, 232, 249, 0.1)'; }}
+                                >
+                                    {displayedStep.buttonLabel ?? 'Continue'}
+                                </button>
+                            </>
+                        ) : (displayedStep.trigger.kind === 'manual' || displayedStep.allowManual) && (
                             <button
                                 onClick={isLastStep ? completeTutorial : advanceTutorialStep}
                                 style={{
@@ -312,14 +388,10 @@ const TutorialOverlay: React.FC = () => {
                                     padding: '4px 12px',
                                     fontWeight: 600,
                                 }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = 'rgba(103, 232, 249, 0.2)';
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = 'rgba(103, 232, 249, 0.1)';
-                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(103, 232, 249, 0.2)'; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(103, 232, 249, 0.1)'; }}
                             >
-                                {isLastStep ? 'Finish' : displayedStep.beginButton ? 'Begin' : 'Next'}
+                                {isLastStep ? 'Finish' : displayedStep.buttonLabel ?? (displayedStep.beginButton ? 'Begin' : 'Next')}
                             </button>
                         )}
                     </div>

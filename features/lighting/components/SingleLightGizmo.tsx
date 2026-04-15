@@ -134,9 +134,10 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
                 </svg>
 
                 {/* Label Tag — light-specific */}
-                <div className="absolute top-[50px] left-0 transform -translate-x-1/2 flex items-center gap-1 bg-black/80 backdrop-blur px-1.5 py-0.5 rounded border border-white/20 select-none z-20 pointer-events-auto transition-transform hover:scale-105">
+                <div data-tut={`light-gizmo-label-${index}`} className="absolute top-[50px] left-0 transform -translate-x-1/2 flex items-center gap-1 bg-black/80 backdrop-blur px-1.5 py-0.5 rounded border border-white/20 select-none z-20 pointer-events-auto transition-transform hover:scale-105">
                     <span className="text-[9px] font-bold text-white">L{index + 1}</span>
                     <button
+                        data-tut={`gizmo-anchor-${index}`}
                         className="anchor-btn p-0.5 hover:text-cyan-400 transition-colors text-[9px]"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); toggleAnchor(); }}

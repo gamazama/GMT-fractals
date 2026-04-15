@@ -131,6 +131,9 @@ export interface FractalStoreState extends FeatureStateMap {
   showLightGizmo: boolean;
   isGizmoDragging: boolean;
   draggedLightIndex: string | null;
+  openLightPopupIndex: number;  // -1 = no popup open
+  shadowPanelOpen: boolean;
+  vpQualityOpen: boolean;
   
   // Consolidated Interaction State
   interactionMode: InteractionMode;
@@ -251,7 +254,10 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setShowLightGizmo: (v: boolean) => void;
     setGizmoDragging: (v: boolean) => void;
     setDraggedLight: (id: string | null) => void;
-    
+    setOpenLightPopupIndex: (index: number) => void;
+    setShadowPanelOpen: (v: boolean) => void;
+    setVpQualityOpen: (v: boolean) => void;
+
     setInteractionMode: (mode: InteractionMode) => void;
     setFocusLock: (v: boolean) => void;
     

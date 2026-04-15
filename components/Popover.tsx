@@ -11,6 +11,7 @@ interface PopoverProps {
     onClose?: () => void;
     /** Set false to hide the pointer arrow. Default true. */
     arrow?: boolean;
+    dataTut?: string;
 }
 
 const alignClasses: Record<PopoverAlign, { container: string; arrow: string }> = {
@@ -50,6 +51,7 @@ export const Popover: React.FC<PopoverProps> = ({
     className = '',
     onClose,
     arrow = true,
+    dataTut,
 }) => {
     const ref = useRef<HTMLDivElement>(null);
 
@@ -73,6 +75,7 @@ export const Popover: React.FC<PopoverProps> = ({
     return (
         <div
             ref={ref}
+            data-tut={dataTut}
             className={`absolute top-full mt-3 ${a.container} ${width} bg-black border border-white/20 rounded-xl p-3 shadow-2xl z-[70] animate-fade-in ${className}`}
             onClick={e => e.stopPropagation()}
         >

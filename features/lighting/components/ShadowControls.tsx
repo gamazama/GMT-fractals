@@ -14,13 +14,14 @@ const ShadowSettingsPopup = () => {
     const handleInteractionEnd = useFractalStore(s => s.handleInteractionEnd);
 
     return (
-        <Popover width="w-52">
+        <Popover width="w-52" dataTut="shadow-panel">
             <div className="relative space-y-2">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2 px-1">
                     <SectionLabel>Shadows</SectionLabel>
                     <div className="flex items-center gap-1.5">
                         {areaLightsCompiled && (
                             <button
+                                data-tut="shadow-area-btn"
                                 onClick={() => {
                                     handleInteractionStart('param');
                                     setLighting({ areaLights: !areaLights });

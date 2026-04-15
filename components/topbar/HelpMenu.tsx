@@ -132,6 +132,14 @@ export const HelpMenu: React.FC<HelpMenuProps> = ({ vibrate, btnBase, btnActive,
                                 <span className="text-xs font-bold group-hover:text-cyan-400">Lesson 2: It's Time to Fly</span>
                                 {state.tutorialCompleted.includes(2) && <CheckIcon />}
                             </button>
+                            <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.startTutorial(3); setShowMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
+                                <span className="text-xs font-bold group-hover:text-cyan-400">Lesson 3: The Light Studio</span>
+                                {state.tutorialCompleted.includes(3) && <CheckIcon />}
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); vibrate(5); state.startTutorial(4); setShowMenu(false); }} className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group">
+                                <span className="text-xs font-bold group-hover:text-cyan-400">Lesson 4: Shadows</span>
+                                {state.tutorialCompleted.includes(4) && <CheckIcon />}
+                            </button>
 
                             <div className="h-px bg-white/10 my-1" />
 

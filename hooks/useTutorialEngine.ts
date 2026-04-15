@@ -54,6 +54,9 @@ function checkTrigger(trigger: TriggerType, state: any, snapshots: Map<string, a
         case 'compound': {
             return trigger.conditions.every(c => checkTrigger(c, state, snapshots));
         }
+        case 'or': {
+            return trigger.conditions.some(c => checkTrigger(c, state, snapshots));
+        }
         case 'delay':
         case 'keypress':
         case 'keypress_all':
@@ -80,6 +83,8 @@ export function useTutorialEngine() {
 
     const snapshotsRef = useRef<Map<string, any>>(new Map());
     const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const postTriggerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const enteredRef = useRef<string | null>(null);
     const actionListenerRef = useRef<string | null>(null);
     const advancingRef = useRef(false);
@@ -120,16 +125,38 @@ export function useTutorialEngine() {
         enteredRef.current = stepId;
         snapshotsRef.current.clear();
 
-        // Capture snapshots for delta triggers
-        const state = useFractalStore.getState();
-        const captureDeltaSnapshots = (trigger: TriggerType) => {
+        // Cancel any pending settle timer from previous step
+        if (settleTimerRef.current) {
+            clearTimeout(settleTimerRef.current);
+            settleTimerRef.current = null;
+        }
+
+        // Capture snapshots for delta triggers.
+        // If settleMs is set, defer snapshot capture so cascade updates from the
+        // previous action can settle before we start watching for changes.
+        const captureNow = (trigger: TriggerType) => {
+            const s = useFractalStore.getState();
             if (trigger.kind === 'delta') {
-                snapshotsRef.current.set(trigger.path, JSON.parse(JSON.stringify(resolveStorePath(state, trigger.path))));
-            } else if (trigger.kind === 'compound') {
-                trigger.conditions.forEach(captureDeltaSnapshots);
+                snapshotsRef.current.set(trigger.path, JSON.parse(JSON.stringify(resolveStorePath(s, trigger.path))));
+            } else if (trigger.kind === 'compound' || trigger.kind === 'or') {
+                trigger.conditions.forEach(captureNow);
             }
         };
-        captureDeltaSnapshots(step.trigger);
+
+        const scheduleCapture = (trigger: TriggerType) => {
+            if (trigger.kind === 'delta' && trigger.settleMs) {
+                // Leave snapshot undefined — checkTrigger returns false until it fires
+                settleTimerRef.current = setTimeout(() => {
+                    settleTimerRef.current = null;
+                    captureNow(trigger);
+                }, trigger.settleMs);
+            } else if (trigger.kind === 'compound' || trigger.kind === 'or') {
+                trigger.conditions.forEach(scheduleCapture);
+            } else {
+                captureNow(trigger);
+            }
+        };
+        scheduleCapture(step.trigger);
 
         if (step.forceTab) {
             (useFractalStore.getState() as any).setActiveTab(step.forceTab);
@@ -194,6 +221,14 @@ export function useTutorialEngine() {
                 clearTimeout(delayTimerRef.current);
                 delayTimerRef.current = null;
             }
+            if (settleTimerRef.current) {
+                clearTimeout(settleTimerRef.current);
+                settleTimerRef.current = null;
+            }
+            if (postTriggerTimerRef.current) {
+                clearTimeout(postTriggerTimerRef.current);
+                postTriggerTimerRef.current = null;
+            }
         };
     }, [tutorialActive, step?.id, lesson?.id]);
 
@@ -209,7 +244,25 @@ export function useTutorialEngine() {
             if (state.tutorialStepIndex !== expectedStepIndex) return;
             if (!state.tutorialActive) return;
             if (checkTrigger(currentTrigger, state, snapshotsRef.current)) {
-                safeAdvance();
+                // Value triggers with settleMs: wait N ms then re-check before advancing
+                if (currentTrigger.kind === 'value' && currentTrigger.settleMs) {
+                    if (!postTriggerTimerRef.current) {
+                        postTriggerTimerRef.current = setTimeout(() => {
+                            postTriggerTimerRef.current = null;
+                            const s = useFractalStore.getState();
+                            if (s.tutorialStepIndex === expectedStepIndex && s.tutorialActive &&
+                                checkTrigger(currentTrigger, s, snapshotsRef.current)) {
+                                safeAdvance();
+                            }
+                        }, currentTrigger.settleMs);
+                    }
+                } else {
+                    safeAdvance();
+                }
+            } else if (currentTrigger.kind === 'value' && currentTrigger.settleMs && postTriggerTimerRef.current) {
+                // Condition went false while timer was pending — cancel it
+                clearTimeout(postTriggerTimerRef.current);
+                postTriggerTimerRef.current = null;
             }
         });
 
