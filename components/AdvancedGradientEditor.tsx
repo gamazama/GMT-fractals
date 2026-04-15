@@ -224,7 +224,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
              bias: s.bias ?? 0.5,
              interpolation: (s.interpolation as InterpolationMode) ?? 'linear'
         }));
-        emitChange(newKnots, 'srgb'); // Presets default to sRGB
+        emitChange(newKnots, 'linear');
         setSelectedIds(new Set());
         handleInteractionEnd();
     }, [emitChange, handleInteractionStart, handleInteractionEnd]);
@@ -530,7 +530,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             { 
                 label: 'Reset Default', 
                 danger: true, 
-                action: wrapAction(() => { emitChange([{ id: '1', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' }, { id: '2', position: 1, color: '#FFFFFF', bias: 0.5, interpolation: 'linear' }], 'srgb', 'oklab'); setSelectedIds(new Set<string>()); })
+                action: wrapAction(() => { emitChange([{ id: '1', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' }, { id: '2', position: 1, color: '#FFFFFF', bias: 0.5, interpolation: 'linear' }], 'linear', 'oklab'); setSelectedIds(new Set<string>()); })
             },
             { label: 'Blend Mode', action: () => {}, isHeader: true },
             {

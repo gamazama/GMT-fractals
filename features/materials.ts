@@ -36,7 +36,7 @@ const MATERIAL_LOGIC = `
         emitSource = uLayer3Color * n01;
     }
     else if (abs(uEmissionMode - 4.0) < 0.1) emitSource = uEmissionColor; 
-    emission = emitSource * uEmission * 1.5;
+    emission = emitSource * uEmission;
 `;
 
 const MAIN_HEADER = `
