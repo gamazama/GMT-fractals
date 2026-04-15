@@ -67,7 +67,7 @@ Set the dropdown next to any slider to **A, B, C, D, E, or F** to link that para
 - The bound parameter is driven by the global slider instead of its own value.
 - Global sliders are animatable via the Timeline — binding lets you keyframe complex graph parameters.
 - Select **—** to clear the binding.
-- Bound parameters display as **cyan** with a `(→ ParamX)` label.
+- Bound parameters display as **cyan** with a \`(-> ParamX)\` label.
 
 **Logic / Condition (collapsible section at the bottom of each node):**
 Make a node execute only on certain fractal iterations:
