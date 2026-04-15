@@ -16,15 +16,25 @@ interface TimelineProps {
 }
 
 const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
-    const { 
+    const {
         isPlaying, currentFrame, durationFrames, sequence,
         selectedTrackIds, updateKeyframes, setTangents, deleteSelectedKeyframes, snapshot,
-        selectedKeyframeIds, clipboard, copySelectedKeyframes, pasteKeyframes, duplicateSelection, loopSelection
+        selectedKeyframeIds, clipboard, copySelectedKeyframes, pasteKeyframes, duplicateSelection, loopSelection,
+        setIsScrubbing
     } = useAnimationStore();
-    
+
     const openGlobalMenu = useFractalStore(s => s.openContextMenu);
     const setIsTimelineHovered = useFractalStore(s => s.setIsTimelineHovered);
     
+    // Reset hover/scrub flags on unmount so they can't get stuck if the timeline
+    // closes while the mouse is inside it or while a drag is in progress.
+    useEffect(() => {
+        return () => {
+            setIsTimelineHovered(false);
+            setIsScrubbing(false);
+        };
+    }, []);
+
     const [mode, setMode] = useState<'DopeSheet' | 'Graph'>('DopeSheet');
     const [panelHeight, setPanelHeight] = useState(250);
     const [isResizing, setIsResizing] = useState(false);
