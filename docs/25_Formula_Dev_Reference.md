@@ -132,7 +132,75 @@ The single line that calls your function inside the iteration loop. Usually just
 loopBody: `formula_MyFormula(z, dr, trap, c);`
 ```
 
-Some formulas do more complex things here (e.g., MandelTerrain runs its own internal loop with `break`).
+### 3.3a Self-Contained SDE pattern
+
+Some fractals cannot be decomposed into independent per-iteration steps — they require a complete loop with internal state (pre-pass transforms, convergence history, post-loop DE corrections). These use the **self-contained SDE pattern**:
+
+```typescript
+shader: {
+    selfContainedSDE: true,                                    // ← required flag
+    loopBody: `formula_MyFormula(z, dr, trap, c); break;`,     // ← break stops outer loop
+    getDist: `return vec2(r, dr);`,                            // ← r=abs(de), dr=smoothIter
+    function: `
+void formula_MyFormula(inout vec4 z, inout float dr, inout float trap, vec4 c) {
+    vec3 p = z.xyz;        // ray sample point — only valid on this one call
+    int maxIter = int(uIterations);
+    int actualIter = maxIter;
+
+    for (int i = 0; i < HARD_CAP; i++) {
+        if (i >= maxIter) break;
+        // ... full SDE iteration body ...
+        trap = min(trap, length(p));     // orbit trap: positive distance
+        if (converged) { actualIter = i + 1; break; }
+    }
+
+    // compute de ...
+
+    // Decomposition (modes 6, 9): encode final orbit angle into z.xy.
+    // getLength(z.xy) = abs(de) is preserved; atan(z.y, z.x) = angle.
+    float angle = atan(p.y, p.x);
+    float de_r  = abs(de);
+    z  = vec4(de_r * cos(angle), de_r * sin(angle), 0.0, 0.0);
+
+    // Iteration depth (modes 1, 7): pass via dr; getDist returns it as smoothIter.
+    dr = float(actualIter) / float(max(maxIter, 1));
+
+    // trap is already set above — positive, compatible with logTrap().
+}`,
+}
+```
+
+**How it works:**
+- `loopBody` includes `break;` so the engine's outer loop fires exactly once
+- The formula function receives `z.xyz = p_fractal` (the ray sample point) and runs its own internal iteration loop
+- `uIterations` still works — read it as `int(uIterations)` to cap the internal loop
+
+**`selfContainedSDE: true` is required and activates these engine guards:**
+- `SKIP_PRE_BAILOUT` — prevents the outer loop's pre-bailout check from short-circuiting before the formula runs
+- Hybrid Box fold injection is suppressed (injecting fold steps into a one-shot loop is meaningless)
+- Burning Ship mode is suppressed (it folds `z.xyz` per outer iteration — same problem)
+- Interlacing (secondary formula) is blocked for both primary and secondary positions
+
+**What you lose:** Hybrid Mode, Interlace, Burning Ship. These features are architecturally undefined for self-contained SDEs since they all assume the outer loop runs many times.
+
+#### Making coloring modes work
+
+Because the outer loop only runs once, none of the standard coloring data is set automatically — you must encode it yourself before returning. The full contract:
+
+| Coloring mode | What it reads | How to provide it |
+|---|---|---|
+| **0 — Orbit Trap** | `result.y` = `trap` | `trap = min(trap, length(p))` each iteration — positive distance, compatible with `logTrap()` |
+| **1 — Iterations** | `result.z` = `smoothIter` from `getDist`'s second return | pass normalised count via `dr`; use `getDist: return vec2(r, dr)` |
+| **6 — Decomposition** | `result.w` = `atan(z.y, z.x)` computed by engine after `map()` returns | encode angle into z.xy: `z = vec4(de_r*cos(angle), de_r*sin(angle), 0, 0)` — `getLength(z.xyz)` still equals `abs(de)` |
+| **7 — Raw Iterations** | `result.z` same as mode 1 | same as mode 1 |
+| **9 — Flow** | `result.w + result.z` | requires both decomp and iterations — do both above |
+| **2–5 — Position-based** | world-space `p` | automatic — no formula action needed |
+| **8 — Potential** | `result.y` (used as magnitude) | set `trap` to a raw distance or escape radius |
+| **10–13 — Per-component orbit** | `g_orbitTrap` set by outer loop from `z.xyz` | encoding angle into z.xy makes x/y non-zero; not ideal but avoids all-zeros |
+
+**Key quirk — `trap` must be positive.** `logTrap(t)` computes `log(max(1e-5, t)) * -0.2`. Negative values (e.g. `log(length(p))`) clamp to `1e-5` and all map to the same output. Always use raw distances (`length(p)`, `dot(p,p)`) not log-distances for `trap`.
+
+**Examples:** `MandelTerrain`, `KleinianMobius`, `JuliaMorph`
 
 ### 3.4 `shader.loopInit` (optional)
 
@@ -214,7 +282,11 @@ preambleVars: ['uCl_n4', 'uCl_doHarmonic']
 - If you forget to list a variable, interlace will produce wrong shaders with no compile error — the secondary formula will read the primary's global state. A dev-mode `console.warn` catches this at runtime.
 - The naming convention is `u[INITIALS]_[name]` (e.g., `uKB_rot` for KaliBox, `uCl_n4` for Claude).
 
-### 3.7 `shader.usesSharedRotation` (optional)
+### 3.7 `shader.selfContainedSDE` (optional)
+
+Set to `true` when the formula owns its entire SDE — i.e., `loopBody` ends with `break;`. See §3.3a for the full pattern, caveats, and engine guards this activates.
+
+### 3.8 `shader.usesSharedRotation` (optional)
 
 Set to `true` if the formula's `loopInit` calls `gmt_precalcRodrigues()` (directly or via a precalc function). This tells the interlace system to save/restore the shared rotation globals (`gmt_rotAxis`, `gmt_rotCos`, `gmt_rotSin`) when swapping between primary and secondary formulas.
 
@@ -807,6 +879,7 @@ shader: {
 - [ ] No `const` with built-in functions in preamble
 - [ ] `preambleVars` lists all mutable preamble globals
 - [ ] `usesSharedRotation: true` if using `gmt_precalcRodrigues`
+- [ ] `selfContainedSDE: true` if `loopBody` ends with `break;` (see §3.3a)
 - [ ] Shared transforms called from `loopInit`, NOT from preamble functions
 - [ ] Estimator type matches DR approach in default preset
 - [ ] fudgeFactor tuned to avoid slicing artifacts
