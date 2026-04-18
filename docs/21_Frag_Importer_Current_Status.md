@@ -1,7 +1,82 @@
 # Fragmentarium Importer — Current Status
 
-**Last Updated:** 2026-03-20
-**Status:** V3 pipeline operational. 64/64 test formulas passing. Formula library with 494 verified formulas. Workshop UI with Browse, Random, Preview, and Import.
+**Last Updated:** 2026-04-17 (V4 pipeline operational, corrected honest numbers)
+**Status:** **V4 pipeline verified (360 passing formulas through the real ShaderFactory engine path).** V3 remains the default; V4 is gated behind the `V4 pipeline (beta)` checkbox in Workshop footer. Cutover pending interactive validation.
+**Honest library numbers:** **360 verified formulas** (112 Fragmentarium `.frag` + 248 DEC).
+
+> **Previous claims were inflated by simplified-scaffold measurement.** Initial numbers (V3: 318 / V4: 394) came from `debug/v4-verify.mts` using a *hand-coded mini-scaffold* that didn't match the engine's real `ShaderFactory` output. After switching the harness to use the **real `ShaderFactory` + full feature config** (the exact path the Workshop's runtime uses), numbers dropped — but V4's lead over V3 actually grew: **+144 formulas** (216 → 360).
+
+---
+
+## V4 Verification Baseline (honest, measured via real ShaderFactory)
+
+Measured 2026-04-17 via `npx tsx debug/v4-verify.mts --pipeline=v4` on all 920 corpus formulas. **Both V3 and V4 now go through the real engine `ShaderFactory.generateFragmentShader()` with a full per-feature config — the exact chain the Workshop uses at runtime.**
+
+| Category | V3 honest | **V4 honest** | Total | Skipped* | V4 rate (of tested) |
+|---|---:|---:|---:|---:|---:|
+| Fragmentarium `.frag` | 54 | **112** | 580 | 366 | 52% |
+| DEC fractals | 162 | **248** | 339 | 4 | 74% |
+| **Total** | **216** | **360** | **919** | **370** | **66%** |
+
+\* Skipped = 2D formulas, buffer shaders, `#donotrun` library files, `#define providesColor` formulas, or non-3D raytracers. V4 correctly rejects more categorical non-formulas than V3 did (e.g. V3 accepted Classic-Noise, murmurHash, BuiltinFloat which are library helpers, not formulas).
+
+### V3 vs V4 failure distribution (honest)
+
+| Gate | V3 fails | **V4 fails** | Δ |
+|---|---:|---:|---:|
+| `webglCompile` | 151 | **100** | −51 |
+| `sampleFinite` | 89 | **2** | **−87** ✓ |
+| `renderNonDegenerate` | 87 | **38** | −49 |
+| `sampleShaderCompile` | 27 | **30** | +3 |
+| `sampleNonConstant` | 25 | **3** | **−22** ✓ |
+| `gradientFinite` | 11 | **17** | +6 |
+| **Total failures** | **390** | **190** | **−200** |
+
+**V4 eliminates ~96% of NaN failures** (sampleFinite + sampleNonConstant: 114 → 5). The core V4 thesis — preserving the DE body verbatim instead of extracting per-iteration — is validated by measurement.
+
+### Harness honesty note
+
+Prior bakeoff runs used a **simplified WebGL scaffold** that diverged from the real engine's shader output. That scaffold was easier to compile and inflated both pipelines' pass counts. Specifically:
+
+- The scaffold had `g_orbitTrap` pre-declared at global scope; the real engine declares it mid-preamble via the `coloring` feature.
+- The scaffold auto-injected `#version 300 es` and `vUv`; the real engine relies on Three.js to add those.
+- The scaffold didn't include the engine's `vec4 DE(vec3)` coloring wrapper; formulas named `DE` collide in the real path.
+- The scaffold didn't enforce the `coreMath`/feature structure of `defaultPreset` that the UI expects.
+
+After switching both harness paths to the real `ShaderFactory` + full feature config, the V4 pipeline picked up a family of bug fixes (DE → `frag_DE` rename to avoid coloring-wrapper collision, V4-owned `_v4_orbitTrap` copied to engine global in wrapper, ambient define injection for `time`, `M_PI`, `iGlobalTime`, reuse of V3's `buildFractalParams` for preset shape) that delivered the final honest numbers.
+
+### V3 vs V4 bakeoff (2×2 outcome matrix — honest)
+
+```
+                V4 pass     V4 ¬pass
+V3 pass         ~205 ✓✓     ~11 REGR    (most of the residual regressions are
+V3 ¬pass        ~155 IMPR   ~466 ✗✗      corpus-wide int/float issues affecting
+                                         both pipelines)
+```
+
+**~155 new formulas pass under V4** that V3 couldn't handle — including BioCube, FoldcutToy, OctahedronOT, Spudsville2, StereographicQuaternionJulia (all were V3 full-DE fallbacks) plus much of the DEC corpus that V3's per-iteration extraction couldn't handle.
+
+> **Known baseline pessimism.** A meaningful fraction of the above "fails" are formulas that *compile cleanly* but produce invisible output because the verification harness uses generic uniform defaults. Fractal DEs are parameter-sensitive; many author-calibrated `#preset Default` blocks aren't being honoured. Phase B.8 of the [V4 plan](26_Formula_Workshop_V4_Plan.md#b8--parameter-aware-verification-critical-1-day-extra) makes preset defaults first-class — rerunning the harness with that change is expected to lift the pass rate.
+
+### How to reproduce
+
+```
+# Full corpus run (V4 pipeline):
+npx tsx debug/v4-verify.mts --pipeline=v4 --fresh
+
+# V3 vs V4 bakeoff:
+npx tsx debug/v4-bakeoff.mts
+
+# Live dashboard during run:
+npx tsx debug/v4-monitor.mts
+
+# Regenerate passing-formulas.ts from latest V4 run:
+npx tsx debug/build-v4-passing.mts
+```
+
+Workshop integration: the `V4 pipeline (beta)` checkbox in the Workshop footer routes Preview + Import through V4's `processFormula` instead of V3's detect/transform chain.
+
+Gate definitions and thresholds: [26_Formula_Workshop_V4_Plan.md §9 A.1](26_Formula_Workshop_V4_Plan.md#a1--verification-spec-with-exact-thresholds).
 
 ---
 
@@ -254,12 +329,12 @@ If no return statement found, `getDist` is `undefined` — engine uses its stand
 
 ---
 
-## What Works (as of 2026-03-20)
+## What Works (as of 2026-04-16)
 
 | Feature | Status |
 |---------|--------|
-| V3 analysis pipeline (AST-based) | Working — 64/64 tests |
-| V3 code generation (per-iteration + full-DE) | Working |
+| V3 analysis pipeline (AST-based) | Working on 64/64 hand-picked formulas — corpus-wide pass rate 52.6% (see §V4 Verification Baseline) |
+| V3 code generation (per-iteration + full-DE) | Working for the 318 verified-passing formulas; remaining 287 fail at various gates |
 | V2 fallback for V3-incompatible formulas | Working |
 | Formula library (494 formulas, categorized) | Working |
 | Browse Library in Workshop | Working |
@@ -299,12 +374,21 @@ Formulas where DE parameter name matches the local vec4 tracker name (`float DE(
 
 ## Testing
 
-Run the full test suite:
+**Primary (V4 harness — end-to-end verification):**
 ```bash
-npx tsx debug/test-frag-importer.mts        # 64/64 passing
-npx tsx debug/test-deg.mts                  # isDegrees verification
-npx tsx debug/build-passing-lists.mts       # Regenerate passing-formulas.ts
+npx tsx debug/v4-verify.mts --fresh         # All 920 formulas through 6 gates
+npx tsx debug/v4-monitor.mts                 # Live dashboard at localhost:3344
+npx tsx debug/build-v4-passing.mts           # Regenerate passing-formulas.ts from verified results
 ```
+
+**Legacy (kept for regression spot-checks):**
+```bash
+npx tsx debug/test-frag-importer.mts         # 64 hand-picked regression formulas
+npx tsx debug/test-deg.mts                   # isDegrees detection
+npx tsx debug/shader-validator.mts --webgl   # AST-parse + WebGL-compile only (pre-V4 baseline)
+```
+
+Gate definitions, thresholds, and rationale: [26_Formula_Workshop_V4_Plan.md §9 A.1](26_Formula_Workshop_V4_Plan.md#a1--verification-spec-with-exact-thresholds).
 
 Quick smoke test sequence:
 1. `Tutorials/11 - Simple Distance Estimated 3D fractal.frag` — Menger IFS, getDist expression
