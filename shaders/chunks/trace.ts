@@ -53,10 +53,6 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
     float accAlpha = 0.0; // Scalar glow accumulator for Fast Mode
     
     // 3. Loop Config
-    // pixelSizeScale: world-space size of a render pixel.
-    // uPixelSizeBase is computed from the physical render resolution (includes DPR),
-    // so it already represents the render pixel — no additional scale division needed.
-    float pixelSizeScale = uPixelSizeBase;
     int limit = int(uMaxSteps);
     float maxMarch = MAX_DIST;
     
@@ -87,20 +83,16 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
         
         ${precisionLogic}
         
-        // Dynamic Epsilon (Cone Tracing concept)
-        // We relax the hit requirement as we get further away to prevent aliasing and stepping issues
-        // Dividing uDetail by uInternalScale makes the threshold DPR-invariant:
-        // at DPR=2, render pixels are half-sized so the raw threshold is half,
-        // but dividing detail by 2 multiplies threshold by 2, canceling the DPR effect.
-        // This matches the DPR-invariance pattern used in material_eval/pathtracer
-        // (which divide pixelSizeScale by uInternalScale for the same net effect).
+        // Dynamic Epsilon (Cone Tracing). uPixelSizeBase is viewport-pixel size
+        // (invariant to adaptive downscale — see UniformManager.syncFrame). The
+        // uDetail / uInternalScale factor also cancels DPR from the threshold, so
+        // uPixelThreshold means "fraction of a viewport pixel" across all scales.
+        // Ortho: parallel rays → pixel footprint is constant.
+        // Perspective/360: cone widens with distance → scale by d.
         float effectiveDetail = uDetail / uInternalScale;
-        // Perspective: pixel footprint grows with distance (cone) → scale by d
-        // Ortho: pixel footprint is constant (parallel rays) → pixelSizeScale already
-        // contains the full world-space pixel size, don't multiply by d
         float pixelFootprint = (uCamType > 0.5 && uCamType < 1.5)
-            ? pixelSizeScale   // Ortho: constant pixel size
-            : pixelSizeScale * d;  // Perspective/360: cone tracing
+            ? uPixelSizeBase
+            : uPixelSizeBase * d;
         float threshold = pixelFootprint * (uPixelThreshold / effectiveDetail);
         float finalEps = max(threshold, floatPrecision);
         
