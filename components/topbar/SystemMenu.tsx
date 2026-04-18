@@ -33,7 +33,31 @@ interface SystemMenuProps {
 }
 
 export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, btnBase, btnActive, btnInactive }) => {
-    const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
+    const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
+        onRegisteredSW(_swUrl, registration) {
+            if (!registration) return;
+            // Check for updates hourly while the app is open.
+            setInterval(() => { registration.update().catch(() => {}); }, 60 * 60 * 1000);
+        },
+    });
+
+    // Robust reload: ask the new SW to skip waiting and reload, with a hard
+    // fallback (unregister + reload) if the SW message doesn't land in time.
+    const handleApplyUpdate = async () => {
+        const fallback = setTimeout(async () => {
+            try {
+                const regs = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+                await Promise.all(regs.map(r => r.unregister()));
+            } catch {}
+            window.location.reload();
+        }, 1500);
+        try {
+            await updateServiceWorker(true);
+        } catch {
+            clearTimeout(fallback);
+            window.location.reload();
+        }
+    };
 
     const state = useFractalStore();
     // Dynamic access to all feature slices
@@ -251,7 +275,7 @@ export const SystemMenu: React.FC<SystemMenuProps> = ({ isMobileMode, vibrate, b
                             {needRefresh && (
                                 <>
                                     <button
-                                        onClick={() => updateServiceWorker(true)}
+                                        onClick={handleApplyUpdate}
                                         className="w-full flex items-center justify-between p-2 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 transition-colors"
                                     >
                                         <span className="text-xs font-bold">Update available — reload</span>
