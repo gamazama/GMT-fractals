@@ -2,14 +2,10 @@
  * Shared helper for building a fresh ShaderConfig from feature-registry defaults.
  *
  * Single source of truth for "start from scratch" config construction.
- * Used by:
- *   - FractalEngine constructor (initial config at boot)
- *   - debug/render-harness.ts (per-test case baseline)
- *   - debug/native-interlace-sweep.mts, native-config-sweep.mts, v4-verify.mts
- *     (verification harnesses' buildFullShaderConfig)
- *
- * Prior to extraction this logic was duplicated across 5 call sites. Any
- * feature-registry shape change now only needs updating here.
+ * Used by the engine constructor and by any tooling (test harnesses,
+ * verification scripts) that needs a clean config seed. Prior to extraction
+ * this iteration was duplicated across several call sites; any feature-
+ * registry shape change now only needs updating here.
  */
 
 import { featureRegistry } from './FeatureSystem';
