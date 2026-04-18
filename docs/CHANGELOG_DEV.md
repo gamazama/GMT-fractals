@@ -2,6 +2,32 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-18
+
+### Pixel threshold invariant across all internal scaling
+
+**User-facing**
+- **Pixel Threshold** (Quality panel) now means the same thing regardless of resolution. Previously, when adaptive resolution downscaled the render buffer, the effective hit threshold grew proportionally — a `0.5` setting that looked crisp at full resolution became sloppy at half res. After the fix, `0.5` means "half of a viewport pixel" across adaptive downscale, DPR changes, and SSAA bucket upscale.
+
+**Mechanism**
+- `uPixelSizeBase` now represents the **viewport pixel** world size, not the physical render pixel. Computed in `UniformManager.syncFrame()` as `height * 2.0 / (resolution.y * _adaptiveScale)`. Adaptive downscale increases `_adaptiveScale`, which cancels the shrink in `resolution.y`, keeping `uPixelSizeBase` stable.
+- Combined with the existing `uDetail / uInternalScale` compensation in `trace.ts`, threshold is invariant to DPR *and* adaptive scale. Matches the invariant the SSAA bucket override was already enforcing for its case.
+- Other consumers (`pathtracer`, `material_eval`, `pbr`, `reflections`) use `uPixelSizeBase / uInternalScale` unchanged — they benefit automatically from the stronger `uPixelSizeBase` semantics.
+
+### Bucket render first-frame aspect stretch fix
+
+**Bug**
+- Toggling a panel immediately before triggering a bucket render occasionally produced a stretched first render. Second try looked correct. Cause: `UniformManager.syncFrame()` skips the `cam.aspect`↔canvas sync during bucket rendering, so if a canvas resize hadn't been processed yet, the first bucket inherited a stale aspect.
+
+**Fix**
+- One-shot `cam.aspect` sync at the top of the worker's `BUCKET_START` handler, before `BucketRenderer.start()` captures `originalSize`. Reads current renderer buffer dims and corrects `cam.aspect` if drifted by more than 0.001. No per-frame overhead.
+
+**Files**
+- `engine/managers/UniformManager.ts` — viewport-pixel `uPixelSizeBase`.
+- `shaders/chunks/trace.ts` — cleanup; restored `effectiveDetail = uDetail / uInternalScale`; dropped the pointless `pixelSizeScale` alias; consolidated comments.
+- `engine/worker/renderWorker.ts` — one-shot aspect sync at bucket start.
+- `docs/07_Code_Health.md` — `uPixelSizeBase` formula description updated.
+
 ## 2026-04-17
 
 ### V3/V4 pipeline catalog + auto-pick in Workshop library

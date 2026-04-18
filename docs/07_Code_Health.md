@@ -27,7 +27,7 @@ The codebase has been successfully migrated to the **Data-Driven Feature System 
 ## 2.4 Recent Fixes (2026-03-05) ✅
 
 ### Shader / Uniform Optimizations
-*   **`PixelSizeBase` CPU Pre-Compute:** `uPixelSizeBase` uniform added (`engine/UniformNames.ts`, `engine/UniformSchema.ts`). The value `length(uCamBasisY) / resolution.y * 2.0` (used in the PT bounce loop's bias epsilon) is now computed on the CPU each frame in `UniformManager.updateCamera()` and uploaded once, eliminating a redundant per-fragment square-root in the hot path of `calculatePathTracedColor`.
+*   **`PixelSizeBase` CPU Pre-Compute:** `uPixelSizeBase` uniform added (`engine/UniformNames.ts`, `engine/UniformSchema.ts`). Value = `length(uCamBasisY) * 2.0 / (resolution.y * _adaptiveScale)` — i.e. **viewport-pixel** world size (invariant to adaptive downscale), computed on the CPU each frame in `UniformManager.syncFrame()`. Used for trace threshold, PT bounce bias epsilon, normal offsets, and shadow bias. Eliminates a per-fragment sqrt in hot paths and keeps precision anchored to what the user sees on screen.
 *   **UniformManager Resize Log Removed:** `console.log` in the resolution resize path deleted — was firing every frame during interactive resize.
 
 ### Vector Formula Parameters (CoreMath)
