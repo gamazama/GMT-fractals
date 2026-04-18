@@ -123,5 +123,25 @@ export const GRADIENT_PRESETS: GradientPreset[] = [
    {
         name: "Black Body",
         stops: createStops(['#000000', '#411712', '#801F1B', '#BC3320', '#E0650A', '#E8A11A', '#E7DA30', '#FFFFFF'])
+    },
+    {
+        name: "Aurora Strata",
+        stops: [
+            { id: "1",  position: 0,                    color: "#000000", bias: 0.7333333333333334, interpolation: "smooth" },
+            { id: "2",  position: 0.08849557522123894,  color: "#363636", bias: 0.5,                interpolation: "smooth" },
+            { id: "3",  position: 0.111,                color: "#05C1D4", bias: 0.5,                interpolation: "linear" },
+            { id: "4",  position: 0.18584070796460178,  color: "#000000", bias: 0.5,                interpolation: "linear" },
+            { id: "5",  position: 0.22789970501474927,  color: "#FF5500", bias: 0.5,                interpolation: "linear" },
+            { id: "6",  position: 0.26843657817109146,  color: "#FFAB00", bias: 0.5,                interpolation: "linear" },
+            { id: "7",  position: 0.333,                color: "#FFDC7C", bias: 0.5,                interpolation: "linear" },
+            { id: "8",  position: 0.3746312684365782,   color: "#FFFFFF", bias: 0.7551454328967512, interpolation: "linear" },
+            { id: "9",  position: 0.444,                color: "#3C5732", bias: 0.5,                interpolation: "linear" },
+            { id: "10", position: 0.4941474926253687,   color: "#97C79D", bias: 0.5,                interpolation: "linear" },
+            { id: "11", position: 0.5353510324483777,   color: "#FFFFFF", bias: 0.5,                interpolation: "linear" },
+            { id: "12", position: 0.667,                color: "#000000", bias: 0.5,                interpolation: "linear" },
+            { id: "13", position: 0.778,                color: "#3B9FEE", bias: 0.5,                interpolation: "linear" },
+            { id: "14", position: 0.889,                color: "#D4FFD4", bias: 0.5,                interpolation: "linear" },
+            { id: "15", position: 1,                    color: "#FFF659", bias: 0.5,                interpolation: "linear" }
+        ]
     }
 ];
