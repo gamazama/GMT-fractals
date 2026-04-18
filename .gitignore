@@ -29,6 +29,9 @@ fractal_generator_*.glsl
 # Shader-validator harness output (regenerated per run)
 debug/shader-validator-results.jsonl
 
+# One-off exploration / debug scripts, not part of the test suite
+debug/scratch/
+
 # Test-suite generated outputs (regenerated per run; baselines are tracked explicitly)
 debug/v4-verify-results.jsonl
 debug/render-sweep-phase1.jsonl
