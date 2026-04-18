@@ -645,6 +645,23 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
             // ─── Bucket Render ───────────────────────────────────────
             case 'BUCKET_START':
                 if (engine && renderer) {
+                    // One-shot aspect sync: UniformManager.syncFrame skips cam.aspect updates
+                    // during bucket rendering, so if cam.aspect got out of sync with the
+                    // renderer buffer between the last resize and bucket start (e.g., a panel
+                    // toggle), the first bucket render would stretch. Correct it here before
+                    // BucketRenderer captures originalSize.
+                    if (camera) {
+                        const bufW = renderer.domElement.width;
+                        const bufH = renderer.domElement.height;
+                        if (bufH > 0) {
+                            const bufAspect = bufW / bufH;
+                            if (Number.isFinite(bufAspect) && Math.abs(camera.aspect - bufAspect) > 0.001) {
+                                camera.aspect = bufAspect;
+                                camera.updateProjectionMatrix();
+                            }
+                        }
+                    }
+
                     engine.state.bucketConfig = { ...msg.config };
                     const exportData = msg.exportData ? {
                         preset: JSON.parse(msg.exportData.preset),
