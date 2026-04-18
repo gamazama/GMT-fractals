@@ -26,6 +26,9 @@ dist-ssr
 # Debug shader dumps
 fractal_generator_*.glsl
 
+# Shader-validator harness output (regenerated per run)
+debug/shader-validator-results.jsonl
+
 # Deep zoom perturbation experiment
 prototype/deep-zoom/
 
