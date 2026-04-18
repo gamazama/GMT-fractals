@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import DraggableWindow from './DraggableWindow';
-import { HELP_TOPICS } from '../data/help/registry';
+import { useHelpTopics } from '../data/help/useHelpTopics';
 import { HelpSection } from '../types/help';
 import { ChevronDown, ChevronRight } from './Icons';
 
@@ -14,6 +14,10 @@ interface HelpBrowserProps {
 const CATEGORY_ORDER = ['Getting Started', 'General', 'Formulas', 'Parameters', 'UI', 'Timeline', 'Graph', 'Animation', 'Lighting', 'Rendering', 'Coloring', 'Audio', 'Effects', 'Export'];
 
 const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNavigate }) => {
+    // HelpBrowser is React.lazy-loaded, so by the time this component runs the
+    // user has explicitly requested help. The hook resolves to the full topic
+    // map on first render (usually already cached thanks to App's idle prefetch).
+    const HELP_TOPICS = useHelpTopics();
     const [searchTerm, setSearchTerm] = useState('');
     // Initialize collapsed by default as requested
     const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());

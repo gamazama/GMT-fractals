@@ -170,9 +170,9 @@
     "code": "  float de( vec3 p ){\n    float s=4.;\n    p=abs(p);\n    vec3 off=p*4.6;\n    for (float i=0.; i<8.; i++){\n      p=1.-abs(abs(p-2.)-1.);\n      float r=-13.*clamp(.38*max(1.3/dot(p,p),.7),0.,3.3);\n      s*=r; p*=r; p+=off;\n    }\n    return length(cross(p,normalize(vec3(1,3,3))))/s-.006;\n  }"
   },
   {
-    "id": "fractal_de43",
+    "id": "fractal_de44",
     "author": "gaziya5 aka gaz",
-    "code": "  vec3 rotate(vec3 p,vec3 axis,float theta){\n    vec3 v = cross(axis,p), u = cross(v, axis);\n    return u * cos(theta) + v * sin(theta) + axis * dot(p, axis);\n  }\n\n  vec2 pmod(vec2 p, float r){\n    float a = mod(atan(p.y, p.x), (M_PI*2) / r) - 0.5 * (M_PI*2) / r;\n    return length(p) * vec2(-sin(a), cos(a));\n  }\n\n  float de(vec3 p){\n    for(int i=0;i<5;i++){\n      p.xy = pmod43(p.xy,12.0); p.y-=4.0;\n      p.yz = pmod43(p.yz,16.0); p.z-=6.8;\n    }\n    return dot(abs(p),rotate43(normalize(vec3(2,1,3)),\n        normalize(vec3(7,1,2)),1.8))-0.3;\n  }"
+    "code": "  #define pmod(p,n)length(p)*sin(vec2(0.,M_PI/2.)\\\n   +mod(atan(p.y,p.x),2.*M_PI/n)-M_PI/n)\n  #define fold(p,v)p-2.*min(0.,dot(p,v))*v;\n\n  float de( vec3 p ){\n    float s = 1.0;\n    p.z=fract(p.z)-.5;\n    for(int i=0;i<20;i++){ // expensive\n      p.y += .15;\n      p.xz = abs(p.xz);\n      for(int j=0;j<2;j++){\n        p.xy = pmod(p.xy,8.);\n        p.y -= .18;\n      }\n      p.xy = fold(p.xy,normalize(vec2(1,-.8)));\n      p.y = -abs(p.y);\n      p.y += .4;\n      p.yz = fold(p.yz,normalize(vec2(3,-1)));\n      p.x -= .47;\n      p.yz = fold(p.yz,normalize(vec2(2,-7)));\n      p -= vec3(1.7,.4,0);\n      float r2= 3.58/dot(p,p);\n      p *= r2;\n      p += vec3(1.8,.7,.0);\n      s *= r2;\n    }\n    return length(p)/s;\n  }"
   },
   {
     "id": "fractal_de45",
@@ -255,6 +255,11 @@
     "code": "  float de(vec3 p){\n    vec3 q;\n    p.z-=1.5;\n    q=p;\n    float e=0.;\n    float s=3.;\n    for(int j=0;j++<8;s*=e)\n      p=sign(p)*(1.-abs(abs(p-2.)-1.)),\n      p=p*(e=6./clamp(dot(p,p),.3,3.))+q-vec3(8,.2,8);\n    return length(p)/s;\n  }"
   },
   {
+    "id": "fractal_de76",
+    "author": "gaziya5 aka gaz",
+    "code": "  float de(vec3 p){\n    #define R(a)a=vec2(a.x+a.y,a.x-a.y)*.7\n    #define G(a,n)R(a);a=abs(a)-n;R(a)\n      p=fract(p)-.5;\n      G(p.xz,.3);\n      G(p.zy,.1);\n      G(p.yz,.15);\n      return .6*length(p.xy)-.01;\n    #undef R\n    #undef G\n  }"
+  },
+  {
     "id": "fractal_de78",
     "author": "gaziya5 aka gaz",
     "code": "  float de(vec3 p){\n    float s=2.;\n    float l=dot(p,p);\n    float e=0.;\n    escape=0.;\n    p=abs(abs(p)-.7)-.5;\n    p.x < p.y?p=p.yxz:p;\n    p.y < p.z?p=p.xzy:p;\n    for(int i=0;i++<8;){\n      s*=e=2./clamp(dot(p,p),.004+tan(12.)*.002,1.35);\n      p=abs(p)*e-vec2(.5*l,12.).xxy;\n    }\n    return length(p-clamp(p,-1.,1.))/s;\n  }"
@@ -308,11 +313,6 @@
     "id": "fractal_de90",
     "author": "yonatan",
     "code": "  float de(vec3 p){\n    float j = 0.5;\n    for(p.xz=mod(p.xz,6.)-3.;++j<9.;p=3.*p-.9)\n      p.xz=abs(p.xz),\n      p.z>p.x?p=p.zyx:p,\n      p.y>p.z?p=p.xzy:p,\n      p.z--,\n      p.x-=++p.y*.5;\n    return min(.2,p.x/4e3-.2);\n  }"
-  },
-  {
-    "id": "fractal_de91",
-    "author": "gaziya5 aka gaz",
-    "code": "  float de(vec3 p){\n    float s=4.;\n    float l=0;\n    p.z-=.9;\n    vec3 q=p;\n    s=2.;\n    for(int j=0;j++<9;)\n      p-=clamp(p,-1.,1.)*2.,\n      p=p*(l=8.8*clamp(.72/min(dot(p,p),2.),0.,1.))+q,\n      s*=l;\n    return length(p)/s;\n  }"
   },
   {
     "id": "fractal_de92",
@@ -435,11 +435,6 @@
     "code": "  float de(vec3 p){\n    float s=2., l=0.;\n    p=abs(p);\n    for(int j=0;j++<8;)\n      p=-sign(p)*(abs(abs(abs(p)-2.)-1.)-1.),\n      p*=l=-1.3/dot(p,p),\n      p-=.15, s*=l;\n    return length(p)/s;\n  }"
   },
   {
-    "id": "fractal_de120",
-    "author": "gaziya5 aka gaz",
-    "code": "  float de(vec3 p){\n    p.z-=20;\n    float s=3., l=0.;\n    p=abs(p);\n    for(int j=0;j++<10;)\n      p=-sign(p)*(abs(abs(abs(p)-2.)-1.)-1.),\n      p*=l=-1./max(.19,dot(p,p)),\n      p-=.24, s*=l;\n    return (length(p)/s);\n  }"
-  },
-  {
     "id": "fractal_de121",
     "author": "gaziya5 aka gaz",
     "code": "  float de(vec3 p){\n    float s=2., l=0.;\n    p=abs(mod(p-1.,2.)-1.);\n    for(int j=0;j++<8;)\n      p=1.-abs(abs(abs(p-5.)-2.)-2.),\n      p*=l=-1.3/dot(p,p),\n      p-=vec3(.3,.3,.4), s*=l;\n    return length(p.yz)/s;\n  }"
@@ -465,6 +460,26 @@
     "code": "  float de(vec3 p){\n    float s=2.,r2;\n    p=abs(p);\n    for(int i=0; i<12;i++){\n      p=1.-abs(p-1.);\n      r2=(i%3==1)?1.1:1.2/dot(p,p);\n      p*=r2; s*=r2;\n    }\n    return length(cross(p,normalize(vec3(1))))/s-0.005;\n  }"
   },
   {
+    "id": "fractal_de127",
+    "author": "gaziya5 aka gaz",
+    "code": "  float de(vec3 p){\n    float i,g,e,s=3.,l;\n    vec3 q=p;\n    for(int j=0;j++<9;)\n      p=mod(p-1.,2.)-1.,\n      l=1.2/pow(pow(dot(pow(abs(p),vec3(5)),vec3(1)),.2),1.6),\n      p*=l, s*=l;\n    return abs(p.y)/s;\n  }"
+  },
+  {
+    "id": "fractal_de128",
+    "author": "gaziya5 aka gaz",
+    "code": "  float de(vec3 p){\n    float i,g,e,s=4.,l;\n    vec3 q=p;\n    for(int j=0;j++<9;)\n      p=mod(p-1.,2.)-1.,\n      l=1.2/dot(p,p),\n      p*=l, s*=l;\n    return abs(p.y)/s;\n  }"
+  },
+  {
+    "id": "fractal_de129",
+    "author": "gaziya5 aka gaz",
+    "code": "  float de(vec3 p){\n    float i,g,e,s=1.,l;\n    vec3 q=p;\n    for(int j=0;j++<4;)\n      p=mod(p-1.,2.)-1.,\n      l=2./dot(p,p),\n      p*=l, s*=l;\n    return length(p.xy)/s;\n  }"
+  },
+  {
+    "id": "fractal_de130",
+    "author": "gaziya5 aka gaz",
+    "code": "  float de(vec3 p){\n    #define F1(s)p.s=abs(p.s)-1.\n    p+=vec3(0,3.8,5.);\n    vec3 q=p;\n    p=mod(p,vec3(8,8,2))-vec3(4,4,1);\n    F1(yx); F1(yx); F1(xz);\n    return min(length(cross(p,vec3(.5)))-.03,length(p.xy)-.05);\n  }"
+  },
+  {
     "id": "fractal_de131",
     "author": "gaziya5 aka gaz",
     "code": "  float de(vec3 p){\n    float l,s=3.;\n    float t = 4.5;\n    for(int j=0;j++<5;p.xy=fract(p.xy+p.x)-.5)\n      p=vec3(log(l=length(p.xy)),atan(p.y,p.x)/PI*2.,p.z/l+1.),\n      s*=.5*l;\n    return abs(p.z)*s;\n  }"
@@ -473,6 +488,11 @@
     "id": "fractal_de133",
     "author": "gaziya5 aka gaz",
     "code": "  float de(vec3 p){\n    float i,g,e,R,S;\n    vec3 q=p; R=2.;\n    for(int j=0;j++<9;)\n      p-=clamp(p,-1.,1.)*2.,\n      S=9.*clamp(.7/min(dot(p,p),3.),0.,1.),\n      p=p*S+q,\n      R=R*abs(S)+1.,\n      p=p.yzx;\n    return length(p)/R;\n  }"
+  },
+  {
+    "id": "fractal_de134",
+    "author": "gaziya5 aka gaz",
+    "code": "  float de(vec3 p){\n    float i,g,e,R=1.,S;\n    vec3 q=p;\n    for(int j=0;j++<9;)\n      p-=clamp(p,-1.,1.)*2.,\n      S=6.*clamp(.2/min(dot(p,p),7.),0.,1.),\n      p=p*S+q*.7,  R=R*abs(S)+.7;\n    return length(p)/R;\n  }"
   },
   {
     "id": "fractal_de135",
@@ -528,6 +548,11 @@
     "id": "fractal_de145",
     "author": "phi16",
     "code": "  float de(vec3 p){\n    return length(.05*cos(9.*p.y*p.x)+cos(p)-.1*cos(9.*(p.z+.3*p.x-p.y)))-1.;\n  }"
+  },
+  {
+    "id": "fractal_de146",
+    "author": "gaziya5 aka gaz",
+    "code": "  float de(vec3 p){\n    vec3 q=p;\n    float s=5., e=0.;\n    for(int j=0;j++<8;s*=e)\n      p=sign(p)*(1.-abs(abs(p-2.)-1.)),\n      p=p*(e=6./clamp(dot(p,p),.1,3.))-q*vec3(2,8,5);\n    return length(p)/s;\n  }"
   },
   {
     "id": "fractal_de147",
@@ -680,11 +705,6 @@
     "code": "  float de(vec3 p){\n    float s=2., e;\n    for(int i=0;i++<7;){\n      p.xz=.8-abs(p.xz);\n      p.x < p.z?p=p.zyx:p;\n      s*=e=2.1/min(dot(p,p),1.);\n      p=abs(p)*e-vec3(1,18,9);\n    }\n    return length(p)/s-0.01;\n  }"
   },
   {
-    "id": "fractal_de179",
-    "author": "yonatan",
-    "code": "  float de(vec3 p){\n    float n=1.+snoise3D(p), s=4., e;\n    for(int i=0;i++<7;p.y-=20.*n)\n      p.xz=.8-abs(p.xz),\n      p.x < p.z?p=p.zyx:p,\n      s*=e=2.1/min(dot(p,p),1.),\n      p=abs(p)*e-n;\n    return length(p)/s+1e-4;\n  }"
-  },
-  {
     "id": "fractal_de180",
     "author": "gaziya5 aka gaz",
     "code": "  float de(vec3 p){\n    float s=3., e;\n    for(int i=0;i++<8;)\n      p=mod(p-1.,2.)-1.,\n      s*=e=1.4/dot(p,p),\n      p*=e;\n    return length(p.yz)/s;\n  }"
@@ -760,6 +780,16 @@
     "code": "  vec3 foldY(vec3 P, float c){\n    float r = length(P.xz);\n    float a = atan(P.z, P.x);\n    a = mod(a, 2.0 * c) - c;\n    P.x = r * cos(a);\n    P.z = r * sin(a);\n    return P;\n  }\n\n  float de(vec3 p){\n    float l= length(p)-1.;\n    float dr = 1.0, g = 1.25;\n    vec4 ot=vec4(.3,.5,0.21,1.);\n    ot = vec4(1.);\n    mat3 tr = rotate3D(-0.55, normalize(vec3(-1., -1., -0.5)));\n\n    for(int i=0;i<15;i++) {\n      if(i-(i/3)*5==0)\n      p = foldY(p, .95);\n      p.yz = abs(p.yz);\n      p = tr * p * g -1.;\n      dr *= g;\n      ot=min(ot,vec4(abs(p),dot(p,p)));\n      l = min (l ,(length(p)-1.) / dr);\n    }\n    return l;\n  }"
   },
   {
+    "id": "fractal_de197",
+    "author": "marvelousbilly",
+    "code": "mat3 rotmat(float angle, vec3 axis){\n\taxis = normalize(axis);\n\tfloat s = sin(angle);\n\tfloat c = cos(angle);\n\tfloat oc = 1.0 - c;\n\treturn mat3(oc * axis.x * axis.x + c,  oc * axis.x * axis.y - axis.z * s,\n\t  oc * axis.z * axis.x + axis.y * s,  oc * axis.x * axis.y + axis.z * s,\n\t  oc * axis.y * axis.y + c, oc * axis.y * axis.z - axis.x * s,\n\t  oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,\n\t  oc * axis.z * axis.z + c);\n}\nfloat de(vec3 p){\n  mat3 r = rotmat(3.14159, vec3(0.,1.,0.)); //rotation matrix\n  float scale= 2.;\n  int Iterations = 10;\n  int i;\n  vec3 C = vec3(1.,5.4,10.+10.*sin(0.5));\n  for(i = 0; i < Iterations; i++){\n    p = r * (p);\n    float x = p.x; float y = p.y; float z = p.z; float x1 = x; float y1 = y;\n    x=abs(x);y = abs(y);\n    if(x-y<0.){x1=y;y=x;x=x1;}\n    if(x-z<0.){x1=z;z=x;x=x1;}\n    if(y-z<0.){y1=z;z=y;y=y1;}\n\n    z-=0.5*C.z*(scale-1.)/scale;\n    z=-abs(-z);\n    z+=0.5*C.z*(scale-1.)/scale;\n\n    p = vec3(x,y,z);\n    r = rotmat(31.4159/4.+5.60,vec3(1.,0.5,0.6));\n    p = r * (p);\n    x = p.x; y = p.y; z = p.z;\n\n    x=scale*x-C.y*(scale-1.);\n    y=scale*y-C.y*(scale-1.);\n    z=scale*z;\n\n    p = vec3(x,y,z);\n  }\n  return (length(p) - 2.) * pow(scale,float(-i));\n}"
+  },
+  {
+    "id": "fractal_de198",
+    "author": "adapted from code by marvelousbilly",
+    "code": "  float de(vec3 p){\n    mat3 r = rotate3D(3.14159, vec3(0.,1.,0.));\n    float scale= 2.;\n    int Iterations = 10;\n    int i;\n    vec3 C = vec3(1.,5.4,10.+10.*sin(0.5));\n    for(i = 0; i < Iterations; i++){\n      p = r * (p);\n      float x = p.x; float y = p.y; float z = p.z; float x1 = x; float y1 = y;\n\n      x=abs(x);y = abs(y);\n      if(x-y<0.){x1=y;y=x;x=x1;}\n      if(x-z<0.){x1=z;z=x;x=x1;}\n      if(y-z<0.){y1=z;z=y;y=y1;}\n\n      z-=0.5*C.z*(scale-1.)/scale;\n      z=-abs(-z);\n      z+=0.5*C.z*(scale-1.)/scale;\n\n      p = vec3(x,y,z);\n      r = rotate3D(31.4159/4.+5.60,vec3(1.,0.5,0.6));\n      p = r * (p);\n      x = p.x; y = p.y; z = p.z;\n\n      x=scale*x-C.y*(scale-1.);\n      y=scale*y-C.y*(scale-1.);\n      z=scale*z;\n\n      p = vec3(x,y,z);\n    }\n    return (length(p) - 2.) * pow(scale,float(-i));\n  }"
+  },
+  {
     "id": "fractal_de199",
     "author": "Nameless",
     "code": "  float de(vec3 p0){\n    vec4 p = vec4(p0, 1.);\n    p.xyz=abs(p.xyz);\n    if(p.x > p.z)p.xz = p.zx;\n    if(p.z < p.y)p.zy = p.yz;\n    if(p.y > p.x)p.yx = p.xy;\n    for(int i = 0; i < 8; i++){\n      if(p.x > p.z)p.xz = p.zx;\n      if(p.z < p.y)p.zy = p.yz;\n      if(p.y > p.x)p.yx = p.xy;\n      p.xyz = abs(p.xyz);\n      p*=(2.15/clamp(dot(p.xyz,p.xyz),.4,1.));\n      p.xyz-=vec3(0.3,0.2,1.6);\n    }\n    float m = 1.5;\n    p.xyz-=clamp(p.xyz,-m,m);\n    return length(p.xyz)/p.w;\n  }"
@@ -818,11 +848,6 @@
     "id": "fractal_de219",
     "author": "gaziya5 aka gaz",
     "code": "  float de(vec3 p){\n    p.y+=1.4;\n    //p.xz*=rotate2D(t*.5+.5);\n    for(int j=0;++j<9;)\n      p=abs(p),\n      p.xy*=rotate2D(-9.78),\n      p.x<p.y?p=p.yxz:p,\n      p.x<p.z?p=p.zyx:p,\n      p.y<p.z?p=p.xzy:p,\n      p.yz*=rotate2D(-1.16),\n      p=1.9*p-vec3(1,1,-1);\n    return length(p-clamp(p,-5.,5.))/500.;\n  }"
-  },
-  {
-    "id": "fractal_de220",
-    "author": "gaziya5 aka gaz",
-    "code": "  float de(vec3 p){\n    float s=2.;\n    float e = 0;\n    float l=dot(p,p);\n    p=abs(abs(p)-.4)-.2;\n    p.x<p.y?p=p.yxz:p;\n    p.y<p.z?p=p.xzy:p;\n    for(int i=0;i++<8;){\n      s*=e=2./min(dot(p,p),1.3);\n      p=abs(p)*e-vec2(l,16.).xxy;\n    }\n    return length(p)/s;\n  }"
   },
   {
     "id": "fractal_de221",
@@ -950,11 +975,6 @@
     "code": "  #define D (dot(sin(Q),cos(Q.yzx))+1.3)\n  float de(vec3 p){\n  \tvec3 Q;\n  \tfloat i,d=1.;\n  \tQ=p, d=D, Q.x+=M_PI, d=min(d,D);\n  \tQ.y+=M_PI;\n    d=min(d,D);\n  \tQ*=30.;\n  \td=max(abs(d),(abs(D-1.3)-.5)/30.);\n  \treturn d*.6;\n  }"
   },
   {
-    "id": "fractal_de246",
-    "author": "kamoshika",
-    "code": "  #define D dot(sin(Q),cos(Q.yzx))+1.35\n  float de(vec3 p){\n    vec3 Q;\n    float d = 0.;\n    Q=p,  d=D,  Q.x+=M_PI;\n    d=min(d,D), Q.y+=M_PI;\n    d=max(abs(min(d,D)+snoise3D(Q*2.)*.05),.01);\n    return d*.5;\n  }"
-  },
-  {
     "id": "fractal_de247",
     "author": "gaziya5 aka gaz",
     "code": "  float de(vec3 p){\n    vec3 Q,S;\n    Q=S=p;\n    float a=1.,d;\n    for(int j=0;j++<9;a=a/d+1.)\n      Q=2.*clamp(Q,-.6,.6)-Q,\n      d=clamp(dot(Q,Q),.1,1.)*.5,\n      Q=Q/d+S;\n    return d=(length(Q)-9.)/a;\n  }"
@@ -1010,11 +1030,6 @@
     "code": "  #define R(p,a,r)mix(a*dot(p,a),p,cos(r))+sin(r)*cross(p,a)\n  #define H(h)cos((h)*6.3+vec3(0,23,21))*.5+.5\n  float deee(vec3 p){\n    float i=0.,g=0.,e,s,a;\n    p=R(p,vec3(1),1.2);\n    p=mod(p,2.)-1.;\n    p.xy=vec2(dot(p.xy,p.xy),length(p.xy)-1.); // interesting\n    s=3.;\n    for(int i=0;i++<5;){\n        p=vec3(10,2,1)-abs(p-vec3(10,5,1));\n        s*=e=12./clamp(dot(p,p),.2,8.);\n        p=abs(p)*e;\n    }\n    return min(length(p.xz),p.y)/s+.001;\n  }"
   },
   {
-    "id": "fractal_de260",
-    "author": "kamoshika",
-    "code": "  float de(vec3 p){\n    vec3 Q=p;\n    float i,d=1.,c;\n    Q.x+=M_PI/2.;\n    c=dot(sin(Q),cos(Q.yzx))+1.;\n    d=7.-length(p.xy);\n    return d=(c+d-sqrt((c-d)*(c-d)+.2))*.5+snoise3D(p)*.1;\n  }"
-  },
-  {
     "id": "fractal_de261",
     "author": "Nameless",
     "code": "  float de(vec3 p){\n    p.xz=abs(.5-mod(p.xz,1.))+.01;\n    float DEfactor=1.;\n    escape = 0.;\n    for (int i=0; i<14; i++) {\n      p = abs(p)-vec3(0.,2.,0.);  \n      float r2 = dot(p, p);\n      float sc=2./clamp(r2,0.4,1.);\n      p*=sc; \n      DEfactor*=sc;\n      p = p - vec3(0.1,1.2,0.5);\n      escape += exp(-0.2*dot(p,p));\n    }\n    return length(p)/DEfactor-.0005;\n  }"
@@ -1055,14 +1070,19 @@
     "code": "  float de( vec3 p ) {\r\n  #define L(p) p.y>p.x?p=p.yx:p\r\n    vec3 k=vec3(5,2,1);\r\n    p.y+=5.4;\r\n    for(int j=0;++j<8;)\r\n      p.xz=abs(p.xz),\r\n      L(p.xz),\r\n      p.z=1.-abs(p.z-.9),\r\n      L(p.xy),\r\n      p.x-=2.,\r\n      L(p.xy),\r\n      p.y+=1.,\r\n      p=k+(p-k)*3.;\r\n    return length(p)/1e4;\r\n  }"
   },
   {
-    "id": "fractalCity",
-    "author": "Leon Denise",
-    "code": "  mat2 rot ( float a ) { return mat2( cos( a ), -sin( a ), sin( a ), cos( a ) ); }\r\n  float de ( vec3 p ) {\r\n    float scene = 100.;\r\n    float t = 1000; // arbitrary value\r\n    float falloff = 1.0;\r\n    for ( float index = 0.; index < 8.; ++index ) {\r\n      p.xz *= rot( t / falloff );\r\n      p = abs( p ) - 0.5 * falloff;\r\n      scene = min( scene, max( p.x, max( p.y, p.z ) ) );\r\n      falloff /= 1.8;\r\n    }\r\n    return -scene;\r\n  }"
-  },
-  {
     "id": "flipper",
     "author": "Adapted from code by Kali",
     "code": "  float de( vec3 p ) {\r\n    float t = 160.0; // designed as a time varying term\r\n    p = p.zxy;\r\n    float a = 1.5 + sin( t * 0.3578 ) * 0.5;\r\n    p.xy = p.xy * mat2( cos( a ), sin( a ), -sin( a ), cos( a ) );\r\n    p.x *= 0.75;\r\n    vec3 ani;\r\n    ani = vec3( sin( t ), sin( t ), cos( t ) ) * 0.6;\r\n    p += sin( p * 3.0 + t * 6.0 ) * 0.04;\r\n    vec3 pp = p;\r\n    float l;\r\n    vec3 rv = vec3( 0.5, -0.05, -1.0 );\r\n    for ( int i = 0; i < 20; i++ ) {\r\n      p.xy = abs( p.xy );\r\n      p = p * 1.25 + vec3( -3.0, -1.5, -0.5 );\r\n      vec3 axis = normalize( rv + ani );\r\n      float angle = ( 40.0 + sin( t ) * 10.0 ) * 0.017;\r\n      p = mix( dot( axis, p ) * axis, p, cos( angle ) ) + cross( axis, p ) * sin( angle ); \r\n      l = length( p );\r\n    }\r\n    return l * pow( 1.25, -20.0 ) - 0.1;\r\n  }"
+  },
+  {
+    "id": "KIFS",
+    "author": "Adapted from code by P_Malin",
+    "code": "  mat3 SetRotQuat ( const in vec4 q ) {\r\n    vec4 qSq = q * q;\r\n    float xy2 = q.x * q.y * 2.0;\r\n    float xz2 = q.x * q.z * 2.0;\r\n    float yz2 = q.y * q.z * 2.0;\r\n    float wx2 = q.w * q.x * 2.0;\r\n    float wy2 = q.w * q.y * 2.0;\r\n    float wz2 = q.w * q.z * 2.0;\r\n    return mat3 (\r\n      qSq.w + qSq.x - qSq.y - qSq.z, xy2 - wz2, xz2 + wy2,\r\n      xy2 + wz2, qSq.w - qSq.x + qSq.y - qSq.z, yz2 - wx2,\r\n      xz2 - wy2, yz2 + wx2, qSq.w - qSq.x - qSq.y + qSq.z );\r\n  }\r\n  mat3 SetRot ( vec3 vAxis, float fAngle ) {\n    return SetRotQuat( vec4( normalize( vAxis ) * sin( fAngle ), cos( fAngle ) ) ); \n  }\r\n  float de( vec3 p ) {\r\n    vec2 ax = vec2( 0.2, 0.7 ); // pick two values in the range 0,1\r\n    vec3 vRotationAxis = vec3( ax.x, 1.0, ax.y );\r\n    float fRotationAngle = length( vRotationAxis );\r\n\r\n    mat3 m = SetRot( vRotationAxis, fRotationAngle );\r\n    float fTrap = 30.0;\r\n    float fTotalScale = 1.0;\r\n    const float fScale = 1.25;\r\n    vec3 vOffset = vec3( -1.0, -2.0, -0.2 );\r\n    for( int i = 0; i < 16; i++ ) {\r\n      p.xyz = abs( p.xyz );\r\n      p *= fScale;\r\n      fTotalScale *= fScale;\r\n      p += vOffset;\r\n      p.xyz = ( p.xyz ) * m;\r\n      float fCurrDist = length( p.xyz ) * fTotalScale;\r\n      // float fCurrDist = max(max( p.x,  p.y ),  p.z ) * fTotalScale;\r\n      // float fCurrDist = dot( p.xyz, p.xyz ); // * fTotalScale;\r\n      fTrap = min( fTrap, fCurrDist );\r\n    }\r\n    float l = length( p.xyz ) / fTotalScale;\r\n    float fDist = l - 0.1;\r\n    // return vec2(fDist, fTrap);\r\n    return fDist;\r\n  }"
+  },
+  {
+    "id": "curly1",
+    "author": "Jos Leys / Knighty",
+    "code": "vec2 wrap ( vec2 x, vec2 a, vec2 s ) {\n  x -= s;\n  return ( x - a * floor( x / a ) ) + s;\n}\n\nvoid TransA( inout vec3 z, inout float DF, float a, float b ) {\n  float iR = 1. / dot(z,z);\n  z *= -iR;\n  z.x = -b - z.x; \n  z.y =  a + z.y; \n  DF *= max( 1.0, iR );\n}\n\nfloat de ( vec3 z ) {\n  float adjust = 6.2; // use this for time varying behavior\n  float box_size_x = 1.0;\n  float box_size_z = 1.0;\n  float KleinR = 1.94 + 0.05 * abs( sin( -adjust * 0.5 ) ); //1.95859103011179;\n  float KleinI = 0.03 * cos( -adjust * 0.5 ); //0.0112785606117658;\n  vec3 lz = z +  vec3( 1.0 ), llz = z + vec3( -1.0 );\n  float d = 0.0; float d2 = 0.0;\n  float DE = 1e10;\n  float DF = 1.0;\n  float a = KleinR;\n  float b = KleinI;\n  float f = sign( b ) * 1.0;\n  for ( int i = 0; i < 20 ; i++ ){\n    z.x = z.x + b / a * z.y;\n    z.xz = wrap( z.xz, vec2( 2.0 * box_size_x, 2.0 * box_size_z ), vec2( -box_size_x, -box_size_z ) );\n    z.x = z.x - b / a * z.y;\n    if ( z.y >= a * 0.5 + f * ( 2.0 * a - 1.95 ) / 4.0 * sign( z.x + b * 0.5 ) * \n     ( 1.0 - exp( -( 7.2 - ( 1.95 - a ) * 15.0 ) * abs( z.x + b * 0.5 ) ) ) ) { \n      z = vec3( -b, a, 0.0 ) - z;\n    } //If above the separation line, rotate by 180° about (-b/2, a/2)\n\n    TransA( z, DF, a, b ); //Apply transformation a\n    if ( dot( z - llz, z - llz ) < 1e-5 ) { break; } //If the iterated points enters a 2-cycle , bail out.\n    llz=lz; lz=z;  //Store previous iterates\n  }\n  \n  float y =  min( z.y, a - z.y );\n  DE = min( DE, min( y, 0.3 ) / max( DF, 2.0 ) );\n  return DE;\n}\n"
   },
   {
     "id": "curly2",
@@ -1073,6 +1093,11 @@
     "id": "curly3",
     "author": "Jos Leys / Knighty / tdhooper",
     "code": "// tdhooper variant 1 - spherical inversion\nvec2 wrap ( vec2 x, vec2 a, vec2 s ) {\n  x -= s;\n  return (x - a * floor(x / a)) + s;\n}\n\nvoid TransA ( inout vec3 z, inout float DF, float a, float b ) {\n  float iR = 1. / dot( z, z );\n  z *= -iR;\n  z.x = -b - z.x;\n  z.y = a + z.y;\n  DF *= iR; // max( 1.0, iR );\n}\n\nfloat de( vec3 z ) {\n  vec3 InvCenter = vec3( 0.0, 1.0, 1.0 );\n  float rad = 0.8;\n  float KleinR = 1.5 + 0.39;\n  float KleinI = ( 0.55 * 2.0 - 1.0 );\n  vec2 box_size = vec2( -0.40445, 0.34 ) * 2.0;\n  vec3 lz = z + vec3( 1.0 ), llz = z + vec3( -1.0 );\n  float d = 0.0; float d2 = 0.0;\n  z = z - InvCenter;\n  d = length( z );\n  d2 = d * d;\n  z = ( rad * rad / d2 ) * z + InvCenter;\n  float DE = 1e12;\n  float DF = 1.0;\n  float a = KleinR;\n  float b = KleinI;\n  float f = sign( b ) * 0.45;\n  for ( int i = 0; i < 80; i++ ) {\n    z.x += b / a * z.y;\n    z.xz = wrap( z.xz, box_size * 2.0, -box_size );\n    z.x -= b / a * z.y;\n    if ( z.y >= a * 0.5 + f * ( 2.0 * a - 1.95 ) / 4.0 * sign( z.x + b * 0.5 ) * \n     ( 1.0 - exp( -( 7.2 - ( 1.95 - a ) * 15.0 )* abs(z.x + b * 0.5 ) ) ) ) {\n      z = vec3( -b, a, 0.0 ) - z;\n    } //If above the separation line, rotate by 180° about (-b/2, a/2)\n    TransA( z, DF, a, b ); //Apply transformation a\n    if ( dot( z - llz, z - llz ) < 1e-5 ) {\n      break;\n    } //If the iterated points enters a 2-cycle, bail out\n    llz = lz; lz = z; //Store previous iterates\n  }\n  float y =  min(z.y, a - z.y);\n  DE = min( DE, min( y, 0.3 ) / max( DF, 2.0 ) );\n  DE = DE * d2 / ( rad + d * DE );\n  return DE;\n}\n"
+  },
+  {
+    "id": "curly4",
+    "author": "Jos Leys / Knighty / tdhooper",
+    "code": "// Tdhooper Variant 2 \nvec2 wrap ( vec2 x, vec2 a, vec2 s ) {\n  x -= s;\n  return ( x - a * floor( x / a ) ) + s;\n}\n\nvoid TransA ( inout vec3 z, inout float DF, float a, float b ) {\n  float iR = 1.0 / dot( z, z );\n  z *= -iR;\n  z.x = -b - z.x; \n  z.y =  a + z.y;\n  DF *= iR; //max( 1.0, iR );\n}\n\nfloat de( vec3 z ) {\n  float t = 0.0;\n  float KleinR = 1.5 + 0.39;\n  float KleinI = ( 0.55 * 2.0 - 1.0 );\n  vec2 box_size = vec2( -0.40445, 0.34 ) * 2.0;\n  vec3 lz = z + vec3( 1.0 ), llz = z + vec3( -1.0 );\n  float d = 0.0; float d2 = 0.0;\n  float DE = 1e12;\n  float DF = 1.0;\n  float a = KleinR;\n  float b = KleinI;\n  float f = sign( b ) * 0.45;\n  for ( int i = 0; i < 80 ; i++ ) {\n    z.x += b / a * z.y;\n    z.xz = wrap( z.xz, box_size * 2.0, -box_size );\n    z.x -= b / a * z.y;\n    if ( z.y >= a * 0.5 + f * ( 2.0 * a - 1.95 ) / 4.0 * sign( z.x + b * 0.5 ) * \n     ( 1.0 - exp( -( 7.2 - ( 1.95 - a ) * 15.0 )* abs(z.x + b * 0.5 ) ) ) ) {\n      z = vec3( -b, a, 0.0 ) - z;\n    } //If above the separation line, rotate by 180° about (-b/2, a/2)\n    TransA(z, DF, a, b); //Apply transformation a\n    if ( dot( z - llz, z - llz ) < 1e-5 ) {\n      break;\n    } //If the iterated points enters a 2-cycle, bail out\n    llz = lz; lz = z; //Store previous iterates\n  }\n  float y =  min( z.y, a - z.y );\n  DE = min( DE, min( y, 0.3 ) / max( DF, 2.0 ) );\n  return DE;\n}\n"
   },
   {
     "id": "SpiderApollo",
@@ -1190,6 +1215,11 @@
     "code": "// Hash based domain repeat snowflakes - Rikka 2 demo\nfloat hash(float v){return fract(sin(v*22.9)*67.);}\nmat2 rot(float a){float s=sin(a),c=cos(a);return mat2(c,s,-s,c);}\nvec2 hexFold(vec2 p){return abs(abs(abs(p)*mat2(.866,.5,-.5,.866))*mat2(.5,-.866,.866,.5));}\nfloat sdHex(vec3 p){p=abs(p);return max(p.z-.02,max((p.x*.5+p.y*.866),p.x)-.015);}\nfloat de(vec3 p){\n  float h=hash(floor(p.x)+floor(p.y)*133.3+floor(p.z)*166.6),o=13.0,s=1.+h;\n  p=fract(p)-.5;\n  p.y+=h*.4-.2;\n  p.xz*=rot(time*(h+.8));\n  p.yz*=rot(time+h*5.);\n  h=hash(h);p.x+=h*.15;\n  float l=dot(p,p);\n  if(l>.1)return l*2.;\n  for(int i=0;i<5;i++){\n    p.xy=hexFold(p.xy);\n    p.xy*=mat2(.866,-.5,.5,.866);\n    p.x*=(s-h);\n    h=hash(h);p.y-=h*.065-.015;p.y*=.8;\n    p.z*=1.2;\n    h=hash(h);p*=1.+h*.3;\n    o=min(o,sdHex(p));\n    h=hash(h);s=1.+h*2.;\n  }\n  return o;\n}\n"
   },
   {
+    "id": "cagedStar",
+    "author": "Catzpaw",
+    "code": "float cube(vec3 p){\n  p=abs(p)-.1;\n  return length(max(p,0.)+min(max(p.x,max(p.y,p.z)),0.));\n}\nfloat de(vec3 p){\n  float s=2.,r=.7;\n  vec3 o=p;\n  for(int i=0;i<8;i++){\n    p=clamp(p,-1.008,1.008)*2.03-p; //boxfold\n    float l=cube(p);\n    if(l<.5){p*=2.1;r*=2.1;}else if(l<3.8){p/=l;r/=l;} //ballfold\n    p=o+p*s;r=r*abs(s)+1.;\n  }\n  return .25-length(p)/abs(r);\n}\n"
+  },
+  {
     "id": "doubleNut",
     "author": "aiekick",
     "code": "mat3 rotZ ( float t ) {\n  float s = sin( t );\n  float c = cos( t );\n  return mat3( c, s, 0., -s, c, 0., 0., 0., 1. );\n}\n\nmat3 rotX ( float t ) {\n  float s = sin( t );\n  float c = cos( t );\n  return mat3( 1., 0., 0., 0., c, s, 0., -s, c );\n}\n\nmat3 rotY ( float t ) {\n  float s = sin( t );\n  float c = cos( t );\n  return mat3 (c, 0., -s, 0., 1., 0, s, 0, c);\n}\n\nfloat de ( vec3 p ){\n  vec2 rm = radians( 360.0 ) * vec2( 0.468359, 0.95317 ); // vary x,y 0.0 - 1.0\n  mat3 scene_mtx = rotX( rm.x ) * rotY( rm.x ) * rotZ( rm.x ) * rotX( rm.y );\n  float scaleAccum = 1.;\n  for( int i = 0; i < 18; ++i ) {\n    p.yz = sqrt( p.yz * p.yz + 0.16406 );\n    p *= 1.21;\n    scaleAccum *= 1.21;\n    p -= vec3( 2.43307, 5.28488, 0.9685 );\n    p = scene_mtx * p;\n  }\n  return length( p ) / scaleAccum - 0.15;\n}\n"
@@ -1218,11 +1248,6 @@
     "id": "fractalPump",
     "author": "snolot",
     "code": "float de ( vec3 p ) {\n  float adjust = 62.0; // time based adjustment\n  p = mod( p, 2.0 ) - 1.0;\n  p = abs( p ) - 1.0;\n  if ( p.x < p.z ) p.xz = p.zx;\n  if ( p.y < p.z ) p.yz = p.zy;\n  if ( p.x < p.y ) p.xy = p.yx;\n  if ( p.x > p.y ) p.xy =- p.yx;\n  float s = 1.0;\n  for( int i = 0;i < 10;i++ ) {\n    p.y -= abs( sin( adjust * 0.1 ) );\n    float r2 = 2.0 / clamp( dot( p, p ), 0.2, 1.0 );\n    p = abs( p ) * r2 - vec3( 0.45, 0.2, clamp( abs( sin( adjust * 0.7 ) * 4.2 ), 3.0, 5.2 ) );\n    s *= r2;\n  }\n  return length( p ) / s;\n}\n\n"
-  },
-  {
-    "id": "waterbear",
-    "author": "yonatan",
-    "code": "float de ( vec3 p ) {\n  float e,v,u;\n  e = v = 2;\n  for(int j=0;j++<12;j>3?e=min(e,length(p.xz+length(p)/u*.55)/v-.006),p.xz=abs(p.xz)-.7,p:p=abs(p)-.86)\n    v /= u = dot( p, p ),\n    p /= u,\n    p.y = 1.7 - p.y;\n  return e;\n}\n"
   },
   {
     "id": "flowerz",
@@ -1258,11 +1283,6 @@
     "id": "warpedKlein",
     "author": "catzpaw",
     "code": "float de ( vec3 p ) {\n  float l, e, v;\n  l=1.;\n  for(int j=0;j++<8;l*=v)\n    p=2.*clamp(p,-.8,.9)-p,\n    p*=v=max(.9/dot(p,p),.7),\n    p+=.13;\n  return e=.1*p.y/l;\n}\n"
-  },
-  {
-    "id": "sinugoid",
-    "author": "catzpaw",
-    "code": "float de ( vec3 p ) {\n  #define F d=max(d,(1.2-length(sin(p*s)))/s);p+=s*=1.3\n  float l=.1,d=l,s,i;\n  d=0.;\n  s=1.;\n  F;\n  F;\n  l+=F;\n  F*5.;\n  F;\n  #undef F\n  return d;\n}\n"
   },
   {
     "id": "heartcube",
@@ -1303,11 +1323,6 @@
     "id": "prisnm",
     "author": "gaz",
     "code": "float de ( vec3 p ) {\n#define R(p,a,t) mix(a*dot(p,a),p,cos(t))+sin(t)*cross(p,a)\n#define H(h) (cos((h)*6.3+vec3(0,23,21))*.5+.5)\n  \n  float i=0., s, e, g=0.0;\n  float t = time;\n  vec4 pp=vec4(p,.07);\n  pp.z-=0.5;\n  pp.xyz=R(pp.xyz,normalize(H(t*.1)),t*.2);\n  s=2.0;\n  for(int j=0;j++<6;)\n    pp=.02-abs(pp-.1),\n    s*=e=max(1./dot(pp,pp),1.3),\n    pp=abs(pp.x<pp.y?pp.wzxy:pp.wzyx)*e-1.3;\n    g+=e=abs(length(pp.xz*pp.wy)-.02)/s+1e-4;\n  return g;\n#undef R\n#undef H\n}\n\n"
-  },
-  {
-    "id": "braind",
-    "author": "i_dianov",
-    "code": "float de ( vec3 p ) {\n  vec3 I=p;\n  float e=9.0;\n  float d=0.0;\n  vec2 uv = p.xy / 2.0;\n  for(float j=0;j<PI;j+=PI/3.)\n    p=I,\n    p.x+=j*4.,\n    p.y+=sin(p.x*.5),\n    p.z+=sin(p.x)*.5,\n    e=min(e,(length(p.yz)-length(uv)/4.)*.8);\n    d+=e;\n  return d;\n}\n"
   },
   {
     "id": "tokamak",
@@ -1360,16 +1375,6 @@
     "code": "#define rot(a) mat2(cos(a),sin(a),-sin(a),cos(a))\n#define PI (atan(1.)*4.)\n#define THREAD_R .035\n#define LOOP_R .1\nfloat coilSlice(vec3 p) {\n  p.xy+=vec2(LOOP_R,0)*rot(p.z);\n  p.x = mod(p.x, 2.*LOOP_R)-LOOP_R;\n  return length(p.xy);\n}\nfloat de(vec3 p){\n  p.z*=10.;\n  float tissue = min(\n    coilSlice(vec3(p.xy,p.z)),\n    coilSlice(vec3(p.xy+vec2(LOOP_R, 0.),p.z+PI))\n  )-THREAD_R;\n  return tissue*.9;\n}\n"
   },
   {
-    "id": "knittt",
-    "author": "gaz",
-    "code": "#define _(a) mat2(cos(a),sin(a),-sin(a),cos(a))\n#define q(p) length(vec2(mod(p.x,.4)-.2,p.y+sin(t)))\n#define R(x) vec2(.3,0)*_((p.z+t)*9.+x)\nfloat de(vec3 p){\n  float t=time;\n  return min(q((p.xy+R(0.))),q((p.xy+R(3.14))))*.2;\n}\n\n"
-  },
-  {
-    "id": "chiral",
-    "author": "illus0r",
-    "code": "#define rot(a) mat2(cos(a),sin(a),-sin(a),cos(a))\n#define tn (time/(120.*.017))\n#define PI 3.1415\n#define STEP PI/8.\nvec2 decartToPolar(vec2 decart) {\n    float alpha = atan(decart.x, decart.y);\n    float R = length(decart);\n    return vec2(alpha, R);\n}\nfloat c=3.1415/16.;\nfloat r=.1;\n#define cohesion r*.2 \nfloat de(vec3 p){\n  float i, s=1.;\n  vec2 pol;\n  p.xy*=rot(PI*.5);\n  for(int j=0;j<3;j++){\n    p.zx*=rot(time*.05*s*s*s);\n    p*=2.5;\n    s*=2.5;\n    pol = decartToPolar(p.xz);\n    i = mod(p.y - pol.x*STEP/PI, STEP*2.)-STEP*1.;\n    p.xyz = vec3(i, pol.x, pol.y-.5);\n  }\n  return (length(p.xz)-.3)/s/3.;\n}\n"
-  },
-  {
     "id": "rifs",
     "author": "illus0r",
     "code": "#define PI (atan(1.)*4.)\n#define rot(a) mat2(cos(a),sin(a),-sin(a),cos(a))\nfloat de(vec3 p){\n  p.yz *= rot(-time);\n  p.xz *= rot(-time);\n  float s = 1.;\n  float d, dPrev, dPrePrev;\n  for(int i = 0; i++ < 5;) {\n    dPrePrev = dPrev;\n    dPrev = d;\n    p.xz *= rot(time-3.14/6. + float(i));\n    p.yz *= rot(time+3.14/6. + float(i));\n    p = abs(p);\n    p -= .4;\n    p *= 2.;\n    s *= 2.;\n    d = (length(vec2(length(p)-.9, p.z))-.4)/s;\n  }\n  return (length(vec2(d, dPrePrev))-.01)*.5;\n}\n\n"
@@ -1390,16 +1395,6 @@
     "code": "#define rot(a) mat2(cos(a),sin(a),-sin(a),cos(a))\nfloat de(vec3 p){\n  float t = time, sc;\n  p.xy*=rot(p.z*3.14/3.);\n  vec3 pos = p;\n  p.y -=1.5-sin(p.z+t)*.5;\n  p.z = mod(p.z,2.)-1.;\n  p.x = mod(p.x,2.)-1.;\n  float DEfactor=1.;\n  for (float j=0.; j<7.; j++){\n    p=abs(p);\n    p-=vec3(.5,2.,.5);\n    float dist = dot(p,p);\n    sc=2./clamp(dist,.1,1.);\n    p*=sc;\n    DEfactor*=sc;\n    p-=vec3(0.,5.,0.);\n  }\n  float dd=(length(p)/DEfactor-.005);\n  return dd*.5;\n}\n"
   },
   {
-    "id": "twiggy",
-    "author": "tk87",
-    "code": "mat2 rotate2D ( float r ) {\n  return mat2(cos(r), sin(r), -sin(r), cos(r));\n}\nfloat de ( vec3 p ) {\n  float d = 0;\n  p.z+=3.;\n  for(int i=0;++i<10;)\n    p.y-=clamp(p.y,.0,.3),\n    p.xz-=.05,\n    p=abs(p),\n    p.yx*=rotate2D(.6),\n    p.zx*=rotate2D(1.4),\n    p*=1.1;\n    d=length(p)-.05;\n    d*=.39;\n  return d;\n}\n\n"
-  },
-  {
-    "id": "twiggy2",
-    "author": "tk87",
-    "code": "float de ( vec3 p ) {\n  float d = 0;\n  p.z+=.8;\n  for(int i=0;++i<10;)\n    p.y-=clamp(p.y,.0,.1),\n    p=abs(p),\n    p*=rotate3D(.4,vec3(1,.2,-1)),\n    p*=1.1;\n  d=length(p)-.02;\n  d*=.39;\n  return d;\n}\n"
-  },
-  {
     "id": "spicy",
     "author": "leon",
     "code": "float gyroid (vec3 seed) { return dot(sin(seed),cos(seed.yzx)); }\nfloat fbm (vec3 seed) {\n  float result = 0.;\n  float a = .5;\n  for (int i = 0; i < 5; ++i) {\n    result += gyroid(seed/a+result/a)*a;\n    a /= 2.;\n  }\n  return result;\n}\nfloat de(vec3 p){\n  // spicy fbm cyclic gyroid noise\n  float details = sin(time*.2-fbm(p)+length(p));\n  return max(abs(details*.05), p.z+2.);\n}\n\n"
@@ -1408,11 +1403,6 @@
     "id": "blocktree",
     "author": "Jeyko",
     "code": "float r11 ( float t ) { \n  return fract( sin( t * 414.125 ) * 114.12521 );\n}\nfloat valN ( float t ) {\n  return mix( r11( floor( t ) ), r11( floor( t ) + 1.0 ), pow( fract( t ), 2.0 ) );\n}\nvec3 nois ( float t ) {\n  t /= 2.0;\n  return vec3( valN( t + 200.0 ), valN( t + 10.0 ), valN( t + 50.0 ) );\n}\nfloat sdBox ( vec3 p, vec3 s ) {\n  p = abs( p ) - s;\n  return max( p.x, max( p.y, p.z ) );\n}\n#define rot(j) mat2(cos(j),-sin(j),sin(j),cos(j))\nfloat de ( vec3 p ) {\n  vec3 n = nois( time );\n  float d = 10e7;\n  vec3 sz = vec3( 1.0, 0.5, 0.5 ) / 2.0;\n  for( int i = 0; i < 8; i++ ){\n    float b = sdBox( p, sz );\n    sz *= vec3( 0.74, 0.5, 0.74 );\n    d = min( b, d );\n    p = abs( p );\n    p.xy *= rot( -0.9 + n.x );\n    p.yz *= rot( 0.6 - n.y * 0.3 );\n    p.xz *= rot( -0.2 + n.y * 0.1 );\n    p.xy -= sz.xy * 2.0;\n  }\n  return d;\n}\n"
-  },
-  {
-    "id": "threddy",
-    "author": "gaz",
-    "code": "float de ( vec3 p ) {\n  float e = 1., g=0;\n  for ( int i=0;i++<7;p=abs(p)-vec3(2,1,.2))\n    p = 0.22-abs(abs(p)-.06),\n    p = p.x>p.y?p.zxy:p.zyx,\n    p *= 2.,\n    e *= 2.,\n    p.xz *= rotate2D(-.6);\n    p /= e;\n    g += e = length(p.xy);\n  return e;\n}\n"
   },
   {
     "id": "Lewpen_snowflake",
@@ -1455,14 +1445,14 @@
     "code": "vec3 pmin ( vec3 a, vec3 b, vec3 k ) {\n  vec3 h = clamp( 0.5 + 0.5 * ( b - a ) / k, 0.0, 1.0 );\n  return mix( b, a, h ) - k * h * ( 1.0 - h );\n}\nvoid sphere_fold ( inout vec3 z, inout float dz ) {\n  const float fixed_radius2 = 1.9;\n  const float min_radius2 = 0.5;\n  float r2 = dot( z, z );\n  if ( r2 < min_radius2 ) {\n    float temp = ( fixed_radius2 / min_radius2 );\n    z *= temp;\n    dz *= temp;\n  } else if ( r2 < fixed_radius2 ) {\n    float temp = ( fixed_radius2 / r2 );\n    z *= temp;\n    dz *= temp;\n  }\n}\nvoid box_fold(float k, inout vec3 z, inout float dz) {\n  vec3 zz = sign( z ) * pmin( abs( z ), vec3( 1.0 ), vec3( k ) );\n  z = zz * 2.0 - z;\n}\nfloat sphere ( vec3 p, float t ) {\n  return length( p ) - t;\n}\nfloat boxf ( vec3 p, vec3 b, float e ) {\n  p = abs( p ) - b;\n  vec3 q = abs( p + e ) - e;\n  return min( min(\n    length( max( vec3( p.x, q.y, q.z ), 0.0 ) ) + min( max( p.x, max( q.y, q.z ) ), 0.0 ),\n    length( max( vec3( q.x, p.y, q.z ), 0.0 ) ) + min( max( q.x, max( p.y, q.z ) ), 0.0 ) ),\n    length( max( vec3( q.x, q.y, p.z ), 0.0 ) ) + min( max( q.x, max( q.y, p.z ) ), 0.0 ) );\n}\nfloat de ( vec3 z ) {\n  const float scale = -2.8;\n  vec3 offset = z;\n  float dr = 1.0;\n  float fd = 0.0;\n  const float k = 0.05;\n  for ( int n = 0; n < 5; ++n ) {\n    box_fold( k / dr, z, dr );\n    sphere_fold( z, dr );\n    z = scale * z + offset;\n    dr = dr * abs( scale ) + 1.0;\n    float r1 = sphere( z, 5.0 );\n    float r2 = boxf( z, vec3( 5.0 ), 0.5 );\n    float r = n < 4 ? r2 : r1;\n    float dd = r / abs( dr );\n    if ( n < 3 || dd < fd ) {\n      fd = dd;\n    }\n  }\n  return fd;\n}\n\n"
   },
   {
-    "id": "PhilosopherStoned",
-    "author": "stb",
-    "code": "// \"Philosopher Stoned\" by stb\nfloat s, c;\n#define rotate(p, a) mat2(c=cos(a), s=-sin(a), -s, c) * p\nvoid rotateXY( inout vec3 p, vec2 axy ) {\n  p.yz = rotate( p.yz, axy.y );\n  p.xz = rotate( p.xz, axy.x );\n}\nvec3 fold ( in vec3 p, in vec3 n ) {\n  n = normalize( n );\n  p -= n * max( 0., 2. * dot( p, n ) );\n  return p;\n}\nfloat de ( in vec3 p ) {\n  float f;\n  float t = time;\n  const float I = 64.;\n  for ( float i = 0.; i < I; i++ ) {\n    rotateXY( p, vec2( 10. - .024273 * t, .0045 * t ) );\n    //p = abs( p );\n    p = fold( p, vec3(  1., -1., 0. ) );\n    p = fold( p, vec3( -1., 0., -1. ) );\n    p -= .125 * .025 / ( ( i + 1. ) / I );\n  }\n  f = length( p )-.007;\n  return f;\n}\n\n"
-  },
-  {
     "id": "ballFlake",
     "author": "natchinoyuchi ( modified )",
     "code": "float de ( vec3 p ) {\n  p += vec3( 3.0, 3.0, -17.0 );\n  float i, d = 3.0, e = 0.0, g, a = 3.0, t = time;\n  p += a;\n  for( int j = 0; j++ < 7; p *= e )\n    p = abs( p - a ) - a,\n    a = a * ( -sin( t ) * 0.6 + 0.61 ),\n    d *= e = a * a * 2.0 / dot( p, p );\n  return min( 0.3, ( p.y + length( p.xz ) ) / d );\n}\n\n"
+  },
+  {
+    "id": "greenDragon",
+    "author": "guil",
+    "code": "vec2 cmul( vec2 a, vec2 b ) { return vec2( a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x ); }\nvec2 csqr( vec2 a ) { return vec2( a.x * a.x - a.y * a.y, 2.0 * a.x * a.y ); }\nvec2 conj( vec2 z ) { return vec2( z.x, -z.y ); }\nvec4 dmul( vec4 a, vec4 b ) {\n  float r = length( a );\n  b.xy = cmul( normalize( a.xy ), b.xy );\n  b.xz = cmul( normalize( a.xz ), b.xz );\n  b.zw = cmul( normalize( a.zw ), b.zw );\n  return r * b;\n}\n\n// Green Dragon\nfloat de ( vec3 p) {\n  float dr = 1.0;\n  p *= dr;\n  float r2;\n  vec4 z = vec4( -p.yzx, 0.2 );\n  dr = dr / length( z );\n  if ( z.z > -0.5 )\n    z.x += 0.5 * cos( time ) * abs( z.y ) * ( z.z + 0.5 );\n  dr = dr * length( z );\n  vec4 c = z;\n  for ( int i = 0; i < 16; i++ ) {\n    r2 = dot( z, z );\n    if( r2 > 100.0 )\n      continue;\n    dr = 2.0 * sqrt( r2 ) * dr + 1.0;\n    z = dmul( z, z ) + c;\n  }\n  return 0.5 * length( z ) * log( length( z ) ) / dr;\n}\n\n"
   },
   {
     "id": "feeingers",
@@ -1483,6 +1473,11 @@
     "id": "sonolith",
     "author": "zackpudil",
     "code": "float de ( vec3 p ) {\n  p.xy = mod( p.xy + 1.0, 2.0 ) - 1.0;\n  p.z = abs( p.z ) - 0.75;\n  vec4 q = vec4( p, 1.0 );\n  for ( int i = 0; i < 15; i++ ) {\n    q.xyz = abs( q.xyz ) - vec3( 0.3, 1.0, -0.0 );\n    q = 2.0 * q / clamp( dot( q.xyz, q.xyz ), 0.5, 1.0 ) - vec4( 1.0, 0.0, 0.3, 0.0 );\n  }\n  return abs(q.x + q.y + q.z)/q.w;\n}\n\n"
+  },
+  {
+    "id": "blobelisk",
+    "author": "zackpudil",
+    "code": "float de ( vec3 p ) {\n  vec4 q = vec4( p, 1 );\n  q.xz = mod(q.xz + 1.0, 2.0) - 1.0;\n  for ( int i = 0; i < 15; i++ ) {\n    q.xyz = abs( q.xyz );\n    q /= clamp( dot( q.xyz, q.xyz ), 0.4, 1.0 );\n    q = 1.7 * q - vec4( 0.5, 1.0, 0.4, 0.0 );\n  }\n  return min( length( q.xyz ) / q.w, min( p.y + 1.0, -p.y + 1.0 ) );\n}\n\n"
   },
   {
     "id": "ringoo",

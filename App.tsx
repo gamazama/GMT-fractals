@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, Suspense } from 'react';
+import React, { useState, useRef, useMemo, useEffect, Suspense } from 'react';
 import TopBar from './components/TopBar';
 import MobileControls from './components/MobileControls';
 import { LoadingScreen } from './components/LoadingScreen';
@@ -13,6 +13,7 @@ import { EngineBridge } from './components/EngineBridge';
 import { useAppStartup } from './hooks/useAppStartup';
 import { useTutorialHints } from './hooks/useTutorialHints';
 import TutorialOverlay from './components/tutorial/TutorialOverlay';
+import { prefetchHelpTopics } from './data/help/registry';
 
 // --- Code-split: loaded on demand ---
 const Timeline = React.lazy(() => import('./components/Timeline'));
@@ -59,6 +60,10 @@ const App: React.FC = () => {
   useKeyboardShortcuts(showTimeline, setShowTimeline);
   useGlobalContextMenu();
   const { activeHint, dismissHint } = useTutorialHints(showTimeline);
+
+  // Warm up the help-topics chunk during idle time so right-click context menus
+  // have their "Help" section ready without pulling 100KB+ into the main bundle.
+  useEffect(() => { prefetchHelpTopics(); }, []);
 
   // --- Computed UI State ---
   const isCurrentlyMobile = isMobile || state.debugMobileLayout;

@@ -86,6 +86,14 @@ function stripFragSyntax(source: string): StripResult {
     cleaned = cleaned.replace(/\}\s*;/g, '}');
     cleaned = cleaned.replace(/\s+\b(Locked|Unlocked)\b/g, '');
 
+    // Collapse doubled semicolons produced by annotation strips. Source like
+    //   `uniform vec3 InvertC; slider[...] Locked;`
+    // strips through `uniform vec3 InvertC; Locked;` → `uniform vec3 InvertC;;`
+    // which @shaderfrog/glsl-parser rejects. Real WebGL drivers tolerate it,
+    // but we need to produce parseable output. Safe because we never use `;;`
+    // as a statement separator in legitimate GLSL.
+    cleaned = cleaned.replace(/;(\s*;)+/g, ';');
+
     // Expand simple #define macros (value defines only, not function-like macros)
     // E.g. `#define M_PI 3.14159...` → replace all M_PI with the value
     const defines = new Map<string, string>();
@@ -111,6 +119,14 @@ function stripFragSyntax(source: string): StripResult {
     cleaned = cleaned.replace(/^#info\s+.+$/gm, '');
     cleaned = cleaned.replace(/^#camera\s+.+$/gm, '');
     cleaned = cleaned.replace(/^#include\s+.+$/gm, '');
+    // Fragmentarium-only blocks that aren't valid GLSL: vertex-shader block,
+    // buffer-shader block, and #FragmentProgram pragma lines. Leaving these
+    // in makes the AST parser crash on unexpected directives.
+    cleaned = cleaned.replace(/#vertex\b[\s\S]*?#endvertex\b/g, '');
+    cleaned = cleaned.replace(/#buffershader\b[\s\S]*?#endbuffershader\b/g, '');
+    cleaned = cleaned.replace(/^#FragmentProgram\s+.+$/gm, '');
+    // Reserved marker #defines that look like statements to the parser.
+    cleaned = cleaned.replace(/^#define\s+(providesInit|providesColor|providesBackground|dontclearonchange|iterationsbetweenredraws|subframemax)\b[^\n]*$/gm, '');
 
     // Snapshot source BEFORE stripping computed globals — extractGlobals() needs
     // the initializer expressions intact to classify and re-inject them.

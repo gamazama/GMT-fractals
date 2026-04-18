@@ -20,16 +20,47 @@ You can also **import .gmf formula files** — these are saved scenes that inclu
 - **Hybrids & Experiments**: Formulas that combine folding with power functions, cyclic feedback, or novel mappings for unusual shapes.
 - **Systems**: The **Modular Builder**, where you construct your own fractal by chaining operations together.
 
-## The Formula Workshop (Import library)
-Beyond the built-in formulas, GMT ships a Workshop that lets you import Fragmentarium \`.frag\` files and DEC formulas — hundreds of community fractals curated from [3Dickulus's Fragmentarium Examples](https://github.com/3Dickulus/Fragmentarium_Examples_Folder) and [Jon Baker's Distance Estimator Compendium](https://jbaker.graphics/writings/DEC.html). Open the Workshop from the Formula dropdown (or via its shortcut).
+## Want more formulas?
+Open the **Formula Workshop** to browse hundreds of community fractals from Fragmentarium and the Distance Estimator Compendium. Right-click inside the Workshop for a dedicated help topic.
+`
+    },
+    'panel.workshop': {
+        id: 'panel.workshop',
+        category: 'Formulas',
+        title: 'Formula Workshop',
+        content: `
+The Formula Workshop opens a library of hundreds of community fractals beyond the built-ins: curated Fragmentarium (\`.frag\`) examples and the Distance Estimator Compendium (DEC), spanning classic and experimental shapes.
 
-- **Search / browse**: type in the search bar to find formulas by name, or use the Frag/DEC buttons to browse by category or artist/folder.
-- **Dice rolls**: the two dice buttons pick a random formula from the working set (Frag or DEC).
-- **Compat badges**: each formula shows a green **V3** or cyan **V4** badge — this is the pipeline GMT will use to render it. V3-badged formulas compose with engine features like interlace and hybrid fold; V4-badged ones render correctly but are standalone.
-- **Pipeline selector** (\`auto\` / \`v3\` / \`v4\` in the footer): default is \`auto\` — GMT picks the right pipeline per formula automatically. You can force a specific pipeline when experimenting.
-- **"Show broken" toggle**: reveals formulas that neither pipeline can render. Off by default; useful if you want to debug why a specific formula fails.
+## Finding a formula
 
-Most users won't need to think about V3 vs V4 — \`auto\` picks correctly, and the 326 working formulas cover the vast majority of the community library.
+- **Search** — type any part of a name, artist, or tag in the search bar at the top.
+- **Browse** — click the **Frag** or **DEC** buttons to browse by category or artist.
+- **Surprise me** — the two dice buttons pick a random formula for you.
+
+Click any result to load it; the scene updates immediately.
+
+## Badge colors
+
+Each formula in the library has a small colored badge. It tells you how the formula will behave:
+
+- **Green "Iteration"** — the formula runs as a per-iteration step inside the engine's main loop. That means you can use it as a primary or secondary formula in the **Interlace** feature, and combine it with engine folds (hybrid box fold, sphere fold, burning ship). This is the richer mode for building hybrid and layered fractals.
+- **Cyan "Standalone"** — the formula is a self-contained distance estimator that runs as a single unit. Renders correctly on its own, but **can't be interlaced** with another formula or mixed with engine folds.
+
+This distinction mostly matters when you're building hybrid or layered fractals. If you're just exploring, either badge is a fine pick — both render.
+
+## Custom imports
+
+Paste \`.frag\` or GLSL source directly into the editor in the Workshop, or drop a file into the window. GMT auto-detects the formula's shape and maps its parameters to on-screen sliders so you can tweak them like a built-in.
+
+## Advanced controls
+
+- **Mode selector** (Auto / Iteration / Standalone at the bottom): leave on **Auto**. GMT picks the right rendering path per formula automatically — Iteration when the formula supports it, Standalone otherwise. Force a specific mode only if you're investigating why a particular formula doesn't render as expected.
+- **Show broken**: reveals formulas that can't be rendered in either mode. Off by default — mostly useful for formula authors debugging compatibility.
+
+## References
+
+- [3Dickulus's Fragmentarium Examples](https://github.com/3Dickulus/Fragmentarium_Examples_Folder)
+- [Jon Baker's Distance Estimator Compendium](https://jbaker.graphics/writings/DEC.html)
 `
     },
     'formula.transform': {

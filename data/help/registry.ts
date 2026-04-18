@@ -1,34 +1,53 @@
+/**
+ * Lazy help-topics loader.
+ *
+ * The aggregated HELP_TOPICS record (~3400 lines of markdown across 14 topic
+ * files) lives in `./topics-bundle`, which is dynamic-imported here so Vite
+ * emits it as a separate chunk. Main-bundle consumers (GlobalContextMenu, which
+ * only needs topic TITLES for right-click menus) never see the content until
+ * `loadHelpTopics()` is called.
+ *
+ * Usage patterns:
+ *   - React component: `const topics = useHelpTopics();` (see ./useHelpTopics)
+ *   - Imperative:      `const topics = await loadHelpTopics();`
+ *   - Sync check:      `getLoadedHelpTopics()` — null until first load
+ *
+ * App-level `prefetchHelpTopics()` fires from App.tsx on an idle callback so
+ * the chunk is usually warm before the user's first right-click. The hook
+ * gracefully renders with an empty map if the load hasn't finished yet.
+ */
 
-import { HelpSection } from '../../types/help';
-import { GETTING_STARTED_TOPICS } from './topics/getting_started';
-import { GENERAL_TOPICS } from './topics/general';
-import { FORMULA_TOPICS } from './topics/formulas';
-import { FORMULA_LIBRARY } from './topics/formula_library';
-import { PARAM_TOPICS } from './topics/parameters';
-import { UI_TOPICS } from './topics/ui';
-import { TIMELINE_TOPICS } from './topics/timeline';
-import { LIGHTING_TOPICS } from './topics/lighting';
-import { RENDERING_TOPICS } from './topics/rendering';
-import { COLORING_TOPICS } from './topics/coloring';
-import { GRAPH_TOPICS } from './topics/graph';
-import { SCENE_TOPICS } from './topics/scene';
-import { EFFECTS_TOPICS } from './topics/effects';
-import { AUDIO_TOPICS } from './topics/audio';
+import type { HelpSection } from '../../types/help';
 
-// Combine all topic dictionaries
-export const HELP_TOPICS: Record<string, HelpSection> = {
-    ...GETTING_STARTED_TOPICS,
-    ...GENERAL_TOPICS,
-    ...FORMULA_TOPICS,
-    ...FORMULA_LIBRARY,
-    ...PARAM_TOPICS,
-    ...UI_TOPICS,
-    ...TIMELINE_TOPICS,
-    ...LIGHTING_TOPICS,
-    ...RENDERING_TOPICS,
-    ...COLORING_TOPICS,
-    ...GRAPH_TOPICS,
-    ...SCENE_TOPICS,
-    ...EFFECTS_TOPICS,
-    ...AUDIO_TOPICS
-};
+export type HelpTopicMap = Record<string, HelpSection>;
+
+let _cache: HelpTopicMap | null = null;
+let _loading: Promise<HelpTopicMap> | null = null;
+
+/** Kick off (or reuse) the help-topics dynamic import. Safe to call repeatedly. */
+export function loadHelpTopics(): Promise<HelpTopicMap> {
+    if (_cache) return Promise.resolve(_cache);
+    if (!_loading) {
+        _loading = import('./topics-bundle').then(m => {
+            _cache = m.HELP_TOPICS;
+            return _cache;
+        });
+    }
+    return _loading;
+}
+
+/** Synchronous accessor — returns null until the first loadHelpTopics() resolves. */
+export function getLoadedHelpTopics(): HelpTopicMap | null {
+    return _cache;
+}
+
+/** Idle prefetch helper — schedules loadHelpTopics() for after the main thread
+ *  has a breather. Browsers that lack requestIdleCallback fall back to setTimeout. */
+export function prefetchHelpTopics(delayMs = 300): void {
+    if (_cache || _loading) return;
+    const schedule: (cb: () => void) => void =
+        (typeof window !== 'undefined' && (window as any).requestIdleCallback)
+            ? (cb) => (window as any).requestIdleCallback(cb, { timeout: 2000 })
+            : (cb) => setTimeout(cb, delayMs);
+    schedule(() => { void loadHelpTopics(); });
+}

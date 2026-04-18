@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ContextMenuItem } from '../types/help';
-import { HELP_TOPICS } from '../data/help/registry';
+import { useHelpTopics } from '../data/help/useHelpTopics';
 import { HelpIcon, CheckIcon, ArrowIcon, ChevronRight } from './Icons';
 import Slider from './Slider';
 
@@ -21,6 +21,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
     const [layout, setLayout] = useState({ x, y, opacity: 0 });
     const [activeSubmenu, setActiveSubmenu] = useState<{ items: ContextMenuItem[], x: number, y: number } | null>(null);
     const submenuTimerRef = useRef<number | null>(null);
+    const HELP_TOPICS = useHelpTopics();
 
     useLayoutEffect(() => {
         if (!menuRef.current) return;

@@ -7,264 +7,246 @@
   },
   "policy": "V3 preferred when V3 passes (engine-feature compat); else V4 if V4 passes; else none",
   "summary": {
-    "v3Only": 18,
-    "v4Only": 107,
-    "bothPass": 201,
-    "bothFail": 168,
-    "hidden": 168,
+    "v3Only": 71,
+    "v4Only": 36,
+    "bothPass": 383,
+    "bothFail": 21,
+    "hidden": 21,
     "recommended": {
-      "v3": 219,
-      "v4": 107,
-      "none": 168
+      "v3": 454,
+      "v4": 36,
+      "none": 21
     }
   },
   "byId": {
     "3DickUlus/3Dickulus.frag": {
       "id": "3DickUlus/3Dickulus.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "3DickUlus/AndyPolygon-Landscape.frag": {
       "id": "3DickUlus/AndyPolygon-Landscape.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "3DickUlus/BuffaloBulb.frag": {
       "id": "3DickUlus/BuffaloBulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "3DickUlus/BurtsBisectorBulb.frag": {
       "id": "3DickUlus/BurtsBisectorBulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "gradientFinite"
+      "recommended": "v3"
     },
     "3DickUlus/LionBulb.frag": {
       "id": "3DickUlus/LionBulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "3DickUlus/Magnetic-Curiosity.frag": {
       "id": "3DickUlus/Magnetic-Curiosity.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "3DickUlus/MMM.frag": {
       "id": "3DickUlus/MMM.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "3DickUlus/Pengbulb.frag": {
       "id": "3DickUlus/Pengbulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "3DickUlus/PetraBox.frag": {
       "id": "3DickUlus/PetraBox.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Benesi/BenesiFoldedBulb.frag": {
       "id": "Benesi/BenesiFoldedBulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Benesi/BenesiPineFoldDE.frag": {
       "id": "Benesi/BenesiPineFoldDE.frag",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "Benesi/MengerSmooth.frag": {
+      "id": "Benesi/MengerSmooth.frag",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "v3FailGate": "webglCompile"
     },
     "Benesi/MengerSmoothforWeb.frag": {
       "id": "Benesi/MengerSmoothforWeb.frag",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "Benesi/MengersmoothPolyhedra.frag": {
+      "id": "Benesi/MengersmoothPolyhedra.frag",
+      "v3": "skip",
+      "v4": "pass",
+      "recommended": "v4"
+    },
+    "Benesi/MengerWorkOnStella.frag": {
+      "id": "Benesi/MengerWorkOnStella.frag",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "v3FailGate": "webglCompile"
     },
     "Benesi/PineV322.frag": {
       "id": "Benesi/PineV322.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Benesi/pinewithgoodcolor.frag": {
       "id": "Benesi/pinewithgoodcolor.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Benesi/pinewithoptionsDE.frag": {
       "id": "Benesi/pinewithoptionsDE.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "Claude/BuiltinFloat.frag": {
       "id": "Claude/BuiltinFloat.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
-    },
-    "Claude/Mandelbulb.frag": {
-      "id": "Claude/Mandelbulb.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "gradientFinite"
-    },
-    "Claude/Quaternion.frag": {
-      "id": "Claude/Quaternion.frag",
-      "v3": "fail",
-      "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "CozyG/abox_inCyl-10.frag": {
       "id": "CozyG/abox_inCyl-10.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "CozyG/aboxMinR2Bias-6.frag": {
       "id": "CozyG/aboxMinR2Bias-6.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "CozyG/aboxMinR2Cuboid-2.frag": {
       "id": "CozyG/aboxMinR2Cuboid-2.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "CozyG/mboxR2-3.frag": {
       "id": "CozyG/mboxR2-3.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "DarkBeam/BioCube.frag": {
       "id": "DarkBeam/BioCube.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "DarkBeam/FoldcutToy.frag": {
       "id": "DarkBeam/FoldcutToy.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
+    },
+    "Experimental/3DMandel.frag": {
+      "id": "Experimental/3DMandel.frag",
+      "v3": "skip",
+      "v4": "pass",
+      "recommended": "v4"
     },
     "Experimental/BenesiFoldedMandelbulb.frag": {
       "id": "Experimental/BenesiFoldedMandelbulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Experimental/boxfold_kleinian.frag": {
       "id": "Experimental/boxfold_kleinian.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Experimental/Knot.frag": {
       "id": "Experimental/Knot.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Experimental/LogisticBulb.frag": {
       "id": "Experimental/LogisticBulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Experimental/Mixed.frag": {
       "id": "Experimental/Mixed.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Experimental/Moebiusbulb.frag": {
       "id": "Experimental/Moebiusbulb.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Experimental/OctahedronOT.frag": {
       "id": "Experimental/OctahedronOT.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Experimental/PseudoKleinian-Progressive-DOF.frag": {
       "id": "Experimental/PseudoKleinian-Progressive-DOF.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Experimental/QuaternionMandelbrot4D.frag": {
       "id": "Experimental/QuaternionMandelbrot4D.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Experimental/SphereSponge.frag": {
       "id": "Experimental/SphereSponge.frag",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "Experimental/Spudsville2.frag": {
+      "id": "Experimental/Spudsville2.frag",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "gradientFinite"
+      "v3FailGate": "webglCompile"
     },
     "Experimental/Stereographic4DJulia.frag": {
       "id": "Experimental/Stereographic4DJulia.frag",
@@ -274,33 +256,27 @@
     },
     "Experimental/StereographicQuaternionJulia.frag": {
       "id": "Experimental/StereographicQuaternionJulia.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Historical 3D Fractals/Mandelbox.frag": {
       "id": "Historical 3D Fractals/Mandelbox.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Historical 3D Fractals/Mandelbulb.frag": {
       "id": "Historical 3D Fractals/Mandelbulb.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Historical 3D Fractals/QuaternionJulia.frag": {
       "id": "Historical 3D Fractals/QuaternionJulia.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Include/Classic-Noise.frag": {
       "id": "Include/Classic-Noise.frag",
@@ -324,104 +300,88 @@
     },
     "Kaleidoscopic IFS/Dodecahedron.frag": {
       "id": "Kaleidoscopic IFS/Dodecahedron.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Kaleidoscopic IFS/Icosahedron.frag": {
       "id": "Kaleidoscopic IFS/Icosahedron.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kaleidoscopic IFS/Menger.frag": {
       "id": "Kaleidoscopic IFS/Menger.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kaleidoscopic IFS/NewMenger.frag": {
       "id": "Kaleidoscopic IFS/NewMenger.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Kaleidoscopic IFS/Octahedron.frag": {
       "id": "Kaleidoscopic IFS/Octahedron.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kaleidoscopic IFS/Tetrahedron.frag": {
       "id": "Kaleidoscopic IFS/Tetrahedron.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kali's Creations/amazingsurface.frag": {
       "id": "Kali's Creations/amazingsurface.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kali's Creations/Kalibox.frag": {
       "id": "Kali's Creations/Kalibox.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kali's Creations/KboxExpSmooth.frag": {
       "id": "Kali's Creations/KboxExpSmooth.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kali's Creations/LivingKIFS.frag": {
       "id": "Kali's Creations/LivingKIFS.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Kali's Creations/Treebroccoli.frag": {
       "id": "Kali's Creations/Treebroccoli.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/IFS/SimpleIFS-DE3D-final.frag": {
       "id": "Kashaders/Fractals/IFS/SimpleIFS-DE3D-final.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/KIFSandCO/Baird-Delta.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/Baird-Delta.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Kashaders/Fractals/KIFSandCO/carpet-sierpinski.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/carpet-sierpinski.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/KIFSandCO/Cross-menger.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/Cross-menger.frag",
@@ -431,24 +391,21 @@
     },
     "Kashaders/Fractals/KIFSandCO/CubeKoch01.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/CubeKoch01.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/KIFSandCO/Menger11.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/Menger11.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/KIFSandCO/MsltoeIFS02.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/MsltoeIFS02.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/KIFSandCO/pythagore.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/pythagore.frag",
@@ -463,26 +420,29 @@
       "v4": "pass",
       "recommended": "v3"
     },
+    "Kashaders/Fractals/KIFSandCO/sqareKoch/koch-darkbeam-40.frag": {
+      "id": "Kashaders/Fractals/KIFSandCO/sqareKoch/koch-darkbeam-40.frag",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
     "Kashaders/Fractals/KIFSandCO/sqareKoch/koch102.frag": {
       "id": "Kashaders/Fractals/KIFSandCO/sqareKoch/koch102.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/Mandos/hybrids/bulbox.frag": {
       "id": "Kashaders/Fractals/Mandos/hybrids/bulbox.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M3-jacobian.frag": {
       "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M3-jacobian.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M3.frag": {
       "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M3.frag",
@@ -516,195 +476,212 @@
     },
     "Kashaders/Fractals/Mandos/mandalay/mandalay-Mbox03.frag": {
       "id": "Kashaders/Fractals/Mandos/mandalay/mandalay-Mbox03.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
+    },
+    "Kashaders/Fractals/Mandos/mandelbrot2.5D/Julia2.5D13.frag": {
+      "id": "Kashaders/Fractals/Mandos/mandelbrot2.5D/Julia2.5D13.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "Kashaders/Fractals/Mandos/mandelbrot2.5D/MB2.5D02.frag": {
+      "id": "Kashaders/Fractals/Mandos/mandelbrot2.5D/MB2.5D02.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "Kashaders/Fractals/Simple_Kleinians/Simple_Kleinian-1st-flawed-version-DE.frag": {
+      "id": "Kashaders/Fractals/Simple_Kleinians/Simple_Kleinian-1st-flawed-version-DE.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "Kashaders/Fractals/Simple_Kleinians/Simple_Kleinian-2nd-attempt-Slow-DE.frag": {
+      "id": "Kashaders/Fractals/Simple_Kleinians/Simple_Kleinian-2nd-attempt-Slow-DE.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
     },
     "Kashaders/Fractals/SuperEllipsoidify-Menger/SpherifyMenger00.frag": {
       "id": "Kashaders/Fractals/SuperEllipsoidify-Menger/SpherifyMenger00.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Kashaders/Fractals/SuperEllipsoidify-Menger/SuperEllipsoidifyMenger.frag": {
       "id": "Kashaders/Fractals/SuperEllipsoidify-Menger/SuperEllipsoidifyMenger.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/polyhedra/FaCPoly-catalan-colored.frag": {
       "id": "Kashaders/Tessellations/polyhedra/FaCPoly-catalan-colored.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/polyhedra/FaCPoly-common-colored.frag": {
       "id": "Kashaders/Tessellations/polyhedra/FaCPoly-common-colored.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/polyhedra/FaCPoly-compound-colored.frag": {
       "id": "Kashaders/Tessellations/polyhedra/FaCPoly-compound-colored.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/polyhedra/FaCPoly-duals-colored.frag": {
       "id": "Kashaders/Tessellations/polyhedra/FaCPoly-duals-colored.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/polyhedra/FaCPoly-interesting-colored.frag": {
       "id": "Kashaders/Tessellations/polyhedra/FaCPoly-interesting-colored.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/polyhedra/foldandcutpoly.frag": {
       "id": "Kashaders/Tessellations/polyhedra/foldandcutpoly.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/polyhedra/Stellations-icosahedron-try-colored.frag": {
       "id": "Kashaders/Tessellations/polyhedra/Stellations-icosahedron-try-colored.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/experiment/hyperbolic-tesselation-3-5-3-colored-named-half-plane-00.frag": {
       "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/experiment/hyperbolic-tesselation-3-5-3-colored-named-half-plane-00.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/experiment/hyperbolic-tesselation-3-5-3-colored-named-Klein-model-00.frag": {
       "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/experiment/hyperbolic-tesselation-3-5-3-colored-named-Klein-model-00.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-3-5-3-colored-named.frag": {
       "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-3-5-3-colored-named.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
+    },
+    "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-5-3-n-colored-named.frag": {
+      "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-5-3-n-colored-named.frag",
+      "v3": "pass",
+      "v4": "skip",
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-bifurcating-5-3-3-colored-named.frag": {
       "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-bifurcating-5-3-3-colored-named.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-cyclic-m-3-n-3-colored-named.frag": {
       "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-cyclic-m-3-n-3-colored-named.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/Tessellations/tess-3D/polychora/polychora-special.frag": {
       "id": "Kashaders/Tessellations/tess-3D/polychora/polychora-special.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Kashaders/With_CRrenderer/CubeKochMosely01.frag": {
       "id": "Kashaders/With_CRrenderer/CubeKochMosely01.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Kashaders/With_CRrenderer/FaCPoly-catalan-colored08.frag": {
       "id": "Kashaders/With_CRrenderer/FaCPoly-catalan-colored08.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
+    },
+    "Kashaders/With_CRrenderer/Kleinian_angles_10.frag": {
+      "id": "Kashaders/With_CRrenderer/Kleinian_angles_10.frag",
+      "v3": "pass",
+      "v4": "fail",
+      "recommended": "v3",
+      "v4FailGate": "webglCompile"
+    },
+    "Kashaders/With_CRrenderer/Kleinian_angles_24.frag": {
+      "id": "Kashaders/With_CRrenderer/Kleinian_angles_24.frag",
+      "v3": "pass",
+      "v4": "fail",
+      "recommended": "v3",
+      "v4FailGate": "webglCompile"
     },
     "Kashaders/With_CRrenderer/Kleinian_test23.frag": {
       "id": "Kashaders/With_CRrenderer/Kleinian_test23.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Kashaders/With_CRrenderer/LittleBunny_NN_SDF_03.frag": {
       "id": "Kashaders/With_CRrenderer/LittleBunny_NN_SDF_03.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Kashaders/With_CRrenderer/Mandelbox2.frag": {
       "id": "Kashaders/With_CRrenderer/Mandelbox2.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/With_CRrenderer/Mandelbulb_.frag": {
       "id": "Kashaders/With_CRrenderer/Mandelbulb_.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Kashaders/With_CRrenderer/Mandelbulb_02.frag": {
       "id": "Kashaders/With_CRrenderer/Mandelbulb_02.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Kashaders/With_CRrenderer/Menger_box00.frag": {
       "id": "Kashaders/With_CRrenderer/Menger_box00.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/With_CRrenderer/Monkey_NN_SDF_02.frag": {
       "id": "Kashaders/With_CRrenderer/Monkey_NN_SDF_02.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Kashaders/With_CRrenderer/PseudoKleinian06---.frag": {
       "id": "Kashaders/With_CRrenderer/PseudoKleinian06---.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Kashaders/With_CRrenderer/pythagore.frag": {
       "id": "Kashaders/With_CRrenderer/pythagore.frag",
@@ -719,134 +696,134 @@
       "v4": "skip",
       "recommended": "v3"
     },
+    "Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02-----.frag": {
+      "id": "Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02-----.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag": {
+      "id": "Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag",
+      "v3": "skip",
+      "v4": "pass",
+      "recommended": "v4"
+    },
     "Kashaders/With_CRrenderer/voxel11.frag": {
       "id": "Kashaders/With_CRrenderer/voxel11.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "gradientFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Kashaders/With_CRrenderer/voxel12.frag": {
       "id": "Kashaders/With_CRrenderer/voxel12.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "gradientFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Knighty Collection/Baird-Delta.frag": {
       "id": "Knighty Collection/Baird-Delta.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "Knighty Collection/Fold and Cut Polyhedra - Original.frag": {
       "id": "Knighty Collection/Fold and Cut Polyhedra - Original.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_10.frag": {
       "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_10.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_11.frag": {
       "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_11.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_20.frag": {
       "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_20.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra02.frag": {
       "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra02.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Fold_and_cut_polyhedra_examples/menger_iterated_20.frag": {
       "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/menger_iterated_20.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Fold_and_cut_polyhedra_examples/octahedral_polyhedra02.frag": {
       "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/octahedral_polyhedra02.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-3-5-3-colored-named-00.frag": {
       "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-3-5-3-colored-named-00.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
+    },
+    "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-5-3-n-colored-named-00.frag": {
+      "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-5-3-n-colored-named-00.frag",
+      "v3": "pass",
+      "v4": "skip",
+      "recommended": "v3"
     },
     "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-bifurcating-5-3-3-colored-named-00.frag": {
       "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-bifurcating-5-3-3-colored-named-00.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-cyclic-m-3-n-3-colored-named-00.frag": {
       "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-cyclic-m-3-n-3-colored-named-00.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Icosahedral_polyhedra_iterated_11.frag": {
       "id": "Knighty Collection/Icosahedral_polyhedra_iterated_11.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Icosahedral_polyhedra_iterated_20.frag": {
       "id": "Knighty Collection/Icosahedral_polyhedra_iterated_20.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Knot.frag": {
       "id": "Knighty Collection/Knot.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Knighty Collection/Koch01.frag": {
       "id": "Knighty Collection/Koch01.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Mandalabeth-generic-with-jacobian/Mandalabeth-M3-jacobian.frag": {
       "id": "Knighty Collection/Mandalabeth-generic-with-jacobian/Mandalabeth-M3-jacobian.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Knighty Collection/Mandalabeth-generic-with-jacobian/Mandalabeth-M4-jacobian.frag": {
       "id": "Knighty Collection/Mandalabeth-generic-with-jacobian/Mandalabeth-M4-jacobian.frag",
@@ -862,70 +839,75 @@
     },
     "Knighty Collection/MandalayBox.frag": {
       "id": "Knighty Collection/MandalayBox.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
+    },
+    "Knighty Collection/mdifs.frag": {
+      "id": "Knighty Collection/mdifs.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
     },
     "Knighty Collection/Menger_iterated_20.frag": {
       "id": "Knighty Collection/Menger_iterated_20.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "Knighty Collection/Menger_Sphere.frag": {
       "id": "Knighty Collection/Menger_Sphere.frag",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "Knighty Collection/NewtonHeightfield.frag": {
+      "id": "Knighty Collection/NewtonHeightfield.frag",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "v3FailGate": "webglCompile"
     },
     "Knighty Collection/polychora-special.frag": {
       "id": "Knighty Collection/polychora-special.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Knighty Collection/polychora-special02.frag": {
       "id": "Knighty Collection/polychora-special02.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Knighty Collection/Pseudo-MandalayBox.frag": {
       "id": "Knighty Collection/Pseudo-MandalayBox.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Knighty Collection/PseudoKleinian_4D_Quaternion_Julia.frag": {
       "id": "Knighty Collection/PseudoKleinian_4D_Quaternion_Julia.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Knighty Collection/PseudoKleinian.frag": {
       "id": "Knighty Collection/PseudoKleinian.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Knighty Collection/PseudoKleinianMenger.frag": {
       "id": "Knighty Collection/PseudoKleinianMenger.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Knighty Collection/PseudoKnightyan.frag": {
       "id": "Knighty Collection/PseudoKnightyan.frag",
@@ -942,24 +924,21 @@
     },
     "Knighty Collection/SimpleIFS/SimpleIFS-DE3D-final.frag": {
       "id": "Knighty Collection/SimpleIFS/SimpleIFS-DE3D-final.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "kosalos/Apollonian.frag": {
       "id": "kosalos/Apollonian.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "kosalos/Apollonian2-FirstSurface.frag": {
       "id": "kosalos/Apollonian2-FirstSurface.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/Apollonian2.frag": {
       "id": "kosalos/Apollonian2.frag",
@@ -975,38 +954,33 @@
     },
     "kosalos/Floral.frag": {
       "id": "kosalos/Floral.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "kosalos/Flower.frag": {
       "id": "kosalos/Flower.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/Gold.frag": {
       "id": "kosalos/Gold.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/HalfTetra.frag": {
       "id": "kosalos/HalfTetra.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "kosalos/KaliBox.frag": {
       "id": "kosalos/KaliBox.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "kosalos/KIFS.frag": {
       "id": "kosalos/KIFS.frag",
@@ -1016,53 +990,52 @@
     },
     "kosalos/Mandelbulb.frag": {
       "id": "kosalos/Mandelbulb.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "kosalos/Monster.frag": {
       "id": "kosalos/Monster.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
+    },
+    "kosalos/PlanetEarth.frag": {
+      "id": "kosalos/PlanetEarth.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
     },
     "kosalos/PseudoKleinian-FirstSurface.frag": {
       "id": "kosalos/PseudoKleinian-FirstSurface.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/PseudoKleinianMenger-FirstSurface.frag": {
       "id": "kosalos/PseudoKleinianMenger-FirstSurface.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/Quaternion.frag": {
       "id": "kosalos/Quaternion.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/SierpinskTetra.frag": {
       "id": "kosalos/SierpinskTetra.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "kosalos/Sponge.frag": {
       "id": "kosalos/Sponge.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/SpudsVille.frag": {
       "id": "kosalos/SpudsVille.frag",
@@ -1072,26 +1045,22 @@
     },
     "kosalos/Tower.frag": {
       "id": "kosalos/Tower.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "kosalos/Vertebrae.frag": {
       "id": "kosalos/Vertebrae.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "LoicVDB/Mandelbulb.frag": {
       "id": "LoicVDB/Mandelbulb.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "LoicVDB/VolumeAndDE.frag": {
       "id": "LoicVDB/VolumeAndDE.frag",
@@ -1101,78 +1070,78 @@
     },
     "mclarekin/abox inCyl-10.frag": {
       "id": "mclarekin/abox inCyl-10.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "mclarekin/aboxMinR2Bias-6.frag": {
       "id": "mclarekin/aboxMinR2Bias-6.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "mclarekin/aboxMinR2Cuboid-2.frag": {
       "id": "mclarekin/aboxMinR2Cuboid-2.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "mclarekin/aboxMod14a.frag": {
       "id": "mclarekin/aboxMod14a.frag",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "mclarekin/AexionnSphereBoxRot4D.frag": {
+      "id": "mclarekin/AexionnSphereBoxRot4D.frag",
       "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "sampleFinite"
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "mclarekin/Aexions_TetraBox2.frag": {
+      "id": "mclarekin/Aexions_TetraBox2.frag",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
     },
     "mclarekin/darkbeam_MixPinski.frag": {
       "id": "mclarekin/darkbeam_MixPinski.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "mclarekin/darkbeam_surfbox.frag": {
       "id": "mclarekin/darkbeam_surfbox.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "mclarekin/Mandelbulb_messC.frag": {
       "id": "mclarekin/Mandelbulb_messC.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "mclarekin/Mandelbulb_pwrs1234_ cosmix.frag": {
       "id": "mclarekin/Mandelbulb_pwrs1234_ cosmix.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "mclarekin/Mandelbulb_pwrs1234_sinmix.frag": {
       "id": "mclarekin/Mandelbulb_pwrs1234_sinmix.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "mclarekin/mboxR2-3.frag": {
       "id": "mclarekin/mboxR2-3.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "mclarekin/menge4 4D rot-1.frag": {
       "id": "mclarekin/menge4 4D rot-1.frag",
@@ -1183,68 +1152,52 @@
     },
     "mclarekin/menger3_1.frag": {
       "id": "mclarekin/menger3_1.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "mclarekin/mengerDeltaAnalytic.frag": {
       "id": "mclarekin/mengerDeltaAnalytic.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "mclarekin/msltoe riemann_DeltaDE.frag": {
       "id": "mclarekin/msltoe riemann_DeltaDE.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "mclarekin/primitives.frag": {
       "id": "mclarekin/primitives.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "sampleNonConstant"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "mclarekin/PseudoKleinian_3D_Quaternion_Julia_1.frag": {
       "id": "mclarekin/PseudoKleinian_3D_Quaternion_Julia_1.frag",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "mclarekin/sym4_1.frag": {
       "id": "mclarekin/sym4_1.frag",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "Theory/Mandelbox - Dual Numbers DE.frag": {
+      "id": "Theory/Mandelbox - Dual Numbers DE.frag",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
-    },
-    "neozhaoliang/Hyperbolic-Honeycombs-DERayTracer/hyperbolic-honeycombs-DERaytracer.frag": {
-      "id": "neozhaoliang/Hyperbolic-Honeycombs-DERayTracer/hyperbolic-honeycombs-DERaytracer.frag",
-      "v3": "fail",
-      "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "webglCompile"
-    },
-    "neozhaoliang/Hyperbolic-Honeycombs-Kn2/hyperoblic-honeycombs-DEKn2.frag": {
-      "id": "neozhaoliang/Hyperbolic-Honeycombs-Kn2/hyperoblic-honeycombs-DEKn2.frag",
-      "v3": "fail",
-      "v4": "skip",
-      "recommended": "none",
       "v3FailGate": "webglCompile"
     },
     "Tutorials/10 - Simple Distance Estimated 3D system.frag": {
       "id": "Tutorials/10 - Simple Distance Estimated 3D system.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Tutorials/11 - Simple Distance Estimated 3D fractal.frag": {
       "id": "Tutorials/11 - Simple Distance Estimated 3D fractal.frag",
@@ -1254,47 +1207,41 @@
     },
     "Tutorials/12 - Faster raytracing of 3D fractals.frag": {
       "id": "Tutorials/12 - Faster raytracing of 3D fractals.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Tutorials/22 - Progressive 3D Rendering.frag": {
       "id": "Tutorials/22 - Progressive 3D Rendering.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Tutorials/30 - Simple Keyframe Animation.frag": {
       "id": "Tutorials/30 - Simple Keyframe Animation.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Tutorials/31 - Simple Focal Plane Tracking Target.frag": {
       "id": "Tutorials/31 - Simple Focal Plane Tracking Target.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
+      "recommended": "v3",
       "v4FailGate": "webglCompile"
     },
     "Tutorials/32 - Simple Multi-Parameter Easing Animation.frag": {
       "id": "Tutorials/32 - Simple Multi-Parameter Easing Animation.frag",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleFinite"
+      "recommended": "v3"
     },
     "fractal_de": {
       "id": "fractal_de",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de3": {
       "id": "fractal_de3",
@@ -1365,17 +1312,14 @@
     "fractal_de17": {
       "id": "fractal_de17",
       "v3": "pass",
-      "v4": "fail",
-      "recommended": "v3",
-      "v4FailGate": "gradientFinite"
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de18": {
       "id": "fractal_de18",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "gradientFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de19": {
       "id": "fractal_de19",
@@ -1409,11 +1353,9 @@
     },
     "fractal_de24": {
       "id": "fractal_de24",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de25": {
       "id": "fractal_de25",
@@ -1429,11 +1371,9 @@
     },
     "fractal_de27": {
       "id": "fractal_de27",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de28": {
       "id": "fractal_de28",
@@ -1461,11 +1401,9 @@
     },
     "fractal_de32": {
       "id": "fractal_de32",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de35": {
       "id": "fractal_de35",
@@ -1499,17 +1437,15 @@
     },
     "fractal_de41": {
       "id": "fractal_de41",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
-    "fractal_de43": {
-      "id": "fractal_de43",
-      "v3": "fail",
+    "fractal_de44": {
+      "id": "fractal_de44",
+      "v3": "skip",
       "v4": "fail",
       "recommended": "none",
-      "v3FailGate": "webglCompile",
       "v4FailGate": "webglCompile"
     },
     "fractal_de45": {
@@ -1526,11 +1462,9 @@
     },
     "fractal_de47": {
       "id": "fractal_de47",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de48": {
       "id": "fractal_de48",
@@ -1610,6 +1544,13 @@
       "v4": "pass",
       "recommended": "v3"
     },
+    "fractal_de76": {
+      "id": "fractal_de76",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
     "fractal_de78": {
       "id": "fractal_de78",
       "v3": "pass",
@@ -1648,11 +1589,9 @@
     },
     "fractal_de86": {
       "id": "fractal_de86",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de87": {
       "id": "fractal_de87",
@@ -1675,17 +1614,8 @@
     "fractal_de90": {
       "id": "fractal_de90",
       "v3": "pass",
-      "v4": "fail",
-      "recommended": "v3",
-      "v4FailGate": "gradientFinite"
-    },
-    "fractal_de91": {
-      "id": "fractal_de91",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de92": {
       "id": "fractal_de92",
@@ -1719,81 +1649,64 @@
     },
     "fractal_de97": {
       "id": "fractal_de97",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de98": {
       "id": "fractal_de98",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de99": {
       "id": "fractal_de99",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de100": {
       "id": "fractal_de100",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de101": {
       "id": "fractal_de101",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "fractal_de103": {
       "id": "fractal_de103",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de106": {
       "id": "fractal_de106",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de107": {
       "id": "fractal_de107",
       "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
     },
     "fractal_de108": {
       "id": "fractal_de108",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de109": {
       "id": "fractal_de109",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de110": {
       "id": "fractal_de110",
@@ -1803,19 +1716,15 @@
     },
     "fractal_de111": {
       "id": "fractal_de111",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleFinite",
-      "v4FailGate": "sampleFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de112": {
       "id": "fractal_de112",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de113": {
       "id": "fractal_de113",
@@ -1841,11 +1750,9 @@
     },
     "fractal_de117": {
       "id": "fractal_de117",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de118": {
       "id": "fractal_de118",
@@ -1858,14 +1765,6 @@
       "v3": "pass",
       "v4": "pass",
       "recommended": "v3"
-    },
-    "fractal_de120": {
-      "id": "fractal_de120",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
     },
     "fractal_de121": {
       "id": "fractal_de121",
@@ -1897,6 +1796,34 @@
       "v4": "pass",
       "recommended": "v3"
     },
+    "fractal_de127": {
+      "id": "fractal_de127",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "fractal_de128": {
+      "id": "fractal_de128",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "fractal_de129": {
+      "id": "fractal_de129",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "fractal_de130": {
+      "id": "fractal_de130",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
     "fractal_de131": {
       "id": "fractal_de131",
       "v3": "pass",
@@ -1905,10 +1832,16 @@
     },
     "fractal_de133": {
       "id": "fractal_de133",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "fractal_de134": {
+      "id": "fractal_de134",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "v3FailGate": "webglCompile"
     },
     "fractal_de135": {
       "id": "fractal_de135",
@@ -1924,19 +1857,15 @@
     },
     "fractal_de137": {
       "id": "fractal_de137",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de138": {
       "id": "fractal_de138",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de139": {
       "id": "fractal_de139",
@@ -1946,18 +1875,15 @@
     },
     "fractal_de140": {
       "id": "fractal_de140",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de141": {
       "id": "fractal_de141",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de142": {
       "id": "fractal_de142",
@@ -1967,11 +1893,9 @@
     },
     "fractal_de143": {
       "id": "fractal_de143",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de144": {
       "id": "fractal_de144",
@@ -1986,6 +1910,13 @@
       "v4": "pass",
       "recommended": "v3"
     },
+    "fractal_de146": {
+      "id": "fractal_de146",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
     "fractal_de147": {
       "id": "fractal_de147",
       "v3": "fail",
@@ -1995,11 +1926,9 @@
     },
     "fractal_de148": {
       "id": "fractal_de148",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de149": {
       "id": "fractal_de149",
@@ -2009,11 +1938,9 @@
     },
     "fractal_de150": {
       "id": "fractal_de150",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de151": {
       "id": "fractal_de151",
@@ -2042,35 +1969,27 @@
     },
     "fractal_de156": {
       "id": "fractal_de156",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de157": {
       "id": "fractal_de157",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de158": {
       "id": "fractal_de158",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de159": {
       "id": "fractal_de159",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de160": {
       "id": "fractal_de160",
@@ -2146,10 +2065,9 @@
     },
     "fractal_de172": {
       "id": "fractal_de172",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de173": {
       "id": "fractal_de173",
@@ -2181,20 +2099,11 @@
       "v4": "pass",
       "recommended": "v3"
     },
-    "fractal_de179": {
-      "id": "fractal_de179",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
     "fractal_de180": {
       "id": "fractal_de180",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de181": {
       "id": "fractal_de181",
@@ -2210,10 +2119,9 @@
     },
     "fractal_de183": {
       "id": "fractal_de183",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de184": {
       "id": "fractal_de184",
@@ -2229,24 +2137,21 @@
     },
     "fractal_de186": {
       "id": "fractal_de186",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de187": {
       "id": "fractal_de187",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de188": {
       "id": "fractal_de188",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de191": {
       "id": "fractal_de191",
@@ -2256,17 +2161,15 @@
     },
     "fractal_de192": {
       "id": "fractal_de192",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "fractal_de193": {
       "id": "fractal_de193",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de194": {
       "id": "fractal_de194",
@@ -2283,17 +2186,29 @@
     "fractal_de196": {
       "id": "fractal_de196",
       "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
     },
-    "fractal_de199": {
-      "id": "fractal_de199",
+    "fractal_de197": {
+      "id": "fractal_de197",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "v3FailGate": "webglCompile"
+    },
+    "fractal_de198": {
+      "id": "fractal_de198",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
+    "fractal_de199": {
+      "id": "fractal_de199",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de200": {
       "id": "fractal_de200",
@@ -2358,27 +2273,15 @@
     },
     "fractal_de219": {
       "id": "fractal_de219",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
-    },
-    "fractal_de220": {
-      "id": "fractal_de220",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de221": {
       "id": "fractal_de221",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de222": {
       "id": "fractal_de222",
@@ -2388,31 +2291,27 @@
     },
     "fractal_de223": {
       "id": "fractal_de223",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "fractal_de224": {
       "id": "fractal_de224",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "fractal_de225": {
       "id": "fractal_de225",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "gradientFinite"
+      "recommended": "v3"
     },
     "fractal_de226": {
       "id": "fractal_de226",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de227": {
       "id": "fractal_de227",
@@ -2434,11 +2333,9 @@
     },
     "fractal_de230": {
       "id": "fractal_de230",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de231": {
       "id": "fractal_de231",
@@ -2460,10 +2357,9 @@
     },
     "fractal_de234": {
       "id": "fractal_de234",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "gradientFinite"
+      "recommended": "v3"
     },
     "fractal_de235": {
       "id": "fractal_de235",
@@ -2509,19 +2405,15 @@
     },
     "fractal_de242": {
       "id": "fractal_de242",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "gradientFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de243": {
       "id": "fractal_de243",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de244": {
       "id": "fractal_de244",
@@ -2531,14 +2423,6 @@
     },
     "fractal_de245": {
       "id": "fractal_de245",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
-    "fractal_de246": {
-      "id": "fractal_de246",
       "v3": "fail",
       "v4": "fail",
       "recommended": "none",
@@ -2559,19 +2443,15 @@
     },
     "fractal_de250": {
       "id": "fractal_de250",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de251": {
       "id": "fractal_de251",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractal_de252": {
       "id": "fractal_de252",
@@ -2593,17 +2473,15 @@
     },
     "fractal_de255": {
       "id": "fractal_de255",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "fractal_de256": {
       "id": "fractal_de256",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "fractal_de257": {
       "id": "fractal_de257",
@@ -2616,14 +2494,6 @@
       "v3": "pass",
       "v4": "pass",
       "recommended": "v3"
-    },
-    "fractal_de260": {
-      "id": "fractal_de260",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
     },
     "fractal_de261": {
       "id": "fractal_de261",
@@ -2645,11 +2515,9 @@
     },
     "fractal_de264": {
       "id": "fractal_de264",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "swirl": {
       "id": "swirl",
@@ -2671,25 +2539,28 @@
     },
     "boxframe": {
       "id": "boxframe",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
-    },
-    "fractalCity": {
-      "id": "fractalCity",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "flipper": {
       "id": "flipper",
       "v3": "pass",
       "v4": "pass",
       "recommended": "v3"
+    },
+    "KIFS": {
+      "id": "KIFS",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
+    },
+    "curly1": {
+      "id": "curly1",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
     },
     "curly2": {
       "id": "curly2",
@@ -2699,18 +2570,22 @@
     },
     "curly3": {
       "id": "curly3",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
-    "SpiderApollo": {
-      "id": "SpiderApollo",
+    "curly4": {
+      "id": "curly4",
       "v3": "fail",
       "v4": "pass",
       "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "v3FailGate": "webglCompile"
+    },
+    "SpiderApollo": {
+      "id": "SpiderApollo",
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "ConstrainedApollo": {
       "id": "ConstrainedApollo",
@@ -2756,19 +2631,15 @@
     },
     "tree": {
       "id": "tree",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "threads": {
       "id": "threads",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "gate0": {
       "id": "gate0",
@@ -2802,19 +2673,15 @@
     },
     "tree2": {
       "id": "tree2",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "ballDiamond": {
       "id": "ballDiamond",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "sinDungeon": {
       "id": "sinDungeon",
@@ -2854,6 +2721,13 @@
       "v3FailGate": "webglCompile",
       "v4FailGate": "webglCompile"
     },
+    "cagedStar": {
+      "id": "cagedStar",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
     "doubleNut": {
       "id": "doubleNut",
       "v3": "pass",
@@ -2862,11 +2736,9 @@
     },
     "snoflake3d": {
       "id": "snoflake3d",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "grid": {
       "id": "grid",
@@ -2877,31 +2749,20 @@
     "bug": {
       "id": "bug",
       "v3": "pass",
-      "v4": "fail",
-      "recommended": "v3",
-      "v4FailGate": "gradientFinite"
+      "v4": "pass",
+      "recommended": "v3"
     },
     "spike": {
       "id": "spike",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "fractalPump": {
       "id": "fractalPump",
       "v3": "pass",
       "v4": "pass",
       "recommended": "v3"
-    },
-    "waterbear": {
-      "id": "waterbear",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
     },
     "flowerz": {
       "id": "flowerz",
@@ -2917,11 +2778,9 @@
     },
     "dark": {
       "id": "dark",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "reeds": {
       "id": "reeds",
@@ -2931,11 +2790,9 @@
     },
     "temple": {
       "id": "temple",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "rolls": {
       "id": "rolls",
@@ -2949,14 +2806,6 @@
       "v4": "pass",
       "recommended": "v3"
     },
-    "sinugoid": {
-      "id": "sinugoid",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
     "heartcube": {
       "id": "heartcube",
       "v3": "pass",
@@ -2965,42 +2814,33 @@
     },
     "manscaped": {
       "id": "manscaped",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "chorse": {
       "id": "chorse",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "gradientFinite",
-      "v4FailGate": "gradientFinite"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "gripple": {
       "id": "gripple",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "getwork": {
       "id": "getwork",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "flor": {
       "id": "flor",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "mipple": {
       "id": "mipple",
@@ -3010,14 +2850,6 @@
     },
     "prisnm": {
       "id": "prisnm",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
-    "braind": {
-      "id": "braind",
       "v3": "fail",
       "v4": "fail",
       "recommended": "none",
@@ -3077,39 +2909,21 @@
     },
     "munger": {
       "id": "munger",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "sampleNonConstant"
+      "recommended": "v3"
     },
     "viking": {
       "id": "viking",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "knitt": {
       "id": "knitt",
       "v3": "pass",
       "v4": "pass",
       "recommended": "v3"
-    },
-    "knittt": {
-      "id": "knittt",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
-    "chiral": {
-      "id": "chiral",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
     },
     "rifs": {
       "id": "rifs",
@@ -3143,22 +2957,6 @@
       "v3FailGate": "webglCompile",
       "v4FailGate": "webglCompile"
     },
-    "twiggy": {
-      "id": "twiggy",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
-    "twiggy2": {
-      "id": "twiggy2",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
     "spicy": {
       "id": "spicy",
       "v3": "fail",
@@ -3175,14 +2973,6 @@
       "v3FailGate": "webglCompile",
       "v4FailGate": "webglCompile"
     },
-    "threddy": {
-      "id": "threddy",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "webglCompile",
-      "v4FailGate": "webglCompile"
-    },
     "Lewpen_snowflake": {
       "id": "Lewpen_snowflake",
       "v3": "pass",
@@ -3191,10 +2981,9 @@
     },
     "OriginFlowers": {
       "id": "OriginFlowers",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "Converge": {
       "id": "Converge",
@@ -3232,15 +3021,16 @@
       "v4": "pass",
       "recommended": "v3"
     },
-    "PhilosopherStoned": {
-      "id": "PhilosopherStoned",
-      "v3": "fail",
-      "v4": "skip",
-      "recommended": "none",
-      "v3FailGate": "webglCompile"
-    },
     "ballFlake": {
       "id": "ballFlake",
+      "v3": "fail",
+      "v4": "fail",
+      "recommended": "none",
+      "v3FailGate": "webglCompile",
+      "v4FailGate": "webglCompile"
+    },
+    "greenDragon": {
+      "id": "greenDragon",
       "v3": "fail",
       "v4": "fail",
       "recommended": "none",
@@ -3271,13 +3061,18 @@
       "v4": "pass",
       "recommended": "v3"
     },
+    "blobelisk": {
+      "id": "blobelisk",
+      "v3": "fail",
+      "v4": "pass",
+      "recommended": "v4",
+      "v3FailGate": "webglCompile"
+    },
     "ringoo": {
       "id": "ringoo",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleNonConstant",
-      "v4FailGate": "renderNonDegenerate"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "shreddissimo": {
       "id": "shreddissimo",
@@ -3289,11 +3084,9 @@
     },
     "gnollum": {
       "id": "gnollum",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "cage": {
       "id": "cage",
@@ -3304,18 +3097,15 @@
     },
     "stairs": {
       "id": "stairs",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     },
     "jumpthecrater": {
       "id": "jumpthecrater",
-      "v3": "fail",
+      "v3": "pass",
       "v4": "pass",
-      "recommended": "v4",
-      "v3FailGate": "renderNonDegenerate"
+      "recommended": "v3"
     },
     "toomanytrees": {
       "id": "toomanytrees",
@@ -3395,11 +3185,9 @@
     },
     "tree4": {
       "id": "tree4",
-      "v3": "fail",
-      "v4": "fail",
-      "recommended": "none",
-      "v3FailGate": "sampleShaderCompile",
-      "v4FailGate": "sampleShaderCompile"
+      "v3": "pass",
+      "v4": "pass",
+      "recommended": "v3"
     }
   }
 }

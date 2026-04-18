@@ -499,14 +499,36 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     }, []);
 
     // ── Detection ──
-    const runDetect = useCallback((src: string, fileBaseName?: string) => {
+    // V3's detect pre-populates the slot-mapping UI so users can route params
+    // to engine uniform slots. V4 doesn't need detect (its processFormula does
+    // its own analysis), so when V4 is the effective pipeline we still run
+    // detect — if it succeeds the user sees the V3 UI as a bonus, if it fails
+    // they can still preview/import via V4. We no longer block on detect
+    // parse errors because V3's preprocessor now handles the quirks (`;;`,
+    // `#vertex` blocks, etc.) that previously caused crashes.
+    const runDetect = useCallback((src: string, fileBaseName?: string, entryId?: string | null) => {
         setError(null);
         setDetected(null);
         setTransformedCode('');
         if (!src.trim()) return;
 
+        const willUseV4 = pipelineMode === 'v4'
+            || (pipelineMode === 'auto' && entryId != null
+                && getRecommendedPipeline(entryId) === 'v4');
+
         const result = detectFormulaV3(src, fileBaseName);
-        if ('error' in result) { setError(result.error); return; }
+        if ('error' in result) {
+            // If V4 is going to handle this formula, don't block on V3 detect
+            // failure — just pre-fill the name and let the user Preview/Import.
+            // If V3 is the target, surface the error so they can investigate.
+            if (willUseV4) {
+                setFormulaName(uniqueName(fileBaseName || 'imported'));
+                setSourceCollapsed(true);
+            } else {
+                setError(result.error);
+            }
+            return;
+        }
 
         setDetected(result);
         setSelectedFunctionName(result.selectedFunction);
@@ -514,7 +536,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         setMappings(result.params);
         setFormulaName(uniqueName(result.suggestedName || fileBaseName || 'imported'));
         setSourceCollapsed(true);
-    }, []);
+    }, [pipelineMode]);
 
     // ── Re-edit: pre-populate from a previously imported formula ──
     useEffect(() => {
@@ -562,7 +584,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
             setCurrentEntryId(entry.id);
-            runDetect(content, label);
+            runDetect(content, label, entry.id);
         } catch (e) {
             setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
         }
@@ -576,7 +598,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
             setCurrentEntryId(entry.id);
-            runDetect(content, label);
+            runDetect(content, label, entry.id);
         } catch (e) {
             setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
         }
@@ -609,14 +631,17 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         return getCategories('frag').map(c => ({ id: c.id, name: `${c.name} (${c.formulaCount})` }));
     }, [libraryReady, browseMode]);
 
-    /** Build a PickerItem badge from the catalog verdict. */
+    /** Build a PickerItem badge from the catalog verdict.
+     *  Green "Iteration" = per-iteration formula, composes with engine features
+     *    like interlace, hybrid fold, burning ship (what V3 emits).
+     *  Cyan "Standalone"  = self-contained DE, renders solo (what V4 emits). */
     const compatBadge = useCallback((id: string): PickerItem['badge'] | undefined => {
         const c = getFormulaCompat(id);
         if (!c || c.recommended === 'none') return undefined;
         if (c.recommended === 'v3') {
-            return { text: 'V3', className: 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/30' };
+            return { text: 'Iteration', className: 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/30' };
         }
-        return { text: 'V4', className: 'bg-cyan-900/40 text-cyan-300 border border-cyan-600/30' };
+        return { text: 'Standalone', className: 'bg-cyan-900/40 text-cyan-300 border border-cyan-600/30' };
     }, []);
 
     const isUnrenderable = useCallback((id: string): boolean => {
@@ -626,12 +651,15 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     const entryToPickerItem = useCallback((entry: FormulaEntry, prefix: 'frag' | 'dec'): PickerItem | null => {
         const badRender = isUnrenderable(entry.id);
         if (badRender && !showIncompatible) return null;
+        // When the user has opted into "show broken", let them click entries
+        // the catalog flagged as unrenderable. The harness gates that mark a
+        // formula "broken" (sampleNonConstant / renderNonDegenerate) are
+        // unreliable — the formula may well render in the live engine, and
+        // the user is asking to try.
         return {
             key: `${prefix}:${entry.id}`,
             label: entry.name,
             description: entry.artist !== 'unknown' ? entry.artist : undefined,
-            disabled: badRender,
-            disabledSuffix: badRender ? '(neither pipeline renders this)' : undefined,
             badge: compatBadge(entry.id),
         };
     }, [isUnrenderable, showIncompatible, compatBadge]);
@@ -665,7 +693,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
             setCurrentEntryId(id);
-            runDetect(content, label);
+            runDetect(content, label, id);
         } catch (e) {
             setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
         }
@@ -683,7 +711,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
             setCurrentEntryId(entry.id);
-            runDetect(content, label);
+            runDetect(content, label, entry.id);
             setSearchQuery('');
             setSearchResults(null);
         } catch (e) {
@@ -931,7 +959,10 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
 
     // ── Render ──
     return (
-        <div className="relative z-[60] w-1/2 max-w-[640px] bg-[#0d0d0d] border-r border-white/10 flex flex-col overflow-hidden shrink-0">
+        <div
+            className="relative z-[60] w-1/2 max-w-[640px] bg-[#0d0d0d] border-r border-white/10 flex flex-col overflow-hidden shrink-0"
+            data-help-id="panel.workshop"
+        >
 
             {/* Success overlay */}
             {success && (
@@ -1078,7 +1109,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                         className="flex-1 text-[10px] px-2.5 py-1 rounded border border-white/10 bg-black/30 text-gray-300 placeholder-gray-600 focus:border-cyan-500/40 focus:outline-none transition-colors"
                     />
                     <label
-                        title="Show formulas that neither V3 nor V4 can render (for debugging). Off by default."
+                        title="Show formulas that neither Iteration nor Standalone mode can render (for debugging). Off by default."
                         className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer select-none shrink-0"
                     >
                         <input
@@ -1124,7 +1155,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                                 )}
                                 {visible.length === 0 && (
                                     <div className="px-2.5 py-1.5 text-[10px] text-gray-500 text-center">
-                                        All matches are in the "neither pipeline renders" bucket. Enable "show incompatible" to see them.
+                                        All matches are in the "neither mode renders" bucket. Enable "show broken" to see them.
                                     </div>
                                 )}
                             </div>
@@ -1353,27 +1384,32 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                         className="flex items-center gap-1 text-[11px] text-gray-400 select-none"
                         title={
                             pipelineMode === 'auto'
-                                ? `Auto-picks per formula: V3 when V3 renders (engine-feature compat — interlace / hybrid fold / burning ship); else V4. Current: ${effectivePipeline.toUpperCase()}.`
+                                ? `Auto-picks per formula: Iteration when possible (engine-feature compat — interlace, hybrid fold, burning ship); else Standalone. Current: ${effectivePipeline === 'v3' ? 'Iteration' : 'Standalone'}.`
                                 : pipelineMode === 'v3'
-                                    ? 'Force V3 pipeline (per-iteration extraction; composes with interlace, hybrid fold, burning ship).'
-                                    : 'Force V4 pipeline (self-contained SDE; simpler but no engine-feature composition).'
+                                    ? 'Force Iteration mode (per-iteration formulas that compose with interlace, hybrid fold, burning ship).'
+                                    : 'Force Standalone mode (self-contained DE; simpler but no engine-feature composition).'
                         }
                     >
-                        <span className="text-gray-500 mr-1">pipeline:</span>
-                        {(['auto', 'v3', 'v4'] as const).map(mode => (
-                            <button
-                                key={mode}
-                                onClick={() => setPipelineMode(mode)}
-                                className={
-                                    'px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors '
-                                    + (pipelineMode === mode
-                                        ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-500/40'
-                                        : 'text-gray-500 hover:text-gray-300 border border-transparent')
-                                }
-                            >
-                                {mode === 'auto' ? `auto (${effectivePipeline})` : mode}
-                            </button>
-                        ))}
+                        <span className="text-gray-500 mr-1">mode:</span>
+                        {(['auto', 'v3', 'v4'] as const).map(mode => {
+                            const label = mode === 'auto'
+                                ? `Auto (${effectivePipeline === 'v3' ? 'Iter' : 'Solo'})`
+                                : mode === 'v3' ? 'Iteration' : 'Standalone';
+                            return (
+                                <button
+                                    key={mode}
+                                    onClick={() => setPipelineMode(mode)}
+                                    className={
+                                        'px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors '
+                                        + (pipelineMode === mode
+                                            ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-500/40'
+                                            : 'text-gray-500 hover:text-gray-300 border border-transparent')
+                                    }
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
