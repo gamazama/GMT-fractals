@@ -56,6 +56,10 @@ export interface TestSpec {
     size?: [number, number];
     /** Total timeout for this test in ms. Default 30000. */
     timeoutMs?: number;
+    /** Output image format. 'png' (default) or 'jpeg' for gallery thumbnails. */
+    imageFormat?: 'png' | 'jpeg';
+    /** JPEG quality 0–1 (default 0.92). Ignored for PNG. */
+    imageQuality?: number;
 }
 
 export interface TestResult {
@@ -271,7 +275,7 @@ interface RenderStats {
     nonBlackFraction: number;
 }
 
-async function captureAndAnalyze(): Promise<{ pngDataUrl: string; stats: RenderStats }> {
+async function captureAndAnalyze(format: 'png' | 'jpeg' = 'png', quality = 0.92): Promise<{ imageDataUrl: string; stats: RenderStats }> {
     // Pull from the engine's display pipeline (post-process, tone-mapped, sRGB-encoded).
     const blob = await engine.captureSnapshot();
     if (!blob) throw new Error('captureSnapshot returned null');
@@ -313,7 +317,12 @@ async function captureAndAnalyze(): Promise<{ pngDataUrl: string; stats: RenderS
         nanFraction: +(nanCount / n).toFixed(3),
         nonBlackFraction: +(nonBlack / n).toFixed(3),
     };
-    return { pngDataUrl, stats };
+    // Re-encode from the analysis canvas if JPEG requested. Gallery thumbs use
+    // JPEG to match the existing public/thumbnails/fractal_*.jpg convention.
+    const imageDataUrl = format === 'jpeg'
+        ? cvs.toDataURL('image/jpeg', quality)
+        : pngDataUrl;
+    return { imageDataUrl, stats };
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -447,9 +456,9 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
         }
 
         stage = 'captureAndAnalyze';
-        const { pngDataUrl, stats } = await captureAndAnalyze();
+        const { imageDataUrl, stats } = await captureAndAnalyze(spec.imageFormat ?? 'png', spec.imageQuality ?? 0.92);
         result.render = stats;
-        result.thumbnailPNG = pngDataUrl;
+        result.thumbnailPNG = imageDataUrl;
         result.ok = true;
     } catch (e: any) {
         const stack = e?.stack ? String(e.stack).split('\n').slice(0, 5).join(' | ') : '';

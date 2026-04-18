@@ -56,6 +56,8 @@ export const PREDEFINED_CATEGORIES = [
             'BoxBulb',
             'MengerAdvanced',
             'Kleinian',
+            'KleinianMobius',
+            'KleinianJos',
             'PseudoKleinian',
             'PseudoKleinian06',
             'PseudoKleinianMod4',

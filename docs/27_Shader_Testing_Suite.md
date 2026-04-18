@@ -101,7 +101,7 @@ These are **compile-only** checks — they catch GLSL errors, namespace collisio
 | `npm run test:render:matrix` | HTML grid view of the latest sweep | instant | `debug/render-matrix-phase1.html` |
 | `npm run test:render:perf` | Perf subset — 10 formulas with warmup + FPS measurement (Phase 3, not built yet) | TBD | `debug/render-sweep-phase3.jsonl` |
 
-**Prerequisite:** `npm run dev` must be running in another terminal. The sweep checks reachability at `http://localhost:3001/render-harness.html` and fails fast with a clear message if unreachable.
+**Prerequisite:** `npm run dev` must be running in another terminal. The sweep checks reachability at `http://localhost:3000/render-harness.html` and fails fast with a clear message if unreachable.
 
 **Per-case measurements:**
 - `compile.totalMs` — wall time from `CONFIG` emit to `IS_COMPILING=false` event
@@ -111,6 +111,18 @@ These are **compile-only** checks — they catch GLSL errors, namespace collisio
 - `render.nanFraction` — % of pixels matching the NaN orange sentinel
 
 **What's currently tested:** baseline only (each formula with all features at defaults). The `hybrid`/`hybrid-adv`/`interlace` modes are wired up in `render-cases.ts` but commented out pending parameter-preset work — the default overrides produce scrambled renders because the param values aren't formula-tuned. The compile-only sweeps above still cover those paths at the GLSL level.
+
+**Gallery thumbnail regeneration (`--gallery`):** The sweep can double as a thumbnail generator for the in-app formula gallery. Pass `--gallery` and it writes 256×256 JPEGs to `public/thumbnails/fractal_<formula>.jpg` instead of the usual `debug/thumbnails/render/*.png`, matching the path/format [FormulaGallery.tsx](../components/panels/formula/FormulaGallery.tsx) reads.
+
+```bash
+# Re-generate a single formula's gallery thumbnail
+npx tsx debug/render-sweep.mts --formula=KleinianMobius --gallery --fresh
+
+# Re-generate every formula's gallery thumbnail (~20–30 min)
+npx tsx debug/render-sweep.mts --gallery --fresh
+```
+
+Under the hood the `imageFormat: 'jpeg'` + `size: [256, 256]` fields are injected into each `TestSpec`; the harness re-encodes the analysis canvas as JPEG (quality 0.92). The jsonl is still written so you can diff render stats.
 
 **Render harness files:**
 - [render-harness.html](../render-harness.html) — served by Vite dev server at project root, not user-facing

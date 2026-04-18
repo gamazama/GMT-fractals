@@ -42,6 +42,8 @@ import { TruncatedIcosahedron } from './TruncatedIcosahedron';
 import { GreatStellatedDodecahedron } from './GreatStellatedDodecahedron';
 import { PseudoKleinian06 } from './PseudoKleinianAdv';
 import { PseudoKleinianMod4 } from './PseudoKleinianMod4';
+import { KleinianMobius } from './KleinianMobius';
+import { KleinianJos } from './KleinianJos';
 
 
 // Organized list determines UI order on LOADING SCREEN
@@ -65,6 +67,8 @@ const formulas = [
     Claude,
 
     // --- Others ---
+    KleinianMobius,
+    KleinianJos,
     Mandelbar3D,
     Quaternion,
     PseudoKleinian,

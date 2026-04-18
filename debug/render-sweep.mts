@@ -1,11 +1,11 @@
 /**
  * Render Harness Sweep — Playwright-driven driver.
  *
- * Spawns Chromium, navigates to http://localhost:3001/render-harness.html
+ * Spawns Chromium, navigates to http://localhost:3000/render-harness.html
  * (served by the app's dev server), iterates test cases, calls
  * `window.runRenderTest(spec)` on each.
  *
- * Prereq: `npm run dev` must be running in another terminal (port 3001).
+ * Prereq: `npm run dev` must be running in another terminal (port 3000).
  * The script checks reachability and fails fast with a clear message.
  *
  * Usage:
@@ -18,10 +18,14 @@
  *   npx tsx debug/render-sweep.mts --verbose             # Per-case detail
  *   npx tsx debug/render-sweep.mts --swiftshader         # Force SwiftShader for reproducibility (CI)
  *   npx tsx debug/render-sweep.mts --timeout=60000       # Per-case timeout
+ *   npx tsx debug/render-sweep.mts --formula=X --gallery # Write a 256x256 JPG to
+ *                                                        # public/thumbnails/fractal_X.jpg
+ *                                                        # (matches in-app gallery convention)
  *
  * Output:
- *   debug/render-sweep-phase<N>.jsonl          one row per case
- *   debug/thumbnails/render/<case_id>.png      e.g. Mandelbulb__baseline.png
+ *   debug/render-sweep-phase<N>.jsonl                    one row per case
+ *   debug/thumbnails/render/<case_id>.png                e.g. Mandelbulb__baseline.png
+ *   public/thumbnails/fractal_<formula>.jpg              only when --gallery is set
  */
 
 import * as fs from 'fs';
@@ -35,10 +39,16 @@ const VERBOSE     = process.argv.includes('--verbose');
 const FRESH       = process.argv.includes('--fresh');
 const HEADLESS    = !process.argv.includes('--show');
 const SWIFTSHADER = process.argv.includes('--swiftshader');
+const GALLERY     = process.argv.includes('--gallery');
 const PHASE       = argVal('--phase') ?? '1';
 const FORMULA     = argVal('--formula');
 const TIMEOUT_MS  = parseInt(argVal('--timeout') ?? '45000', 10);
-const PORT        = parseInt(argVal('--port') ?? '3001', 10);
+const PORT        = parseInt(argVal('--port') ?? '3000', 10);
+// Gallery thumbnails match the in-app FormulaGallery convention: 256×256 JPEG,
+// named fractal_<formula>.jpg, served from /thumbnails/ (public/thumbnails/).
+const GALLERY_SIZE: [number, number] = [256, 256];
+const GALLERY_QUALITY = 0.92;
+const GALLERY_DIR = path.resolve('public/thumbnails');
 
 function argVal(flag: string): string | undefined {
     const hit = process.argv.find(a => a.startsWith(flag + '='));
@@ -122,6 +132,7 @@ async function main() {
     }
 
     if (!fs.existsSync(OUT_THUMBS)) fs.mkdirSync(OUT_THUMBS, { recursive: true });
+    if (GALLERY && !fs.existsSync(GALLERY_DIR)) fs.mkdirSync(GALLERY_DIR, { recursive: true });
 
     let cases = getCases();
 
@@ -162,10 +173,16 @@ async function main() {
         if (aborted) break;
         const c = cases[i];
 
+        // In gallery mode, inject JPEG format + 256×256 size so the harness
+        // produces files that drop straight into public/thumbnails/.
+        const spec = GALLERY
+            ? { ...c, imageFormat: 'jpeg', imageQuality: GALLERY_QUALITY, size: GALLERY_SIZE }
+            : c;
+
         let result: any;
         try {
             result = await withTimeout(
-                page.evaluate(async (spec) => await (window as any).runRenderTest(spec), c as any),
+                page.evaluate(async (s) => await (window as any).runRenderTest(s), spec as any),
                 TIMEOUT_MS,
                 c.id,
             );
@@ -183,11 +200,22 @@ async function main() {
         // ID as the filename so you can find a specific formula's thumbnail
         // directly (`Mandelbulb__baseline.png` rather than a sha1 hash).
         if (result.thumbnailPNG) {
-            const safeName = c.id.replace(/[^\w=.-]/g, '_');
-            const pngPath = path.join(OUT_THUMBS, `${safeName}.png`);
-            const b64 = result.thumbnailPNG.replace(/^data:image\/png;base64,/, '');
-            fs.writeFileSync(pngPath, Buffer.from(b64, 'base64'));
-            result.thumbnail = `thumbnails/render/${safeName}.png`;
+            const isJpeg = result.thumbnailPNG.startsWith('data:image/jpeg');
+            const b64 = result.thumbnailPNG.replace(/^data:image\/(png|jpeg);base64,/, '');
+            const buf = Buffer.from(b64, 'base64');
+
+            if (GALLERY) {
+                // One JPEG per formula, matching FormulaGallery's naming.
+                const jpgPath = path.join(GALLERY_DIR, `fractal_${c.formula}.jpg`);
+                fs.writeFileSync(jpgPath, buf);
+                result.thumbnail = `thumbnails/fractal_${c.formula}.jpg`;
+            } else {
+                const safeName = c.id.replace(/[^\w=.-]/g, '_');
+                const ext = isJpeg ? 'jpg' : 'png';
+                const outPath = path.join(OUT_THUMBS, `${safeName}.${ext}`);
+                fs.writeFileSync(outPath, buf);
+                result.thumbnail = `thumbnails/render/${safeName}.${ext}`;
+            }
             delete result.thumbnailPNG;
         }
         // Merge source case data into result for analysis (formula, axis, etc.)
