@@ -152,6 +152,7 @@ export const JuliaMorph: FractalDefinition = {
         // Return packed result
         z = vec4(Z.x, Z.y, d, smooth_iter);
     }`,
+        selfContainedSDE: true,
         loopBody: `formula_JuliaMorph(z, dr, trap, c); break;`,
         getDist: `
             return vec2(z.z, z.w);

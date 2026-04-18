@@ -3,6 +3,7 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 import * as THREE from 'three';
 import { FOLD_LIST, FOLD_OPTIONS, getFold } from './folds';
 import { SHARED_TRANSFORMS_GLSL } from './transforms';
+import { registry } from '../../engine/FractalRegistry';
 
 // Re-export types
 export type { FoldDefinition } from './types';
@@ -408,11 +409,12 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
 
         // --- BURNING MODE (Global Runtime) ---
         const formula = config.formula;
-        if (formula !== 'MandelTerrain') {
+        const isSelfContainedSDE = registry.get(formula)?.shader.selfContainedSDE ?? false;
+        if (!isSelfContainedSDE) {
             hybridInLoop += `z.xyz = mix(z.xyz, abs(z.xyz), step(0.5, uBurningEnabled));`;
         }
 
-        if (hybridCompiled) {
+        if (hybridCompiled && !isSelfContainedSDE) {
             const isComplex = state && state.hybridComplex;
 
             if (!isComplex) {
