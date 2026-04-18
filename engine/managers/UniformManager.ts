@@ -377,21 +377,27 @@ export class UniformManager {
                     radArr[i] = l.radius ?? 0.0;
                     sofArr[i] = l.softness ?? 0.0;
 
+                    // Position / rotation may be omitted on legacy presets
+                    // (e.g. older formulas with lights-array entries that
+                    // predate the rotation field). Default-to-zero so the
+                    // engine renders correctly instead of crashing.
+                    const lp = l.position;
                     const effectivePos = {
-                        x: l.position.x + dX,
-                        y: l.position.y + dY,
-                        z: l.position.z + dZ
+                        x: (lp?.x ?? 0) + dX,
+                        y: (lp?.y ?? 0) + dY,
+                        z: (lp?.z ?? 0) + dZ
                     };
 
                     this.virtualSpace.getLightShaderVector(effectivePos, l.fixed, cam, (posArr[i] as THREE.Vector3));
                 }
-                
+
                 // Calculate Direction
                 // Base: (0, 0, -1) [Forward]
+                const lr = l.rotation;
                 this.lightEuler.set(
-                    l.rotation.x + dRotX, 
-                    l.rotation.y + dRotY, 
-                    l.rotation.z + dRotZ, 
+                    (lr?.x ?? 0) + dRotX,
+                    (lr?.y ?? 0) + dRotY,
+                    (lr?.z ?? 0) + dRotZ,
                     'YXZ' // Matches typical Yaw/Pitch order
                 );
                 this.lightQuat.setFromEuler(this.lightEuler);

@@ -13,15 +13,14 @@ import { bucketRenderer, BucketRenderConfig } from './BucketRenderer';
 import { UniformManager } from './managers/UniformManager';
 import { ConfigManager } from './managers/ConfigManager';
 import { OpticsState } from '../features/optics';
-import { DEFAULT_HARD_CAP } from '../data/constants';
 import { LightingState } from '../features/lighting';
 import { QualityState } from '../features/quality';
 import type { GeometryState } from '../features/geometry';
 import '../formulas';
-import { featureRegistry } from './FeatureSystem';
 import { halton } from './codec/H264Converter';
 import { detectHardwareProfileMainThread } from './HardwareDetection';
 import { createFullscreenPass } from './utils/FullscreenQuad';
+import { createDefaultShaderConfig } from './ConfigDefaults';
 
 /** Custom input event passed to FractalEngine.handleInput() from viewport interaction handlers. */
 export type EngineInputEvent =
@@ -134,40 +133,9 @@ export class FractalEngine {
         this.state.isMobile = detectHardwareProfileMainThread().isMobile;
 
         // --- DYNAMIC CONFIG GENERATION ---
-        const initialConfig: any = { 
-            formula: 'Mandelbulb', 
-            pipelineRevision: 0, 
-            msaaSamples: 1, 
-            previewMode: false, 
-            maxSteps: 300,
-            renderMode: 'Direct',
-            compilerHardCap: DEFAULT_HARD_CAP,
-            shadows: true
-        };
+        // Shared with test harnesses so feature-registry iteration stays in one place.
+        const initialConfig = createDefaultShaderConfig('Mandelbulb') as any;
 
-        const allFeatures = featureRegistry.getAll();
-        allFeatures.forEach(feat => {
-            const featConfig: any = {};
-            Object.entries(feat.params).forEach(([key, config]) => {
-                if (!config.composeFrom) {
-                    featConfig[key] = config.default;
-                }
-            });
-            const cleanConfig: any = {};
-            Object.keys(featConfig).forEach(k => {
-                const val = featConfig[k];
-                if (val && typeof val === 'object') {
-                    if (val.clone) cleanConfig[k] = val.clone();
-                    else if (Array.isArray(val)) cleanConfig[k] = JSON.parse(JSON.stringify(val));
-                    else cleanConfig[k] = { ...val };
-                } else {
-                    cleanConfig[k] = val;
-                }
-            });
-
-            initialConfig[feat.id] = cleanConfig;
-        });
-        
         if (this.state.isMobile && initialConfig.quality) {
             initialConfig.quality.precisionMode = 1.0;
             // Use HalfFloat16 on mobile - works well on modern iOS devices
@@ -312,6 +280,51 @@ export class FractalEngine {
     }
     
     public registerRenderer(renderer: THREE.WebGLRenderer) { this.renderer = renderer; }
+
+    /**
+     * Sync a THREE.Camera's world matrix into the shader's camera uniforms.
+     * This is the canonical camera-→-uniform bridge used by the worker at
+     * boot and per tick, and by test harnesses per frame. Any change to the
+     * camera-uniform set (new FOV/near/far uniforms, matrix-based camera,
+     * etc.) should happen here and propagate to all callers automatically.
+     */
+    public syncCameraFromMatrix(camera: THREE.PerspectiveCamera) {
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld();
+        const m = camera.matrixWorld.elements;
+        const halfFov = THREE.MathUtils.degToRad(camera.fov * 0.5);
+        const tanHalf = Math.tan(halfFov);
+        const u = this.mainUniforms as any;
+        u.uCameraPosition.value.set(m[12], m[13], m[14]);
+        u.uCamBasisX.value.set(m[0], m[1], m[2]).multiplyScalar(tanHalf * camera.aspect);
+        u.uCamBasisY.value.set(m[4], m[5], m[6]).multiplyScalar(tanHalf);
+        u.uCamForward.value.set(-m[8], -m[9], -m[10]);
+    }
+
+    /**
+     * Await the next compile cycle to complete. Resolves when
+     * `IS_COMPILING=false` fires; rejects on timeout. Shared primitive for
+     * test harnesses and any tooling that needs deterministic compile
+     * completion. The app's React UI uses FractalEvents listeners directly
+     * and doesn't need this.
+     */
+    public awaitCompile(timeoutMs = 30000): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                off();
+                reject(new Error(`compile timeout after ${timeoutMs}ms`));
+            }, timeoutMs);
+            const handler = (status: boolean | string) => {
+                if (status === false) {
+                    clearTimeout(timer);
+                    off();
+                    resolve();
+                }
+            };
+            const off = () => FractalEvents.off(FRACTAL_EVENTS.IS_COMPILING, handler);
+            FractalEvents.on(FRACTAL_EVENTS.IS_COMPILING, handler);
+        });
+    }
     
     public resolveLightPosition(currentPos: {x:number, y:number, z:number}, wasFixed: boolean): {x:number, y:number, z:number} {
         return this.virtualSpace.resolveRealWorldPosition(currentPos, wasFixed, this.sceneCtrl.getCamera());

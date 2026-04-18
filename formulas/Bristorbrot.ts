@@ -49,7 +49,8 @@ export const Bristorbrot: FractalDefinition = {
         float sD = sin(angD), cD = cos(angD);
         mat2 rotZ = mat2(cD, -sD, sD, cD);
         `,
-        loopBody: `formula_Bristorbrot(z, dr, trap, c, rotX, rotZ);`
+        loopBody: `formula_Bristorbrot(z, dr, trap, c, rotX, rotZ);`,
+        preambleVars: ['rotX', 'rotZ']
     },
 
     parameters: [

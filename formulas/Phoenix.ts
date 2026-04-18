@@ -116,7 +116,8 @@ export const Phoenix: FractalDefinition = {
         float dr_prev = 0.0;
         vec4 z_prev2 = vec4(0.0);
         float dr_prev2 = 0.0;
-        `
+        `,
+        preambleVars: ['z_prev', 'dr_prev', 'z_prev2', 'dr_prev2']
     },
 
     parameters: [

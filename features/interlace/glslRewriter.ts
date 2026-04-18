@@ -61,6 +61,67 @@ function applyPreambleVarRenames(glsl: string, preambleVars: string[]): string {
 }
 
 /**
+ * Extract names of top-level symbols (functions and variables) declared in a
+ * formula's preamble or function source. Skips `formula_*` (handled separately)
+ * and declarations inside function bodies. Returns names that should be prefixed
+ * with `interlace_` when this formula runs as the secondary so identity-pair
+ * interlacing (primary == secondary) doesn't produce duplicate declarations.
+ *
+ * Covers:
+ *   - function decls   `void foo(...)`, `vec3 bar(...)`
+ *   - mutable globals  `float claude_Phi;`, `vec3 claude_n1;`
+ *   - const globals    `const vec3 co_nc = vec3(...);`
+ */
+export function extractPreambleFunctions(preamble: string): string[] {
+    const names: string[] = [];
+    const funcRe = /\b(?:void|vec[234]|float|int|mat[234]|bool)\s+(\w+)\s*\(/g;
+    // Match a variable declaration line, capturing the comma-separated list up
+    // to the `;`. e.g. `float sC = sin(angC), cC = cos(angC);` → captures `sC = sin(angC), cC = cos(angC)`.
+    const varLineRe = /^\s*(?:const\s+)?(?:vec[234]|float|int|mat[234]|bool)\s+([^;]+);/;
+    // Extract the identifier name at the start of each comma-separated entry.
+    const nameRe = /^\s*(\w+)/;
+    let depth = 0;
+    for (const line of preamble.split('\n')) {
+        if (depth === 0) {
+            // function decls (may appear multiple times per line)
+            funcRe.lastIndex = 0;
+            let fm: RegExpExecArray | null;
+            while ((fm = funcRe.exec(line)) !== null) {
+                const name = fm[1];
+                if (!name.startsWith('formula_') && !names.includes(name)) names.push(name);
+            }
+            // variable decl line — may declare multiple names separated by commas.
+            // The regex already requires a name followed by `=`, `;`, or `,`, so
+            // function decls (`type name(...)`) are naturally excluded.
+            const vm = varLineRe.exec(line);
+            if (vm) {
+                // Split on commas at paren-depth 0 to handle init exprs like
+                // `float sC = sin(angC), cC = cos(angC);` correctly.
+                const parts: string[] = [];
+                let pdepth = 0;
+                let buf = '';
+                for (const ch of vm[1]) {
+                    if (ch === '(') pdepth++;
+                    else if (ch === ')') pdepth--;
+                    else if (ch === ',' && pdepth === 0) { parts.push(buf); buf = ''; continue; }
+                    buf += ch;
+                }
+                if (buf) parts.push(buf);
+                for (const part of parts) {
+                    const nm = nameRe.exec(part);
+                    if (nm && !names.includes(nm[1])) names.push(nm[1]);
+                }
+            }
+        }
+        for (const ch of line) {
+            if (ch === '{') depth++;
+            else if (ch === '}') depth--;
+        }
+    }
+    return names;
+}
+
+/**
  * Rewrite a formula's preamble for interlacing.
  * - Renames mutable global variables listed in `preambleVars` to `interlace_` prefix
  * - Renames precalc functions (e.g. KaliBox_precalc -> interlace_KaliBox_precalc)
@@ -97,11 +158,18 @@ export function rewritePreamble(preamble: string, formulaId: string, preambleVar
 
     let result = preamble;
 
-    // 1. Rename precalc functions: XYZ_foo -> interlace_XYZ_foo
+    // 1a. Rename precalc functions with formulaId prefix: XYZ_foo -> interlace_XYZ_foo
     result = result.replace(
         new RegExp(`\\b${formulaId}_\\w+\\b`, 'g'),
         (match) => `interlace_${match}`
     );
+
+    // 1b. Also prefix any other top-level helpers (e.g. `planeToBulb`, `km_wrap`,
+    // `co_nc`) so primary == secondary identity interlacing doesn't redeclare them.
+    const helpers = extractPreambleFunctions(preamble);
+    for (const name of helpers) {
+        result = result.replace(new RegExp(`\\b${name}\\b`, 'g'), `interlace_${name}`);
+    }
 
     // 2. Rename mutable globals from the explicit list (handles any GLSL type: bool, mat3, etc.)
     if (preambleVars && preambleVars.length > 0) {
@@ -120,7 +188,12 @@ export function rewritePreamble(preamble: string, formulaId: string, preambleVar
  * - Remaps all uniform references to interlace-prefixed variants
  * - Renames preamble global references using the explicit `preambleVars` list
  */
-export function rewriteFormulaFunction(glsl: string, formulaId: string, preambleVars?: string[]): string {
+export function rewriteFormulaFunction(
+    glsl: string,
+    formulaId: string,
+    preambleVars?: string[],
+    preambleFunctions?: string[],
+): string {
     let result = glsl;
 
     // 1. Rename the formula function
@@ -137,24 +210,43 @@ export function rewriteFormulaFunction(glsl: string, formulaId: string, preamble
         result = applyPreambleVarRenames(result, preambleVars);
     }
 
+    // 4. Rename calls to preamble helper functions (auto-detected)
+    if (preambleFunctions && preambleFunctions.length > 0) {
+        for (const name of preambleFunctions) {
+            result = result.replace(new RegExp(`\\b${name}\\b`, 'g'), `interlace_${name}`);
+        }
+    }
+
     return result;
 }
 
 /**
  * Rewrite a formula's loopBody call for interlacing.
+ * - Renames `formula_XYZ` to `formula_Interlace`
+ * - Renames any mutable-global args listed in `preambleVars` (e.g. `rotX`, `z_prev`)
+ *   so the call site matches the prefixed declarations emitted in the loop-init block
  */
-export function rewriteLoopBody(loopBody: string, formulaId: string): string {
-    return loopBody.replace(
+export function rewriteLoopBody(loopBody: string, formulaId: string, preambleVars?: string[]): string {
+    let result = loopBody.replace(
         new RegExp(`\\bformula_${formulaId}\\b`, 'g'),
         'formula_Interlace'
     );
+    if (preambleVars && preambleVars.length > 0) {
+        result = applyPreambleVarRenames(result, preambleVars);
+    }
+    return result;
 }
 
 /**
  * Rewrite a formula's loopInit for interlacing.
  * Remaps function calls that reference the formula name and remap uniforms.
  */
-export function rewriteLoopInit(loopInit: string, formulaId: string, preambleVars?: string[]): string {
+export function rewriteLoopInit(
+    loopInit: string,
+    formulaId: string,
+    preambleVars?: string[],
+    preambleFunctions?: string[],
+): string {
     let result = loopInit;
 
     // Rename precalc function calls (e.g. KaliBox_precalcRotation -> interlace_KaliBox_precalcRotation)
@@ -169,6 +261,13 @@ export function rewriteLoopInit(loopInit: string, formulaId: string, preambleVar
     // Rename preamble global references (e.g. gsd_dmin -> interlace_gsd_dmin)
     if (preambleVars && preambleVars.length > 0) {
         result = applyPreambleVarRenames(result, preambleVars);
+    }
+
+    // Rename calls to preamble helper functions (auto-detected)
+    if (preambleFunctions && preambleFunctions.length > 0) {
+        for (const name of preambleFunctions) {
+            result = result.replace(new RegExp(`\\b${name}\\b`, 'g'), `interlace_${name}`);
+        }
     }
 
     return result;
@@ -191,22 +290,23 @@ export function buildInterlaceLoopGLSL(
 ): { preLoop: string; inLoop: string } {
     let preLoop = '';
     if (interlaceInit) {
+        // Emit interlaceInit at function scope (no enclosing if-block). Any
+        // variables it declares need to be visible inside the iteration loop
+        // where the rewritten formula body references them. Running uncondi-
+        // tionally is safe: the declarations are cheap, and the rot-swap
+        // bookkeeping below still captures the post-init state only when
+        // uInterlaceEnabled is true at runtime.
         preLoop = `
     vec3 _il_savedAxis = gmt_rotAxis;
     float _il_savedCos = gmt_rotCos;
     float _il_savedSin = gmt_rotSin;
+    ${interlaceInit}
     vec3 _il_interlaceAxis = gmt_rotAxis;
     float _il_interlaceCos = gmt_rotCos;
     float _il_interlaceSin = gmt_rotSin;
-    if (uInterlaceEnabled > 0.5) {
-        ${interlaceInit}
-        _il_interlaceAxis = gmt_rotAxis;
-        _il_interlaceCos = gmt_rotCos;
-        _il_interlaceSin = gmt_rotSin;
-        gmt_rotAxis = _il_savedAxis;
-        gmt_rotCos = _il_savedCos;
-        gmt_rotSin = _il_savedSin;
-    }`;
+    gmt_rotAxis = _il_savedAxis;
+    gmt_rotCos = _il_savedCos;
+    gmt_rotSin = _il_savedSin;`;
     }
 
     const rotSwapIn = needsRotSwap ? `

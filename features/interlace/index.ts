@@ -9,6 +9,7 @@ import {
     rewriteLoopInit,
     rewritePreamble,
     buildInterlaceLoopGLSL,
+    extractPreambleFunctions,
     INTERLACE_UNIFORM_NAMES,
 } from './glslRewriter';
 
@@ -35,6 +36,9 @@ export interface InterlaceState {
     interlaceVec3A: THREE.Vector3 | { x: number; y: number; z: number };
     interlaceVec3B: THREE.Vector3 | { x: number; y: number; z: number };
     interlaceVec3C: THREE.Vector3 | { x: number; y: number; z: number };
+    interlaceVec4A: { x: number; y: number; z: number; w: number };
+    interlaceVec4B: { x: number; y: number; z: number; w: number };
+    interlaceVec4C: { x: number; y: number; z: number; w: number };
 }
 
 /**
@@ -53,6 +57,7 @@ const INTERLACE_PARAM_MAP: Record<string, string> = {
     interlaceParamD: 'paramD', interlaceParamE: 'paramE', interlaceParamF: 'paramF',
     interlaceVec3A: 'vec3A', interlaceVec3B: 'vec3B', interlaceVec3C: 'vec3C',
     interlaceVec2A: 'vec2A', interlaceVec2B: 'vec2B', interlaceVec2C: 'vec2C',
+    interlaceVec4A: 'vec4A', interlaceVec4B: 'vec4B', interlaceVec4C: 'vec4C',
 };
 
 /** Inverse: formula param ID → interlace state key */
@@ -275,6 +280,30 @@ export const InterlaceFeature: FeatureDefinition = {
             dynamicConfig: makeDynamicConfig('interlaceVec2C'),
             dynamicVisible: makeDynamicVisible('interlaceVec2C'),
         },
+        interlaceVec4A: {
+            type: 'vec4', default: { x: 0, y: 0, z: 0, w: 0 }, label: 'Vec4 A', shortId: 'ilv4a',
+            uniform: 'uInterlaceVec4A', min: -10, max: 10, step: 0.001,
+            group: 'interlace_runtime',
+            condition: [{ param: 'interlaceCompiled', bool: true }, { param: 'interlaceEnabled', bool: true }],
+            dynamicConfig: makeDynamicConfig('interlaceVec4A'),
+            dynamicVisible: makeDynamicVisible('interlaceVec4A'),
+        },
+        interlaceVec4B: {
+            type: 'vec4', default: { x: 0, y: 0, z: 0, w: 0 }, label: 'Vec4 B', shortId: 'ilv4b',
+            uniform: 'uInterlaceVec4B', min: -10, max: 10, step: 0.001,
+            group: 'interlace_runtime',
+            condition: [{ param: 'interlaceCompiled', bool: true }, { param: 'interlaceEnabled', bool: true }],
+            dynamicConfig: makeDynamicConfig('interlaceVec4B'),
+            dynamicVisible: makeDynamicVisible('interlaceVec4B'),
+        },
+        interlaceVec4C: {
+            type: 'vec4', default: { x: 0, y: 0, z: 0, w: 0 }, label: 'Vec4 C', shortId: 'ilv4c',
+            uniform: 'uInterlaceVec4C', min: -10, max: 10, step: 0.001,
+            group: 'interlace_runtime',
+            condition: [{ param: 'interlaceCompiled', bool: true }, { param: 'interlaceEnabled', bool: true }],
+            dynamicConfig: makeDynamicConfig('interlaceVec4C'),
+            dynamicVisible: makeDynamicVisible('interlaceVec4C'),
+        },
     },
 
     groups: {
@@ -294,8 +323,14 @@ export const InterlaceFeature: FeatureDefinition = {
         // Don't interlace when primary IS Modular
         if (config.formula === 'Modular') return;
 
+        // Self-contained SDE formulas own their full iteration loop — interlacing is undefined.
+        if (registry.get(config.formula)?.shader.selfContainedSDE) return;
+
         const def = registry.get(formulaId);
         if (!def) return;
+
+        // Secondary formula cannot be a self-contained SDE either.
+        if (def.shader.selfContainedSDE) return;
 
         // For Mesh variant: declare interlace uniforms via addUniform() since MESH_GLSL_UNIFORMS
         // only covers primary formula params. The main shader has these in the full UNIFORMS chunk.
@@ -309,23 +344,38 @@ export const InterlaceFeature: FeatureDefinition = {
             builder.addUniform('uInterlaceStartIter', 'float');
         }
 
-        // 1. Inject preamble (if any) with prefixed variables
+        // Auto-detect top-level symbols (functions, globals) declared in the
+        // formula's preamble, function, AND loopInit. loopInit's declarations
+        // are hoisted to function scope in the interlace pre-loop, so identity-
+        // pair interlacing (primary == secondary) would otherwise redeclare
+        // the same locals (e.g. `preScale`, `angC`).
+        const preambleFunctions = [
+            ...extractPreambleFunctions(def.shader.preamble ?? ''),
+            ...extractPreambleFunctions(def.shader.function ?? ''),
+            ...extractPreambleFunctions(def.shader.loopInit ?? ''),
+        ].filter((v, i, a) => a.indexOf(v) === i);  // dedupe
+
+        // 1. Inject preamble (if any) with prefixed variables and helpers
         if (def.shader.preamble) {
             const rewrittenPreamble = rewritePreamble(def.shader.preamble, def.id, def.shader.preambleVars);
             builder.addPreamble(rewrittenPreamble);
         }
 
         // 2. Inject the rewritten formula function
-        const rewrittenFunction = rewriteFormulaFunction(def.shader.function, def.id, def.shader.preambleVars);
+        const rewrittenFunction = rewriteFormulaFunction(
+            def.shader.function, def.id, def.shader.preambleVars, preambleFunctions,
+        );
         builder.addFunction(rewrittenFunction);
 
         // 3. Build the interlace loop logic
-        const rewrittenBody = rewriteLoopBody(def.shader.loopBody, def.id);
+        const rewrittenBody = rewriteLoopBody(def.shader.loopBody, def.id, def.shader.preambleVars);
 
         // Build loopInit for the secondary formula
         let interlaceInit = '';
         if (def.shader.loopInit) {
-            interlaceInit = rewriteLoopInit(def.shader.loopInit, def.id, def.shader.preambleVars);
+            interlaceInit = rewriteLoopInit(
+                def.shader.loopInit, def.id, def.shader.preambleVars, preambleFunctions,
+            );
         }
 
         const needsRotSwap = !!def.shader.usesSharedRotation;
