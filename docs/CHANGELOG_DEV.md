@@ -2,6 +2,46 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-17
+
+### V3/V4 pipeline catalog + auto-pick in Workshop library
+
+**User-facing**
+- **Pipeline tristate**: the "V4 pipeline (beta)" checkbox in the Formula Workshop footer is now a three-way `[auto] [v3] [v4]` selector. `auto` reads a per-formula compatibility catalog and picks the pipeline that renders each formula correctly. `v3` / `v4` force that pipeline regardless.
+- **Compat badges**: search results and both category browsers (Frag and DEC) now show a small `V3` or `V4` badge next to each formula. Green V3 = engine-feature compat (interlace, hybrid fold, burning ship). Cyan V4 = self-contained, simpler but no feature composition.
+- **"Show broken" toggle** next to the Workshop search bar. Default off — hides the 168 formulas that neither pipeline can render.
+- **Dice rolls skip broken formulas** by default. The two random-formula buttons reroll from only the 326 working formulas; "show broken" flips this.
+
+**Architecture / data**
+- **New artifact `public/formulas/v3-v4-catalog.json`**: per-formula verdict `{ v3: pass|fail|skip, v4: same, recommended: 'v3'|'v4'|'none' }` for every entry in `public/formulas/manifest.json`. Built from V3 and V4 harness snapshots.
+- **Recommendation policy**: V3 when V3 passes (engine-feature compat); else V4 if V4 passes; else `'none'`. One function in the build script — easy to flip.
+- **Build script**: `npm run catalog:build` (wraps `npx tsx debug/build-v3-v4-catalog.mts`). Snapshot-based, manually regenerated.
+
+**Code changes**
+- `public/formulas/v3-v4-catalog.json` (new, generated)
+- `debug/build-v3-v4-catalog.mts` (new)
+- `features/fragmentarium_import/formula-library.ts` — catalog loader; new exports `getFormulaCompat`, `getRecommendedPipeline`, types `FormulaCompat` / `RecommendedPipeline`. `pickRandom` gains predicate parameter for compat filtering.
+- `features/fragmentarium_import/FormulaWorkshop.tsx` — `useV4Pipeline` boolean → `pipelineMode: 'auto'|'v3'|'v4'` + `currentEntryId` tracking. Effective pipeline resolved via `useMemo`. Selection handlers set `currentEntryId`. Dice buttons filter via predicate.
+- `components/CategoryPickerMenu.tsx` — `PickerItem` gains optional `badge` field.
+- `package.json` — new `catalog:build` script.
+
+**Research doc (retires Strategy I, retargets future work)**
+- `docs/research/hybrid-formula-architecture-comparison.md` (new) — GMT's per-iteration contract compared against Mandelbulber2 / Fragmentarium / Fraktaler 3. Finding: GMT's contract mirrors Mandelbulber2's. The impedance with Fragmentarium's full-DE shape is a one-time import cost, not an architectural flaw. "Strategy I" (engine-side fix for self-contained hybrid compat) retired as fighting-the-grain.
+- `docs/24_Formula_Interlace_System.md` §8 — cross-links Mandelbulber's `seq[i] → formula_idx` as the concrete target shape for N-formula hybrid generalization.
+- `docs/26_Formula_Workshop_V4_Plan.md` §0.1 — revised direction: per-iter emitter opt-in only, V3-fallback deferred, AI-assisted `.frag → .ts` elevated, N-formula hybrid flagged as the real feature gap.
+
+**V4 per-iteration emitter — landed but parked**
+- `features/fragmentarium_import/v4/emit/per-iteration.ts` (new, ~720 LOC) — reuses V3's pattern detectors to emit per-iteration formulas from V4 analysis output.
+- `features/fragmentarium_import/v4/emit/index.ts` — dispatcher with parse-check fallback, gated behind `globalThis.V4_ENABLE_PER_ITER`. Default path routes to `emitSelfContained`.
+- Measured: 330 total passes with per-iter dispatched first vs 394 self-contained-only — a net regression. Foundation kept for future iteration, not promoted.
+
+**Catalog numbers (v0.9.2 branch, 2026-04-17 snapshot)**
+- 494 formulas in the library manifest
+- V3 recommended: 219 (201 both-pass + 18 V3-only)
+- V4 recommended: 107 (V4-only wins)
+- Hidden: 168 (neither renders)
+- Total usable: 326
+
 ## 2026-04-14
 
 ### Modular Graph Builder — Correctness, Undo/Redo, UX Overhaul

@@ -155,6 +155,8 @@ The current design hardcodes exactly two formulas. Mandelbulber supports N-formu
 - GLSL rewriter generates `formula_Hybrid_0`, `formula_Hybrid_1`, etc.
 This is a significant rewrite but would make the system much more powerful without growing the uniform count proportionally.
 
+**Elevated to primary feature-investment target** per [research/hybrid-formula-architecture-comparison.md](research/hybrid-formula-architecture-comparison.md). Mandelbulber2's scheduler is `seq[i] → formula_idx` with per-formula `start_iter` / `stop_iter` / `formula_iterations` / `weight`. That's the concrete target shape.
+
 **9. Uniform buffer objects (UBOs) for secondary params**
 The current 12+ interlace uniforms are each individually queried. UBOs would bundle them and reduce the per-draw overhead. Low priority since mesh export is not real-time.
 

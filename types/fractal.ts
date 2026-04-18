@@ -85,6 +85,9 @@ export interface FractalDefinition {
         preamble?: string;           // Global code before functions (for pre-calculation)
         preambleVars?: string[];     // Names of mutable globals declared in preamble (for interlace renaming)
         usesSharedRotation?: boolean; // True if formula reads/writes gmt_rotAxis/rotCos/rotSin (needs swap during interlace)
+        /** Formula owns its full SDE: loopBody calls the function once then breaks.
+         *  Engine guards: SKIP_PRE_BAILOUT, no hybrid fold injection, no interlacing. */
+        selfContainedSDE?: boolean;
     };
     parameters: (FractalParameter | null)[];
     description?: string;

@@ -132,16 +132,9 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     engine.registerRenderer(renderer);
     engine.mainUniforms.uInternalScale.value = initMsg.dpr;
 
-    // Sync initial camera to shader uniforms so the first preview frame renders correctly
-    if (initMsg.initialCamera) {
-        camera.updateMatrixWorld();
-        const m = camera.matrixWorld.elements;
-        const tanFov = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * camera.aspect;
-        engine.mainUniforms.uCameraPosition.value.set(m[12], m[13], m[14]);
-        engine.mainUniforms.uCamBasisX.value.set(m[0], m[1], m[2]).multiplyScalar(tanFov);
-        engine.mainUniforms.uCamBasisY.value.set(m[4], m[5], m[6]).multiplyScalar(Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)));
-        engine.mainUniforms.uCamForward.value.set(-m[8], -m[9], -m[10]);
-    }
+    // Sync initial camera to shader uniforms so the first preview frame renders correctly.
+    // Shared with test harnesses via the canonical FractalEngine method.
+    if (initMsg.initialCamera) engine.syncCameraFromMatrix(camera);
 
     // Set up display scene for blitting
     initDisplayScene();

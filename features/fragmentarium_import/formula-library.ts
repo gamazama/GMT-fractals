@@ -44,6 +44,21 @@ export interface FolderInfo {
     formulaCount: number;
 }
 
+/** Per-formula V3/V4 pipeline compatibility (from the bakeoff catalog).
+ *  `pass` / `fail` / `skip` mirror the verification harness states.
+ *  `recommended` is the pipeline the Workshop should auto-pick when the user
+ *  selects this formula (policy: V3 when V3 passes — engine-feature compat;
+ *  else V4 if V4 passes; else 'none' — neither renders). */
+export type PipelineState = 'pass' | 'fail' | 'skip' | 'missing';
+export type RecommendedPipeline = 'v3' | 'v4' | 'none';
+export interface FormulaCompat {
+    v3: PipelineState;
+    v4: PipelineState;
+    recommended: RecommendedPipeline;
+    v3FailGate?: string;
+    v4FailGate?: string;
+}
+
 // ============================================================================
 // Internal state
 // ============================================================================
@@ -56,6 +71,7 @@ interface DECFormulaJSON {
 
 let _library: FormulaEntry[] | null = null;
 let _decData: DECFormulaJSON[] | null = null;
+let _compat: Record<string, FormulaCompat> | null = null;
 let _loading: Promise<void> | null = null;
 
 // ============================================================================
@@ -68,9 +84,13 @@ export function loadLibrary(): Promise<void> {
     if (_loading) return _loading;
 
     _loading = (async () => {
-        const [manifestRes, decRes] = await Promise.all([
+        // Catalog fetch is best-effort. If missing (never generated / dev build),
+        // library still works — compat lookups just return undefined and the UI
+        // falls back to "unknown, assume V4 default" behaviour.
+        const [manifestRes, decRes, catalogRes] = await Promise.all([
             fetch('./formulas/manifest.json'),
             fetch('./formulas/dec.json'),
+            fetch('./formulas/v3-v4-catalog.json').catch(() => null),
         ]);
 
         if (!manifestRes.ok) throw new Error(`Failed to load manifest: ${manifestRes.status}`);
@@ -78,6 +98,13 @@ export function loadLibrary(): Promise<void> {
 
         const manifest = await manifestRes.json();
         _decData = await decRes.json() as DECFormulaJSON[];
+
+        if (catalogRes && catalogRes.ok) {
+            try {
+                const doc = await catalogRes.json() as { byId: Record<string, FormulaCompat> };
+                _compat = doc.byId ?? null;
+            } catch { _compat = null; }
+        }
 
         // Build unified FormulaEntry[] from manifest
         const fragEntries: FormulaEntry[] = manifest.frags.map((f: any) => ({
@@ -199,8 +226,32 @@ export function searchFormulas(query: string): FormulaEntry[] {
     );
 }
 
-/** Pick a random formula (optionally filtered by source) */
-export function pickRandom(source?: FormulaSource): FormulaEntry {
-    const pool = source ? getFormulasBySource(source) : getLibrary();
+/** Pick a random formula, optionally filtered by source and/or a predicate.
+ *  Returns null if no entry in the (filtered) pool satisfies the predicate —
+ *  caller decides how to present "no matches" (e.g. reroll with predicate off). */
+export function pickRandom(
+    source?: FormulaSource,
+    predicate?: (entry: FormulaEntry) => boolean,
+): FormulaEntry | null {
+    let pool = source ? getFormulasBySource(source) : getLibrary();
+    if (predicate) pool = pool.filter(predicate);
+    if (pool.length === 0) return null;
     return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ============================================================================
+// V3/V4 pipeline compatibility
+// ============================================================================
+
+/** Returns the V3/V4 compat record for a formula ID, or undefined when the
+ *  catalog hasn't been loaded or doesn't know about this formula (e.g. user
+ *  pasted custom GLSL into the Workshop). */
+export function getFormulaCompat(id: string): FormulaCompat | undefined {
+    return _compat?.[id];
+}
+
+/** Recommended pipeline for a formula ID. Defaults to 'v4' when the catalog
+ *  is absent or unknown — matches the existing Workshop default. */
+export function getRecommendedPipeline(id: string): RecommendedPipeline {
+    return _compat?.[id]?.recommended ?? 'v4';
 }

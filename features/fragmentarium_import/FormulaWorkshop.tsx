@@ -23,6 +23,7 @@ import { detectVariables, promoteVariable } from './workshop/variable-detector';
 import type { DetectedVariable } from './workshop/variable-detector';
 import { detectFormulaV3, transformFormulaV3 } from './v3/compat';
 import { buildFractalParams, filterDeadParams, slotLabel, componentSlotBase, groupedSlotOptions, buildOccupancyMap, isSlotConflict, getSlotOccupancy } from './workshop/param-builder';
+import { processFormula as v4ProcessFormula } from './v4';
 
 const PREVIEW_ID = 'frag_workshop_preview';
 import {
@@ -31,8 +32,9 @@ import {
     getFolders, getFormulasByFolder,
     getFormulasBySource, searchFormulas, pickRandom,
     loadFragSource, loadDECSource,
+    getRecommendedPipeline, getFormulaCompat,
 } from './formula-library';
-import type { FormulaEntry } from './formula-library';
+import type { FormulaEntry, RecommendedPipeline } from './formula-library';
 
 // ─── Slot Picker ────────────────────────────────────────────────────────────
 // Uses the same CategoryPickerMenu as ParameterSelector (LFO/audio modulation targets).
@@ -424,6 +426,21 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     const [searchResults, setSearchResults]               = useState<FormulaEntry[] | null>(null);
     const [detectVarsActive, setDetectVarsActive]         = useState(false);
     const [detectedVars, setDetectedVars]                 = useState<DetectedVariable[]>([]);
+    /** Pipeline selector:
+     *    'auto' — per-formula catalog recommendation (V3 when V3 passes for
+     *             engine-feature compat; else V4 if V4 passes; else V4 default).
+     *    'v3'   — force V3 pipeline (per-iteration extraction; composes with
+     *             interlace / hybrid fold / burning ship).
+     *    'v4'   — force V4 processFormula (self-contained SDE; simpler but no
+     *             engine-feature composition).
+     *  See docs/26_Formula_Workshop_V4_Plan.md §0.1 + docs/research/hybrid-formula-architecture-comparison.md */
+    const [pipelineMode, setPipelineMode]                 = useState<'auto' | 'v3' | 'v4'>('auto');
+    /** ID of the formula loaded from the library, used for auto-pick lookup.
+     *  null when the user pasted custom source. */
+    const [currentEntryId, setCurrentEntryId]             = useState<string | null>(null);
+    /** Toggle: when true, include formulas where neither pipeline renders.
+     *  Default false — most users don't want to see 170+ broken entries. */
+    const [showIncompatible, setShowIncompatible]         = useState(false);
 
     // ── Refs ──
     const fileRef            = useRef<HTMLInputElement>(null);
@@ -437,6 +454,20 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     useEffect(() => {
         loadLibrary().then(() => setLibraryReady(true)).catch(e => console.warn('[Workshop] Library load failed:', e));
     }, []);
+
+    // ── Effective pipeline (auto = catalog recommendation) ──
+    // Resolved per-render so catalog-aware changes (loading a new library entry)
+    // flip the pipeline instantly without another state set.
+    const effectivePipeline: 'v3' | 'v4' = useMemo(() => {
+        if (pipelineMode === 'v3' || pipelineMode === 'v4') return pipelineMode;
+        // Auto: consult the catalog. Default to v4 when formula is unknown
+        // (custom-pasted GLSL) or catalog hasn't loaded yet.
+        const rec: RecommendedPipeline = currentEntryId
+            ? getRecommendedPipeline(currentEntryId)
+            : 'v4';
+        return rec === 'v3' ? 'v3' : 'v4';  // 'none' also routes through V4 (it'll surface its own error)
+    }, [pipelineMode, currentEntryId]);
+    const useV4Pipeline = effectivePipeline === 'v4';  // preserves existing handler shape
 
     // ── Store ──
     const setFormula = useFractalStore(s => s.setFormula);
@@ -510,30 +541,46 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         } catch (e) { console.warn('[Workshop] Transform preview failed:', e); }
     }, [detected, selectedFunctionName, loopMode, mappings, formulaName]);
 
+    // Dice predicate: only pick formulas at least one pipeline can render,
+    // unless the user has opted into "show broken". When the catalog isn't
+    // loaded (offline dev build), compat is undefined → predicate passes.
+    const dicePredicate = useCallback((entry: FormulaEntry): boolean => {
+        if (showIncompatible) return true;
+        const compat = getFormulaCompat(entry.id);
+        return !compat || compat.recommended !== 'none';
+    }, [showIncompatible]);
+
     // ── File Loading ──
     const handleRandomDEC = useCallback(async () => {
         if (!libraryReady) return;
         try {
-            const entry = pickRandom('dec');
+            // Predicate filters out "neither renders" entries; if the filter
+            // produces an empty pool (shouldn't happen with real catalog),
+            // fall back to the unfiltered pool so the dice never hangs.
+            const entry = pickRandom('dec', dicePredicate) ?? pickRandom('dec');
+            if (!entry) { setError('No DEC formulas in library.'); return; }
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
+            setCurrentEntryId(entry.id);
             runDetect(content, label);
         } catch (e) {
             setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
         }
-    }, [runDetect, libraryReady]);
+    }, [runDetect, libraryReady, dicePredicate]);
 
     const handleRandomFrag = useCallback(async () => {
         if (!libraryReady) return;
         try {
-            const entry = pickRandom('frag');
+            const entry = pickRandom('frag', dicePredicate) ?? pickRandom('frag');
+            if (!entry) { setError('No frag formulas in library.'); return; }
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
+            setCurrentEntryId(entry.id);
             runDetect(content, label);
         } catch (e) {
             setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
         }
-    }, [runDetect, libraryReady]);
+    }, [runDetect, libraryReady, dicePredicate]);
 
     const handleLoadFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -542,7 +589,12 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         const reader = new FileReader();
         reader.onload = ev => {
             const content = ev.target?.result as string;
-            if (content) { setSource(content); runDetect(content, fileBaseName || undefined); }
+            if (content) {
+                setSource(content);
+                // User-supplied file — not a library entry, so no catalog lookup possible.
+                setCurrentEntryId(null);
+                runDetect(content, fileBaseName || undefined);
+            }
         };
         reader.readAsText(file);
         e.target.value = '';
@@ -557,17 +609,40 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         return getCategories('frag').map(c => ({ id: c.id, name: `${c.name} (${c.formulaCount})` }));
     }, [libraryReady, browseMode]);
 
+    /** Build a PickerItem badge from the catalog verdict. */
+    const compatBadge = useCallback((id: string): PickerItem['badge'] | undefined => {
+        const c = getFormulaCompat(id);
+        if (!c || c.recommended === 'none') return undefined;
+        if (c.recommended === 'v3') {
+            return { text: 'V3', className: 'bg-emerald-900/50 text-emerald-300 border border-emerald-600/30' };
+        }
+        return { text: 'V4', className: 'bg-cyan-900/40 text-cyan-300 border border-cyan-600/30' };
+    }, []);
+
+    const isUnrenderable = useCallback((id: string): boolean => {
+        return getFormulaCompat(id)?.recommended === 'none';
+    }, []);
+
+    const entryToPickerItem = useCallback((entry: FormulaEntry, prefix: 'frag' | 'dec'): PickerItem | null => {
+        const badRender = isUnrenderable(entry.id);
+        if (badRender && !showIncompatible) return null;
+        return {
+            key: `${prefix}:${entry.id}`,
+            label: entry.name,
+            description: entry.artist !== 'unknown' ? entry.artist : undefined,
+            disabled: badRender,
+            disabledSuffix: badRender ? '(neither pipeline renders this)' : undefined,
+            badge: compatBadge(entry.id),
+        };
+    }, [isUnrenderable, showIncompatible, compatBadge]);
+
     const getFragBrowseItems = useCallback((categoryId: string): PickerItem[] => {
         if (!libraryReady) return [];
         const entries = browseMode === 'folder'
             ? getFormulasByFolder(categoryId)
             : getFormulasByCategory(categoryId, 'frag');
-        return entries.map(entry => ({
-            key: `frag:${entry.id}`,
-            label: entry.name,
-            description: entry.artist !== 'unknown' ? entry.artist : undefined,
-        }));
-    }, [libraryReady, browseMode]);
+        return entries.map(e => entryToPickerItem(e, 'frag')).filter((i): i is PickerItem => i !== null);
+    }, [libraryReady, browseMode, entryToPickerItem]);
 
     // ── Browse DEC Library ──
     const decBrowseCategories: PickerCategory[] = useMemo(() => {
@@ -577,12 +652,10 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
 
     const getDECBrowseItems = useCallback((categoryId: string): PickerItem[] => {
         if (!libraryReady) return [];
-        return getFormulasByCategory(categoryId, 'dec').map(entry => ({
-            key: `dec:${entry.id}`,
-            label: entry.name,
-            description: entry.artist !== 'unknown' ? entry.artist : undefined,
-        }));
-    }, [libraryReady]);
+        return getFormulasByCategory(categoryId, 'dec')
+            .map(e => entryToPickerItem(e, 'dec'))
+            .filter((i): i is PickerItem => i !== null);
+    }, [libraryReady, entryToPickerItem]);
 
     const handleBrowseSelect = useCallback(async (key: string) => {
         const [src, ...rest] = key.split(':');
@@ -591,6 +664,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
             const entry: FormulaEntry = { id, name: '', source: src as any, artist: '', category: '', tags: [] };
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
+            setCurrentEntryId(id);
             runDetect(content, label);
         } catch (e) {
             setError('Failed to load formula: ' + (e instanceof Error ? e.message : String(e)));
@@ -608,6 +682,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         try {
             const { label, content } = await loadFormulaSource(entry);
             setSource(content);
+            setCurrentEntryId(entry.id);
             runDetect(content, label);
             setSearchQuery('');
             setSearchResults(null);
@@ -736,11 +811,37 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         return { def, defaultPreset };
     }, []);
 
+    // ── V4 pipeline: build + register a formula via the new processFormula ──
+    // Bypasses V3's detect/transform entirely. Logs the registered def so
+    // triage is possible when something downstream misrenders.
+    const buildAndRegisterV4 = useCallback((
+        id: string,
+        name: string,
+        sourceText: string,
+    ): { ok: true; def: FractalDefinition; defaultPreset: any } | { ok: false; error: string } => {
+        const r = v4ProcessFormula(sourceText, name, id, name);
+        if (!r.ok) return { ok: false, error: `${r.error.kind}: ${r.error.message}` };
+        const def = r.value.definition;
+        registry.register(def);
+        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+        console.log('[V4] registered', def.id, def);
+        return { ok: true, def, defaultPreset: def.defaultPreset };
+    }, []);
+
     // ── Preview ──
     const handlePreview = useCallback(() => {
         if (!detected || !selectedFunctionName) return;
         setError(null);
         try {
+            // V4 path: bypass the V3 transform chain entirely.
+            if (useV4Pipeline) {
+                const r = buildAndRegisterV4(PREVIEW_ID, 'Workshop Preview', source);
+                if (!r.ok) { setError('V4 preview failed: ' + r.error); return; }
+                setFormula(PREVIEW_ID as any);
+                applyFormulaDefaults(r.defaultPreset);
+                return;
+            }
+
             const result = runTransform(detected, selectedFunctionName, loopMode, PREVIEW_ID, mappings);
             if (!result) { setError('Could not analyze the selected function.'); return; }
 
@@ -751,7 +852,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         } catch (e) {
             setError('Preview failed: ' + (e instanceof Error ? e.message : String(e)));
         }
-    }, [detected, selectedFunctionName, loopMode, mappings, buildAndRegister, setFormula, applyFormulaDefaults]);
+    }, [detected, selectedFunctionName, loopMode, mappings, source, useV4Pipeline, buildAndRegister, buildAndRegisterV4, setFormula, applyFormulaDefaults]);
 
     // ── Close: restore previous formula if showing preview ──
     const handleClose = useCallback(() => {
@@ -765,6 +866,21 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     const handleImport = useCallback(() => {
         if (!detected || !selectedFunctionName || !formulaName.trim()) return;
         setError(null);
+
+        // V4 path: processFormula handles slot assignment internally — no
+        // per-param mapping UI needed. Skips V3 validation entirely.
+        if (useV4Pipeline) {
+            try {
+                const r = buildAndRegisterV4(formulaName, formulaName, source);
+                if (!r.ok) { setError('V4 import failed: ' + r.error); return; }
+                setSuccess(true);
+                setTimeout(() => { setFormula(formulaName as any); applyFormulaDefaults(r.defaultPreset); onClose(); }, 1000);
+            } catch (e) {
+                setError('V4 import failed: ' + (e instanceof Error ? e.message : String(e)));
+            }
+            return;
+        }
+
         try {
             // Validate slot uniqueness
             const valOccupancy = new Map<string, Set<string>>();
@@ -808,7 +924,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         } catch (e) {
             setError('Import failed: ' + (e instanceof Error ? e.message : String(e)));
         }
-    }, [detected, selectedFunctionName, formulaName, loopMode, mappings, source, buildAndRegister, setFormula, applyFormulaDefaults, onClose]);
+    }, [detected, selectedFunctionName, formulaName, loopMode, mappings, source, useV4Pipeline, buildAndRegister, buildAndRegisterV4, setFormula, applyFormulaDefaults, onClose]);
 
     const selectedCandidate = detected?.candidates.find(c => c.name === selectedFunctionName) ?? null;
     const canImport = !!detected && !!selectedFunctionName && formulaName.trim().length > 0;
@@ -950,7 +1066,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                     <input ref={fileRef} type="file" accept=".frag,.glsl,.txt" className="hidden" onChange={handleLoadFile} />
                 </div>
                 {/* Row 2: Search */}
-                <div className="relative px-3 pb-1.5">
+                <div className="relative px-3 pb-1.5 flex items-center gap-2">
                     <input
                         type="text"
                         value={searchQuery}
@@ -959,32 +1075,61 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
                         disabled={!libraryReady}
                         onBlur={() => setTimeout(() => setSearchResults(null), 150)}
                         onFocus={() => { if (searchQuery.trim()) handleSearch(searchQuery); }}
-                        className="w-full text-[10px] px-2.5 py-1 rounded border border-white/10 bg-black/30 text-gray-300 placeholder-gray-600 focus:border-cyan-500/40 focus:outline-none transition-colors"
+                        className="flex-1 text-[10px] px-2.5 py-1 rounded border border-white/10 bg-black/30 text-gray-300 placeholder-gray-600 focus:border-cyan-500/40 focus:outline-none transition-colors"
                     />
-                    {searchResults && searchResults.length > 0 && (
-                        <div className="absolute left-3 right-3 top-full z-50 max-h-[240px] overflow-y-auto bg-[#1a1a1a] border border-white/10 rounded shadow-xl">
-                            {searchResults.slice(0, 30).map(entry => (
-                                <button
-                                    key={`${entry.source}:${entry.id}`}
-                                    onClick={() => handleSearchSelect(entry)}
-                                    className="w-full text-left px-2.5 py-1.5 text-[10px] hover:bg-white/5 transition-colors flex items-center gap-2"
-                                >
-                                    <span className={`shrink-0 text-[8px] px-1 py-0.5 rounded ${entry.source === 'frag' ? 'bg-cyan-900/40 text-cyan-400' : 'bg-amber-900/40 text-amber-400'}`}>
-                                        {entry.source === 'frag' ? 'FRAG' : 'DEC'}
-                                    </span>
-                                    <span className="text-white truncate">{entry.name}</span>
-                                    {entry.artist !== 'unknown' && (
-                                        <span className="text-gray-500 truncate ml-auto">{entry.artist}</span>
-                                    )}
-                                </button>
-                            ))}
-                            {searchResults.length > 30 && (
-                                <div className="px-2.5 py-1 text-[9px] text-gray-500 text-center">
-                                    +{searchResults.length - 30} more results
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    <label
+                        title="Show formulas that neither V3 nor V4 can render (for debugging). Off by default."
+                        className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer select-none shrink-0"
+                    >
+                        <input
+                            type="checkbox"
+                            checked={showIncompatible}
+                            onChange={e => setShowIncompatible(e.target.checked)}
+                            className="w-3 h-3 accent-cyan-500"
+                        />
+                        show broken
+                    </label>
+                    {searchResults && searchResults.length > 0 && (() => {
+                        // Filter out neither-pipeline-renders formulas unless user opts in.
+                        const visible = showIncompatible ? searchResults : searchResults.filter(e => !isUnrenderable(e.id));
+                        return (
+                            <div className="absolute left-3 right-3 top-full z-50 max-h-[240px] overflow-y-auto bg-[#1a1a1a] border border-white/10 rounded shadow-xl">
+                                {visible.slice(0, 30).map(entry => {
+                                    const badge = compatBadge(entry.id);
+                                    return (
+                                        <button
+                                            key={`${entry.source}:${entry.id}`}
+                                            onClick={() => handleSearchSelect(entry)}
+                                            className="w-full text-left px-2.5 py-1.5 text-[10px] hover:bg-white/5 transition-colors flex items-center gap-2"
+                                        >
+                                            <span className={`shrink-0 text-[8px] px-1 py-0.5 rounded ${entry.source === 'frag' ? 'bg-cyan-900/40 text-cyan-400' : 'bg-amber-900/40 text-amber-400'}`}>
+                                                {entry.source === 'frag' ? 'FRAG' : 'DEC'}
+                                            </span>
+                                            {badge && (
+                                                <span className={`shrink-0 text-[8px] px-1 py-0.5 rounded font-semibold ${badge.className}`}>
+                                                    {badge.text}
+                                                </span>
+                                            )}
+                                            <span className="text-white truncate">{entry.name}</span>
+                                            {entry.artist !== 'unknown' && (
+                                                <span className="text-gray-500 truncate ml-auto">{entry.artist}</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                                {visible.length > 30 && (
+                                    <div className="px-2.5 py-1 text-[9px] text-gray-500 text-center">
+                                        +{visible.length - 30} more results
+                                    </div>
+                                )}
+                                {visible.length === 0 && (
+                                    <div className="px-2.5 py-1.5 text-[10px] text-gray-500 text-center">
+                                        All matches are in the "neither pipeline renders" bucket. Enable "show incompatible" to see them.
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                     {searchResults && searchResults.length === 0 && searchQuery.trim() && (
                         <div className="absolute left-3 right-3 top-full z-50 bg-[#1a1a1a] border border-white/10 rounded shadow-xl px-2.5 py-2 text-[10px] text-gray-500">
                             No formulas found
@@ -1197,23 +1342,51 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
 
             {/* Footer */}
             <div className="flex items-center justify-between px-3 py-2 border-t border-white/10 bg-black/30 shrink-0">
-                <button
-                    onClick={handleClose}
-                    className="px-3 py-1.5 rounded-lg text-[11px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                >
-                    Cancel
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleClose}
+                        className="px-3 py-1.5 rounded-lg text-[11px] text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <div
+                        className="flex items-center gap-1 text-[11px] text-gray-400 select-none"
+                        title={
+                            pipelineMode === 'auto'
+                                ? `Auto-picks per formula: V3 when V3 renders (engine-feature compat — interlace / hybrid fold / burning ship); else V4. Current: ${effectivePipeline.toUpperCase()}.`
+                                : pipelineMode === 'v3'
+                                    ? 'Force V3 pipeline (per-iteration extraction; composes with interlace, hybrid fold, burning ship).'
+                                    : 'Force V4 pipeline (self-contained SDE; simpler but no engine-feature composition).'
+                        }
+                    >
+                        <span className="text-gray-500 mr-1">pipeline:</span>
+                        {(['auto', 'v3', 'v4'] as const).map(mode => (
+                            <button
+                                key={mode}
+                                onClick={() => setPipelineMode(mode)}
+                                className={
+                                    'px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors '
+                                    + (pipelineMode === mode
+                                        ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-500/40'
+                                        : 'text-gray-500 hover:text-gray-300 border border-transparent')
+                                }
+                            >
+                                {mode === 'auto' ? `auto (${effectivePipeline})` : mode}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={handlePreview}
-                        disabled={!canImport}
+                        disabled={!canImport && !useV4Pipeline}
                         className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-white/10"
                     >
                         Preview
                     </button>
                     <button
                         onClick={handleImport}
-                        disabled={!canImport}
+                        disabled={(!canImport && !useV4Pipeline) || !formulaName.trim()}
                         className="px-4 py-1.5 bg-cyan-900/50 hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-[11px] font-semibold text-cyan-300 transition-colors border border-cyan-500/30"
                     >
                         Import Formula

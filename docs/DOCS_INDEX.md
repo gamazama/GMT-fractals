@@ -37,6 +37,11 @@ The GMT documentation is organized into several complementary systems:
 | [23_Formula_Audit.md](23_Formula_Audit.md) | Formula correctness audit: naming, descriptions, params, DE |
 | [24_Formula_Interlace_System.md](24_Formula_Interlace_System.md) | Interlace architecture, preambleVars contract, quirks, improvement suggestions |
 | [25_Formula_Dev_Reference.md](25_Formula_Dev_Reference.md) | **Unified formula writing reference**: full API surface, shader fields, parameters, GLSL built-ins, quirks & gotchas, templates |
+| [26_Formula_Workshop_V4_Plan.md](26_Formula_Workshop_V4_Plan.md) | **V4 rewrite plan** \u2014 self-contained SDE first, verification harness, Fragmentarium as spec reference |
+| [26b_Fragmentarium_Spec.md](26b_Fragmentarium_Spec.md) | **Fragmentarium `.frag` format spec** \u2014 canonical directives, annotations, render-model classification; drives V4 Stage 2 |
+| [27_Shader_Testing_Suite.md](27_Shader_Testing_Suite.md) | **GLSL shader verification harness** \u2014 Playwright-driven, real ShaderFactory path, 6 gates. Usable beyond the importer |
+| [research/v4-rethink-prompt.md](research/v4-rethink-prompt.md) | Self-contained prompt for a fresh session to rethink V4 architecture |
+| [research/hybrid-formula-architecture-comparison.md](research/hybrid-formula-architecture-comparison.md) | **How Mandelbulber2 / Fragmentarium / Fraktaler architect hybrid formulas** — confirms GMT's per-iter contract is mainstream; retires Strategy I; points at N-formula sequences as the real gap |
 
 ### Archive
 Historical design docs, completed reports, and superseded references are in [`docs/archive/`](archive/). See [`archive/README.md`](archive/README.md) for a categorized index.

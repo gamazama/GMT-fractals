@@ -6,12 +6,23 @@
   "scripts": {
     "dev": "node server/server.js",
     "build": "vite build",
-    "preview": "cross-env NODE_ENV=production node server/server.js",
+    "preview": "cross-env NODE_ENV=production PORT=4173 node server/server.js",
     "start": "npm run build && cross-env NODE_ENV=production node server/server.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
     "test:frag": "tsx debug/test-frag-importer.mts",
-    "test:frag:v": "tsx debug/test-frag-importer.mts --verbose"
+    "test:frag:v": "tsx debug/test-frag-importer.mts --verbose",
+    "test:interlace": "tsx debug/native-interlace-sweep.mts --fresh",
+    "test:interlace:matrix": "tsx debug/native-interlace-matrix.mts --thumbs",
+    "test:interlace:watch": "tsx debug/native-interlace-monitor.mts",
+    "test:baseline": "tsx debug/native-config-sweep.mts --mode=baseline --fresh",
+    "test:hybrid": "tsx debug/native-config-sweep.mts --mode=hybrid --fresh",
+    "test:hybrid-adv": "tsx debug/native-config-sweep.mts --mode=hybrid-adv --fresh",
+    "test:shader": "npm run test:baseline && npm run test:hybrid && npm run test:hybrid-adv && npm run test:interlace",
+    "test:render": "tsx debug/render-sweep.mts --phase=1 --fresh",
+    "test:render:perf": "tsx debug/render-sweep.mts --phase=3 --fresh",
+    "test:render:matrix": "tsx debug/render-matrix.mts",
+    "catalog:build": "tsx debug/build-v3-v4-catalog.mts"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
@@ -41,6 +52,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.19",
     "gh-pages": "^6.1.1",
+    "playwright": "^1.59.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.7.0",

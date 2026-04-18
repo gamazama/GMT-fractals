@@ -618,7 +618,7 @@ export class WorkerProxy {
         this.post({ type: 'CONFIG', config });
     }
 
-    registerFormula(id: string, shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string }) {
+    registerFormula(id: string, shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean }) {
         this.post({ type: 'REGISTER_FORMULA', id, shader });
     }
 

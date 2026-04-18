@@ -24,6 +24,8 @@ Before making ANY code changes, you MUST read the relevant documentation using t
 | Formula conversion | `docs/22_Frag_to_Native_Formula_Conversion.md` |
 | **Writing formulas**: full API, shader fields, params, GLSL built-ins, quirks | `docs/25_Formula_Dev_Reference.md` |
 | Formula interlace system, preambleVars, mesh export interlace | `docs/24_Formula_Interlace_System.md` |
+| V4 importer plan, per-iter emitter status, pipeline catalog | `docs/26_Formula_Workshop_V4_Plan.md` |
+| Hybrid formula architecture: GMT vs Mandelbulber2/Fragmentarium/Fraktaler | `docs/research/hybrid-formula-architecture-comparison.md` |
 | Mesh export tool, VDB writer, preview canvas, pipeline | `docs/30_Mesh_Export_Prototype.md` |
 
 After making changes, update the relevant docs if you discovered new patterns, quirks, or undocumented behavior. Check `docs/06_Troubleshooting_and_Quirks.md` for known issues when debugging.
@@ -59,12 +61,22 @@ After making changes, update the relevant docs if you discovered new patterns, q
 - Don't bind React state directly in render loops — use the bridge pattern
 - Don't create manual Zustand slices for features — use DDFS
 - Don't use `engine.renderer` or `engine.pipeline` checks in worker mode — they're null. Use `engine.isBooted` or shadow state.
-- No test suite exists yet — be careful with refactors, test manually
+- Test suite coverage is partial — be careful with refactors, test manually alongside the automated checks below
+
+### Automated checks
+- `npm run test:frag` — frag importer suite (64/64 passing)
+- `npm run test:baseline` — every native formula compiles with all features off (~8s, 42/42 passing). Baseline compile regression check.
+- `npm run test:hybrid` / `test:hybrid-adv` — every native formula + hybrid box (standard / interleaved) (~12s each, 42/42 passing). Run after hybrid-box or geometry-feature changes.
+- `npm run test:interlace` — native-formula interlace sweep (1600 primary × secondary pairs, ~100s, 1600/1600 passing). Run after changes to the interlace rewriter, feature uniform declarations, or any formula's `preamble` / `loopInit` / `preambleVars`.
+- `npm run test:shader` — all compile checks in sequence (~2.5 min). Use before pushing engine changes.
+- `npm run test:render` — **full-engine render sweep**. Boots the real `FractalEngine` + Three.js in headless Chromium, renders each formula through the full pipeline, captures PNG thumbnails. Requires `npm run dev` running in another terminal (served at `/render-harness.html`). Baseline only for now (42 cases, ~3-5 min); hybrid/interlace modes wired but commented pending param-preset work.
+- `npm run test:render:matrix` — regenerates an HTML grid view of the last render sweep at `debug/render-matrix-phase1.html`.
+- `npm run catalog:build` — regenerates `public/formulas/v3-v4-catalog.json` from the latest V3/V4 harness snapshots (`debug/v3-honest-snapshot.jsonl`, `debug/v4-honest-snapshot.jsonl`). Run after adding formulas to the library or making V3/V4 pipeline changes that might flip a formula's pass/fail status. Workshop library UI uses this catalog to auto-pick the right pipeline per formula and filter unrenderable entries.
+- See [docs/27_Shader_Testing_Suite.md](docs/27_Shader_Testing_Suite.md) for full details.
 
 ## Formulas & File I/O
 - 42 formula files in `formulas/` (.ts with embedded GLSL)
 - GMF format files in `public/gmf/` (formula library)
-- Frag importer test suite: `npx tsx debug/test-frag-importer.mts` (64/64 passing)
 - **GMF is the primary save format** — all scenes save as `.gmf` (formula shader + full scene state). JSON is load-only for backward compat. PNG snapshots embed GMF in metadata. See `docs/05_Data_and_Export.md`.
 - Key functions: `saveGMFScene()` / `loadGMFScene()` in `utils/FormulaFormat.ts`
 

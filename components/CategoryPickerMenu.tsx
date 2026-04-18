@@ -28,6 +28,8 @@ export interface PickerItem {
     disabledSuffix?: string;
     /** Item is currently selected */
     selected?: boolean;
+    /** Optional small badge shown before the label (e.g. "V3" / "V4"). */
+    badge?: { text: string; className: string };
 }
 
 export interface CategoryPickerMenuProps {
@@ -158,7 +160,7 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
                         <button
                             key={item.key}
                             onClick={item.disabled ? undefined : () => { onSelect(item.key); onClose(); }}
-                            className={`w-full px-3 py-1.5 text-left transition-colors truncate ${
+                            className={`w-full px-3 py-1.5 text-left transition-colors truncate flex items-center gap-1.5 ${
                                 item.disabled
                                     ? 'text-gray-600 cursor-not-allowed'
                                     : item.selected
@@ -167,7 +169,14 @@ export const CategoryPickerMenu: React.FC<CategoryPickerMenuProps> = ({
                             }`}
                             title={item.description || item.label}
                         >
-                            {item.label}{item.disabled && item.disabledSuffix ? ` ${item.disabledSuffix}` : ''}
+                            {item.badge && (
+                                <span className={`shrink-0 text-[8px] px-1 py-0.5 rounded font-semibold ${item.badge.className}`}>
+                                    {item.badge.text}
+                                </span>
+                            )}
+                            <span className="truncate">
+                                {item.label}{item.disabled && item.disabledSuffix ? ` ${item.disabledSuffix}` : ''}
+                            </span>
                         </button>
                     ))}
                 </div>

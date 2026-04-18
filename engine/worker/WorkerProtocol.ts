@@ -80,7 +80,7 @@ export type MainToWorkerMessage =
         exportData?: { preset: string; name: string; version: number } }
     | { type: 'BUCKET_STOP' }
     // ─── Dynamic Formula Registration ───
-    | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string } }
+    | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean } }
     // ─── Shader Debug ───
     | { type: 'GET_SHADER_SOURCE'; id: string; variant: 'compiled' | 'translated' }
     | { type: 'CONFIG_DONE' };

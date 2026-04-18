@@ -126,13 +126,14 @@ export const CoreMathFeature: FeatureDefinition = {
             builder.addUniform(Uniforms.ModularParams, 'float', MAX_MODULAR_PARAMS);
         }
 
-        // 2. Analytic Opt-in
-        if (['JuliaMorph', 'MandelTerrain'].includes(formula)) {
+        // 2. Analytic Opt-in: skip the pre-bailout distance check for formulas that
+        //    manage their own iteration loop (selfContainedSDE).
+        const def = registry.get(formula);
+        if (def?.shader.selfContainedSDE) {
             builder.addDefine('SKIP_PRE_BAILOUT', '1');
         }
 
         // 3. Generate Code
-        const def = registry.get(formula);
         let functions = "";
         let loopBody = "";
         let loopInit = "";
