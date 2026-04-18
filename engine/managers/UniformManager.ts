@@ -270,9 +270,14 @@ export class UniformManager {
         this.uniforms[Uniforms.CamForward].value.copy(this.camForward);
         this.uniforms[Uniforms.CameraPosition].value.set(0, 0, 0);
 
-        // CPU pre-compute: length(uCamBasisY) / resolution.y * 2.0
-        // camUp is a unit vector so length(uCamBasisY) == height
-        this.uniforms[Uniforms.PixelSizeBase].value = height * 2.0 / this.uniforms[Uniforms.Resolution].value.y;
+        // CPU pre-compute: length(uCamBasisY) / viewportY * 2.0
+        // viewportY = resolution.y * _adaptiveScale — the pre-adaptive viewport resolution.
+        // This makes uPixelSizeBase represent the VIEWPORT pixel size (invariant to adaptive
+        // downscale), matching the intent of the SSAA bucket override (which forces viewport
+        // value during upscale). Trace precision, normal epsilon, and shadow bias all stay
+        // anchored to what the user sees on screen regardless of internal resolution scaling.
+        const viewportY = this.uniforms[Uniforms.Resolution].value.y * this._adaptiveScale;
+        this.uniforms[Uniforms.PixelSizeBase].value = height * 2.0 / viewportY;
 
         const camModX = modulations['camera.unified.x'] || 0;
         const camModY = modulations['camera.unified.y'] || 0;

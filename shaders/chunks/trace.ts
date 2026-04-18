@@ -53,8 +53,9 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
     float accAlpha = 0.0; // Scalar glow accumulator for Fast Mode
     
     // 3. Loop Config
-    // pixelSizeScale: world-space size of an output pixel (NOT affected by internal scale)
-    // Internal scale affects ray detail, not pixel size calculations
+    // pixelSizeScale: world-space size of a render pixel.
+    // uPixelSizeBase is computed from the physical render resolution (includes DPR),
+    // so it already represents the render pixel — no additional scale division needed.
     float pixelSizeScale = uPixelSizeBase;
     int limit = int(uMaxSteps);
     float maxMarch = MAX_DIST;
@@ -88,8 +89,11 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
         
         // Dynamic Epsilon (Cone Tracing concept)
         // We relax the hit requirement as we get further away to prevent aliasing and stepping issues
-        // Note: uDetail is divided by uInternalScale because at higher internal resolutions,
-        // each output pixel covers more render pixels, so we need less precision per output pixel
+        // Dividing uDetail by uInternalScale makes the threshold DPR-invariant:
+        // at DPR=2, render pixels are half-sized so the raw threshold is half,
+        // but dividing detail by 2 multiplies threshold by 2, canceling the DPR effect.
+        // This matches the DPR-invariance pattern used in material_eval/pathtracer
+        // (which divide pixelSizeScale by uInternalScale for the same net effect).
         float effectiveDetail = uDetail / uInternalScale;
         // Perspective: pixel footprint grows with distance (cone) → scale by d
         // Ortho: pixel footprint is constant (parallel rays) → pixelSizeScale already
