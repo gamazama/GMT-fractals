@@ -36,6 +36,28 @@ If the screen turns black or the browser crashes:
 *   **Fix:** Added explicit render target reset to `null` (screen) in `restoreState()` method before resetting viewport and scissor.
 *   **Location:** `engine/worker/WorkerExporter.ts` — `restoreState()` method
 
+### Firefox export bitrate / fps mismatch (60 → 58.85, lower-than-requested bitrate)
+*   **Cause (fps):** Firefox's `VideoEncoder` adds a one-frame leading-latency offset to `chunk.timestamp` even with `latencyMode: 'realtime'`. Mediabunny writes the muxed file's total duration as `lastSample.timestamp + lastSample.duration` (see `mvhd` / `tkhd` / `mdhd` in `node_modules/mediabunny/dist/modules/src/isobmff/isobmff-boxes.js`); the offset gets baked in, so `N` frames at `F` fps come out as `F × N/(N+1)` — e.g. 60 fps → ~58.82 fps for a 50-frame clip. Chrome doesn't add this offset.
+*   **Cause (duration):** Firefox also doesn't echo back the per-frame `duration` we set on the source `VideoFrame` — it returns its own default (≈33333 µs, a 30-fps assumption). On its own this would inflate the last sample's duration the same way.
+*   **Cause (bitrate):** Firefox's default `bitrateMode: 'variable'` rate controller under-runs the target on fractal renders (large smooth gradient regions look "easy"), producing visibly lower-quality output than Chrome at the same setting.
+*   **Fix:** In [`engine/worker/WorkerExporter.ts`](../engine/worker/WorkerExporter.ts):
+    1. Encoder configured with `latencyMode: 'quality'` (B-frames + aggressive motion estimation, ~30% better Firefox bitrate than `realtime`) and `bitrateMode: 'constant'` (forces target bitrate; Firefox's `variable` default underruns on smooth fractal content).
+    2. Stopped trusting `chunk.timestamp` directly: PTS is reconstructed as `chunk.timestamp − firstChunkOffset`. The keyframe on input-frame 0 forces the first decoded chunk to be the I-frame at PTS = 0, so the first chunk's timestamp *is* whatever offset Firefox added — subtracting it cancels the shift on Firefox, no-op on Chrome. B-frame-safe because each chunk's `chunk.timestamp` is still its true PTS.
+    3. Stopped trusting `chunk.duration`: hardcoded to `1 / fps` (Firefox echoes ~33333 µs / 30 fps default regardless of what we set on the source VideoFrame).
+
+### Firefox H.264 export bitrate hard-capped at ~31 Mbps
+*   **Cause:** Firefox encodes H.264 via Cisco's binary OpenH264 plugin (Mozilla can't ship libavcodec because of MPEG-LA royalties). Cisco's binary is built with an H.264 **Level 4.0** ceiling (MaxBR = 25,000 kbps × 1.25 for High profile = 31,250 kbps), regardless of the level we request in the codec string (`avc1.640034` = Level 5.2). The cap is upstream of WebCodecs — no encoder config knob bypasses it. Symptom: cranking the bitrate slider from 12 → 60 Mbps barely changes the output file size (~3.0 MB → 3.3 MB for an 0.8 s clip).
+*   **Mitigation:** None from JS. The render dialog now shows a small inline notice when Firefox is detected and the bitrate slider is set above 12 Mbps (≈ where the multiplied encoder request hits the OpenH264 ceiling). See [`components/timeline/RenderPopup.tsx`](../components/timeline/RenderPopup.tsx) `isFirefoxH264BitrateCapped`.
+
+### Output resolution doesn't match the request (e.g. 1920×1080 → 1920×1072)
+*   **Cause:** `WorkerExporter.start()` previously aligned dimensions to a 16-pixel grid (`Math.floor(d/16)*16`) "to match macroblock size". H.264's macroblock is 16×16, but WebCodecs encoders pad internally and signal display crop in the SPS — they accept any 2-pixel-aligned dimension and emit the requested visible resolution. The over-strict alignment shaved any height that wasn't a multiple of 16 (1080 → 1072, 1350 → 1344).
+*   **Fix:** Lowered `align` from 16 → 2 in [`engine/worker/WorkerExporter.ts`](../engine/worker/WorkerExporter.ts). Output now matches the requested resolution exactly for the standard presets.
+
+### Custom H264 AnnexB → AVCC converter (`H264Converter.ts`) — removed
+*   **What it was:** When configured with `avc: { format: 'annexb' }` (cross-browser default for MP4), the WebCodecs encoder emits AnnexB-formatted NAL units (start-code delimited). MP4/ISOBMFF requires AVCC (length-prefixed NALs) plus an `avcC` atom built from SPS/PPS — without that, Windows Media Player refuses to play the file. The custom `H264Converter` parsed NAL units, extracted SPS (type 7) / PPS (type 8), built an `AVCDecoderConfigurationRecord` and converted bytes inline before handing the packet to mediabunny.
+*   **Why removed (2026-04-20):** Mediabunny's ISOBMFF muxer (≥1.34, confirmed in 1.40.1) does the same work natively. When `meta.decoderConfig.description` is missing and the codec is `avc`, the muxer calls `extractAvcDecoderConfigurationRecord(packet.data)`, builds the description, and sets `requiresAnnexBTransformation = true` so subsequent packets are re-emitted via `iterateNalUnitsInAnnexB` + `concatNalUnitsInLengthPrefixed(nalUnits, 4)`. Identical byte-level result.
+*   **Sanity check after upgrades:** if a future mediabunny bump regresses WMP playback, restore the old converter from git history (`engine/codec/H264Converter.ts` at commit before this change) before chasing the regression elsewhere.
+
 ### "Error finalizing video file" in Chrome Disk Mode
 *   **Cause:** When using `StreamTarget` with `chunked: true`, Mediabunny's `output.finalize()` internally closes the underlying `FileSystemWritableFileStream`. The code was then attempting to close the stream again, which threw an error because the stream was already closed.
 *   **Fix:** Removed the redundant stream close call — the stream is already closed by `finalize()`.

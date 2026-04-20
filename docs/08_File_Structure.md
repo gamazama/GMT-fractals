@@ -29,7 +29,7 @@ The imperative WebGL system.
 *   `SceneController.ts`: Manages Three.js scenes/cameras.
 *   `AnimationEngine.ts`: Handles timeline playback and value interpolation.
 *   `codec/VideoExportTypes.ts`: Shared `VideoExportConfig` interface for export pipeline.
-*   `codec/H264Converter.ts`: H264 AnnexB → AVCC conversion + Halton sequence for TAA jitter.
+*   `codec/halton.ts`: Halton low-discrepancy sequence (TAA jitter, Monte Carlo sampling).
 *   `BucketRenderer.ts`: Tiled high-res rendering logic.
 *   `LoadingRenderer.ts`: Standalone raw WebGL renderer for the splash screen.
 *   `LoadingRendererCPU.ts`: CPU-based fallback loading renderer.

@@ -156,7 +156,11 @@ export class MaterialController {
             map: { value: null },
             uResolution: { value: new THREE.Vector2(1,1) },
             uEncodeOutput: { value: 1.0 },
-            uBloomTexture: { value: null }  // Set by BloomPass in worker
+            uBloomTexture: { value: null }   // Set by BloomPass in worker
+            // uOutputPass / uDepthMin / uDepthMax are SHARED from mainUniforms (declared in UniformSchema
+            // so the main fractal shader and both post-process materials see the same value). Setting
+            // `engine.mainUniforms.uOutputPass.value = 1` inside the worker updates the preview (display),
+            // the export pipeline, AND the main shader's alpha-pass branch in one write.
         };
 
         // SHARED REFERENCE OPTIMIZATION:

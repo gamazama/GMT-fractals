@@ -398,7 +398,7 @@ The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full sh
 ### Short Term (Medium Effort)
 1. Create typed state accessor utility for DDFS (reduce `any` instances)
 2. ✅ Split `FormulaSelect.tsx` → `FormulaContextMenu.tsx` + `FormulaGallery.tsx` (see Section 8)
-3. ✅ Extract shared `H264Converter` + `halton` from both exporters → `engine/codec/H264Converter.ts`
+3. ✅ Extract shared `halton` helper → `engine/codec/halton.ts` (mediabunny ≥1.34 muxes AnnexB AVC natively, so `H264Converter` was deleted)
 4. ✅ Extract `applyExportModulations` + time helpers from `RenderPopup.tsx` (see Section 8)
 5. ✅ Extract `FullscreenQuad` utility → `engine/utils/FullscreenQuad.ts` — 10 sites consolidated, shared geometry, 3 bugs fixed.
 6. Extract `NeighborKeyData` + drag-neighbor collection from `useDopeSheetInteraction`/`useGraphInteraction` into `timelineUtils.ts`. See Section 2.10.
@@ -461,9 +461,9 @@ The `engineConfig.mode` field distinguishes cost: `'compile'` triggers a full sh
 
 | File | Content | Lines |
 |------|---------|-------|
-| `engine/codec/H264Converter.ts` | `H264Converter` class (NALU parsing, AnnexB → AVCC conversion) + `halton()` (TAA jitter sequence) | 80 |
+| `engine/codec/halton.ts` | `halton()` low-discrepancy sequence (TAA jitter, Monte Carlo) | 14 |
 | `engine/codec/VideoExportTypes.ts` | `VideoExportConfig` interface (shared by WorkerExporter, WorkerProxy, WorkerProtocol) | 13 |
-| `engine/worker/WorkerExporter.ts` | Worker-thread exporter (sole exporter, imports shared codec) | 509 |
+| `engine/worker/WorkerExporter.ts` | Worker-thread exporter (sole exporter; mediabunny handles AVC AnnexB → AVCC muxing natively) | ~480 |
 
 ### Split Plan: renderWorker.ts (829 → ~560 main)
 

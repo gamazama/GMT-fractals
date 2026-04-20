@@ -184,7 +184,7 @@ Main Thread                          Worker Thread
 | Render | `RENDER_TICK` | Per-frame state snapshot (camera, params) |
 | Config | `CONFIG`, `CONFIG_DONE` | Shader config updates; `CONFIG_DONE` signals all CONFIGs sent (deterministic compile trigger) |
 | Bucket | `BUCKET_START/STOP/STATUS/IMAGE` | Tiled high-res rendering |
-| Video | `VIDEO_START/STOP/FRAME` | Offline video export |
+| Export | `EXPORT_START/RENDER_FRAME/CANCEL/FINISH` (main → worker), `EXPORT_READY/FRAME_DONE/COMPLETE/ERROR` (worker → main) | Offline video *and* image-sequence export. `EXPORT_START` carries either a `WritableStream` (video/MP4/WebM file) or a `FileSystemDirectoryHandle` (image sequence); the worker picks the appropriate pipeline. Directory handles ride the message body directly — they're structured-cloneable since the File System Access API landed in workers. |
 | Focus Pick | `FOCUS_PICK_START/SAMPLE/END` | DoF focus distance from depth buffer |
 | Histogram | `HISTOGRAM_REQUEST/RESULT` | Probe RPC for histogram data |
 | Snapshot | `SNAPSHOT_REQUEST/RESULT` | Screenshot capture |

@@ -659,7 +659,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     if (!exporter) {
                         exporter = new WorkerExporter(engine, renderer, camera, postMsg);
                     }
-                    exporter.start(msg.config, msg.stream);
+                    exporter.start(msg.config, msg.stream, msg.dirHandle);
                 } else {
                     postMsg({ type: 'EXPORT_ERROR', message: 'Engine not ready for export' });
                 }

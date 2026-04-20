@@ -41,6 +41,11 @@ export const generatePostProcessFrag = () => {
 uniform sampler2D map;
 uniform vec2 uResolution;
 uniform float uEncodeOutput;
+// Multi-pass export uniforms — shared with the main shader via mainUniforms. At defaults
+// (uOutputPass=0) these are no-ops; WorkerExporter drives them per session.
+uniform float uOutputPass;  // 0=beauty, 1=alpha mask, 2=depth
+uniform float uDepthMin;    // Near plane for depth normalization (world units)
+uniform float uDepthMax;    // Far plane for depth normalization (world units)
 
 // --- DYNAMIC UNIFORMS ---
 ${injectedUniforms}
@@ -147,6 +152,31 @@ void main() {
     ${injectedMainUV}
 
     vec4 tex = texture(map, sampleUV);
+
+    // --- EXPORT PASS BRANCHES ---
+    // Alpha and depth passes skip tone mapping + feature color injections entirely
+    // and write a luminance pass (same value in R,G,B) so the result is legible as
+    // a greyscale video or image regardless of container.
+    if (uOutputPass > 1.5) {
+        // Depth: linear camera distance, normalized to the user-configured [uDepthMin, uDepthMax]
+        // range (defaults to [0, 5] world units; RenderPopup can auto-populate from the
+        // atmosphere feature's fog start/end when fog is enabled). Values outside the range
+        // clamp to 0 (near) or 1 (far).
+        float span = max(uDepthMax - uDepthMin, 0.0001);
+        float d = clamp((tex.a - uDepthMin) / span, 0.0, 1.0);
+        pc_fragColor = vec4(d, d, d, 1.0);
+        return;
+    }
+    if (uOutputPass > 0.5) {
+        // Alpha mask: tex.a is already the accumulated fractional coverage (the main shader
+        // writes per-sample binary 1.0/0.0, and the N-sample accumulation averages to a smooth
+        // edge). No thresholding needed — the sub-pixel AA comes for free from the TAA jitter.
+        float a = clamp(tex.a, 0.0, 1.0);
+        pc_fragColor = vec4(a, a, a, 1.0);
+        return;
+    }
+
+    // Beauty pass (default)
     vec3 col = tex.rgb;
 
     col *= mask;

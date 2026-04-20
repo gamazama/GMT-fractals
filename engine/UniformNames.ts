@@ -68,6 +68,11 @@ export const Uniforms = {
     // Export/Render Scale
     InternalScale: 'uInternalScale',
     PixelSizeBase: 'uPixelSizeBase',
+
+    // Multi-pass export
+    OutputPass: 'uOutputPass',                   // 0=beauty, 1=alpha, 2=depth. Main shader and post-process both branch on this.
+    DepthMin: 'uDepthMin',                       // Near clip for depth-pass normalization (world units).
+    DepthMax: 'uDepthMax',                       // Far clip for depth-pass normalization (world units).
     
     // Vector Formula Parameters (NEW)
     Vec2A: 'uVec2A',

@@ -2,6 +2,85 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-20
+
+### Image-sequence export: PNG (RGBA) + JPG (per-pass)
+
+**User-facing**
+- Two new format dropdown entries: **PNG Sequence (RGBA)** and **JPG Sequence (per pass)**.
+- Selecting either enables a **Select Output Folder…** button (instead of the usual "Output File"). The user picks a directory and the render writes per-frame files into it named `{project}_v{n}_{WxH}_{00000}.{ext}`.
+- **PNG** merges the beauty and alpha passes into a single RGBA PNG per frame (RGB from beauty, A from the anti-aliased coverage mask). If depth is also selected, it goes out as a separate greyscale PNG per frame (`…_depth_00000.png`).
+- **JPG** writes one file per pass per frame (`…_beauty_00000.jpg`, `…_alpha_00000.jpg`, `…_depth_00000.jpg`) — JPG can't carry alpha, so pass separation is the only sensible option.
+- Chrome / Edge only: image sequences depend on the File System Access API's directory picker. Firefox / Safari show an inline amber notice and the button is disabled when that API isn't present.
+
+**Mechanism**
+- [`data/constants.ts`](../data/constants.ts) — two new `VIDEO_FORMATS` entries with `imageSequence: true`; the existing video entries get `imageSequence: false`.
+- [`engine/codec/VideoExportTypes.ts`](../engine/codec/VideoExportTypes.ts) — `VideoExportConfig` gains `passes?: ExportPass[]` (image mode: all selected passes in one session) and `imageSequenceBaseName?: string`. The per-pass `pass` field still drives video mode.
+- [`engine/worker/WorkerProtocol.ts`](../engine/worker/WorkerProtocol.ts) / [`WorkerProxy.ts`](../engine/worker/WorkerProxy.ts) — `EXPORT_START` accepts an optional `dirHandle: FileSystemDirectoryHandle`. `FileSystemDirectoryHandle` is structured-cloneable across `postMessage` since the File System Access API landed in workers, so it rides in the message body — no transferable entry needed.
+- [`engine/worker/WorkerExporter.ts`](../engine/worker/WorkerExporter.ts) — the session is now video-vs-image-tagged; video-specific fields (`encoder`, `packetSource`, `output`, `muxerChain`) are optional and only created in video mode. Image mode holds `dirHandle` + `imageWriteChain` instead. `renderFrame` branches: `renderFrameVideo` runs one pass + encodes one chunk (prior behavior); `renderFrameImageSequence` loops over `config.passes` per frame, copies each pass's `pixelBuffer` snapshot into a map, then schedules `writeFrameFiles` onto the write chain so disk I/O overlaps with the next frame's GPU work. Files are encoded in-worker via `OffscreenCanvas.convertToBlob('image/png' | 'image/jpeg')` and streamed into `dirHandle.getFileHandle(name, {create: true}).createWritable()`. `finish()` drains the write chain before posting `EXPORT_COMPLETE`; `cancel()` drops the session (partial files on disk are kept — they're valid frames).
+- Bloom is skipped on the alpha and depth passes inside `renderOnePass` — those are greyscale luminance data that bloom would smear, changing the "meaning" of the value. Beauty still bloomsa as always.
+- [`components/timeline/RenderPopup.tsx`](../components/timeline/RenderPopup.tsx) — new `handleImageSequenceExport` takes the image path: `showDirectoryPicker({mode: 'readwrite'})`, sets up the same per-frame pump as video but with `config.passes` populated, awaits `finishExport()` at the end. The start button relabels to **Select Output Folder…** when an image format is chosen, and disables with a notice when the File System Access API isn't available.
+- Format-support check in `RenderPopup` short-circuits to `supported = true` for image sequences — they don't go through `Mediabunny.canEncodeVideo`.
+
+**Performance**
+- PNG + alpha selected → 2× GPU work per frame (beauty pass, then alpha pass, both at full accumulation). Still roughly half the cost of running two separate video exports because the per-frame state setup (camera, offset, uniforms) happens once.
+- PNG encode cost: `OffscreenCanvas.convertToBlob` at 1080p is ~10-30ms per frame, dwarfed by the accumulation work — and it runs on the write chain, so frame N+1's accumulation overlaps frame N's encode/write.
+
+### Multi-pass video export: beauty, alpha, depth
+
+**User-facing**
+- The render dialog now has a **Passes** row with three checkboxes: **Beauty**, **Alpha**, **Depth**. At least one must be selected.
+- Beauty is the normal tone-mapped video we've always exported. Alpha is an anti-aliased black-and-white matte (white = surface, black = sky). Depth is a linear greyscale distance map (near = black, far = white), normalized to a user-configurable range.
+- Checking **Depth** reveals a **Near / Far (world units)** control row with a **Use fog range** shortcut — if the scene's atmosphere fog is enabled, that one click copies the current fog start/end into the depth range.
+- While a pass renders, the viewport preview now shows that pass being rendered (alpha or depth as it goes into the file), not the beauty image it used to show regardless.
+- When more than one pass is selected, each pass produces its own file named `{project}_{pass}_v{n}.{ext}`. Disk-mode exports show a separate save dialog per file; RAM-mode triggers downloads sequentially.
+
+**Mechanism**
+- Three new uniforms in [`engine/UniformSchema.ts`](../engine/UniformSchema.ts) / [`UniformNames.ts`](../engine/UniformNames.ts): `uOutputPass` (0=beauty, 1=alpha, 2=depth), `uDepthMin`, `uDepthMax`. They live in the base schema so the main fractal shader, the viewport's `displayMaterial`, and the `exportMaterial` all share the *same* uniform reference via `createPostProcessMaterial`'s "SHARED REFERENCE" loop. Setting `engine.mainUniforms.uOutputPass.value = 1` atomically retargets all three — which is what makes the viewport preview follow the pass being rendered.
+- [`shaders/chunks/main.ts`](../shaders/chunks/main.ts) branches the alpha write at the end of `main()`. In beauty/depth passes the projected camera distance still goes into alpha (the physics probe relies on it). In alpha pass, a per-sample binary `step(depth, 900.0)` (MISS_DIST=1000, 100-unit margin for DoF jitter) goes in instead. The existing Halton-jittered TAA accumulation then averages the 0/1 values across sub-pixel samples — which is exactly what sub-pixel coverage AA looks like. Zero extra render cost; the anti-aliasing comes out of the accumulation buffer for free.
+- [`shaders/chunks/post_process.ts`](../shaders/chunks/post_process.ts) — alpha branch reads the accumulated fractional coverage straight out of `tex.a` (no thresholding). Depth branch normalizes `tex.a` against `uDepthMin` / `uDepthMax` (was hardcoded to `MAX_SKY_DISTANCE = 50`). Both branches skip tone mapping and post-process feature injections.
+- [`engine/worker/WorkerExporter.ts`](../engine/worker/WorkerExporter.ts) sets `uOutputPass` / `uDepthMin` / `uDepthMax` via `mainUniforms` at session start; cleanup resets `uOutputPass` to 0. The focus-lock depth probe is now gated on `pass !== 'alpha'` — otherwise it would read the binary-coverage alpha and trash `lastMeasuredDistance`.
+- [`engine/codec/VideoExportTypes.ts`](../engine/codec/VideoExportTypes.ts) — new `ExportPass` type; `pass`, `depthMin`, `depthMax` optional fields on `VideoExportConfig`.
+- [`components/timeline/RenderPopup.tsx`](../components/timeline/RenderPopup.tsx) — the export function wraps its per-frame pump in an outer loop over the selected passes. Progress UI resets between passes and the status text reads `Pass 2/3 (Alpha) — …` in multi-pass runs. Focus lock only adjusts DOF during the beauty pass. When Depth is checked, two `DraggableNumber` inputs for near / far world-unit clips show up alongside a **Use fog range** shortcut that reads the live atmosphere feature state.
+
+**Performance**
+- Viewport hot path (default `uOutputPass = 0`) adds one ternary in `main.ts` — GLSL compiles ternaries to a `select`, so this is a single GPU op, no branch divergence. Post-process adds two `if` comparisons that both fall through at default. Inner trace / SDF / iteration loops are untouched. `npm run test:baseline` regenerates clean (42/42 formulas compile).
+
+**Outstanding (next phase)**
+- PNG + JPG image-sequence format entries and the `showDirectoryPicker` flow for image sequences.
+- EXR image-sequence writer (minimal half-float scanline format).
+
+### Video export overhaul: exact resolution, exact fps in Firefox, drop H264 workaround
+
+**User-facing**
+- **Resolution.** Picking **1920×1080** in the render dialog now exports a 1920×1080 file (was 1920×1072). All standard presets export at their nominal size.
+- **Firefox fps.** Exports from Firefox now play back at the requested fps. Before this batch, 60 fps came out as ~58.85 fps and 30 fps as ~29.42 fps — a one-frame timing drift that compounded across all clip lengths.
+- **Firefox bitrate notice.** When the bitrate slider is set above ~12 Mbps and the format is H.264, the render dialog now shows: *"Firefox caps H.264 output at ~31 Mbps regardless of this setting."* This is an OpenH264 limitation that can't be worked around in JS.
+
+**Mechanism**
+- **mediabunny 1.34.0 → 1.40.1.** Catches up on a CTS-offset fix in fMP4 muxing, GOP timestamp validation, and `visibleRect` / non-square-pixel support. Confirmed v1.34+ already auto-extracts the AVC decoder configuration record from AnnexB packet data, so our hand-rolled `H264Converter.ts` (originally added "for WMP compatibility") is now redundant — deleted, along with the "wait for SPS/PPS before adding video track" guard. `halton()` moved to its own file.
+- **Resolution alignment 16 → 2.** WebCodecs encoders pad internally to macroblock size and signal display crop in the bitstream; we don't need to floor to a 16-pixel grid. The 16-aligned floor was shaving any height not divisible by 16 (1080 → 1072, 1350 → 1344).
+- **Firefox fps fix — three layered causes:**
+  1. Firefox's `VideoEncoder` doesn't echo back the per-frame `duration` we set on the source `VideoFrame` — it returns its own default (~33333 µs, a 30 fps assumption).
+  2. Firefox adds a one-frame leading-latency offset to every `chunk.timestamp`, regardless of `latencyMode`.
+  3. Mediabunny writes the file's total duration as `lastSample.timestamp + lastSample.duration`, so both quirks compound into a ~`60 × N/(N+1)` reported fps.
+
+  Fix in [`WorkerExporter.handleEncodedChunk`](../engine/worker/WorkerExporter.ts): hardcode duration to `1 / fps`, and reconstruct PTS as `chunk.timestamp − firstChunkOffsetMicros`. The `keyFrame: true` on input-frame 0 guarantees the first decoded chunk is the I-frame at PTS = 0, so the captured offset is exactly Firefox's leading-latency shift (zero on Chrome). B-frame-safe because each chunk's `chunk.timestamp` is still its true PTS.
+- **Bitrate config.** Encoder uses `latencyMode: 'quality'` (B-frames + aggressive motion estimation) and `bitrateMode: 'constant'` (Firefox's default `'variable'` under-runs the target on smooth fractal regions).
+- **Firefox H.264 bitrate cap.** Firefox uses Cisco's binary OpenH264 (Mozilla can't ship libavcodec because of MPEG-LA royalties). Cisco's binary is built with a Level 4.0 ceiling — MaxBR ≈ 31 Mbps for High profile — regardless of the level we request in the codec string. The cap is upstream of WebCodecs, so all we can do is surface it in the UI.
+
+**Files**
+- `package.json` — `mediabunny` 1.34.0 → 1.40.1.
+- `engine/worker/WorkerExporter.ts` — alignment 16 → 2; AVCC conversion + SPS/PPS wait deleted; `addVideoTrack` now passes only `frameRate`; encoder config switched to `latencyMode: 'quality'` + `bitrateMode: 'constant'`; `handleEncodedChunk` hardcodes duration to `1/fps` and normalizes PTS by subtracting the first chunk's offset (new `firstChunkOffsetMicros` session field).
+- `engine/codec/halton.ts` (new), `engine/codec/H264Converter.ts` (deleted).
+- `engine/FractalEngine.ts` — import path updated.
+- `components/timeline/RenderPopup.tsx` — Firefox + H.264 + > 12 Mbps inline notice (`isFirefoxH264BitrateCapped`).
+- Docs: `06_Troubleshooting_and_Quirks.md`, `07_Code_Health.md`, `08_File_Structure.md`.
+
+**Outstanding (separate sessions)**
+- Animation appears 2× faster after switching `animStore.fps` 30 → 60 — UX issue: keyframes are stored as integer frame indices, not seconds, so changing fps without rescaling halves the wall-clock duration. Needs design call (auto-rescale vs. warn).
+- Alpha-channel video export (Resolume / VFX use case) — needs new format entry (WebM/VP9 with `alpha: 'keep'`), RGBA pixel buffer + RGBA render target, and verification that the sky/post pipeline writes meaningful alpha.
+
 ## 2026-04-18
 
 ### Pixel threshold invariant across all internal scaling

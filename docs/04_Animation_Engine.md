@@ -239,20 +239,24 @@ Frame advances are based on wall-clock delta, so animation stays in sync with re
 
 ### 6.2 Offline / Video Export (`scrub`)
 
-The `RenderPopup` component drives offline rendering:
+The `RenderPopup` component drives offline rendering. The outer shape is the same for video and image-sequence exports — scrub → render → encode/write — but multi-pass output adds a second dimension:
 
 ```
-for each frame in [startFrame..endFrame]:
-    animationEngine.scrub(timelineFrame)   // Sets all params for this exact frame
-    // Wait for shader to render + accumulate
-    // Capture frame to video encoder
-animationEngine.scrub(savedFrame)          // Restore original position
+for each pass in selectedPasses:            // outer for VIDEO (one file per pass)
+    for each frame in [startFrame..endFrame]:
+        animationEngine.scrub(timelineFrame)   // Sets all params for this exact frame
+        // Wait for shader to render + accumulate N samples (worker-side)
+        // Capture frame to video encoder OR to per-frame image file(s)
+animationEngine.scrub(savedFrame)                // Restore original position
 ```
+
+For image sequences (PNG / JPG) the nesting inverts: a single worker session iterates passes *inside* each frame so beauty + alpha can be merged into one RGBA PNG, while JPG writes one file per pass per frame. See [05_Data_and_Export.md](05_Data_and_Export.md) §1 for the full pass/format matrix.
 
 Key differences from real-time:
 - Exact frame positions (no delta-time drift)
 - No camera smoothing (`shouldSnapCamera = true`)
 - Full accumulation per frame (waits for convergence)
+- Focus-lock only adjusts DOF on the beauty pass — prevents the lens offset from drifting between passes of a multi-pass video run.
 
 ### 6.3 Modulation Recording
 

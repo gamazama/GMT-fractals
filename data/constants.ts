@@ -32,9 +32,18 @@ export const VIDEO_CONFIG = {
     DEFAULT_SAMPLES: 16
 };
 
+/**
+ * Supported export formats.
+ * - Video containers (`mp4`, `webm`) run one encoder per selected pass and produce one video file per pass.
+ * - Image sequences (`png`, `jpg`) write individual frame files into a user-chosen directory. They're
+ *   gated by the File System Access API (Chrome/Edge only). PNG combines beauty+alpha into RGBA when both
+ *   passes are selected; JPG always emits a separate file per pass; depth is a separate file in both.
+ */
 export const VIDEO_FORMATS = [
-    { label: 'MP4 (H.264) - Universal', container: 'mp4', codec: 'avc', ext: 'mp4', mime: 'video/mp4' },
-    { label: 'MP4 (H.265/HEVC) - High Quality', container: 'mp4', codec: 'hevc', ext: 'mp4', mime: 'video/mp4' },
-    { label: 'MP4 (AV1) - Best Compression', container: 'mp4', codec: 'av1', ext: 'mp4', mime: 'video/mp4' },
-    { label: 'WebM (VP9) - Web Standard', container: 'webm', codec: 'vp9', ext: 'webm', mime: 'video/webm' },
+    { label: 'MP4 (H.264) - Universal', container: 'mp4', codec: 'avc', ext: 'mp4', mime: 'video/mp4', imageSequence: false },
+    { label: 'MP4 (H.265/HEVC) - High Quality', container: 'mp4', codec: 'hevc', ext: 'mp4', mime: 'video/mp4', imageSequence: false },
+    { label: 'MP4 (AV1) - Best Compression', container: 'mp4', codec: 'av1', ext: 'mp4', mime: 'video/mp4', imageSequence: false },
+    { label: 'WebM (VP9) - Web Standard', container: 'webm', codec: 'vp9', ext: 'webm', mime: 'video/webm', imageSequence: false },
+    { label: 'PNG Sequence (RGBA)', container: 'png', codec: 'png', ext: 'png', mime: 'image/png', imageSequence: true },
+    { label: 'JPG Sequence (per pass)', container: 'jpg', codec: 'jpg', ext: 'jpg', mime: 'image/jpeg', imageSequence: true },
 ];

@@ -625,10 +625,21 @@ export class WorkerProxy {
     // ─── Video Export ────────────────────────────────────────────────
 
     /**
-     * Start a video export session on the worker.
+     * Start an export session on the worker.
+     *
+     * Video mode: pass a `WritableStream` (from `FileSystemFileHandle.createWritable()`) as the
+     * second arg; the worker pipes encoded video chunks into it. `null` means RAM buffer.
+     *
+     * Image-sequence mode: pass a `FileSystemDirectoryHandle` as the third arg; the worker creates
+     * and writes per-frame files inside that directory. `stream` is ignored in this mode.
+     *
      * Returns a promise that resolves when the worker is ready to accept frames.
      */
-    startExport(config: VideoExportConfig, stream: WritableStream | null): Promise<void> {
+    startExport(
+        config: VideoExportConfig,
+        stream: WritableStream | null,
+        dirHandle?: FileSystemDirectoryHandle
+    ): Promise<void> {
         this._isExporting = true;
         return new Promise((resolve, reject) => {
             this._exportReady = () => { this._exportReady = null; resolve(); };
@@ -650,7 +661,9 @@ export class WorkerProxy {
 
             const transfer: Transferable[] = [];
             if (transferStream) transfer.push(transferStream);
-            this.post({ type: 'EXPORT_START', config, stream: transferStream }, transfer);
+            // FileSystemDirectoryHandle is structured-cloneable (since File System Access API landed
+            // in workers), so it rides along in the message body without needing a transfer entry.
+            this.post({ type: 'EXPORT_START', config, stream: transferStream, dirHandle }, transfer);
 
             this._exportStartTimer = setTimeout(() => {
                 this._exportStartTimer = null;

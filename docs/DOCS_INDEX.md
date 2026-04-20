@@ -24,7 +24,7 @@ The GMT documentation is organized into several complementary systems:
 | [02_Rendering_Internals.md](02_Rendering_Internals.md) | **Raymarching** | SDF, Cook-Torrance PBR, reflection tracing, path tracing, fog system, precision math, accumulation, bucket rendering |
 | [03_Modular_System.md](03_Modular_System.md) | **Modular Graph Builder** | Node graph → GLSL compiler, JIT code generation, uniform flattening |
 | [04_Animation_Engine.md](04_Animation_Engine.md) | **Timeline** | Keyframes, interpolation, unified camera, offline rendering |
-| [05_Data_and_Export.md](05_Data_and_Export.md) | **I/O System** | Video export, presets, GMF format, storage strategies |
+| [05_Data_and_Export.md](05_Data_and_Export.md) | **I/O System** | Video export (multi-pass + Firefox quirks), PNG/JPG image sequences, presets, GMF format, storage strategies |
 | [06_Troubleshooting_and_Quirks.md](06_Troubleshooting_and_Quirks.md) | **Debug Guide** | WebGL issues, export problems, precision artifacts |
 | [07_Code_Health.md](07_Code_Health.md) | **Maintenance** | Technical debt, refactor status, optimization opportunities |
 | [08_File_Structure.md](08_File_Structure.md) | **Reference** | Complete file map with responsibilities |

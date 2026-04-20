@@ -17,7 +17,7 @@ import { LightingState } from '../features/lighting';
 import { QualityState } from '../features/quality';
 import type { GeometryState } from '../features/geometry';
 import '../formulas';
-import { halton } from './codec/H264Converter';
+import { halton } from './codec/halton';
 import { detectHardwareProfileMainThread } from './HardwareDetection';
 import { createFullscreenPass } from './utils/FullscreenQuad';
 import { createDefaultShaderConfig } from './ConfigDefaults';

@@ -61,6 +61,11 @@ const BASE_SCHEMA: UniformDefinition[] = [
     { name: Uniforms.InternalScale, type: 'float', default: 1.0 },
     { name: Uniforms.PixelSizeBase, type: 'float', default: 0.01, comment: 'CPU: length(uCamBasisY)/resolution.y*2, avoids per-fragment sqrt' },
 
+    // Multi-pass export (WorkerExporter drives these per session; harmless no-op at defaults).
+    { name: Uniforms.OutputPass, type: 'float', default: 0.0, comment: '0=beauty, 1=alpha, 2=depth' },
+    { name: Uniforms.DepthMin, type: 'float', default: 0.0 },
+    { name: Uniforms.DepthMax, type: 'float', default: 5.0 },
+
     // Optimizations (Shared by Geometry & Lighting)
     { name: Uniforms.PreRotMatrix, type: 'mat3', default: new THREE.Matrix3() },
     { name: Uniforms.PostRotMatrix, type: 'mat3', default: new THREE.Matrix3() },

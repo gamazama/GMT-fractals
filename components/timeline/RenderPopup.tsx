@@ -19,6 +19,7 @@ import { modulationEngine } from '../../features/modulation/ModulationEngine';
 import { getViewportCamera } from '../../engine/worker/ViewportRefs';
 import type { SerializedCamera, SerializedOffset } from '../../engine/worker/WorkerProtocol';
 import type { EngineRenderState } from '../../engine/FractalEngine';
+import type { ExportPass, VideoExportConfig } from '../../engine/codec/VideoExportTypes';
 import { applyExportModulations } from './exportModulations';
 import { formatTimeWithUnits, formatDurationMs } from './exportHelpers';
 import { getExportFileName } from '../../utils/fileUtils';
@@ -70,6 +71,17 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     const [endFrame, setEndFrame] = useState(animStore.durationFrames);
     const [frameStep, setFrameStep] = useState(1);
     const [internalScale, setInternalScale] = useState(1.0);
+
+    // Multi-pass export: at least one must be selected. Each enabled pass produces a
+    // separate output file with a `_{pass}` suffix. Alpha and depth write greyscale
+    // luminance (same value in R/G/B) so they're legible in any player/container.
+    const [exportBeauty, setExportBeauty] = useState(true);
+    const [exportAlpha, setExportAlpha] = useState(false);
+    const [exportDepth, setExportDepth] = useState(false);
+    // Depth-pass normalization range (world units). Defaults to 0..5 which matches the
+    // atmosphere feature's default fog start/end. Only visible when depth pass is enabled.
+    const [depthMin, setDepthMin] = useState(0);
+    const [depthMax, setDepthMax] = useState(5);
     
     // Render State
     const [progress, setProgress] = useState(0);
@@ -113,6 +125,13 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
 
     const fps = animStore.fps;
     const currentFormat = VIDEO_FORMATS[formatIndex];
+
+    // Firefox uses Cisco's OpenH264 binary for AVC encoding, which is built with an
+    // H.264 Level 4.0 cap (≈31 Mbps MaxBR for High profile) regardless of the level we
+    // request. The cap is upstream of WebCodecs — no JS knob bypasses it. The encoder
+    // request is `bitrate * 2.5e6` (see WorkerExporter), so the slider trips it above ~12.
+    const isFirefox = typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent);
+    const isFirefoxH264BitrateCapped = isFirefox && currentFormat.codec === 'avc' && vidBitrate > 12;
 
     // --- WINDOW POSITION LOGIC ---
     const BASE_WIDTH = 320;
@@ -216,6 +235,14 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     // Format Support Check
     useEffect(() => {
         const checkSupport = async () => {
+            // Image sequences don't go through WebCodecs — they encode PNG/JPG in the worker
+            // via OffscreenCanvas.convertToBlob. The capability gate is the File System Access
+            // API (directory picker), which is Chromium-only; UI surfaces that check separately.
+            if (currentFormat.imageSequence) {
+                setIsFormatSupported(true);
+                return;
+            }
+
             if (typeof VideoEncoder === 'undefined') {
                 setIsFormatSupported(false);
                 return;
@@ -231,7 +258,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                     height: safeHeight,
                     bitrate: vidBitrate * 1_000_000
                 });
-                
+
                 setIsFormatSupported(supported);
             } catch (e) {
                 console.warn("Format check failed:", e);
@@ -242,73 +269,233 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         checkSupport();
     }, [formatIndex, vidRes, vidBitrate, fps]);
 
-    const handleVideoExport = async () => {
-        const selectedFormat = VIDEO_FORMATS[formatIndex];
-        const state = useFractalStore.getState();
-        const exportVersion = state.prepareExport();
-        const exportFilename = getExportFileName(state.projectSettings.name, exportVersion, selectedFormat.ext, `${vidRes.w}x${vidRes.h}`);
+    /**
+     * Per-frame export pump — shared by the video multi-pass path and the image-sequence path.
+     *
+     * For every frame in [0, totalFrames):
+     *   1. Honour the pause/cancel/finish-early flags.
+     *   2. Scrub the animation and apply modulations for this timeline frame.
+     *   3. Serialize camera + offset + render-state snapshots and send them to the worker via
+     *      `engine.renderExportFrame`. The worker renders + accumulates + encodes (or writes
+     *      image files) and replies with `measuredDistance` for focus-lock.
+     *   4. (Optional) update `optics.dofFocus` from the measured distance.
+     *   5. Push progress / elapsed / ETA / last-frame-time into UI state + emit BUCKET_STATUS.
+     *
+     * Returns a string tag describing how the loop exited — the caller decides whether to
+     * call `finishExport` or `cancelExport`.
+     */
+    const runFramePump = async (
+        config: VideoExportConfig,
+        totalFrames: number,
+        applyFocusLock: boolean
+    ): Promise<'completed' | 'cancelled' | 'finishEarly'> => {
+        for (let i = 0; i < totalFrames; i++) {
+            if (cancelledRef.current) return 'cancelled';
+            if (finishEarlyRef.current) return 'finishEarly';
+            while (stoppingRef.current && !cancelledRef.current && !finishEarlyRef.current) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+            if (cancelledRef.current) return 'cancelled';
+            if (finishEarlyRef.current) return 'finishEarly';
 
-        // --- STEP 1: OPEN SAVE DIALOG (MUST BE SYNCHRONOUS TO CLICK) ---
-        let fileStream: any = null;
-        let effectiveDiskMode = isDiskMode;
+            const timelineFrame = startFrame + (i * frameStep);
+            const time = timelineFrame / fps;
 
-        if (isDiskMode) {
-            try {
-                // @ts-expect-error — File System Access API not in all TS lib targets
-                const handle = await window.showSaveFilePicker({
-                    suggestedName: exportFilename,
-                    types: [{
-                        description: selectedFormat.label,
-                        accept: { [selectedFormat.mime]: [`.${selectedFormat.ext}`] },
-                    }],
-                });
-                fileStream = await handle.createWritable();
-            } catch (err) {
-                if (err instanceof DOMException && err.name === 'AbortError') return; // Cancelled
+            animationEngine.scrub(timelineFrame);
+            applyExportModulations(time, 1.0 / fps);
 
-                const errMsg = err instanceof Error ? err.message : String(err);
-                const errName = err instanceof DOMException ? err.name : '';
-                const isSecurityError = errName === 'SecurityError' || errMsg.includes('not supported') || errMsg.includes('not a function');
-                if (isSecurityError) {
-                    console.warn("RenderPopup: Disk Access blocked. Fallback to RAM.");
-                    fileStream = null;
-                    effectiveDiskMode = false;
-                } else {
-                    alert("Could not start export. Error: " + errMsg);
-                    return;
+            const cam = getViewportCamera() as THREE.PerspectiveCamera | null;
+            const storeState = useFractalStore.getState();
+
+            const serializedCamera: SerializedCamera = cam ? {
+                position: [cam.position.x, cam.position.y, cam.position.z],
+                quaternion: [cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w],
+                fov: cam.fov || 60,
+                aspect: config.width / config.height
+            } : {
+                position: [0, 0, 0],
+                quaternion: [0, 0, 0, 1],
+                fov: (storeState as any).optics?.camFov ?? 60,
+                aspect: config.width / config.height
+            };
+
+            const so = storeState.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+            const serializedOffset: SerializedOffset = {
+                x: so.x, y: so.y, z: so.z,
+                xL: so.xL ?? 0, yL: so.yL ?? 0, zL: so.zL ?? 0
+            };
+
+            const renderState: Partial<EngineRenderState> = {
+                cameraMode: storeState.cameraMode,
+                isCameraInteracting: false,
+                optics: (storeState as any).optics ?? null,
+                lighting: (storeState as any).lighting ?? null,
+                quality: (storeState as any).quality ?? null,
+                geometry: (storeState as any).geometry ?? null,
+            };
+
+            const frameResult = await engine.renderExportFrame(
+                i, time, serializedCamera, serializedOffset, renderState,
+                { ...engine.modulations }
+            );
+
+            if (applyFocusLock) {
+                const fStore = useFractalStore.getState();
+                if (fStore.focusLock && frameResult.measuredDistance > 0 && frameResult.measuredDistance < 1000) {
+                    const currentFocus = (fStore as any).optics?.dofFocus ?? 0;
+                    const relChange = Math.abs(frameResult.measuredDistance - currentFocus) / Math.max(currentFocus, 0.0001);
+                    if (relChange > 0.01) {
+                        (fStore as any).setOptics({ dofFocus: frameResult.measuredDistance });
+                    }
                 }
             }
+
+            const pct = ((i + 1) / totalFrames) * 100;
+            setProgress(pct);
+
+            const now = Date.now();
+            const elapsed = (now - startTimeRef.current) / 1000;
+            setElapsedTime(elapsed);
+            const framesDone = i + 1;
+            setEtaRange(calcEtaRange(elapsed, framesDone, totalFrames));
+            setLastFrameTime(elapsed / framesDone);
+
+            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: true, progress: pct });
+        }
+        return 'completed';
+    };
+
+    /**
+     * Image-sequence export (PNG / JPG). Chrome/Edge only — the File System Access API's
+     * `showDirectoryPicker` is not available in Firefox or Safari. A single worker session
+     * handles all selected passes; the worker loops over them per frame and writes files
+     * into the chosen directory (PNG merges beauty+alpha into RGBA, JPG writes separate
+     * files per pass, depth is always a separate file).
+     */
+    const handleImageSequenceExport = async (passesToExport: ExportPass[]) => {
+        // The selected format is read off `formatIndex` via `currentFormat` as needed; no
+        // reason to thread it as a param when it's already part of the closure.
+        if (typeof (window as any).showDirectoryPicker !== 'function') {
+            alert('Image-sequence export requires the File System Access API, which is only available in Chrome / Edge. Use an MP4 or WebM format in other browsers.');
+            return;
         }
 
-        // --- STEP 2: SETUP UI & RENDER ---
-        setWinSize({ width: EXPANDED_WIDTH, height: BASE_HEIGHT });
+        let dirHandle: FileSystemDirectoryHandle | null = null;
+        try {
+            // @ts-expect-error — FSA types not in all TS lib targets
+            dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') return; // User cancelled
+            alert('Could not open output folder. Error: ' + (err instanceof Error ? err.message : String(err)));
+            return;
+        }
+        if (!dirHandle) return;
 
+        const state = useFractalStore.getState();
+        const exportVersion = state.prepareExport();
+        const baseName = `${state.projectSettings.name}_v${exportVersion}_${vidRes.w}x${vidRes.h}`;
+
+        setWinSize({ width: EXPANDED_WIDTH, height: BASE_HEIGHT });
         setIsRendering(true);
         setIsStopping(false);
-        setProgress(0);
-        setElapsedTime(0);
-        setEtaRange({ min: 0, max: 0 });
-        setLastFrameTime(0);
-        setStatusText(effectiveDiskMode ? "Exporting to Disk..." : "Exporting to RAM...");
-        
-        await new Promise(resolve => setTimeout(resolve, 100));
 
-        startTimeRef.current = Date.now();
-        
-        const config = {
-            width: vidRes.w,
-            height: vidRes.h,
-            fps: fps,
-            samples: vidSamples,
-            bitrate: vidBitrate,
-            startFrame: startFrame,
-            endFrame: endFrame,
-            frameStep: frameStep,
-            formatIndex: formatIndex,
-            internalScale: internalScale
-        };
+        const animState = useAnimationStore.getState();
+        const savedFrame = animState.currentFrame;
+        const savedIsPlaying = animState.isPlaying;
+        if (savedIsPlaying) animState.pause();
 
-        // --- STEP 3: SAVE STATE FOR RESTORE ---
+        cancelledRef.current = false;
+        finishEarlyRef.current = false;
+
+        const passLabels = passesToExport.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' + ');
+
+        try {
+            setProgress(0);
+            setElapsedTime(0);
+            setEtaRange({ min: 0, max: 0 });
+            setLastFrameTime(0);
+            setStatusText(`Image sequence → ${dirHandle.name} (${passLabels})`);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            startTimeRef.current = Date.now();
+
+            const config = {
+                width: vidRes.w,
+                height: vidRes.h,
+                fps: fps,
+                samples: vidSamples,
+                bitrate: vidBitrate,
+                startFrame: startFrame,
+                endFrame: endFrame,
+                frameStep: frameStep,
+                formatIndex: formatIndex,
+                internalScale: internalScale,
+                passes: passesToExport,
+                depthMin,
+                depthMax,
+                imageSequenceBaseName: baseName
+            };
+
+            setStatusText(`Initializing (${passLabels})…`);
+            await engine.startExport(config, null, dirHandle);
+
+            const totalFrames = Math.floor((endFrame - startFrame) / frameStep) + 1;
+            const outcome = await runFramePump(config, totalFrames, /* applyFocusLock */ true);
+
+            if (outcome === 'cancelled') {
+                engine.cancelExport();
+                setStatusText('Cancelled.');
+            } else {
+                setStatusText('Flushing remaining files…');
+                await engine.finishExport();
+                setStatusText(`Complete — wrote to ${dirHandle.name}`);
+            }
+        } catch (e) {
+            console.error('RenderPopup: Image sequence export failed', e);
+            alert(`Image sequence export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            setIsRendering(false);
+            setWinSize({ width: BASE_WIDTH, height: BASE_HEIGHT });
+            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
+
+            animationEngine.scrub(savedFrame);
+            if (savedIsPlaying) useAnimationStore.getState().play();
+
+            engine.modulations = {};
+            modulationEngine.resetOffsets();
+        }
+    };
+
+    const handleVideoExport = async () => {
+        // Collect selected passes (at least one is required by the UI guard on the
+        // start button, but double-check here). Each pass produces its own file.
+        const passesToExport: ExportPass[] = [];
+        if (exportBeauty) passesToExport.push('beauty');
+        if (exportAlpha) passesToExport.push('alpha');
+        if (exportDepth) passesToExport.push('depth');
+        if (passesToExport.length === 0) {
+            alert('Select at least one pass (Beauty, Alpha, or Depth).');
+            return;
+        }
+
+        const selectedFormat = VIDEO_FORMATS[formatIndex];
+
+        // Image-sequence formats (PNG / JPG) take the dedicated path — one startExport
+        // session with `passes[]` populated + a directory handle; the worker loops over
+        // passes internally per frame and writes files into the chosen folder.
+        if (selectedFormat.imageSequence) {
+            return handleImageSequenceExport(passesToExport);
+        }
+
+        const state = useFractalStore.getState();
+        const exportVersion = state.prepareExport();
+        const baseProjectName = state.projectSettings.name;
+        const isMultiPass = passesToExport.length > 1;
+
+        // --- Shared setup (UI, animation, cancel flags) ---
+        setWinSize({ width: EXPANDED_WIDTH, height: BASE_HEIGHT });
+        setIsRendering(true);
+        setIsStopping(false);
+
         const animState = useAnimationStore.getState();
         const savedFrame = animState.currentFrame;
         const savedIsPlaying = animState.isPlaying;
@@ -318,105 +505,106 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         finishEarlyRef.current = false;
 
         try {
-            // --- STEP 4: INIT WORKER EXPORT SESSION ---
-            setStatusText("Initializing encoder...");
-            await engine.startExport(config, fileStream);
+            for (let p = 0; p < passesToExport.length; p++) {
+                if (cancelledRef.current) break;
 
-            // --- STEP 5: FRAME PUMP LOOP ---
-            const totalFrames = Math.floor((endFrame - startFrame) / frameStep) + 1;
-
-            for (let i = 0; i < totalFrames; i++) {
-                if (cancelledRef.current || finishEarlyRef.current) break;
-
-                // Wait while paused
-                while (stoppingRef.current && !cancelledRef.current && !finishEarlyRef.current) {
-                    await new Promise(r => setTimeout(r, 100));
-                }
-                if (cancelledRef.current || finishEarlyRef.current) break;
-
-                const timelineFrame = startFrame + (i * frameStep);
-                const time = timelineFrame / fps;
-
-                // 5a. Scrub animation to this frame (updates store via binders → events → worker)
-                animationEngine.scrub(timelineFrame);
-
-                // 5b. Apply modulations (LFOs + rules)
-                applyExportModulations(time, 1.0 / fps);
-
-                // 5c. Collect current state snapshot
-                const cam = getViewportCamera() as THREE.PerspectiveCamera | null;
-                const storeState = useFractalStore.getState();
-
-                // Serialize camera
-                const serializedCamera: SerializedCamera = cam ? {
-                    position: [cam.position.x, cam.position.y, cam.position.z],
-                    quaternion: [cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w],
-                    fov: cam.fov || 60,
-                    aspect: config.width / config.height
-                } : {
-                    position: [0, 0, 0],
-                    quaternion: [0, 0, 0, 1],
-                    fov: (storeState as any).optics?.camFov ?? 60,
-                    aspect: config.width / config.height
-                };
-
-                // Serialize offset
-                const so = storeState.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
-                const serializedOffset: SerializedOffset = {
-                    x: so.x, y: so.y, z: so.z,
-                    xL: so.xL ?? 0, yL: so.yL ?? 0, zL: so.zL ?? 0
-                };
-
-                // Collect render state (same shape as RENDER_TICK)
-                const renderState: Partial<EngineRenderState> = {
-                    cameraMode: storeState.cameraMode,
-                    isCameraInteracting: false, // Not interacting during export
-                    optics: (storeState as any).optics ?? null,
-                    lighting: (storeState as any).lighting ?? null,
-                    quality: (storeState as any).quality ?? null,
-                    geometry: (storeState as any).geometry ?? null,
-                };
-
-                // 5d. Send frame to worker for rendering + encoding
-                const frameResult = await engine.renderExportFrame(
-                    i, time, serializedCamera, serializedOffset, renderState,
-                    { ...engine.modulations } // Copy current modulation offsets
+                const pass = passesToExport[p];
+                const passLabel = pass.charAt(0).toUpperCase() + pass.slice(1);
+                const passPrefix = isMultiPass
+                    ? `Pass ${p + 1}/${passesToExport.length} (${passLabel}) — `
+                    : '';
+                // Multi-pass runs suffix the project name with `_{pass}` so the N files
+                // end up as e.g. `MyScene_beauty_v3.mp4`, `MyScene_alpha_v3.mp4`, ….
+                const projectNameForFile = isMultiPass ? `${baseProjectName}_${pass}` : baseProjectName;
+                const exportFilename = getExportFileName(
+                    projectNameForFile,
+                    exportVersion,
+                    selectedFormat.ext,
+                    `${vidRes.w}x${vidRes.h}`
                 );
 
-                // 5d.1 Focus Lock: sync dofFocus from measured depth for next frame
-                const fStore = useFractalStore.getState();
-                if (fStore.focusLock && frameResult.measuredDistance > 0 && frameResult.measuredDistance < 1000) {
-                    const currentFocus = (fStore as any).optics?.dofFocus ?? 0;
-                    const relChange = Math.abs(frameResult.measuredDistance - currentFocus) / Math.max(currentFocus, 0.0001);
-                    if (relChange > 0.01) {
-                        (fStore as any).setOptics({ dofFocus: frameResult.measuredDistance });
+                // --- PER-PASS SAVE DIALOG (must run under transient activation; async
+                //     await chains preserve it, so opening the picker inside a loop works
+                //     on all browsers that support showSaveFilePicker). ---
+                let fileStream: any = null;
+                let effectiveDiskMode = isDiskMode;
+                if (isDiskMode) {
+                    try {
+                        // @ts-expect-error — File System Access API not in all TS lib targets
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: exportFilename,
+                            types: [{
+                                description: selectedFormat.label,
+                                accept: { [selectedFormat.mime]: [`.${selectedFormat.ext}`] },
+                            }],
+                        });
+                        fileStream = await handle.createWritable();
+                    } catch (err) {
+                        if (err instanceof DOMException && err.name === 'AbortError') {
+                            // User cancelled the picker — abort the whole multi-pass run
+                            cancelledRef.current = true;
+                            break;
+                        }
+                        const errMsg = err instanceof Error ? err.message : String(err);
+                        const errName = err instanceof DOMException ? err.name : '';
+                        const isSecurityError = errName === 'SecurityError' || errMsg.includes('not supported') || errMsg.includes('not a function');
+                        if (isSecurityError) {
+                            console.warn("RenderPopup: Disk Access blocked. Fallback to RAM.");
+                            fileStream = null;
+                            effectiveDiskMode = false;
+                        } else {
+                            alert("Could not start export. Error: " + errMsg);
+                            cancelledRef.current = true;
+                            break;
+                        }
                     }
                 }
 
-                // 5e. Update progress UI
-                const pct = ((i + 1) / totalFrames) * 100;
-                setProgress(pct);
+                // --- PER-PASS UI RESET ---
+                setProgress(0);
+                setElapsedTime(0);
+                setEtaRange({ min: 0, max: 0 });
+                setLastFrameTime(0);
+                setStatusText(passPrefix + (effectiveDiskMode ? "Exporting to Disk..." : "Exporting to RAM..."));
 
-                const now = Date.now();
-                const elapsed = (now - startTimeRef.current) / 1000;
-                setElapsedTime(elapsed);
+                await new Promise(resolve => setTimeout(resolve, 100));
+                startTimeRef.current = Date.now();
 
-                const framesDone = i + 1;
-                setEtaRange(calcEtaRange(elapsed, framesDone, totalFrames));
-                setLastFrameTime(elapsed / framesDone);
+                const config = {
+                    width: vidRes.w,
+                    height: vidRes.h,
+                    fps: fps,
+                    samples: vidSamples,
+                    bitrate: vidBitrate,
+                    startFrame: startFrame,
+                    endFrame: endFrame,
+                    frameStep: frameStep,
+                    formatIndex: formatIndex,
+                    internalScale: internalScale,
+                    pass,
+                    depthMin,
+                    depthMax
+                };
 
-                FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: true, progress: pct });
-            }
+                // --- INIT WORKER EXPORT SESSION ---
+                setStatusText(passPrefix + "Initializing encoder...");
+                await engine.startExport(config, fileStream);
 
-            if (cancelledRef.current) {
-                engine.cancelExport();
-                setStatusText("Cancelled.");
-            } else {
-                // --- STEP 6: FINALIZE (full render or finish-early) ---
-                setStatusText("Finalizing video...");
+                // Focus-lock DOF is only meaningful on the beauty pass — tweaking focus between
+                // alpha/depth passes moves the output around for no visual benefit.
+                const totalFrames = Math.floor((endFrame - startFrame) / frameStep) + 1;
+                const outcome = await runFramePump(config, totalFrames, /* applyFocusLock */ pass === 'beauty');
+
+                if (outcome === 'cancelled') {
+                    engine.cancelExport();
+                    setStatusText(passPrefix + "Cancelled.");
+                    break;
+                }
+
+                // --- FINALIZE THIS PASS ---
+                setStatusText(passPrefix + "Finalizing video...");
                 const blob = await engine.finishExport();
 
-                // RAM mode: trigger download
                 if (blob && !effectiveDiskMode) {
                     const blobObj = new Blob([blob], { type: selectedFormat.mime });
                     const url = URL.createObjectURL(blobObj);
@@ -427,9 +615,12 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                     URL.revokeObjectURL(url);
                 }
 
-                setStatusText("Complete!");
+                // "Finish early" stops the current pass cleanly but also ends the multi-pass run —
+                // the user asked to finish, not to proceed to the next pass.
+                if (finishEarlyRef.current) break;
             }
 
+            setStatusText(cancelledRef.current ? "Cancelled." : "Complete!");
         } catch (e) {
             console.error("RenderPopup: Export failed", e);
             alert(`Export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
@@ -633,6 +824,89 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                                     </div>
                                 )}
 
+                                <div className="px-1 mb-1.5">
+                                    <label className="t-label mb-0.5 block">Passes</label>
+                                    <div className="flex gap-3 items-center">
+                                        <label className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={exportBeauty}
+                                                onChange={(e) => setExportBeauty(e.target.checked)}
+                                                className="accent-cyan-400"
+                                            />
+                                            Beauty
+                                        </label>
+                                        <label className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={exportAlpha}
+                                                onChange={(e) => setExportAlpha(e.target.checked)}
+                                                className="accent-cyan-400"
+                                            />
+                                            Alpha
+                                        </label>
+                                        <label className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={exportDepth}
+                                                onChange={(e) => setExportDepth(e.target.checked)}
+                                                className="accent-cyan-400"
+                                            />
+                                            Depth
+                                        </label>
+                                    </div>
+                                    {(exportAlpha || exportDepth) && (exportBeauty ? 1 : 0) + (exportAlpha ? 1 : 0) + (exportDepth ? 1 : 0) > 1 && (
+                                        <div className="text-[8px] text-gray-500 mt-0.5 leading-tight">
+                                            One file per pass, named {'{project}'}_{'{pass}'}_{'v{n}'}.{currentFormat.ext}
+                                        </div>
+                                    )}
+                                    {exportDepth && (
+                                        <div className="mt-1.5 pt-1 border-t border-white/5">
+                                            <div className="flex items-center justify-between mb-0.5">
+                                                <label className="t-label">Depth range (world units)</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const atm = (useFractalStore.getState() as any).atmosphere;
+                                                        if (!atm || !(atm.fogIntensity > 0)) return;
+                                                        setDepthMin(atm.fogNear ?? 0);
+                                                        setDepthMax(atm.fogFar ?? 5);
+                                                    }}
+                                                    disabled={!((useFractalStore.getState() as any).atmosphere?.fogIntensity > 0)}
+                                                    className="text-[9px] text-cyan-300 hover:text-cyan-200 disabled:text-gray-600 disabled:cursor-not-allowed underline-offset-2 hover:underline"
+                                                    title="Copy the atmosphere feature's fog start/end into the depth range (only available when fog is enabled)."
+                                                >
+                                                    Use fog range
+                                                </button>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <div className="flex-1">
+                                                    <label className="t-label mb-0.5 block">Near</label>
+                                                    <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                                                        <DraggableNumber
+                                                            value={depthMin}
+                                                            onChange={(v) => setDepthMin(Math.max(0, Math.min(v, depthMax - 0.001)))}
+                                                            step={0.1}
+                                                            overrideText={depthMin.toFixed(2)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="t-label mb-0.5 block">Far</label>
+                                                    <div className="h-5 bg-black/40 rounded border border-white/10 relative">
+                                                        <DraggableNumber
+                                                            value={depthMax}
+                                                            onChange={(v) => setDepthMax(Math.max(depthMin + 0.001, v))}
+                                                            step={0.1}
+                                                            overrideText={depthMax.toFixed(2)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="flex gap-1">
                                     <div className="flex-1">
                                         <label className="t-label mb-0.5 block">Start</label>
@@ -667,13 +941,19 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
                                 </div>
                             
                                 {/* FLUSH SLIDER - BITRATE */}
-                                <Slider 
-                                    label="Bitrate (Mbps)" 
-                                    value={vidBitrate} 
-                                    min={1} max={100} step={1} 
+                                <Slider
+                                    label="Bitrate (Mbps)"
+                                    value={vidBitrate}
+                                    min={1} max={100} step={1}
                                     onChange={setVidBitrate}
                                     overrideInputText={`${vidBitrate}`}
                                 />
+
+                                {isFirefoxH264BitrateCapped && (
+                                    <div className="px-2 -mt-1 mb-1 text-[9px] text-amber-400/90 leading-tight">
+                                        Firefox caps H.264 output at ~31 Mbps regardless of this setting.
+                                    </div>
+                                )}
 
                                 {/* FLUSH SLIDER - SAMPLES */}
                                 <Slider
@@ -735,14 +1015,27 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
 
                         {/* Action Buttons Section */}
                         <div className="p-1.5 bg-gray-900/50 border-t border-white/10 shrink-0">
-                            <Button 
+                            <Button
                                 onClick={handleVideoExport}
-                                label={isDiskMode ? "Select Output File..." : "Start RAM Render"}
+                                label={
+                                    currentFormat.imageSequence
+                                        ? (isDiskMode ? "Select Output Folder…" : "Image Sequence Requires Chrome")
+                                        : (isDiskMode ? "Select Output File…" : "Start RAM Render")
+                                }
                                 variant="primary"
                                 fullWidth
-                                disabled={!isFormatSupported}
+                                disabled={
+                                    !isFormatSupported
+                                    || (!exportBeauty && !exportAlpha && !exportDepth)
+                                    || (currentFormat.imageSequence && !isDiskMode)
+                                }
                                 icon={isDiskMode ? <SaveIcon /> : <PlayIcon />}
                             />
+                            {currentFormat.imageSequence && !isDiskMode && (
+                                <div className="mt-1.5 px-2 text-[9px] text-amber-400/90 leading-tight">
+                                    Image sequences need the File System Access API (directory picker), available in Chrome / Edge.
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

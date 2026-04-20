@@ -1,22 +1,57 @@
 
 # Data I/O & Export
-> Last updated: 2026-04-09 | GMT v0.9.1
+> Last updated: 2026-04-20 | GMT v0.9.1
 
-## 1. Video Export (`WorkerExporter.ts`)
+## 1. Video + Image-Sequence Export (`engine/worker/WorkerExporter.ts`)
 
-GMT features a client-side render farm.
+GMT exports animated renders in two flavours: **video containers** (MP4 H.264/HEVC/AV1, WebM VP9) and **image sequences** (PNG RGBA, JPG per-pass). Both run inside the render worker and share the same per-frame pump — the divergence is the output sink (video encoder vs. directory handle) and the pass-loop layout.
 
-### The Pipeline
-1.  **Pause:** Game loop stops.
-2.  **Seek:** Timeline moves to Frame X.
-3.  **Accumulate:** The engine renders N samples (e.g., 64) into a floating-point buffer to eliminate noise.
-4.  **Encode:** The frame is passed to `VideoEncoder` (WebCodecs).
-5.  **Mux:** Frames are stitched into a `.webm` container.
+### The Pipeline (per frame)
+1.  **Scrub & state:** main thread seeks the timeline, applies modulations, and serializes camera/offset/render-state.
+2.  **Render pass(es):** for each pass (`beauty` / `alpha` / `depth`), the worker clears the accumulation ping-pong, runs N Halton-jittered samples (default 16), post-processes with bloom + tone-map into an 8-bit export target, reads back 8-bit RGBA pixels, and (on beauty) records a center-pixel depth for focus-lock.
+3.  **Encode or write:**
+    - Video mode — feed the pixel buffer to `VideoEncoder` (WebCodecs) and pipe encoded chunks into mediabunny's `EncodedVideoPacketSource` → container file.
+    - Image-sequence mode — combine per-pass pixel buffers per format rule (PNG: merge beauty.rgb + alpha.a into RGBA; JPG: one file per pass; depth is always separate), encode with `OffscreenCanvas.convertToBlob`, stream into a `FileSystemFileHandle` under the chosen directory.
+
+### Multi-pass export
+The render dialog has three pass checkboxes: **Beauty**, **Alpha**, **Depth**. The shader has a `uOutputPass` uniform that lives in the shared main-uniform block and branches both the main shader's alpha write and the post-process output:
+
+| Pass | Main-shader alpha channel | Post-process output |
+|---|---|---|
+| **Beauty** (0) | projected camera distance (for focus-lock) | tone-mapped sRGB color |
+| **Alpha** (1) | per-sample `step(depth, MISS_DIST − 100)` — binary coverage | accumulated coverage as luminance (the N-sample average of 0/1 *is* anti-aliased sub-pixel coverage — AA for free) |
+| **Depth** (2) | projected camera distance | `(distance − uDepthMin) / (uDepthMax − uDepthMin)` as luminance |
+
+Since `uOutputPass` is shared across the main shader, `displayMaterial` (viewport preview), and `exportMaterial`, setting it once atomically retargets all three — that's how the preview follows the active pass during a video export.
+
+**Video mode** runs `startExport` once per selected pass (outer pass loop); each pass produces its own file named `{project}_{pass}_v{n}_{WxH}.{ext}`.
+
+**Image-sequence mode** runs a single `startExport` session with `config.passes[]` populated; the worker loops passes *inside* the per-frame render so it can combine them into multi-channel outputs. For PNG RGBA the beauty RGB and alpha coverage end up in one file; depth stays separate (8-bit greyscale PNG per frame). For JPG every pass is a separate file (JPG can't carry alpha).
+
+### Depth-pass normalization range
+The post-process depth branch normalizes by `uDepthMin` / `uDepthMax` — two numeric inputs exposed in the render dialog when Depth is checked. Default `0..5` world units matches the atmosphere feature's default fog range. A **Use fog range** shortcut copies the current `fogNear` / `fogFar` into the depth range when fog is enabled in the scene.
 
 ### Storage Strategies
-Video export uses the `mediabunny` library for encoding. Storage modes depend on browser capabilities:
-*   **Disk Mode (Chrome/Edge):** Uses the File System Access API (OPFS). Streams chunks directly to disk. Supports unlimited file sizes.
-*   **RAM Mode (Firefox/Safari):** Buffers the entire video in RAM. Limited by browser memory (crash risk on 4K renders).
+Video export uses mediabunny (≥ 1.40.1) for container muxing; the encoder itself is WebCodecs:
+
+*   **Disk Mode** (Chrome / Edge): File System Access API. `showSaveFilePicker` returns a `FileSystemWritableFileStream` that we wrap in a proxy `WritableStream` (FSWFS isn't transferable across `postMessage`) and stream mediabunny's output through. Unlimited file size.
+*   **RAM Mode** (Firefox / Safari for video): buffer the entire container into a `Mediabunny.BufferTarget`; transferred back to the main thread and handed to the user as a download `Blob`. Limited by browser memory (~2–4 GB before tab crash).
+*   **Image sequences are Chrome-only.** They require `showDirectoryPicker` to pick an output folder; Firefox/Safari don't implement it. The render dialog disables the start button and shows an inline notice in those browsers.
+
+### Firefox-specific quirks
+These are discussed in detail in [06_Troubleshooting_and_Quirks.md](06_Troubleshooting_and_Quirks.md); a summary:
+- `VideoEncoder.encode()` returns chunks with a one-frame leading-latency offset and the wrong `duration` default. We hardcode duration to `1/fps` and PTS to `chunk.timestamp - firstChunkOffsetMicros` to bypass both.
+- H.264 encoding goes through Cisco's OpenH264 binary, which is capped at Level 4.0 (~31 Mbps). The render dialog surfaces an inline warning when the user's bitrate slider + multiplier would exceed this.
+- `latencyMode: 'quality'` + `bitrateMode: 'constant'` give the most consistent output; variable bitrate under-runs on smooth fractal content.
+
+### File naming
+| Mode | Pattern |
+|---|---|
+| Video single-pass | `{project}_v{n}_{WxH}.{ext}` |
+| Video multi-pass | `{project}_{pass}_v{n}_{WxH}.{ext}` |
+| PNG sequence (beauty + alpha merged) | `{project}_v{n}_{WxH}_{00000}.png` |
+| PNG sequence (alpha-only or depth) | `{project}_{alpha|depth}_v{n}_{WxH}_{00000}.png` |
+| JPG sequence (always per-pass) | `{project}_v{n}_{WxH}_{pass}_{00000}.jpg` |
 
 ## 2. File Formats
 

@@ -67,7 +67,7 @@ export type MainToWorkerMessage =
     | { type: 'HISTOGRAM_READBACK'; id: string; source: 'geometry' | 'color' }
     | { type: 'GET_GPU_INFO' }
     // ─── Video Export ───
-    | { type: 'EXPORT_START'; config: VideoExportConfig; stream: WritableStream | null }
+    | { type: 'EXPORT_START'; config: VideoExportConfig; stream: WritableStream | null; dirHandle?: FileSystemDirectoryHandle }
     | { type: 'EXPORT_RENDER_FRAME'; frameIndex: number; time: number;
         camera: SerializedCamera; offset: SerializedOffset;
         renderState: Partial<EngineRenderState>;

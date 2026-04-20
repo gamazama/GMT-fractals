@@ -87,8 +87,21 @@ void main() {
 
     vec3 finalCol = mix(safeHistory, col, uBlendFactor);
 
-    // Store depth in alpha channel - physics probe reads center pixel from previous frame
-    pc_fragColor = vec4(finalCol, depth);
+    // Alpha channel write:
+    //   Beauty / depth passes store the projected depth (physics probe reads this every frame,
+    //   and the depth post-process branch normalizes it).
+    //   Alpha pass stores per-sample binary coverage (1.0 for a surface hit, 0.0 for sky).
+    //   Accumulating that binary signal across the Halton-jittered sub-pixel samples averages
+    //   out to fractional coverage — i.e. properly anti-aliased edges in the final mask, for
+    //   free from the existing TAA pipeline.
+    //
+    //   Hit threshold is MISS_DIST minus a safety margin: depth is a projection of d along the
+    //   un-jittered ray, so DoF jitter can push genuine hits slightly past MISS_DIST. The
+    //   margin absorbs that without flipping real hits to "sky".
+    float alphaOut = (uOutputPass > 0.5 && uOutputPass < 1.5)
+        ? step(depth, MISS_DIST - 100.0)
+        : depth;
+    pc_fragColor = vec4(finalCol, alphaOut);
 }
 `;
 };
