@@ -63,31 +63,50 @@ Settings specific to the Path Tracing engine.
     'bucket.render': {
         id: 'bucket.render',
         category: 'Rendering',
-        title: 'High Quality Render (Buckets)',
+        title: 'High Quality Render',
         parentId: 'panel.quality',
         content: `
-Renders the image in small tiles (Buckets) instead of all at once.
+Render images at arbitrary resolutions — far beyond what the GPU can draw in a single frame — by rendering in small internal tiles (GPU buckets) and accumulating samples per tile until noise-free. Optionally split the output into a grid of separate PNG files for massive prints.
 
-## Why use it?
-- **High Resolution**: Allows rendering 4K or 8K images that would otherwise crash the GPU memory.
-- **Anti-Aliasing**: Each bucket accumulates samples until noise-free before moving to the next.
-- **Export**: Can automatically save the result as a PNG when finished.
+## Actions
+- **Refine View**: renders the current viewport at viewport resolution until converged, then holds the cleaned-up frame on screen until you move the camera or change a parameter. Use when you want a clean still of what you're currently looking at.
+- **Preview Region**: click a spot on the canvas to zoom into that area at export pixel density. You stay fully interactive — move sliders, adjust lights, change colors — and the preview re-renders live. See the *Preview Region* section below.
+- **Export Image**: renders at the configured Output Size and saves PNG(s) to disk. With a tile grid > 1×1, each tile saves as its own file.
 
-## Settings
-- **Convergence Threshold** (default 0.25%): How similar consecutive frames must be before a tile is "done". Lower = more samples, higher quality. 0.1% for production, 1% for fast preview.
-- **Max Samples Per Bucket** (default 64): Safety limit. Tiles stop early if converged.
-- **Export Scale**: Resolution multiplier (2× = 4K from 1080p, 4× = 8K).
-- **Bucket Size**: Smaller tiles use less VRAM, larger tiles render faster.
+## Quality Settings
+- **Convergence Threshold** (default 0.25%): how similar consecutive frames must be before a tile is considered "done". Lower = more samples, higher quality. 0.1% = production, 1% = fast preview.
+- **Max Samples Per Bucket** (default 64): safety cap so difficult tiles don't accumulate forever. Also caps Preview Region accumulation.
+
+## Output Size
+- **Preset**: HD / FHD / QHD / 4K / 5K / 8K, squares, portraits, and A0–A3 print sizes at 300 DPI.
+- **Width / Height**: type any values; snaps to multiples of 8 for GPU alignment.
+- **Lock to viewport aspect** (default on): the output automatically tracks the current canvas aspect ratio — open a sidebar, change the window size, and the output height adjusts so what you export matches what you see. Turn off to pick an arbitrary aspect ratio; when off, the viewport temporarily switches to a fitted Fixed-mode canvas that matches the output aspect (so the live render doesn't stretch).
+- **Match viewport**: one-click button to set output size to the current canvas dimensions.
+
+## Tile Grid
+Columns × Rows splits the output into separate PNG files — useful for prints too large for GPU memory in one render (e.g. 20K × 20K split 5×5 = 25 files at 4K each). The per-tile VRAM estimate below the dimensions shows the memory cost of a single tile. **1 × 1 = single file** (default).
+
+When tiling is active with bloom or chromatic aberration enabled, visible seams may appear at tile boundaries (spatial effects run per-tile). Disable those effects for seamless stitching.
+
+## GPU Bucket Size
+Internal tile size for VRAM safety — distinct from the output tile grid above. Smaller = less memory per tile, larger = faster per-tile cost. 512 is a good default on most GPUs.
 
 ## Post-Processing
-Post-processing effects (Bloom, Chromatic Aberration, Color Grading, Tone Mapping) are applied to the complete image **after** all buckets have finished rendering — so the final result looks exactly like the live viewport with effects enabled.
+Bloom, Chromatic Aberration, Color Grading, and Tone Mapping are applied to each image tile's complete composite after its GPU buckets finish. For single-image renders the result matches the live viewport; for tiled renders see the seam note above.
 
-## Usage
-1. Click the **Grid Icon** in the top bar.
-2. Select **Refine View** to clear up the current viewport.
-3. Select **Export Image** to render and download a file.
+## During Export
+The viewport is locked — camera movement, parameter changes, and resizing are blocked to preserve tiled-render integrity. The panel stays open with a progress bar and Stop button.
 
-While rendering, the viewport is locked — camera movement, parameter changes, and window resizing are blocked to prevent corrupting the tiled render. The render panel stays visible with a progress bar and stop button.
+## Preview Region
+A live, export-density preview of any canvas section. Unlike Export, this does **not** lock the viewport — you keep full interactivity so you can iterate on the look at final resolution.
+
+1. Click **Preview Region** in the panel. The cursor becomes a crosshair.
+2. Hover over the canvas — a dashed fuchsia rectangle follows the cursor, showing which slice of the export will fill the canvas at 1 output-pixel per 1 physical canvas-pixel.
+3. Click to start. The viewport now shows the selected region rendered at export density, converging up to **Max Samples Per Bucket**.
+4. Adjust anything — sliders, lighting, colors, formula params, camera. The preview re-renders live with the new values, still at export density.
+5. Exit via the header **Exit Preview ✕** chip, pressing **Esc**, or closing the panel.
+
+The panel stays open during preview so all your controls remain reachable. Changing Output Width/Height auto-exits the preview (the rendered pixels no longer represent the configured export).
 `
     },
     'render.region': {
@@ -547,24 +566,47 @@ Disabled automatically during bucket rendering and video export.
     'export.video': {
         id: 'export.video',
         category: 'Export',
-        title: 'Video Export',
+        title: 'Video & Image Sequence Export',
         content: `
-Allows rendering high-quality video sequences offline.
+Render high-quality video files or per-frame image sequences from the timeline.
 
-### Browser Compatibility (Disk vs RAM)
-Because 4K video files are huge, the exporter works differently depending on your browser.
+### Formats
+- **MP4 (H.264 / HEVC / AV1)**: universal video containers. H.264 is the most compatible; HEVC and AV1 give better compression but require a GPU/browser that can encode them.
+- **WebM (VP9)**: web-native open format. Firefox encodes VP9 natively (no cap).
+- **PNG Sequence (RGBA)**: per-frame image files written into a folder. When you select both Beauty and Alpha, they're merged into one RGBA PNG per frame — perfect for compositing in After Effects, Nuke, Resolume, etc. Depth (if selected) goes out as a separate greyscale PNG per frame.
+- **JPG Sequence**: per-frame files, one per selected pass. Lossy but small — good for preview proofs or social-media clips.
 
-- **Disk Mode (Chrome / Edge / Opera)**: Uses direct file access. When you click Render, you will be asked where to save the file immediately. The video is streamed directly to your hard drive, allowing unlimited file sizes (perfect for 4K).
-- **RAM Mode (Firefox / Safari)**: Must store the *entire video* in memory until finished.
-  - **Warning**: If the video file exceeds ~2GB-4GB, the browser tab will crash (Out of Memory).
-  - **Workaround**: For long animations in these browsers, render shorter segments and stitch them later in a video editor.
+### Passes
+Three checkboxes control which render passes go to the output:
+
+- **Beauty** — the normal tone-mapped color image.
+- **Alpha** — a surface mask (white = surface, black = sky). Anti-aliased "for free" via the accumulation pipeline.
+- **Depth** — a linear distance map (near = black, far = white). When Depth is selected you'll see **Near / Far (world units)** inputs — anything closer than Near reads as black, anything farther than Far reads as white. The **Use fog range** shortcut copies your scene's current fog start/end if fog is enabled.
+
+Each selected pass produces its own file for video / JPG exports. PNG merges Beauty + Alpha into one RGBA file.
+
+### Browser Compatibility
+- **MP4 / WebM — Disk Mode** (Chrome / Edge / Opera): direct file write. You pick the output file when you click Render; video streams to disk, unlimited file size.
+- **MP4 / WebM — RAM Mode** (Firefox / Safari): the entire video is buffered in memory before download. Crashes the tab if the file would exceed ~2–4 GB. Render short segments and stitch in a video editor for long animations.
+- **Image Sequences**: **Chrome / Edge only** — needs the directory-picker API. The render button shows a notice in unsupported browsers.
+
+### Firefox notes
+- Firefox encodes H.264 through Cisco's OpenH264 plugin, which is **capped at ~31 Mbps** regardless of the bitrate slider. An inline notice appears in the dialog when you set a bitrate above this threshold. Use VP9/WebM (or Chrome) if you need higher bitrate for H.264-visible quality.
+- Exported fps / timing is automatically corrected — the encoder returns timestamps with a one-frame leading offset on Firefox, which we cancel internally.
 
 ### Settings
-- **Resolution**: Includes social presets (Square 1:1, Portrait 4:5, Vertical 9:16).
-- **Bitrate**: Higher = Less compression artifacts. 12-20 Mbps is usually sufficient for 1080p.
-- **Samples**: How many accumulation passes per frame. 
-  - 16-32: Good for Draft.
-  - 64-128: Production Quality (removes all grain).
+- **Resolution**: includes social presets (Square 1:1, Portrait 4:5, Vertical 9:16). Any 2-pixel-aligned resolution works.
+- **Bitrate**: the slider value is a "visible quality" target — the encoder is actually given 2.5× this value to compensate for CBR under-shoot on smooth content. 12–20 Mbps on the slider is usually sufficient for 1080p beauty.
+- **Samples**: accumulation passes per frame (shared across all render passes in image-sequence mode).
+  - 16–32: draft.
+  - 64–128: production quality (removes residual grain).
+- **Internal Scale**: render above resolution (1.5×–2× for SSAA) at proportionally higher cost.
+
+### Multi-pass file naming
+- Single video / single pass: \`{project}_v{n}_{WxH}.{ext}\`
+- Video with multiple passes: \`{project}_{pass}_v{n}_{WxH}.{ext}\` — one file per pass.
+- PNG merged: \`{project}_v{n}_{WxH}_{frame}.png\`
+- JPG / PNG depth: \`{project}_{pass}_v{n}_{WxH}_{frame}.{png|jpg}\`
 `
     }
 };
