@@ -180,9 +180,13 @@ This ensures:
 *   **Fix:** Compositing now uses GL scissor rect with integer pixel bounds instead of shader-based UV discard. The render region is expanded by half a pixel so boundary pixels are always rendered; the scissor clips precisely.
 *   **Location:** `engine/BucketRenderer.ts` — `compositeCurrentBucket()`, `applyCurrentBucket()`
 
-### Bucket Render Size Estimation Wrong in Fixed Mode
-*   **Cause:** `canvasPixelSize` store value (set by WorkerDisplay ResizeObserver) may lag behind resolution mode changes.
-*   **Fix:** UI components (BucketRenderControls, RenderPopup, PerformanceMonitor) use `fixedResolution * dpr` directly when `resolutionMode === 'Fixed'`, falling back to `canvasPixelSize` for Full mode.
+### Reading Canvas Physical Pixel Size
+*   **Problem:** Several consumers need "the actual canvas pixel dimensions right now" — for VRAM estimation, Preview Region rect calc, render-time estimation, RegionOverlay readouts, etc. Two subtleties make this hard to do inline:
+    1. **Fixed mode lag.** `state.canvasPixelSize` is updated asynchronously by a `ResizeObserver` — it lags 1+ frames behind `setResolutionMode('Fixed')` / `setFixedResolution(...)`. In Fixed mode the authoritative value is `fixedResolution × dpr`, not the observer.
+    2. **Wrong-element measurement.** In Full mode, `canvasPixelSize` must reflect the post-sidebar flex-1 canvas area. The observer must therefore be on an element that correctly shrinks when docks toggle.
+*   **Fix:** Never read `state.canvasPixelSize` directly. Use `getCanvasPhysicalPixelSize(state)` from `store/fractalStore.ts` — derives from `fixedResolution × dpr` in Fixed mode, falls back to `canvasPixelSize` in Full mode.
+*   **Authoritative writer.** `components/ViewportArea.tsx` owns the `ResizeObserver` that writes `canvasPixelSize`. It observes `viewportRef` (the `flex-1` div between the docks), so its measurement is always the real canvas area. `WorkerDisplay` stopped writing to the store because its inner absolute-positioned div sometimes missed dock-toggle layout updates; it still owns the `RESIZE` message to the render worker.
+*   **Consumers currently routed through the helper:** `hooks/usePreviewTarget.ts`, `components/topbar/BucketRenderControls.tsx`, `components/timeline/RenderPopup.tsx`, `components/PerformanceMonitor.tsx`, the `RegionOverlay` inside `components/ViewportArea.tsx`. Add new consumers through the same helper.
 
 ### Bucket Render Corruption from UI Interaction
 *   **Cause:** Resize, uniform, config, or offset messages reaching the worker mid-render corrupt the pipeline state.

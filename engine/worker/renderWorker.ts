@@ -233,8 +233,22 @@ function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK
         engine.setRenderState(msg.renderState);
     }
 
-    // Update engine (VirtualSpace smoothing, uniform sync)
+    // Update engine (VirtualSpace smoothing, uniform sync). FractalEngine.update also
+    // releases the held final frame (if any) when the user has moved camera / changed
+    // params — so the held path below is only taken when no interaction has occurred.
     engine.update(camera, msg.delta, {}, false);
+
+    // ── Held Final Frame Path ────────────────────────────────────
+    // After Refine View / Preview Region finishes, the BucketRenderer retains its final
+    // composite and re-blits it each tick. Skip compute + normal display entirely while
+    // holding — otherwise the normal display path would overwrite the final image with
+    // fresh (empty) pipeline output.
+    if (bucketRenderer.isHoldingFinalFrame()) {
+        bucketRenderer.blitHeldFinalFrame();
+        _tickCount++;
+        postMsg({ type: 'FRAME_READY', bitmap: null, state: getShadowState() });
+        return;
+    }
 
     // Compute fractal (render to internal FBOs)
     engine.compute(renderer);
@@ -265,12 +279,42 @@ function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK
 
         renderer.setRenderTarget(null);
         renderer.clear();
-        renderer.render(displayScene, displayCamera);
+
+        // During bucket render, each tile's output has pixel dimensions that may not match
+        // the canvas aspect (e.g. 2×1 tile grid on a square output produces 1:2 tiles on a
+        // 1:1 canvas). Stretching to fill the canvas makes the live preview look distorted
+        // during render; letterbox the tile into a centered rect matching its own aspect
+        // so what the user sees during rendering matches what gets saved.
+        const gl = renderer.getContext();
+        if (bucketRenderer.getIsRunning()) {
+            const [tileW, tileH] = bucketRenderer.getCurrentTilePixelSize();
+            const cW = canvas.width, cH = canvas.height;
+            if (tileW > 0 && tileH > 0) {
+                const tileAspect = tileW / tileH;
+                const canvasAspect = cW / Math.max(1, cH);
+                let vx = 0, vy = 0, vw = cW, vh = cH;
+                if (Math.abs(tileAspect - canvasAspect) > 0.002) {
+                    if (tileAspect > canvasAspect) {
+                        vh = Math.floor(cW / tileAspect);
+                        vy = Math.floor((cH - vh) / 2);
+                    } else {
+                        vw = Math.floor(cH * tileAspect);
+                        vx = Math.floor((cW - vw) / 2);
+                    }
+                }
+                renderer.setViewport(vx, vy, vw, vh);
+                renderer.render(displayScene, displayCamera);
+                renderer.setViewport(0, 0, cW, cH);
+            } else {
+                renderer.render(displayScene, displayCamera);
+            }
+        } else {
+            renderer.render(displayScene, displayCamera);
+        }
 
         // Flush GPU command queue — starts executing the display frame immediately.
         // Without this, the driver may batch commands and execute them later,
         // causing variable presentation timing (stutter).
-        const gl = renderer.getContext();
         gl.flush();
     }
 
@@ -288,6 +332,12 @@ function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK
 // Uses MessageChannel to schedule rendering — this lets already-queued messages
 // (CONFIG, UNIFORM, OFFSET_SHIFT) process first, then renders with up-to-date state.
 // Unlike setTimeout(0) which adds 1-4ms minimum delay, MessageChannel fires in <0.1ms.
+// Preview Region state. Stored at module scope (not on engine) because the worker handles
+// it as a lightweight uniform override with no bucket-render locking — any module that
+// observes engine.state won't see anything special.
+let _previewActive = false;
+let _savedSampleCap = 0;
+
 let _pendingTick: Extract<MainToWorkerMessage, { type: 'RENDER_TICK' }> | null = null;
 let _rendering = false;
 let _tickScheduled = false;
@@ -677,6 +727,52 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 if (engine) {
                     bucketRenderer.stop();
                     engine.state.isBucketRendering = false;
+                }
+                break;
+
+            // ─── Preview Region (live, uniforms-only) ─────────────────────
+            // Sets UV-remap uniforms so primary rays cover the selected sub-rect of the full
+            // output, at export pixel density. Does NOT engage bucket-render lock — all
+            // normal interactions (camera, params, sliders) continue to work; each change
+            // resets accumulation naturally and the preview re-renders.
+            case 'PREVIEW_REGION_SET':
+                if (engine) {
+                    const u = engine.mainUniforms;
+                    const outW = Math.max(1, Math.floor(msg.outputWidth));
+                    const outH = Math.max(1, Math.floor(msg.outputHeight));
+                    const rMinX = Math.max(0, Math.min(1, msg.region.minX));
+                    const rMinY = Math.max(0, Math.min(1, msg.region.minY));
+                    const rMaxX = Math.max(0, Math.min(1, msg.region.maxX));
+                    const rMaxY = Math.max(0, Math.min(1, msg.region.maxY));
+                    const px0 = Math.floor(rMinX * outW);
+                    const py0 = Math.floor(rMinY * outH);
+                    const px1 = Math.max(px0 + 1, Math.ceil(rMaxX * outW));
+                    const py1 = Math.max(py0 + 1, Math.ceil(rMaxY * outH));
+                    (u.uImageTileOrigin.value as any).set(px0 / outW, py0 / outH);
+                    (u.uImageTileSize.value as any).set((px1 - px0) / outW, (py1 - py0) / outH);
+                    (u.uTilePixelOrigin.value as any).set(px0, py0);
+                    u.uFullOutputResolution.value.set(outW, outH);
+
+                    // Apply sample cap (saved once on first SET, restored on CLEAR).
+                    if (!_previewActive) _savedSampleCap = engine.pipeline.getSampleCap();
+                    engine.pipeline.setSampleCap(Math.max(1, Math.floor(msg.sampleCap)));
+                    _previewActive = true;
+                    engine.resetAccumulation();
+                }
+                break;
+
+            case 'PREVIEW_REGION_CLEAR':
+                if (engine && _previewActive) {
+                    const u = engine.mainUniforms;
+                    (u.uImageTileOrigin.value as any).set(0, 0);
+                    (u.uImageTileSize.value as any).set(1, 1);
+                    (u.uTilePixelOrigin.value as any).set(0, 0);
+                    // UniformManager.syncFrame will resume auto-copying uResolution -> uFullOutputResolution
+                    // now that uImageTileSize == (1,1).
+                    engine.pipeline.setSampleCap(_savedSampleCap);
+                    _savedSampleCap = 0;
+                    _previewActive = false;
+                    engine.resetAccumulation();
                 }
                 break;
         }

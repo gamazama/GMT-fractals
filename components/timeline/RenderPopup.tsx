@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { useAnimationStore } from '../../store/animationStore';
-import { useFractalStore } from '../../store/fractalStore';
+import { useFractalStore, getCanvasPhysicalPixelSize } from '../../store/fractalStore';
 import { VIDEO_FORMATS } from '../../data/constants';
 import Slider, { DraggableNumber } from '../Slider';
 import Dropdown from '../Dropdown';
@@ -36,7 +36,9 @@ interface RenderPopupProps {
 
 export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
     const animStore = useAnimationStore();
-    const { resolutionMode, fixedResolution, canvasPixelSize } = useFractalStore();
+    // Full-store subscription — re-render on canvasPixelSize changes so the render-time
+    // estimator stays fresh. Actual canvas size is read via getCanvasPhysicalPixelSize below.
+    const { resolutionMode, fixedResolution } = useFractalStore();
     
     // Config State
     const [vidRes, setVidRes] = useState<{w:number, h:number}>(() => {
@@ -460,10 +462,7 @@ export const RenderPopup: React.FC<RenderPopupProps> = ({ onClose }) => {
         
         let multiplier = 1.0;
         // Estimate based on viewport vs target resolution ratio
-        const dpr = useFractalStore.getState().dpr || 1;
-        const [viewportW, viewportH] = resolutionMode === 'Fixed'
-            ? [Math.floor(fixedResolution[0] * dpr), Math.floor(fixedResolution[1] * dpr)]
-            : canvasPixelSize;
+        const [viewportW, viewportH] = getCanvasPhysicalPixelSize(useFractalStore.getState());
         const viewportPixels = viewportW * viewportH;
         const targetW = vidRes.w * internalScale;
         const targetH = vidRes.h * internalScale;

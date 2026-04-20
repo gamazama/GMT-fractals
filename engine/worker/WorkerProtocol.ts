@@ -79,6 +79,11 @@ export type MainToWorkerMessage =
     | { type: 'BUCKET_START'; exportImage: boolean; config: BucketRenderConfig;
         exportData?: { preset: string; name: string; version: number } }
     | { type: 'BUCKET_STOP' }
+    // ─── Preview Region (uniform-only zoom; no render lock) ───
+    | { type: 'PREVIEW_REGION_SET';
+        region: { minX: number; minY: number; maxX: number; maxY: number };
+        outputWidth: number; outputHeight: number; sampleCap: number }
+    | { type: 'PREVIEW_REGION_CLEAR' }
     // ─── Dynamic Formula Registration ───
     | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean } }
     // ─── Shader Debug ───

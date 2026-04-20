@@ -1,13 +1,14 @@
 
 import React, { useRef, useState, useLayoutEffect, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { useFractalStore } from '../store/fractalStore';
+import { useFractalStore, getCanvasPhysicalPixelSize } from '../store/fractalStore';
 import HistogramProbe from './HistogramProbe';
 import HudOverlay from './HudOverlay';
 import type { ActiveHint } from '../hooks/useTutorialHints';
 import { AnimationSystem } from './AnimationSystem';
 import { useInteractionManager } from '../hooks/useInteractionManager';
 import { useRegionSelection } from '../hooks/useRegionSelection';
+import { usePreviewTarget } from '../hooks/usePreviewTarget';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from './registry/ComponentRegistry';
@@ -120,12 +121,13 @@ const RegionOverlay: React.FC<{
     const sampleCap = useFractalStore(s => s.sampleCap);
     const setSampleCap = useFractalStore(s => s.setSampleCap);
     const convergenceThreshold = useFractalStore(s => s.convergenceThreshold);
-    const canvasPixelSize = useFractalStore(s => s.canvasPixelSize);
 
     const [samples, setSamples] = useState(0);
     const [convergence, setConvergence] = useState(1.0);
 
-    // Poll accumulation count and convergence from engine proxy
+    // Poll accumulation count + convergence from engine proxy. This also re-triggers the
+    // region pixel readout (read via getCanvasPhysicalPixelSize below) every 100ms, so
+    // the displayed dims stay fresh after any canvas resize without extra subscriptions.
     useEffect(() => {
         const id = setInterval(() => {
             setSamples(engine.accumulationCount);
@@ -134,8 +136,9 @@ const RegionOverlay: React.FC<{
         return () => clearInterval(id);
     }, []);
 
-    const regionW = Math.round((region.maxX - region.minX) * canvasPixelSize[0]);
-    const regionH = Math.round((region.maxY - region.minY) * canvasPixelSize[1]);
+    const [canvasW, canvasH] = getCanvasPhysicalPixelSize(useFractalStore.getState());
+    const regionW = Math.round((region.maxX - region.minX) * canvasW);
+    const regionH = Math.round((region.maxY - region.minY) * canvasH);
 
     const capReached = sampleCap > 0 && samples >= sampleCap;
     const thresholdRaw = convergenceThreshold / 100.0;
@@ -206,6 +209,33 @@ const RegionOverlay: React.FC<{
     );
 };
 
+// ── Preview Region Overlays ─────────────────────────────────────────
+// Ghost rectangle that follows the cursor during `selecting_preview` mode.
+// Purely visual — usePreviewTarget handles the mouse events.
+const PreviewGhostOverlay: React.FC<{
+    region: { minX: number; minY: number; maxX: number; maxY: number };
+}> = ({ region }) => {
+    const outputWidth = useFractalStore(s => s.outputWidth);
+    const outputHeight = useFractalStore(s => s.outputHeight);
+    const rectW = Math.round((region.maxX - region.minX) * outputWidth);
+    const rectH = Math.round((region.maxY - region.minY) * outputHeight);
+    return (
+        <div
+            className="absolute z-40 pointer-events-none border-2 border-dashed border-fuchsia-400/90"
+            style={{
+                left: `${region.minX * 100}%`,
+                bottom: `${region.minY * 100}%`,
+                right: `${(1 - region.maxX) * 100}%`,
+                top: `${(1 - region.maxY) * 100}%`,
+            }}
+        >
+            <div className="absolute -top-4 left-0 bg-fuchsia-500/70 text-white text-[9px] font-bold px-1 py-0.5 rounded-sm whitespace-nowrap">
+                Click to preview · {rectW}×{rectH}px @ export
+            </div>
+        </div>
+    );
+};
+
 export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneReady, activeHint, onDismissHint }) => {
     const state = useFractalStore();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -214,8 +244,11 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
     const { drawing, interactionMode } = state;
     const isDrawingToolActive = drawing?.active;
     const isSelectingRegion = interactionMode === 'selecting_region';
+    const isSelectingPreview = interactionMode === 'selecting_preview';
+    const isPreviewingRegion = !!state.previewRegion;
 
     const { visualRegion, drawPreview, isGhostDragging, renderRegion } = useRegionSelection(canvasContainerRef);
+    const { ghostRect: previewGhostRect } = usePreviewTarget(canvasContainerRef);
     useInteractionManager(canvasContainerRef);
 
     const { isMobile: isMobileDevice } = useMobileLayout();
@@ -223,11 +256,24 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
 
     useLayoutEffect(() => {
         if (!viewportRef.current) return;
+        // Authoritative canvas-area measurement. This div is flex-1 between the left and
+        // right docks, so its dimensions reflect the ACTUAL canvas area available after
+        // sidebars take their space. Pushing this into `canvasPixelSize` (physical pixels)
+        // gives the Bucket Render panel, Preview Region, VRAM estimator etc. the correct
+        // post-sidebar size — WorkerDisplay's own observer sees a smaller, absolute-
+        // positioned inner div that sometimes misses layout updates when docks toggle.
+        const pushCanvasSize = (w: number, h: number) => {
+            const dpr = window.devicePixelRatio || 1;
+            const st = useFractalStore.getState();
+            if (st.isBucketRendering) return; // match WorkerDisplay's observer guard
+            st.setCanvasPixelSize(Math.floor(w * dpr), Math.floor(h * dpr));
+        };
         const observer = new ResizeObserver(entries => {
             for (const entry of entries) {
                 const w = Math.max(1, entry.contentRect.width);
                 const h = Math.max(1, entry.contentRect.height);
                 setViewportSize({ w, h });
+                pushCanvasSize(w, h);
             }
         });
         observer.observe(viewportRef.current);
@@ -235,6 +281,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
         const rect = viewportRef.current.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
             setViewportSize({ w: rect.width, h: rect.height });
+            pushCanvasSize(rect.width, rect.height);
         }
 
         return () => observer.disconnect();
@@ -278,7 +325,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
     const handleInput = (e: React.PointerEvent | React.WheelEvent) => {};
 
     return (
-        <div ref={viewportRef} className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${isSelectingRegion ? 'cursor-crosshair' : (isDrawingToolActive ? 'cursor-crosshair' : '')}`} style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} onMouseEnter={() => setMouseOverCanvas(true)} onMouseLeave={() => setMouseOverCanvas(false)} >
+        <div ref={viewportRef} className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${(isSelectingRegion || isSelectingPreview) ? 'cursor-crosshair' : (isDrawingToolActive ? 'cursor-crosshair' : '')}`} style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} onMouseEnter={() => setMouseOverCanvas(true)} onMouseLeave={() => setMouseOverCanvas(false)} >
             {isFixed && <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', backgroundSize: '40px 40px' }} />}
             
             {!isCleanFeed && <HudOverlay state={state} actions={state} isMobile={state.debugMobileLayout || isMobileDevice} activeHint={activeHint} onDismissHint={onDismissHint} hudRefs={hudRefs} />}
@@ -289,10 +336,15 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ hudRefs, onSceneRead
             {!isCleanFeed && <AnimationSystem />}
             
             <div ref={canvasContainerRef} style={wrapperStyle} className="relative bg-[#111] group z-0">
-                {(isSelectingRegion || isDrawingToolActive) && <div className="absolute inset-0 z-50 cursor-crosshair bg-transparent pointer-events-none" />}
+                {(isSelectingRegion || isSelectingPreview || isDrawingToolActive) && <div className="absolute inset-0 z-50 cursor-crosshair bg-transparent pointer-events-none" />}
 
-                {activeRegion && !isCleanFeed && (
+                {activeRegion && !isCleanFeed && !isPreviewingRegion && (
                     <RegionOverlay region={activeRegion} isGhostDragging={isGhostDragging} isDrawing={isDrawingPreview} onClear={() => state.setRenderRegion(null)} />
+                )}
+
+                {/* Preview Region — ghost rect while picking */}
+                {previewGhostRect && !isCleanFeed && (
+                    <PreviewGhostOverlay region={previewGhostRect} />
                 )}
 
                 {/* 2D canvas receives ImageBitmaps from render worker */}

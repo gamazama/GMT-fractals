@@ -335,8 +335,32 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
 })));
 
 export const selectIsGlobalInteraction = (state: FractalStoreState) => {
-    return state.isUserInteracting || 
+    return state.isUserInteracting ||
            state.interactionMode !== 'none';
+};
+
+/**
+ * Canonical accessor for the render canvas's physical pixel dimensions.
+ *
+ * Use this ANYWHERE you need "what are the actual pixels the worker is rendering into".
+ * Do NOT read `state.canvasPixelSize` directly — in Fixed mode the observer lags behind
+ * the resolution-mode switch, and the authoritative value is `fixedResolution × dpr`.
+ * In Full mode, `state.canvasPixelSize` is written by `ViewportArea`'s ResizeObserver on
+ * the flex-1 viewport div, so it correctly reflects the post-sidebar canvas area.
+ *
+ * Returns [widthPx, heightPx] in physical pixels.
+ *
+ * See docs/06_Troubleshooting_and_Quirks.md §"Reading canvas physical pixel size".
+ */
+export const getCanvasPhysicalPixelSize = (state: FractalStoreState): [number, number] => {
+    const dpr = state.dpr || 1;
+    if (state.resolutionMode === 'Fixed') {
+        return [
+            Math.max(1, Math.floor(state.fixedResolution[0] * dpr)),
+            Math.max(1, Math.floor(state.fixedResolution[1] * dpr)),
+        ];
+    }
+    return state.canvasPixelSize;
 };
 
 export const selectMovementLock = (state: FractalStoreState) => {

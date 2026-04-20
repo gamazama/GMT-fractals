@@ -11,7 +11,7 @@ import type { ScalabilityState, HardwareProfile } from './viewport';
 
 export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
 
-export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region';
+export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region' | 'selecting_preview';
 
 export type CompositionOverlayType = 'none' | 'grid' | 'thirds' | 'golden' | 'spiral' | 'center' | 'diagonal' | 'safearea';
 
@@ -100,11 +100,15 @@ export interface FractalStoreState extends FeatureStateMap {
   activeCameraId: string | null;
 
   isBucketRendering: boolean;
-  bucketSize: number; 
-  bucketUpscale: number; 
+  bucketSize: number;
+  outputWidth: number;       // Bucket render output width in pixels
+  outputHeight: number;      // Bucket render output height in pixels
+  tileCols: number;          // Image-tile grid columns (1 = single image output)
+  tileRows: number;          // Image-tile grid rows (1 = single image output)
+  matchViewportAspect: boolean; // When true, W/H inputs preserve viewport ratio
   convergenceThreshold: number;
   samplesPerBucket: number;
-  canvasPixelSize: [number, number]; // Actual physical pixel size of the render canvas
+  canvasPixelSize: [number, number]; // Physical pixel size of the post-sidebar canvas area. Read via getCanvasPhysicalPixelSize() in fractalStore.ts — do not read directly (Fixed-mode lag).
 
   advancedMode: boolean;
   showHints: boolean;
@@ -117,7 +121,10 @@ export interface FractalStoreState extends FeatureStateMap {
   
   resolutionMode: 'Full' | 'Fixed';
   fixedResolution: [number, number]; 
-  renderRegion: { minX: number, minY: number, maxX: number, maxY: number } | null; 
+  renderRegion: { minX: number, minY: number, maxX: number, maxY: number } | null;
+  // Preview Region — export-resolution preview of a canvas slice. See docs/44_Preview_Region_Plan.md.
+  // Truthy iff preview is active (`previewRegion !== null` == "previewing").
+  previewRegion: { minX: number, minY: number, maxX: number, maxY: number } | null;
   
   isBroadcastMode: boolean;
   
@@ -228,7 +235,11 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     
     setIsBucketRendering: (v: boolean) => void;
     setBucketSize: (v: number) => void;
-    setBucketUpscale: (v: number) => void;
+    setOutputWidth: (v: number) => void;
+    setOutputHeight: (v: number) => void;
+    setTileCols: (v: number) => void;
+    setTileRows: (v: number) => void;
+    setMatchViewportAspect: (v: boolean) => void;
     setConvergenceThreshold: (v: number) => void;
     setSamplesPerBucket: (v: number) => void;
     setCanvasPixelSize: (w: number, h: number) => void;
@@ -242,6 +253,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     setResolutionMode: (m: 'Full' | 'Fixed') => void;
     setFixedResolution: (w: number, h: number) => void;
     setRenderRegion: (r: { minX: number, minY: number, maxX: number, maxY: number } | null) => void;
+    setPreviewRegion: (r: { minX: number, minY: number, maxX: number, maxY: number } | null) => void;
     // setIsControlsDocked: (v: boolean) => void; // Deprecated
     setIsBroadcastMode: (v: boolean) => void;
 

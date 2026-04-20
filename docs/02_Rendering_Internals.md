@@ -469,21 +469,56 @@ Disabled during bucket rendering and video export (`isExporting || isBucketRende
 ## 6. Bucket Renderer
 For resolutions higher than the GPU limit (e.g., 8K), or to prevent TDR (Timeout Detection Recovery) crashes:
 1.  **Tiling:** The screen is divided into small buckets (e.g., 128x128).
-2.  **Scissor:** The projection matrix is skewed to render *only* that tiny window.
+2.  **Region mask:** `uRegionMin`/`uRegionMax` limits the shader to only render that tiny window.
 3.  **Accumulation:** The engine renders that bucket until it converges (noise-free).
-4.  **Composite:** The result is copied to a final canvas. (may need more work to ensure it can handle large files)
-5.  **Repeat:** Move to next bucket.
+4.  **Composite:** The result is copied to a composite buffer via GL scissor.
+5.  **Repeat:** Move to next bucket until the image (or current image tile) is complete.
 
-### 6.1 Bucket Renderer Architecture (Updated 2026-03)
+### 6.1 Bucket Renderer Architecture (Updated 2026-04-20)
 
-The bucket renderer handles high-resolution output (4K-10K+):
+Two orthogonal concepts the renderer composes:
+
+- **GPU bucket** — internal rectangular chunk (64/128/256/512 px) used as a VRAM/TDR safety knob. Multiple buckets make up one image tile.
+- **Image tile** — an output sub-image saved as its own PNG. `tileCols × tileRows` image tiles make up the full output. For `tileCols=tileRows=1` the output is a single file (default).
+
+Sizing is controlled by explicit **Output Width / Output Height** pixel inputs (plus optional preset dropdown + "lock to viewport aspect" toggle). The older `bucketUpscale` multiplier has been replaced.
 
 #### Key Components:
-- **Composite Buffer**: A separate Float32 render target stores the final accumulated image
-- **Scissor Compositing**: Each completed bucket is copied to the composite buffer using a GL scissor rect with integer pixel bounds — guarantees pixel-perfect tile boundaries with no float precision gaps
-- **Integer Pixel Bounds**: Each bucket stores both UV-space bounds (for the render shader) and integer pixel coordinates (`pixelX/pixelY/pixelW/pixelH`) for the scissor rect
+- **Per-tile Composite Buffer**: A Float32 render target sized to the *current image tile* stores its accumulated HDR image. For single-image output (1×1), this is the full output.
+- **Scissor Compositing**: Each completed GPU bucket is copied into the current tile's composite buffer using a GL scissor rect with integer pixel bounds — guarantees pixel-perfect bucket boundaries with no float precision gaps.
+- **Integer Pixel Bounds**: Each bucket stores both UV-space bounds (for the render shader) and integer pixel coordinates (`pixelX/pixelY/pixelW/pixelH`) for the scissor rect.
 - **Half-Pixel Region Expansion**: The render shader's `uRegionMin`/`uRegionMax` are expanded by 0.5 pixels in each direction to ensure boundary pixels are always rendered. The scissor rect does the precise clipping, so slight over-render is harmless.
-- **Adaptive Convergence**: Each tile renders until converged (noise-free) or max samples reached
+- **Adaptive Convergence**: Each bucket renders until converged (noise-free) or max samples reached.
+- **Output-aspect Override**: At the start of a bucket render, `cam.aspect` is set to `outputWidth/outputHeight` so primary-ray basis vectors frame the full output. Restored on cleanup.
+
+### 6.1a Image-Tile Loop (Split-Output Rendering)
+
+When `tileCols × tileRows > 1` the render produces separate PNG files for each tile, suitable for massive prints that would otherwise exceed VRAM. The outer loop wraps the existing bucket loop:
+
+```
+for each image tile (row, col):
+    - set tile-local uniforms (uImageTileOrigin, uImageTileSize,
+      uTilePixelOrigin, uFullOutputResolution)
+    - resize pipeline + composite buffer to tile's pixel size
+    - run the inner bucket loop (unchanged)
+    - run post-processing (bloom/CA/tone-map) on this tile's composite
+    - save as PNG with "_rXXcYY" filename suffix
+```
+
+**UV remap for rays** (`shaders/chunks/ray.ts`):
+```glsl
+vec2 uvFull = uImageTileOrigin + uvCoord * uImageTileSize;
+vec2 uv     = uvFull * 2.0 - 1.0;
+```
+Each tile's fullscreen quad covers its slice of full-image NDC while the camera basis stays configured for full-output aspect — primary rays are seamless by construction.
+
+**Blue-noise continuity**: blue-noise lookups use `noiseCoord * uFullOutputResolution` (instead of `* uResolution`), so noise patterns are globally consistent across adjacent tiles — path-traced seams at tile boundaries collapse to <1-sample variance.
+
+**Defaults are no-ops**: `uImageTileOrigin = (0,0)`, `uImageTileSize = (1,1)`, `uFullOutputResolution = uResolution`, `uTilePixelOrigin = (0,0)`. Single-image renders behave identically to the pre-tiling code path. `UniformManager.syncFrame` keeps `uFullOutputResolution` synced to `uResolution` whenever `uImageTileSize == (1,1)`.
+
+**Known seam**: bloom and chromatic aberration are spatial post-process effects and run on each tile independently — they sample black outside the current tile, producing visible seams at tile boundaries. The UI shows a warning when tiling is active with bloom/CA on. The v2 plan (see [docs/43_Bucket_Render_Overhaul.md](43_Bucket_Render_Overhaul.md)) renders bloom once from the viewport and samples it per-tile.
+
+**Filename**: single-image → `name_v{n}_WxH.png`. Multi-tile → `name_v{n}_WxH_r01c02.png` (zero-padded so alphabetic sort matches scan order).
 
 #### Adaptive Convergence Sampling:
 The bucket renderer uses **adaptive convergence-based sampling**:
@@ -516,13 +551,13 @@ Note: The worker's own `engine.state.isExporting` stays `false` so `update()` an
 - Bucket size controls memory usage (smaller = less VRAM)
 - Composite buffer uses Float32 for HDR quality
 - Supports up to 10K+ resolution with appropriate bucket sizes
-- `canvasPixelSize` in the store (set by `WorkerDisplay` ResizeObserver) provides accurate resolution for VRAM estimation; in Fixed resolution mode, the estimate uses `fixedResolution * dpr` directly
+- `canvasPixelSize` in the store (set by `ViewportArea`'s ResizeObserver on the flex-1 viewport div, so it always reflects the post-sidebar canvas area) drives VRAM estimation. Consumers read via `getCanvasPhysicalPixelSize(state)` which handles the Fixed-mode case by deriving from `fixedResolution × dpr` (avoiding ResizeObserver lag after a Fixed-mode switch). See [docs/06_Troubleshooting_and_Quirks.md](06_Troubleshooting_and_Quirks.md#reading-canvas-physical-pixel-size).
 
-#### Export Scale:
-- `1x` = Viewport resolution
-- `2x` = 4K from 1080p viewport
-- `4x` = 8K from 1080p viewport
-- `8x` = 10K+ from 1080p viewport
+#### Output Size:
+- Explicit pixel dimensions (width × height) via the bucket render panel.
+- Presets cover common viewport sizes (HD/FHD/QHD/4K/5K/8K), squares (2K/4K), portraits/verticals, and print sizes (A3-A0 at 300 DPI).
+- "Lock to viewport aspect" checkbox auto-adjusts height when width changes (or vice-versa) to preserve the current ratio.
+- "Match viewport" button sets output to the current canvas pixel size.
 
 ### 6.2 Region Rendering
 

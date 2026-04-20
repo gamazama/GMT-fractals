@@ -41,6 +41,12 @@ const BASE_SCHEMA: UniformDefinition[] = [
     { name: Uniforms.RegionMin, type: 'vec2', default: new THREE.Vector2(0, 0) },
     { name: Uniforms.RegionMax, type: 'vec2', default: new THREE.Vector2(1, 1) },
 
+    // Image-Tile Export (bucket render tiling; all defaults produce identical behavior to untiled render)
+    { name: Uniforms.ImageTileOrigin, type: 'vec2', default: new THREE.Vector2(0, 0) },
+    { name: Uniforms.ImageTileSize, type: 'vec2', default: new THREE.Vector2(1, 1) },
+    { name: Uniforms.FullOutputResolution, type: 'vec2', default: new THREE.Vector2(100, 100) },
+    { name: Uniforms.TilePixelOrigin, type: 'vec2', default: new THREE.Vector2(0, 0) },
+
     // Progressive / Pipeline
     { name: Uniforms.HistoryTexture, type: 'sampler2D', default: null },
     { name: Uniforms.BlendFactor, type: 'float', default: 1.0 },

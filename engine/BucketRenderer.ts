@@ -17,17 +17,21 @@ export interface BucketEngineRef {
     renderer: THREE.WebGLRenderer | null;
     pipeline: RenderPipeline;
     mainUniforms: { [key: string]: THREE.IUniform };
+    mainCamera: THREE.Camera;
     materials: MaterialController;
     resetAccumulation(): void;
     pipelineRender(renderer: THREE.WebGLRenderer): void;
 }
 
 export interface BucketRenderConfig {
-    bucketSize: number;
-    bucketUpscale: number;
+    bucketSize: number;              // Internal GPU tile size (VRAM safety knob)
+    outputWidth: number;             // Full output image width in pixels
+    outputHeight: number;            // Full output image height in pixels
+    tileCols: number;                // Image-tile grid columns (1 = single image)
+    tileRows: number;                // Image-tile grid rows (1 = single image)
     convergenceThreshold: number;
     accumulation: boolean;
-    samplesPerBucket?: number; // New: explicit sample count for predictable quality
+    samplesPerBucket?: number;
 }
 
 /**
@@ -53,18 +57,22 @@ export class BucketRenderer {
     private isRunning: boolean = false;
     private isExporting: boolean = false;
 
+    // Inner (bucket) loop state — GPU tiles inside the current image tile
     private buckets: { minX: number, minY: number, maxX: number, maxY: number, pixelX: number, pixelY: number, pixelW: number, pixelH: number }[] = [];
     private currentBucketIndex: number = 0;
-
     private bucketFrameCount: number = 0;
-    private readonly DEFAULT_MAX_FRAMES = 1024; // Increased for high-quality renders
-    private convergenceRequested: boolean = false; // Async convergence state
+    private readonly DEFAULT_MAX_FRAMES = 1024;
+    private convergenceRequested: boolean = false;
 
-    private originalSize = new THREE.Vector2();
-    private activeUpscale: number = 1.0;
-    private targetResolution = new THREE.Vector2();
+    // Outer (image-tile) loop state — each image tile is saved as a separate PNG
+    private imageTiles: { col: number, row: number, pixelX: number, pixelY: number, pixelW: number, pixelH: number }[] = [];
+    private currentImageTileIndex: number = 0;
+    private fullOutputSize = new THREE.Vector2();      // Full composed image pixel size
+    private originalSize = new THREE.Vector2();        // Viewport size (restored on cleanup)
+    private originalAspect: number = 1;                // cam.aspect before override
+    private targetResolution = new THREE.Vector2();    // Current image-tile pixel size (what the pipeline renders at)
 
-    // Composite buffer - stores the final accumulated image
+    // Composite buffer - stores the final accumulated image for the CURRENT image tile
     private compositeTarget: THREE.WebGLRenderTarget | null = null;
     private compositeMaterial: THREE.ShaderMaterial | null = null;
     private compositeScene: THREE.Scene | null = null;
@@ -73,11 +81,14 @@ export class BucketRenderer {
 
     // Cached config
     private config: BucketRenderConfig = {
-        bucketSize: 128,
-        bucketUpscale: 1.0,
+        bucketSize: 512,
+        outputWidth: 1920,
+        outputHeight: 1080,
+        tileCols: 1,
+        tileRows: 1,
         convergenceThreshold: 0.25,
         accumulation: true,
-        samplesPerBucket: 64 // Default to 64 samples for predictable quality
+        samplesPerBucket: 64
     };
 
     // Preset for metadata injection (Optional, only used if exporting to disk)
@@ -112,18 +123,30 @@ export class BucketRenderer {
     }
 
     /**
-     * Start a bucket render session
-     * @param exportImage Whether to save the final image to disk
+     * Start a bucket render session. Builds the image-tile grid from `config.tileCols × tileRows`
+     * and kicks off the inner bucket loop. Refine View uses a 1×1 grid; Export Image uses the
+     * user's chosen grid. Preview Region is a separate worker-side uniform-remap mechanism and
+     * does NOT go through this path — see `PREVIEW_REGION_SET` / `PREVIEW_REGION_CLEAR` in
+     * `renderWorker.ts`.
+     *
+     * @param exportImage Whether to save each tile to disk as a PNG
      * @param config Bucket render configuration
      * @param exportData Optional preset data to embed in the exported image
      */
-    public start(exportImage: boolean, config: BucketRenderConfig, exportData?: { preset: Preset, name: string, version: number }) {
+    public start(
+        exportImage: boolean,
+        config: BucketRenderConfig,
+        exportData?: { preset: Preset, name: string, version: number }
+    ) {
         const gl = this.engine.renderer;
         if (!gl || this.isRunning) return;
 
+        // Release any leftover held frame from a previous Refine session before
+        // claiming the composite buffer for this new render.
+        if (this._holdingFinalFrame) this.releaseHeldFinalFrame();
+
         this.isExporting = exportImage;
         this.config = { ...config };
-        this.activeUpscale = config.bucketUpscale || 1.0;
 
         if (exportData) {
             this.exportPreset = exportData.preset;
@@ -131,47 +154,41 @@ export class BucketRenderer {
             this.projectVersion = exportData.version;
         }
 
-        // Store current size to restore later
+        // Store viewport size and aspect so we can restore them on cleanup.
         gl.getSize(this.originalSize);
+        const cam = this.engine.mainCamera as THREE.PerspectiveCamera | undefined;
+        this.originalAspect = cam?.aspect ?? (this.originalSize.x / Math.max(1, this.originalSize.y));
 
-        // SSAA: Save viewport pixelSizeBase before resolution change.
-        // FractalEngine.compute() will override uPixelSizeBase each frame to this value,
-        // keeping trace precision/normal epsilon/shadow bias at viewport levels.
+        // SSAA: save viewport pixelSizeBase — FractalEngine.compute() overrides uPixelSizeBase
+        // each frame during bucket render to preserve viewport-relative precision.
         this.savedPixelSizeBase = this.engine.mainUniforms[Uniforms.PixelSizeBase]?.value ?? 0;
 
-        // Calculate Target Resolution
-        const targetW = Math.floor(this.originalSize.x * this.activeUpscale);
-        const targetH = Math.floor(this.originalSize.y * this.activeUpscale);
-        this.targetResolution.set(targetW, targetH);
+        const outW = Math.max(1, Math.floor(config.outputWidth));
+        const outH = Math.max(1, Math.floor(config.outputHeight));
+        this.fullOutputSize.set(outW, outH);
 
-        // Resize pipeline to target resolution
-        this.engine.pipeline.resize(targetW, targetH);
-        this.engine.mainUniforms.uResolution.value.set(targetW, targetH);
+        // Override camera aspect to the full OUTPUT aspect. Primary-ray basis vectors
+        // derive from cam.aspect via UniformManager; we need full-image aspect regardless
+        // of viewport aspect so the composed image frames the scene as the user sees it.
+        // UniformManager.syncFrame skips cam.aspect sync while bucket render is active.
+        if (cam) {
+            cam.aspect = outW / outH;
+            cam.updateProjectionMatrix();
+        }
 
-        // Initialize composite buffer for storing final image
-        this.initCompositeBuffer(targetW, targetH);
-
-        // Generate bucket list in center-first spiral order.
-        // Renders the most visually important region first, giving faster feedback.
-        this.buckets = [];
-        const size = config.bucketSize;
-        const cols = Math.ceil(targetW / size);
-        const rows = Math.ceil(targetH / size);
-
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                // Compute pixel boundaries first, then convert to UV.
-                // This ensures adjacent buckets share exact pixel edges with no gaps.
-                const px0 = x * size;
-                const py0 = y * size;
-                const px1 = Math.min(targetW, (x + 1) * size);
-                const py1 = Math.min(targetH, (y + 1) * size);
-                this.buckets.push({
-                    minX: px0 / targetW,
-                    minY: py0 / targetH,
-                    maxX: px1 / targetW,
-                    maxY: py1 / targetH,
-                    // Integer pixel bounds for scissor compositing
+        // Build image-tile grid. Last col/row absorbs pixel remainder so the full output
+        // is covered exactly with no gaps.
+        this.imageTiles = [];
+        const cols = Math.max(1, Math.floor(config.tileCols));
+        const rows = Math.max(1, Math.floor(config.tileRows));
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const px0 = Math.floor((col * outW) / cols);
+                const py0 = Math.floor((row * outH) / rows);
+                const px1 = (col === cols - 1) ? outW : Math.floor(((col + 1) * outW) / cols);
+                const py1 = (row === rows - 1) ? outH : Math.floor(((row + 1) * outH) / rows);
+                this.imageTiles.push({
+                    col, row,
                     pixelX: px0,
                     pixelY: py0,
                     pixelW: px1 - px0,
@@ -180,7 +197,71 @@ export class BucketRenderer {
             }
         }
 
-        // Sort by distance from center — center buckets render first
+        this.currentImageTileIndex = 0;
+        this.isRunning = true;
+        this.engine.pipeline.setBucketRendering(true);
+
+        // Seed full-output resolution. Stays constant across all image tiles;
+        // used by blue-noise lookups so patterns are continuous across tiles.
+        this.engine.mainUniforms[Uniforms.FullOutputResolution].value.set(outW, outH);
+
+        this.startImageTile();
+    }
+
+    /**
+     * Begin rendering the image tile at currentImageTileIndex. Configures the pipeline,
+     * uniforms, composite buffer, and bucket list for this tile and kicks off its inner
+     * bucket loop. Called by start() and after each tile finishes.
+     */
+    private startImageTile() {
+        const imgTile = this.imageTiles[this.currentImageTileIndex];
+        const tileW = imgTile.pixelW;
+        const tileH = imgTile.pixelH;
+        this.targetResolution.set(tileW, tileH);
+
+        // Resize pipeline to this tile's pixel size and point uResolution at it.
+        this.engine.pipeline.resize(tileW, tileH);
+        this.engine.mainUniforms.uResolution.value.set(tileW, tileH);
+
+        // Image-tile uniforms: UV remap so the fullscreen quad draws this tile's
+        // sub-rect of the full image, plus pixel origin for seamless blue-noise.
+        const outW = this.fullOutputSize.x;
+        const outH = this.fullOutputSize.y;
+        const originUV = this.engine.mainUniforms[Uniforms.ImageTileOrigin].value as THREE.Vector2;
+        const sizeUV = this.engine.mainUniforms[Uniforms.ImageTileSize].value as THREE.Vector2;
+        const pixelOrigin = this.engine.mainUniforms[Uniforms.TilePixelOrigin].value as THREE.Vector2;
+        originUV.set(imgTile.pixelX / outW, imgTile.pixelY / outH);
+        sizeUV.set(tileW / outW, tileH / outH);
+        pixelOrigin.set(imgTile.pixelX, imgTile.pixelY);
+
+        // Composite buffer is per-tile (sized to the tile, not full output).
+        this.initCompositeBuffer(tileW, tileH);
+        this.clearCompositeBuffer();
+
+        // Build inner bucket list for this tile: GPU tiles in pixel-grid order,
+        // converted to tile-local UV for the region mask, then sorted center-first.
+        this.buckets = [];
+        const size = this.config.bucketSize;
+        const cols = Math.ceil(tileW / size);
+        const rows = Math.ceil(tileH / size);
+        for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+                const px0 = x * size;
+                const py0 = y * size;
+                const px1 = Math.min(tileW, (x + 1) * size);
+                const py1 = Math.min(tileH, (y + 1) * size);
+                this.buckets.push({
+                    minX: px0 / tileW,
+                    minY: py0 / tileH,
+                    maxX: px1 / tileW,
+                    maxY: py1 / tileH,
+                    pixelX: px0,
+                    pixelY: py0,
+                    pixelW: px1 - px0,
+                    pixelH: py1 - py0,
+                });
+            }
+        }
         this.buckets.sort((a, b) => {
             const aCx = (a.minX + a.maxX) * 0.5 - 0.5;
             const aCy = (a.minY + a.maxY) * 0.5 - 0.5;
@@ -191,21 +272,25 @@ export class BucketRenderer {
 
         this.currentBucketIndex = 0;
         this.bucketFrameCount = 0;
-        this.isRunning = true;
-        this.engine.pipeline.setBucketRendering(true);
-
-        // Clear the composite buffer at start
-        this.clearCompositeBuffer();
-
-        // Set initial bucket region
         this.applyCurrentBucket();
 
-        // Notify UI via Event
+        this.emitProgress();
+    }
+
+    /** Progress across the full multi-tile render, 0..100. */
+    private emitProgress() {
+        const totalTiles = this.imageTiles.length;
+        const bucketsPerTile = this.buckets.length;
+        const outerDone = this.currentImageTileIndex;
+        const innerDone = this.currentBucketIndex;
+        const globalDone = outerDone * bucketsPerTile + innerDone;
+        const globalTotal = totalTiles * bucketsPerTile;
+        const pct = globalTotal > 0 ? (globalDone / globalTotal) * 100 : 0;
         FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, {
             isRendering: true,
-            progress: 0,
-            totalBuckets: this.buckets.length,
-            currentBucket: 0
+            progress: pct,
+            totalBuckets: globalTotal,
+            currentBucket: globalDone
         });
     }
 
@@ -288,8 +373,12 @@ export class BucketRenderer {
     }
 
     public stop() {
+        // An active render cleans up as usual. If we're only holding a final frame (not
+        // running), release that so the next viewport render can draw fresh.
         if (this.isRunning) {
             this.cleanup();
+        } else if (this._holdingFinalFrame) {
+            this.releaseHeldFinalFrame();
         }
     }
 
@@ -306,12 +395,26 @@ export class BucketRenderer {
         this.engine.materials.setUniform(Uniforms.RegionMin, min);
         this.engine.materials.setUniform(Uniforms.RegionMax, max);
 
+        // Reset image-tile uniforms to no-op defaults. UniformManager.syncFrame will
+        // resume copying uResolution → uFullOutputResolution once tileSize returns to (1,1).
+        (this.engine.mainUniforms[Uniforms.ImageTileOrigin].value as THREE.Vector2).set(0, 0);
+        (this.engine.mainUniforms[Uniforms.ImageTileSize].value as THREE.Vector2).set(1, 1);
+        (this.engine.mainUniforms[Uniforms.TilePixelOrigin].value as THREE.Vector2).set(0, 0);
+
         // Restore original resolution
         this.engine.pipeline.resize(this.originalSize.x, this.originalSize.y);
         this.engine.mainUniforms.uResolution.value.set(this.originalSize.x, this.originalSize.y);
+        this.engine.mainUniforms[Uniforms.FullOutputResolution].value.set(this.originalSize.x, this.originalSize.y);
+
+        // Restore camera aspect to viewport aspect.
+        const cam = this.engine.mainCamera as THREE.PerspectiveCamera;
+        if (cam && Math.abs(cam.aspect - this.originalAspect) > 0.0001) {
+            cam.aspect = this.originalAspect;
+            cam.updateProjectionMatrix();
+        }
 
         // Restore bloom pass to viewport dimensions
-        if (this.bloomPass && this.activeUpscale > 1.0) {
+        if (this.bloomPass) {
             this.bloomPass.resize(this.originalSize.x, this.originalSize.y);
         }
 
@@ -320,8 +423,11 @@ export class BucketRenderer {
 
         this.engine.resetAccumulation();
 
-        // Dispose composite resources
-        this.disposeCompositeBuffer();
+        // Dispose composite resources — UNLESS holding the final frame for on-screen display,
+        // in which case the composite stays alive until releaseHeldFinalFrame() is called.
+        if (!this._holdingFinalFrame) {
+            this.disposeCompositeBuffer();
+        }
 
         // Notify UI via Event
         FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
@@ -333,7 +439,7 @@ export class BucketRenderer {
      */
     private applyCurrentBucket() {
         if (this.currentBucketIndex >= this.buckets.length) {
-            this.finish();
+            this.finishImageTile();
             return;
         }
 
@@ -403,9 +509,11 @@ export class BucketRenderer {
     }
 
     /**
-     * Run full post-processing pipeline on the complete composite HDR buffer.
-     * Called once after ALL buckets are done — ensures spatial effects (bloom, CA)
-     * operate on the complete image, matching the offline renderer pattern.
+     * Run full post-processing pipeline on the current image tile's composite HDR buffer.
+     * Spatial effects (bloom, CA) operate on a single tile at a time — when rendering with
+     * tileCols/tileRows > 1, visible seams may appear at tile boundaries (documented in
+     * docs/43_Bucket_Render_Overhaul.md; opt-in v2 renders bloom from the viewport to
+     * eliminate them).
      */
     private runPostProcessing() {
         const gl = this.engine.renderer;
@@ -413,17 +521,19 @@ export class BucketRenderer {
 
         const w = this.targetResolution.x;
         const h = this.targetResolution.y;
+        const outW = this.fullOutputSize.x;
+        const outH = this.fullOutputSize.y;
 
-        // 1. Run bloom on the full composite (spatial effect — must see entire image)
         const bloomIntensity = this.engine.mainUniforms.uBloomIntensity?.value ?? 0;
         const exportMat = this.engine.materials.exportMaterial;
 
         if (bloomIntensity > 0.001 && this.bloomPass) {
-            // Bloom is a screen-space effect — run at viewport resolution so it looks
-            // identical regardless of upscale. The UV-based sampling in the post-process
-            // shader bilinearly upsamples the bloom texture to target resolution.
-            const bloomW = this.activeUpscale > 1.0 ? this.originalSize.x : w;
-            const bloomH = this.activeUpscale > 1.0 ? this.originalSize.y : h;
+            // When the output is larger than the viewport, bloom runs at viewport
+            // resolution to stay visually consistent with the on-screen preview.
+            // Otherwise it runs at the (tile) composite resolution.
+            const outputUpsampled = outW > this.originalSize.x || outH > this.originalSize.y;
+            const bloomW = outputUpsampled ? this.originalSize.x : w;
+            const bloomH = outputUpsampled ? this.originalSize.y : h;
             this.bloomPass.resize(bloomW, bloomH);
             const threshold = this.engine.mainUniforms.uBloomThreshold?.value ?? 0.5;
             const radius = this.engine.mainUniforms.uBloomRadius?.value ?? 1.5;
@@ -433,17 +543,19 @@ export class BucketRenderer {
             exportMat.uniforms.uBloomTexture.value = null;
         }
 
-        // 2. Set composite as input to post-process shader.
-        //    All other uniforms (tone mapping, color grading, CA, etc.) are already
-        //    synced via shared mainUniforms references from createPostProcessMaterial().
+        // Set composite as input to post-process shader. Other uniforms (tone mapping,
+        // color grading, CA, etc.) are shared-reference via mainUniforms.
         exportMat.uniforms.map.value = this.compositeTarget.texture;
         exportMat.uniforms.uResolution.value.set(w, h);
         exportMat.uniforms.uEncodeOutput.value = 1.0;
     }
 
     /**
-     * Blit the post-processed composite to the screen canvas (Refine View).
+     * Blit the post-processed composite to the screen canvas (Refine View / Preview Region).
      * Uses the displayMaterial so on-screen output matches what export would produce.
+     *
+     * The bucket render panel auto-switches the viewport to Fixed mode at output aspect while
+     * open, so the canvas always matches the output's aspect and no letterboxing is needed.
      */
     private blitToScreen() {
         const gl = this.engine.renderer;
@@ -451,35 +563,75 @@ export class BucketRenderer {
 
         const displayMat = this.engine.materials.displayMaterial;
 
-        // Sync bloom texture to display material
         const bloomIntensity = this.engine.mainUniforms.uBloomIntensity?.value ?? 0;
         if (bloomIntensity > 0.001 && this.bloomPass) {
             displayMat.uniforms.uBloomTexture.value = this.bloomPass.getOutput();
         } else {
             displayMat.uniforms.uBloomTexture.value = null;
         }
-
-        // Set composite HDR as display input
         displayMat.uniforms.map.value = this.compositeTarget.texture;
 
-        // Blit to screen (null render target = canvas)
         gl.setRenderTarget(null);
         gl.clear();
         gl.render(this.displayScene, this.displayCamera);
         gl.getContext().flush();
     }
 
-    private finish() {
-        // Run full post-processing on the complete composite
+    // ─── Held Final Frame ─────────────────────────────────────────────
+    // After a non-export bucket render (Refine View) finishes, we keep the composite alive
+    // and re-blit it each frame until the user interacts. Preview Region is handled entirely
+    // by worker-side uniform overrides (see renderWorker PREVIEW_REGION_SET/CLEAR) and
+    // doesn't need this machinery.
+    private _holdingFinalFrame: boolean = false;
+
+    public isHoldingFinalFrame(): boolean { return this._holdingFinalFrame; }
+
+    /** Called by the worker tick when holding — re-runs the letterboxed blit. */
+    public blitHeldFinalFrame() {
+        if (!this._holdingFinalFrame) return;
+        this.blitToScreen();
+    }
+
+    /** Release the held frame and dispose its composite. Called on user interaction. */
+    public releaseHeldFinalFrame() {
+        if (!this._holdingFinalFrame) return;
+        this._holdingFinalFrame = false;
+        this.disposeCompositeBuffer();
+    }
+
+    /**
+     * Finish the current image tile: run bloom/CA/tone-mapping on its composite, then
+     * either save as PNG (export mode) or blit to screen (refine mode), then advance.
+     */
+    private finishImageTile() {
         this.runPostProcessing();
 
         if (this.isExporting) {
             this.saveImage();
         } else {
-            // Refine View: blit the post-processed composite to screen,
-            // then hold the pipeline so the canvas retains the frame.
+            // Refine View: only meaningful for single-tile renders. Blit current composite.
             this.blitToScreen();
-            this.engine.pipeline.setHold(true);
+        }
+
+        this.currentImageTileIndex++;
+        if (this.currentImageTileIndex >= this.imageTiles.length) {
+            this.finalizeAll();
+            return;
+        }
+
+        // Reset per-tile accumulation state and begin next tile.
+        this.engine.resetAccumulation();
+        this.startImageTile();
+    }
+
+    /** Final cleanup after all image tiles have been saved/blitted. */
+    private finalizeAll() {
+        const wasExporting = this.isExporting;
+        if (!wasExporting) {
+            // Refine / Preview mode: the composite is the final on-screen frame. Keep it
+            // alive and let the worker tick keep re-blitting it every frame via
+            // blitHeldFinalFrame() until user interaction releases it.
+            this._holdingFinalFrame = true;
         }
         this.cleanup();
     }
@@ -540,13 +692,40 @@ export class BucketRenderer {
         return { pixels: flipped, width: w, height: h };
     }
 
+    /**
+     * Build the per-tile filename. For 1x1 renders uses the full-output dimensions
+     * and no suffix. For multi-tile renders appends zero-padded `_rXXcYY` (zero-padding
+     * width matches the maximum row/col index, so sort order matches scan order).
+     */
+    private buildTileFilename(w: number, h: number): string {
+        const outW = this.fullOutputSize.x;
+        const outH = this.fullOutputSize.y;
+        const rows = this.config.tileRows;
+        const cols = this.config.tileCols;
+        const imgTile = this.imageTiles[this.currentImageTileIndex];
+
+        // Base tag uses full-output dimensions so the user can identify the intended size
+        // regardless of how the output was sliced.
+        const dimTag = `${outW}x${outH}`;
+
+        if (rows * cols <= 1) {
+            return getExportFileName(this.projectName, this.projectVersion, 'png', dimTag);
+        }
+
+        const pad = (n: number, width: number) => String(n).padStart(width, '0');
+        const rPad = Math.max(2, String(rows - 1).length);
+        const cPad = Math.max(2, String(cols - 1).length);
+        const suffix = `_r${pad(imgTile.row, rPad)}c${pad(imgTile.col, cPad)}`;
+        return getExportFileName(this.projectName, this.projectVersion, 'png', `${dimTag}${suffix}`);
+    }
+
     private saveImage() {
         // In worker context (no DOM), emit pixel data for main thread to handle
         if (typeof document === 'undefined') {
             const result = this.readCompositePixels();
             if (!result) return;
             const presetStr = this.exportPreset ? saveGMFScene(this.exportPreset as Preset) : "{}";
-            const filename = getExportFileName(this.projectName, this.projectVersion, 'png', `${result.width}x${result.height}`);
+            const filename = this.buildTileFilename(result.width, result.height);
             FractalEvents.emit(FRACTAL_EVENTS.BUCKET_IMAGE, {
                 pixels: result.pixels,
                 width: result.width,
@@ -571,7 +750,7 @@ export class BucketRenderer {
             ctx.putImageData(imageData, 0, 0);
 
             const presetStr = this.exportPreset ? saveGMFScene(this.exportPreset as Preset) : "{}";
-            const filename = getExportFileName(this.projectName, this.projectVersion, 'png', `${w}x${h}`);
+            const filename = this.buildTileFilename(w, h);
 
             canvas.toBlob(async (blob) => {
                 if (!blob) return;
@@ -661,41 +840,41 @@ export class BucketRenderer {
         }
 
         if (bucketComplete) {
-            // Composite the current bucket to the final buffer
+            // Composite the current bucket into the current image tile's composite buffer
             this.compositeCurrentBucket();
 
-            // Move to next bucket
+            // Move to next bucket. applyCurrentBucket() will call finishImageTile()
+            // automatically when the last bucket in this tile is done.
             this.currentBucketIndex++;
-
-            // Check if we're done
-            if (this.currentBucketIndex >= this.buckets.length) {
-                this.finish();
-                return;
-            }
-
-            // Setup next bucket
             this.applyCurrentBucket();
 
-            // Emit progress
-            const prog = (this.currentBucketIndex / this.buckets.length) * 100;
-            FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, {
-                isRendering: true,
-                progress: prog,
-                totalBuckets: this.buckets.length,
-                currentBucket: this.currentBucketIndex
-            });
+            // Emit global progress (covers all image tiles × all buckets per tile)
+            if (this.isRunning) this.emitProgress();
         } else {
             this.bucketFrameCount++;
         }
     }
 
     public getProgress() {
-        if (!this.isRunning || this.buckets.length === 0) return 0;
-        return (this.currentBucketIndex / this.buckets.length) * 100;
+        if (!this.isRunning || this.imageTiles.length === 0) return 0;
+        const total = this.imageTiles.length * Math.max(1, this.buckets.length);
+        const done = this.currentImageTileIndex * this.buckets.length + this.currentBucketIndex;
+        return (done / total) * 100;
     }
 
     public getIsRunning() {
         return this.isRunning;
+    }
+
+    /**
+     * Current image tile's pixel dimensions. Used by the worker's display tick to
+     * letterbox the on-screen blit when the tile aspect doesn't match the canvas
+     * aspect (common for non-square tile grids like 2×1 or 3×2). Returns (0,0) when
+     * no bucket render is in flight.
+     */
+    public getCurrentTilePixelSize(): [number, number] {
+        if (!this.isRunning) return [0, 0];
+        return [this.targetResolution.x, this.targetResolution.y];
     }
 }
 

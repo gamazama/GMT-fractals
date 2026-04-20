@@ -228,7 +228,17 @@ export class UniformManager {
                 cam.updateProjectionMatrix();
             }
         }
-        
+
+        // IMAGE-TILE EXPORT: when no tile is active (uImageTileSize == 1,1) the full
+        // output equals the render target; sync so blue-noise lookups behave identically
+        // to the pre-tiling code path. Bucket renderer overrides uFullOutputResolution
+        // directly during tiled export.
+        const tileSize = this.uniforms[Uniforms.ImageTileSize].value;
+        if (tileSize.x > 0.9999 && tileSize.y > 0.9999) {
+            const res = this.uniforms[Uniforms.Resolution].value;
+            this.uniforms[Uniforms.FullOutputResolution].value.copy(res);
+        }
+
         const isOrtho = optics ? optics.camType > 0.5 : false;
         const orthoScale = optics ? optics.orthoScale : 2.0;
         

@@ -75,7 +75,7 @@ export class FractalEngine {
         lighting: null,
         quality: null,
         geometry: null,
-        bucketConfig: { bucketSize: 128, bucketUpscale: 1.0, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 }
+        bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 }
     };
 
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }
@@ -658,8 +658,12 @@ export class FractalEngine {
 
         // During bucket rendering, do NOT reset accumulation on camera drift —
         // the bucket renderer manages its own per-bucket accumulation cycle.
-        if (!this.state.isBucketRendering && (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged || this.dirty)) {
+        const userMoved = sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged || this.dirty;
+        if (!this.state.isBucketRendering && userMoved) {
             this.pipeline.resetAccumulation(); this.dirty = false;
+            // Release any held final frame from a completed Refine/Preview session —
+            // the user is now interacting, so the held image should yield to live rendering.
+            if (bucketRenderer.isHoldingFinalFrame()) bucketRenderer.releaseHeldFinalFrame();
         }
         if (sPos.distanceToSquared(this.lastRenderState.pos) > 1e-4 || sQuat.angleTo(this.lastRenderState.quat) > 1e-3 || Math.abs(sFov - this.lastRenderState.fov) > 0.1 || offsetChanged) {
             this.lastRenderState.pos.copy(sPos); this.lastRenderState.quat.copy(sQuat);

@@ -49,8 +49,16 @@ export const RenderTools: React.FC<{ isMobileMode: boolean, vibrate: (ms: number
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (bucketMenuRef.current && !bucketMenuRef.current.contains(e.target as Node)) {
-                // Don't close during active bucket render — read fresh state to avoid stale closure
-                if (!useFractalStore.getState().isBucketRendering) setShowBucketMenu(false);
+                // Don't close during active bucket render, while a preview region is
+                // active (user needs the panel open to adjust params live), or while
+                // in preview-pick mode (the canvas click that picks shouldn't also
+                // dismiss the panel). Read fresh state to avoid stale closure.
+                const s = useFractalStore.getState();
+                if (!s.isBucketRendering
+                    && !s.previewRegion
+                    && s.interactionMode !== 'selecting_preview') {
+                    setShowBucketMenu(false);
+                }
             }
             if (renameRef.current && !renameRef.current.contains(e.target as Node)) {
                 setIsRenaming(false);

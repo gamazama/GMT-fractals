@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useFractalStore, getCanvasPhysicalPixelSize } from '../store/fractalStore';
 import { useAnimationStore } from '../store/animationStore';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
@@ -110,13 +110,15 @@ export const PerformanceMonitor = () => {
     const lastFrameCountRef = useRef(0);
     
     // Store Access
+    // Full-store subscription — this component recomputes suggestions on any state change,
+    // which includes `canvasPixelSize` updates from the ResizeObserver so the "Reduce
+    // resolution" button picks up dock-toggle canvas changes automatically.
     const {
         resolutionMode, setResolutionMode, setFixedResolution, fixedResolution,
         isExporting, isBroadcastMode, openContextMenu,
         aaLevel, setAALevel,
         renderMode,
         quality,
-        canvasPixelSize,
         dpr
     } = useFractalStore();
 
@@ -164,11 +166,9 @@ export const PerformanceMonitor = () => {
     
     // --- Suggestions Logic ---
 
-    // 1. Resolution Reduction — use actual canvas pixel size
-    const effectiveDpr = dpr || 1;
-    const [currentW, currentH] = resolutionMode === 'Fixed'
-        ? [Math.floor(fixedResolution[0] * effectiveDpr), Math.floor(fixedResolution[1] * effectiveDpr)]
-        : canvasPixelSize;
+    // 1. Resolution Reduction — use the canonical canvas-size accessor.
+    // (Avoids ResizeObserver lag after Fixed-mode toggles — see store/fractalStore.ts.)
+    const [currentW, currentH] = getCanvasPhysicalPixelSize(useFractalStore.getState());
     
     const canReduce = currentW > 480;
 

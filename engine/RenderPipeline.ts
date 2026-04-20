@@ -291,6 +291,10 @@ export class RenderPipeline {
             this.resetAccumulation();
         }
     }
+
+    public getSampleCap(): number {
+        return this.sampleCap;
+    }
     
     public resetAccumulation() {
         this.accumulationCount = 0;

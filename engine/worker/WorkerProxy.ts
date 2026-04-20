@@ -734,6 +734,27 @@ export class WorkerProxy {
         this._isBucketRendering = false;
     }
 
+    /**
+     * Enter Preview Region mode: live, uniform-only zoom into a sub-rect of the export image
+     * at export pixel density. Normal interaction (camera, params, sliders) continues to work
+     * — each change resets accumulation and re-renders the preview naturally. Accumulation
+     * is capped at `sampleCap` (the user's Max Samples Per Bucket setting). Exit with
+     * `clearPreviewRegion()`.
+     */
+    setPreviewRegion(
+        region: { minX: number; minY: number; maxX: number; maxY: number },
+        outputWidth: number,
+        outputHeight: number,
+        sampleCap: number
+    ) {
+        this.post({ type: 'PREVIEW_REGION_SET', region, outputWidth, outputHeight, sampleCap });
+    }
+
+    /** Exit Preview Region mode — reset UV uniforms + sample cap, resume normal viewport. */
+    clearPreviewRegion() {
+        this.post({ type: 'PREVIEW_REGION_CLEAR' });
+    }
+
     /** Handle completed bucket image from worker — saves to disk via DOM */
     private async _handleBucketImage(msg: Extract<WorkerToMainMessage, { type: 'BUCKET_IMAGE' }>) {
         const { pixels, width, height, presetJson, filename } = msg;

@@ -89,28 +89,21 @@ export const WorkerDisplay: React.FC<WorkerDisplayProps> = ({ width, height }) =
             { position: [0, 0, 0], quaternion: [camRot.x, camRot.y, camRot.z, camRot.w], fov: camFov }
         );
 
-        // Set initial canvas pixel size for UI estimates
-        state.setCanvasPixelSize(Math.floor(initW * dpr), Math.floor(initH * dpr));
+        // NB: `canvasPixelSize` in the store is driven by ViewportArea's ResizeObserver on
+        // the flex-1 viewport div — that measurement is authoritative (post-sidebars) and
+        // consistent, whereas this component's absolute-positioned inner div occasionally
+        // misses dock-toggle layout updates. Here we only send RESIZE to the worker.
 
-        // Initial offset is sent by useAppStartup's bootEngine() after full
-        // store hydration — no need to duplicate it here (RC-5).
-
-        // Watch container for post-init layout shifts (dock transitions, panel
-        // opening, etc.) and push the corrected size to the worker so the very
-        // first rendered frame has the right aspect ratio.
+        // Watch container for post-init layout shifts (dock transitions, panel opening,
+        // etc.) and push the corrected size to the worker so the very first rendered
+        // frame has the right aspect ratio.
         const observer = new ResizeObserver(entries => {
-            // Skip resize while bucket rendering to prevent corrupting the tiled render
             if (useFractalStore.getState().isBucketRendering) return;
             for (const entry of entries) {
                 const w = Math.max(1, entry.contentRect.width);
                 const h = Math.max(1, entry.contentRect.height);
                 const currentDpr = window.devicePixelRatio || 1;
                 proxy.resizeWorker(w, h, currentDpr);
-                // Track actual physical pixel size in store for UI estimates
-                useFractalStore.getState().setCanvasPixelSize(
-                    Math.floor(w * currentDpr),
-                    Math.floor(h * currentDpr)
-                );
             }
         });
         observer.observe(container);

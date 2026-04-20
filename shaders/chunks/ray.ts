@@ -17,11 +17,17 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
 // Handles Camera Basis and Depth of Field
 // ------------------------------------------------------------------
 void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSeed, out vec3 roClean, out vec3 rdClean) {
-    vec2 uv = uvCoord * 2.0 - 1.0;
-    
+    // IMAGE-TILE UV REMAP: map the fullscreen quad's UV (0..1 across this render surface)
+    // into the full-output image's UV space. Default uImageTileOrigin=(0,0), uImageTileSize=(1,1)
+    // makes this a no-op (uvFull == uvCoord). During tiled bucket export, each tile sets
+    // origin/size to its slice so primary rays cover the correct sub-frame of the full image
+    // while the camera basis stays configured for the full-output aspect.
+    vec2 uvFull = uImageTileOrigin + uvCoord * uImageTileSize;
+    vec2 uv = uvFull * 2.0 - 1.0;
+
     // Store original UV for stable noise lookup (before jitter)
     vec2 uvOriginal = uv;
-    
+
     // --- TAA JITTER (Calculated on CPU) ---
     // Jitter behavior:
     // - During navigation (blendFactor >= 0.99): NO jitter (stable view)
@@ -29,7 +35,9 @@ void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSe
     // isMoving = true means camera is moving (navigation), false means accumulating
     bool isMoving = uBlendFactor >= 0.99;
     if (!isMoving && uResolution.x > 0.5) {
-        vec2 pixelSize = 2.0 / uResolution;
+        // Jitter magnitude = 1 render-surface pixel in NDC, then scaled to full-output NDC
+        // by uImageTileSize so it corresponds to 1 output pixel regardless of tiling.
+        vec2 pixelSize = 2.0 / uResolution * uImageTileSize;
         uv += uJitter * pixelSize * 0.5;
     }
 
@@ -46,9 +54,12 @@ void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSe
     // Use Blue Noise Red Channel as base seed
     // Use stable noise during navigation, animated during accumulation for better convergence
     if (needNoise) {
-        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1]
-        stochasticSeed = isMoving ? getStableBlueNoise4(noiseCoord * uResolution).r
-                                 : getBlueNoise4(noiseCoord * uResolution).r;
+        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1] (full-output UV)
+        // Use full-output resolution so the blue-noise LUT sampling is continuous across image tiles.
+        // In single-image mode uFullOutputResolution == uResolution, so behavior is unchanged.
+        vec2 noisePixel = noiseCoord * uFullOutputResolution;
+        stochasticSeed = isMoving ? getStableBlueNoise4(noisePixel).r
+                                 : getBlueNoise4(noisePixel).r;
     }
     
     vec3 forward = uCamForward;
@@ -95,9 +106,10 @@ void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSe
         vec3 focalPoint = ro + rd * uDOFFocus;
         
         // Use stable blue noise during navigation, animated during accumulation
-        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1]
-        vec4 blue = isMoving ? getStableBlueNoise4(noiseCoord * uResolution) 
-                             : getBlueNoise4(noiseCoord * uResolution);
+        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1] (full-output UV)
+        vec2 noisePixel = noiseCoord * uFullOutputResolution;
+        vec4 blue = isMoving ? getStableBlueNoise4(noisePixel)
+                             : getBlueNoise4(noisePixel);
         
         float r = sqrt(blue.r);
         float theta = blue.g * TAU;

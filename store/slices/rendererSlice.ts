@@ -13,11 +13,17 @@ const isMobile = () => {
 
 export type RendererSlice = Pick<FractalStoreState,
     'dpr' | 'aaLevel' | 'msaaSamples' | 'aaMode' | 'accumulation' | 'previewMode' | 'renderMode' |
-    'isExporting' | 'adaptiveSuppressed' | 'renderRegion' | 'isBucketRendering' | 'bucketSize' | 'bucketUpscale' | 'convergenceThreshold' |
+    'isExporting' | 'adaptiveSuppressed' | 'renderRegion' | 'previewRegion' |
+    'isBucketRendering' | 'bucketSize' |
+    'outputWidth' | 'outputHeight' | 'tileCols' | 'tileRows' | 'matchViewportAspect' |
+    'convergenceThreshold' |
     'isPaused' | 'sampleCap' | 'samplesPerBucket' | 'canvasPixelSize'
 > & Pick<FractalActions,
     'setDpr' | 'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
-    'setIsExporting' | 'setAdaptiveSuppressed' | 'setRenderRegion' | 'setIsBucketRendering' | 'setBucketSize' | 'setBucketUpscale' | 'setConvergenceThreshold' |
+    'setIsExporting' | 'setAdaptiveSuppressed' | 'setRenderRegion' | 'setPreviewRegion' |
+    'setIsBucketRendering' | 'setBucketSize' |
+    'setOutputWidth' | 'setOutputHeight' | 'setTileCols' | 'setTileRows' | 'setMatchViewportAspect' |
+    'setConvergenceThreshold' |
     'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket' | 'setCanvasPixelSize'
 >;
 
@@ -40,14 +46,19 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     isExporting: false,
     adaptiveSuppressed: false,
     renderRegion: null,
+    previewRegion: null,
     
     // Bucket Rendering Defaults
     isBucketRendering: false,
-    bucketSize: 128,
-    bucketUpscale: 1.0,
+    bucketSize: 512,
+    outputWidth: 1920,          // Default FHD
+    outputHeight: 1080,
+    tileCols: 1,                // Single-image output by default (no tiling)
+    tileRows: 1,
+    matchViewportAspect: true,  // Keep viewport ratio when editing W/H
     convergenceThreshold: 0.25, // 0.25% default
     samplesPerBucket: 64, // Default samples per bucket for predictable quality
-    canvasPixelSize: [1920, 1080], // Updated by WorkerDisplay on resize
+    canvasPixelSize: [1920, 1080], // Physical px of the post-sidebar canvas area. Authoritative writer is ViewportArea's ResizeObserver on viewportRef (flex-1). Read via getCanvasPhysicalPixelSize() — do not read directly.
 
     setDpr: (v) => { set({ dpr: v }); FractalEvents.emit('reset_accum', undefined); },
     setAALevel: (v) => { 
@@ -110,11 +121,16 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
         set({ isBucketRendering: v });
     },
     setBucketSize: (v) => set({ bucketSize: v }),
-    setBucketUpscale: (v) => set({ bucketUpscale: v }),
+    setOutputWidth: (v) => set({ outputWidth: Math.max(64, Math.round(v)) }),
+    setOutputHeight: (v) => set({ outputHeight: Math.max(64, Math.round(v)) }),
+    setTileCols: (v) => set({ tileCols: Math.max(1, Math.min(32, Math.round(v))) }),
+    setTileRows: (v) => set({ tileRows: Math.max(1, Math.min(32, Math.round(v))) }),
+    setMatchViewportAspect: (v) => set({ matchViewportAspect: v }),
     setConvergenceThreshold: (v) => set({ convergenceThreshold: v }),
     setSamplesPerBucket: (v) => set({ samplesPerBucket: v }),
     setCanvasPixelSize: (w, h) => set({ canvasPixelSize: [w, h] }),
 
     setIsExporting: (v) => set({ isExporting: v }),
     setAdaptiveSuppressed: (v) => set({ adaptiveSuppressed: v }),
+    setPreviewRegion: (r) => set({ previewRegion: r }),
 });

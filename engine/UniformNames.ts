@@ -18,6 +18,12 @@ export const Uniforms = {
     RegionMin: 'uRegionMin',
     RegionMax: 'uRegionMax',
 
+    // Image-Tile Export (bucket render tiling; no-op at defaults)
+    ImageTileOrigin: 'uImageTileOrigin',         // UV origin of this tile in full-output space (default 0,0)
+    ImageTileSize: 'uImageTileSize',             // UV size of this tile in full-output space  (default 1,1)
+    FullOutputResolution: 'uFullOutputResolution', // pixels of full composed image (default = uResolution)
+    TilePixelOrigin: 'uTilePixelOrigin',         // pixel offset of this tile in full output (default 0,0)
+
     // Lights
     LightCount: 'uLightCount',
     LightType: 'uLightType', // 0=Point, 1=Directional

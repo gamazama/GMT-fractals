@@ -90,7 +90,7 @@ export function buildFormulaContextMenu(): ContextMenuItem[] {
         const s = useFractalStore.getState(); // fresh state each click
         const curDef = registry.get(s.formula);
         s.handleInteractionStart('param');
-        const updates: Record<string, number | { x: number; y: number; z?: number }> = {};
+        const updates: Record<string, number | { x: number; y: number; z?: number; w?: number }> = {};
 
         if (s.formula === 'Modular') {
             const cur = s.coreMath;
