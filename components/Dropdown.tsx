@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
 import { GenericDropdown } from './GenericDropdown';
 import type { GenericDropdownOption } from './GenericDropdown';
@@ -23,7 +23,7 @@ interface DropdownProps<T> {
 }
 
 export function Dropdown<T extends string | number>({ label, value, options, onChange, helpId, fullWidth, className = '', selectClassName = '', labelSuffix }: DropdownProps<T>) {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     const handleContextMenu = useHelpContextMenu();
 
     const handleChange = (val: T) => {

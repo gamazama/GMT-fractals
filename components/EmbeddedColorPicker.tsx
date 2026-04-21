@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { hexToRgb, rgbToHsv, hsvToRgb, rgbToHex } from '../utils/colorUtils';
-import { useFractalStore } from '../store/fractalStore';
+import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { collectHelpIds } from '../utils/helpUtils';
 import { ContextMenuItem } from '../types/help';
 
@@ -24,7 +24,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({ color, onColo
     });
     
     const lastOutputHex = useRef(color.toUpperCase());
-    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
 
     useEffect(() => {
         if (color.toUpperCase() !== lastOutputHex.current) {

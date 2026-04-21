@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useStoreCallbacks } from '../components/contexts/StoreCallbacksContext';
 import { collectHelpIds } from '../utils/helpUtils';
 
 /**
@@ -10,7 +10,7 @@ import { collectHelpIds } from '../utils/helpUtils';
  * @param extraIds - Additional help IDs to prepend (e.g. ['ui.colorpicker'])
  */
 export function useHelpContextMenu(extraIds?: string[]) {
-    const openContextMenu = useFractalStore(s => s.openContextMenu);
+    const { openContextMenu } = useStoreCallbacks();
     return React.useCallback((e: React.MouseEvent) => {
         const ids = collectHelpIds(e.currentTarget);
         if (extraIds) ids.unshift(...extraIds);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useFractalStore } from '../store/fractalStore'; 
+import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { ContextMenuItem } from '../types/help';
 import { collectHelpIds } from '../utils/helpUtils';
 import { useTrackAnimation } from '../hooks/useTrackAnimation';
@@ -176,7 +176,7 @@ export const BaseSlider: React.FC<BaseSliderProps> = ({
 // --- CONNECTED COMPONENTS (Maintain exact same API) ---
 
 export const DraggableNumber: React.FC<DraggableNumberProps> = (props) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     
     return <RawDraggableNumber 
         {...props} 
@@ -211,7 +211,7 @@ const Slider: React.FC<SliderProps> = ({
     onChange, 
     ...props 
 }) => {
-    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     const { status, toggleKey, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, props.value ?? 0, props.label);
 
     const helpIds = [];

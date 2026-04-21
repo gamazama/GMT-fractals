@@ -29,6 +29,8 @@ import { DropZones } from './components/layout/DropZones';
 import DraggableWindow from './components/DraggableWindow';
 import { PanelRouter } from './components/PanelRouter';
 import { PanelId, PanelState } from './types';
+import { StoreCallbacksProvider } from './components/contexts/StoreCallbacksContext';
+import type { StoreCallbacks } from './components/contexts/StoreCallbacksContext';
 
 const App: React.FC = () => {
   const state = useFractalStore();
@@ -99,7 +101,18 @@ const App: React.FC = () => {
   // Filter floating panels
   const floatingPanels = (Object.values(state.panels) as PanelState[]).filter((p) => p.location === 'float' && p.isOpen);
 
+  // Zustand actions are stable refs, so this memo effectively runs once.
+  // Shared UI primitives (Slider, Dropdown, EmbeddedColorPicker, AdvancedGradientEditor)
+  // read these via StoreCallbacksContext so they can also be used in standalone sub-apps
+  // that don't mount the fractal store.
+  const storeCallbacks = useMemo<StoreCallbacks>(() => ({
+      handleInteractionStart: state.handleInteractionStart,
+      handleInteractionEnd: state.handleInteractionEnd,
+      openContextMenu: state.openContextMenu,
+  }), [state.handleInteractionStart, state.handleInteractionEnd, state.openContextMenu]);
+
   return (
+    <StoreCallbacksProvider value={storeCallbacks}>
     <div className={rootClass}>
       <EngineBridge />
       <DropZones />
@@ -206,6 +219,7 @@ const App: React.FC = () => {
         {showTimeline && !isBroadcast && <Suspense fallback={null}><Timeline onClose={() => setShowTimeline(false)} /></Suspense>}
       </div>
     </div>
+    </StoreCallbacksProvider>
   );
 };
 

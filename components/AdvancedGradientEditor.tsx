@@ -7,7 +7,7 @@ import Slider from './Slider';
 import EmbeddedColorPicker from './EmbeddedColorPicker';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import Dropdown from './Dropdown';
-import { useFractalStore } from '../store/fractalStore';
+import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { collectHelpIds } from '../utils/helpUtils';
 import { ContextMenuItem } from '../types/help';
 import { ContextMenu as PresetMenu } from './gradient/GradientContextMenu';
@@ -96,7 +96,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const onChangeRef = useRef(onChange);
     useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
 
     useEffect(() => {
         setKnots(prev => {
