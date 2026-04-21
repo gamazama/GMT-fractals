@@ -59,8 +59,9 @@ async function createServer() {
     try {
       const url = req.originalUrl;
 
-      // Multi-page entry: serve mesh-export.html for its route
-      const htmlFile = url === '/mesh-export.html' ? 'mesh-export.html' : 'index.html';
+      // Multi-page entries: serve the matching HTML for each dedicated route
+      const multiPageEntries = new Set(['/mesh-export.html', '/toy-fluid.html']);
+      const htmlFile = multiPageEntries.has(url) ? url.slice(1) : 'index.html';
 
       if (!isProduction && vite) {
          // In Dev, use Vite to transform the HTML entry

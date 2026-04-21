@@ -105,6 +105,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
+        'toy-fluid': path.resolve(__dirname, 'toy-fluid.html'),
       },
       output: {
         manualChunks: {
