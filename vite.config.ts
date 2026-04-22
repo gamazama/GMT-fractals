@@ -104,7 +104,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
-        'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
         'toy-fluid': path.resolve(__dirname, 'toy-fluid.html'),
       },
       output: {
@@ -116,14 +115,13 @@ export default defineConfig({
           'three-fiber': ['@react-three/fiber'],
           // Compression (needed at startup for URL parsing)
           'pako': ['pako'],
-          // Note: reactflow and mediabunny intentionally omitted —
-          // they're only used by lazy-loaded components (FlowEditor, RenderPopup)
-          // so Vite naturally bundles them with their consumers.
         }
       }
     }
   },
   server: {
-    middlewareMode: true,
+    port: 3400,
+    // Standalone dev server (not middleware mode) — HMR WebSocket is
+    // attached to the same HTTP server and works out of the box.
   }
 });
