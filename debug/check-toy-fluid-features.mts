@@ -91,8 +91,8 @@ function assertPass(label: string, cond: boolean) {
   assertPass(`Wheel zoom changes zoom (before=${zBefore}, after=${zAfter})`, zBefore !== zAfter);
 
   // 9. C+Shift+drag: coarser (5x precision) — verify c delta is larger than plain drag with same pixel distance
-  // Reset c first by clicking Lagoon preset.
-  await page.locator('button:has-text("Lagoon")').first().click();
+  // Reset c first by clicking Coral Gyre preset.
+  await page.locator('button:has-text("Coral Gyre")').first().click();
   await page.waitForTimeout(120);
   const c0 = (await page.locator('[data-testid="status-c"]').first().textContent()) ?? '';
   // plain drag, ~40px
@@ -105,7 +105,7 @@ function assertPass(label: string, cond: boolean) {
   await page.waitForTimeout(120);
   const c1 = (await page.locator('[data-testid="status-c"]').first().textContent()) ?? '';
   // reset again
-  await page.locator('button:has-text("Lagoon")').first().click();
+  await page.locator('button:has-text("Coral Gyre")').first().click();
   await page.waitForTimeout(120);
   // Shift+C+drag, same 40px
   await page.keyboard.down('Shift');

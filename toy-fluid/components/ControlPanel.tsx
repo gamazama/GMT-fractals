@@ -111,7 +111,7 @@ export const ControlPanel: React.FC<Props> = ({
   onPresetApply, onSaveJson, onSavePng, onLoadFile, hideHints,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = React.useState<TabId>('Fractal');
+  const [activeTab, setActiveTab] = React.useState<TabId>('Presets');
 
   const applyPreset = (id: string) => {
     const p = PRESETS.find(p => p.id === id);
@@ -243,8 +243,8 @@ export const ControlPanel: React.FC<Props> = ({
                   {FORCE_MODES.find(m => m.id === params.forceMode)?.hint}
                 </div>
               )}
-              <Row hint="Multiplier on the fractal-derived force. How loudly the fractal shouts at the fluid.">
-                <ScalarInput label="Force gain" value={params.forceGain} onChange={(v) => setParams({ forceGain: v })} min={0} max={40} step={0.1} variant="full" />
+              <Row hint="Multiplier on the fractal-derived force. How loudly the fractal shouts at the fluid. Negative inverts the force direction.">
+                <ScalarInput label="Force gain" value={params.forceGain} onChange={(v) => setParams({ forceGain: v })} min={-2000} max={2000} step={0.1} variant="full" />
               </Row>
               <Row hint="How much to suppress force inside the set. 1 = still lake in the interior, 0 = full bleed.">
                 <ScalarInput label="Interior damp" value={params.interiorDamp} onChange={(v) => setParams({ interiorDamp: v })} min={0} max={1} step={0.01} variant="full" />
@@ -281,15 +281,39 @@ export const ControlPanel: React.FC<Props> = ({
               <Row hint="How fast velocity decays. High = fluid forgets the fractal quickly.">
                 <ScalarInput label="Velocity dissipation /s" value={params.dissipation} onChange={(v) => setParams({ dissipation: v })} min={0} max={5} step={0.01} variant="full" />
               </Row>
-              <Row hint="How fast dye fades.">
-                <ScalarInput label="Dye dissipation /s" value={params.dyeDissipation} onChange={(v) => setParams({ dyeDissipation: v })} min={0} max={5} step={0.01} variant="full" />
-              </Row>
               <Row hint="How much of the fractal's color bleeds into the fluid each frame.">
                 <ScalarInput label="Dye inject" value={params.dyeInject} onChange={(v) => setParams({ dyeInject: v })} min={0} max={3} step={0.01} variant="full" />
               </Row>
               <Row hint="Jacobi iterations for incompressibility. More = stricter but slower.">
                 <ScalarInput label="Pressure iters" value={params.pressureIters} onChange={(v) => setParams({ pressureIters: Math.round(v) })} min={4} max={60} step={1} variant="full" />
               </Row>
+
+              <GroupHeader>Dye decay</GroupHeader>
+              <Hint>How dye fades over time. Colour space controls whether it greys out (linear) or stays hue-stable (perceptual / vivid).</Hint>
+              <div className="flex flex-col gap-1">
+                <div className="text-[10px] text-gray-400">Colour space</div>
+                <div className="grid grid-cols-3 gap-1">
+                  {DYE_DECAY_MODES.map(m => (
+                    <Chip key={m.id} active={params.dyeDecayMode === m.id} onClick={() => setParams({ dyeDecayMode: m.id })} title={m.hint}>
+                      {m.label}
+                    </Chip>
+                  ))}
+                </div>
+                <Hint>{DYE_DECAY_MODES.find(m => m.id === params.dyeDecayMode)?.hint}</Hint>
+              </div>
+              <Row hint={params.dyeDecayMode === 'linear' ? 'How fast dye fades (RGB multiply).' : 'Per-second luminance fade (OKLab L). Chroma fades on its own schedule below.'}>
+                <ScalarInput label="Dye dissipation /s" value={params.dyeDissipation} onChange={(v) => setParams({ dyeDissipation: v })} min={0} max={5} step={0.01} variant="full" />
+              </Row>
+              {params.dyeDecayMode !== 'linear' && (
+                <>
+                  <Row hint="Per-second fade on OKLab a/b (chroma). Lower than Dye dissipation → colour stays saturated longer than it stays bright.">
+                    <ScalarInput label="Chroma decay /s" value={params.dyeChromaDecayHz} onChange={(v) => setParams({ dyeChromaDecayHz: v })} min={0} max={5} step={0.01} variant="full" />
+                  </Row>
+                  <Row hint="Per-frame chroma multiplier applied after decay. 1 = neutral, <1 washes out, >1 punches colours up.">
+                    <ScalarInput label="Saturation boost" value={params.dyeSaturationBoost} onChange={(v) => setParams({ dyeSaturationBoost: v })} min={0} max={4} step={0.01} variant="full" />
+                  </Row>
+                </>
+              )}
 
               <GroupHeader right={<Chip active={params.autoQuality} onClick={() => setParams({ autoQuality: !params.autoQuality })}>{params.autoQuality ? 'on' : 'off'}</Chip>}>Quality</GroupHeader>
               <Hint>The slider is your target. Auto-quality may drop below it if FPS is low, then snaps back in one jump when it recovers (no stair-step flashing).</Hint>
@@ -386,27 +410,6 @@ export const ControlPanel: React.FC<Props> = ({
               </div>
               <Hint>{DYE_BLENDS.find(b => b.id === params.dyeBlend)?.hint}</Hint>
 
-              <div className="flex flex-col gap-1">
-                <div className="text-[10px] text-gray-400">Dye decay colour space</div>
-                <div className="grid grid-cols-3 gap-1">
-                  {DYE_DECAY_MODES.map(m => (
-                    <Chip key={m.id} active={params.dyeDecayMode === m.id} onClick={() => setParams({ dyeDecayMode: m.id })} title={m.hint}>
-                      {m.label}
-                    </Chip>
-                  ))}
-                </div>
-                <Hint>{DYE_DECAY_MODES.find(m => m.id === params.dyeDecayMode)?.hint}</Hint>
-              </div>
-              {params.dyeDecayMode !== 'linear' && (
-                <>
-                  <Row hint="Per-second fade on OKLab a/b (chroma). Lower than Dye dissipation → colour stays saturated longer than it stays bright.">
-                    <ScalarInput label="Chroma decay /s" value={params.dyeChromaDecayHz} onChange={(v) => setParams({ dyeChromaDecayHz: v })} min={0} max={5} step={0.01} variant="full" />
-                  </Row>
-                  <Row hint="Per-frame chroma multiplier applied after decay. 1 = neutral, <1 washes out, >1 punches colours up.">
-                    <ScalarInput label="Saturation boost" value={params.dyeSaturationBoost} onChange={(v) => setParams({ dyeSaturationBoost: v })} min={0} max={4} step={0.01} variant="full" />
-                  </Row>
-                </>
-              )}
             </>
           )}
 

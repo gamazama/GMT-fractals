@@ -61,20 +61,20 @@ function pass(label: string, cond: boolean, extra = '') {
   pass('Saved PNG contains GmtFluidState metadata keyword', idxKW > 0);
 
   // ── Load: first pick a different preset so we can detect the load actually took effect ──
-  await page.locator('button:has-text("Lagoon")').first().click();
+  await page.locator('button:has-text("Coral Gyre")').first().click();
   await page.waitForTimeout(250);
-  const cAfterLagoon = (await page.locator('[data-testid="status-c"]').first().textContent()) ?? '';
-  pass('Lagoon preset different from Vortex', cAfterLagoon !== cBefore);
+  const cAfterCoral Gyre = (await page.locator('[data-testid="status-c"]').first().textContent()) ?? '';
+  pass('Coral Gyre preset different from Vortex', cAfterCoral Gyre !== cBefore);
 
   // Load the JSON we saved — should restore Vortex's c
   const fileInput = await page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(jsonPath);
   await page.waitForTimeout(400);
   const cAfterLoad = (await page.locator('[data-testid="status-c"]').first().textContent()) ?? '';
-  pass(`Load(JSON) restored Vortex c (was "${cAfterLagoon}", now "${cAfterLoad}")`, cAfterLoad === cBefore);
+  pass(`Load(JSON) restored Vortex c (was "${cAfterCoral Gyre}", now "${cAfterLoad}")`, cAfterLoad === cBefore);
 
   // Nudge away then load the PNG back
-  await page.locator('button:has-text("Lagoon")').first().click();
+  await page.locator('button:has-text("Coral Gyre")').first().click();
   await page.waitForTimeout(200);
   await fileInput.setInputFiles(pngPath);
   await page.waitForTimeout(400);
