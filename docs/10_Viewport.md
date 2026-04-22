@@ -262,7 +262,8 @@ The R3F `<Canvas>` that currently lives in engine/ViewportArea.tsx becomes optio
 
 4. **Snap-to-8 everywhere?** GMT snaps fixed resolution to 8 for GPU alignment. Toy-fluid may or may not need this. Default: plugin snaps; apps can opt out per-call with `viewport.setFixedResolution(w, h, { snap: false })`.
 
-5. **Mobile DPR default of 1.0** (see `rendererSlice.ts:32`) — plugin should encode this or let apps decide? Plugin encodes; apps override via `installViewport({ initialDpr: … })`.
+5. **Mobile DPR default of 1.0** (see `rendererSlice.ts:32`) — plugin should encode this or let apps decide?
+   **Decided 2026-04-22**: viewport plugin does NOT bake in a mobile-detection heuristic. A future `@engine/environment` (or similarly named) plugin exposes environmental signals (`isMobile`, `isFirefox`, `maxGPUTextureSize`, `hardwareConcurrency`, touch-vs-mouse, etc.); viewport consults it via bridge. Until that plugin exists, apps pass `installViewport({ initialDpr })` explicitly.
 
 ## Decisions
 
@@ -285,6 +286,10 @@ The R3F `<Canvas>` that currently lives in engine/ViewportArea.tsx becomes optio
 ### 2026-04-22 — Canvas ownership: app slots its canvas into `<ViewportArea canvasSlot={…}>`
 **Decision:** no hardcoded canvas element in the plugin. Slot prop.
 **Alternative:** plugin creates the canvas, exposes ref. Rejected — apps have different canvas-creation needs (WebGL2 vs OffscreenCanvas vs transferBitmap).
+
+### 2026-04-22 — Environmental signals (mobile detection, etc.) are NOT viewport-plugin-internal
+**Decision:** a future `@engine/environment` plugin owns `isMobile`, `isFirefox`, GPU / memory queries, etc. Viewport consults it via bridge. Apps in the interim pass explicit `initialDpr` etc. to `installViewport`.
+**Rationale:** mobile detection is a shared environmental concern (GMT had it in both `rendererSlice.ts` and `hardware.ts`). Baking into viewport couples two orthogonal concerns. Per the engine's clean-dev-experience principle: each plugin solves one thing; coordination is explicit via bridges.
 
 ## Known fragilities
 
