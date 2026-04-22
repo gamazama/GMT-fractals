@@ -124,7 +124,25 @@ export interface FractalStoreState extends FeatureStateMap {
   invertY: boolean;
   
   resolutionMode: 'Full' | 'Fixed';
-  fixedResolution: [number, number]; 
+  fixedResolution: [number, number];
+
+  // Adaptive viewport quality (phase 2b). Apps consume qualityFraction
+  // as a hint on [minQuality, 1] — 1 = full quality, lower = reduce
+  // internal resolution / sim grid / whatever the app's engine uses as
+  // its quality knob. The plugin computes this from fpsSmoothed vs
+  // adaptiveConfig.targetFps and isUserInteracting. See
+  // docs/10_Viewport.md.
+  qualityFraction: number;
+  fps: number;               // last-sample instantaneous FPS
+  fpsSmoothed: number;       // exponential smoothing, adaptive-loop driver
+  adaptiveConfig: {
+    enabled: boolean;
+    targetFps: number;
+    minQuality: number;
+    interactionDownsample: number;
+    graceMs: number;
+    changeCooldownMs: number;
+  };
   renderRegion: { minX: number, minY: number, maxX: number, maxY: number } | null;
   // Preview Region — export-resolution preview of a canvas slice. See docs/44_Preview_Region_Plan.md.
   // Truthy iff preview is active (`previewRegion !== null` == "previewing").
@@ -262,6 +280,14 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
 
     setIsExporting: (v: boolean) => void;
     setAdaptiveSuppressed: (v: boolean) => void;
+
+    // Adaptive viewport (phase 2b). Apps call reportFps (or frameTick —
+    // exposed on the plugin) per frame; the slice computes fps/fpsSmoothed
+    // and ramps qualityFraction based on target FPS + interaction state
+    // + grace period. See engine/plugins/Viewport.ts.
+    reportFps: (fps: number) => void;
+    holdAdaptive: (durationMs?: number) => void;
+    setAdaptiveConfig: (cfg: Partial<FractalStoreState['adaptiveConfig']>) => void;
 
     setLockSceneOnSwitch: (v: boolean) => void;
     setExportIncludeScene: (v: boolean) => void;
