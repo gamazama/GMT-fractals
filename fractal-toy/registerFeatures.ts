@@ -15,6 +15,7 @@
 import { featureRegistry } from '../engine/FeatureSystem';
 import { MandelbulbFeature } from './features/mandelbulb';
 import { CameraFeature } from './features/camera';
+import { LightingFeature } from './features/lighting';
 
 // 1c: the fractal formula. Injects GLSL via ShaderBuilder.addSection
 // under the 'formulaFunction' and 'formulaCall' names that
@@ -25,3 +26,7 @@ featureRegistry.register(MandelbulbFeature);
 // construction lives in the assembler, since camera math is pipeline
 // level rather than per-formula.
 featureRegistry.register(CameraFeature);
+
+// 1e: directional light + ambient + AO + albedo. Assembler's shading
+// block consumes the uniforms this feature declares.
+featureRegistry.register(LightingFeature);

@@ -193,15 +193,15 @@ const RAYMARCH_BODY = (formulaCall: string): string => `
         }
         vec3 n = normalize(vec3(dx, dy, dz) - vec3(dist));
 
-        // Directional light (1e makes this a feature).
-        vec3 lightDir = normalize(vec3(0.5, 0.8, 0.5));
+        // Directional light (uniforms from LightingFeature, 1e).
+        vec3 lightDir = normalize(uLightDir);
         float diff = max(0.0, dot(n, lightDir));
-        vec3 albedo = vec3(0.85, 0.72, 0.55);
-        col = albedo * (0.15 + 0.85 * diff);
+        col = uAlbedo * uLightColor * uLightIntensity * (uAmbient + (1.0 - uAmbient) * diff);
 
-        // Soft AO from step count.
-        float ao = 1.0 - float(stepsUsed) / float(MAX_STEPS);
-        col *= mix(0.6, 1.0, ao);
+        // Soft AO from step count, weighted by uAoAmount.
+        float aoRaw = 1.0 - float(stepsUsed) / float(MAX_STEPS);
+        float ao = mix(1.0, aoRaw, uAoAmount);
+        col *= ao;
     } else {
         // Background gradient.
         col = mix(vec3(0.02, 0.02, 0.04), vec3(0.08, 0.08, 0.12), vUv.y);

@@ -25,6 +25,7 @@ export const FractalToyApp: React.FC = () => {
     // push effect. For 1d: mandelbulb + camera.
     const mandelbulb = useFractalStore((s: any) => s.mandelbulb);
     const camera     = useFractalStore((s: any) => s.camera);
+    const lighting   = useFractalStore((s: any) => s.lighting);
 
     // Boot the engine once.
     useEffect(() => {
@@ -97,6 +98,43 @@ export const FractalToyApp: React.FC = () => {
         );
     }, [camera]);
 
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !lighting) return;
+
+        const d = lighting.direction;
+        engine.setUniform3F('uLightDir',
+            d?.x ?? 0.5,
+            d?.y ?? 0.8,
+            d?.z ?? 0.5,
+        );
+
+        // Color is sanitized to THREE.Color by createFeatureSlice — its
+        // shape is { r, g, b } (0..1 floats) after mutation, or a hex
+        // string pre-mutation. Handle both.
+        const c = lighting.color;
+        if (c && typeof c === 'object' && 'r' in c) {
+            engine.setUniform3F('uLightColor', c.r, c.g, c.b);
+        } else if (typeof c === 'string') {
+            const hex = parseInt(c.replace('#', ''), 16);
+            const r = ((hex >> 16) & 0xff) / 255;
+            const g = ((hex >>  8) & 0xff) / 255;
+            const b = ( hex        & 0xff) / 255;
+            engine.setUniform3F('uLightColor', r, g, b);
+        } else {
+            engine.setUniform3F('uLightColor', 1, 1, 1);
+        }
+
+        engine.setUniformF('uLightIntensity', lighting.intensity ?? 1.0);
+        engine.setUniformF('uAmbient',        lighting.ambient ?? 0.15);
+        engine.setUniformF('uAoAmount',       lighting.aoAmount ?? 0.4);
+        engine.setUniform3F('uAlbedo',
+            lighting.albedoR ?? 0.85,
+            lighting.albedoG ?? 0.72,
+            lighting.albedoB ?? 0.55,
+        );
+    }, [lighting]);
+
     return (
         <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden">
             <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
@@ -113,10 +151,14 @@ export const FractalToyApp: React.FC = () => {
                     <div className="text-[10px] text-cyan-400 uppercase tracking-wider mb-2">Camera</div>
                     <AutoFeaturePanel featureId="camera" />
                 </div>
+                <div>
+                    <div className="text-[10px] text-cyan-400 uppercase tracking-wider mb-2">Lighting</div>
+                    <AutoFeaturePanel featureId="lighting" />
+                </div>
             </div>
 
             <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
-                Fractal Toy — 1d · Mandelbulb + orbit camera (lighting hardcoded)
+                Fractal Toy — 1e · Mandelbulb + Camera + Lighting, all DDFS
             </div>
         </div>
     );
