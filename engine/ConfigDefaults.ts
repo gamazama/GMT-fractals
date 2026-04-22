@@ -12,17 +12,22 @@ import { featureRegistry } from './FeatureSystem';
 import type { ShaderConfig } from './ShaderFactory';
 import { DEFAULT_HARD_CAP } from '../data/constants';
 
-export function createDefaultShaderConfig(formulaId: string = 'Mandelbulb'): ShaderConfig {
+/**
+ * Builds a fresh ShaderConfig seeded from the feature registry's default
+ * param values. Apps pass their own formula identifier (or omit entirely
+ * for an app that has no formula concept).
+ *
+ * Engine-level defaults are kept to the bare minimum; everything else
+ * comes from the feature registry, making this factory data-driven.
+ */
+export function createDefaultShaderConfig(formulaId?: string): ShaderConfig {
     const cfg: any = {
-        formula: formulaId,
         pipelineRevision: 0,
         msaaSamples: 1,
         previewMode: false,
-        maxSteps: 300,
-        renderMode: 'Direct',
         compilerHardCap: DEFAULT_HARD_CAP,
-        shadows: true,
     };
+    if (formulaId !== undefined) cfg.formula = formulaId;
 
     for (const feat of featureRegistry.getAll()) {
         const featConfig: any = {};

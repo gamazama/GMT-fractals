@@ -1,62 +1,36 @@
+/**
+ * ShaderFactory — generic shader assembly entry point.
+ *
+ * Iterates the feature registry, lets each feature inject into a
+ * ShaderBuilder, then returns the final GLSL string. The engine itself
+ * has no knowledge of render modes (PathTracing/Direct), render quality
+ * tiers, or other pipeline variants — those are plugin concerns.
+ *
+ * Apps that need variant-specific shaders (e.g. a raymarching plugin
+ * producing Main/Physics/Histogram/Mesh variants) instantiate
+ * ShaderFactory themselves with the desired variant.
+ */
 
 import { featureRegistry } from './FeatureSystem';
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
-import { LightingState } from '../features/lighting';
-
 import type { ShaderConfig } from './ShaderConfig';
 export type { ShaderConfig } from './ShaderConfig';
 
 export class ShaderFactory {
-    
-    public static generateFragmentShader(config: ShaderConfig): string {
-        return this.buildShader(config, 'Main');
-    }
 
-    public static generatePhysicsShader(config: ShaderConfig): string {
-        return this.buildShader(config, 'Physics');
-    }
-
-    public static generateHistogramShader(config: ShaderConfig): string {
-        return this.buildShader(config, 'Histogram');
-    }
-
-    /** Generates a GLSL SDF library for mesh export.
-     *  Returns the library body only (no #version, no void main).
-     *  The GPU pipeline wraps it with pass-specific preamble + entry point. */
-    public static generateMeshSDFLibrary(config: ShaderConfig): string {
-        return this.buildShader(config, 'Mesh');
-    }
-
-    private static buildShader(config: ShaderConfig, variant: RenderVariant): string {
+    public static generateFragmentShader(config: ShaderConfig, variant: RenderVariant = 'Main'): string {
         const builder = new ShaderBuilder(variant);
-        
-        // 1. Configure Builder State
-        const lighting = config.lighting as LightingState;
-        const ptEnabled = lighting?.ptEnabled !== false;
-        const isPathTracing = ptEnabled && (config.renderMode === 'PathTracing' || lighting?.renderMode === 1.0);
-        
-        builder.setRenderMode(isPathTracing ? 'PathTracing' : 'Direct');
-        
-        const quality = config.quality || {};
-        builder.setQuality(
-            quality.precisionMode === 1.0, // isLite
-            quality.precisionMode ?? 0
-        );
 
-        // 2. Iterate Features and Inject
-        const allFeatures = featureRegistry.getAll();
-        
-        allFeatures.forEach(feat => {
+        // Let each registered feature inject its GLSL contributions.
+        // Features inject via the generic primitives (addDefine/addUniform/
+        // addFunction/addPreamble/addHeader) or the section escape hatch
+        // (addSection(name, code)) for pipeline-specific stages.
+        for (const feat of featureRegistry.getAll()) {
             if (feat.inject) {
-                // Always call inject() — each feature's inject() is responsible for
-                // injecting stubs when disabled. Skipping inject() entirely causes
-                // undefined function errors when other code (e.g. calculateShading)
-                // depends on functions that the feature would have stubbed out.
                 feat.inject(builder, config, variant);
             }
-        });
+        }
 
-        // 3. Assemble
         return builder.buildFragment();
     }
 }

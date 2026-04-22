@@ -1,8 +1,23 @@
+/**
+ * ConfigManager — generic shader-config diffing.
+ *
+ * Owns the authoritative ShaderConfig object. On every `update(newConfig)`
+ * call, iterates the feature registry and diffs incoming values against
+ * the current config, classifying each change as:
+ *   - compile-time   → shader recompile required (onUpdate: 'compile')
+ *   - runtime        → uniform update only (onUpdate: 'uniform' or default)
+ *   - accum-reset    → requires rendering accumulation to restart
+ *
+ * Engine-level fields (formula, renderMode, compilerHardCap, isMobile,
+ * pipelineRevision) are diffed directly on the root.
+ *
+ * Apps that want richer diffing behavior (per-formula preset injection,
+ * pipeline-aware revision bumping, compile-time estimation) layer that
+ * on top — the engine stays generic.
+ */
 
-import { ShaderConfig } from '../ShaderFactory';
+import type { ShaderConfig } from '../ShaderFactory';
 import { featureRegistry } from '../FeatureSystem';
-import { detectEngineProfile, estimateCompileTime } from '../../features/engine/profiles';
-import { FractalEvents } from '../FractalEvents';
 import * as THREE from 'three';
 import { DEFAULT_HARD_CAP } from '../../data/constants';
 
@@ -15,11 +30,7 @@ export interface ConfigUpdateResult {
 
 export class ConfigManager {
     public config: ShaderConfig;
-    // Map uniform name -> { featureId, paramId, isCompileTime }
-    private uniformToPath: Map<string, { featureId: string, paramId: string, isCompileTime: boolean }> = new Map();
-    // Batched log: accumulates compile changes across rapid successive update() calls
-    private pendingLogChanges: string[] = [];
-    private logFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    private uniformToPath: Map<string, { featureId: string; paramId: string; isCompileTime: boolean }> = new Map();
 
     constructor(initialConfig: ShaderConfig) {
         this.config = { ...initialConfig };
@@ -32,77 +43,49 @@ export class ConfigManager {
     }
 
     private buildUniformMap() {
-        const allFeatures = featureRegistry.getAll();
-        allFeatures.forEach(feat => {
-            Object.entries(feat.params).forEach(([paramId, config]) => {
-                if (config.uniform) {
-                    this.uniformToPath.set(config.uniform, { 
-                        featureId: feat.id, 
+        for (const feat of featureRegistry.getAll()) {
+            for (const [paramId, param] of Object.entries(feat.params)) {
+                if (param.uniform) {
+                    this.uniformToPath.set(param.uniform, {
+                        featureId: feat.id,
                         paramId,
-                        isCompileTime: config.onUpdate === 'compile'
+                        isCompileTime: param.onUpdate === 'compile',
                     });
                 }
-            });
-        });
-    }
-
-    private flushRebuildLog() {
-        this.logFlushTimer = null;
-        if (this.pendingLogChanges.length === 0) return;
-
-        const changes = this.pendingLogChanges.splice(0);
-        const profile = detectEngineProfile(this.config);
-        const profileLabel = profile === 'custom' ? 'Custom' : profile.charAt(0).toUpperCase() + profile.slice(1);
-        const estMs = estimateCompileTime(this.config);
-        if (import.meta.env.DEV) console.log(`[ConfigManager] Rebuild: ${changes.length} change(s) → Profile: ${profileLabel} (~${(estMs / 1000).toFixed(1)}s) | ${changes.join(' | ')}`);
-        FractalEvents.emit('compile_estimate', estMs);
+            }
+        }
     }
 
     public syncUniform(uniformName: string, value: any) {
         const path = this.uniformToPath.get(uniformName);
-        if (path) {
-            // Skip update if this param requires compilation logic
-            if (path.isCompileTime) return;
+        if (!path) return;
+        if (path.isCompileTime) return;
+        // Derived gradient buffers are not source data — skip.
+        if (value && (value as any).isGradientBuffer) return;
 
-            // Skip gradient buffers — they're derived values (Uint8Array textures),
-            // not source data (GradientStop[]). Storing them would corrupt the config
-            // and cause syncConfigUniforms to misinterpret gradient data.
-            if (value && value.isGradientBuffer) return;
-
-            const { featureId, paramId } = path;
-            if (!(this.config as any)[featureId]) {
-                (this.config as any)[featureId] = {};
-            }
-            (this.config as any)[featureId][paramId] = value;
-        }
+        const { featureId, paramId } = path;
+        if (!(this.config as any)[featureId]) (this.config as any)[featureId] = {};
+        (this.config as any)[featureId][paramId] = value;
     }
 
     private areValuesEqual(a: any, b: any): boolean {
         if (a === b) return true;
-        
-        // Handle primitives/null/undefined
         if (a === null || a === undefined || b === null || b === undefined) return a === b;
-        
-        // Handle Numbers with tolerance
+
         if (typeof a === 'number' && typeof b === 'number') {
             return Math.abs(a - b) < 1e-6;
         }
 
-        // Handle Three.js Types (Color, Vector)
         if (typeof a === 'object' && typeof b === 'object') {
-            // Color — compare raw r/g/b to handle deserialized plain objects
             if (a.isColor && b.isColor) {
                 return Math.abs(a.r - b.r) < 1e-6 && Math.abs(a.g - b.g) < 1e-6 && Math.abs(a.b - b.b) < 1e-6;
             }
-            // Vector3
             if (a.isVector3 && b.isVector3) {
                 return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6 && Math.abs(a.z - b.z) < 1e-6;
             }
-            // Vector2
             if (a.isVector2 && b.isVector2) {
                 return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
             }
-            // Handle cases where one is a THREE object and the other is a plain object (from preset)
             if (a.isVector3 || b.isVector3) {
                 const va = a.isVector3 ? a : new THREE.Vector3(a.x, a.y, a.z);
                 const vb = b.isVector3 ? b : new THREE.Vector3(b.x, b.y, b.z);
@@ -118,141 +101,84 @@ export class ConfigManager {
                 const cb = b.isColor ? b : new THREE.Color(b);
                 return Math.abs(ca.r - cb.r) < 1e-6 && Math.abs(ca.g - cb.g) < 1e-6 && Math.abs(ca.b - cb.b) < 1e-6;
             }
-            // Array (Simple shallow check for now)
             if (Array.isArray(a) && Array.isArray(b)) {
-                 if (a.length !== b.length) return false;
-                 // Deep check arrays? For now assume referential equality or JSON
-                 return JSON.stringify(a) === JSON.stringify(b);
+                if (a.length !== b.length) return false;
+                return JSON.stringify(a) === JSON.stringify(b);
             }
         }
-        
         return false;
     }
 
     public update(newConfig: Partial<ShaderConfig>, runtimeState: any): ConfigUpdateResult {
-        // Hoist compilerHardCap from quality slice if present
-        if ((newConfig as any).quality && (newConfig as any).quality.compilerHardCap !== undefined) {
-             newConfig.compilerHardCap = (newConfig as any).quality.compilerHardCap;
+        // Ensure hardware cap has a value — consumers expect it set.
+        if (newConfig.compilerHardCap === undefined) {
+            newConfig.compilerHardCap =
+                runtimeState?.quality?.compilerHardCap ||
+                runtimeState?.compilerHardCap ||
+                DEFAULT_HARD_CAP;
         }
 
-        // Fallback to runtime state for critical compiler defines if missing in update
-        if (newConfig.compilerHardCap === undefined) {
-            newConfig.compilerHardCap = runtimeState.quality?.compilerHardCap || runtimeState.compilerHardCap || DEFAULT_HARD_CAP;
-        }
-        
-        if (newConfig.renderMode === undefined) newConfig.renderMode = runtimeState.renderMode;
-        if (newConfig.isMobile === undefined) newConfig.isMobile = runtimeState.isMobile;
+        if (newConfig.renderMode === undefined) newConfig.renderMode = runtimeState?.renderMode;
+        if ((newConfig as any).isMobile === undefined) (newConfig as any).isMobile = runtimeState?.isMobile;
 
         let rebuildNeeded = false;
         let uniformUpdate = false;
         let modeChanged = false;
         let needsAccumReset = false;
-        const compileChanges: string[] = []; // Collect all compile-trigger changes for grouped log
 
-        // --- GENERIC DDFS DIFFING ---
-        const allFeatures = featureRegistry.getAll();
+        // ── Per-feature diffing (generic, driven by feature registry) ──
+        for (const feat of featureRegistry.getAll()) {
+            const incoming = (newConfig as any)[feat.id];
+            if (!incoming) continue;
 
-        for (const feat of allFeatures) {
-            if ((newConfig as any)[feat.id]) {
-                const newFeatData = (newConfig as any)[feat.id];
-                const oldFeatData = (this.config as any)[feat.id] || {};
+            const existing = (this.config as any)[feat.id] || {};
 
-                // Special Handling: Lighting Render Mode Sync
-                if (feat.id === 'lighting' && newFeatData.renderMode !== undefined) {
-                    const oldMode = oldFeatData.renderMode;
-                    if (!this.areValuesEqual(newFeatData.renderMode, oldMode)) {
-                        modeChanged = true;
-                        this.config.renderMode = newFeatData.renderMode === 1.0 ? 'PathTracing' : 'Direct';
-                    }
+            for (const paramKey in incoming) {
+                const paramConfig = feat.params[paramKey];
+                if (!paramConfig) continue;
+                const newVal = incoming[paramKey];
+                const oldVal = existing[paramKey] !== undefined ? existing[paramKey] : paramConfig.default;
+
+                if (paramConfig.onUpdate === 'compile' && !this.areValuesEqual(newVal, oldVal)) {
+                    rebuildNeeded = true;
                 }
-
-                // Check for compile-triggers and accumulation reset BEFORE merging
-                for (const paramKey in newFeatData) {
-                    const paramConfig = feat.params[paramKey];
-                    if (paramConfig && paramConfig.onUpdate === 'compile') {
-                        const newVal = newFeatData[paramKey];
-                        // Fix: Fallback to default if old value is missing (initial boot scenario)
-                        const oldVal = oldFeatData[paramKey] !== undefined ? oldFeatData[paramKey] : paramConfig.default;
-
-                        if (!this.areValuesEqual(newVal, oldVal)) {
-                            // Collect for grouped log (skip initial hydration)
-                            if (Object.keys(oldFeatData).length > 0) {
-                                compileChanges.push(`${feat.id}.${paramKey}: ${oldVal} → ${newVal}`);
-                            }
-                            rebuildNeeded = true;
-                        }
-                    }
-                    // Track whether any non-noReset param actually changed
-                    if (paramConfig && !paramConfig.noReset) {
-                        const newVal = newFeatData[paramKey];
-                        const oldVal = oldFeatData[paramKey] !== undefined ? oldFeatData[paramKey] : paramConfig.default;
-                        if (!this.areValuesEqual(newVal, oldVal)) {
-                            needsAccumReset = true;
-                        }
-                    }
+                if (!paramConfig.noReset && !this.areValuesEqual(newVal, oldVal)) {
+                    needsAccumReset = true;
                 }
-
-                // Merge state into the master config
-                (this.config as any)[feat.id] = { ...oldFeatData, ...newFeatData };
-                uniformUpdate = true;
             }
+
+            (this.config as any)[feat.id] = { ...existing, ...incoming };
+            uniformUpdate = true;
         }
 
-        // Batch compile changes for grouped log (collapses rapid successive update() calls)
-        // Uses setTimeout to survive synchronous shader rebuilds between update() calls
-        if (rebuildNeeded && compileChanges.length > 0) {
-            this.pendingLogChanges.push(...compileChanges);
-            if (this.logFlushTimer) clearTimeout(this.logFlushTimer);
-            this.logFlushTimer = setTimeout(() => this.flushRebuildLog(), 50);
+        // ── Root-level engine fields ──
+        if (newConfig.formula !== undefined && newConfig.formula !== this.config.formula) {
+            this.config.formula = newConfig.formula;
+            rebuildNeeded = true;
         }
-        
-        // --- CORE SYSTEM DIFFS ---
-        
-        // Formula Switch
-        if (newConfig.formula && newConfig.formula !== this.config.formula) { 
-            if (import.meta.env.DEV) console.log(`[ConfigManager] Formula changed: ${this.config.formula} -> ${newConfig.formula}`);
-            this.config.formula = newConfig.formula; 
-            rebuildNeeded = true; 
-        }
-        
-        // Render Mode (Root Override)
+
         if (newConfig.renderMode !== undefined && newConfig.renderMode !== this.config.renderMode) {
-             this.config.renderMode = newConfig.renderMode;
-             modeChanged = true;
-             if (!(this.config as any).lighting) (this.config as any).lighting = {};
-             (this.config as any).lighting.renderMode = newConfig.renderMode === 'PathTracing' ? 1.0 : 0.0;
+            this.config.renderMode = newConfig.renderMode;
+            modeChanged = true;
         }
-        
-        // Hard Cap
+
         if (newConfig.compilerHardCap !== undefined && newConfig.compilerHardCap !== this.config.compilerHardCap) {
             this.config.compilerHardCap = newConfig.compilerHardCap;
             rebuildNeeded = true;
         }
-        
-        // Mobile Flag
-        if (newConfig.isMobile !== undefined && newConfig.isMobile !== this.config.isMobile) {
-            this.config.isMobile = newConfig.isMobile;
+
+        if ((newConfig as any).isMobile !== undefined && (newConfig as any).isMobile !== (this.config as any).isMobile) {
+            (this.config as any).isMobile = (newConfig as any).isMobile;
             rebuildNeeded = true;
         }
 
-        // Modular Pipeline
-        if (newConfig.graph) { 
-            this.config.graph = newConfig.graph; 
-        }
-        
+        // Plugin-supplied pipelineRevision — apps that maintain a graph/pipeline
+        // structure bump this to trigger recompile when structural changes occur.
         if (newConfig.pipelineRevision !== undefined && newConfig.pipelineRevision !== this.config.pipelineRevision) {
             this.config.pipelineRevision = newConfig.pipelineRevision;
-            if (newConfig.pipeline) this.config.pipeline = newConfig.pipeline;
-            
-            if (this.config.formula === 'Modular') {
-                rebuildNeeded = true;
-            }
-        } else if (newConfig.pipeline) {
-            this.config.pipeline = newConfig.pipeline;
-            uniformUpdate = true;
-            needsAccumReset = true; // Param-only change — new values must be visible immediately
+            rebuildNeeded = true;
         }
-        
+
         return { rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset };
     }
 }
