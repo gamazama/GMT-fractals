@@ -39,11 +39,43 @@ export interface ViewportAdaptiveConfig {
     changeCooldownMs: number;
 }
 
+// Track whether installViewport has wired its one-time subscriptions.
+// Idempotent so multiple install calls (from different bundles) are safe.
+let _installed = false;
+let _interactionUnsub: (() => void) | null = null;
+
 /** Install the viewport plugin. Apps call this once at boot. Passing
- *  adaptive-config overrides lets apps retune for their workload. */
+ *  adaptive-config overrides lets apps retune for their workload.
+ *
+ *  Also wires a subscription to isUserInteracting so quality drops to
+ *  interactionDownsample *immediately* on drag start — not at the next
+ *  reportFps sample window (which is throttled to ~500ms). Keeps UI
+ *  responsive during scrub gestures. */
 export const installViewport = (options?: Partial<ViewportAdaptiveConfig>) => {
-    if (!options) return;
-    useFractalStore.getState().setAdaptiveConfig(options);
+    if (options) useFractalStore.getState().setAdaptiveConfig(options);
+    if (_installed) return;
+    _installed = true;
+
+    _interactionUnsub = useFractalStore.subscribe(
+        (s) => s.isUserInteracting,
+        (isInteracting) => {
+            if (!isInteracting) return; // recovery is handled by reportFps
+            const s = useFractalStore.getState();
+            if (!s.adaptiveConfig.enabled || s.adaptiveSuppressed) return;
+            if (s.qualityFraction > s.adaptiveConfig.interactionDownsample) {
+                useFractalStore.setState({
+                    qualityFraction: s.adaptiveConfig.interactionDownsample,
+                });
+            }
+        },
+    );
+};
+
+/** Tear-down for tests / hot-reload. Rarely needed in app code. */
+export const uninstallViewport = () => {
+    if (_interactionUnsub) _interactionUnsub();
+    _interactionUnsub = null;
+    _installed = false;
 };
 
 /** Imperative API — works outside React. The viewport plugin's

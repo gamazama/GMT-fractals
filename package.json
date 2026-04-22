@@ -11,7 +11,8 @@
     "smoke:boot": "tsx debug/smoke-boot.mts",
     "smoke:interact": "tsx debug/smoke-interact.mts",
     "smoke:screenshot": "tsx debug/smoke-screenshot.mts",
-    "smoke:fractal-toy": "tsx debug/smoke-fractal-toy.mts"
+    "smoke:fractal-toy": "tsx debug/smoke-fractal-toy.mts",
+    "smoke:viewport": "tsx debug/smoke-viewport.mts"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
