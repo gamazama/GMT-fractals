@@ -11,7 +11,9 @@ import type { ScalabilityState, HardwareProfile } from './viewport';
 // saved cameras can declaration-merge to widen this opaque record.
 type OpticsState = Record<string, unknown>;
 
-export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
+// PanelId was a fixed union of GMT's panels. The engine treats it as a
+// string tag so apps/add-ons can register any panel they need.
+export type PanelId = string;
 
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region' | 'selecting_preview';
 

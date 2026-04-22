@@ -1,12 +1,17 @@
+// ── Add-on registration ──
+// This import runs BEFORE App loads the store, so demo's feature is
+// in the registry by the time createFeatureSlice iterates it. Any
+// engine add-on follows the same pattern: a side-effect module that
+// registers definitions + UI components before the store is created.
+import './demo/registerFeatures';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { registerUI } from './features/ui';
+import { wireDemoPanel } from './demo/setup';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
-// Dev and preview share port 3000, so a SW registered in preview keeps hijacking
-// dev requests until it's unregistered — causing stale code with no way to refresh.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
     if (regs.length === 0) return;
@@ -18,8 +23,12 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   });
 }
 
-// Initialize UI Registry (Connects Components to the System)
+// Initialize the engine's UI registry (AutoFeaturePanel + built-in components)
 registerUI();
+
+// Add-on: wire the demo panel into the right dock. Requires the store
+// to exist, so it runs after App has been imported.
+wireDemoPanel();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

@@ -8,6 +8,7 @@
 
 import React, { Suspense } from 'react';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
+import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 
 // --- Lazy helper for on-demand components ---
 function lazify<P extends object>(
@@ -33,6 +34,13 @@ const LazyDebugToolsOverlay = lazify(() =>
 
 // --- Registration ---
 export const registerUI = () => {
+    // Canonical panel type: any feature with `tabConfig.componentId:
+    // 'auto-feature-panel'` gets an auto-generated panel for its params.
+    // Apps/add-ons rely on this id; registering it here is part of the
+    // engine's generic UI surface.
+    componentRegistry.register('auto-feature-panel', AutoFeaturePanel as any);
+
+    // Engine-shipped generic features' UI
     componentRegistry.register('panel-audio', LazyAudioPanel);
     componentRegistry.register('overlay-webcam', WebcamOverlay);
     componentRegistry.register('overlay-debug-tools', LazyDebugToolsOverlay);
