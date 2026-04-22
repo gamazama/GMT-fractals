@@ -1,15 +1,18 @@
 /**
  * FractalToyApp — root component.
  *
- * Layout mirrors the engine's App.tsx skeleton: viewport + right dock
- * housing the feature panels, plus floating windows and DropZones for
- * drag-out / drag-back. Panels land in the dock via setup.ts calling
- * movePanel — the tab system is the engine's standard Dock + PanelRouter.
+ * Layout mirrors the engine's App.tsx skeleton: ViewportFrame +
+ * right-dock for the feature panels, plus floating windows and
+ * DropZones for drag-out / drag-back. Panels land in the dock via
+ * setup.ts auto-layout — the tab system is the engine's standard
+ * Dock + PanelRouter.
  *
- * Fractal-toy's canvas fills the viewport area. FractalEngine owns the
- * WebGL2 context, iterates the feature registry to collect inject()
- * contributions, and composes the raymarching shader via
- * fractal-toy/shaderAssembler.ts.
+ * The WebGL2 canvas slots into <ViewportFrame> which owns the
+ * authoritative ResizeObserver, handles Full/Fixed mode with
+ * fit-scaling, and mounts the fixed-resolution UI. The app's only
+ * job is to (a) compile the raymarching shader from feature injections,
+ * (b) subscribe to canvasPixelSize + qualityFraction, and (c) resize
+ * the WebGL drawing buffer accordingly.
  */
 
 import React, { useEffect, useMemo, useRef } from 'react';
@@ -25,7 +28,12 @@ import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
-import { viewport, useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
+import {
+    viewport,
+    useQualityFraction,
+    useViewportFps,
+    ViewportFrame,
+} from '../engine/plugins/Viewport';
 
 export const FractalToyApp: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,60 +43,30 @@ export const FractalToyApp: React.FC = () => {
     const mandelbulb = useFractalStore((s: any) => s.mandelbulb);
     const camera     = useFractalStore((s: any) => s.camera);
     const lighting   = useFractalStore((s: any) => s.lighting);
-    // @engine/viewport signals for the adaptive render-scale loop.
-    const quality   = useQualityFraction();
+    // @engine/viewport signals.
+    const canvasPixelSize = useFractalStore((s) => s.canvasPixelSize);
+    const quality = useQualityFraction();
     const { fpsSmoothed } = useViewportFps();
 
-    // StoreCallbacks context — so engine primitives (Slider etc.) that
-    // consume it from React context don't fall back to whatever the
-    // default is. Same pattern App.tsx uses.
+    // StoreCallbacks context — same pattern as App.tsx, piped through
+    // so slider drags on the right-dock feature panels fire
+    // handleInteractionStart/End which the viewport plugin subscribes
+    // to for immediate quality drop.
     const storeCallbacks = useMemo<StoreCallbacks>(() => ({
         handleInteractionStart: state.handleInteractionStart,
         handleInteractionEnd:   state.handleInteractionEnd,
         openContextMenu:        state.openContextMenu,
     }), [state.handleInteractionStart, state.handleInteractionEnd, state.openContextMenu]);
 
-    // Floating panels (users drag tabs out; engine's DraggableWindow hosts them).
     const floatingPanels = (Object.values(state.panels) as PanelState[])
         .filter((p) => p.location === 'float' && p.isOpen);
-
-    // Track the CSS pixel size of the canvas so the qualityFraction
-    // subscriber can recompute the WebGL buffer size on quality change.
-    const cssSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
-    // Stable ref to current quality so the ResizeObserver callback
-    // can read it without capturing stale state.
-    const qualityRef = useRef(quality);
-    qualityRef.current = quality;
 
     // Boot the engine once.
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        // Recompute the WebGL drawing buffer from (cssSize × DPR × quality).
-        // CSS size stays at the element's layout box; the browser blits
-        // the smaller WebGL output to the full-size element, which is
-        // the standard dynamic-resolution technique.
-        const applySize = () => {
-            const { w, h } = cssSizeRef.current;
-            if (w < 1 || h < 1) return;
-            const dpr = window.devicePixelRatio || 1;
-            const q = qualityRef.current;
-            engineRef.current?.resize(
-                Math.max(1, Math.floor(w * dpr * q)),
-                Math.max(1, Math.floor(h * dpr * q)),
-            );
-        };
-
-        const observeCssSize = () => {
-            const rect = canvas.getBoundingClientRect();
-            cssSizeRef.current = { w: rect.width, h: rect.height };
-            applySize();
-        };
-
         try {
-            // onFrameEnd reports a frame tick to @engine/viewport so its
-            // adaptive loop runs naturally with the app's render cadence.
             const engine = new FractalEngine(canvas, {
                 onFrameEnd: () => viewport.frameTick(),
             });
@@ -99,33 +77,32 @@ export const FractalToyApp: React.FC = () => {
             }
             const fragSrc = assembleRayMarchShader(builder);
             engine.setShader(fragSrc);
-            observeCssSize();
             engine.start();
         } catch (e) {
             console.error('[FractalToy] failed to start engine:', e);
         }
 
-        const ro = new ResizeObserver(observeCssSize);
-        ro.observe(canvas);
-
         return () => {
-            ro.disconnect();
             engineRef.current?.dispose();
             engineRef.current = null;
         };
     }, []);
 
-    // Resize the WebGL buffer whenever qualityFraction changes. Separate
-    // effect so the boot useEffect doesn't re-run on every quality tick.
+    // Resize the WebGL drawing buffer whenever the frame's authoritative
+    // canvasPixelSize changes OR adaptive quality shifts. Fractal-toy
+    // maps quality → internal render scale, which is the dynamic-
+    // resolution trick: smaller WebGL buffer, browser blits to the
+    // full-size canvas element.
     useEffect(() => {
-        const { w, h } = cssSizeRef.current;
-        if (w < 1 || h < 1) return;
-        const dpr = window.devicePixelRatio || 1;
-        engineRef.current?.resize(
-            Math.max(1, Math.floor(w * dpr * quality)),
-            Math.max(1, Math.floor(h * dpr * quality)),
+        const engine = engineRef.current;
+        if (!engine) return;
+        const [physW, physH] = canvasPixelSize;
+        if (physW < 1 || physH < 1) return;
+        engine.resize(
+            Math.max(1, Math.floor(physW * quality)),
+            Math.max(1, Math.floor(physH * quality)),
         );
-    }, [quality]);
+    }, [canvasPixelSize, quality]);
 
     // Push feature uniforms on state change. Engine caches uniform
     // locations so these calls are cheap.
@@ -206,19 +183,24 @@ export const FractalToyApp: React.FC = () => {
                 ))}
 
                 <div className="flex-1 flex overflow-hidden relative">
-                    {/* Viewport: fractal-toy's WebGL2 canvas fills it. */}
-                    <div className="flex-1 relative bg-black">
+                    {/* The plugin frame owns ResizeObserver, mode UI, and
+                        Fixed/Full layout. Fractal-toy slots its WebGL
+                        canvas as the only child; any overlays we add
+                        later (pointer cursor, gizmos) go here too. */}
+                    <ViewportFrame>
                         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
-                        <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
-                            Fractal Toy · Mandelbulb
-                        </div>
-                        {/* Perf HUD — shows adaptive quality at work. */}
-                        <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none">
-                            {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
-                        </div>
-                    </div>
+                    </ViewportFrame>
 
                     <Dock side="right" />
+                </div>
+
+                {/* Perf HUD — global, outside the frame so it's visible
+                    regardless of Fixed letterboxing. */}
+                <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none">
+                    {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
+                </div>
+                <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
+                    Fractal Toy · Mandelbulb
                 </div>
             </div>
         </StoreCallbacksProvider>
