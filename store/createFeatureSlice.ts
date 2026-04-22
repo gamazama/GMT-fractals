@@ -5,6 +5,8 @@ import { featureRegistry } from '../engine/FeatureSystem';
 import { registerFeatures } from '../features';
 import { FractalEvents } from '../engine/FractalEvents';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
+import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
+import { registerDefaultPresetFields } from '../utils/defaultPresetFields';
 
 // Generic type for the dynamic slice
 export interface FeatureSlice {
@@ -16,12 +18,17 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
     // Ensure features are registered before building slices —
     // module evaluation order can vary due to circular dependencies.
     registerFeatures();
-    // Freeze the registry: from this point on, new registrations fail loudly
+    // Register canonical non-feature preset fields (cameraRot, targetDistance,
+    // savedCameras). A future @engine/camera plugin will own these; for now
+    // they live in the engine proper. See docs/20_Fragility_Audit.md F3.
+    registerDefaultPresetFields();
+    // Freeze both registries: from this point on, new registrations fail loudly
     // (throw in dev, warn in prod). State slices are snapshotted below, so
     // late arrivals would be invisible to the store — this catches the bug
     // at the point of the late register() call instead of much later when
     // a feature's setter is unexpectedly undefined. See docs/20_Fragility_Audit.md F1.
     featureRegistry.freeze();
+    presetFieldRegistry.freeze();
     const features = featureRegistry.getAll();
 
     features.forEach(feat => {

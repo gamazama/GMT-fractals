@@ -18,6 +18,7 @@ import type { FractalActions } from '../types/store';
 import { FractalEvents } from '../engine/FractalEvents';
 import { useAnimationStore } from '../store/animationStore';
 import { featureRegistry } from '../engine/FeatureSystem';
+import { presetFieldRegistry } from './PresetFieldRegistry';
 import * as THREE from 'three';
 
 /**
@@ -109,17 +110,10 @@ export const applyPresetState = (
     if (p.sequence) useAnimationStore.getState().setSequence(p.sequence);
     (actions as unknown as FractalActions).setAnimations(p.animations || []);
 
-    // Saved-camera library — generic pattern
-    if (p.savedCameras && Array.isArray(p.savedCameras) && p.savedCameras.length > 0) {
-        set({
-            savedCameras: p.savedCameras as any,
-            activeCameraId: (p.savedCameras[0] as any).id || null,
-        });
-    }
-
-    // Core scene state (what's left after stripping VirtualSpace absorb)
-    if (p.cameraRot) set({ cameraRot: p.cameraRot });
-    if (p.targetDistance !== undefined) set({ targetDistance: p.targetDistance });
+    // Non-feature scene fields (cameraRot, targetDistance, savedCameras, …).
+    // Registered by utils/defaultPresetFields.ts at boot; future apps/plugins
+    // add their own via presetFieldRegistry.register(). See docs/04_Core_Plugins.md.
+    presetFieldRegistry.applyAll(p, set, get as () => Record<string, unknown>);
 
     if (p.duration) useAnimationStore.getState().setDuration(p.duration);
 

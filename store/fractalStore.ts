@@ -27,6 +27,7 @@ const engine = getProxy();
 import { featureRegistry } from '../engine/FeatureSystem';
 import { generateShareStringFromPreset } from '../utils/Sharing';
 import { applyPresetState, sanitizeFeatureState } from '../utils/PresetLogic';
+import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { animationEngine } from '../engine/AnimationEngine';
 import '../features'; // Ensure features are registered
@@ -163,8 +164,8 @@ export const useFractalStore = create<FractalStoreState & FractalActions>()(subs
         };
 
         if (options?.includeScene !== false) {
-            p.cameraRot = s.cameraRot;
-            p.targetDistance = s.targetDistance;
+            // Non-feature scene fields from the registry (cameraRot, targetDistance, …).
+            Object.assign(p, presetFieldRegistry.serializeAll(s));
             p.lights = [];
         }
 
