@@ -62,16 +62,32 @@ setupMyAddon();  // step 3 below
 
 ### Step 3 — `setup.ts`
 
+For the common case (auto-layout via feature `tabConfig.dock`):
+
+```ts
+// my-addon/setup.ts
+import { applyDefaultPanelLayout } from '@engine/applyDefaultPanelLayout';
+export const setupMyAddon = applyDefaultPanelLayout;
+```
+
+For custom layouts, or when you need to mix auto-layout with conditional panels:
+
 ```ts
 // my-addon/setup.ts
 import { useEngineStore } from '@engine/core';
+import { applyDefaultPanelLayout } from '@engine/applyDefaultPanelLayout';
 
 export const setupMyAddon = () => {
+  // 1. Auto-place any feature with tabConfig.dock declared.
+  applyDefaultPanelLayout();
+
+  // 2. Custom hand-placement for features that opt out of auto-layout.
   const store = useEngineStore.getState();
-  store.movePanel('MyThing', 'right', 0);
-  store.togglePanel('MyThing', true);
+  store.movePanel('ConditionalPanel', 'float');
 };
 ```
+
+**Rule:** `applyDefaultPanelLayout()` only touches features with an explicit `dock` in tabConfig. Features without it are untouched — the app is free to place them manually or skip them.
 
 **Rule:** `setup.ts` runs AFTER React mounts and the store exists. It's where you seed initial panel positions, attach non-React event handlers, or kick off one-shot boot logic.
 **Why:** it can't run at module load (store not constructed); can't run in a component `useEffect` easily (timing across multiple add-ons gets racy). A dedicated post-mount call is the simplest contract.

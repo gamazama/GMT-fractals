@@ -25,6 +25,7 @@ export const CameraFeature: FeatureDefinition = {
         label: 'Camera',
         componentId: 'auto-feature-panel',
         order: 1,
+        dock: 'right',
     },
 
     params: {

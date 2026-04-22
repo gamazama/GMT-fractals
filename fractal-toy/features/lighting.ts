@@ -22,6 +22,7 @@ export const LightingFeature: FeatureDefinition = {
         label: 'Lighting',
         componentId: 'auto-feature-panel',
         order: 2,
+        dock: 'right',
     },
 
     params: {

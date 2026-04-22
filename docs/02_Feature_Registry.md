@@ -37,6 +37,18 @@ defineFeature({
   // UI — default is AutoFeaturePanel; override only when needed
   ui: { panel: 'auto' },     // or { panel: 'custom', componentId: 'dye-custom-panel' }
 
+  // TAB PLACEMENT — optional. If `dock` is set the engine's
+  // applyDefaultPanelLayout() helper auto-places this panel into
+  // the named dock with zero setup.ts boilerplate. `defaultActive`
+  // picks which feature lands as the active tab on the same dock.
+  tabConfig: {
+    label: 'Dye',
+    componentId: 'auto-feature-panel',
+    order: 0,
+    dock: 'right',           // 'left' | 'right' | 'float' | omit (= manual placement)
+    defaultActive: true,     // optional; defaults to lowest-order panel
+  },
+
   // VIEWPORT OVERLAY — optional, for features that render DOM on top
   viewportConfig: { componentId: 'overlay-brush-cursor', type: 'dom' },
 })

@@ -107,10 +107,19 @@ export interface ParamConfig {
 
 export interface FeatureTabConfig {
     label: string;
-    iconId?: string; 
+    iconId?: string;
     componentId: string;
-    order: number; 
-    condition?: ParamCondition | ParamCondition[]; 
+    order: number;
+    condition?: ParamCondition | ParamCondition[];
+    /** Target dock for automatic panel placement via
+     *  `applyDefaultPanelLayout()`. If omitted, the panel is not
+     *  auto-placed — the app must call `movePanel()` itself (useful
+     *  for custom layouts or conditionally-shown panels). */
+    dock?: 'left' | 'right' | 'float';
+    /** If multiple features are auto-placed into the same dock,
+     *  the one marked `defaultActive: true` is selected as the
+     *  active tab. If none are marked, the lowest-order panel wins. */
+    defaultActive?: boolean;
 }
 
 export interface FeatureViewportConfig {

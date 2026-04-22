@@ -67,6 +67,8 @@ export const MandelbulbFeature: FeatureDefinition = {
         label: 'Mandelbulb',
         componentId: 'auto-feature-panel',
         order: 0,
+        dock: 'right',
+        defaultActive: true,
     },
 
     params: {
