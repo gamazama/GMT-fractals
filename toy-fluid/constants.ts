@@ -78,7 +78,7 @@ export const DEFAULT_ORBIT = { enabled: false, radius: 0.02, speed: 0.4 };
  * Response (200): { ok: true, id: string }
  * Response (400 / 429 / 5xx): { ok: false, error: string }
  */
-export const PRESET_SUBMIT_ENDPOINT: string | null = null;
+export const PRESET_SUBMIT_ENDPOINT: string | null = 'https://api.gmt-fractals.com/v1/toy-fluid/submissions';
 
 /** Minimum seconds between submissions from the same browser (client-side throttle). */
 export const PRESET_SUBMIT_COOLDOWN_SEC = 30;
