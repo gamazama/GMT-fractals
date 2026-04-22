@@ -11,7 +11,8 @@ import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
-import { ColoringState } from '../features/coloring';
+// ColoringState was a fractal feature; treat as opaque here.
+type ColoringState = Record<string, any>;
 import { evaluateTrackValue } from '../utils/timelineUtils';
 
 // Global refs for animation system state
@@ -148,10 +149,10 @@ export const tick = (delta: number) => {
              // Legacy Root Params
              if (targetKey === 'iterations') {
                  uniformName = 'uIterations';
-                 resolvedBase = storeState.coreMath?.iterations ?? 0;
+                 resolvedBase = (storeState as any).coreMath?.iterations ?? 0;
              } else if (targetKey.startsWith('param')) {
                  uniformName = 'u' + targetKey.charAt(0).toUpperCase() + targetKey.slice(1);
-                 resolvedBase = (storeState.coreMath as any)?.[targetKey] ?? 0;
+                 resolvedBase = (storeState as any).coreMath?.[targetKey] ?? 0;
              }
         }
 

@@ -7,8 +7,13 @@ import { solveBezierY } from './BezierMath';
 import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
 import { getViewportCamera } from './worker/ViewportRefs';
-import { VirtualSpace } from './PrecisionMath';
 import { AnimationMath } from './math/AnimationMath';
+
+// Local stand-in for the deleted VirtualSpace.split — used to feed the
+// split-float scene offset that GMT's deep-zoom camera expected. For a
+// generic engine we emit just the high half; apps with their own
+// deep-zoom camera replace this via a plugin that owns the camera math.
+const splitPrecision = (v: number) => ({ high: v, low: 0 });
 
 // Pending State Buffer to prevent partial updates per frame
 interface PendingCameraState {
@@ -355,9 +360,9 @@ export class AnimationEngine {
             const q = new THREE.Quaternion().setFromEuler(this.pendingCam.rot);
             const rot = { x: q.x, y: q.y, z: q.z, w: q.w };
             
-            const sX = VirtualSpace.split(this.pendingCam.unified.x);
-            const sY = VirtualSpace.split(this.pendingCam.unified.y);
-            const sZ = VirtualSpace.split(this.pendingCam.unified.z);
+            const sX = splitPrecision(this.pendingCam.unified.x);
+            const sY = splitPrecision(this.pendingCam.unified.y);
+            const sZ = splitPrecision(this.pendingCam.unified.z);
             
             FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
                 position: { x: 0, y: 0, z: 0 },

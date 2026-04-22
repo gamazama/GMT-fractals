@@ -1,7 +1,10 @@
 
 declare const __APP_VERSION__: string;
 
-export type FormulaType = 'Mandelbulb' | 'AmazingBox' | 'MengerSponge' | 'MixPinski' | 'AmazingSurf' | 'Kleinian' | 'BoxBulb' | 'MengerAdvanced' | 'Quaternion' | 'Dodecahedron' | 'Mandelbar3D' | 'Bristorbrot' | 'MakinBrot' | 'Tetrabrot' | 'Modular' | 'PseudoKleinian' | 'Phoenix' | 'Buffalo'| 'MandelTerrain' | 'MarbleMarcher' | 'JuliaMorph' | 'AmazingSurface' | 'Mandelorus' | 'Appell' | 'Borromean' | 'MandelMap' | 'MandelBolic' | 'SierpinskiTetrahedron' | 'KaliBox' | 'Claude' | 'Octahedron' | 'Icosahedron' | 'RhombicDodecahedron' | 'Coxeter' | 'RhombicTriacontahedron' | 'Apollonian' | 'Cuboctahedron' | 'TruncatedIcosahedron' | 'GreatStellatedDodecahedron' | 'PseudoKleinianMod4' | 'PseudoKleinian06' | 'KleinianMobius' | 'KleinianJos';
+// FormulaType used to enumerate GMT's 42 native fractal formula IDs.
+// The engine treats it as an opaque string tag; apps that want a strict
+// union widen this via declaration merging.
+export type FormulaType = string;
 export type CameraMode = 'Orbit' | 'Fly';
 
 export interface PreciseVector3 {

@@ -13,12 +13,26 @@
  * re-installs those as preset middlewares.
  */
 
-import { Preset } from '../types';
+import type { Preset } from '../types';
 import type { FractalActions } from '../types/store';
 import { FractalEvents } from '../engine/FractalEvents';
 import { useAnimationStore } from '../store/animationStore';
 import { featureRegistry } from '../engine/FeatureSystem';
 import * as THREE from 'three';
+
+/**
+ * Builds a default preset from feature registry defaults. Used by URL-share
+ * decoding when no feature data is present in the incoming share string.
+ */
+export const getFullDefaultPreset = (formula: string): Preset => {
+    const full: Preset = {
+        version: 5,
+        name: formula || 'Untitled',
+        formula,
+        features: {},
+    };
+    return full;
+};
 
 /** Strip Three.js object wrappers so feature state is JSON-serializable. */
 export const sanitizeFeatureState = (state: Record<string, unknown>) => {

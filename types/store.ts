@@ -5,8 +5,11 @@ import { Preset, FractalDefinition } from './fractal';
 import { ContextMenuItem } from './help';
 import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
 import { LightParams } from './graphics';
-import { OpticsState } from '../features/optics';
 import type { ScalabilityState, HardwareProfile } from './viewport';
+
+// Optics was a fractal-leaning feature. Apps that need typed optics on
+// saved cameras can declaration-merge to widen this opaque record.
+type OpticsState = Record<string, unknown>;
 
 export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
 

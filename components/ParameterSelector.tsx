@@ -1,7 +1,11 @@
 
 import React, { useState, useRef } from 'react';
 import { featureRegistry } from '../engine/FeatureSystem';
-import { registry } from '../engine/FractalRegistry';
+// FractalRegistry removed in engine extraction.
+interface StubFormulaDef {
+    parameters: Array<{ id?: string; label?: string } | null>;
+}
+const registry = { get: (_id: string): StubFormulaDef | undefined => undefined };
 import { MAX_LIGHTS } from '../data/constants';
 import { useFractalStore } from '../store/fractalStore';
 import { CategoryPickerMenu } from './CategoryPickerMenu';

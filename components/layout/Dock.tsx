@@ -5,7 +5,10 @@ import { PanelRouter } from '../PanelRouter';
 import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
 import { collectHelpIds } from '../../utils/helpUtils';
-import { AudioState, DrawingState } from '../../features/types';
+import { AudioState, DrawnShape } from '../../features/types';
+// Drawing feature was removed during engine extraction; keep an
+// opaque stand-in so component code that read DrawingState still types.
+type DrawingState = { active?: boolean; shapes?: DrawnShape[]; [k: string]: unknown };
 import { accent, surface, text, border, tabActive, tabInactive, collapsedIconActive, collapsedIconInactive, dragHandleActive, dragHandleInactive } from '../../data/theme';
 
 // Mobile detection helper

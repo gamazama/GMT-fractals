@@ -1,7 +1,5 @@
 
 import React from 'react';
-// Import panel directly if needed or lazily
-import { CameraManagerPanel } from '../../features/camera_manager/CameraManagerPanel';
 
 // Define the interface for components used in the registry
 export interface FeatureComponentProps {

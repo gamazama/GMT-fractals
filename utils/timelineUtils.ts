@@ -5,15 +5,34 @@ const engine = getProxy();
 import * as THREE from 'three';
 import { Keyframe, AnimationSequence, SoftSelectionType } from '../types';
 import { featureRegistry } from '../engine/FeatureSystem';
-import { getLightFromSlice } from '../features/lighting';
 import { nanoid } from 'nanoid';
 import { AnimationMath } from '../engine/math/AnimationMath';
 
 /** Checks if a track ID represents a rotation-like parameter (needs euler unwrapping) */
 export const isRotationTrack = (trackId: string): boolean =>
     /rotation|rot|phase|twist/i.test(trackId) || /param[C-F]/i.test(trackId);
-import { CameraUtils } from './CameraUtils';
 import { getViewportCamera } from '../engine/worker/ViewportRefs';
+
+// CameraUtils provided fractal deep-zoom unified-position math; stubbed
+// for the generic engine. Apps with their own camera math replace this.
+const UnifiedPos = {
+    getUnifiedPosition: (local: { x: number; y: number; z: number }, offset: any) => ({
+        x: local.x + (offset?.x ?? 0) + (offset?.xL ?? 0),
+        y: local.y + (offset?.y ?? 0) + (offset?.yL ?? 0),
+        z: local.z + (offset?.z ?? 0) + (offset?.zL ?? 0),
+    }),
+};
+
+// Lighting feature was fractal-raymarching specific. This helper is a
+// no-op stand-in so tracks bound to `lighting.*` fall through to nothing.
+// Typed with an optional Light shape so downstream property accesses still
+// compile — apps re-installing a lighting feature replace this.
+interface StubLight {
+    intensity: number;
+    falloff: number;
+    position: { x: number; y: number; z: number };
+}
+const getLightFromSlice = (_lighting: unknown, _idx: number): StubLight | null => null;
 
 // --- LIVE VALUE HELPER ---
 // Reads current value from the specific store slice
@@ -31,7 +50,7 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
         // non-zero during orbit drag — store never has this, engine camera does.
         const cam0 = getViewportCamera() || engine.activeCamera;
         const localPos = cam0 ? cam0.position : { x: 0, y: 0, z: 0 };
-        const unified = CameraUtils.getUnifiedPosition(localPos, fs.sceneOffset);
+        const unified = UnifiedPos.getUnifiedPosition(localPos, (fs as any).sceneOffset);
 
         if (trackId === 'camera.unified.x') return unified.x;
         if (trackId === 'camera.unified.y') return unified.y;
@@ -96,7 +115,7 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
     }
     
     // Fallback for legacy bare params
-    const coreMath = fs.coreMath;
+    const coreMath = (fs as any).coreMath;
     if (coreMath) {
         if (trackId === 'paramA') return coreMath.paramA;
         if (trackId === 'paramB') return coreMath.paramB;

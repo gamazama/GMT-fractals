@@ -9,7 +9,7 @@ export type UISlice = Pick<FractalStoreState,
     'showLightGizmo' | 'isGizmoDragging' | 
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
-    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'autoCompile' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
+    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
     'resolutionMode' | 'fixedResolution' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
@@ -30,7 +30,7 @@ export type UISlice = Pick<FractalStoreState,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
-    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAutoCompile' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
+    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
     'setResolutionMode' | 'setFixedResolution' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
@@ -190,7 +190,6 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setOpenLightPopupIndex: (index) => set({ openLightPopupIndex: index }),
     setShadowPanelOpen: (v) => set({ shadowPanelOpen: v }),
     setVpQualityOpen: (v) => set({ vpQualityOpen: v }),
-    setAutoCompile: (v) => set({ autoCompile: v }),
     setAdvancedMode: (v) => set({ advancedMode: v }),
     setShowHints: (v) => set({ showHints: v }),
     setDebugMobileLayout: (v) => set({ debugMobileLayout: v }),

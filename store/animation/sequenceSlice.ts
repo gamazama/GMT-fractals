@@ -6,8 +6,15 @@ import { AnimationStore, SequenceSliceState, SequenceSliceActions, HistoryItem, 
 import { Track, Keyframe, AnimationSequence } from '../../types';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
-import { CameraUtils } from '../../utils/CameraUtils';
 import { getViewportCamera } from '../../engine/worker/ViewportRefs';
+
+// Stub: GMT's CameraUtils.getUnifiedFromEngine read the engine's active
+// camera + split-float offset. The generic engine has no camera math,
+// so apps that want to record keyframes from a live camera install
+// their own helper.
+const CameraUtils = {
+    getUnifiedFromEngine: () => ({ x: 0, y: 0, z: 0 }),
+};
 import { simplifyTrack } from '../../utils/CurveFitting';
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';

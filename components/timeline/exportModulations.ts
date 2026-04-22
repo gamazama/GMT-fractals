@@ -122,7 +122,7 @@ export function applyExportModulations(time: number, dt: number) {
             }
         } else if (targetKey.startsWith('param')) {
             uniformName = 'u' + targetKey.charAt(0).toUpperCase() + targetKey.slice(1);
-            baseVal = (storeState.coreMath as any)?.[targetKey] ?? 0;
+            baseVal = (storeState as any).coreMath?.[targetKey] ?? 0;
         }
 
         if (uniformName) {

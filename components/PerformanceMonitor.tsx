@@ -6,7 +6,8 @@ import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { AlertIcon, CloseIcon, CheckIcon, LayersIcon, CubeIcon } from './Icons';
 import { collectHelpIds } from '../utils/helpUtils';
-import { QualityState } from '../features/quality';
+// Quality feature was fractal-specific. Apps re-install via their own feature.
+type QualityState = Record<string, any>;
 
 const _isFirefox = /Firefox/i.test(navigator.userAgent);
 
@@ -118,9 +119,9 @@ export const PerformanceMonitor = () => {
         isExporting, isBroadcastMode, openContextMenu,
         aaLevel, setAALevel,
         renderMode,
-        quality,
         dpr
     } = useFractalStore();
+    const quality = (useFractalStore.getState() as any).quality as QualityState | undefined;
 
     const isPaused = useFractalStore(s => s.isPaused);
     const isScrubbing = useAnimationStore(s => s.isScrubbing);

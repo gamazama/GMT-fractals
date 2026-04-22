@@ -1,7 +1,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useFractalStore } from '../store/fractalStore';
-import { registry } from '../engine/FractalRegistry';
+// FractalRegistry removed in engine extraction. Apps that want a
+// formula/variant registry install their own. Stub keeps API shape.
+const registry = { get: (_id: string) => undefined as any };
 import Slider from './Slider';
 import { LfoTarget } from '../types';
 
@@ -25,10 +27,11 @@ export const PopupSliderSystem: React.FC = () => {
     
     // Access core math slice and actions
     const state = useFractalStore();
-    const coreMath = state.coreMath;
-    const { formula, setCoreMath } = state;
+    const coreMath = (state as any).coreMath;
+    const formula = state.formula;
+    const setCoreMath = (state as any).setCoreMath as ((u: any) => void) | undefined;
 
-    if (!coreMath) return null;
+    if (!coreMath || !setCoreMath) return null;
 
     // Map keys 1-6 to params and setters
     const paramMap: Record<string, { key: string; setter: (v: number) => void; val: number }> = {

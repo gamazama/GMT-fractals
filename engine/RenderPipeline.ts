@@ -1,7 +1,15 @@
 import * as THREE from 'three';
 import { Uniforms } from './UniformNames';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
-import { QualityState } from '../features/quality';
+// Quality state was a fractal-feature type; treat as a loose record here.
+// Typed numerics on known fields so downstream comparisons still compile.
+// Apps with a richer quality plugin widen this via declaration merging.
+type QualityState = {
+    bufferPrecision?: number;
+    precisionMode?: number;
+    compilerHardCap?: number;
+    [key: string]: unknown;
+};
 import { createFullscreenPass } from './utils/FullscreenQuad';
 
 const CONVERGENCE_FRAG = `

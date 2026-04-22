@@ -3,7 +3,8 @@ import React, { useRef, useEffect } from 'react';
 import Histogram from '../../Histogram';
 import Slider from '../../Slider';
 import { analyzeHistogram, calculateSmartLevels } from '../../../utils/histogramUtils';
-import { ColoringState } from '../../../features/coloring';
+// Coloring feature was fractal-specific.
+type ColoringState = Record<string, any>;
 
 interface ColoringHistogramProps {
     layer: 1 | 2;

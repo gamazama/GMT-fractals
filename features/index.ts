@@ -1,94 +1,34 @@
+/**
+ * Feature registration entry point.
+ *
+ * Registers the generic (non-fractal) features that survived the engine
+ * extraction. A future app or plugin (e.g. GMT raymarching) will register
+ * its own features on top of these via `featureRegistry.register(MyFeature)`.
+ */
 
 import { featureRegistry } from '../engine/FeatureSystem';
-import { AtmosphereFeature } from './atmosphere/index'; 
-import { DrosteFeature } from './droste';
 import { PostEffectsFeature } from './post_effects';
-import { MaterialFeature } from './materials';
 import { ColorGradingFeature } from './color_grading';
-import { TexturingFeature } from './texturing';
-import { ColoringFeature } from './coloring';
-import { GeometryFeature } from './geometry';
-import { InterlaceFeature } from './interlace';
-import { QualityFeature } from './quality';
-import { CoreMathFeature } from './core_math';
-import { LightingFeature } from './lighting/index';
-import { LightSpheresFeature } from './lighting/light_spheres';
-import { OpticsFeature } from './optics';
-import { NavigationFeature } from './navigation';
 import { AudioFeature } from './audioMod';
-import { DrawingFeature } from './drawing/index';
 import { ModulationFeature } from './modulation';
 import { WebcamFeature } from './webcam';
 import { DebugToolsFeature } from './debug_tools';
-import { EngineSettingsFeature } from './engine/index';
-import { AOFeature } from './ao/index';
-import { ReflectionsFeature } from './reflections/index';
-import { WaterPlaneFeature } from './water_plane';
-import { CameraManagerFeature } from './camera_manager/index';
-import { VolumetricFeature } from './volumetric/index';
 
-// --- REGISTER FEATURES ---
 export const registerFeatures = () => {
-    // Core
-    featureRegistry.register(CoreMathFeature);
-    featureRegistry.register(GeometryFeature);
-    featureRegistry.register(InterlaceFeature);
-
-    // Rendering & Shading
-    featureRegistry.register(LightingFeature);
-    featureRegistry.register(LightSpheresFeature); // dependsOn: ['lighting'] — order enforced by registry
-    featureRegistry.register(AOFeature);
-    featureRegistry.register(ReflectionsFeature);
-    featureRegistry.register(AtmosphereFeature);
-    featureRegistry.register(VolumetricFeature);
-    featureRegistry.register(MaterialFeature);
-    featureRegistry.register(WaterPlaneFeature);
-    featureRegistry.register(ColoringFeature);
-    featureRegistry.register(TexturingFeature);
-    featureRegistry.register(QualityFeature);
-    
     // Post & Effects
-    featureRegistry.register(DrosteFeature);
     featureRegistry.register(PostEffectsFeature);
     featureRegistry.register(ColorGradingFeature);
-    
-    // Scene
-    featureRegistry.register(OpticsFeature);
-    featureRegistry.register(NavigationFeature);
-    featureRegistry.register(CameraManagerFeature);
-    
+
     // Systems
     featureRegistry.register(AudioFeature);
-    featureRegistry.register(DrawingFeature);
     featureRegistry.register(ModulationFeature);
     featureRegistry.register(WebcamFeature);
     featureRegistry.register(DebugToolsFeature);
-    featureRegistry.register(EngineSettingsFeature);
 };
 
-// --- EXPORT TYPES ---
-// CRITICAL FIX: Use 'export type' for interfaces to prevent runtime import errors
+// --- Type exports (use `export type` to prevent runtime import errors
+// under isolatedModules; see CLAUDE.md) ---
 export * from './audioMod';
-export * from './drawing/index';
 export * from './modulation';
 export * from './webcam';
 export * from './debug_tools';
-export * from './ao/index';
-export * from './reflections/index';
-export type { NavigationState } from './navigation';
-export type { OpticsState } from './optics';
-export type { QualityState } from './quality';
-export type { GeometryState } from './geometry';
-export type { InterlaceState } from './interlace';
-export type { ColoringState } from './coloring';
-export type { TexturingState } from './texturing';
-export type { ColorGradingState } from './color_grading';
-export type { PostEffectsState } from './post_effects';
-export type { MaterialState } from './materials';
-export type { AtmosphereState } from './atmosphere/index';
-export type { VolumetricState } from './volumetric/index';
-export type { DrosteState } from './droste';
-export type { LightingState } from './lighting/index';
-export type { LightSpheresState } from './lighting/light_spheres';
-export type { CoreMathState } from './core_math';
-export type { WaterPlaneState } from './water_plane';

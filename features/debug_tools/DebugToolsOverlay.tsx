@@ -2,10 +2,8 @@
 import React, { Suspense } from 'react';
 import { FeatureComponentProps } from '../../components/registry/ComponentRegistry';
 
-// Code-split: debug tools are rarely used
-const LazyShaderDebugger = React.lazy(() =>
-    import('../../components/ShaderDebugger').then(m => ({ default: m.ShaderDebuggerGlobalWrapper }))
-);
+// ShaderDebugger was fractal-specific (raymarching introspection).
+// StateDebugger is generic and kept.
 const LazyStateDebugger = React.lazy(() =>
     import('../../components/StateDebugger').then(m => ({ default: m.StateDebugger }))
 );
@@ -13,7 +11,6 @@ const LazyStateDebugger = React.lazy(() =>
 export const DebugToolsOverlay: React.FC<FeatureComponentProps> = ({ sliceState, actions }) => {
     return (
         <Suspense fallback={null}>
-            <LazyShaderDebugger />
             <LazyStateDebugger />
         </Suspense>
     );
