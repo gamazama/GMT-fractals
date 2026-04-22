@@ -1,21 +1,24 @@
 /**
  * Post-mount setup for Fractal Toy — runs once after React has mounted.
  *
- * Intentionally empty through phase 1. Fractal-toy renders its feature
- * panels directly in FractalToyApp.tsx (a right-column stack of
- * AutoFeaturePanel components) rather than via the engine's Dock /
- * PanelRouter system, so there's no engine panel state to seed.
+ * Seeds panel state on the engine's right-dock for the three fractal-toy
+ * features. Panel IDs match each feature's tabConfig.label:
+ *   Mandelbulb (order 0) · Camera (order 1) · Lighting (order 2)
  *
- * A future commit could migrate the panels onto the engine's Dock so
- * they become dockable / floatable / dismissible — at which point this
- * function starts calling movePanel(...) to place them. For 1f we
- * keep the simpler right-column layout.
- *
- * Kept as an explicit hook so the boot-time three-step contract
- * (registerFeatures → store construction → setup) stays visible, even
- * when the setup step is currently a no-op.
+ * Panels become dockable / floatable / tab-switchable through the
+ * engine's standard Dock + PanelRouter system, the same way App.tsx
+ * surfaces features — no bespoke layout inside fractal-toy.
  */
 
+import { useFractalStore } from '../store/fractalStore';
+
 export const setupFractalToy = () => {
-    // No-op in phase 1 — see file comment.
+    const s = useFractalStore.getState();
+    s.movePanel('Mandelbulb', 'right', 0);
+    s.movePanel('Camera',     'right', 1);
+    s.movePanel('Lighting',   'right', 2);
+    // movePanel sets the moved panel as active on its side, so after three
+    // calls Lighting is active. Flip back to Mandelbulb — the default
+    // landing tab for a fractal explorer.
+    s.togglePanel('Mandelbulb', true);
 };
