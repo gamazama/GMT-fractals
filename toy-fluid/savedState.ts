@@ -20,8 +20,10 @@ export interface SavedState {
   name?: string;
   /** Params — the full FluidParams record. */
   params: FluidParams;
-  /** Gradient config. */
+  /** Main colour gradient. */
   gradient: GradientConfig;
+  /** B&W gradient driving collision mask (optional for back-compat with pre-v2 saves). */
+  collisionGradient?: GradientConfig;
   /** Orbit state. */
   orbit: OrbitState;
 }
@@ -30,6 +32,7 @@ export function buildSavedState(
   params: FluidParams,
   gradient: GradientConfig,
   orbit: OrbitState,
+  collisionGradient?: GradientConfig,
   name?: string,
 ): SavedState {
   return {
@@ -38,6 +41,7 @@ export function buildSavedState(
     name,
     params,
     gradient,
+    collisionGradient,
     orbit,
   };
 }
@@ -56,6 +60,9 @@ export function parseSavedState(raw: unknown): SavedState {
     name: typeof o.name === 'string' ? o.name : undefined,
     params: o.params as FluidParams,
     gradient: o.gradient as GradientConfig,
+    collisionGradient: (o.collisionGradient && typeof o.collisionGradient === 'object')
+      ? o.collisionGradient as GradientConfig
+      : undefined,
     orbit: o.orbit as OrbitState,
   };
 }

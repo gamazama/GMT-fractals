@@ -17,6 +17,7 @@ import {
   FRAG_BLOOM_EXTRACT,
   FRAG_BLOOM_DOWN,
   FRAG_BLOOM_UP,
+  FRAG_MASK,
 } from './shaders';
 import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH, SPLAT_RADIUS_UV } from '../constants';
 
@@ -26,6 +27,23 @@ export type FractalKind = 'julia' | 'mandelbrot';
 
 /** How new dye blends into the existing dye field each frame. */
 export type DyeBlend = 'add' | 'screen' | 'max' | 'over';
+
+/** Colour space used when dye decays each frame — controls whether fading dye stays vivid or goes grey. */
+export type DyeDecayMode = 'linear' | 'perceptual' | 'vivid';
+
+export const DYE_DECAY_MODES: Array<{ id: DyeDecayMode; label: string; hint: string }> = [
+  { id: 'linear',     label: 'Linear',     hint: 'Classic RGB multiply. Fades to black but mixing goes through muddy greys.' },
+  { id: 'perceptual', label: 'Perceptual', hint: 'OKLab: decay only the L-channel. Hue + chroma preserved — dye fades hue-stable to black.' },
+  { id: 'vivid',      label: 'Vivid',      hint: 'OKLab with chroma boost as lightness drops. Dye stays punchy all the way to near-black.' },
+];
+
+export function dyeDecayModeToIndex(m: DyeDecayMode): number {
+  switch (m) {
+    case 'linear': return 0;
+    case 'perceptual': return 1;
+    case 'vivid': return 2;
+  }
+}
 
 /** How the final colour gets compressed before display. */
 export type ToneMapping = 'none' | 'reinhard' | 'agx' | 'filmic';
@@ -177,6 +195,15 @@ export interface FluidParams {
   stripeFreq: number;
   /** How new dye blends onto the existing dye field. */
   dyeBlend: DyeBlend;
+  /** Colour-space used when dye decays each frame. `linear` = classic RGB, `perceptual` = OKLab L-decay. */
+  dyeDecayMode: DyeDecayMode;
+  /** Per-second decay rate for chroma (OKLab a/b) when mode is perceptual/vivid.
+   *  Lower than dyeDissipation → colour stays saturated longer than it stays bright. */
+  dyeChromaDecayHz: number;
+  /** Per-frame chroma multiplier applied after decay. 1 = neutral, <1 washes out, >1 punches up. */
+  dyeSaturationBoost: number;
+  /** Vorticity-confinement spatial scale (in sim texels). 1 = tight pixel-scale swirls, 4 = wider regional vortices. */
+  vorticityScale: number;
   /** Final tone-mapping stage. `none` is vivid & may clip; `agx` is best for rich colours. */
   toneMapping: ToneMapping;
   /** Pre-tone-map exposure gain (multiplier on final colour). */
@@ -201,6 +228,10 @@ export interface FluidParams {
   interiorColor: [number, number, number];
   edgeMargin: number;         // 0..0.25 — fade force/dye injection + advection near borders (fixes "gushing from edges")
   forceCap: number;           // per-pixel magnitude cap on force vector (prevents c-track blowup)
+  /** When true, a separate B&W collision gradient paints solid obstacles the fluid bounces off. */
+  collisionEnabled: boolean;
+  /** When true, the display overlays the collision mask so walls are visible. */
+  collisionPreview: boolean;
   paused: boolean;
   simResolution: number;      // target sim grid height (cells) — may be adaptively reduced
   autoQuality: boolean;       // if true, adaptive-scaler may reduce simResolution when FPS is low
@@ -271,6 +302,10 @@ export const DEFAULT_PARAMS: FluidParams = {
   trapOffset: 0,
   stripeFreq: 4,
   dyeBlend: 'max',
+  dyeDecayMode: 'linear',
+  dyeChromaDecayHz: 1.03,
+  dyeSaturationBoost: 1.0,
+  vorticityScale: 1,
   toneMapping: 'none',
   exposure: 1,
   vibrance: 1.645,
@@ -284,6 +319,8 @@ export const DEFAULT_PARAMS: FluidParams = {
   interiorColor: [0.02, 0.02, 0.04],
   edgeMargin: 0.04,
   forceCap: 40,
+  collisionEnabled: false,
+  collisionPreview: false,
   paused: false,
   simResolution: 1344,
   autoQuality: true,
@@ -311,6 +348,7 @@ export class FluidEngine {
   private progBloomExtract!: Program;
   private progBloomDown!: Program;
   private progBloomUp!: Program;
+  private progMask!: Program;
 
   /** Bloom scratch textures. Allocated to the DISPLAY canvas size / 2, /4, /8. */
   private bloomA!: FBO;   // half-res — extraction target + final upsample target
@@ -335,9 +373,13 @@ export class FluidEngine {
   private divergence!: FBO;
   private pressure!: DoubleFBO;
   private curl!: FBO;
+  /** Collision mask — r > 0.5 means that sim cell is a solid wall. Recomputed each frame. */
+  private maskTex!: FBO;
 
-  /** 256x1 RGBA8 gradient LUT. */
+  /** 256x1 RGBA8 gradient LUT — the main colour gradient. */
   private gradientTex: WebGLTexture | null = null;
+  /** 256x1 RGBA8 B&W LUT used by the collision-mask pass. */
+  private collisionGradientTex: WebGLTexture | null = null;
 
   params: FluidParams = { ...DEFAULT_PARAMS };
 
@@ -438,32 +480,36 @@ export class FluidEngine {
       ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower',
        'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq']);
     this.progMotion = this.linkProgram(VERT_FULLSCREEN, FRAG_MOTION,
-      ['uTexel', 'uJulia', 'uJuliaPrev', 'uJuliaAux', 'uGradient', 'uMode', 'uGain', 'uDt', 'uInteriorDamp', 'uDyeGain',
+      ['uTexel', 'uJulia', 'uJuliaPrev', 'uJuliaAux', 'uGradient', 'uMask', 'uMode', 'uGain', 'uDt',
+       'uInteriorDamp', 'uDyeGain',
        'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uEdgeMargin', 'uForceCap']);
     this.progAddForce = this.linkProgram(VERT_FULLSCREEN, FRAG_ADDFORCE,
-      ['uTexel', 'uVelocity', 'uForce', 'uDt']);
+      ['uTexel', 'uVelocity', 'uForce', 'uMask', 'uDt']);
     this.progInjectDye = this.linkProgram(VERT_FULLSCREEN, FRAG_INJECT_DYE,
-      ['uTexel', 'uDye', 'uJulia', 'uJuliaAux', 'uGradient', 'uDyeGain', 'uDyeFadeHz', 'uDt',
-       'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uEdgeMargin', 'uDyeBlend']);
+      ['uTexel', 'uDye', 'uJulia', 'uJuliaAux', 'uGradient', 'uMask',
+       'uDyeGain', 'uDyeFadeHz', 'uDt',
+       'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uEdgeMargin', 'uDyeBlend',
+       'uDyeDecayMode', 'uDyeChromaFadeHz', 'uDyeSatBoost']);
     this.progAdvect = this.linkProgram(VERT_FULLSCREEN, FRAG_ADVECT,
-      ['uTexel', 'uVelocity', 'uSource', 'uDt', 'uDissipation', 'uEdgeMargin']);
+      ['uTexel', 'uVelocity', 'uSource', 'uMask', 'uDt', 'uDissipation', 'uEdgeMargin']);
     this.progDivergence = this.linkProgram(VERT_FULLSCREEN, FRAG_DIVERGENCE,
       ['uTexel', 'uVelocity']);
     this.progCurl = this.linkProgram(VERT_FULLSCREEN, FRAG_CURL,
       ['uTexel', 'uVelocity']);
     this.progVorticity = this.linkProgram(VERT_FULLSCREEN, FRAG_VORTICITY,
-      ['uTexel', 'uVelocity', 'uCurl', 'uStrength', 'uDt']);
+      ['uTexel', 'uVelocity', 'uCurl', 'uStrength', 'uScale', 'uDt']);
     this.progPressure = this.linkProgram(VERT_FULLSCREEN, FRAG_PRESSURE,
       ['uTexel', 'uPressure', 'uDivergence']);
     this.progGradSub = this.linkProgram(VERT_FULLSCREEN, FRAG_GRADSUB,
-      ['uTexel', 'uPressure', 'uVelocity']);
+      ['uTexel', 'uPressure', 'uVelocity', 'uMask']);
     this.progSplat = this.linkProgram(VERT_FULLSCREEN, FRAG_SPLAT,
       ['uTexel', 'uTarget', 'uPoint', 'uValue', 'uRadius', 'uAspect']);
     this.progDisplay = this.linkProgram(VERT_FULLSCREEN, FRAG_DISPLAY,
-      ['uTexel', 'uTexelDisplay', 'uTexelDye', 'uJulia', 'uJuliaAux', 'uDye', 'uVelocity', 'uGradient', 'uBloom',
+      ['uTexel', 'uTexelDisplay', 'uTexelDye', 'uJulia', 'uJuliaAux', 'uDye', 'uVelocity', 'uGradient', 'uBloom', 'uMask',
        'uShowMode', 'uJuliaMix', 'uDyeMix', 'uVelocityViz',
        'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
-       'uToneMapping', 'uExposure', 'uVibrance', 'uBloomAmount', 'uAberration', 'uRefraction', 'uRefractSmooth', 'uCaustics']);
+       'uToneMapping', 'uExposure', 'uVibrance', 'uBloomAmount', 'uAberration', 'uRefraction', 'uRefractSmooth', 'uCaustics',
+       'uCollisionPreview']);
     this.progClear = this.linkProgram(VERT_FULLSCREEN, FRAG_CLEAR, ['uValue']);
     this.progReproject = this.linkProgram(VERT_FULLSCREEN, FRAG_REPROJECT,
       ['uTexel', 'uSource', 'uNewCenter', 'uOldCenter', 'uNewZoom', 'uOldZoom', 'uAspect']);
@@ -473,6 +519,9 @@ export class FluidEngine {
       ['uTexel', 'uSource']);
     this.progBloomUp = this.linkProgram(VERT_FULLSCREEN, FRAG_BLOOM_UP,
       ['uTexel', 'uSource', 'uPrev', 'uIntensity']);
+    this.progMask = this.linkProgram(VERT_FULLSCREEN, FRAG_MASK,
+      ['uTexel', 'uJulia', 'uJuliaAux', 'uGradient', 'uCollisionGradient',
+       'uColorMapping', 'uGradientRepeat', 'uGradientPhase']);
   }
 
   // ---------------------------- Textures & FBOs ----------------------------
@@ -572,6 +621,7 @@ export class FluidEngine {
     this.deleteFBO(this.divergence);
     this.deleteDoubleFBO(this.pressure);
     this.deleteFBO(this.curl);
+    this.deleteFBO(this.maskTex);
 
     this.simW = w;
     this.simH = h;
@@ -584,6 +634,7 @@ export class FluidEngine {
     this.divergence = this.createFBO(w, h);
     this.pressure  = this.createDoubleFBO(w, h);
     this.curl      = this.createFBO(w, h);
+    this.maskTex   = this.createFBO(w, h);
     // New textures are zero — don't try to reproject from the previous (smaller/larger) grid.
     this.firstFrame = true;
   }
@@ -631,27 +682,36 @@ export class FluidEngine {
   }
 
   /**
-   * Upload a baked gradient LUT (`GRADIENT_LUT_WIDTH × 1 RGBA`, length = 4×width).
-   * Call whenever the user edits the gradient.
+   * Upload a baked LUT (`GRADIENT_LUT_WIDTH × 1 RGBA`, length = 4×width).
+   * Shared helper: both the main colour gradient and the collision B&W gradient
+   * use the same upload path, differing only in the sampling site.
    */
-  setGradientBuffer(buf: Uint8Array) {
+  private uploadLut(slot: 'main' | 'collision', buf: Uint8Array) {
     const gl = this.gl;
     const expected = GRADIENT_LUT_WIDTH * 4;
     if (buf.length !== expected) {
-      console.warn(`[FluidEngine] gradient buffer unexpected length ${buf.length} (want ${expected})`);
+      console.warn(`[FluidEngine] ${slot} gradient buffer unexpected length ${buf.length} (want ${expected})`);
     }
-    if (!this.gradientTex) {
-      this.gradientTex = gl.createTexture();
+    let tex = slot === 'main' ? this.gradientTex : this.collisionGradientTex;
+    if (!tex) {
+      tex = gl.createTexture()!;
+      if (slot === 'main') this.gradientTex = tex;
+      else this.collisionGradientTex = tex;
     }
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.gradientTex);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    // REPEAT so fract(t) in the shader tiles seamlessly.
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRADIENT_LUT_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, buf);
   }
+
+  /** Upload the main colour gradient LUT. Call whenever the user edits the gradient. */
+  setGradientBuffer(buf: Uint8Array) { this.uploadLut('main', buf); }
+
+  /** Upload the collision gradient LUT (black = fluid, white = wall). */
+  setCollisionGradientBuffer(buf: Uint8Array) { this.uploadLut('collision', buf); }
 
   private ensureGradient() {
     if (this.gradientTex) return;
@@ -665,6 +725,20 @@ export class FluidEngine {
       buf[i * 4 + 3] = 255;
     }
     this.setGradientBuffer(buf);
+  }
+
+  private ensureCollisionGradient() {
+    if (this.collisionGradientTex) return;
+    // Fallback = all black → no walls anywhere. Harmless until the app uploads one.
+    const w = GRADIENT_LUT_WIDTH;
+    const buf = new Uint8Array(w * 4);
+    for (let i = 0; i < w; ++i) {
+      buf[i * 4 + 0] = 0;
+      buf[i * 4 + 1] = 0;
+      buf[i * 4 + 2] = 0;
+      buf[i * 4 + 3] = 255;
+    }
+    this.setCollisionGradientBuffer(buf);
   }
 
   /** Resize the drawing buffer to match container. */
@@ -778,6 +852,34 @@ export class FluidEngine {
     this.drawQuad();
   }
 
+  /**
+   * Build the per-frame collision mask from the current color-mapping + gradient.
+   * Written to `maskTex.tex`; every fluid pass reads it. When collision is off
+   * we still render but clear the mask to zero, so the shaders that read it
+   * keep a single fast path.
+   */
+  private computeMask() {
+    const gl = this.gl;
+    this.ensureGradient();
+    this.ensureCollisionGradient();
+    this.bindFBO(this.maskTex);
+    if (!this.params.collisionEnabled) {
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      return;
+    }
+    this.useProgram(this.progMask);
+    this.setTexel(this.progMask, this.simW, this.simH);
+    this.bindTex(0, this.juliaCur.texMain, this.progMask.uniforms['uJulia']);
+    this.bindTex(1, this.juliaCur.texAux, this.progMask.uniforms['uJuliaAux']);
+    this.bindTex(2, this.gradientTex!, this.progMask.uniforms['uGradient']);
+    this.bindTex(3, this.collisionGradientTex!, this.progMask.uniforms['uCollisionGradient']);
+    gl.uniform1i(this.progMask.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
+    gl.uniform1f(this.progMask.uniforms['uGradientRepeat'], this.params.gradientRepeat);
+    gl.uniform1f(this.progMask.uniforms['uGradientPhase'], this.params.gradientPhase);
+    this.drawQuad();
+  }
+
   private computeForce() {
     const gl = this.gl;
     this.ensureGradient();
@@ -788,6 +890,7 @@ export class FluidEngine {
     this.bindTex(1, this.juliaPrev.texMain, this.progMotion.uniforms['uJuliaPrev']);
     this.bindTex(4, this.juliaCur.texAux, this.progMotion.uniforms['uJuliaAux']);
     this.bindTex(2, this.gradientTex!, this.progMotion.uniforms['uGradient']);
+    this.bindTex(5, this.maskTex.tex, this.progMotion.uniforms['uMask']);
     gl.uniform1i(this.progMotion.uniforms['uMode'], modeToIndex(this.params.forceMode));
     gl.uniform1f(this.progMotion.uniforms['uGain'], this.params.forceGain);
     gl.uniform1f(this.progMotion.uniforms['uDt'], this.params.dt);
@@ -808,6 +911,7 @@ export class FluidEngine {
     this.setTexel(this.progAddForce, this.simW, this.simH);
     this.bindTex(0, this.velocity.read.tex, this.progAddForce.uniforms['uVelocity']);
     this.bindTex(1, this.forceTex.tex, this.progAddForce.uniforms['uForce']);
+    this.bindTex(2, this.maskTex.tex, this.progAddForce.uniforms['uMask']);
     gl.uniform1f(this.progAddForce.uniforms['uDt'], this.params.dt);
     this.drawQuad();
     this.velocity.swap();
@@ -823,6 +927,7 @@ export class FluidEngine {
     this.bindTex(1, this.juliaCur.texMain, this.progInjectDye.uniforms['uJulia']);
     this.bindTex(2, this.gradientTex!, this.progInjectDye.uniforms['uGradient']);
     this.bindTex(4, this.juliaCur.texAux, this.progInjectDye.uniforms['uJuliaAux']);
+    this.bindTex(5, this.maskTex.tex, this.progInjectDye.uniforms['uMask']);
     gl.uniform1f(this.progInjectDye.uniforms['uDyeGain'], this.params.dyeInject);
     gl.uniform1f(this.progInjectDye.uniforms['uDyeFadeHz'], this.params.dyeDissipation);
     gl.uniform1f(this.progInjectDye.uniforms['uDt'], this.params.dt);
@@ -831,6 +936,9 @@ export class FluidEngine {
     gl.uniform1f(this.progInjectDye.uniforms['uGradientPhase'], this.params.gradientPhase);
     gl.uniform1f(this.progInjectDye.uniforms['uEdgeMargin'], this.params.edgeMargin);
     gl.uniform1i(this.progInjectDye.uniforms['uDyeBlend'], dyeBlendToIndex(this.params.dyeBlend));
+    gl.uniform1i(this.progInjectDye.uniforms['uDyeDecayMode'], dyeDecayModeToIndex(this.params.dyeDecayMode));
+    gl.uniform1f(this.progInjectDye.uniforms['uDyeChromaFadeHz'], this.params.dyeChromaDecayHz);
+    gl.uniform1f(this.progInjectDye.uniforms['uDyeSatBoost'], this.params.dyeSaturationBoost);
     this.drawQuad();
     this.dye.swap();
   }
@@ -851,6 +959,7 @@ export class FluidEngine {
     this.bindTex(0, this.velocity.read.tex, this.progVorticity.uniforms['uVelocity']);
     this.bindTex(1, this.curl.tex, this.progVorticity.uniforms['uCurl']);
     gl.uniform1f(this.progVorticity.uniforms['uStrength'], this.params.vorticity);
+    gl.uniform1f(this.progVorticity.uniforms['uScale'], this.params.vorticityScale);
     gl.uniform1f(this.progVorticity.uniforms['uDt'], this.params.dt);
     this.drawQuad();
     this.velocity.swap();
@@ -888,6 +997,7 @@ export class FluidEngine {
     this.setTexel(this.progGradSub, this.simW, this.simH);
     this.bindTex(0, this.pressure.read.tex, this.progGradSub.uniforms['uPressure']);
     this.bindTex(1, this.velocity.read.tex, this.progGradSub.uniforms['uVelocity']);
+    this.bindTex(2, this.maskTex.tex, this.progGradSub.uniforms['uMask']);
     this.drawQuad();
     this.velocity.swap();
   }
@@ -903,6 +1013,7 @@ export class FluidEngine {
     this.setTexel(this.progAdvect, this.simW, this.simH);
     this.bindTex(0, this.velocity.read.tex, this.progAdvect.uniforms['uVelocity']);
     this.bindTex(1, source.read.tex, this.progAdvect.uniforms['uSource']);
+    this.bindTex(2, this.maskTex.tex, this.progAdvect.uniforms['uMask']);
     gl.uniform1f(this.progAdvect.uniforms['uDt'], this.params.dt);
     gl.uniform1f(this.progAdvect.uniforms['uDissipation'], dissipationHz);
     gl.uniform1f(this.progAdvect.uniforms['uEdgeMargin'], this.params.edgeMargin);
@@ -1022,6 +1133,7 @@ export class FluidEngine {
     this.bindTex(2, this.velocity.read.tex, this.progDisplay.uniforms['uVelocity']);
     this.bindTex(3, this.gradientTex!, this.progDisplay.uniforms['uGradient']);
     this.bindTex(5, bloomTex?.tex ?? this.gradientTex!, this.progDisplay.uniforms['uBloom']);
+    this.bindTex(6, this.maskTex.tex, this.progDisplay.uniforms['uMask']);
     gl.uniform1i(this.progDisplay.uniforms['uShowMode'], showToIndex(this.params.show));
     gl.uniform1f(this.progDisplay.uniforms['uJuliaMix'], this.params.juliaMix);
     gl.uniform1f(this.progDisplay.uniforms['uDyeMix'], this.params.dyeMix);
@@ -1041,6 +1153,7 @@ export class FluidEngine {
       gl.uniform1f(this.progDisplay.uniforms['uRefraction'], 0.0);
       gl.uniform1f(this.progDisplay.uniforms['uRefractSmooth'], 1.0);
       gl.uniform1f(this.progDisplay.uniforms['uCaustics'], 0.0);
+      gl.uniform1i(this.progDisplay.uniforms['uCollisionPreview'], 0);
     } else {
       gl.uniform1i(this.progDisplay.uniforms['uToneMapping'], toneMappingToIndex(this.params.toneMapping));
       gl.uniform1f(this.progDisplay.uniforms['uExposure'], this.params.exposure);
@@ -1050,6 +1163,7 @@ export class FluidEngine {
       gl.uniform1f(this.progDisplay.uniforms['uRefraction'], this.params.refraction);
       gl.uniform1f(this.progDisplay.uniforms['uRefractSmooth'], this.params.refractSmooth);
       gl.uniform1f(this.progDisplay.uniforms['uCaustics'], this.params.caustics);
+      gl.uniform1i(this.progDisplay.uniforms['uCollisionPreview'], this.params.collisionPreview ? 1 : 0);
     }
   }
 
@@ -1061,6 +1175,9 @@ export class FluidEngine {
 
     // 1. Julia pass
     this.renderJulia();
+    // 1a. Collision mask (always — emits zeros when disabled so downstream
+    // shaders have a single fast path through texture(uMask, ...)).
+    this.computeMask();
 
     if (!this.params.paused) {
       // 1b. Camera-locked dye/velocity — if the user panned or zoomed since the last
@@ -1105,14 +1222,17 @@ export class FluidEngine {
     this.deleteFBO(this.divergence);
     this.deleteDoubleFBO(this.pressure);
     this.deleteFBO(this.curl);
+    this.deleteFBO(this.maskTex);
     if (this.gradientTex) { gl.deleteTexture(this.gradientTex); this.gradientTex = null; }
+    if (this.collisionGradientTex) { gl.deleteTexture(this.collisionGradientTex); this.collisionGradientTex = null; }
     this.deleteFBO(this.bloomA); this.deleteFBO(this.bloomB); this.deleteFBO(this.bloomC);
     gl.deleteBuffer(this.quadVbo);
     for (const p of [
       this.progJulia, this.progMotion, this.progAddForce, this.progInjectDye,
       this.progAdvect, this.progDivergence, this.progCurl, this.progVorticity,
       this.progPressure, this.progGradSub, this.progSplat, this.progDisplay, this.progClear,
-      this.progReproject,
+      this.progReproject, this.progMask,
+      this.progBloomExtract, this.progBloomDown, this.progBloomUp,
     ]) {
       if (p?.prog) gl.deleteProgram(p.prog);
     }

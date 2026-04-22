@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FluidEngine, FluidParams, DEFAULT_PARAMS } from './fluid/FluidEngine';
 import { ControlPanel } from './components/ControlPanel';
 import { CanvasContextMenu, MenuItem } from './components/CanvasContextMenu';
-import { DEFAULT_GRADIENT, OrbitState, PRESETS, Preset } from './presets';
+import { DEFAULT_COLLISION_GRADIENT, DEFAULT_GRADIENT, OrbitState, PRESETS, Preset } from './presets';
 import type { GradientConfig } from '../types';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { buildSavedState, downloadJson, downloadPng, downloadScreenshot, readSavedStateFromFile } from './savedState';
@@ -35,6 +35,7 @@ export const ToyFluidApp: React.FC = () => {
   const [params, setParams] = useState<FluidParams>(DEFAULT_PARAMS);
   const [orbit, setOrbit] = useState<OrbitState>(DEFAULT_ORBIT);
   const [gradient, setGradient] = useState<GradientConfig>(DEFAULT_GRADIENT);
+  const [collisionGradient, setCollisionGradient] = useState<GradientConfig>(DEFAULT_COLLISION_GRADIENT);
   const [error, setError] = useState<string | null>(null);
   const [fps, setFps] = useState(0);
   const [showHotkeys, setShowHotkeys] = useState(true);
@@ -43,14 +44,17 @@ export const ToyFluidApp: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
 
-  // Bake the gradient to a 256×1 RGBA Uint8Array whenever the config changes.
-  // Memoized so the buffer identity is stable across renders → avoids thrash in consumers.
+  // Bake both gradients to 256×1 RGBA Uint8Arrays. Memoised so identity is
+  // stable across renders → no thrash in downstream consumers.
   const gradientLut = useMemo(() => generateGradientTextureBuffer(gradient), [gradient]);
+  const collisionGradientLut = useMemo(() => generateGradientTextureBuffer(collisionGradient), [collisionGradient]);
 
-  // Push the baked gradient into the engine every time it changes.
   useEffect(() => {
     engineRef.current?.setGradientBuffer(gradientLut);
   }, [gradientLut]);
+  useEffect(() => {
+    engineRef.current?.setCollisionGradientBuffer(collisionGradientLut);
+  }, [collisionGradientLut]);
 
   // Latest-value refs so the rAF callback doesn't re-subscribe.
   const paramsRef = useRef(params);
@@ -103,6 +107,7 @@ export const ToyFluidApp: React.FC = () => {
       engine.setParams(paramsRef.current);
       // Seed initial gradient (bypass the dependency effect so first frame isn't grey).
       engine.setGradientBuffer(gradientLut);
+      engine.setCollisionGradientBuffer(collisionGradientLut);
       const rect = cv.getBoundingClientRect();
       engine.resize(rect.width, rect.height);
     } catch (e) {
@@ -343,31 +348,31 @@ export const ToyFluidApp: React.FC = () => {
     // starts from a known state — no leftover values from whatever the user was doing.
     setParams({ ...DEFAULT_PARAMS, ...preset.params });
     if (preset.gradient) setGradient(preset.gradient);
-    // Orbit is an independent piece of state — reset to the preset's desired orbit,
-    // or to "off" if the preset doesn't care.
+    // Older presets (pre-collision) have no collisionGradient; fall back to the default
+    // so applying them doesn't leave stale walls from a previous preset.
+    setCollisionGradient(preset.collisionGradient ?? DEFAULT_COLLISION_GRADIENT);
     setOrbit(preset.orbit ?? DEFAULT_ORBIT);
-    // Clear any accumulated fluid (velocity + dye + pressure) so the preset starts fresh.
     engineRef.current?.resetFluid();
   }, []);
 
   // ----- Save / Load -----
   const handleSaveJson = useCallback(() => {
-    const state = buildSavedState(paramsRef.current, gradient, orbitRef.current);
+    const state = buildSavedState(paramsRef.current, gradient, orbitRef.current, collisionGradient);
     const ts = new Date().toISOString().replace(/[:]/g, '-').replace(/\..+$/, '');
     downloadJson(state, `toy-fluid-${ts}.json`);
-  }, [gradient]);
+  }, [gradient, collisionGradient]);
 
   const handleSavePng = useCallback(async () => {
     const cv = canvasRef.current;
     if (!cv) return;
-    const state = buildSavedState(paramsRef.current, gradient, orbitRef.current);
+    const state = buildSavedState(paramsRef.current, gradient, orbitRef.current, collisionGradient);
     const ts = new Date().toISOString().replace(/[:]/g, '-').replace(/\..+$/, '');
     try {
       await downloadPng(cv, state, `toy-fluid-${ts}.png`);
     } catch (e) {
       console.error('[toy-fluid] Save PNG failed:', e);
     }
-  }, [gradient]);
+  }, [gradient, collisionGradient]);
 
   const handleScreenshot = useCallback(async () => {
     const cv = canvasRef.current;
@@ -390,6 +395,7 @@ export const ToyFluidApp: React.FC = () => {
         desc: `Loaded from ${file.name}`,
         params: saved.params,
         gradient: saved.gradient,
+        collisionGradient: saved.collisionGradient,
         orbit: saved.orbit,
       });
     } catch (e) {
@@ -666,6 +672,8 @@ export const ToyFluidApp: React.FC = () => {
           gradient={gradient}
           setGradient={setGradient}
           gradientLut={gradientLut}
+          collisionGradient={collisionGradient}
+          setCollisionGradient={setCollisionGradient}
           onPresetApply={handlePresetApply}
           onSaveJson={handleSaveJson}
           onSavePng={handleSavePng}
@@ -685,7 +693,7 @@ export const ToyFluidApp: React.FC = () => {
       <SubmitPresetModal
         open={submitOpen}
         canvas={canvasRef.current}
-        state={submitOpen ? buildSavedState(paramsRef.current, gradient, orbitRef.current) : null}
+        state={submitOpen ? buildSavedState(paramsRef.current, gradient, orbitRef.current, collisionGradient) : null}
         onClose={() => setSubmitOpen(false)}
       />
       </div>

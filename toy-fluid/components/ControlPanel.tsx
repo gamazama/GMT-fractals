@@ -1,12 +1,12 @@
 import React from 'react';
 import { ScalarInput } from '../../components/inputs/ScalarInput';
-import TabBar from '../../components/TabBar';
 import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
 import type { GradientConfig, GradientStop } from '../../types';
 import {
   FluidParams, ForceMode, ShowMode, FractalKind,
   ColorMapping, COLOR_MAPPINGS,
   DyeBlend, DYE_BLENDS,
+  DyeDecayMode, DYE_DECAY_MODES,
   ToneMapping, TONE_MAPPINGS,
   FluidStyle, FLUID_STYLES,
 } from '../fluid/FluidEngine';
@@ -22,6 +22,8 @@ interface Props {
   gradient: GradientConfig;
   setGradient: (g: GradientConfig) => void;
   gradientLut: Uint8Array | null;
+  collisionGradient: GradientConfig;
+  setCollisionGradient: (g: GradientConfig) => void;
   onPresetApply: (preset: Preset) => void;
   onSaveJson: () => void;
   onSavePng: () => void;
@@ -53,7 +55,7 @@ const KINDS: { id: FractalKind; label: string }[] = [
   { id: 'mandelbrot', label: 'Mandelbrot' },
 ];
 
-const TABS = ['Fractal', 'Flow', 'Color', 'Presets'] as const;
+const TABS = ['Fractal', 'Coupling', 'Fluid', 'Palette', 'Post-FX', 'Collision', 'Composite', 'Presets'] as const;
 type TabId = (typeof TABS)[number];
 
 function rgbToHex(rgb: [number, number, number]): string {
@@ -104,8 +106,9 @@ const GroupHeader: React.FC<{ children: React.ReactNode; right?: React.ReactNode
 );
 
 export const ControlPanel: React.FC<Props> = ({
-  params, setParams, onReset, orbit, setOrbit, gradient, setGradient, gradientLut, onPresetApply,
-  onSaveJson, onSavePng, onLoadFile, hideHints,
+  params, setParams, onReset, orbit, setOrbit, gradient, setGradient, gradientLut,
+  collisionGradient, setCollisionGradient,
+  onPresetApply, onSaveJson, onSavePng, onLoadFile, hideHints,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = React.useState<TabId>('Fractal');
@@ -114,7 +117,6 @@ export const ControlPanel: React.FC<Props> = ({
     const p = PRESETS.find(p => p.id === id);
     if (p) onPresetApply(p);
   };
-  const onLoadClick = () => fileInputRef.current?.click();
   const onFileChosen = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) onLoadFile(f);
@@ -135,6 +137,9 @@ export const ControlPanel: React.FC<Props> = ({
     }
   };
 
+  // Container gap collapses to a hairline when hints are off so sliders stack flush.
+  const tabGap = hideHints ? 'gap-0.5' : 'gap-3';
+
   return (
     <HideHintsContext.Provider value={hideHints}>
       <div className="flex flex-col h-full text-gray-200 text-xs select-none">
@@ -147,11 +152,37 @@ export const ControlPanel: React.FC<Props> = ({
           <a href="./index.html" className="text-[10px] text-cyan-300 hover:underline">← back to GMT</a>
         </div>
 
-        {/* Tabs */}
-        <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
+        {/* Tabs — two rows of four so we have room for the full technical names
+            without cramping. Only the last row draws the bottom divider. */}
+        <div className="bg-black/40 border-b border-white/10">
+          {[TABS.slice(0, 4), TABS.slice(4, 8)].map((row, rowIdx) => (
+            <div
+              key={rowIdx}
+              className={`flex ${rowIdx === 0 ? 'border-b border-white/5' : ''}`}
+            >
+              {row.map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 py-1.5 px-0 text-[10px] font-bold tracking-wide whitespace-nowrap transition-all relative ${
+                    activeTab === tab
+                      ? 'text-cyan-400 bg-white/5'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                  }`}
+                >
+                  {tab}
+                  {activeTab === tab && (
+                    <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-cyan-500 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                  )}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
 
         {/* Tab content (scrollable) */}
-        <div className="flex-1 overflow-y-auto px-3 pt-3 pb-2 flex flex-col gap-3">
+        <div className={`flex-1 overflow-y-auto px-3 pt-3 pb-2 flex flex-col ${tabGap}`}>
           {activeTab === 'Fractal' && (
             <>
               <Hint>The fractal is the force generator. Every fluid frame reads this texture.</Hint>
@@ -197,7 +228,7 @@ export const ControlPanel: React.FC<Props> = ({
             </>
           )}
 
-          {activeTab === 'Flow' && (
+          {activeTab === 'Coupling' && (
             <>
               <Hint>The coupling law. Chooses <em>how</em> fractal pixels become velocity at each cell.</Hint>
               <div className="grid grid-cols-3 gap-1">
@@ -218,19 +249,35 @@ export const ControlPanel: React.FC<Props> = ({
               <Row hint="How much to suppress force inside the set. 1 = still lake in the interior, 0 = full bleed.">
                 <ScalarInput label="Interior damp" value={params.interiorDamp} onChange={(v) => setParams({ interiorDamp: v })} min={0} max={1} step={0.01} variant="full" />
               </Row>
+              <Row hint="Per-pixel cap on the fractal force magnitude.">
+                <ScalarInput label="Force cap" value={params.forceCap} onChange={(v) => setParams({ forceCap: v })} min={1} max={40} step={0.5} variant="full" />
+              </Row>
+              <Row hint="Fades force/dye injection near the canvas edges. Fixes 'gushing from the borders' under fast c-changes.">
+                <ScalarInput label="Edge margin" value={params.edgeMargin} onChange={(v) => setParams({ edgeMargin: v })} min={0} max={0.25} step={0.005} variant="full" />
+              </Row>
 
               <GroupHeader right={<Chip active={orbit.enabled} onClick={() => setOrbit({ enabled: !orbit.enabled })}>{orbit.enabled ? 'on' : 'off'}</Chip>}>Auto-orbit c</GroupHeader>
               <Hint>Circles c automatically around its current value. Pair with <b>C-Track</b> to watch the fluid breathe with the fractal's deformation.</Hint>
-              <div className="grid grid-cols-2 gap-2">
-                <ScalarInput label="Radius" value={orbit.radius} onChange={(v) => setOrbit({ radius: v })} min={0} max={0.5} step={0.001} variant="full" />
-                <ScalarInput label="Speed" value={orbit.speed} onChange={(v) => setOrbit({ speed: v })} min={0} max={3} step={0.01} variant="full" />
-              </div>
+              {orbit.enabled && (
+                <div className="grid grid-cols-2 gap-2">
+                  <ScalarInput label="Radius" value={orbit.radius} onChange={(v) => setOrbit({ radius: v })} min={0} max={0.5} step={0.001} variant="full" />
+                  <ScalarInput label="Speed" value={orbit.speed} onChange={(v) => setOrbit({ speed: v })} min={0} max={3} step={0.01} variant="full" />
+                </div>
+              )}
+            </>
+          )}
 
-              <GroupHeader>Fluid</GroupHeader>
+          {activeTab === 'Fluid' && (
+            <>
               <Hint>How the fluid carries and forgets what the fractal pushed into it.</Hint>
               <Row hint="Amplifies existing curl — keeps fractal-induced swirls from smearing away.">
                 <ScalarInput label="Vorticity" value={params.vorticity} onChange={(v) => setParams({ vorticity: v })} min={0} max={50} step={0.1} variant="full" />
               </Row>
+              {params.vorticity > 0 && (
+                <Row hint="Spatial scale of the vorticity confinement (in sim texels). 1 = tight pixel-scale swirls, 4+ = larger organised vortices.">
+                  <ScalarInput label="Vorticity scale" value={params.vorticityScale} onChange={(v) => setParams({ vorticityScale: v })} min={0.5} max={8} step={0.1} variant="full" />
+                </Row>
+              )}
               <Row hint="How fast velocity decays. High = fluid forgets the fractal quickly.">
                 <ScalarInput label="Velocity dissipation /s" value={params.dissipation} onChange={(v) => setParams({ dissipation: v })} min={0} max={5} step={0.01} variant="full" />
               </Row>
@@ -249,16 +296,10 @@ export const ControlPanel: React.FC<Props> = ({
               <Row hint="Target fluid grid height in cells. More = finer detail, slower.">
                 <ScalarInput label="Sim resolution" value={params.simResolution} onChange={(v) => setParams({ simResolution: Math.round(v) })} min={128} max={1536} step={32} variant="full" />
               </Row>
-              <Row hint="Fades force/dye injection near the canvas edges. Fixes 'gushing from the borders' under fast c-changes.">
-                <ScalarInput label="Edge margin" value={params.edgeMargin} onChange={(v) => setParams({ edgeMargin: v })} min={0} max={0.25} step={0.005} variant="full" />
-              </Row>
-              <Row hint="Per-pixel cap on the fractal force magnitude.">
-                <ScalarInput label="Force cap" value={params.forceCap} onChange={(v) => setParams({ forceCap: v })} min={1} max={40} step={0.5} variant="full" />
-              </Row>
             </>
           )}
 
-          {activeTab === 'Color' && (
+          {activeTab === 'Palette' && (
             <>
               <Hint>Colors both the fractal AND the dye that gets injected into the fluid. In Hue-mode, it <em>is</em> the vector field.</Hint>
               <AdvancedGradientEditor
@@ -322,7 +363,19 @@ export const ControlPanel: React.FC<Props> = ({
                 </Row>
               )}
 
-              <GroupHeader>Dye blend</GroupHeader>
+              <div className="flex flex-col gap-1">
+                <div className="text-[10px] text-gray-400">Interior color (bounded points)</div>
+                <input
+                  type="color"
+                  title="Interior color (points that never escape)"
+                  aria-label="Interior color"
+                  value={rgbToHex(params.interiorColor)}
+                  onChange={(e) => setParams({ interiorColor: hexToRgb(e.target.value) })}
+                  className="w-full h-6 rounded border border-white/10 cursor-pointer bg-transparent"
+                />
+              </div>
+
+              <GroupHeader>Dye</GroupHeader>
               <Hint>How new dye mixes with what the fluid already carries. Gradient stop alpha acts as a per-colour injection mask.</Hint>
               <div className="grid grid-cols-4 gap-1">
                 {DYE_BLENDS.map(b => (
@@ -332,6 +385,63 @@ export const ControlPanel: React.FC<Props> = ({
                 ))}
               </div>
               <Hint>{DYE_BLENDS.find(b => b.id === params.dyeBlend)?.hint}</Hint>
+
+              <div className="flex flex-col gap-1">
+                <div className="text-[10px] text-gray-400">Dye decay colour space</div>
+                <div className="grid grid-cols-3 gap-1">
+                  {DYE_DECAY_MODES.map(m => (
+                    <Chip key={m.id} active={params.dyeDecayMode === m.id} onClick={() => setParams({ dyeDecayMode: m.id })} title={m.hint}>
+                      {m.label}
+                    </Chip>
+                  ))}
+                </div>
+                <Hint>{DYE_DECAY_MODES.find(m => m.id === params.dyeDecayMode)?.hint}</Hint>
+              </div>
+              {params.dyeDecayMode !== 'linear' && (
+                <>
+                  <Row hint="Per-second fade on OKLab a/b (chroma). Lower than Dye dissipation → colour stays saturated longer than it stays bright.">
+                    <ScalarInput label="Chroma decay /s" value={params.dyeChromaDecayHz} onChange={(v) => setParams({ dyeChromaDecayHz: v })} min={0} max={5} step={0.01} variant="full" />
+                  </Row>
+                  <Row hint="Per-frame chroma multiplier applied after decay. 1 = neutral, <1 washes out, >1 punches colours up.">
+                    <ScalarInput label="Saturation boost" value={params.dyeSaturationBoost} onChange={(v) => setParams({ dyeSaturationBoost: v })} min={0} max={4} step={0.01} variant="full" />
+                  </Row>
+                </>
+              )}
+            </>
+          )}
+
+          {activeTab === 'Post-FX' && (
+            <>
+              <Hint>Post-process pack. Pick a style to preset bloom / aberration / refraction, or mix them yourself below.</Hint>
+              <div className="grid grid-cols-3 gap-1">
+                {FLUID_STYLES.map(s => (
+                  <Chip key={s.id} active={params.fluidStyle === s.id} onClick={() => applyStyle(s.id)} title={s.hint}>
+                    {s.label}
+                  </Chip>
+                ))}
+              </div>
+              <Row hint="Bloom strength — wide soft glow on bright pixels. Core of the electric look.">
+                <ScalarInput label="Bloom" value={params.bloomAmount} onChange={(v) => setParams({ bloomAmount: v })} min={0} max={3} step={0.01} variant="full" />
+              </Row>
+              {params.bloomAmount > 0 && (
+                <Row hint="Luminance threshold: pixels below this don't contribute to bloom. Lower = more of the image glows.">
+                  <ScalarInput label="Bloom threshold" value={params.bloomThreshold} onChange={(v) => setParams({ bloomThreshold: v })} min={0} max={3} step={0.01} variant="full" />
+                </Row>
+              )}
+              <Row hint="Chromatic aberration keyed to local velocity — plasma fringing on fast-moving dye regions. Affects dye only; fractal stays sharp.">
+                <ScalarInput label="Aberration" value={params.aberration} onChange={(v) => setParams({ aberration: v })} min={0} max={3} step={0.01} variant="full" />
+              </Row>
+              <Row hint="Screen-space refraction: dye's luminance acts as a height field — the fractal underneath warps like glass.">
+                <ScalarInput label="Refraction" value={params.refraction} onChange={(v) => setParams({ refraction: v })} min={0} max={0.3} step={0.001} variant="full" />
+              </Row>
+              {params.refraction > 0 && (
+                <Row hint="Stencil width (in dye texels) for the refraction gradient. Higher = smoother distortion, less pixel jitter; 1 = raw single-pixel gradient.">
+                  <ScalarInput label="Refract smooth" value={params.refractSmooth} onChange={(v) => setParams({ refractSmooth: v })} min={1} max={12} step={0.1} variant="full" />
+                </Row>
+              )}
+              <Row hint="Laplacian-of-dye highlight — simulates focused-light caustics where the liquid surface bends.">
+                <ScalarInput label="Caustics" value={params.caustics} onChange={(v) => setParams({ caustics: v })} min={0} max={25} step={0.1} variant="full" />
+              </Row>
 
               <GroupHeader>Tone mapping</GroupHeader>
               <Hint>
@@ -351,48 +461,52 @@ export const ControlPanel: React.FC<Props> = ({
               <Row hint="Chroma-aware saturation — boosts dull pixels without posterising already-vivid ones.">
                 <ScalarInput label="Vibrance" value={params.vibrance} onChange={(v) => setParams({ vibrance: v })} min={0} max={1} step={0.01} variant="full" />
               </Row>
+            </>
+          )}
 
-              <GroupHeader>Fluid style</GroupHeader>
-              <Hint>Post-process pack. Pick a style to preset the bloom/aberration/refraction knobs, or mix them yourself below.</Hint>
-              <div className="grid grid-cols-3 gap-1">
-                {FLUID_STYLES.map(s => (
-                  <Chip key={s.id} active={params.fluidStyle === s.id} onClick={() => applyStyle(s.id)} title={s.hint}>
-                    {s.label}
-                  </Chip>
-                ))}
+          {activeTab === 'Collision' && (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] text-gray-200 font-medium">Collision walls</div>
+                <Chip active={params.collisionEnabled} onClick={() => setParams({ collisionEnabled: !params.collisionEnabled })}>
+                  {params.collisionEnabled ? 'on' : 'off'}
+                </Chip>
               </div>
-              <Row hint="Bloom strength — wide soft glow on bright pixels. Core of the electric look.">
-                <ScalarInput label="Bloom" value={params.bloomAmount} onChange={(v) => setParams({ bloomAmount: v })} min={0} max={3} step={0.01} variant="full" />
-              </Row>
-              <Row hint="Luminance threshold: pixels below this don't contribute to bloom. Lower = more of the image glows.">
-                <ScalarInput label="Bloom threshold" value={params.bloomThreshold} onChange={(v) => setParams({ bloomThreshold: v })} min={0} max={3} step={0.01} variant="full" />
-              </Row>
-              <Row hint="Chromatic aberration keyed to local velocity — plasma fringing on fast-moving dye regions. Affects dye only; fractal stays sharp.">
-                <ScalarInput label="Aberration" value={params.aberration} onChange={(v) => setParams({ aberration: v })} min={0} max={3} step={0.01} variant="full" />
-              </Row>
-              <Row hint="Screen-space refraction: dye's luminance acts as a height field — the fractal underneath warps like glass.">
-                <ScalarInput label="Refraction" value={params.refraction} onChange={(v) => setParams({ refraction: v })} min={0} max={0.3} step={0.001} variant="full" />
-              </Row>
-              <Row hint="Stencil width (in dye texels) for the refraction gradient. Higher = smoother distortion, less pixel jitter; 1 = raw single-pixel gradient.">
-                <ScalarInput label="Refract smooth" value={params.refractSmooth} onChange={(v) => setParams({ refractSmooth: v })} min={1} max={12} step={0.1} variant="full" />
-              </Row>
-              <Row hint="Laplacian-of-dye highlight — simulates focused-light caustics where the liquid surface bends.">
-                <ScalarInput label="Caustics" value={params.caustics} onChange={(v) => setParams({ caustics: v })} min={0} max={25} step={0.1} variant="full" />
-              </Row>
+              <Hint>
+                Paints solid walls the fluid bounces off, sculpted by the gradient below.
+                Same mapping (iterations / angle / orbit trap / etc.) as the main gradient — edit
+                stops to black = <b>fluid</b>, white = <b>wall</b>. Gradient shape is up to you.
+              </Hint>
+              {params.collisionEnabled && (
+                <>
+                  <AdvancedGradientEditor
+                    value={collisionGradient}
+                    onChange={(val) => {
+                      if (Array.isArray(val)) {
+                        setCollisionGradient({
+                          stops: val as GradientStop[],
+                          colorSpace: collisionGradient.colorSpace,
+                          blendSpace: collisionGradient.blendSpace,
+                        });
+                      } else {
+                        setCollisionGradient(val as GradientConfig);
+                      }
+                    }}
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-400">Preview walls on canvas</span>
+                    <Chip active={params.collisionPreview} onClick={() => setParams({ collisionPreview: !params.collisionPreview })}>
+                      {params.collisionPreview ? 'on' : 'off'}
+                    </Chip>
+                  </div>
+                  <Hint>Overlays diagonal cyan hatching on solid cells so you can see the wall shape while tuning the gradient.</Hint>
+                </>
+              )}
+            </>
+          )}
 
-              <div className="flex flex-col gap-1">
-                <div className="text-[10px] text-gray-400">Interior color (bounded points)</div>
-                <input
-                  type="color"
-                  title="Interior color (points that never escape)"
-                  aria-label="Interior color"
-                  value={rgbToHex(params.interiorColor)}
-                  onChange={(e) => setParams({ interiorColor: hexToRgb(e.target.value) })}
-                  className="w-full h-6 rounded border border-white/10 cursor-pointer bg-transparent"
-                />
-              </div>
-
-              <GroupHeader>Display</GroupHeader>
+          {activeTab === 'Composite' && (
+            <>
               <Hint>What you see. The simulation runs the same either way.</Hint>
               <div className="grid grid-cols-4 gap-1">
                 {SHOW_MODES.map(m => (
@@ -401,21 +515,25 @@ export const ControlPanel: React.FC<Props> = ({
                   </Chip>
                 ))}
               </div>
-              <Row hint="How much fractal color shows through in Mixed view.">
-                <ScalarInput label="Julia mix" value={params.juliaMix} onChange={(v) => setParams({ juliaMix: v })} min={0} max={2} step={0.01} variant="full" />
-              </Row>
-              <Row hint="How much fluid dye shows through in Mixed view.">
-                <ScalarInput label="Dye mix" value={params.dyeMix} onChange={(v) => setParams({ dyeMix: v })} min={0} max={2} step={0.01} variant="full" />
-              </Row>
-              <Row hint="Overlay velocity-hue on top of the composite. Diagnostic.">
-                <ScalarInput label="Velocity viz" value={params.velocityViz} onChange={(v) => setParams({ velocityViz: v })} min={0} max={2} step={0.01} variant="full" />
-              </Row>
+              <Hint>{SHOW_MODES.find(m => m.id === params.show)?.hint}</Hint>
+              {params.show === 'composite' && (
+                <>
+                  <Row hint="How much fractal color shows through in Mixed view.">
+                    <ScalarInput label="Julia mix" value={params.juliaMix} onChange={(v) => setParams({ juliaMix: v })} min={0} max={2} step={0.01} variant="full" />
+                  </Row>
+                  <Row hint="How much fluid dye shows through in Mixed view.">
+                    <ScalarInput label="Dye mix" value={params.dyeMix} onChange={(v) => setParams({ dyeMix: v })} min={0} max={2} step={0.01} variant="full" />
+                  </Row>
+                  <Row hint="Overlay velocity-hue on top of the composite. Diagnostic.">
+                    <ScalarInput label="Velocity viz" value={params.velocityViz} onChange={(v) => setParams({ velocityViz: v })} min={0} max={2} step={0.01} variant="full" />
+                  </Row>
+                </>
+              )}
             </>
           )}
 
           {activeTab === 'Presets' && (
             <>
-              <GroupHeader>Presets</GroupHeader>
               <Hint>Each preset is a curated fractal→fluid coupling. Applying one resets the grid and restores known params.</Hint>
               <div className="grid grid-cols-2 gap-1">
                 {PRESETS.map(p => (
@@ -426,7 +544,7 @@ export const ControlPanel: React.FC<Props> = ({
               </div>
               <Hint>Save / Screenshot / Load moved to the top bar icons above.</Hint>
               {/* JSON export still exposed for users who want a text-only export. */}
-              <div className="grid grid-cols-1 gap-1 mt-2">
+              <div className="grid grid-cols-1 gap-1">
                 <Chip active={false} onClick={onSaveJson} title="Export the full state as a .json file.">Save JSON</Chip>
               </div>
               <input

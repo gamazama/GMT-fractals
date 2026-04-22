@@ -18,6 +18,43 @@
  * juliaTex_sample is the RGBA from the julia aux texture:
  *   .rg = final z (Re, Im),  .b = smooth iter count,  .a = escaped flag.
  */
+/**
+ * sRGB ↔ OKLab helpers (Björn Ottosson 2020). Used by dye dissipation to fade
+ * lightness while preserving hue and chroma — stops dye from collapsing to
+ * muddy grey as it dims. We treat the incoming colour as "roughly-sRGB" (it's
+ * never been gamma-corrected explicitly, since the dye LUT / gradient is all
+ * in display space) — aesthetically it reads correctly even if not strictly
+ * colorimetric.
+ */
+export const OKLAB_GLSL = /* glsl */ `
+vec3 rgbToOklab(vec3 c) {
+  float l = 0.4122214708 * c.r + 0.5363325372 * c.g + 0.0514459929 * c.b;
+  float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+  float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+  float lc = pow(max(l, 0.0), 1.0/3.0);
+  float mc = pow(max(m, 0.0), 1.0/3.0);
+  float sc = pow(max(s, 0.0), 1.0/3.0);
+  return vec3(
+    0.2104542553*lc + 0.7936177850*mc - 0.0040720468*sc,
+    1.9779984951*lc - 2.4285922050*mc + 0.4505937099*sc,
+    0.0259040371*lc + 0.7827717662*mc - 0.8086757660*sc
+  );
+}
+vec3 oklabToRgb(vec3 c) {
+  float lc = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+  float mc = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+  float sc = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+  float l = lc * lc * lc;
+  float m = mc * mc * mc;
+  float s = sc * sc * sc;
+  return vec3(
+    +4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
+    -1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
+    -0.0041960863*l - 0.7034186147*m + 1.7076147010*s
+  );
+}
+`;
+
 export const GRADIENT_SAMPLE_GLSL = /* glsl */ `
 // Convert the fractal's per-pixel data into a 0..1-ish scalar along which to sample the gradient.
 // j   = main  tex: rg = final z, b = smooth iter, a = escaped
@@ -228,6 +265,7 @@ uniform sampler2D uJulia;
 uniform sampler2D uJuliaPrev;
 uniform sampler2D uJuliaAux;
 uniform sampler2D uGradient;
+uniform sampler2D uMask;
 uniform vec2  uTexel;
 uniform int   uMode;
 uniform float uGain;
@@ -321,6 +359,11 @@ void main() {
     injectColor = gradientForJulia(c, auxHere) * escaped * uDyeGain * edgeFade;
   }
 
+  // Solid obstacles emit no force into the fluid (and carry no dye injection).
+  float solid = texture(uMask, vUv).r;
+  force *= (1.0 - solid);
+  injectColor *= (1.0 - solid);
+
   fragColor = vec4(force * uGain, injectColor.r, injectColor.g + injectColor.b * 0.5);
 }`;
 
@@ -334,11 +377,13 @@ in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uVelocity;
 uniform sampler2D uForce;
+uniform sampler2D uMask;
 uniform float uDt;
 void main() {
   vec2 v = texture(uVelocity, vUv).rg;
   vec2 f = texture(uForce, vUv).rg;
-  fragColor = vec4(v + f * uDt, 0.0, 1.0);
+  float solid = texture(uMask, vUv).r;
+  fragColor = vec4((v + f * uDt) * (1.0 - solid), 0.0, 1.0);
 }`;
 
 // -----------------------------------------------------------------------------
@@ -352,6 +397,7 @@ uniform sampler2D uDye;
 uniform sampler2D uJulia;
 uniform sampler2D uJuliaAux;
 uniform sampler2D uGradient;
+uniform sampler2D uMask;
 uniform float uDyeGain;
 uniform float uDyeFadeHz;
 uniform float uDt;
@@ -359,8 +405,30 @@ uniform int   uColorMapping;
 uniform float uGradientRepeat;
 uniform float uGradientPhase;
 uniform float uEdgeMargin;
-uniform int   uDyeBlend;    // 0 add, 1 screen, 2 max, 3 over (alpha)
+uniform int   uDyeBlend;        // 0 add, 1 screen, 2 max, 3 over (alpha)
+uniform int   uDyeDecayMode;    // 0 linear, 1 perceptual (OKLab L-decay), 2 vivid (chroma-boost)
+uniform float uDyeChromaFadeHz; // per-second chroma decay rate (perceptual / vivid only)
+uniform float uDyeSatBoost;     // per-frame chroma multiplier applied after decay
 ${GRADIENT_SAMPLE_GLSL}
+${OKLAB_GLSL}
+
+/** Apply this frame's dissipation to existing dye. Lightness and chroma decay
+ *  on independent schedules, then chroma is scaled by uDyeSatBoost. In "vivid"
+ *  mode chroma also gets an inverse-lightness boost so colours stay punchy as
+ *  they dim. */
+vec3 decayDye(vec3 c) {
+  float decayL = exp(-uDyeFadeHz * uDt);
+  if (uDyeDecayMode == 0) return c * decayL;
+  vec3 lab = rgbToOklab(c);
+  float decayC = exp(-uDyeChromaFadeHz * uDt);
+  lab.x *= decayL;
+  lab.yz *= decayC * uDyeSatBoost;
+  if (uDyeDecayMode == 2) {
+    lab.yz *= clamp(1.0 / max(decayL, 0.01), 1.0, 2.0);
+  }
+  return max(oklabToRgb(lab), 0.0);
+}
+
 void main() {
   vec4 d = texture(uDye, vUv);
   vec4 j = texture(uJulia, vUv);
@@ -372,25 +440,29 @@ void main() {
   // Base amount of colour to introduce this frame at this pixel.
   // j.a gates on "escaped", grad.a gates on gradient-stop alpha, edgeFade/etc on borders.
   float rate = j.a * uDyeGain * uDt * edgeFade * grad.a;
-  vec3 injectAdd  = grad.rgb * rate;
-  vec3 decay = vec3(exp(-uDyeFadeHz * uDt));   // per-frame persistence for existing dye
+  vec3 injectAdd = grad.rgb * rate;
+  vec3 aged      = decayDye(d.rgb);           // dye after this frame's dissipation, in chosen colour space
   vec3 col;
 
   if (uDyeBlend == 0) {
     // Add: classic accumulation. Simple, bright, can clip to 1.0 at heavy injection.
-    col = d.rgb * decay + injectAdd;
+    col = aged + injectAdd;
   } else if (uDyeBlend == 1) {
     // Screen: 1 − (1−d)(1−i). Overlaps glow; never exceeds 1.0 mathematically.
     vec3 i = clamp(injectAdd, 0.0, 1.0);
-    col = 1.0 - (1.0 - d.rgb * decay) * (1.0 - i);
+    col = 1.0 - (1.0 - aged) * (1.0 - i);
   } else if (uDyeBlend == 2) {
     // Max: hold the brightest. Good for preserving vivid strokes over faded ones.
-    col = max(d.rgb * decay, injectAdd);
+    col = max(aged, injectAdd);
   } else {
     // Over (alpha-compositing): uses grad.α + rate to mask the new colour onto old.
     float a = clamp(rate * 8.0, 0.0, 1.0);   // scale so "rate" reads like a visible alpha
-    col = d.rgb * decay * (1.0 - a) + grad.rgb * a;
+    col = aged * (1.0 - a) + grad.rgb * a;
   }
+
+  // Solid obstacles: no dye inside — they're walls, not flowing medium.
+  float solid = texture(uMask, vUv).r;
+  col *= (1.0 - solid);
 
   fragColor = vec4(col, 1.0);
 }`;
@@ -404,6 +476,7 @@ in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uVelocity;
 uniform sampler2D uSource;      // field to advect (could be velocity itself)
+uniform sampler2D uMask;        // collision mask; 1 = solid wall
 uniform vec2 uTexel;
 uniform float uDt;
 uniform float uDissipation;     // per-second decay
@@ -413,12 +486,12 @@ void main() {
   vec2 prev = vUv - v * uDt * uTexel;   // backtrace in UV-space
   vec4 val = texture(uSource, prev);
   float decay = 1.0 / (1.0 + uDissipation * uDt);
-  // Gentle wall: fade only the last ~half of the edge margin, so velocity/dye
-  // don't get crushed in the bulk. Keeps the fluid lively while still preventing
-  // "stuff piling up at the borders".
+  // Soft no-slip at the canvas border (last ~half of the edge margin).
   float dEdge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
   float edgeFade = (uEdgeMargin <= 0.0) ? 1.0 : smoothstep(0.0, uEdgeMargin * 0.5, dEdge);
-  fragColor = val * decay * edgeFade;
+  // Solid obstacles: fluid goes to zero inside them so nothing advects through.
+  float solid = texture(uMask, vUv).r;
+  fragColor = val * decay * edgeFade * (1.0 - solid);
 }`;
 
 // -----------------------------------------------------------------------------
@@ -462,17 +535,21 @@ void main() {
 export const FRAG_VORTICITY = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
-in vec2 vL, vR, vT, vB;
 out vec4 fragColor;
 uniform sampler2D uVelocity;
 uniform sampler2D uCurl;
+uniform vec2  uTexel;
 uniform float uStrength;
+uniform float uScale;      // stencil width in texels — wider = larger organised vortices
 uniform float uDt;
 void main() {
-  float L = texture(uCurl, vL).r;
-  float R = texture(uCurl, vR).r;
-  float T = texture(uCurl, vT).r;
-  float B = texture(uCurl, vB).r;
+  // Compute the curl-magnitude gradient with a variable-width stencil. The vertex-
+  // shader's 1-texel neighbours aren't used here because we want uScale control.
+  vec2 t = uTexel * max(uScale, 1.0);
+  float L = texture(uCurl, vUv - vec2(t.x, 0.0)).r;
+  float R = texture(uCurl, vUv + vec2(t.x, 0.0)).r;
+  float T = texture(uCurl, vUv + vec2(0.0, t.y)).r;
+  float B = texture(uCurl, vUv - vec2(0.0, t.y)).r;
   float C = texture(uCurl, vUv).r;
   vec2 eta = vec2(abs(T) - abs(B), abs(R) - abs(L));
   float mag = length(eta) + 1e-5;
@@ -513,6 +590,7 @@ in vec2 vL, vR, vT, vB;
 out vec4 fragColor;
 uniform sampler2D uPressure;
 uniform sampler2D uVelocity;
+uniform sampler2D uMask;
 void main() {
   float L = texture(uPressure, vL).r;
   float R = texture(uPressure, vR).r;
@@ -520,7 +598,8 @@ void main() {
   float B = texture(uPressure, vB).r;
   vec2 v = texture(uVelocity, vUv).rg;
   v -= vec2(R - L, T - B) * 0.5;
-  fragColor = vec4(v, 0.0, 1.0);
+  float solid = texture(uMask, vUv).r;
+  fragColor = vec4(v * (1.0 - solid), 0.0, 1.0);
 }`;
 
 // -----------------------------------------------------------------------------
@@ -558,6 +637,7 @@ uniform sampler2D uJuliaAux;
 uniform sampler2D uDye;
 uniform sampler2D uVelocity;
 uniform sampler2D uGradient;
+uniform sampler2D uMask;
 uniform sampler2D uBloom;      // pre-computed bloom texture (black if bloom disabled)
 uniform vec2  uTexelDisplay;   // 1/width, 1/height of the DISPLAY canvas
 uniform vec2  uTexelDye;       // 1/width, 1/height of the dye (sim) grid
@@ -579,6 +659,7 @@ uniform float uAberration;     // 0..1 — velocity-keyed RGB shift
 uniform float uRefraction;     // 0..0.3 — dye-gradient UV offset for the fractal
 uniform float uRefractSmooth;  // stencil width (in dye texels) — smooths the gradient
 uniform float uCaustics;       // 0..25 — laplacian-of-dye highlight
+uniform int   uCollisionPreview; // 1 = overlay the mask with diagonal hatching so walls are visible
 ${GRADIENT_SAMPLE_GLSL}
 
 const vec3 LUM_REC601 = vec3(0.299, 0.587, 0.114);   // used for dye luminance + vibrance
@@ -697,6 +778,22 @@ void main() {
   // Caustics: additive highlight on focused-surface regions.
   col += vec3(caustic) * uCaustics;
 
+  // Solid obstacles: override the composite with the raw (untoned) gradient
+  // colour so walls read as crisp objects, not as "dyed fluid near a wall."
+  float solid = texture(uMask, uv + refractOffset).r;
+  if (solid > 0.01) {
+    col = mix(col, gradientForJulia(j, aux), solid);
+  }
+
+  // Collision preview: diagonal cyan hatching over solid cells. Uses screen
+  // pixels (not UV) so stripes stay a constant width at any zoom level.
+  if (uCollisionPreview == 1 && solid > 0.01) {
+    vec2 screenPx = vUv / uTexelDisplay;
+    float hatch = step(4.0, mod(screenPx.x + screenPx.y, 8.0));
+    vec3 preview = mix(vec3(0.0, 0.95, 1.0), vec3(0.0, 0.25, 0.35), hatch);
+    col = mix(col, preview, solid * 0.55);
+  }
+
   // Bloom: an HDR pre-blurred energy texture we add on top.
   if (uBloomAmount > 0.0) {
     col += texture(uBloom, vUv).rgb * uBloomAmount;
@@ -711,8 +808,40 @@ void main() {
 }`;
 
 // -----------------------------------------------------------------------------
-// Simple clear (for reset). We re-use addForce with a zero source but it's
-// clearer to have a dedicated tiny shader.
+// Collision mask. For each sim cell, compute the color-mapping's t (same code
+// path used for rendering), sample the gradient, and decide: is this pixel
+// bright enough to be treated as a SOLID wall? Output 1.0 = solid, 0.0 = fluid.
+// Downstream advection, addForce, and grad-subtract passes zero their fields
+// inside solid cells, which causes fluid to bounce / divert around walls.
+// -----------------------------------------------------------------------------
+export const FRAG_MASK = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uJulia;
+uniform sampler2D uJuliaAux;
+uniform sampler2D uGradient;           // main gradient (only needed for helper symbol linkage)
+uniform sampler2D uCollisionGradient;  // user-authored B&W LUT: black = fluid, white = wall
+uniform int   uColorMapping;
+uniform float uGradientRepeat;
+uniform float uGradientPhase;
+${GRADIENT_SAMPLE_GLSL}
+void main() {
+  vec4 j = texture(uJulia, vUv);
+  vec4 a = texture(uJuliaAux, vUv);
+  // Same mapping → t pipeline the main gradient uses, so walls track colour-mapping
+  // changes exactly (angle / orbit trap / stripe / bands / whatever).
+  float t0 = colorMappingT(j, a);
+  float t = fract(t0 * uGradientRepeat + uGradientPhase);
+  vec4 m = texture(uCollisionGradient, vec2(t, 0.5));
+  float mask = dot(m.rgb, vec3(0.299, 0.587, 0.114));  // b&w → luma; also works if user uses colour
+  // Interior points aren't walls (no escape → no fluid-side colour to collide with).
+  mask *= j.a;
+  fragColor = vec4(clamp(mask, 0.0, 1.0), 0.0, 0.0, 1.0);
+}`;
+
+// -----------------------------------------------------------------------------
+// Simple clear (for reset).
 // -----------------------------------------------------------------------------
 export const FRAG_CLEAR = /* glsl */ `#version 300 es
 precision highp float;

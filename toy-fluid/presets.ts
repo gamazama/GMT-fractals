@@ -9,7 +9,10 @@ export interface Preset {
   desc: string;
   /** Parameter overrides applied on top of DEFAULT_PARAMS (so presets always start from a clean baseline). */
   params: Partial<FluidParams>;
+  /** Main colour gradient. Omitted ⇒ keep the current gradient. */
   gradient?: GradientConfig;
+  /** B&W collision gradient. Omitted ⇒ fall back to DEFAULT_COLLISION_GRADIENT. */
+  collisionGradient?: GradientConfig;
   /** Optional orbit state — if omitted, auto-orbit is disabled for this preset. */
   orbit?: OrbitState;
 }
@@ -509,6 +512,18 @@ export const PRESETS: Preset[] = [
     orbit: { enabled: true, radius: 0.035, speed: 0.02 },
   },
 ];
+
+/** Boot-time collision gradient — all-black so nothing is a wall by default.
+ *  The user paints walls by editing this gradient: any stop with non-zero
+ *  luminance maps (at its t value) to a solid region the fluid bounces off. */
+export const DEFAULT_COLLISION_GRADIENT: GradientConfig = {
+  stops: [
+    { id: 'c0', position: 0, color: '#000000', bias: 0.5, interpolation: 'linear' },
+    { id: 'c1', position: 1, color: '#000000', bias: 0.5, interpolation: 'linear' },
+  ],
+  colorSpace: 'srgb',
+  blendSpace: 'rgb',
+};
 
 /** Boot-time gradient — the Inferno-like palette that pairs with DEFAULT_PARAMS. */
 export const DEFAULT_GRADIENT: GradientConfig = {
