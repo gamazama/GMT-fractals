@@ -5,8 +5,7 @@ import { useFractalStore } from './store/fractalStore';
 import { ViewportArea } from './components/ViewportArea';
 import { useGlobalContextMenu } from './hooks/useGlobalContextMenu';
 import GlobalContextMenu from './components/GlobalContextMenu';
-import { PopupSliderSystem } from './components/PopupSliderSystem';
-import { SmartphoneRotateIcon, TimelineOpenIcon, AlertIcon } from './components/Icons';
+import { SmartphoneRotateIcon, TimelineOpenIcon } from './components/Icons';
 import { EngineBridge } from './components/EngineBridge';
 import { useAppStartup } from './hooks/useAppStartup';
 import { prefetchHelpTopics } from './data/help/registry';
@@ -128,7 +127,6 @@ const App: React.FC = () => {
         </div>
 
         {!isBroadcast && <MobileControls />}
-        {!isBroadcast && <PopupSliderSystem />}
 
         {state.contextMenu.visible && !isBroadcast && (
             <GlobalContextMenu

@@ -102,6 +102,10 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
     const state = useFractalStore();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
+    // Latch so onSceneReady fires exactly once regardless of parent-provided
+    // callback identity. Without this, a parent that rebuilds the callback on
+    // every render would cause an infinite setState→rerender→setState loop.
+    const sceneReadyFired = useRef(false);
 
     const { isMobile: isMobileDevice } = useMobileLayout();
     const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
@@ -130,12 +134,15 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
             pushCanvasSize(rect.width, rect.height);
         }
 
-        // Signal to parent that the scene is ready (no heavy startup in the
-        // generic engine — apps with lazy resources gate their own ready state)
-        onSceneReady();
+        // Signal to parent exactly once — apps with heavy startup gate their
+        // own ready state; the generic engine has nothing to wait on here.
+        if (!sceneReadyFired.current) {
+            sceneReadyFired.current = true;
+            onSceneReady();
+        }
 
         return () => observer.disconnect();
-    }, [onSceneReady]);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const isFixed = state.resolutionMode === 'Fixed';
     const [w, h] = state.fixedResolution;

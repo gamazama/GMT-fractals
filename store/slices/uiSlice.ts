@@ -59,24 +59,12 @@ const getUrlParam = (key: string) => {
 };
 
 // INITIAL LAYOUT DEFINITION
-// Left dock is empty by default - panels are added when called from menus
-// Right dock contains main control panels
-const DEFAULT_PANELS: Record<string, PanelState> = {
-    // Left Dock - Empty by default, panels added dynamically
-    
-    // Right Dock (Main Control Deck)
-    'Formula': { id: 'Formula', location: 'right', order: 0, isCore: true, isOpen: true }, // Default Active
-    'Graph': { id: 'Graph', location: 'right', order: 1, isCore: true, isOpen: false },
-    'Scene': { id: 'Scene', location: 'right', order: 2, isCore: true, isOpen: false },
-    'Shader': { id: 'Shader', location: 'right', order: 3, isCore: true, isOpen: false },
-    'Gradient': { id: 'Gradient', location: 'right', order: 4, isCore: true, isOpen: false },
-    'Quality': { id: 'Quality', location: 'right', order: 5, isCore: true, isOpen: false },
-    
-    // Dynamic / Switchable Panels (Initially Hidden/Closed)
-    'Light': { id: 'Light', location: 'right', order: 6, isCore: false, isOpen: false },
-    'Audio': { id: 'Audio', location: 'right', order: 7, isCore: false, isOpen: false },
-    'Drawing': { id: 'Drawing', location: 'right', order: 8, isCore: false, isOpen: false },
-};
+//
+// The generic engine ships with no panels pre-registered. Apps seed their
+// own panel set by merging entries into the `panels` record in their store
+// bootstrap — either via `movePanel(id, dock)` at boot time or by spreading
+// an app-specific initial state into the Zustand creator.
+const DEFAULT_PANELS: Record<string, PanelState> = {};
 
 export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
     showLightGizmo: true, 
@@ -90,8 +78,7 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     openLightPopupIndex: -1,
     shadowPanelOpen: false,
     vpQualityOpen: false,
-    autoCompile: false,
-    
+
     isUserInteracting: false,
 
     advancedMode: false,
@@ -141,8 +128,8 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     dragSnapshot: null,
     
     // Computed props (updated when panels change)
-    activeLeftTab: null, // No active tab since panels are closed
-    activeRightTab: 'Formula',
+    activeLeftTab: null,
+    activeRightTab: null,
 
     // Workshop
     workshopOpen: false,
