@@ -2,10 +2,11 @@
 
 Overview of the plugins that ship with the engine. Each is opt-in: apps call `install*()` at boot. Each plugin has its own doc for deep detail; this doc is the map.
 
-## The eight core plugins
+## The nine core plugins
 
 | Plugin | Install | Scope | Detail doc |
 |---|---|---|---|
+| `@engine/viewport` | `installViewport()` | Size modes, DPR, interaction state, adaptive quality, perf warnings | [10_Viewport.md](10_Viewport.md) |
 | `@engine/shortcuts` | `installShortcuts()` | Keyboard registry, scope stack, priority | [07_Shortcuts.md](07_Shortcuts.md) |
 | `@engine/undo` | `installUndo()` | Unified transaction stack, scoped groups | [06_Undo_Transactions.md](06_Undo_Transactions.md) |
 | `@engine/animation` | `installAnimation()` | Timeline, keyframes, auto-binding | [08_Animation.md](08_Animation.md) |
@@ -176,6 +177,8 @@ installRenderLoop({
 
 ---
 
+### `@engine/viewport` — see [10_Viewport.md](10_Viewport.md)
+
 ### `@engine/shortcuts` — see [07_Shortcuts.md](07_Shortcuts.md)
 
 ### `@engine/undo` — see [06_Undo_Transactions.md](06_Undo_Transactions.md)
@@ -192,6 +195,7 @@ installRenderLoop();
 
 ### Standard creative tool (GMT, toy-fluid)
 ```ts
+installViewport();
 installShortcuts();
 installUndo();
 installAnimation();
@@ -209,10 +213,14 @@ installRenderLoop();
 
 ## Decisions
 
-### 2026-04-22 — Eight core plugins, not fewer or more
-**Decision:** the eight listed above ship with the engine. Other candidates (help-browser, PWA-update-prompt, hardware-prefs) stay app-specific or domain-specific for now.
+### 2026-04-22 — Nine core plugins, not fewer or more
+**Decision:** the nine listed above ship with the engine. Other candidates (help-browser, PWA-update-prompt, hardware-prefs) stay app-specific or domain-specific for now.
 
-**Rationale:** each of the eight is reusable by GMT AND toy-fluid without modification. Anything unique to GMT (formula library, light studio, bucket render) is a GMT plugin, not an engine plugin.
+**Rationale:** each of the nine is reusable by GMT AND toy-fluid without modification. Anything unique to GMT (formula library, light studio, bucket render) is a GMT plugin, not an engine plugin.
+
+### 2026-04-22 — `@engine/viewport` added as the ninth plugin
+**Decision:** viewport size + interaction state + adaptive quality are a cohesive core-plugin responsibility, not engine-core internals.
+**Rationale:** both GMT and toy-fluid reinvented 80% of this; the 20% that differs (how each engine maps "reduce quality" to its internal knobs) stays app-level. See [10_Viewport.md](10_Viewport.md) for the full design and audit.
 
 ### 2026-04-22 — Plugins are opt-in singletons (not always-on)
 **Decision:** `install*()` is required; nothing is automatic.

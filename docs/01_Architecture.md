@@ -46,6 +46,7 @@ See [04_Core_Plugins.md](04_Core_Plugins.md) for per-plugin surface. Short versi
 
 | Plugin | Owns |
 |---|---|
+| `@engine/viewport` | Size modes (Full/Fixed/Custom), DPR, interaction state, adaptive quality, FPS probe |
 | `@engine/shortcuts` | Keyboard registry, scope stack, priority resolution |
 | `@engine/undo` | Unified transaction stack, scoped groups, debounce |
 | `@engine/animation` | Timeline, keyframes, modulation, auto-binding to DDFS params |
@@ -86,18 +87,22 @@ Plugins register via `tickRegistry.register(phase, priority, handler)`. Within a
 
 ## Canvas and viewport
 
-**Rule:** the app owns the canvas. The engine provides a `<ViewportArea>` component that is a DOM host — the app mounts its canvas inside.
+**Rule:** the app owns the canvas. `@engine/viewport` owns dimensions, interaction state, and adaptive quality. Apps install the plugin, slot their canvas into `<ViewportArea canvasSlot={…}>`, and subscribe to resize / quality-change signals.
 
-**Why:** GMT's worker-owned OffscreenCanvas and toy-fluid's synchronous WebGL2 context need different creation paths. Forcing one is a coupling we're not willing to accept.
+**Why:** GMT's worker-owned OffscreenCanvas and toy-fluid's synchronous WebGL2 context need different creation paths. Forcing one is a coupling we're not willing to accept. But size/DPR/adaptive are shared concerns — the plugin separates them cleanly.
 
-**What the engine provides:**
-- A flex-sized `<div>` with `ResizeObserver` wired to `canvasPixelSize` in the store.
-- A viewport-overlay loop that renders features with `viewportConfig.type === 'dom'`.
-- No canvas element.
+**What `@engine/viewport` provides** (see [10_Viewport.md](10_Viewport.md)):
+- Single ResizeObserver on the flex-1 div (authoritative physical-pixel measurement).
+- Size modes: `'Full' | 'Fixed' | 'Custom'`, fixed-resolution controls UI, aspect-ratio presets.
+- Interaction state: `isInteracting`, `interactionMode`, `isMouseOverCanvas`.
+- FPS probe + smoothed FPS + adaptive-quality loop that emits `qualityFraction` in `[0, 1]`.
+- `<PerformanceWarning>` UI with registerable suggestions.
 
 **What the app does:**
-- `<ViewportArea canvasSlot={<canvas ref={canvasRef} />} />` — or a custom mount.
-- Instantiates its render engine (FractalEngine, FluidEngine, etc.) in a `useEffect` with `canvasRef.current`.
+- `<ViewportArea canvasSlot={<MyCanvas />} />` (MyCanvas is the app's render-surface component).
+- Subscribes to `viewport.onResize` / `viewport.onQualityChange`.
+- Maps `qualityFraction` to its own render-engine knobs (DPR + MSAA for GMT; sim-grid resolution for toy-fluid).
+- Reports FPS via `viewport.reportFps(fps)` each frame.
 
 ## Store topology
 

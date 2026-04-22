@@ -21,6 +21,7 @@ docs/
 ├── 07_Shortcuts.md                     registry, scopes, priority resolution
 ├── 08_Animation.md                     auto-binding, BinderRegistry, track types
 ├── 09_Bridges_and_Derived.md           intra-feature coordination
+├── 10_Viewport.md                      size modes, DPR, interaction, adaptive quality
 │
 ├── 20_Fragility_Audit.md               known issues + remediation status
 │
@@ -60,6 +61,7 @@ Each architecture doc (01–09, 20) opens with a stability marker:
 | 07 | [Shortcuts](07_Shortcuts.md) | 🚧 | Registry, scope stack, priority, text-input guard, rebinding |
 | 08 | [Animation](08_Animation.md) | 🚧 | Every DDFS param auto-animatable; BinderRegistry for non-DDFS; interpolators by type |
 | 09 | [Bridges & Derived](09_Bridges_and_Derived.md) | 🚧 | Explicit intra-feature coordination; `derive()` and `bridge()` APIs |
+| 10 | [Viewport](10_Viewport.md) | 🚧 | Size modes, DPR, interaction state, FPS probe, adaptive quality; canvas-slot abstraction |
 
 ### Audit & Migration
 | # | File | Status | Scope |

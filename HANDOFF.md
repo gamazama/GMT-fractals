@@ -109,6 +109,9 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 **Not needed for toy-fluid (deferred or dropped):**
 - RenderEngine — toy-fluid brings its own `FluidEngine` with its own canvas + WebGL + sim loop. The engine's role is pure framework (DDFS + UI + save/load + animation). If/when another app needs a shared render engine, build it then.
 
+**✅ Done (2026-04-22) — Phase 0 viewport audit + design doc:**
+- `docs/10_Viewport.md` — full audit of GMT + toy-fluid viewport code, plugin design, API shape, state slice, integration patterns for both apps, decisions + open questions. Viewport added as the ninth core plugin in `docs/04_Core_Plugins.md`; tier map in `docs/01_Architecture.md` updated; `DOCS_INDEX.md` + `CLAUDE.md` reference it.
+
 **✅ Done (2026-04-22) — the four toy-fluid-blocking fragility fixes landed:**
 - **F1** (commit 96a4b5f) — `featureRegistry.freeze()` in `createFeatureSlice`; dev-throw on late registration, prod-warn+no-op.
 - **F2** (commit 96a4b5f) — `DuplicateFeatureError` thrown in prod; HMR-same-def is a no-op, HMR-different-def warns+replaces in dev.
@@ -117,7 +120,13 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 
 All four fixes verified via `npm run typecheck` (0 errors) + `smoke:boot` (no pageerrors) + `smoke:interact` (state round-trip passes).
 
-**Next session — toy-fluid port itself (direct copy of the Demo add-on pattern):**
+**Next — Phase 1: minimal fractal-toy.** Bring back one formula (Mandelbulb), orbit+fly camera feature, basic directional light feature. Uses `ShaderBuilder.addSection` (the escape hatch's first real load). Consumes a stub `@engine/viewport` that satisfies only what fractal-toy needs today. The nucleus of the eventual full GMT port.
+
+**Then — Phase 2: toy-fluid port** (direct copy of the Demo add-on pattern). Same stub viewport plugin, pressure-tested by a second consumer.
+
+**Then — Phase 3: promote stub `@engine/viewport` to the full plugin design in `docs/10_Viewport.md`** with both apps as oracles. Adaptive quality, FixedResolutionControls refactor, perf warning suggestion registry.
+
+**Phase-1 details (toy-fluid pattern, same three-file contract):**
 
 Study `demo/README.md` + `docs/03_Plugin_Contract.md` — they document the three-step contract toy-fluid follows. Concretely:
 

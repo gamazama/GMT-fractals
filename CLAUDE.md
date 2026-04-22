@@ -27,6 +27,7 @@ Before ANY code change, consult the doc for the area you're touching. The engine
 | Keyboard shortcuts, scopes, priority resolution | `docs/07_Shortcuts.md` |
 | Animation, keyframes, auto-binding, BinderRegistry | `docs/08_Animation.md` |
 | Intra-feature coordination — bridges and derived values | `docs/09_Bridges_and_Derived.md` |
+| Viewport sizing, DPR, adaptive quality, FPS probe, fixed-res controls | `docs/10_Viewport.md` |
 | Known fragilities + remediation status | `docs/20_Fragility_Audit.md` |
 | Save/load, SceneFormat, preset field registry | `docs/04_Core_Plugins.md#scene-io` + `utils/SceneFormat.ts` |
 | GMT-era reference (fractal, raymarching, formulas) | `docs/10_*` through `docs/44_*` — historical, NOT authoritative for the engine |
