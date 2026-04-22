@@ -133,14 +133,21 @@ Study `demo/README.md` — it documents the exact three-step contract toy-fluid 
 
 ```bash
 cd h:/GMT/gmt-engine
-git log --oneline -20                       # full stage progression
-npx tsc --noEmit                            # should still exit 0
-PORT=3400 npm run dev                       # serves on localhost:3400
-# In another shell, smoke-check:
-ENGINE_URL=http://localhost:3400/ npx tsx debug/smoke-boot.mts
-# Screenshot the boot state to debug/scratch/engine-boot.png:
-ENGINE_URL=http://localhost:3400/ npx tsx debug/smoke-screenshot.mts
+git log --oneline -20          # full stage progression
+npm run typecheck              # should exit 0
+npm run dev                    # plain vite on localhost:3400
+
+# In another shell — smoke checks:
+npm run smoke:boot             # headless boot, fail on pageerrors
+npm run smoke:interact         # state-flow + save round-trip
+npm run smoke:screenshot       # visual baseline → debug/scratch/engine-boot.png
 ```
+
+Note: the `dev` script is now plain `vite`. GMT's custom Express
+`server/server.js` was removed in stage 16 — it ran Vite in
+middleware mode without attaching HMR to the HTTP server, which
+caused full-page reloads every 1-2s. Plain `vite` works out of
+the box.
 
 The `upstream` remote points at GMT. Pull updates with `git fetch upstream`. There is no `origin` — nothing pushes anywhere until you add one.
 
