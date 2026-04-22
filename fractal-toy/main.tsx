@@ -24,6 +24,7 @@ import ReactDOM from 'react-dom/client';
 import { FractalToyApp } from './FractalToyApp';
 import { registerUI } from '../features/ui';
 import { setupFractalToy } from './setup';
+import { installViewport } from '../engine/plugins/Viewport';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -39,6 +40,19 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
 
 // Initialize the engine's built-in UI registry (AutoFeaturePanel etc.)
 registerUI();
+
+// Install @engine/viewport. Raymarching is per-pixel-expensive so we
+// target 30 FPS and let the adaptive loop drop to 35% on pressure.
+// interactionDownsample of 0.55 keeps drags responsive without
+// looking unrecognisable.
+installViewport({
+    enabled: true,
+    targetFps: 30,
+    minQuality: 0.35,
+    interactionDownsample: 0.55,
+    graceMs: 1200,
+    changeCooldownMs: 500,
+});
 
 // Seed panel state after mount.
 setupFractalToy();

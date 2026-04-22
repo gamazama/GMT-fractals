@@ -25,6 +25,13 @@ void main() {
 }
 `;
 
+export interface FractalEngineOptions {
+    /** Called once per rendered frame, after the draw. Use this to
+     *  report a frame tick to @engine/viewport's adaptive loop
+     *  without coupling the engine class to plugin imports. */
+    onFrameEnd?: () => void;
+}
+
 export class FractalEngine {
     private gl: WebGL2RenderingContext;
     private program: WebGLProgram | null = null;
@@ -33,11 +40,13 @@ export class FractalEngine {
     private rafId: number | null = null;
     private startTime = performance.now();
     private frameCount = 0;
+    private onFrameEnd?: () => void;
 
-    constructor(public readonly canvas: HTMLCanvasElement) {
+    constructor(public readonly canvas: HTMLCanvasElement, options: FractalEngineOptions = {}) {
         const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
         if (!gl) throw new Error('[FractalEngine] WebGL2 is required and not available.');
         this.gl = gl;
+        this.onFrameEnd = options.onFrameEnd;
         this.initQuad();
     }
 
@@ -125,6 +134,7 @@ export class FractalEngine {
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
         this.frameCount++;
+        if (this.onFrameEnd) this.onFrameEnd();
     }
 
     private uniformApply(name: string, fn: (gl: WebGL2RenderingContext, loc: WebGLUniformLocation) => void): void {

@@ -25,6 +25,7 @@ import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
+import { viewport, useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
 
 export const FractalToyApp: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,6 +35,9 @@ export const FractalToyApp: React.FC = () => {
     const mandelbulb = useFractalStore((s: any) => s.mandelbulb);
     const camera     = useFractalStore((s: any) => s.camera);
     const lighting   = useFractalStore((s: any) => s.lighting);
+    // @engine/viewport signals for the adaptive render-scale loop.
+    const quality   = useQualityFraction();
+    const { fpsSmoothed } = useViewportFps();
 
     // StoreCallbacks context — so engine primitives (Slider etc.) that
     // consume it from React context don't fall back to whatever the
@@ -48,22 +52,46 @@ export const FractalToyApp: React.FC = () => {
     const floatingPanels = (Object.values(state.panels) as PanelState[])
         .filter((p) => p.location === 'float' && p.isOpen);
 
+    // Track the CSS pixel size of the canvas so the qualityFraction
+    // subscriber can recompute the WebGL buffer size on quality change.
+    const cssSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+    // Stable ref to current quality so the ResizeObserver callback
+    // can read it without capturing stale state.
+    const qualityRef = useRef(quality);
+    qualityRef.current = quality;
+
     // Boot the engine once.
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const sizeToParent = () => {
-            const rect = canvas.getBoundingClientRect();
+        // Recompute the WebGL drawing buffer from (cssSize × DPR × quality).
+        // CSS size stays at the element's layout box; the browser blits
+        // the smaller WebGL output to the full-size element, which is
+        // the standard dynamic-resolution technique.
+        const applySize = () => {
+            const { w, h } = cssSizeRef.current;
+            if (w < 1 || h < 1) return;
             const dpr = window.devicePixelRatio || 1;
+            const q = qualityRef.current;
             engineRef.current?.resize(
-                Math.max(1, Math.floor(rect.width  * dpr)),
-                Math.max(1, Math.floor(rect.height * dpr)),
+                Math.max(1, Math.floor(w * dpr * q)),
+                Math.max(1, Math.floor(h * dpr * q)),
             );
         };
 
+        const observeCssSize = () => {
+            const rect = canvas.getBoundingClientRect();
+            cssSizeRef.current = { w: rect.width, h: rect.height };
+            applySize();
+        };
+
         try {
-            const engine = new FractalEngine(canvas);
+            // onFrameEnd reports a frame tick to @engine/viewport so its
+            // adaptive loop runs naturally with the app's render cadence.
+            const engine = new FractalEngine(canvas, {
+                onFrameEnd: () => viewport.frameTick(),
+            });
             engineRef.current = engine;
             const builder = new ShaderBuilder('Main');
             for (const feat of featureRegistry.getAll()) {
@@ -71,13 +99,13 @@ export const FractalToyApp: React.FC = () => {
             }
             const fragSrc = assembleRayMarchShader(builder);
             engine.setShader(fragSrc);
-            sizeToParent();
+            observeCssSize();
             engine.start();
         } catch (e) {
             console.error('[FractalToy] failed to start engine:', e);
         }
 
-        const ro = new ResizeObserver(sizeToParent);
+        const ro = new ResizeObserver(observeCssSize);
         ro.observe(canvas);
 
         return () => {
@@ -86,6 +114,18 @@ export const FractalToyApp: React.FC = () => {
             engineRef.current = null;
         };
     }, []);
+
+    // Resize the WebGL buffer whenever qualityFraction changes. Separate
+    // effect so the boot useEffect doesn't re-run on every quality tick.
+    useEffect(() => {
+        const { w, h } = cssSizeRef.current;
+        if (w < 1 || h < 1) return;
+        const dpr = window.devicePixelRatio || 1;
+        engineRef.current?.resize(
+            Math.max(1, Math.floor(w * dpr * quality)),
+            Math.max(1, Math.floor(h * dpr * quality)),
+        );
+    }, [quality]);
 
     // Push feature uniforms on state change. Engine caches uniform
     // locations so these calls are cheap.
@@ -171,6 +211,10 @@ export const FractalToyApp: React.FC = () => {
                         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
                         <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
                             Fractal Toy · Mandelbulb
+                        </div>
+                        {/* Perf HUD — shows adaptive quality at work. */}
+                        <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none">
+                            {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
                         </div>
                     </div>
 
