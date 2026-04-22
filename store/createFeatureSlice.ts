@@ -14,8 +14,14 @@ export interface FeatureSlice {
 export const createFeatureSlice: StateCreator<any> = (set, get) => {
     const slice: any = {};
     // Ensure features are registered before building slices —
-    // module evaluation order can vary due to circular dependencies
+    // module evaluation order can vary due to circular dependencies.
     registerFeatures();
+    // Freeze the registry: from this point on, new registrations fail loudly
+    // (throw in dev, warn in prod). State slices are snapshotted below, so
+    // late arrivals would be invisible to the store — this catches the bug
+    // at the point of the late register() call instead of much later when
+    // a feature's setter is unexpectedly undefined. See docs/20_Fragility_Audit.md F1.
+    featureRegistry.freeze();
     const features = featureRegistry.getAll();
 
     features.forEach(feat => {

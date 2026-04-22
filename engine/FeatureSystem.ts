@@ -220,11 +220,79 @@ export interface FeatureDefinition {
 
 }
 
+/**
+ * Thrown when `featureRegistry.register()` is called after the registry was
+ * frozen (i.e. after `createEngineStore` ran). See docs/02_Feature_Registry.md.
+ * Thrown in dev; downgraded to a console warning in prod to avoid crashing
+ * shipped apps on a late-arriving plugin.
+ */
+export class FeatureRegistryFrozenError extends Error {
+    constructor(featureId: string) {
+        super(
+            `Feature "${featureId}" registered after featureRegistry was frozen. ` +
+            `All features must register BEFORE createEngineStore runs (i.e. before any ` +
+            `module that touches useFractalStore / useEngineStore is imported). See ` +
+            `docs/03_Plugin_Contract.md § boot-timeline.`
+        );
+        this.name = 'FeatureRegistryFrozenError';
+    }
+}
+
+/**
+ * Thrown when two different feature definitions share an id. Always thrown
+ * in prod (data-loss risk — silent overwrite would lose the first feature's
+ * state). In dev, HMR re-registration of the SAME def object is a no-op,
+ * and re-registration with a DIFFERENT def object is allowed with a warning
+ * (Vite HMR creates new def objects across reloads).
+ */
+export class DuplicateFeatureError extends Error {
+    constructor(featureId: string) {
+        super(
+            `Duplicate feature id: "${featureId}". Feature ids must be unique — ` +
+            `second registration rejected to prevent silent overwrite of the first ` +
+            `feature's state slice.`
+        );
+        this.name = 'DuplicateFeatureError';
+    }
+}
+
 class FeatureRegistry {
     private features = new Map<string, FeatureDefinition>();
     private sortedCache: FeatureDefinition[] | null = null;
+    private frozen = false;
 
     public register(def: FeatureDefinition) {
+        const existing = this.features.get(def.id);
+
+        if (existing) {
+            // Same def object — HMR or accidental double-import. No-op.
+            if (existing === def) return;
+
+            // Different def with same id.
+            if (import.meta.env.DEV) {
+                // Dev: assume HMR; replace with a loud warning so real conflicts
+                // are still obvious in the console.
+                console.warn(
+                    `[FeatureRegistry] Replacing definition for "${def.id}". ` +
+                    `If this is not HMR, it is a duplicate-id bug — see ` +
+                    `docs/02_Feature_Registry.md.`
+                );
+                this.features.set(def.id, def);
+                this.sortedCache = null;
+                return;
+            }
+            // Prod: hard fail. Production has no HMR, so this is always a real conflict.
+            throw new DuplicateFeatureError(def.id);
+        }
+
+        // New feature. Reject if registry was frozen.
+        if (this.frozen) {
+            const err = new FeatureRegistryFrozenError(def.id);
+            if (import.meta.env.DEV) throw err;
+            console.warn(`[FeatureRegistry] ${err.message}`);
+            return;
+        }
+
         // Validate dependencies exist (if any registered so far are referenced)
         if (def.dependsOn) {
             for (const dep of def.dependsOn) {
@@ -235,6 +303,17 @@ class FeatureRegistry {
         }
         this.features.set(def.id, def);
         this.sortedCache = null; // Invalidate cache
+    }
+
+    /** Freeze the registry. Subsequent `register()` calls for NEW ids throw
+     *  in dev and no-op (with warning) in prod. Called by the store during
+     *  construction to lock the feature set before state slices are built. */
+    public freeze() {
+        this.frozen = true;
+    }
+
+    public isFrozen() {
+        return this.frozen;
     }
 
     public get(id: string) { return this.features.get(id); }
