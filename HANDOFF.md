@@ -2,7 +2,7 @@
 
 **Location:** `h:/GMT/gmt-engine/`
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
-**Status:** ✅ **Engine skeleton fully type-checks.** `npx tsc --noEmit` → 0 errors.
+**Status:** ✅ **Engine skeleton fully type-checks + boots clean.** `npx tsc --noEmit` → 0 errors. `npm run dev` serves a minimal shell with no runtime errors.
 
 ## What this is
 
@@ -95,35 +95,46 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 
 ## Remaining work before toy-fluid port
 
-**Priority 1 — Decide what to do about feature-residuals.** Components like PerformanceMonitor, AnimationSystem, PopupSliderSystem still have `(state as any).coreMath` style reads that return undefined at runtime (no coreMath feature exists anymore). They compile but do nothing. Either:
-- (a) leave them — they become active when a plugin registers `coreMath`
-- (b) rewrite the components to not assume specific feature names
-- (c) delete the components and apps rebuild as plugins
+**✅ Done (stage 14, 2026-04-22):**
+- Feature-residuals cleaned — PopupSliderSystem / HelpMenu / DonateButton / HardwarePreferences / ColoringHistogram deleted. Remaining components that cast `(state as any).coreMath` will simply no-op until a plugin registers a `coreMath` feature.
+- SceneFormat.ts written — generic save/load (JSON + PNG-iTXt + URL) replacing deleted FormulaFormat. Ready for toy-fluid's savedState calls to port onto.
+- Default panel config genericized — engine ships with empty `DEFAULT_PANELS`; apps seed via `movePanel(id, dock)` or Zustand spread.
+- Runtime boot verified — `npm run dev` serves a clean shell, `debug/smoke-boot.mts` passes with zero pageerrors. Screenshot in `debug/scratch/engine-boot.png`.
 
-**Priority 2 — Minimal render engine.** Currently the engine has no render loop. ShaderFactory produces a GLSL string but nothing runs it. Write a thin `RenderEngine` class (~200 lines) that:
-- Creates a WebGL2 context on a provided canvas
-- Compiles the shader from ShaderFactory
-- Ticks per frame, calling a plugin-provided `onRender(gl, uniforms)` hook
-- Swaps framebuffers for accumulation
-Apps that want richer rendering install their own; this is the shared baseline.
+**Not needed for toy-fluid (deferred or dropped):**
+- RenderEngine — toy-fluid brings its own `FluidEngine` with its own canvas + WebGL + sim loop. The engine's role is pure framework (DDFS + UI + save/load + animation). If/when another app needs a shared render engine, build it then.
 
-**Priority 3 — Port toy-fluid.** The real proof. Success metric: toy-fluid runs via DDFS-driven UI + save/load + animation + URL sharing, with LoC comparable or smaller than current toy-fluid code.
+**Next session — toy-fluid port itself:**
 
-**Priority 4 — Scene save/load format.** Generic `SceneFormat.ts` to replace the deleted `FormulaFormat.ts`:
-- Serialize store → JSON
-- Embed in PNG iTXt via pngMetadata
-- Load path: parse → `applyPresetState`
-- Pluggable sections per feature
+1. **Define DDFS features** for the pieces that currently live in toy-fluid's React `useState`:
+   - `fluidSim` — simResolution, viscosity, dissipation, autoQuality, kind, forceMode
+   - `julia` — juliaC (vec2), zoom, center (vec2), orbit (enabled/radius/speed)
+   - `dye` — gradient, collisionGradient
+   - `sceneCamera` — pan/zoom (since toy-fluid has its own 2D camera, not GMT's treadmill)
 
-**Priority 5 — Rename.** `fractalStore` → `engineStore`, `useFractalStore` → `useEngineStore`, `FractalEvents` → `EngineEvents`, `FractalStoreState`/`FractalActions` → `EngineStoreState`/`EngineActions`. One sweep at the end.
+2. **Register features** in `toy-fluid/features/index.ts` (app-scoped, not engine-scoped). Reuse the engine's `featureRegistry` singleton but register only toy-fluid's features.
+
+3. **Install panels** by calling `movePanel('fluidSim', 'right')` etc. at boot, or by spreading an initial panels map into the store creator.
+
+4. **Mount FluidEngine** inside the ViewportArea's canvas region — either via a feature-registered viewport overlay (`type: 'dom'`) or by passing children to ViewportArea.
+
+5. **Rewrite `toy-fluid/savedState.ts`** as thin wrappers over `utils/SceneFormat.ts`: `downloadSceneJson`, `downloadScenePng`, `loadSceneFromFile`.
+
+6. **Wire toy-fluid's TopBar** — replace the current custom TopBar with either the engine's stripped shell (re-register components) or a toy-fluid-specific TopBar that lives in the app layer.
+
+**Deferred — rename pass.** Once the toy-fluid port proves the shape, do the one-shot rename: `fractalStore` → `engineStore`, `useFractalStore` → `useEngineStore`, `FractalEvents` → `EngineEvents`, `FractalStoreState`/`FractalActions` → `EngineStoreState`/`EngineActions`, file `store/fractalStore.ts` → `store/engineStore.ts`. Single commit.
 
 ## How to resume
 
 ```bash
 cd h:/GMT/gmt-engine
-git log --oneline -20           # see full stage progression
-npx tsc --noEmit                # should still be exit 0
-npm run dev                     # tries to serve — may fail on missing things, that's Priority 1
+git log --oneline -20                       # full stage progression
+npx tsc --noEmit                            # should still exit 0
+PORT=3400 npm run dev                       # serves on localhost:3400
+# In another shell, smoke-check:
+ENGINE_URL=http://localhost:3400/ npx tsx debug/smoke-boot.mts
+# Screenshot the boot state to debug/scratch/engine-boot.png:
+ENGINE_URL=http://localhost:3400/ npx tsx debug/smoke-screenshot.mts
 ```
 
 The `upstream` remote points at GMT. Pull updates with `git fetch upstream`. There is no `origin` — nothing pushes anywhere until you add one.
