@@ -8,7 +8,7 @@ import { PerformanceMonitor } from './PerformanceMonitor';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from './registry/ComponentRegistry';
 import { useMobileLayout } from '../hooks/useMobileLayout';
-import { FixedResolutionControls } from './viewport/FixedResolutionControls';
+import { FixedResolutionControls } from '../engine/plugins/viewport/FixedResolutionControls';
 import { CompositionOverlay } from './viewport/CompositionOverlay';
 import { CompilingIndicator } from './CompilingIndicator';
 import { setMouseOverCanvas } from '../engine/worker/ViewportRefs';

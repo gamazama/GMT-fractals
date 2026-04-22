@@ -147,3 +147,17 @@ export const useViewportMode = () => {
     const fixedResolution = useFractalStore((s) => s.fixedResolution);
     return { mode, fixedResolution };
 };
+
+// ── Layout components ──────────────────────────────────────────────
+//
+// Apps typically wrap their render surface(s) in <ViewportFrame>, which
+// owns the ResizeObserver, handles Fixed/Full layout, and mounts
+// <ViewportModeControls>. GMT, toy-fluid, fractal-toy, and any future
+// app share the same frame; what differs is what each app slots as
+// children (worker display, WebGL canvas, brush cursor, etc.).
+
+export { ViewportFrame } from './viewport/ViewportFrame';
+export type { ViewportFrameProps } from './viewport/ViewportFrame';
+export { ViewportModeControls } from './viewport/ViewportModeControls';
+export type { ViewportModeControlsProps } from './viewport/ViewportModeControls';
+export { FixedResolutionControls } from './viewport/FixedResolutionControls';
