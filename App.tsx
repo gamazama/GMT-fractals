@@ -7,6 +7,7 @@ import { useGlobalContextMenu } from './hooks/useGlobalContextMenu';
 import GlobalContextMenu from './components/GlobalContextMenu';
 import { SmartphoneRotateIcon, TimelineOpenIcon } from './components/Icons';
 import { EngineBridge } from './components/EngineBridge';
+import { RenderLoopDriver } from './engine/plugins/RenderLoop';
 import { useAppStartup } from './hooks/useAppStartup';
 import { prefetchHelpTopics } from './data/help/registry';
 
@@ -82,6 +83,7 @@ const App: React.FC = () => {
     <StoreCallbacksProvider value={storeCallbacks}>
     <div className={rootClass}>
       <EngineBridge />
+      <RenderLoopDriver />
       <DropZones />
 
       {floatingPanels.map(p => (

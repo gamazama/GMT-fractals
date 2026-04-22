@@ -38,6 +38,13 @@ interface TickEntry {
 const _entries: TickEntry[] = [];
 let _needsSort = false;
 
+// Dev-only instrumentation: warn if registerTick is ever called but runTicks
+// isn't invoked within 3 seconds. Catches the fragility where an app forgets
+// to install @engine/render-loop and nothing ticks. See docs/20_Fragility_Audit.md F4.
+let _firstRegisterTime = 0;
+let _lastTickTime = 0;
+let _warnedNoTicks = false;
+
 /**
  * Register a tick function into a phase.
  * Duplicate names are silently ignored (safe for HMR re-execution).
@@ -48,6 +55,27 @@ export function registerTick(
     phase: TickPhase,
     fn: (delta: number) => void
 ): () => void {
+    // Arm the dev-only no-ticks warning on first registration. If something
+    // has been registered but nothing ever calls runTicks, the app has a
+    // silent rendering-loop bug — flag it loudly after 3s.
+    if (_firstRegisterTime === 0) {
+        _firstRegisterTime = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+        if (import.meta.env.DEV && typeof setTimeout !== 'undefined') {
+            setTimeout(() => {
+                if (_lastTickTime === 0 && !_warnedNoTicks) {
+                    console.warn(
+                        '[TickRegistry] 3 seconds after first registerTick() and runTicks(dt) ' +
+                        'has never been called. Animations, overlays, and timeline will not ' +
+                        'update. Mount <RenderLoopDriver /> from engine/plugins/RenderLoop ' +
+                        '(or call runTicks(dt) every frame yourself). See ' +
+                        'docs/01_Architecture.md § render-loop.'
+                    );
+                    _warnedNoTicks = true;
+                }
+            }, 3000);
+        }
+    }
+
     if (_entries.some(e => e.name === name)) return () => {};
     const entry: TickEntry = { name, phase, fn };
     _entries.push(entry);
@@ -60,9 +88,11 @@ export function registerTick(
 
 /**
  * Run all registered ticks in phase order.
- * Called once per frame from WorkerTickScene's useFrame.
+ * Called once per frame from WorkerTickScene's useFrame, or from the default
+ * RenderLoopDriver in engine/plugins/RenderLoop.
  */
 export function runTicks(delta: number): void {
+    _lastTickTime = (typeof performance !== 'undefined') ? performance.now() : Date.now();
     if (_needsSort) {
         _entries.sort((a, b) => a.phase - b.phase);
         _needsSort = false;
