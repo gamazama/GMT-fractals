@@ -12,5 +12,10 @@
  *   1e  LightingFeature
  */
 
-// Empty at 1a — scaffold only. Features are registered in subsequent commits.
-export {};
+import { featureRegistry } from '../engine/FeatureSystem';
+import { MandelbulbFeature } from './features/mandelbulb';
+
+// 1c: the fractal formula. Injects GLSL via ShaderBuilder.addSection
+// under the 'formulaFunction' and 'formulaCall' names that
+// fractal-toy/shaderAssembler.ts reads back.
+featureRegistry.register(MandelbulbFeature);

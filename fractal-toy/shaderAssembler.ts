@@ -80,13 +80,121 @@ const GRADIENT_BODY = `
 `;
 
 // Raymarching template. Wraps the feature-registered formulaCall inside
-// an iteration loop and a distance-estimator / normal-estimate flow.
-// Lands in 1c with the mandelbulb feature. For now the gradient body
-// runs because no formula is registered.
+// an iteration loop with a standard Mandelbulb-style distance estimator,
+// then traces a ray from a fixed camera (1c — camera becomes a feature
+// in 1d) and shades with a single hardcoded directional light (1e makes
+// that a feature too).
+//
+// The template requires these uniforms (declared by the feature's inject):
+//   uIterations, uPower, uPhaseTheta, uPhasePhi, uTwist,
+//   uRadiolariaEnabled, uRadiolariaLimit
+//
+// Escape bound (r > 2) and DE form (0.5 * log(r) * r / dr) match the
+// canonical Mandelbulb distance estimator.
 const RAYMARCH_BODY = (formulaCall: string): string => `
-    // Placeholder raymarching body — fleshed out in 1c/1d/1e.
-    // When the mandelbulb feature is present, this will run the
-    // iteration loop and distance estimator. For now just a hint.
-    ${formulaCall}
-    fragColor = vec4(vUv, 0.5, 1.0);
+    // ── Distance estimator (uses the feature-injected formula) ──
+    // Hoisted into main() as a GLSL function would require sections to
+    // reorder; inlining keeps the assembler simple for 1c. 1d will
+    // split this into a proper \`float mapSDF(vec3)\` function.
+    vec2 uv = vUv * 2.0 - 1.0;
+    float aspect = uResolution.x / uResolution.y;
+    uv.x *= aspect;
+
+    // Fixed camera for 1c (configurable in 1d).
+    vec3 camPos = vec3(0.0, 0.0, 2.5);
+    vec3 rayDir = normalize(vec3(uv, -1.5));
+
+    // ── Ray march ──────────────────────────────────────────────
+    float t = 0.0;
+    float dist = 0.0;
+    vec3 pos = camPos;
+    bool hit = false;
+    int stepsUsed = 0;
+    const int MAX_STEPS = 200;
+    const float MAX_DIST = 20.0;
+    const float HIT_EPS = 0.001;
+
+    for (int s = 0; s < MAX_STEPS; s++) {
+        stepsUsed = s;
+        pos = camPos + rayDir * t;
+
+        // Inline distance-estimator loop. Runs the feature-registered
+        // formula \`uIterations\` times or until escape.
+        vec4 z = vec4(pos, 0.0);
+        vec4 c = vec4(pos, 0.0);
+        float dr = 1.0;
+        float r = 0.0;
+        for (int i = 0; i < 32; i++) {
+            if (i >= uIterations) break;
+            ${formulaCall}
+            r = length(z.xyz);
+            if (r > 2.0) break;
+        }
+        dist = 0.5 * log(max(r, 1e-8)) * r / dr;
+
+        if (dist < HIT_EPS) { hit = true; break; }
+        if (t > MAX_DIST) break;
+        t += dist * 0.9;
+    }
+
+    // ── Shade ───────────────────────────────────────────────────
+    vec3 col;
+    if (hit) {
+        // Approximate normal via finite differences of mapSDF. For 1c
+        // we re-run the inner iteration loop per-sample — expensive but
+        // clear. A split into a proper mapSDF function happens in 1d.
+        const float hStep = 0.002;
+        float dx, dy, dz;
+        {
+            vec3 pp = pos + vec3(hStep, 0.0, 0.0);
+            vec4 z = vec4(pp, 0.0); vec4 c = vec4(pp, 0.0); float dr = 1.0; float r = 0.0;
+            for (int i = 0; i < 32; i++) {
+                if (i >= uIterations) break;
+                ${formulaCall}
+                r = length(z.xyz);
+                if (r > 2.0) break;
+            }
+            dx = 0.5 * log(max(r, 1e-8)) * r / dr;
+        }
+        {
+            vec3 pp = pos + vec3(0.0, hStep, 0.0);
+            vec4 z = vec4(pp, 0.0); vec4 c = vec4(pp, 0.0); float dr = 1.0; float r = 0.0;
+            for (int i = 0; i < 32; i++) {
+                if (i >= uIterations) break;
+                ${formulaCall}
+                r = length(z.xyz);
+                if (r > 2.0) break;
+            }
+            dy = 0.5 * log(max(r, 1e-8)) * r / dr;
+        }
+        {
+            vec3 pp = pos + vec3(0.0, 0.0, hStep);
+            vec4 z = vec4(pp, 0.0); vec4 c = vec4(pp, 0.0); float dr = 1.0; float r = 0.0;
+            for (int i = 0; i < 32; i++) {
+                if (i >= uIterations) break;
+                ${formulaCall}
+                r = length(z.xyz);
+                if (r > 2.0) break;
+            }
+            dz = 0.5 * log(max(r, 1e-8)) * r / dr;
+        }
+        vec3 n = normalize(vec3(dx, dy, dz) - vec3(dist));
+
+        // Directional light (1e makes this a feature).
+        vec3 lightDir = normalize(vec3(0.5, 0.8, 0.5));
+        float diff = max(0.0, dot(n, lightDir));
+        vec3 albedo = vec3(0.85, 0.72, 0.55);
+        col = albedo * (0.15 + 0.85 * diff);
+
+        // Soft AO from step count.
+        float ao = 1.0 - float(stepsUsed) / float(MAX_STEPS);
+        col *= mix(0.6, 1.0, ao);
+    } else {
+        // Background gradient.
+        col = mix(vec3(0.02, 0.02, 0.04), vec3(0.08, 0.08, 0.12), vUv.y);
+    }
+
+    // Gamma correction.
+    col = pow(col, vec3(1.0 / 2.2));
+    fragColor = vec4(col, 1.0);
 `;
