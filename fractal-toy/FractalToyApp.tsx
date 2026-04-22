@@ -1,30 +1,67 @@
 /**
- * FractalToyApp — the root React component for the Fractal Toy add-on.
+ * FractalToyApp — root component.
  *
- * At 1a this is a scaffold placeholder. Subsequent commits wire in:
- *   1b  FractalEngine canvas mount (inside a ViewportArea overlay)
- *   1c  AutoFeaturePanel for the Mandelbulb feature
- *   1d  Camera feature + panel
- *   1e  Lighting feature + panel
- *
- * Once polished, this component's shape mirrors App.tsx — engine chrome
- * (viewport area, docks, context menu, loading screen) with the
- * raymarched fractal canvas slotted into the viewport.
+ * Mounts a WebGL2 canvas and instantiates FractalEngine. For 1b the
+ * assembler has no features registered, so the shader falls through to
+ * a gradient pattern that proves the GL path. 1c adds the mandelbulb
+ * feature, and the same shader becomes a raymarched fractal.
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { FractalEngine } from './FractalEngine';
+import { ShaderBuilder } from '../engine/ShaderBuilder';
+import { assembleRayMarchShader } from './shaderAssembler';
 
 export const FractalToyApp: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const engineRef = useRef<FractalEngine | null>(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        // Size the canvas to its backing element's physical pixels.
+        const sizeToParent = () => {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            engineRef.current?.resize(
+                Math.max(1, Math.floor(rect.width  * dpr)),
+                Math.max(1, Math.floor(rect.height * dpr)),
+            );
+        };
+
+        try {
+            const engine = new FractalEngine(canvas);
+            engineRef.current = engine;
+
+            // 1b: assemble a shader with no features registered — the
+            // assembler's gradient fallback proves the GL path.
+            // 1c wires the feature registry: features inject into this
+            // same ShaderBuilder via their inject() hook before assembly.
+            const builder = new ShaderBuilder('Main');
+            const fragSrc = assembleRayMarchShader(builder);
+            engine.setShader(fragSrc);
+            sizeToParent();
+            engine.start();
+        } catch (e) {
+            console.error('[FractalToy] failed to start engine:', e);
+        }
+
+        const ro = new ResizeObserver(sizeToParent);
+        ro.observe(canvas);
+
+        return () => {
+            ro.disconnect();
+            engineRef.current?.dispose();
+            engineRef.current = null;
+        };
+    }, []);
+
     return (
-        <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col items-center justify-center font-mono">
-            <div className="text-cyan-400 text-xl mb-2 tracking-wide">Fractal Toy</div>
-            <div className="text-gray-500 text-xs mb-8">
-                scaffolding — commit 1a. FractalEngine lands in 1b, Mandelbulb in 1c.
-            </div>
-            <div className="text-[10px] text-gray-700 max-w-md text-center leading-relaxed">
-                The second live consumer of the gmt-engine plugin surface.
-                Proves the shader pipeline (ShaderBuilder.addSection escape
-                hatch) and DDFS-driven raymarching on the extracted engine.
+        <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden">
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
+            <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
+                Fractal Toy — 1b · gradient test (no formula registered yet)
             </div>
         </div>
     );
