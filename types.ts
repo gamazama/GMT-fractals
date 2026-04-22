@@ -4,7 +4,6 @@ import type React from 'react';
 export * from './types/common';
 export * from './types/graphics';
 export * from './types/animation';
-export * from './types/graph';
 export * from './types/fractal';
 export * from './types/store';
 

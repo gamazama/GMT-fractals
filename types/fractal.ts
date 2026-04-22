@@ -1,33 +1,33 @@
 import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LightParams } from './graphics';
 import { AnimationParams, AnimationSequence } from './animation';
-import { FractalGraph, PipelineNode } from './graph';
+
+// NOTE: `graph` and `pipeline` fields were removed when the modular graph
+// system was stripped (engine-extraction stage 7). If a future plugin
+// re-introduces a node-graph system, it should carry its state inside
+// `features[pluginId]` rather than at the root of Preset.
 
 export interface Preset {
   version?: number;
   name: string;
   formula: FormulaType;
-  
+
   // --- CORE SYSTEMS ---
   /** Serialization-only. Absorbed into sceneOffset on load — NOT a runtime store field. */
   cameraPos?: { x: number, y: number, z: number };
-  cameraRot?: { x: number, y: number, z: number, w: number }; 
+  cameraRot?: { x: number, y: number, z: number, w: number };
   cameraFov?: number; // Kept for Scene restoration
   sceneOffset?: PreciseVector3;
-  targetDistance?: number; 
+  targetDistance?: number;
   cameraMode?: CameraMode;
-  
+
   // Arrays/Complex types not yet in DDFS
-  lights?: LightParams[]; 
-  animations?: AnimationParams[]; 
-  
-  // Modular System
-  graph?: FractalGraph;
-  pipeline?: PipelineNode[];
-  
+  lights?: LightParams[];
+  animations?: AnimationParams[];
+
   // Animation System
   sequence?: AnimationSequence;
-  duration?: number; 
+  duration?: number;
   
   // Legacy root props used by RendererSlice/LightSlice logic
   renderMode?: 'Direct' | 'PathTracing';

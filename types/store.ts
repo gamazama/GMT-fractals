@@ -1,7 +1,6 @@
 
 import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LfoTarget, AnimationParams } from './animation';
-import { FractalGraph, PipelineNode } from './graph';
 import { Preset, FractalDefinition } from './fractal';
 import { ContextMenuItem } from './help';
 import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
@@ -169,11 +168,10 @@ export interface FractalStoreState extends FeatureStateMap {
   paramUndoStack: Partial<FractalStoreState>[];
   paramRedoStack: Partial<FractalStoreState>[];
 
-  // --- MODULAR BUILDER STATE (managed by modularSlice + uiSlice) ---
-  graph: FractalGraph;
-  pipeline: PipelineNode[];
-  pipelineRevision: number;
-  autoCompile: boolean;
+  // NOTE: Modular builder state (graph/pipeline/pipelineRevision/autoCompile)
+  // was removed with the modular graph system. A future plugin that wants a
+  // node-graph authoring surface should carry its state inside
+  // `features[pluginId]` rather than at the root of FractalStoreState.
 
   isTimelineHovered: boolean;
   
@@ -275,13 +273,11 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;
-    setAnimations: (v: AnimationParams[]) => void; 
+    setAnimations: (v: AnimationParams[]) => void;
     setLiveModulations: (v: Partial<Record<LfoTarget, number>>) => void;
-    // --- MODULAR BUILDER ACTIONS (managed by modularSlice) ---
-    setGraph: (g: FractalGraph) => void;
-    setPipeline: (v: PipelineNode[]) => void;
-    refreshPipeline: () => void;
-    setAutoCompile: (v: boolean) => void;
+    // Modular builder actions were removed with the graph system; if a
+    // future plugin needs setGraph/setPipeline/refreshPipeline, it adds
+    // them via store extension (Zustand slice composition).
     loadPreset: (p: Preset) => void;
     loadScene: (args: { def?: FractalDefinition; preset: Preset }) => void;
 
