@@ -14,8 +14,14 @@
 
 import { featureRegistry } from '../engine/FeatureSystem';
 import { MandelbulbFeature } from './features/mandelbulb';
+import { CameraFeature } from './features/camera';
 
 // 1c: the fractal formula. Injects GLSL via ShaderBuilder.addSection
 // under the 'formulaFunction' and 'formulaCall' names that
 // fractal-toy/shaderAssembler.ts reads back.
 featureRegistry.register(MandelbulbFeature);
+
+// 1d: orbit-style camera. Declares uniforms only — the pinhole-ray
+// construction lives in the assembler, since camera math is pipeline
+// level rather than per-formula.
+featureRegistry.register(CameraFeature);

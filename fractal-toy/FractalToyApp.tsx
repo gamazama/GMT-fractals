@@ -20,9 +20,11 @@ export const FractalToyApp: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<FractalEngine | null>(null);
 
-    // Subscribe to the Mandelbulb feature slice. Any change re-runs this
-    // effect's uniform push block.
+    // Subscribe to every relevant feature slice. Zustand selector returns
+    // a fresh slice reference on each mutation, which re-runs the uniform-
+    // push effect. For 1d: mandelbulb + camera.
     const mandelbulb = useFractalStore((s: any) => s.mandelbulb);
+    const camera     = useFractalStore((s: any) => s.camera);
 
     // Boot the engine once.
     useEffect(() => {
@@ -66,8 +68,8 @@ export const FractalToyApp: React.FC = () => {
         };
     }, []);
 
-    // Push feature uniforms whenever feature state changes. The engine
-    // caches uniform locations so these setUniform calls are cheap.
+    // Push feature uniforms whenever feature state changes. Engine caches
+    // uniform locations so these calls are cheap.
     useEffect(() => {
         const engine = engineRef.current;
         if (!engine || !mandelbulb) return;
@@ -80,6 +82,21 @@ export const FractalToyApp: React.FC = () => {
         engine.setUniformF('uRadiolariaLimit',  mandelbulb.radiolariaLimit ?? 0.5);
     }, [mandelbulb]);
 
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !camera) return;
+        engine.setUniformF('uCamOrbitTheta', camera.orbitTheta ?? 0.6);
+        engine.setUniformF('uCamOrbitPhi',   camera.orbitPhi ?? 0.2);
+        engine.setUniformF('uCamDistance',   camera.distance ?? 2.5);
+        engine.setUniformF('uCamFov',        camera.fov ?? 60);
+        const t = camera.target;
+        engine.setUniform3F('uCamTarget',
+            t?.x ?? 0,
+            t?.y ?? 0,
+            t?.z ?? 0,
+        );
+    }, [camera]);
+
     return (
         <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden">
             <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
@@ -87,13 +104,19 @@ export const FractalToyApp: React.FC = () => {
             {/* Mandelbulb panel — uses the engine's AutoFeaturePanel
                 (rendered from the feature's params metadata). 1f will
                 tidy the chrome. */}
-            <div className="absolute right-3 top-3 w-72 bg-black/85 border border-white/10 rounded-md p-3 backdrop-blur-sm max-h-[90vh] overflow-y-auto">
-                <div className="text-[10px] text-cyan-400 uppercase tracking-wider mb-2">Mandelbulb</div>
-                <AutoFeaturePanel featureId="mandelbulb" />
+            <div className="absolute right-3 top-3 w-72 bg-black/85 border border-white/10 rounded-md p-3 backdrop-blur-sm max-h-[90vh] overflow-y-auto space-y-4">
+                <div>
+                    <div className="text-[10px] text-cyan-400 uppercase tracking-wider mb-2">Mandelbulb</div>
+                    <AutoFeaturePanel featureId="mandelbulb" />
+                </div>
+                <div>
+                    <div className="text-[10px] text-cyan-400 uppercase tracking-wider mb-2">Camera</div>
+                    <AutoFeaturePanel featureId="camera" />
+                </div>
             </div>
 
             <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
-                Fractal Toy — 1c · Mandelbulb (camera + lighting hardcoded)
+                Fractal Toy — 1d · Mandelbulb + orbit camera (lighting hardcoded)
             </div>
         </div>
     );

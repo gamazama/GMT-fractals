@@ -92,17 +92,30 @@ const GRADIENT_BODY = `
 // Escape bound (r > 2) and DE form (0.5 * log(r) * r / dr) match the
 // canonical Mandelbulb distance estimator.
 const RAYMARCH_BODY = (formulaCall: string): string => `
-    // ── Distance estimator (uses the feature-injected formula) ──
-    // Hoisted into main() as a GLSL function would require sections to
-    // reorder; inlining keeps the assembler simple for 1c. 1d will
-    // split this into a proper \`float mapSDF(vec3)\` function.
+    // ── Screen → camera ray (pinhole, uCam* uniforms from camera feature) ──
     vec2 uv = vUv * 2.0 - 1.0;
     float aspect = uResolution.x / uResolution.y;
-    uv.x *= aspect;
 
-    // Fixed camera for 1c (configurable in 1d).
-    vec3 camPos = vec3(0.0, 0.0, 2.5);
-    vec3 rayDir = normalize(vec3(uv, -1.5));
+    // Orbit position from (θ, φ, distance) around uCamTarget.
+    float cp = cos(uCamOrbitPhi);
+    vec3 camOffset = vec3(
+        sin(uCamOrbitTheta) * cp,
+        sin(uCamOrbitPhi),
+        cos(uCamOrbitTheta) * cp
+    ) * uCamDistance;
+    vec3 camPos = uCamTarget + camOffset;
+
+    // Camera basis (right-handed, +Y-up).
+    vec3 camForward = normalize(uCamTarget - camPos);
+    vec3 camRight   = normalize(cross(camForward, vec3(0.0, 1.0, 0.0)));
+    vec3 camUp      = cross(camRight, camForward);
+
+    float halfFov = tan(radians(uCamFov) * 0.5);
+    vec3 rayDir = normalize(
+        camForward
+        + camRight * (uv.x * aspect * halfFov)
+        + camUp    * (uv.y * halfFov)
+    );
 
     // ── Ray march ──────────────────────────────────────────────
     float t = 0.0;
