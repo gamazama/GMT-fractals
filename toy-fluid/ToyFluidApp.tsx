@@ -23,10 +23,39 @@ import {
   MIDDLE_DRAG_ZOOM_SENSITIVITY,
   MIN_ZOOM,
   PAN_DRAG_THRESHOLD_PX,
+  PARTICLE_HARD_CAP,
   PRECISION_ALT_MULT,
   PRECISION_SHIFT_MULT,
   WHEEL_ZOOM_SENSITIVITY,
 } from './constants';
+
+/** Tiny HSL↔RGB helpers used by the brush colour pipeline. Both work in 0..1 space. */
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = h * 6;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let r = 0, g = 0, b = 0;
+  if (hp < 1)      { r = c; g = x; }
+  else if (hp < 2) { r = x; g = c; }
+  else if (hp < 3) { g = c; b = x; }
+  else if (hp < 4) { g = x; b = c; }
+  else if (hp < 5) { r = x; b = c; }
+  else             { r = c; b = x; }
+  const m = l - c / 2;
+  return [r + m, g + m, b + m];
+}
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return [h, s, l];
+}
 
 export const ToyFluidApp: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -63,7 +92,7 @@ export const ToyFluidApp: React.FC = () => {
   orbitRef.current = orbit;
 
   // Modifier state captured globally (keydown/keyup listeners on window)
-  const mods = useRef({ c: false, shift: false, alt: false });
+  const mods = useRef({ c: false, b: false, shift: false, alt: false });
 
   // Adaptive-quality scratch state (read by the rAF loop)
   const effectiveSimResRef = useRef<number>(DEFAULT_PARAMS.simResolution);
@@ -79,21 +108,53 @@ export const ToyFluidApp: React.FC = () => {
   // upgrading, the contextmenu fires normally and opens the right-click menu.
   const pointerState = useRef({
     down: false,
-    mode: 'splat' as 'splat' | 'pick-c' | 'pan' | 'pan-pending' | 'zoom',
+    mode: 'splat' as 'splat' | 'pick-c' | 'pan' | 'pan-pending' | 'zoom' | 'resize-brush',
     startX: 0, startY: 0,
     startCx: 0, startCy: 0,
     startCenterX: 0, startCenterY: 0,
     startZoom: 1.5,
+    /** Brush size at the start of a B+drag — set on pointerdown, used as the base for logarithmic resize. */
+    startBrushSize: 0.1,
     /** World-space coord to anchor zoom at (middle-drag pivots around this point). */
     zoomAnchor: [0, 0] as [number, number],
     /** UV (0..1) of the middle-drag start on the canvas — used by the anchor math. */
     zoomAnchorUv: [0.5, 0.5] as [number, number],
     lastX: 0, lastY: 0,
     lastT: 0,
+    /** Running UV arc-length since the last emitted splat — drives brushSpacing. */
+    distSinceSplat: 0,
+    /** UV of the last emitted splat (for spacing math). */
+    lastSplatUv: [0, 0] as [number, number],
     /** Set to true when a right-click drag actually moved past the threshold.
      *  The subsequent contextmenu event reads this to decide whether to open the
      *  menu. Reset on the next pointerdown. */
     rightDragged: false,
+  });
+
+  /** Live cursor info for the brush-preview overlay (null = don't draw). */
+  const [brushCursor, setBrushCursor] = useState<{ x: number; y: number } | null>(null);
+  /** Running phase for rainbow colour mode, so brush hue cycles smoothly. */
+  const brushHuePhase = useRef(0);
+
+  /** CPU-side particle system. Lives independently of the fluid — each particle
+   *  flies on its own ballistic trajectory (optionally with gravity + drag) and
+   *  leaves a secondary-paint dye trail every frame it's alive. Decoupling the
+   *  particles from the fluid means they make their own streaks instead of just
+   *  getting immediately absorbed into whatever dye field already exists. */
+  interface Particle {
+    x: number; y: number;
+    vx: number; vy: number;
+    life: number; lifeMax: number;
+    r: number; g: number; b: number;
+    size: number;
+  }
+  const particles = useRef<Particle[]>([]);
+  /** Particle-emitter spawn accumulator — ticks up in seconds to honour
+   *  particleRate without creating fractional particles. */
+  const particleSpawnAcc = useRef(0);
+  /** Latest pointer state the rAF emitter tick needs: position + velocity. */
+  const pointerUv = useRef<{ u: number; v: number; vx: number; vy: number; down: boolean }>({
+    u: 0.5, v: 0.5, vx: 0, vy: 0, down: false,
   });
 
   // Boot engine once.
@@ -194,6 +255,24 @@ export const ToyFluidApp: React.FC = () => {
       }
       lastLoopT = t;
 
+      // Emitter tick: while the user holds the pointer down AND the emitter
+      // is on AND the gesture mode is 'splat' (i.e. not pan/pick-c/zoom/etc.),
+      // spawn particles at the current cursor at particleRate/sec.
+      const pp = paramsRef.current;
+      const ptr = pointerUv.current;
+      if (pp.particleEmitter && ptr.down && pointerState.current.mode === 'splat') {
+        particleSpawnAcc.current += dtSec * pp.particleRate;
+        while (particleSpawnAcc.current >= 1 && particles.current.length < PARTICLE_HARD_CAP) {
+          particleSpawnAcc.current -= 1;
+          spawnParticle(ptr.u, ptr.v, ptr.vx, ptr.vy);
+        }
+        if (particles.current.length >= PARTICLE_HARD_CAP) particleSpawnAcc.current = 0;
+      }
+
+      // Step CPU particle system + paint with the current brushMode BEFORE the
+      // fluid frame, so this tick's dye gets advected by this tick's velocity.
+      stepParticles(engine, dtSec);
+
       engine.frame(t);
 
       // FPS — keep both instantaneous (for display) and smoothed (for adaptive).
@@ -242,6 +321,7 @@ export const ToyFluidApp: React.FC = () => {
       if (tag === 'input' || tag === 'textarea') return;
 
       if (e.key === 'c' || e.key === 'C') mods.current.c = true;
+      if (e.key === 'b' || e.key === 'B') mods.current.b = true;
       mods.current.shift = e.shiftKey;
       mods.current.alt = e.altKey;
 
@@ -263,11 +343,12 @@ export const ToyFluidApp: React.FC = () => {
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'c' || e.key === 'C') mods.current.c = false;
+      if (e.key === 'b' || e.key === 'B') mods.current.b = false;
       mods.current.shift = e.shiftKey;
       mods.current.alt = e.altKey;
     };
     const onBlur = () => {
-      mods.current.c = false;
+      mods.current.c = false; mods.current.b = false;
       mods.current.shift = false; mods.current.alt = false;
     };
 
@@ -450,10 +531,127 @@ export const ToyFluidApp: React.FC = () => {
       ps.mode = 'pick-c';
       ps.startCx = paramsRef.current.juliaC[0];
       ps.startCy = paramsRef.current.juliaC[1];
+    } else if (mods.current.b) {
+      ps.mode = 'resize-brush';
+      ps.startBrushSize = paramsRef.current.brushSize;
     } else {
       ps.mode = 'splat';
+      ps.distSinceSplat = 0;
+      const [u0, v0] = engine.canvasToUv(e.clientX, e.clientY);
+      ps.lastSplatUv = [u0, v0];
+      pointerUv.current = { u: u0, v: v0, vx: 0, vy: 0, down: true };
+      particleSpawnAcc.current = 0;
+      // Drop one splat at press so a single click always leaves a mark, unless
+      // the emitter is on — in that case the rAF loop handles continuous spawn.
+      if (!paramsRef.current.particleEmitter) {
+        emitBrushSplat(engine, u0, v0, 0, 0);
+      }
     }
   };
+
+  /** Emit a single brush splat for a stroke sample. Particles live on their
+   *  own layer and are driven by the rAF loop — not this function. */
+  function emitBrushSplat(engine: FluidEngine, u: number, v: number, vx: number, vy: number) {
+    const p = paramsRef.current;
+    const color = pickBrushColor(vx, vy, u, v);
+    const jittered = applyBrushJitter(color, p.brushJitter);
+    engine.brush(u, v, vx * p.brushFlow, vy * p.brushFlow, jittered, p.brushSize, p.brushHardness, p.brushStrength, p.brushMode);
+  }
+
+  /** Spawn one particle at (u,v) with a direction+speed derived from current
+   *  pointer velocity + spread. Called from the rAF emitter tick. */
+  function spawnParticle(u: number, v: number, pointerVx: number, pointerVy: number) {
+    const p = paramsRef.current;
+    if (particles.current.length >= PARTICLE_HARD_CAP) return;
+    const hasDrag = Math.hypot(pointerVx, pointerVy) > 1e-4;
+    const baseAng = hasDrag ? Math.atan2(pointerVy, pointerVx) : Math.random() * Math.PI * 2;
+    const a = baseAng + (Math.random() - 0.5) * 2 * p.particleSpread * Math.PI;
+    const speed = p.particleVelocity * (0.4 + Math.random() * 0.6);
+    // Colour snapshot at spawn — the particle keeps this hue for its whole life.
+    const base = pickBrushColor(pointerVx, pointerVy, u, v);
+    const col = applyBrushJitter(base, p.brushJitter);
+    const jr = p.brushSize * 0.35;
+    particles.current.push({
+      x: u + (Math.random() - 0.5) * jr,
+      y: v + (Math.random() - 0.5) * jr,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed,
+      life: p.particleLifetime,
+      lifeMax: p.particleLifetime,
+      r: col[0], g: col[1], b: col[2],
+      size: p.brushSize * p.particleSizeScale * (0.85 + Math.random() * 0.3),
+    });
+  }
+
+  /** Step all live particles and let each one act as a tiny brush — painting
+   *  with the currently-selected brushMode at its own position/velocity. Each
+   *  particle fades to transparent as it ages so streaks dissolve naturally. */
+  function stepParticles(engine: FluidEngine, dtSec: number) {
+    const list = particles.current;
+    if (list.length === 0) return;
+    const p = paramsRef.current;
+    const decay = Math.exp(-p.particleDrag * dtSec);
+    let write = 0;
+    for (let i = 0; i < list.length; i++) {
+      const pt = list[i];
+      pt.life -= dtSec;
+      if (pt.life <= 0) continue;
+      pt.vx *= decay;
+      pt.vy *= decay;
+      pt.vy += p.particleGravity * dtSec;
+      pt.x += pt.vx * dtSec;
+      pt.y += pt.vy * dtSec;
+      // Cull particles off-canvas (generous margin so gravity arcs can return).
+      if (pt.x < -0.1 || pt.x > 1.1 || pt.y < -0.1 || pt.y > 1.1) continue;
+      // Life-weighted fade so particles dissolve instead of snapping out.
+      const alpha = Math.max(0, pt.life / pt.lifeMax);
+      const col: [number, number, number] = [pt.r * alpha, pt.g * alpha, pt.b * alpha];
+      // Each particle acts as a mini brush — same mode the user has selected.
+      engine.brush(pt.x, pt.y, pt.vx * p.brushFlow, pt.vy * p.brushFlow, col,
+                   pt.size, p.brushHardness, p.brushStrength * alpha, p.brushMode);
+      list[write++] = pt;
+    }
+    list.length = write;
+  }
+
+  /** Pick a colour for the next splat according to the active colour mode. */
+  function pickBrushColor(vx: number, vy: number, u: number, v: number): [number, number, number] {
+    const p = paramsRef.current;
+    switch (p.brushColorMode) {
+      case 'solid':
+        return [p.brushColor[0], p.brushColor[1], p.brushColor[2]];
+      case 'velocity': {
+        const mag = Math.min(1, Math.hypot(vx, vy) * 0.2);
+        const h = (Math.atan2(vy, vx) / (2 * Math.PI) + 1) % 1;
+        return hslToRgb(h, 0.9, 0.35 + 0.3 * mag);
+      }
+      case 'gradient': {
+        // Cheap heuristic: sample the palette LUT at (u+v)/2. A readback from
+        // the Julia buffer would give exact iteration-based colour but isn't
+        // worth the per-splat cost.
+        const lut = gradientLut;
+        if (!lut) return [1, 1, 1];
+        const idx = Math.floor(((u + v) * 0.5) * (lut.length / 4 - 1));
+        const i = idx * 4;
+        return [lut[i] / 255, lut[i + 1] / 255, lut[i + 2] / 255];
+      }
+      case 'rainbow':
+      default: {
+        const h = brushHuePhase.current;
+        return [0.5 + 0.5 * Math.cos(6.28318 * h),
+                0.5 + 0.5 * Math.cos(6.28318 * (h + 0.33)),
+                0.5 + 0.5 * Math.cos(6.28318 * (h + 0.67))];
+      }
+    }
+  }
+
+  /** Apply hue jitter around a base colour. 0 = passthrough, 1 = total hue randomise. */
+  function applyBrushJitter(c: [number, number, number], amt: number): [number, number, number] {
+    if (amt <= 0) return c;
+    const [h, s, l] = rgbToHsl(c[0], c[1], c[2]);
+    const jh = (h + (Math.random() - 0.5) * amt + 1) % 1;
+    return hslToRgb(jh, s, l);
+  }
 
   const onPointerMove = (e: React.PointerEvent) => {
     const engine = engineRef.current;
@@ -514,6 +712,19 @@ export const ToyFluidApp: React.FC = () => {
       return;
     }
 
+    // B+drag to resize brush — horizontal drag scales logarithmically so feel
+    // is uniform across the 0.005 → 0.3 size range.
+    if (ps.mode === 'resize-brush') {
+      const dxPx = e.clientX - ps.startX;
+      const mul = precisionMultiplier(mods.current.shift, mods.current.alt);
+      // ~2× per 200 px of drag at neutral precision
+      const factor = Math.exp(dxPx / 200 * mul);
+      const next = Math.max(0.003, Math.min(0.4, ps.startBrushSize * factor));
+      mergeParams({ brushSize: next });
+      setBrushCursor({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
     if (ps.mode === 'pan') {
       // Grab-and-drag: the fractal point under the cursor at drag-start stays under
       // the cursor as you drag. That means center moves opposite to the pixel delta,
@@ -531,7 +742,7 @@ export const ToyFluidApp: React.FC = () => {
       return;
     }
 
-    // Splat mode
+    // Brush stroke mode
     const dt = Math.max(1, now - ps.lastT) / 1000;
     const dxPx = e.clientX - ps.lastX;
     const dyPx = e.clientY - ps.lastY;
@@ -542,18 +753,38 @@ export const ToyFluidApp: React.FC = () => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const [u, v] = engine.canvasToUv(e.clientX, e.clientY);
     const mul = precisionMultiplier(mods.current.shift, mods.current.alt);
-    const vx = (dxPx / rect.width) / dt * 5 * mul;
-    const vy = -(dyPx / rect.height) / dt * 5 * mul;
-    const strength = Math.min(50, Math.hypot(vx, vy));
-    const h = (now * 0.001) % 1;
-    const r = 0.5 + 0.5 * Math.cos(6.28 * h);
-    const g = 0.5 + 0.5 * Math.cos(6.28 * (h + 0.33));
-    const b = 0.5 + 0.5 * Math.cos(6.28 * (h + 0.67));
-    engine.splatForce(u, v, vx, vy, strength, [r, g, b]);
+    const vx = (dxPx / rect.width) / dt * mul;
+    const vy = -(dyPx / rect.height) / dt * mul;
+
+    // Advance rainbow phase — one loop per second of clock time, not per drag.
+    brushHuePhase.current = (now * 0.001) % 1;
+
+    // Feed the rAF-side emitter with the latest cursor UV + pointer velocity.
+    pointerUv.current = { u, v, vx, vy, down: true };
+
+    const p = paramsRef.current;
+
+    // Particle emitter runs in the rAF loop based on pointer-down state — not
+    // from move events — so emission rate stays consistent even if the user
+    // pauses mid-drag. Move events just update the last-known cursor position.
+    if (p.particleEmitter) return;
+
+    // Spacing: accumulate arc-length (not chord from last splat) so winding
+    // strokes still emit. Turns laggy streams into even strokes; at large
+    // spacing gives a dotted / stamp look for free.
+    const duStep = Math.abs(dxPx / rect.width);
+    const dvStep = Math.abs(dyPx / rect.height);
+    ps.distSinceSplat += Math.hypot(duStep, dvStep);
+    if (ps.distSinceSplat < Math.max(1e-5, p.brushSpacing)) return;
+    ps.distSinceSplat = 0;
+    ps.lastSplatUv = [u, v];
+
+    emitBrushSplat(engine, u, v, vx, vy);
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
     pointerState.current.down = false;
+    pointerUv.current.down = false;
     try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch {}
   };
 
@@ -620,15 +851,42 @@ export const ToyFluidApp: React.FC = () => {
               pointerState.current.mode === 'pick-c' ? 'crosshair' :
               pointerState.current.mode === 'pan'    ? 'grabbing'  :
               pointerState.current.mode === 'zoom'   ? 'ns-resize' :
-                                                      'default'
+              pointerState.current.mode === 'resize-brush' ? 'ew-resize' :
+                                                      'none'  // hide OS cursor — brush ring replaces it
           }}
           onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
+          onPointerMove={(e) => {
+            onPointerMove(e);
+            setBrushCursor({ x: e.clientX, y: e.clientY });
+          }}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onPointerEnter={(e) => setBrushCursor({ x: e.clientX, y: e.clientY })}
+          onPointerLeave={() => setBrushCursor(null)}
           onWheel={onWheel}
           onContextMenu={onContextMenu}
         />
+
+        {/* Brush preview ring — follows the pointer, size reflects brushSize in UV. */}
+        {brushCursor && canvasRef.current ? (() => {
+          const rect = canvasRef.current.getBoundingClientRect();
+          const diamPx = params.brushSize * 2 * rect.width;
+          return (
+            <div
+              className="pointer-events-none absolute rounded-full border"
+              style={{
+                left: brushCursor.x - rect.left - diamPx / 2,
+                top:  brushCursor.y - rect.top  - diamPx / 2,
+                width: diamPx,
+                height: diamPx,
+                borderColor: 'rgba(255,255,255,0.6)',
+                borderStyle: params.brushHardness > 0.5 ? 'solid' : 'dashed',
+                borderWidth: 1,
+                boxShadow: '0 0 0 1px rgba(0,0,0,0.5)',
+              }}
+            />
+          );
+        })() : null}
 
         {/* Status is now shown in the TopBar above — overlay removed. */}
 
@@ -645,6 +903,7 @@ export const ToyFluidApp: React.FC = () => {
             </div>
             <ul className="space-y-0.5 leading-snug">
               <li><Key>Drag</Key> inject force + dye into the fluid</li>
+              <li><Key>B</Key>+<Key>Drag</Key> resize the brush live (horizontal = scale)</li>
               <li><Key>C</Key>+<Key>Drag</Key> pick Julia c directly on the canvas</li>
               <li><Key>Right-click</Key>+<Key>Drag</Key> pan the fractal view</li>
               <li><Key>Right-click</Key> (tap) canvas for quick actions menu</li>

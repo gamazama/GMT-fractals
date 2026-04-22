@@ -19,14 +19,14 @@ import {
   FRAG_BLOOM_UP,
   FRAG_MASK,
 } from './shaders';
-import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH, SPLAT_RADIUS_UV } from '../constants';
+import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH } from '../constants';
 
 export type ForceMode = 'gradient' | 'curl' | 'iterate' | 'c-track' | 'hue';
 export type ShowMode = 'composite' | 'julia' | 'dye' | 'velocity';
 export type FractalKind = 'julia' | 'mandelbrot';
 
 /** How new dye blends into the existing dye field each frame. */
-export type DyeBlend = 'add' | 'screen' | 'max' | 'over';
+export type DyeBlend = 'add' | 'screen' | 'max' | 'over' | 'multiply' | 'difference' | 'dodge' | 'vivid-mix';
 
 /** Colour space used when dye decays each frame — controls whether fading dye stays vivid or goes grey. */
 export type DyeDecayMode = 'linear' | 'perceptual' | 'vivid';
@@ -74,10 +74,14 @@ export const FLUID_STYLES: Array<{ id: FluidStyle; label: string; hint: string }
 ];
 
 export const DYE_BLENDS: Array<{ id: DyeBlend; label: string; hint: string }> = [
-  { id: 'add',    label: 'Add',    hint: 'Linear accumulate — bright strokes build up, classic fluid look.' },
-  { id: 'screen', label: 'Screen', hint: '1−(1−d)(1−i) — overlapping dye glows brighter, never clips to full white.' },
-  { id: 'max',    label: 'Max',    hint: 'Per-channel max — keeps the brightest layer, leaves darker alone.' },
-  { id: 'over',   label: 'Over',   hint: 'Alpha compositing — uses the gradient\'s α to fade / mask dye onto existing.' },
+  { id: 'add',        label: 'Add',        hint: 'Linear accumulate — bright strokes build up, classic fluid look.' },
+  { id: 'screen',     label: 'Screen',     hint: '1−(1−d)(1−i) — overlapping dye glows brighter, never clips to full white.' },
+  { id: 'max',        label: 'Max',        hint: 'Per-channel max — keeps the brightest layer, leaves darker alone.' },
+  { id: 'over',       label: 'Over',       hint: 'Alpha compositing — uses the gradient\'s α to fade / mask dye onto existing.' },
+  { id: 'multiply',   label: 'Multiply',   hint: 'Darkens where dye lands. Fractal peeks through — coloured-shadow look.' },
+  { id: 'difference', label: 'Difference', hint: '|d−i| — complementary hues reveal sharp edges, matching hues cancel to black. High-contrast / electric.' },
+  { id: 'dodge',      label: 'Dodge',      hint: 'd/(1−i) — hot spots bloom white. Pair with bloom for nova highlights.' },
+  { id: 'vivid-mix',  label: 'Vivid mix',  hint: 'OKLab-space add with chroma weighting. Complementary hues stay colourful instead of averaging to grey.' },
 ];
 
 export function dyeBlendToIndex(b: DyeBlend): number {
@@ -86,6 +90,48 @@ export function dyeBlendToIndex(b: DyeBlend): number {
     case 'screen': return 1;
     case 'max': return 2;
     case 'over': return 3;
+    case 'multiply': return 4;
+    case 'difference': return 5;
+    case 'dodge': return 6;
+    case 'vivid-mix': return 7;
+  }
+}
+
+/** Brush action on pointer drag (or on each live particle when the emitter is on). */
+export type BrushMode = 'paint' | 'erase' | 'stamp' | 'smudge';
+
+export const BRUSH_MODES: Array<{ id: BrushMode; label: string; hint: string }> = [
+  { id: 'paint',  label: 'Paint',  hint: 'Inject both dye and drag-velocity (the classic mouse behaviour).' },
+  { id: 'erase',  label: 'Erase',  hint: 'Subtract dye under the cursor. No force — leaves the velocity field alone.' },
+  { id: 'stamp',  label: 'Stamp',  hint: 'Dye only, no force. Hold and move for a pure colour trail that the fluid doesn\'t push.' },
+  { id: 'smudge', label: 'Smudge', hint: 'Force only, no new dye. Drag to push existing colour around without adding any.' },
+];
+
+export function brushModeToIndex(m: BrushMode): number {
+  switch (m) {
+    case 'paint': return 0;
+    case 'erase': return 1;
+    case 'stamp': return 2;
+    case 'smudge': return 3;
+  }
+}
+
+/** How the brush picks its colour each stroke sample. */
+export type BrushColorMode = 'rainbow' | 'solid' | 'gradient' | 'velocity';
+
+export const BRUSH_COLOR_MODES: Array<{ id: BrushColorMode; label: string; hint: string }> = [
+  { id: 'rainbow',  label: 'Rainbow',  hint: 'Cycles through the full hue wheel over ~1 s. Playful, good for demos.' },
+  { id: 'solid',    label: 'Solid',    hint: 'One fixed colour. Pick below.' },
+  { id: 'gradient', label: 'Gradient', hint: 'Samples the main palette at the cursor\'s fractal iteration — paint borrows scene colour.' },
+  { id: 'velocity', label: 'Velocity', hint: 'Maps drag direction → hue. Fast strokes are vivid, slow strokes dim.' },
+];
+
+export function brushColorModeToIndex(m: BrushColorMode): number {
+  switch (m) {
+    case 'rainbow': return 0;
+    case 'solid': return 1;
+    case 'gradient': return 2;
+    case 'velocity': return 3;
   }
 }
 
@@ -232,6 +278,44 @@ export interface FluidParams {
   collisionEnabled: boolean;
   /** When true, the display overlays the collision mask so walls are visible. */
   collisionPreview: boolean;
+
+  // ── Brush (artist) controls — governs what pointer drags inject into the sim. ──
+  /** Splat radius in UV units (0..1). Hold B+drag on the canvas to resize live. */
+  brushSize: number;
+  /** Falloff sharpness. 0 = soft gaussian fringe, 1 = hard disc with only a thin antialias. */
+  brushHardness: number;
+  /** Dye amount per splat (base is 1.0; 0 = dry brush, 3 = saturated). */
+  brushStrength: number;
+  /** How much of the pointer's velocity gets injected into the force field (0 = stamp-like, 5 = whippy). */
+  brushFlow: number;
+  /** Minimum UV distance between splats along a drag. Low = smooth stroke, high = dotted trail. */
+  brushSpacing: number;
+  /** What the brush draws/does on a stroke. */
+  brushMode: BrushMode;
+  /** Where the brush gets its colour from each splat. */
+  brushColorMode: BrushColorMode;
+  /** Solid-mode colour (RGB in 0..1). Ignored by the other colour modes. */
+  brushColor: [number, number, number];
+  /** Hue jitter applied on top of whatever colourMode picks. 0 = exact, 1 = full hue randomise per splat. */
+  brushJitter: number;
+  /** When true, pointer drags spawn particles on a separate layer; each live
+   *  particle paints using the current brushMode at its current position. */
+  particleEmitter: boolean;
+  /** Particles/second while dragging with the emitter on. */
+  particleRate: number;
+  /** Initial velocity magnitude of each emitted particle (UV/sec). */
+  particleVelocity: number;
+  /** Angular spread of the initial velocity (0 = all along drag, 1 = full 360°). */
+  particleSpread: number;
+  /** Gravity (UV/sec²) applied to each particle. Negative = falls down the canvas. */
+  particleGravity: number;
+  /** How long each particle lives (seconds) before it's culled. */
+  particleLifetime: number;
+  /** Air-drag coefficient (per second). 0 = ballistic, 1 = heavy drag. */
+  particleDrag: number;
+  /** Per-particle stamp radius as a fraction of brushSize. 1 = same size as brush. */
+  particleSizeScale: number;
+
   paused: boolean;
   simResolution: number;      // target sim grid height (cells) — may be adaptively reduced
   autoQuality: boolean;       // if true, adaptive-scaler may reduce simResolution when FPS is low
@@ -321,6 +405,25 @@ export const DEFAULT_PARAMS: FluidParams = {
   forceCap: 40,
   collisionEnabled: false,
   collisionPreview: false,
+
+  brushSize: 0.1,
+  brushHardness: 0,
+  brushStrength: 1,
+  brushFlow: 50,
+  brushSpacing: 0.005,
+  brushMode: 'paint',
+  brushColorMode: 'rainbow',
+  brushColor: [1, 1, 1],
+  brushJitter: 0,
+  particleEmitter: false,
+  particleRate: 120,
+  particleVelocity: 0.3,
+  particleSpread: 0.35,
+  particleGravity: 0,
+  particleLifetime: 1.2,
+  particleDrag: 0.6,
+  particleSizeScale: 0.35,
+
   paused: false,
   simResolution: 1344,
   autoQuality: true,
@@ -503,7 +606,7 @@ export class FluidEngine {
     this.progGradSub = this.linkProgram(VERT_FULLSCREEN, FRAG_GRADSUB,
       ['uTexel', 'uPressure', 'uVelocity', 'uMask']);
     this.progSplat = this.linkProgram(VERT_FULLSCREEN, FRAG_SPLAT,
-      ['uTexel', 'uTarget', 'uPoint', 'uValue', 'uRadius', 'uAspect']);
+      ['uTexel', 'uTarget', 'uPoint', 'uValue', 'uRadius', 'uDiscR', 'uHardness', 'uAspect', 'uOp']);
     this.progDisplay = this.linkProgram(VERT_FULLSCREEN, FRAG_DISPLAY,
       ['uTexel', 'uTexelDisplay', 'uTexelDye', 'uJulia', 'uJuliaAux', 'uDye', 'uVelocity', 'uGradient', 'uBloom', 'uMask',
        'uShowMode', 'uJuliaMix', 'uDyeMix', 'uVelocityViz',
@@ -793,29 +896,68 @@ export class FluidEngine {
   }
 
   /**
-   * Inject a single gaussian splat into a ping-pong field and advance the swap.
-   * Called twice from splatForce (once for velocity, once for dye).
+   * Inject a gaussian/disc splat into a ping-pong field and advance the swap.
+   * sizeUv is the UV radius of the brush. op = 'add' deposits, 'sub' erases.
    */
-  private splat(target: DoubleFBO, u: number, v: number, value: [number, number, number]) {
+  private splat(
+    target: DoubleFBO, u: number, v: number,
+    value: [number, number, number],
+    sizeUv: number,
+    hardness: number,
+    op: 'add' | 'sub',
+  ) {
     const gl = this.gl;
     this.bindFBO(target.write);
     this.useProgram(this.progSplat);
     this.bindTex(0, target.read.tex, this.progSplat.uniforms['uTarget']);
     gl.uniform2f(this.progSplat.uniforms['uPoint'], u, v);
     gl.uniform3f(this.progSplat.uniforms['uValue'], value[0], value[1], value[2]);
-    gl.uniform1f(this.progSplat.uniforms['uRadius'], SPLAT_RADIUS_UV);
+    // sizeUv is a visual radius. Soft-mode needs sigma² ≈ (0.5·r)² so the 1-stddev ring lines up with the UI ring.
+    gl.uniform1f(this.progSplat.uniforms['uRadius'], Math.max(1e-6, (sizeUv * 0.5) * (sizeUv * 0.5)));
+    gl.uniform1f(this.progSplat.uniforms['uDiscR'], Math.max(1e-6, sizeUv));
+    gl.uniform1f(this.progSplat.uniforms['uHardness'], hardness);
     gl.uniform1f(this.progSplat.uniforms['uAspect'], this.simW / this.simH);
+    gl.uniform1f(this.progSplat.uniforms['uOp'], op === 'sub' ? 1 : 0);
     this.drawQuad();
     target.swap();
   }
 
-  /** Inject a splat of force and dye at a UV location. */
-  splatForce(u: number, v: number, dx: number, dy: number, strength: number, color: [number, number, number]) {
-    // Clamp UV — pointer capture can fire move events from outside the canvas.
+  /**
+   * Artist brush — single atomic splat respecting the current brush mode/size/hardness.
+   *   mode='paint'  → dye + drag-velocity
+   *   mode='erase'  → subtract dye
+   *   mode='stamp'  → dye only
+   *   mode='smudge' → velocity only
+   */
+  brush(
+    u: number, v: number,
+    velX: number, velY: number,
+    color: [number, number, number],
+    sizeUv: number,
+    hardness: number,
+    strength: number,
+    mode: BrushMode,
+  ) {
     u = Math.max(0, Math.min(1, u));
     v = Math.max(0, Math.min(1, v));
-    this.splat(this.velocity, u, v, [dx * strength, dy * strength, 0]);
-    this.splat(this.dye, u, v, color);
+    const dye: [number, number, number] = [color[0] * strength, color[1] * strength, color[2] * strength];
+    const vel: [number, number, number] = [velX, velY, 0];
+    switch (mode) {
+      case 'paint':
+        this.splat(this.velocity, u, v, vel, sizeUv, hardness, 'add');
+        this.splat(this.dye,      u, v, dye, sizeUv, hardness, 'add');
+        break;
+      case 'erase':
+        // Subtract dye using current dye colour as the mask, scaled by strength.
+        this.splat(this.dye,      u, v, [strength, strength, strength], sizeUv, hardness, 'sub');
+        break;
+      case 'stamp':
+        this.splat(this.dye,      u, v, dye, sizeUv, hardness, 'add');
+        break;
+      case 'smudge':
+        this.splat(this.velocity, u, v, vel, sizeUv, hardness, 'add');
+        break;
+    }
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
   }
 

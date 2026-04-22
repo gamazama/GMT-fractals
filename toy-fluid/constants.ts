@@ -26,8 +26,9 @@ export const PRECISION_SHIFT_MULT = 5.0;
 /** Alt precision multiplier (0.2× finer) — matches GMT's convention. */
 export const PRECISION_ALT_MULT = 0.2;
 
-/** Mouse-drag splat: gaussian radius in UV-squared units. */
-export const SPLAT_RADIUS_UV = 0.002;
+/** Particle emitter hard cap — refuses to spawn beyond this. Each live particle
+ *  makes one GL brush call per frame, so 300 ≈ 300 draws/frame just for particles. */
+export const PARTICLE_HARD_CAP = 300;
 
 // ── Adaptive quality ─────────────────────────────────────────────────────────
 /** Floor the FPS-driven scaler can drop simResolution to. */

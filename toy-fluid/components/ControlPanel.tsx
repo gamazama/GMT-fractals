@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScalarInput } from '../../components/inputs/ScalarInput';
+import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
 import type { GradientConfig, GradientStop } from '../../types';
 import {
@@ -9,6 +10,8 @@ import {
   DyeDecayMode, DYE_DECAY_MODES,
   ToneMapping, TONE_MAPPINGS,
   FluidStyle, FLUID_STYLES,
+  BrushMode, BRUSH_MODES,
+  BrushColorMode, BRUSH_COLOR_MODES,
 } from '../fluid/FluidEngine';
 import { MandelbrotPicker } from './MandelbrotPicker';
 import { PRESETS, Preset } from '../presets';
@@ -55,7 +58,7 @@ const KINDS: { id: FractalKind; label: string }[] = [
   { id: 'mandelbrot', label: 'Mandelbrot' },
 ];
 
-const TABS = ['Fractal', 'Coupling', 'Fluid', 'Palette', 'Post-FX', 'Collision', 'Composite', 'Presets'] as const;
+const TABS = ['Fractal', 'Coupling', 'Fluid', 'Brush', 'Palette', 'Post-FX', 'Collision', 'Composite', 'Presets'] as const;
 type TabId = (typeof TABS)[number];
 
 function rgbToHex(rgb: [number, number, number]): string {
@@ -152,10 +155,10 @@ export const ControlPanel: React.FC<Props> = ({
           <a href="./index.html" className="text-[10px] text-cyan-300 hover:underline">← back to GMT</a>
         </div>
 
-        {/* Tabs — two rows of four so we have room for the full technical names
-            without cramping. Only the last row draws the bottom divider. */}
+        {/* Tabs — split roughly in half so neither row gets too cramped.
+            Only the last row draws the bottom divider. */}
         <div className="bg-black/40 border-b border-white/10">
-          {[TABS.slice(0, 4), TABS.slice(4, 8)].map((row, rowIdx) => (
+          {[TABS.slice(0, 5), TABS.slice(5)].map((row, rowIdx) => (
             <div
               key={rowIdx}
               className={`flex ${rowIdx === 0 ? 'border-b border-white/5' : ''}`}
@@ -309,8 +312,8 @@ export const ControlPanel: React.FC<Props> = ({
                   <Row hint="Per-second fade on OKLab a/b (chroma). Lower than Dye dissipation → colour stays saturated longer than it stays bright.">
                     <ScalarInput label="Chroma decay /s" value={params.dyeChromaDecayHz} onChange={(v) => setParams({ dyeChromaDecayHz: v })} min={0} max={5} step={0.01} variant="full" />
                   </Row>
-                  <Row hint="Per-frame chroma multiplier applied after decay. 1 = neutral, <1 washes out, >1 punches colours up.">
-                    <ScalarInput label="Saturation boost" value={params.dyeSaturationBoost} onChange={(v) => setParams({ dyeSaturationBoost: v })} min={0} max={4} step={0.01} variant="full" />
+                  <Row hint="Per-frame chroma gain, log-scaled 0.5 → 1.1 so you can dial the near-neutral zone precisely. 1 = neutral, &lt;1 washes out, &gt;1 pushes toward max saturation. Gamut-mapped in OKLab, so it pegs at the saturation ceiling rather than hue-shifting to white.">
+                    <ScalarInput label="Saturation boost" value={params.dyeSaturationBoost} onChange={(v) => setParams({ dyeSaturationBoost: v })} min={0.5} max={1.1} step={0.001} mapping={createLogMapping(0.5, 1.1)} variant="full" />
                   </Row>
                 </>
               )}
@@ -320,6 +323,105 @@ export const ControlPanel: React.FC<Props> = ({
               <Row hint="Target fluid grid height in cells. More = finer detail, slower.">
                 <ScalarInput label="Sim resolution" value={params.simResolution} onChange={(v) => setParams({ simResolution: Math.round(v) })} min={128} max={1536} step={32} variant="full" />
               </Row>
+            </>
+          )}
+
+          {activeTab === 'Brush' && (
+            <>
+              <Hint>
+                The brush is what your pointer paints into the fluid. Hold <b>B</b> and drag horizontally on the canvas
+                to scale it live. Solid-click drops a single splat; dragging emits a stroke.
+              </Hint>
+
+              <GroupHeader>Mode</GroupHeader>
+              <div className="grid grid-cols-4 gap-1">
+                {BRUSH_MODES.map(m => (
+                  <Chip key={m.id} active={params.brushMode === m.id} onClick={() => setParams({ brushMode: m.id })} title={m.hint}>
+                    {m.label}
+                  </Chip>
+                ))}
+              </div>
+              <Hint>{BRUSH_MODES.find(m => m.id === params.brushMode)?.hint}</Hint>
+
+              <GroupHeader>Shape</GroupHeader>
+              <ScalarInput label="Size (UV)"   value={params.brushSize}     onChange={(v) => setParams({ brushSize: v })}     min={0.003} max={0.4}  step={0.001} variant="full" />
+              <Hint>Radius in UV units (0..1 across the canvas). B+drag the canvas to resize live.</Hint>
+              <ScalarInput label="Hardness"    value={params.brushHardness} onChange={(v) => setParams({ brushHardness: v })} min={0}     max={1}    step={0.01}  variant="full" />
+              <Hint>0 = soft gaussian edge (airbrush). 1 = hard disc (stamp).</Hint>
+
+              {/* Strength controls dye amount. Smudge injects no dye, so hide it there. */}
+              {params.brushMode !== 'smudge' && (<>
+                <ScalarInput label={params.brushMode === 'erase' ? 'Erase strength' : 'Strength'}
+                  value={params.brushStrength} onChange={(v) => setParams({ brushStrength: v })} min={0} max={3} step={0.01} variant="full" />
+                <Hint>{params.brushMode === 'erase'
+                  ? 'How much dye each splat removes. 0 = nothing, 3 = total wipe.'
+                  : 'Dye amount per splat. 0 = dry brush, 3 = saturated.'}</Hint>
+              </>)}
+
+              {/* Flow drives the force injection. Stamp/erase suppress force, so hide there. */}
+              {(params.brushMode === 'paint' || params.brushMode === 'smudge') && (<>
+                <ScalarInput label="Flow" value={params.brushFlow} onChange={(v) => setParams({ brushFlow: v })} min={0} max={200} step={0.5} variant="full" />
+                <Hint>How much of the pointer's velocity is injected into the force field. Low = delicate, 50 = paints, 200 = whip.</Hint>
+              </>)}
+
+              {/* Spacing governs stroke sampling. When the emitter is on the particles
+                  handle all emission (spawn rate is time-based, not travel-based). */}
+              {!params.particleEmitter && (<>
+                <ScalarInput label="Spacing (UV)" value={params.brushSpacing} onChange={(v) => setParams({ brushSpacing: v })} min={0} max={0.1} step={0.001} variant="full" />
+                <Hint>Minimum travel between splats along a drag. Low = smooth stroke, high = dotted trail.</Hint>
+              </>)}
+
+              {/* Colour section only applies when we're actually depositing dye. */}
+              {params.brushMode !== 'smudge' && params.brushMode !== 'erase' && (<>
+                <GroupHeader>Colour</GroupHeader>
+                <div className="grid grid-cols-4 gap-1">
+                  {BRUSH_COLOR_MODES.map(m => (
+                    <Chip key={m.id} active={params.brushColorMode === m.id} onClick={() => setParams({ brushColorMode: m.id })} title={m.hint}>
+                      {m.label}
+                    </Chip>
+                  ))}
+                </div>
+                <Hint>{BRUSH_COLOR_MODES.find(m => m.id === params.brushColorMode)?.hint}</Hint>
+
+                {params.brushColorMode === 'solid' && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="text-[10px] text-gray-400 w-20">Solid color</div>
+                    <input
+                      type="color"
+                      aria-label="Brush solid colour"
+                      title="Brush solid colour"
+                      value={rgbToHex(params.brushColor)}
+                      onChange={(e) => setParams({ brushColor: hexToRgb(e.target.value) })}
+                      className="w-10 h-6 rounded border border-white/10 bg-transparent cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {params.brushColorMode !== 'rainbow' && (<>
+                  <ScalarInput label="Hue jitter" value={params.brushJitter} onChange={(v) => setParams({ brushJitter: v })} min={0} max={1} step={0.01} variant="full" />
+                  <Hint>Random hue wiggle per splat. 0 = exact colour, 1 = full hue wheel. Builds natural variation in long strokes.</Hint>
+                </>)}
+              </>)}
+
+              <GroupHeader right={<Chip active={params.particleEmitter} onClick={() => setParams({ particleEmitter: !params.particleEmitter })}>{params.particleEmitter ? 'on' : 'off'}</Chip>}>Particle emitter</GroupHeader>
+              <Hint>When on, dragging spawns independent particles on their own layer. Each live particle flies with its own velocity/lifespan and acts as a mini brush — painting into the fluid with whichever mode is selected above, at its own position.</Hint>
+
+              {params.particleEmitter && (<>
+                <ScalarInput label="Rate /s"   value={params.particleRate}      onChange={(v) => setParams({ particleRate: v })}      min={1}    max={600} step={1}    variant="full" />
+                <Hint>Particles emitted per second while dragging. Hard-capped at 300 live at once.</Hint>
+                <ScalarInput label="Velocity"  value={params.particleVelocity}  onChange={(v) => setParams({ particleVelocity: v })}  min={0}    max={3}   step={0.01} variant="full" />
+                <Hint>Initial speed in UV/sec. 0.3 = gentle spray, 2 = shotgun.</Hint>
+                <ScalarInput label="Spread"    value={params.particleSpread}    onChange={(v) => setParams({ particleSpread: v })}    min={0}    max={1}   step={0.01} variant="full" />
+                <Hint>Angular spread around the drag direction. 0 = beam, 1 = full 360° burst.</Hint>
+                <ScalarInput label="Gravity"   value={params.particleGravity}   onChange={(v) => setParams({ particleGravity: v })}   min={-3}   max={3}   step={0.01} variant="full" />
+                <Hint>UV/sec² acceleration. Negative = falls down the canvas, positive = rises.</Hint>
+                <ScalarInput label="Drag /s"   value={params.particleDrag}      onChange={(v) => setParams({ particleDrag: v })}      min={0}    max={4}   step={0.01} variant="full" />
+                <Hint>Air drag — 0 = ballistic (keeps speed), 2 = quickly slows, 4 = fast stop.</Hint>
+                <ScalarInput label="Lifetime"  value={params.particleLifetime}  onChange={(v) => setParams({ particleLifetime: v })}  min={0.1}  max={6}   step={0.05} variant="full" />
+                <Hint>Seconds before each particle is culled. Longer = more persistent streaks.</Hint>
+                <ScalarInput label="Size ×"    value={params.particleSizeScale} onChange={(v) => setParams({ particleSizeScale: v })} min={0.05} max={1.5} step={0.01} variant="full" />
+                <Hint>Per-particle stamp size as a fraction of the brush size. 0.35 = dabs a third of the brush.</Hint>
+              </>)}
             </>
           )}
 
