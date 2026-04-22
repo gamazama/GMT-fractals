@@ -109,17 +109,15 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 **Not needed for toy-fluid (deferred or dropped):**
 - RenderEngine — toy-fluid brings its own `FluidEngine` with its own canvas + WebGL + sim loop. The engine's role is pure framework (DDFS + UI + save/load + animation). If/when another app needs a shared render engine, build it then.
 
-**Next session — land the four toy-fluid-blocking fragility fixes first.**
+**✅ Done (2026-04-22) — the four toy-fluid-blocking fragility fixes landed:**
+- **F1** (commit 96a4b5f) — `featureRegistry.freeze()` in `createFeatureSlice`; dev-throw on late registration, prod-warn+no-op.
+- **F2** (commit 96a4b5f) — `DuplicateFeatureError` thrown in prod; HMR-same-def is a no-op, HMR-different-def warns+replaces in dev.
+- **F3** (commit a4e7d6b) — `utils/PresetFieldRegistry.ts` + `utils/defaultPresetFields.ts`; `PresetLogic`/`getPreset` iterate the registry instead of hardcoded `savedCameras`/`cameraRot`/`targetDistance`.
+- **F4** (commit c6ee640) — `engine/plugins/RenderLoop.tsx` provides `<RenderLoopDriver />`, mounted in `App.tsx`; `TickRegistry` warns in dev if 3s pass after first `registerTick()` without any `runTicks()`.
 
-Per `docs/20_Fragility_Audit.md`:
-1. **F1** — freeze `featureRegistry` at `createEngineStore`; dev-throw on late registration.
-2. **F2** — throw on duplicate feature IDs in `featureRegistry.register`.
-3. **F3** — preset field registry in `@engine/scene-io` (replaces hardcoded `savedCameras`/`cameraRot`/`targetDistance` in `utils/PresetLogic.ts`).
-4. **F4** — `@engine/render-loop` default plugin + dev warning if `runTicks` is never called.
+All four fixes verified via `npm run typecheck` (0 errors) + `smoke:boot` (no pageerrors) + `smoke:interact` (state round-trip passes).
 
-These unblock toy-fluid port and remove silent-fail surfaces. Small commits; each independently verifiable.
-
-**Then — toy-fluid port itself (direct copy of the Demo add-on pattern):**
+**Next session — toy-fluid port itself (direct copy of the Demo add-on pattern):**
 
 Study `demo/README.md` + `docs/03_Plugin_Contract.md` — they document the three-step contract toy-fluid follows. Concretely:
 

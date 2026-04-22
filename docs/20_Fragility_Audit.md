@@ -12,7 +12,7 @@ Known issues found in the 2026-04-22 engine audit, with remediation status. This
 ---
 
 ## F1 — Late feature registration silently breaks
-**Status:** 🔴 Open
+**Status:** 🟢 Fixed (commit 96a4b5f)
 **Severity:** Critical — data loss risk.
 
 **Symptom:** `featureRegistry.register(MyFeature)` called after `createEngineStore()` adds the feature to the registry, but NOT to the store. Setters are undefined; UI panel renders nothing; preset round-trip silently drops feature state.
@@ -31,7 +31,7 @@ Known issues found in the 2026-04-22 engine audit, with remediation status. This
 ---
 
 ## F2 — Duplicate feature IDs silently overwrite
-**Status:** 🔴 Open
+**Status:** 🟢 Fixed (commit 96a4b5f)
 **Severity:** High — silent fail, data loss.
 
 **Symptom:** two features with the same `id` register → second overwrites first. No warning, no error. The first feature's state is lost.
@@ -59,7 +59,7 @@ Known issues found in the 2026-04-22 engine audit, with remediation status. This
 ---
 
 ## F3 — PresetLogic hardcodes top-level fields
-**Status:** 🔴 Open
+**Status:** 🟢 Fixed (commit a4e7d6b)
 **Severity:** Medium — extensibility, not correctness.
 
 **Symptom:** [utils/PresetLogic.ts:114-122](../utils/PresetLogic.ts#L114-L122) explicitly handles `savedCameras`, `cameraRot`, `targetDistance`. Apps with their own top-level state (toy-fluid's saved state, a future app's workspace meta) can't add preset-round-trip fields without editing this file.
@@ -79,7 +79,7 @@ PresetLogic iterates registered fields instead of hardcoding.
 ---
 
 ## F4 — Implicit render-loop contract
-**Status:** 🔴 Open
+**Status:** 🟢 Fixed (commit c6ee640)
 **Severity:** Medium — silent fail.
 
 **Symptom:** [engine/TickRegistry.ts](../engine/TickRegistry.ts) exposes `runTicks(dt)` but nothing in the engine calls it. If an app forgets to call it, animations silently don't play.
@@ -172,10 +172,10 @@ PresetLogic iterates registered fields instead of hardcoding.
 ## Fragility fix priority order
 
 Blocking toy-fluid port (must do first):
-1. **F1** — late registration freeze (unblocks plugin authoring)
-2. **F2** — duplicate ID detection
-3. **F3** — preset field registry (toy-fluid has app-specific state)
-4. **F4** — render-loop plugin + dev warning
+1. ~~**F1** — late registration freeze~~ 🟢 Fixed (96a4b5f)
+2. ~~**F2** — duplicate ID detection~~ 🟢 Fixed (96a4b5f)
+3. ~~**F3** — preset field registry~~ 🟢 Fixed (a4e7d6b)
+4. ~~**F4** — render-loop plugin + dev warning~~ 🟢 Fixed (c6ee640)
 
 Can land incrementally during/after toy-fluid port:
 5. **F5** — decouple camera from AnimationEngine
