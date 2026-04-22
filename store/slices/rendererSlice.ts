@@ -6,34 +6,32 @@ import { Uniforms } from '../../engine/UniformNames';
 import { UNIFORM_DEFAULTS } from '../../engine/UniformSchema';
 import * as THREE from 'three';
 
-const isMobile = () => {
-    if (typeof window === 'undefined') return false;
-    return (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) || (window.innerWidth < 768);
-};
-
+// dpr + canvasPixelSize (and their setters) migrated to viewportSlice in
+// Phase 2a. RendererSlice retains only the fractal-rendering-specific
+// knobs (MSAA, accumulation, path tracing, bucket render). These will
+// move to a future GMT-rendering plugin when the full GMT port lands.
 export type RendererSlice = Pick<FractalStoreState,
-    'dpr' | 'aaLevel' | 'msaaSamples' | 'aaMode' | 'accumulation' | 'previewMode' | 'renderMode' |
+    'aaLevel' | 'msaaSamples' | 'aaMode' | 'accumulation' | 'previewMode' | 'renderMode' |
     'isExporting' | 'adaptiveSuppressed' | 'renderRegion' | 'previewRegion' |
     'isBucketRendering' | 'bucketSize' |
     'outputWidth' | 'outputHeight' | 'tileCols' | 'tileRows' | 'matchViewportAspect' |
     'convergenceThreshold' |
-    'isPaused' | 'sampleCap' | 'samplesPerBucket' | 'canvasPixelSize'
+    'isPaused' | 'sampleCap' | 'samplesPerBucket'
 > & Pick<FractalActions,
-    'setDpr' | 'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
+    'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
     'setIsExporting' | 'setAdaptiveSuppressed' | 'setRenderRegion' | 'setPreviewRegion' |
     'setIsBucketRendering' | 'setBucketSize' |
     'setOutputWidth' | 'setOutputHeight' | 'setTileCols' | 'setTileRows' | 'setMatchViewportAspect' |
     'setConvergenceThreshold' |
-    'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket' | 'setCanvasPixelSize'
+    'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket'
 >;
 
 export const createRendererSlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], RendererSlice> = (set, get) => ({
-    
-    dpr: isMobile() ? 1.0 : Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1.0) : 1.0, 2.0),
-    aaLevel: 1.0, 
-    msaaSamples: 1, 
-    aaMode: 'Always', 
-    accumulation: true, 
+
+    aaLevel: 1.0,
+    msaaSamples: 1,
+    aaMode: 'Always',
+    accumulation: true,
     previewMode: false,
     
     // Fixed: Converted from getter to simple value to prevent init crash.
@@ -58,10 +56,10 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     matchViewportAspect: true,  // Keep viewport ratio when editing W/H
     convergenceThreshold: 0.25, // 0.25% default
     samplesPerBucket: 64, // Default samples per bucket for predictable quality
-    canvasPixelSize: [1920, 1080], // Physical px of the post-sidebar canvas area. Authoritative writer is ViewportArea's ResizeObserver on viewportRef (flex-1). Read via getCanvasPhysicalPixelSize() — do not read directly.
 
-    setDpr: (v) => { set({ dpr: v }); FractalEvents.emit('reset_accum', undefined); },
-    setAALevel: (v) => { 
+    // canvasPixelSize, setCanvasPixelSize, dpr, setDpr moved to viewportSlice (Phase 2a).
+
+    setAALevel: (v) => {
         set({ aaLevel: v }); 
         const { aaMode } = get(); 
         if (aaMode === 'Always' || (aaMode === 'Auto')) { set({ dpr: v }); } 
@@ -128,7 +126,6 @@ export const createRendererSlice: StateCreator<FractalStoreState & FractalAction
     setMatchViewportAspect: (v) => set({ matchViewportAspect: v }),
     setConvergenceThreshold: (v) => set({ convergenceThreshold: v }),
     setSamplesPerBucket: (v) => set({ samplesPerBucket: v }),
-    setCanvasPixelSize: (w, h) => set({ canvasPixelSize: [w, h] }),
 
     setIsExporting: (v) => set({ isExporting: v }),
     setAdaptiveSuppressed: (v) => set({ adaptiveSuppressed: v }),

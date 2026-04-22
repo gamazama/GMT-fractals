@@ -6,11 +6,10 @@ import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
 export type UISlice = Pick<FractalStoreState,
-    'showLightGizmo' | 'isGizmoDragging' | 
+    'showLightGizmo' | 'isGizmoDragging' |
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
     'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
-    'resolutionMode' | 'fixedResolution' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
     'isTimelineHovered' | 
@@ -31,7 +30,6 @@ export type UISlice = Pick<FractalStoreState,
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
     'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
-    'setResolutionMode' | 'setFixedResolution' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
     'setInteractionMode' | 'setFocusLock' |
@@ -85,9 +83,9 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     showHints: true,
     debugMobileLayout: false,
     invertY: false,
-    
-    resolutionMode: 'Full',
-    fixedResolution: [800, 600],
+
+    // resolutionMode + fixedResolution migrated to viewportSlice (Phase 2a).
+
     isBroadcastMode: getUrlParam('clean') || getUrlParam('broadcast'),
     
     lockSceneOnSwitch: false,
@@ -181,10 +179,9 @@ export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["
     setShowHints: (v) => set({ showHints: v }),
     setDebugMobileLayout: (v) => set({ debugMobileLayout: v }),
     setInvertY: (v) => set({ invertY: v }),
-    
-    setResolutionMode: (m) => { set({ resolutionMode: m }); FractalEvents.emit('reset_accum', undefined); },
-    setFixedResolution: (w, h) => { set({ fixedResolution: [w, h] }); FractalEvents.emit('reset_accum', undefined); },
-    
+
+    // setResolutionMode / setFixedResolution migrated to viewportSlice (Phase 2a).
+
     setLockSceneOnSwitch: (v) => set({ lockSceneOnSwitch: v }),
     setExportIncludeScene: (v) => set({ exportIncludeScene: v }),
     

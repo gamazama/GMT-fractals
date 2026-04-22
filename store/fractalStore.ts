@@ -20,6 +20,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { FractalStoreState, FractalActions, Preset } from '../types';
 import { createUISlice } from './slices/uiSlice';
 import { createRendererSlice } from './slices/rendererSlice';
+import { createViewportSlice } from './slices/viewportSlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createFeatureSlice } from './createFeatureSlice';
 import { getProxy } from '../engine/worker/WorkerProxy';
@@ -37,6 +38,7 @@ import { compileGate } from './CompileGate';
 export const useFractalStore = create<FractalStoreState & FractalActions>()(subscribeWithSelector((set, get, api) => ({
     ...createUISlice(set, get, api),
     ...createRendererSlice(set, get, api),
+    ...createViewportSlice(set, get, api),
     ...createHistorySlice(set, get, api),
     ...createFeatureSlice(set, get, api),
 
