@@ -4,6 +4,8 @@
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
 **Status:** ✅ **Engine is runnable and verified end-to-end.** `npx tsc --noEmit` → 0 errors. `PORT=3400 npm run dev` serves a working shell. A Demo add-on plugs in via the documented contract, proving DDFS + auto-panel + overlay + save/load all round-trip correctly.
 
+**📐 Architecture baseline committed (2026-04-22).** 12 engine-scope docs written under `docs/01_*` through `docs/20_*`. Start any session with `docs/DOCS_INDEX.md`; the table in `CLAUDE.md` maps "working on X" → "read Y". All design decisions (core+plugins model, feature isolation, unified undo, auto-binding animation, bridges/derived) live in those docs. Any architectural change goes in a doc before it goes in code.
+
 ## What this is
 
 An experiment in extracting a reusable application engine (DDFS + animation + UI framework + save/load + worker stub + shader assembly) from GMT. The first goal is to port toy-fluid onto this engine as a proof, then eventually rebuild GMT's raymarching pipeline on top as a plugin.
@@ -107,9 +109,19 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 **Not needed for toy-fluid (deferred or dropped):**
 - RenderEngine — toy-fluid brings its own `FluidEngine` with its own canvas + WebGL + sim loop. The engine's role is pure framework (DDFS + UI + save/load + animation). If/when another app needs a shared render engine, build it then.
 
-**Next session — toy-fluid port itself (now a direct copy of the Demo add-on pattern):**
+**Next session — land the four toy-fluid-blocking fragility fixes first.**
 
-Study `demo/README.md` — it documents the exact three-step contract toy-fluid follows. Concretely:
+Per `docs/20_Fragility_Audit.md`:
+1. **F1** — freeze `featureRegistry` at `createEngineStore`; dev-throw on late registration.
+2. **F2** — throw on duplicate feature IDs in `featureRegistry.register`.
+3. **F3** — preset field registry in `@engine/scene-io` (replaces hardcoded `savedCameras`/`cameraRot`/`targetDistance` in `utils/PresetLogic.ts`).
+4. **F4** — `@engine/render-loop` default plugin + dev warning if `runTicks` is never called.
+
+These unblock toy-fluid port and remove silent-fail surfaces. Small commits; each independently verifiable.
+
+**Then — toy-fluid port itself (direct copy of the Demo add-on pattern):**
+
+Study `demo/README.md` + `docs/03_Plugin_Contract.md` — they document the three-step contract toy-fluid follows. Concretely:
 
 1. **Define DDFS features** that replace toy-fluid's React `useState`:
    - `fluidSim` — simResolution, viscosity, dissipation, autoQuality, kind, forceMode

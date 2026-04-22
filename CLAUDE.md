@@ -1,87 +1,78 @@
-# GMT - Claude Code Instructions
+# gmt-engine — Claude Code Instructions
 
 ## Project Overview
-**GMT (Fractal Explorer)** - Real-time 3D fractal renderer in the browser.
-Stack: React 18 + TypeScript + Zustand + Vite + Three.js + GLSL shaders | Version 0.9.1 | License GPL-3.0
+**gmt-engine** — a generic application engine extracted from GMT (at `h:/GMT/gmt-0.8.5/`). Provides DDFS (Data-Driven Feature System), animation, UI, save/load, shortcuts, undo, and plugin seams. Apps (GMT, toy-fluid, future prototypes) install features and core plugins on top of it.
+
+Stack: React 18 + TypeScript + Zustand + Vite + optional GLSL | Forked from GMT 0.9.2 | Status: pre-1.0 architecture stabilisation
+
+Two companion docs at the repo root:
+- `HANDOFF.md` — session-by-session progress log, stage history, resume instructions.
+- `README.md` — project overview (if/when public).
+
+This file (`CLAUDE.md`) is forward-looking rules. `docs/DOCS_INDEX.md` is the authoritative table of contents.
 
 ## Critical Rules
 
 ### Read Docs Before Coding (MANDATORY)
-Before making ANY code changes, you MUST read the relevant documentation using the table below. Do NOT skip this — the docs contain architecture decisions, patterns, and constraints that are not obvious from code alone. Start with `docs/DOCS_INDEX.md` for the full index.
+Before ANY code change, consult the doc for the area you're touching. The engine has architectural commitments not obvious from code alone.
 
 | Working on... | Read first |
-|---------------|-----------|
-| Engine, render loop, state | `docs/01_System_Architecture.md` |
-| Raymarching, SDF, path tracing, accumulation | `docs/02_Rendering_Internals.md` |
-| Modular graph builder, node-to-GLSL | `docs/03_Modular_System.md` |
-| Animation, keyframes, timeline | `docs/04_Animation_Engine.md` |
-| Video export, presets, GMF format | `docs/05_Data_and_Export.md` |
-| Debugging, WebGL issues | `docs/06_Troubleshooting_and_Quirks.md` |
-| Technical debt, refactoring | `docs/07_Code_Health.md` |
-| File locations, project structure | `docs/08_File_Structure.md` |
-| Shader composition, injection | `docs/archive/10_Shader_Architecture_Refactor.md` |
-| Frag importer | `docs/21_Frag_Importer_Current_Status.md` (start here) |
-| Formula conversion | `docs/22_Frag_to_Native_Formula_Conversion.md` |
-| **Writing formulas**: full API, shader fields, params, GLSL built-ins, quirks | `docs/25_Formula_Dev_Reference.md` |
-| Formula interlace system, preambleVars, mesh export interlace | `docs/24_Formula_Interlace_System.md` |
-| V4 importer plan, per-iter emitter status, pipeline catalog | `docs/26_Formula_Workshop_V4_Plan.md` |
-| Hybrid formula architecture: GMT vs Mandelbulber2/Fragmentarium/Fraktaler | `docs/research/hybrid-formula-architecture-comparison.md` |
-| Mesh export tool, VDB writer, preview canvas, pipeline | `docs/30_Mesh_Export_Prototype.md` |
+|---|---|
+| Overall architecture — engine vs core plugins vs apps | `docs/01_Architecture.md` |
+| Adding/modifying features, `defineFeature` API, isolation | `docs/02_Feature_Registry.md` |
+| The add-on registration contract (plugin boot order) | `docs/03_Plugin_Contract.md` |
+| Which core plugins ship, what each owns | `docs/04_Core_Plugins.md` |
+| UI primitives, AdvancedGradientEditor, opt-in context pattern | `docs/05_Shared_UI.md` |
+| Undo, redo, transaction scopes, debounce | `docs/06_Undo_Transactions.md` |
+| Keyboard shortcuts, scopes, priority resolution | `docs/07_Shortcuts.md` |
+| Animation, keyframes, auto-binding, BinderRegistry | `docs/08_Animation.md` |
+| Intra-feature coordination — bridges and derived values | `docs/09_Bridges_and_Derived.md` |
+| Known fragilities + remediation status | `docs/20_Fragility_Audit.md` |
+| Save/load, SceneFormat, preset field registry | `docs/04_Core_Plugins.md#scene-io` + `utils/SceneFormat.ts` |
+| GMT-era reference (fractal, raymarching, formulas) | `docs/10_*` through `docs/44_*` — historical, NOT authoritative for the engine |
 
-After making changes, update the relevant docs if you discovered new patterns, quirks, or undocumented behavior. Check `docs/06_Troubleshooting_and_Quirks.md` for known issues when debugging.
+After making changes, update the affected doc. If you discover undocumented behaviour, add it. If a doc says something that's no longer true, fix it in the same commit.
 
 ### TypeScript
-- `tsconfig` has `isolatedModules: true` — type-only cross-module re-exports MUST use `export type { X }` and `import type { X }`, otherwise Vite/esbuild leaves the export in JS output causing runtime SyntaxError.
+- `tsconfig` has `isolatedModules: true` — type-only cross-module re-exports MUST use `export type { X }` and `import type { X }`. Otherwise Vite/esbuild leaves the export in JS output → runtime SyntaxError.
 
-### Architecture Patterns
-- **Engine-Bridge pattern**: React state NEVER directly drives the render loop. `EngineBridge.tsx` mediates between React (Zustand) and `engine/FractalEngine.ts`.
-- **DDFS (Data-Driven Feature System)**: Features define their own state, UI params, and shader injection. Adding a feature does NOT require touching engine or UI core. See `store/createFeatureSlice.ts`, `components/AutoFeaturePanel.tsx`, `features/`.
-- **TickRegistry** (`engine/TickRegistry.ts`): Phase-based tick orchestrator. Phases: `SNAPSHOT -> ANIMATE -> OVERLAY -> UI`. Don't bypass this with ad-hoc useFrame hooks.
-- **Worker architecture**: Rendering runs on a Web Worker with OffscreenCanvas. `WorkerProxy` is worker-only. State goes to worker via RENDER_TICK messages, not direct engine calls.
+### Architecture Rules
+- **Features are isolated.** A feature's state lives at `store[featureId]`. Reading another feature's state requires declaring `dependsOn: ['otherId']` in the feature def. Undeclared access throws in dev, warns in prod. See `docs/02_Feature_Registry.md`.
+- **Intra-feature coordination uses bridges or derived values.** No ad-hoc store reach-through. See `docs/09_Bridges_and_Derived.md`.
+- **UI primitives are pure.** No primitive imports the store. Animation / undo / shortcuts / context-menu capabilities are opt-in via React context. See `docs/05_Shared_UI.md`.
+- **The render loop is app-owned.** Engine provides `TickRegistry` phases; the app (or `@engine/render-loop` core plugin) calls `runTicks(dt)` each frame. See `docs/01_Architecture.md`.
+- **Feature registry is frozen at store construction.** Late registration throws in dev, no-ops in prod. All `featureRegistry.register()` calls must happen before `createEngineStore()` runs. See `docs/03_Plugin_Contract.md`.
+- **Duplicate feature IDs are forbidden.** The second registration throws immediately.
+- **Every DDFS param is animatable and undoable by construction.** No per-feature wiring. If you add a param, keyframes + undo + preset round-trip all work automatically. See `docs/08_Animation.md`.
 
 ### Key Files
 | File | Role |
-|------|------|
-| `engine/FractalEngine.ts` | Main render loop orchestrator |
-| `engine/ShaderFactory.ts` | GLSL generation from DDFS config |
-| `engine/ShaderBuilder.ts` | Builder pattern for shader composition |
-| `engine/MaterialController.ts` | Two-stage shader compilation, preview/full swap |
-| `store/fractalStore.ts` | Main Zustand store |
-| `components/AutoFeaturePanel.tsx` | Auto-generated UI from feature defs |
-| `components/CompilableFeatureSection.tsx` | Reusable compile/runtime split UI (reads DDFS `panelConfig`) |
-| `components/EngineBridge.tsx` | React <-> Engine mediator |
-| `components/WorkerTickScene.tsx` | Worker frame loop + TickRegistry runner |
-
-### Shader Conventions
-- `uLightDir[i]` stores direction TOWARD LIGHT (negated at boundary in UniformManager). Shaders use directly for NdotL/shadows — no per-consumer negation needed.
-- Features with `engineConfig.toggleParam` are conditionally compiled; `mode: 'compile'` = full rebuild, `'runtime'` = uniform toggle
-- Two-stage compilation: preview shader (<1s) renders while full shader compiles async. Generation counter cancels stale compiles.
+|---|---|
+| `engine/FeatureSystem.ts` | `featureRegistry`, `binderRegistry`, `bridgeRegistry`; isolation + freeze checks |
+| `engine/ShaderBuilder.ts` | 5 generic primitives + `addSection` escape hatch (optional for non-shader apps) |
+| `engine/TickRegistry.ts` | SNAPSHOT → ANIMATE → OVERLAY → UI phase orchestration |
+| `engine/AnimationEngine.ts` | Auto-binds every DDFS param + any explicitly registered binder |
+| `store/fractalStore.ts` | Engine store (rename to `engineStore.ts` deferred — see `HANDOFF.md`) |
+| `store/createFeatureSlice.ts` | Auto-derives state slice + setter from feature def |
+| `utils/SceneFormat.ts` | Generic save/load (JSON + PNG iTXt + URL share) |
+| `demo/` | Reference add-on. Three-file contract: `registerFeatures.ts` + feature def + `setup.ts` |
 
 ### What NOT to Do
-- Don't bind React state directly in render loops — use the bridge pattern
-- Don't create manual Zustand slices for features — use DDFS
-- Don't use `engine.renderer` or `engine.pipeline` checks in worker mode — they're null. Use `engine.isBooted` or shadow state.
-- Test suite coverage is partial — be careful with refactors, test manually alongside the automated checks below
+- Don't add manual Zustand slices for feature state — use `defineFeature`.
+- Don't import the store from a UI primitive — use React context.
+- Don't reach from feature A's setter into feature B's state — use a bridge.
+- Don't depend on `set${Feature}` by name-inference in animation — the engine auto-binds via the registry. If you need a custom binder, `binderRegistry.register()` it explicitly.
+- Don't write architecture decisions in changelog form. Update the relevant doc's "Decisions" section and link commits from the doc, not the other way around.
+- Don't modify `docs/10_*` through `docs/44_*` — those are GMT-era reference. Engine-scope changes go in `docs/01_*` through `docs/20_*`.
 
-### Automated checks
-- `npm run test:frag` — frag importer suite (64/64 passing)
-- `npm run test:baseline` — every native formula compiles with all features off (~8s, 42/42 passing). Baseline compile regression check.
-- `npm run test:hybrid` / `test:hybrid-adv` — every native formula + hybrid box (standard / interleaved) (~12s each, 42/42 passing). Run after hybrid-box or geometry-feature changes.
-- `npm run test:interlace` — native-formula interlace sweep (1600 primary × secondary pairs, ~100s, 1600/1600 passing). Run after changes to the interlace rewriter, feature uniform declarations, or any formula's `preamble` / `loopInit` / `preambleVars`.
-- `npm run test:shader` — all compile checks in sequence (~2.5 min). Use before pushing engine changes.
-- `npm run test:render` — **full-engine render sweep**. Boots the real `FractalEngine` + Three.js in headless Chromium, renders each formula through the full pipeline, captures PNG thumbnails. Requires `npm run dev` running in another terminal (served at `/render-harness.html`). Baseline only for now (42 cases, ~3-5 min); hybrid/interlace modes wired but commented pending param-preset work.
-- `npm run test:render:matrix` — regenerates an HTML grid view of the last render sweep at `debug/render-matrix-phase1.html`.
-- `npm run catalog:build` — regenerates `public/formulas/v3-v4-catalog.json` from the latest V3/V4 harness snapshots (`debug/v3-honest-snapshot.jsonl`, `debug/v4-honest-snapshot.jsonl`). Run after adding formulas to the library or making V3/V4 pipeline changes that might flip a formula's pass/fail status. Workshop library UI uses this catalog to auto-pick the right pipeline per formula and filter unrenderable entries.
-- See [docs/27_Shader_Testing_Suite.md](docs/27_Shader_Testing_Suite.md) for full details.
-
-## Formulas & File I/O
-- 42 formula files in `formulas/` (.ts with embedded GLSL)
-- GMF format files in `public/gmf/` (formula library)
-- **GMF is the primary save format** — all scenes save as `.gmf` (formula shader + full scene state). JSON is load-only for backward compat. PNG snapshots embed GMF in metadata. See `docs/05_Data_and_Export.md`.
-- Key functions: `saveGMFScene()` / `loadGMFScene()` in `utils/FormulaFormat.ts`
+### Automated Checks
+- `npm run typecheck` — tsc, should exit 0.
+- `npm run smoke:boot` — headless Chromium boot, fails on pageerrors.
+- `npm run smoke:interact` — state-flow + preset round-trip (demo feature).
+- `npm run smoke:screenshot` — visual baseline → `debug/scratch/engine-boot.png`.
 
 ## Build & Run
 ```bash
-npm run dev      # Dev server
+npm run dev      # Vite on localhost:3400
 npm run build    # Production build
 ```
