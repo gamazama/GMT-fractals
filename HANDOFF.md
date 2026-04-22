@@ -2,7 +2,7 @@
 
 **Location:** `h:/GMT/gmt-engine/`
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
-**Status:** ✅ **Engine skeleton fully type-checks + boots clean.** `npx tsc --noEmit` → 0 errors. `npm run dev` serves a minimal shell with no runtime errors.
+**Status:** ✅ **Engine is runnable and verified end-to-end.** `npx tsc --noEmit` → 0 errors. `PORT=3400 npm run dev` serves a working shell. A Demo add-on plugs in via the documented contract, proving DDFS + auto-panel + overlay + save/load all round-trip correctly.
 
 ## What this is
 
@@ -95,32 +95,37 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 
 ## Remaining work before toy-fluid port
 
-**✅ Done (stage 14, 2026-04-22):**
-- Feature-residuals cleaned — PopupSliderSystem / HelpMenu / DonateButton / HardwarePreferences / ColoringHistogram deleted. Remaining components that cast `(state as any).coreMath` will simply no-op until a plugin registers a `coreMath` feature.
-- SceneFormat.ts written — generic save/load (JSON + PNG-iTXt + URL) replacing deleted FormulaFormat. Ready for toy-fluid's savedState calls to port onto.
-- Default panel config genericized — engine ships with empty `DEFAULT_PANELS`; apps seed via `movePanel(id, dock)` or Zustand spread.
-- Runtime boot verified — `npm run dev` serves a clean shell, `debug/smoke-boot.mts` passes with zero pageerrors. Screenshot in `debug/scratch/engine-boot.png`.
+**✅ Done (stages 14 + 15, 2026-04-22):**
+- Feature-residuals cleaned.
+- SceneFormat.ts — generic save/load (JSON + PNG-iTXt + URL).
+- Default panel config genericized.
+- Runtime boot verified — engine serves a clean shell, `debug/smoke-boot.mts` passes.
+- **PanelId widened to `string`** + **AutoFeaturePanel registered as `'auto-feature-panel'`** — any add-on can now register a feature with an auto-generated panel.
+- **Demo add-on** (`demo/` folder) proves the three-step add-on contract: `registerFeatures.ts` → store construction → `setup.ts`. Cyan square in viewport, auto-generated panel with Color/Position/Size/Opacity controls.
+- **State flow verified** via `debug/smoke-interact.mts`: state slice exists, auto-generated `setDemo` propagates, `getPreset()` round-trips.
 
 **Not needed for toy-fluid (deferred or dropped):**
 - RenderEngine — toy-fluid brings its own `FluidEngine` with its own canvas + WebGL + sim loop. The engine's role is pure framework (DDFS + UI + save/load + animation). If/when another app needs a shared render engine, build it then.
 
-**Next session — toy-fluid port itself:**
+**Next session — toy-fluid port itself (now a direct copy of the Demo add-on pattern):**
 
-1. **Define DDFS features** for the pieces that currently live in toy-fluid's React `useState`:
+Study `demo/README.md` — it documents the exact three-step contract toy-fluid follows. Concretely:
+
+1. **Define DDFS features** that replace toy-fluid's React `useState`:
    - `fluidSim` — simResolution, viscosity, dissipation, autoQuality, kind, forceMode
    - `julia` — juliaC (vec2), zoom, center (vec2), orbit (enabled/radius/speed)
    - `dye` — gradient, collisionGradient
-   - `sceneCamera` — pan/zoom (since toy-fluid has its own 2D camera, not GMT's treadmill)
+   - `sceneCamera` — pan/zoom
 
-2. **Register features** in `toy-fluid/features/index.ts` (app-scoped, not engine-scoped). Reuse the engine's `featureRegistry` singleton but register only toy-fluid's features.
+2. **`toy-fluid/registerFeatures.ts`** — side-effect module that imports `featureRegistry` + `componentRegistry` and registers all features + viewport overlay. Imported at the TOP of `toy-fluid.html`'s entry (before anything touches the store).
 
-3. **Install panels** by calling `movePanel('fluidSim', 'right')` etc. at boot, or by spreading an initial panels map into the store creator.
+3. **`toy-fluid/setup.ts`** — `wireToyFluidPanels()` seeds panel state via `movePanel(...)`.
 
-4. **Mount FluidEngine** inside the ViewportArea's canvas region — either via a feature-registered viewport overlay (`type: 'dom'`) or by passing children to ViewportArea.
+4. **Mount FluidEngine**: register a `'dom'` viewport overlay that renders a `<canvas>` and attaches the existing `FluidEngine` instance to it. Read params from the store via `useFractalStore(s => s.fluidSim)` etc.
 
-5. **Rewrite `toy-fluid/savedState.ts`** as thin wrappers over `utils/SceneFormat.ts`: `downloadSceneJson`, `downloadScenePng`, `loadSceneFromFile`.
+5. **Rewrite `toy-fluid/savedState.ts`** as thin wrappers over `utils/SceneFormat.ts`: `downloadSceneJson`, `downloadScenePng`, `loadSceneFromFile` are all there.
 
-6. **Wire toy-fluid's TopBar** — replace the current custom TopBar with either the engine's stripped shell (re-register components) or a toy-fluid-specific TopBar that lives in the app layer.
+6. **TopBar**: either add a toy-fluid-owned top bar component mounted in its own entry (`toy-fluid.html` already exists), or keep the engine's App.tsx shell and add a minimal toy-fluid TopBar.
 
 **Deferred — rename pass.** Once the toy-fluid port proves the shape, do the one-shot rename: `fractalStore` → `engineStore`, `useFractalStore` → `useEngineStore`, `FractalEvents` → `EngineEvents`, `FractalStoreState`/`FractalActions` → `EngineStoreState`/`EngineActions`, file `store/fractalStore.ts` → `store/engineStore.ts`. Single commit.
 
