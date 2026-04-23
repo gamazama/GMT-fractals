@@ -29,7 +29,7 @@ import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { forceModeFromIndex } from './features/fluidSim';
-import { kindFromIndex } from './features/julia';
+import { kindFromIndex, colorMappingFromIndex } from './features/julia';
 import { FluidPointerLayer } from './FluidPointerLayer';
 import { registerFluidToyHotkeys } from './hotkeys';
 
@@ -108,12 +108,31 @@ export const FluidToyApp: React.FC = () => {
         const baseY = julia.juliaC?.y ?? 0;
         const cx = liveMod['julia.juliaC_x'] ?? baseX;
         const cy = liveMod['julia.juliaC_y'] ?? baseY;
+        // Normalize the line-trap normal so the shader's distance math
+        // stays well-defined. The slider exposes a raw (x,y) for
+        // intuition but the uniform wants a unit vector.
+        const rawNx = julia.trapNormal?.x ?? 1;
+        const rawNy = julia.trapNormal?.y ?? 0;
+        const nLen = Math.hypot(rawNx, rawNy);
+        const trapNormal: [number, number] = nLen > 1e-6
+            ? [rawNx / nLen, rawNy / nLen]
+            : [1, 0];
+
+        const interior = julia.interiorColor ?? { x: 0.02, y: 0.02, z: 0.04 };
+
         engine.setParams({
             kind: kindFromIndex(julia.kind),
             juliaC: [cx, cy],
             maxIter: julia.maxIter ?? 310,
             escapeR: julia.escapeR ?? 32,
             power: julia.power ?? 2,
+            colorMapping: colorMappingFromIndex(julia.colorMapping),
+            interiorColor: [interior.x ?? 0.02, interior.y ?? 0.02, interior.z ?? 0.04],
+            trapCenter: [julia.trapCenter?.x ?? 0, julia.trapCenter?.y ?? 0],
+            trapRadius: julia.trapRadius ?? 1,
+            trapNormal,
+            trapOffset: julia.trapOffset ?? 0,
+            stripeFreq: julia.stripeFreq ?? 4,
         });
     }, [julia, liveMod]);
 
