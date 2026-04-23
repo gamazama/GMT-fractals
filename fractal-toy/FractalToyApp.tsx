@@ -29,6 +29,7 @@ import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
 import { TimelineHost } from '../components/TimelineHost';
+import { AdaptiveResolutionBadge } from '../engine/plugins/viewport/AdaptiveResolutionBadge';
 import {
     viewport,
     useQualityFraction,
@@ -190,6 +191,9 @@ export const FractalToyApp: React.FC = () => {
                         later (pointer cursor, gizmos) go here too. */}
                     <ViewportFrame>
                         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
+                        <div className="absolute top-3 right-3 z-10">
+                            <AdaptiveResolutionBadge />
+                        </div>
                     </ViewportFrame>
 
                     <Dock side="right" />

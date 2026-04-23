@@ -172,3 +172,5 @@ export type { ViewportFrameProps } from './viewport/ViewportFrame';
 export { ViewportModeControls } from './viewport/ViewportModeControls';
 export type { ViewportModeControlsProps } from './viewport/ViewportModeControls';
 export { FixedResolutionControls } from './viewport/FixedResolutionControls';
+export { AdaptiveResolutionBadge } from './viewport/AdaptiveResolutionBadge';
+export type { AdaptiveResolutionBadgeProps } from './viewport/AdaptiveResolutionBadge';

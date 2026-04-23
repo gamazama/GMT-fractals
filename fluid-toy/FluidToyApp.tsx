@@ -13,6 +13,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
+import { AdaptiveResolutionBadge } from '../engine/plugins/viewport/AdaptiveResolutionBadge';
 import { viewport, useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
 import { FluidEngine } from './fluid/FluidEngine';
 import { Dock } from '../components/layout/Dock';
@@ -152,7 +153,10 @@ export const FluidToyApp: React.FC = () => {
                         className="absolute inset-0 w-full h-full block"
                     />
                     <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none z-10">
-                        Fluid Toy · 3c (Julia DDFS feature wired)
+                        Fluid Toy
+                    </div>
+                    <div className="absolute top-3 right-3 z-10">
+                        <AdaptiveResolutionBadge />
                     </div>
                     <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none z-10">
                         {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
