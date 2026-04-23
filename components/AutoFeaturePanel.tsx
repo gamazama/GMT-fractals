@@ -313,10 +313,20 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (config.type === 'vec2') {
             const x = val?.x ?? config.default?.x ?? 0;
             const y = val?.y ?? config.default?.y ?? 0;
-            const liveVec2 = liveModulations[`${featureId}.${key}_x`] !== undefined || liveModulations[`${featureId}.${key}_y`] !== undefined
-                ? new THREE.Vector2(liveModulations[`${featureId}.${key}_x`], liveModulations[`${featureId}.${key}_y`])
+            // Per-axis track IDs in GMT's UNDERSCORE form — matches
+            // AnimationEngine.getBinder case 4 so per-axis keyframe
+            // buttons on Vector2Input add tracks the playback +
+            // modulation pipelines both resolve.
+            const trackKeys = config.composeFrom
+                ? config.composeFrom.map(k => `${featureId}.${k}`)
+                : [`${featureId}.${key}_x`, `${featureId}.${key}_y`];
+            const trackLabels = config.composeFrom
+                ? undefined
+                : [`${config.label} X`, `${config.label} Y`];
+            const liveVec2 = liveModulations[trackKeys[0]] !== undefined || liveModulations[trackKeys[1]] !== undefined
+                ? new THREE.Vector2(liveModulations[trackKeys[0]], liveModulations[trackKeys[1]])
                 : undefined;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec2} showLiveIndicator={true} /></div>;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={trackKeys} trackLabels={trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec3') {
              const x = val?.x ?? config.default?.x ?? 0;
