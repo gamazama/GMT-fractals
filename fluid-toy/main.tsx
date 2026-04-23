@@ -22,6 +22,7 @@ import { FluidToyApp } from './FluidToyApp';
 import { registerUI } from '../features/ui';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
+import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -50,6 +51,9 @@ installViewport({
     interactionDownsample: 0.5,  // manual-mode fallback when targetFps=0
     activityGraceMs: 100,
 });
+
+// Camera tracks for the shared TimelineToolbar's Key Cam button.
+registerCameraKeyTracks(['sceneCamera.center', 'sceneCamera.zoom']);
 
 setupFluidToy();
 

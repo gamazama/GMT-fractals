@@ -25,6 +25,7 @@ import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksCon
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
 import { TimelineHost } from '../components/TimelineHost';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
+import { FORCE_MODES } from './features/fluidSim';
 
 export const FluidToyApp: React.FC = () => {
     const state = useFractalStore();
@@ -49,8 +50,10 @@ export const FluidToyApp: React.FC = () => {
     const quality = useQualityFraction();
     const { fpsSmoothed } = useViewportFps();
     // DDFS feature slices — push into FluidEngine.setParams on change.
-    const julia = useFractalStore((s: any) => s.julia);
-    const dye   = useFractalStore((s: any) => s.dye);
+    const julia       = useFractalStore((s: any) => s.julia);
+    const dye         = useFractalStore((s: any) => s.dye);
+    const fluidSim    = useFractalStore((s: any) => s.fluidSim);
+    const sceneCamera = useFractalStore((s: any) => s.sceneCamera);
 
     // Boot the engine once.
     useEffect(() => {
@@ -115,6 +118,39 @@ export const FluidToyApp: React.FC = () => {
             engine.setCollisionGradientBuffer(lut);
         }
     }, [dye]);
+
+    // Push fluid-sim dynamics knobs. simResolution is the user TARGET;
+    // the actual sim grid is scaled by qualityFraction (adaptive).
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !fluidSim) return;
+        const forceIdx = fluidSim.forceMode ?? 0;
+        engine.setParams({
+            simResolution:  Math.max(64, Math.floor((fluidSim.simResolution ?? 1344) * quality)),
+            vorticity:      fluidSim.vorticity ?? 22.1,
+            vorticityScale: fluidSim.vorticityScale ?? 1,
+            pressureIters:  fluidSim.pressureIters ?? 50,
+            dissipation:    fluidSim.dissipation ?? 0.17,
+            forceMode:      FORCE_MODES[Math.floor(forceIdx)] ?? 'gradient',
+            forceGain:      fluidSim.forceGain ?? -1200,
+            interiorDamp:   fluidSim.interiorDamp ?? 0.59,
+            paused:         !!fluidSim.paused,
+            // autoQuality stays off in our port — adaptive is handled by
+            // @engine/viewport, not FluidEngine's internal loop.
+            autoQuality:    false,
+        });
+    }, [fluidSim, quality]);
+
+    // Push scene-camera (pan/zoom).
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !sceneCamera) return;
+        const c = sceneCamera.center;
+        engine.setParams({
+            center: [c?.x ?? 0, c?.y ?? 0],
+            zoom: sceneCamera.zoom ?? 1.5,
+        });
+    }, [sceneCamera]);
 
     // Resize whenever physical pixels or quality fraction change.
     useEffect(() => {

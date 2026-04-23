@@ -14,14 +14,21 @@
 import { featureRegistry } from '../engine/FeatureSystem';
 import { JuliaFeature } from './features/julia';
 import { DyeFeature } from './features/dye';
+import { FluidSimFeature } from './features/fluidSim';
+import { SceneCameraFeature } from './features/sceneCamera';
 
-// 3c: Julia/Mandelbrot fractal iteration params. FluidToyApp subscribes
-// to the slice and pushes into FluidEngine.setParams — no inject()
-// because FluidEngine owns its own GLSL pipeline.
+// 3c: Julia/Mandelbrot fractal iteration params.
 featureRegistry.register(JuliaFeature);
 
-// 3d: Dye/palette params. Uses DDFS gradient type → AutoFeaturePanel
-// auto-renders AdvancedGradientEditor (the engine's existing
-// component, no reimpl). Gradient buffers baked to LUTs in FluidToyApp
-// and pushed via engine.setGradientBuffer / setCollisionGradientBuffer.
+// 3d: Dye/palette params with gradient editor via DDFS gradient type.
 featureRegistry.register(DyeFeature);
+
+// 3e: Fluid-sim dynamics knobs (vorticity, pressure, forces, target
+// resolution, force-mode dropdown). Uses numeric enum pattern for
+// forceMode since DDFS param types don't include 'string' — app-side
+// mapping via FORCE_MODES array.
+featureRegistry.register(FluidSimFeature);
+
+// 3e: 2D scene camera (pan + zoom). Parallel to fractal-toy's orbit
+// camera. Both wait for the eventual @engine/camera plugin to unify.
+featureRegistry.register(SceneCameraFeature);
