@@ -31,6 +31,7 @@ import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { forceModeFromIndex } from './features/fluidSim';
 import { kindFromIndex, colorMappingFromIndex } from './features/julia';
 import { fluidStyleFromIndex, toneMappingFromIndex } from './features/postFx';
+import { dyeBlendFromIndex, dyeDecayModeFromIndex } from './features/dye';
 import { FluidPointerLayer } from './FluidPointerLayer';
 import { registerFluidToyHotkeys } from './hotkeys';
 
@@ -144,11 +145,15 @@ export const FluidToyApp: React.FC = () => {
         if (!engine || !dye) return;
 
         engine.setParams({
-            dyeInject:       dye.dyeInject ?? 8,
-            dyeDissipation:  dye.dyeDissipation ?? 1.03,
-            dyeMix:          dye.dyeMix ?? 2,
-            gradientRepeat:  dye.gradientRepeat ?? 1,
-            gradientPhase:   dye.gradientPhase ?? 0,
+            dyeInject:           dye.dyeInject ?? 8,
+            dyeBlend:            dyeBlendFromIndex(dye.dyeBlend),
+            dyeDissipation:      dye.dyeDissipation ?? 1.03,
+            dyeMix:              dye.dyeMix ?? 2,
+            gradientRepeat:      dye.gradientRepeat ?? 1,
+            gradientPhase:       dye.gradientPhase ?? 0,
+            dyeDecayMode:        dyeDecayModeFromIndex(dye.dyeDecayMode),
+            dyeChromaDecayHz:    dye.dyeChromaDecayHz ?? 1.03,
+            dyeSaturationBoost:  dye.dyeSaturationBoost ?? 1,
         });
 
         if (dye.gradient) {
