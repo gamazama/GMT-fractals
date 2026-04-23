@@ -11,5 +11,10 @@
  *   3e  FluidSimFeature + SceneCameraFeature
  */
 
-// Empty at 3a — scaffold only. Features registered in subsequent commits.
-export {};
+import { featureRegistry } from '../engine/FeatureSystem';
+import { JuliaFeature } from './features/julia';
+
+// 3c: Julia/Mandelbrot fractal iteration params. FluidToyApp subscribes
+// to the slice and pushes into FluidEngine.setParams — no inject()
+// because FluidEngine owns its own GLSL pipeline.
+featureRegistry.register(JuliaFeature);
