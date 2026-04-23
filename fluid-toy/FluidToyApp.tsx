@@ -30,6 +30,7 @@ import GlobalContextMenu from '../components/GlobalContextMenu';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { forceModeFromIndex } from './features/fluidSim';
 import { kindFromIndex, colorMappingFromIndex } from './features/julia';
+import { fluidStyleFromIndex, toneMappingFromIndex } from './features/postFx';
 import { FluidPointerLayer } from './FluidPointerLayer';
 import { registerFluidToyHotkeys } from './hotkeys';
 
@@ -60,6 +61,7 @@ export const FluidToyApp: React.FC = () => {
     const dye         = useFractalStore((s: any) => s.dye);
     const fluidSim    = useFractalStore((s: any) => s.fluidSim);
     const sceneCamera = useFractalStore((s: any) => s.sceneCamera);
+    const postFx      = useFractalStore((s: any) => s.postFx);
     // Live-modulated values (base + LFO/audio/rule offsets). The
     // engine/animation/modulationTick writes this each frame.
     // Read-with-fallback pattern: liveMod[target] if present, else base.
@@ -190,6 +192,25 @@ export const FluidToyApp: React.FC = () => {
             zoom: sceneCamera.zoom ?? 1.5,
         });
     }, [sceneCamera]);
+
+    // Push post-FX (tone mapping, exposure, bloom, aberration, refraction,
+    // caustics, style preset). Pure display-stage — doesn't touch sim state.
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !postFx) return;
+        engine.setParams({
+            fluidStyle:     fluidStyleFromIndex(postFx.fluidStyle),
+            toneMapping:    toneMappingFromIndex(postFx.toneMapping),
+            exposure:       postFx.exposure ?? 1,
+            vibrance:       postFx.vibrance ?? 1.645,
+            bloomAmount:    postFx.bloomAmount ?? 0,
+            bloomThreshold: postFx.bloomThreshold ?? 0.9,
+            aberration:     postFx.aberration ?? 0,
+            refraction:     postFx.refraction ?? 0,
+            refractSmooth:  postFx.refractSmooth ?? 3,
+            caustics:       postFx.caustics ?? 0,
+        });
+    }, [postFx]);
 
     // Resize whenever physical pixels or quality fraction change.
     useEffect(() => {

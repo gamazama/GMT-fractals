@@ -18,6 +18,7 @@ import { DyeFeature } from './features/dye';
 import { FluidSimFeature } from './features/fluidSim';
 import { SceneCameraFeature } from './features/sceneCamera';
 import { OrbitFeature } from './features/orbit';
+import { PostFxFeature } from './features/postFx';
 import { JuliaCPicker } from './components/JuliaCPicker';
 
 // Components used by feature customUI slots must be registered before
@@ -45,3 +46,7 @@ featureRegistry.register(SceneCameraFeature);
 // drive a TickRegistry handler that rewrites julia.juliaC each frame
 // when enabled. Modulation-style continuous driver, not keyframes.
 featureRegistry.register(OrbitFeature);
+
+// PostFX — tone mapping, exposure, vibrance, bloom, aberration,
+// refraction, caustics, fluid style presets. Pure display-stage knobs.
+featureRegistry.register(PostFxFeature);
