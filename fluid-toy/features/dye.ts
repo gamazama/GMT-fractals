@@ -91,7 +91,6 @@ export const DyeFeature: FeatureDefinition = {
     params: {
         brushMode: brushModeParam.config,
         gradient:          { type: 'gradient', default: DEFAULT_DYE_GRADIENT,       label: 'Palette' },
-        collisionGradient: { type: 'gradient', default: DEFAULT_COLLISION_GRADIENT, label: 'Collision Mask' },
         dyeInject:         { type: 'float', default: 8,    min: 0, max: 20,  step: 0.01,  label: 'Dye Inject' },
         dyeBlend:          dyeBlendParam.config,
         dyeMix:            { type: 'float', default: 2,    min: 0, max: 4,   step: 0.01,  label: 'Dye Mix' },
@@ -105,5 +104,39 @@ export const DyeFeature: FeatureDefinition = {
                                condition: { param: 'dyeDecayMode', neq: 0 } },  // 0 = linear (chroma coupled to luminance)
         dyeSaturationBoost:  { type: 'float', default: 1,    min: 0, max: 3,    step: 0.001, label: 'Saturation Boost',
                                condition: { param: 'dyeDecayMode', eq: 2 } },   // 2 = vivid — only mode that applies the multiplier
+
+        // ── Collision obstacles ──────────────────────────────────────
+        // Walls the fluid bounces off, authored as a B&W gradient along
+        // the same t-axis the colour mapping uses. White = wall, black
+        // = open. Enhancement over the reference: collisionRepeat +
+        // collisionPhase are independent of the dye gradient repeat/phase,
+        // so the wall pattern can tile at its own density and offset.
+        collisionEnabled: {
+            type: 'boolean', default: false, label: 'Collision',
+            description: 'Turn the collision gradient into solid obstacles the fluid bounces off.',
+        },
+        collisionPreview: {
+            type: 'boolean', default: false, label: 'Preview Walls',
+            condition: { param: 'collisionEnabled', bool: true },
+            description: 'Overlay the collision mask on the display so walls are visible.',
+        },
+        collisionGradient: {
+            type: 'gradient',
+            default: DEFAULT_COLLISION_GRADIENT,
+            label: 'Collision Pattern',
+            condition: { param: 'collisionEnabled', bool: true },
+        },
+        collisionRepeat: {
+            type: 'float', default: 1, min: 0.1, max: 8, step: 0.01,
+            label: 'Collision Repeat',
+            condition: { param: 'collisionEnabled', bool: true },
+            description: 'Tile the collision pattern along t — independent of the dye gradient repeat.',
+        },
+        collisionPhase: {
+            type: 'float', default: 0, min: 0, max: 1, step: 0.001,
+            label: 'Collision Phase',
+            condition: { param: 'collisionEnabled', bool: true },
+            description: 'Phase-shift the collision pattern so walls land where the dye doesn\'t.',
+        },
     },
 };

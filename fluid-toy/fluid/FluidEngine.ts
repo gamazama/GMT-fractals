@@ -232,6 +232,10 @@ export interface FluidParams {
   collisionEnabled: boolean;
   /** When true, the display overlays the collision mask so walls are visible. */
   collisionPreview: boolean;
+  /** Collision LUT tiling repeat — independent of the dye gradientRepeat. */
+  collisionRepeat: number;
+  /** Collision LUT phase shift — independent of the dye gradientPhase. */
+  collisionPhase: number;
   paused: boolean;
   simResolution: number;      // target sim grid height (cells) — may be adaptively reduced
   autoQuality: boolean;       // if true, adaptive-scaler may reduce simResolution when FPS is low
@@ -321,6 +325,8 @@ export const DEFAULT_PARAMS: FluidParams = {
   forceCap: 40,
   collisionEnabled: false,
   collisionPreview: false,
+  collisionRepeat: 1.0,
+  collisionPhase: 0.0,
   paused: false,
   simResolution: 1344,
   autoQuality: true,
@@ -527,6 +533,7 @@ export class FluidEngine {
       ['uTexel', 'uSource', 'uPrev', 'uIntensity']);
     this.progMask = this.linkProgram(VERT_FULLSCREEN, FRAG_MASK,
       ['uTexel', 'uJulia', 'uJuliaAux', 'uGradient', 'uCollisionGradient',
+       'uCollisionRepeat', 'uCollisionPhase',
        'uColorMapping', 'uGradientRepeat', 'uGradientPhase']);
   }
 
@@ -889,8 +896,14 @@ export class FluidEngine {
     this.bindTex(2, this.gradientTex!, this.progMask.uniforms['uGradient']);
     this.bindTex(3, this.collisionGradientTex!, this.progMask.uniforms['uCollisionGradient']);
     gl.uniform1i(this.progMask.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
+    // Main gradient repeat/phase — the GRADIENT_SAMPLE_GLSL helper references
+    // these even though the mask pass doesn't actually read from the main
+    // gradient. Kept in sync with the dye panel.
     gl.uniform1f(this.progMask.uniforms['uGradientRepeat'], this.params.gradientRepeat);
     gl.uniform1f(this.progMask.uniforms['uGradientPhase'], this.params.gradientPhase);
+    // Collision-specific repeat/phase — independent of the dye gradient.
+    gl.uniform1f(this.progMask.uniforms['uCollisionRepeat'], this.params.collisionRepeat);
+    gl.uniform1f(this.progMask.uniforms['uCollisionPhase'], this.params.collisionPhase);
     this.drawQuad();
   }
 

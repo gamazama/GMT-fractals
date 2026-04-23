@@ -820,19 +820,28 @@ in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uJulia;
 uniform sampler2D uJuliaAux;
-uniform sampler2D uGradient;           // main gradient (only needed for helper symbol linkage)
-uniform sampler2D uCollisionGradient;  // user-authored B&W LUT: black = fluid, white = wall
+uniform sampler2D uGradient;            // main gradient (needed for helper symbol linkage)
+uniform sampler2D uCollisionGradient;   // user-authored B&W LUT: black = fluid, white = wall
 uniform int   uColorMapping;
+// Main-gradient repeat/phase are also uniforms of this program because
+// the shared GRADIENT_SAMPLE_GLSL helper references them — they're
+// kept in sync with the dye panel so colorMappingT() stays canonical.
 uniform float uGradientRepeat;
 uniform float uGradientPhase;
+// Collision-specific repeat/phase — independent of the dye gradient.
+// User can tile the wall pattern at a different density from the dye
+// palette, or phase-shift it to place walls where the dye doesn't go.
+uniform float uCollisionRepeat;
+uniform float uCollisionPhase;
 ${GRADIENT_SAMPLE_GLSL}
 void main() {
   vec4 j = texture(uJulia, vUv);
   vec4 a = texture(uJuliaAux, vUv);
   // Same mapping → t pipeline the main gradient uses, so walls track colour-mapping
-  // changes exactly (angle / orbit trap / stripe / bands / whatever).
+  // changes exactly (angle / orbit trap / stripe / bands / whatever). Then the
+  // collision knobs remap t before the LUT lookup so walls can have their own tiling.
   float t0 = colorMappingT(j, a);
-  float t = fract(t0 * uGradientRepeat + uGradientPhase);
+  float t = fract(t0 * uCollisionRepeat + uCollisionPhase);
   vec4 m = texture(uCollisionGradient, vec2(t, 0.5));
   float mask = dot(m.rgb, vec3(0.299, 0.587, 0.114));  // b&w → luma; also works if user uses colour
   // Interior points aren't walls (no escape → no fluid-side colour to collide with).

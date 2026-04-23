@@ -155,6 +155,13 @@ export const FluidToyApp: React.FC = () => {
             dyeDecayMode:        dyeDecayModeFromIndex(dye.dyeDecayMode),
             dyeChromaDecayHz:    dye.dyeChromaDecayHz ?? 1.03,
             dyeSaturationBoost:  dye.dyeSaturationBoost ?? 1,
+            // Collision knobs — mask pass only fires when collisionEnabled;
+            // the *Repeat/*Phase remap t before the collision LUT lookup
+            // so walls tile independently of the dye palette.
+            collisionEnabled:    !!dye.collisionEnabled,
+            collisionPreview:    !!dye.collisionPreview,
+            collisionRepeat:     dye.collisionRepeat ?? 1,
+            collisionPhase:      dye.collisionPhase ?? 0,
         });
 
         if (dye.gradient) {
