@@ -2,12 +2,17 @@
  * FluidPointerLayer — canvas pointer interaction for fluid-toy.
  *
  * Gestures:
- *   left-drag       — splat (force + dye, hue-cycled rainbow trail)
- *   right-drag      — pan the scene camera (grab-and-drag; world-point
- *                     under cursor stays locked during the drag)
- *   right-click     — open canvas context menu (suppressed if the
- *                     press became a pan drag)
- *   wheel           — zoom the scene camera, anchored at the cursor
+ *   left-drag        — splat (force + dye, hue-cycled rainbow trail)
+ *   right-drag       — pan the scene camera (grab-and-drag; world-point
+ *                      under cursor stays locked during the drag)
+ *   right-click      — open canvas context menu (suppressed if the
+ *                      press became a pan drag)
+ *   middle-drag up/dn — smooth zoom anchored at the click-point. Unlike
+ *                      the wheel, the anchor is captured at press time
+ *                      and held for the whole drag, so continuous
+ *                      vertical motion zooms into/out of one fixed spot.
+ *   wheel            — zoom the scene camera, anchored at the cursor
+ *                      (per-tick anchor; cursor tracks world-space)
  *
  * Both pan and zoom write through the DDFS `sceneCamera` slice so the
  * existing FluidToyApp subscribe → FluidEngine.setParams path handles
@@ -28,6 +33,7 @@ import {
     MAX_ZOOM,
     PAN_DRAG_THRESHOLD_PX,
     WHEEL_ZOOM_SENSITIVITY,
+    MIDDLE_DRAG_ZOOM_SENSITIVITY,
     PRECISION_SHIFT_MULT,
     PRECISION_ALT_MULT,
 } from './constants';
@@ -37,7 +43,7 @@ export interface FluidPointerLayerProps {
     engineRef: React.RefObject<FluidEngine | null>;
 }
 
-type PointerMode = 'idle' | 'splat' | 'pan-pending' | 'pan';
+type PointerMode = 'idle' | 'splat' | 'pan-pending' | 'pan' | 'zoom';
 
 interface PointerState {
     mode: PointerMode;
@@ -51,6 +57,16 @@ interface PointerState {
     startY: number;
     startCx: number;
     startCy: number;
+    // Zoom (middle-drag) anchors — captured once at pointerdown and held
+    // for the whole drag so vertical motion pivots around one fixed
+    // world-space point. startZoom is what we multiply the exp factor
+    // against; zoomAnchor* describe the world-and-UV coords of the
+    // click-point.
+    startZoom: number;
+    zoomAnchorX: number;
+    zoomAnchorY: number;
+    zoomAnchorU: number;
+    zoomAnchorV: number;
     // Flag set when right-press upgraded to a pan drag — tells the
     // contextmenu handler to ignore the resulting click so the menu
     // doesn't flash up at the end of a pan.
@@ -68,6 +84,7 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
         mode: 'idle', pointerId: -1,
         lastX: 0, lastY: 0, lastT: 0,
         startX: 0, startY: 0, startCx: 0, startCy: 0,
+        startZoom: 1, zoomAnchorX: 0, zoomAnchorY: 0, zoomAnchorU: 0.5, zoomAnchorV: 0.5,
         rightDragged: false,
     });
     const handleInteractionStart = useFractalStore((s) => s.handleInteractionStart);
@@ -152,6 +169,31 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 return;
             }
 
+            if (e.button === 1) {
+                // Middle-press — smooth vertical-drag zoom anchored at
+                // the click-point. preventDefault suppresses the
+                // browser's auto-scroll cursor that would otherwise
+                // appear on middle-down.
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                if (rect.width < 1 || rect.height < 1) return;
+                const s = useFractalStore.getState() as any;
+                const currCenter = s.sceneCamera?.center ?? { x: 0, y: 0 };
+                const currZoom = s.sceneCamera?.zoom ?? 1.5;
+                const u = (e.clientX - rect.left) / rect.width;
+                const v = 1 - (e.clientY - rect.top) / rect.height;
+                const aspect = rect.width / rect.height;
+                ps.mode = 'zoom';
+                ps.startZoom = currZoom;
+                ps.zoomAnchorU = u;
+                ps.zoomAnchorV = v;
+                ps.zoomAnchorX = currCenter.x + (u * 2 - 1) * aspect * currZoom;
+                ps.zoomAnchorY = currCenter.y + (v * 2 - 1) * currZoom;
+                canvas.setPointerCapture(e.pointerId);
+                handleInteractionStart('camera');
+                return;
+            }
+
             if (e.button === 0) {
                 ps.mode = 'splat';
                 canvas.setPointerCapture(e.pointerId);
@@ -193,6 +235,23 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const dcx = -(dxPx / rect.width) * 2 * aspect * zoom * mul;
                 const dcy = (dyPx / rect.height) * 2 * zoom * mul;
                 s.setSceneCamera({ center: { x: ps.startCx + dcx, y: ps.startCy + dcy } });
+                ps.lastX = e.clientX; ps.lastY = e.clientY;
+                return;
+            }
+
+            if (ps.mode === 'zoom') {
+                // Middle-drag: exponential zoom on vertical motion; pivots
+                // around the click-point (anchor captured in onDown).
+                // Drag up (dyPx negative) → zoom in.
+                const s = useFractalStore.getState() as any;
+                const mul = precisionMultiplier(e.shiftKey, e.altKey);
+                const dyPx = e.clientY - ps.startY;
+                const zoomFactor = Math.exp(-dyPx * MIDDLE_DRAG_ZOOM_SENSITIVITY * mul);
+                const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ps.startZoom * zoomFactor));
+                const aspect = rect.width / rect.height;
+                const newCx = ps.zoomAnchorX - (ps.zoomAnchorU * 2 - 1) * aspect * newZoom;
+                const newCy = ps.zoomAnchorY - (ps.zoomAnchorV * 2 - 1) * newZoom;
+                s.setSceneCamera({ center: { x: newCx, y: newCy }, zoom: newZoom });
                 ps.lastX = e.clientX; ps.lastY = e.clientY;
                 return;
             }
