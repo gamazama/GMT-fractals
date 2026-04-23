@@ -15,9 +15,12 @@
  *   3. `fractal-toy/setup.ts` — seeds panel state after React mounts.
  */
 
-// Step 1: side-effect registration. MUST come before anything that
-// touches the store.
+// Step 1: side-effect registrations — features + plugin preset fields.
+// MUST come before anything that touches the store (which freezes the
+// registries). Plugins with preset fields are imported here purely
+// for their module-level side effects.
 import './registerFeatures';
+import '../engine/plugins/camera/presetField';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -29,6 +32,8 @@ import { installTopBar } from '../engine/plugins/TopBar';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
+import { installCamera, camera } from '../engine/plugins/Camera';
+import { useFractalStore } from '../store/fractalStore';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
@@ -76,6 +81,34 @@ installShortcuts();
 
 // @engine/undo — unified transaction stack.
 installUndo();
+
+// @engine/camera — adapter-based slot system. Fractal-toy's 3D orbit
+// camera registers with the plugin so Ctrl+1..9 save + 1..9 recall
+// work on the orbit params.
+installCamera();
+camera.register({
+    featureId: 'camera',
+    captureState: () => {
+        const s = useFractalStore.getState() as any;
+        const c = s.camera;
+        return {
+            orbitTheta: c?.orbitTheta,
+            orbitPhi: c?.orbitPhi,
+            distance: c?.distance,
+            fov: c?.fov,
+            target: { ...c?.target },
+        };
+    },
+    applyState: (state) => {
+        (useFractalStore.getState() as any).setCamera({
+            orbitTheta: state.orbitTheta,
+            orbitPhi: state.orbitPhi,
+            distance: state.distance,
+            fov: state.fov,
+            target: state.target,
+        });
+    },
+});
 
 // Tell the shared <TimelineToolbar> which tracks make up "the camera"
 // for this app — it uses these for the Key Cam button's capture +

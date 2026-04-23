@@ -14,7 +14,12 @@
  * stay app-local.
  */
 
+// Side-effect registrations — features + plugin preset fields. MUST
+// come before anything that touches the store (which freezes the
+// registries). Plugins with preset fields are imported here purely
+// for their module-level side effects.
 import './registerFeatures';
+import '../engine/plugins/camera/presetField';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -28,6 +33,8 @@ import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
+import { installCamera, camera } from '../engine/plugins/Camera';
+import { useFractalStore } from '../store/fractalStore';
 import { installOrbitSync } from './orbitTick';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -86,6 +93,27 @@ installShortcuts();
 // @engine/undo — unified transaction stack. Ctrl+Z / Ctrl+Y via
 // @engine/shortcuts; Undo/Redo buttons in topbar's right slot.
 installUndo();
+
+// @engine/camera — adapter-based slot system (Ctrl+1..9 save, 1..9 recall)
+// + preset round-trip for saved camera state.
+installCamera();
+
+// Register fluid-toy's 2D camera with the plugin. captureState +
+// applyState work on an opaque JSON blob — the plugin doesn't need
+// to know it's 2D (center + zoom) vs 3D.
+camera.register({
+    featureId: 'sceneCamera',
+    captureState: () => {
+        const s = useFractalStore.getState() as any;
+        return { center: { ...s.sceneCamera?.center }, zoom: s.sceneCamera?.zoom };
+    },
+    applyState: (state) => {
+        (useFractalStore.getState() as any).setSceneCamera({
+            center: state.center,
+            zoom: state.zoom,
+        });
+    },
+});
 
 // Orbit → animations array sync. When orbit DDFS params change, we
 // rewrite the two sine LFOs on julia.juliaC.x/.y that drive the orbit.
