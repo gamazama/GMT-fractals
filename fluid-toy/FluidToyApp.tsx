@@ -55,6 +55,10 @@ export const FluidToyApp: React.FC = () => {
     const dye         = useFractalStore((s: any) => s.dye);
     const fluidSim    = useFractalStore((s: any) => s.fluidSim);
     const sceneCamera = useFractalStore((s: any) => s.sceneCamera);
+    // Live-modulated values (base + LFO/audio/rule offsets). The
+    // engine/animation/modulationTick writes this each frame.
+    // Read-with-fallback pattern: liveMod[target] if present, else base.
+    const liveMod = useFractalStore((s: any) => s.liveModulations ?? {});
 
     // Boot the engine once.
     useEffect(() => {
@@ -84,18 +88,25 @@ export const FluidToyApp: React.FC = () => {
         };
     }, []);
 
-    // Push Julia params to the engine whenever they change.
+    // Push Julia params. juliaC reads liveModulations first (base+offset
+    // from any LFO/audio/rule driver — like the orbit LFOs) and falls
+    // back to the DDFS base. That's how orbit, audio-reactive c, and
+    // future modulation sources all compose without FluidToyApp knowing
+    // they exist.
     useEffect(() => {
         const engine = engineRef.current;
         if (!engine || !julia) return;
-        const c = julia.juliaC;
+        const baseX = julia.juliaC?.x ?? 0;
+        const baseY = julia.juliaC?.y ?? 0;
+        const cx = liveMod['julia.juliaC.x'] ?? baseX;
+        const cy = liveMod['julia.juliaC.y'] ?? baseY;
         engine.setParams({
-            juliaC: [c?.x ?? 0, c?.y ?? 0],
+            juliaC: [cx, cy],
             maxIter: julia.maxIter ?? 310,
             escapeR: julia.escapeR ?? 32,
             power: julia.power ?? 2,
         });
-    }, [julia]);
+    }, [julia, liveMod]);
 
     // Push Dye params + gradient LUTs whenever they change.
     useEffect(() => {

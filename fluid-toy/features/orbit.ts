@@ -22,7 +22,7 @@ export const OrbitFeature: FeatureDefinition = {
     name: 'Orbit',
     category: 'Simulation',
 
-    dependsOn: ['julia'],   // the tick reads julia.juliaC as the orbit anchor when anchor is not set
+    dependsOn: ['julia'],   // orbit modulates julia.juliaC around its current base
 
     tabConfig: {
         label: 'Orbit',
@@ -35,11 +35,9 @@ export const OrbitFeature: FeatureDefinition = {
         enabled: { type: 'boolean', default: false,                                    label: 'Auto Orbit' },
         radius:  { type: 'float',   default: 0.08, min: 0,     max: 1,    step: 0.001, label: 'Radius' },
         speed:   { type: 'float',   default: 0.25, min: 0,     max: 4,    step: 0.01,  label: 'Speed (Hz)' },
-        anchor:  {
-            type: 'vec2',
-            default: { x: -0.363, y: 0.168 },
-            min: -2, max: 2, step: 0.001,
-            label: 'Anchor',
-        },
     },
+    // No anchor — the Julia c param IS the anchor. Two sine LFOs
+    // (0° + 90° phase) on julia.juliaC.x/.y drive circular motion
+    // around the current base position. Drag juliaC while orbit is
+    // on and the circle moves with it.
 };

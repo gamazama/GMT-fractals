@@ -25,7 +25,8 @@ import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
-import { installOrbitTick } from './orbitTick';
+import { installModulation } from '../engine/animation/modulationTick';
+import { installOrbitSync } from './orbitTick';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -69,9 +70,16 @@ installSceneIO({
 // Camera tracks for the shared TimelineToolbar's Key Cam button.
 registerCameraKeyTracks(['sceneCamera.center', 'sceneCamera.zoom']);
 
-// Install the orbit tick — reads orbit.* slice each frame, writes
-// julia.juliaC along a circle when orbit.enabled is true.
-installOrbitTick();
+// Canonical modulation tick — processes the store's `animations` array
+// each frame into liveModulations (base + offset for every target).
+// Any app with continuous-driver features (LFO, audio-reactive, etc.)
+// installs this once.
+installModulation();
+
+// Orbit → animations array sync. When orbit DDFS params change, we
+// rewrite the two sine LFOs on julia.juliaC.x/.y that drive the orbit.
+// No per-frame work here; modulationTick does the oscillator math.
+installOrbitSync();
 
 setupFluidToy();
 
