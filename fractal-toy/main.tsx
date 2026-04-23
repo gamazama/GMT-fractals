@@ -25,6 +25,7 @@ import { FractalToyApp } from './FractalToyApp';
 import { registerUI } from '../features/ui';
 import { setupFractalToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
+import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -54,6 +55,16 @@ installViewport({
     interactionDownsample: 0.55,
     activityGraceMs: 100,
 });
+
+// Tell the shared <TimelineToolbar> which tracks make up "the camera"
+// for this app — it uses these for the Key Cam button's capture +
+// dirty-detection logic. Fractal-toy uses a 4-DOF orbit camera.
+registerCameraKeyTracks([
+    'camera.orbitTheta',
+    'camera.orbitPhi',
+    'camera.distance',
+    'camera.target',
+]);
 
 // Seed panel state after mount.
 setupFractalToy();
