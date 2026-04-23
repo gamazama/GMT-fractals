@@ -1,32 +1,91 @@
 /**
- * FluidToyApp — root React component for the engine-native Fluid Toy.
+ * FluidToyApp — engine-native Fluid Toy.
  *
- * At 3a this is a scaffold placeholder. Subsequent commits:
- *   3b  FluidEngine mounted inside <ViewportFrame>, canvas subscribes
- *       to canvasPixelSize × qualityFraction for adaptive sim resolution.
- *   3c  Julia feature panel auto-renders in right dock via Dock +
- *       applyDefaultPanelLayout.
- *   3d  Dye feature panel (gradient editor renders automatically from
- *       DDFS gradient-type param).
- *   3e  FluidSim + SceneCamera panels.
- *   3f  Pointer/brush/particle interaction layer on top of the canvas.
- *   3g  Save/load UI using SceneFormat helpers.
- *   3h  Julia-c orbit via AnimationEngine tracks.
+ * 3b: FluidEngine mounted inside <ViewportFrame>. Canvas physical-pixel
+ * size is driven by canvasPixelSize (authoritative writer: the frame's
+ * ResizeObserver) × qualityFraction (driven by the adaptive loop).
+ *
+ * No bespoke ResizeObserver. No bespoke adaptive loop. Both live in
+ * @engine/viewport. FluidEngine's own internal params are still its
+ * defaults — DDFS features arrive in 3c-3e.
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useFractalStore } from '../store/fractalStore';
+import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
+import { viewport, useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
+import { FluidEngine } from './fluid/FluidEngine';
 
 export const FluidToyApp: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const engineRef = useRef<FluidEngine | null>(null);
+    const rafRef = useRef<number | null>(null);
+
+    // Authoritative size (written by ViewportFrame's ResizeObserver) ×
+    // adaptive quality fraction. FluidEngine.resize() takes CSS pixels
+    // (not DPR-multiplied) for its WebGL buffer, matching toy-fluid's
+    // original contract. So we divide DPR out and apply quality.
+    const canvasPixelSize = useFractalStore((s) => s.canvasPixelSize);
+    const quality = useQualityFraction();
+    const { fpsSmoothed } = useViewportFps();
+
+    // Boot the engine once.
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        try {
+            const engine = new FluidEngine(canvas, {
+                onFrameEnd: () => viewport.frameTick(),
+            });
+            engineRef.current = engine;
+
+            // RAF loop — engine.frame(timeMs) does the full sim + display pass.
+            const loop = (t: number) => {
+                engineRef.current?.frame(t);
+                rafRef.current = requestAnimationFrame(loop);
+            };
+            rafRef.current = requestAnimationFrame(loop);
+        } catch (e) {
+            console.error('[FluidToy] failed to start engine:', e);
+        }
+
+        return () => {
+            if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+            engineRef.current?.dispose();
+            engineRef.current = null;
+        };
+    }, []);
+
+    // Resize whenever physical pixels or quality fraction change.
+    useEffect(() => {
+        const engine = engineRef.current;
+        const [physW, physH] = canvasPixelSize;
+        if (!engine || physW < 1 || physH < 1) return;
+        const dpr = window.devicePixelRatio || 1;
+        // Scale down physical px by DPR to get CSS-ish logical px, then
+        // apply quality. FluidEngine.resize expects logical pixels —
+        // matches the original toy-fluid contract.
+        const logicalW = Math.max(1, Math.floor((physW / dpr) * quality));
+        const logicalH = Math.max(1, Math.floor((physH / dpr) * quality));
+        engine.resize(logicalW, logicalH);
+    }, [canvasPixelSize, quality]);
+
     return (
-        <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col items-center justify-center font-mono">
-            <div className="text-cyan-400 text-xl mb-2 tracking-wide">Fluid Toy</div>
-            <div className="text-gray-500 text-xs mb-8">
-                scaffolding — commit 3a. FluidEngine + ViewportFrame in 3b.
-            </div>
-            <div className="text-[10px] text-gray-700 max-w-md text-center leading-relaxed">
-                Engine-native port of toy-fluid — DDFS features, viewport plugin,
-                SceneFormat save/load, AnimationEngine keyframes, AdvancedGradientEditor.
-                Original prototype at /toy-fluid.html stays untouched as reference.
+        <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col">
+            <div className="flex-1 flex overflow-hidden relative">
+                <ViewportFrame className="flex-1">
+                    <canvas
+                        ref={canvasRef}
+                        className="absolute inset-0 w-full h-full block"
+                    />
+                    <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none z-10">
+                        Fluid Toy · 3b (FluidEngine default render)
+                    </div>
+                    <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none z-10">
+                        {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
+                    </div>
+                </ViewportFrame>
             </div>
         </div>
     );
