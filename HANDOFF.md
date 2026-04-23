@@ -2,7 +2,7 @@
 
 **Location:** `h:/GMT/gmt-engine/`
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
-**Status:** ✅ **Engine is runnable and verified end-to-end.** `npx tsc --noEmit` → 0 errors. `PORT=3400 npm run dev` serves a working shell. A Demo add-on plugs in via the documented contract, proving DDFS + auto-panel + overlay + save/load all round-trip correctly.
+**Status:** ✅ **Phases 1–5 complete (2026-04-23).** Two playground apps (`fractal-toy.html`, `fluid-toy.html`) boot on the engine with the full shared chrome: topbar, viewport with adaptive quality, scene save/load, shortcuts, unified undo, camera slots, animation timeline with playback. `npx tsc --noEmit` → 0 errors. Six of ten designed core plugins are shipped; see `docs/04_Core_Plugins.md` for the current map.
 
 **📐 Architecture baseline committed (2026-04-22).** 12 engine-scope docs written under `docs/01_*` through `docs/20_*`. Start any session with `docs/DOCS_INDEX.md`; the table in `CLAUDE.md` maps "working on X" → "read Y". All design decisions (core+plugins model, feature isolation, unified undo, auto-binding animation, bridges/derived) live in those docs. Any architectural change goes in a doc before it goes in code.
 
@@ -95,71 +95,90 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 | FormulaType | `type FormulaType = string` — apps narrow via declaration merging |
 | ShaderConfig | `Record<string, any>` with engine-level scalar fields — apps widen via declaration merging |
 
-## Remaining work before toy-fluid port
+## Phase progress
 
-**✅ Done (stages 14 + 15, 2026-04-22):**
-- Feature-residuals cleaned.
-- SceneFormat.ts — generic save/load (JSON + PNG-iTXt + URL).
-- Default panel config genericized.
-- Runtime boot verified — engine serves a clean shell, `debug/smoke-boot.mts` passes.
-- **PanelId widened to `string`** + **AutoFeaturePanel registered as `'auto-feature-panel'`** — any add-on can now register a feature with an auto-generated panel.
-- **Demo add-on** (`demo/` folder) proves the three-step add-on contract: `registerFeatures.ts` → store construction → `setup.ts`. Cyan square in viewport, auto-generated panel with Color/Position/Size/Opacity controls.
-- **State flow verified** via `debug/smoke-interact.mts`: state slice exists, auto-generated `setDemo` propagates, `getPreset()` round-trips.
+### ✅ Phase 0 — Architecture baseline (2026-04-22, stages 14-15)
+- Feature-residuals cleaned, SceneFormat.ts generic, default panel config genericized.
+- Runtime boot verified; `debug/smoke-boot.mts` passes.
+- `PanelId: string` + `AutoFeaturePanel` registered as `'auto-feature-panel'`.
+- Demo add-on in `demo/` proves the three-step plugin contract end-to-end.
+- Fragilities F1 (96a4b5f), F2 (96a4b5f), F3 (a4e7d6b), F4 (c6ee640) — all 🟢 Fixed.
 
-**Not needed for toy-fluid (deferred or dropped):**
-- RenderEngine — toy-fluid brings its own `FluidEngine` with its own canvas + WebGL + sim loop. The engine's role is pure framework (DDFS + UI + save/load + animation). If/when another app needs a shared render engine, build it then.
+### ✅ Phase 1 — Fractal-toy (2026-04-22, commits `4830a2c` … `b9d13f9`)
+- `fractal-toy/` — minimal Mandelbulb playground: one formula, orbit+fly camera, directional light. Used `ShaderBuilder.addSection` as the escape hatch's first real load.
 
-**✅ Done (2026-04-22) — Phase 0 viewport audit + design doc:**
-- `docs/10_Viewport.md` — full audit of GMT + toy-fluid viewport code, plugin design, API shape, state slice, integration patterns for both apps, decisions + open questions. Viewport added as the ninth core plugin in `docs/04_Core_Plugins.md`; tier map in `docs/01_Architecture.md` updated; `DOCS_INDEX.md` + `CLAUDE.md` reference it.
+### ✅ Phase 2 — Viewport plugin (2026-04-22, `610b4e0` … `2f73612`)
+- `@engine/viewport` (`engine/plugins/Viewport.tsx`) with GMT's production adaptive-quality loop ported and genericized.
+- `<ViewportFrame>`, `<ViewportModeControls>`, `<FixedResolutionControls>`, `<AdaptiveResolutionBadge>` — shared plugin components.
+- Immediate quality drop on interaction; `smoke:viewport` passes.
 
-**✅ Done (2026-04-22) — the four toy-fluid-blocking fragility fixes landed:**
-- **F1** (commit 96a4b5f) — `featureRegistry.freeze()` in `createFeatureSlice`; dev-throw on late registration, prod-warn+no-op.
-- **F2** (commit 96a4b5f) — `DuplicateFeatureError` thrown in prod; HMR-same-def is a no-op, HMR-different-def warns+replaces in dev.
-- **F3** (commit a4e7d6b) — `utils/PresetFieldRegistry.ts` + `utils/defaultPresetFields.ts`; `PresetLogic`/`getPreset` iterate the registry instead of hardcoded `savedCameras`/`cameraRot`/`targetDistance`.
-- **F4** (commit c6ee640) — `engine/plugins/RenderLoop.tsx` provides `<RenderLoopDriver />`, mounted in `App.tsx`; `TickRegistry` warns in dev if 3s pass after first `registerTick()` without any `runTicks()`.
+### ✅ Phase 3 — Toy-fluid port (2026-04-22, `4830a2c` … `205745a`)
+- `fluid-toy/` — engine-native port of the reference `toy-fluid/`. FluidEngine mounts via `<ViewportFrame>` + `qualityFraction`; pointer→splat interaction layer; julia-c auto-orbit via modulation-style tick.
+- `@engine/topbar` (`engine/plugins/TopBar.tsx`) — slot-based host + default items (ProjectName, FpsCounter).
+- `@engine/scene-io` (`engine/plugins/SceneIO.tsx`) — Save + Load via topbar slot registration, delegates to `utils/SceneFormat.ts`.
+- `<TimelineHost>` — shared animation-timeline chrome with GMT's 317-line TimelineToolbar ported as reusable engine chrome.
 
-All four fixes verified via `npm run typecheck` (0 errors) + `smoke:boot` (no pageerrors) + `smoke:interact` (state round-trip passes).
+### ✅ Phase 4 — Input + undo + camera (2026-04-23, `8662447` … `2b8b6f9`)
+- **4a** `engine/animation/modulationTick.ts` — canonical modulation tick; orbit refactored to register LFO animations via `setAnimations` instead of its own per-frame tick.
+- **4b** `@engine/shortcuts` (`engine/plugins/Shortcuts.ts`) — scope-based keyboard dispatcher with priority resolution, text-input guard, rebinding hook.
+- **4c** `@engine/undo` (`engine/plugins/Undo.tsx`) — unified transaction stack with scoped shortcuts (`Mod+Z` global, `Mod+Z` in `timeline-hover` scope routes to animation undo). Topbar Undo/Redo buttons. (F2b — 🟢 Fixed.)
+- **4d** `@engine/camera` (`engine/plugins/Camera.ts`) — adapter-based slot plugin. Apps register a `CameraAdapter` with `captureState`/`applyState`; slots 1-9 save/recall via Ctrl+1..9 / 1..9. Preset round-trip via `camera/presetField.ts` side-effect module (F3 registry).
 
-**Next — Phase 1: minimal fractal-toy.** Bring back one formula (Mandelbulb), orbit+fly camera feature, basic directional light feature. Uses `ShaderBuilder.addSection` (the escape hatch's first real load). Consumes a stub `@engine/viewport` that satisfies only what fractal-toy needs today. The nucleus of the eventual full GMT port.
+### ✅ Phase 5 — Animation plumbing (2026-04-23, commit `b82dc18`)
+- `engine/animation/modulationTick.ts` now **delegates to GMT's AnimationSystem.tick** via `TickRegistry.ANIMATE`. No reinvention — same code path GMT uses, so keyframe playback, LFO modulation, audio-reactive rules, and resolved liveModulations all work identically.
+- `engine/animation/cameraKeyRegistry.ts` — generic Key Cam track list. Default capture path-resolves scalar paths in DDFS store; apps override via `setCameraKeyCaptureFn`.
+- `engine/AnimationEngine.ts` extended binder resolution: generic 3-part vec paths (`feature.param.x/y/z/w`) alongside GMT's legacy `vec[23][ABC]_axis` convention.
+- `store/fractalStore.ts` eagerly imports `animationStore` so `window.useAnimationStore` is set before `bindStoreToEngine()` runs → `animationEngine.connect(animStore, hostStore)` always succeeds.
+- Both toys now mount `<EngineBridge />`, `<RenderLoopDriver />`, `<GlobalContextMenu />` from the GMT chrome — not reinvented, just mounted.
 
-**Then — Phase 2: toy-fluid port** (direct copy of the Demo add-on pattern). Same stub viewport plugin, pressure-tested by a second consumer.
+**Verified via `debug/smoke-anim-play.mts`:** playback advances frame 0 → 73.5 in 700ms; a 2-keyframe track on `julia.power` (2 → 6 over 30 frames) drives the bound param correctly.
 
-**Then — Phase 3: promote stub `@engine/viewport` to the full plugin design in `docs/10_Viewport.md`** with both apps as oracles. Adaptive quality, FixedResolutionControls refactor, perf warning suggestion registry.
+### 🚧 Known gaps after Phase 5
 
-**Phase-1 details (toy-fluid pattern, same three-file contract):**
+Identified in headless + manual testing:
 
-Study `demo/README.md` + `docs/03_Plugin_Contract.md` — they document the three-step contract toy-fluid follows. Concretely:
+- **Vec2 animation tracks use UNDERSCORE format** (`featureId.key_x` / `_y`) per AutoFeaturePanel convention, but Phase 5's additions (orbit LFO targets, `cameraKeyRegistry` default paths, `AnimationEngine.getBinder` 3-part extension) use DOT format (`feature.param.x`). Result: vec2 controls don't show live modulation; Key Cam for vec2-backed camera poses doesn't round-trip cleanly. Fix queued — flip DOT→UNDERSCORE in `fluid-toy/orbitTick.ts`, `fluid-toy/main.tsx` + `fractal-toy/main.tsx` camera-track registration, and `AnimationEngine.getBinder`.
+- **Right-click context menus** — `<GlobalContextMenu />` mounted but some entry points (timeline ruler, keyframe dots) may still need wire-up verification.
 
-1. **Define DDFS features** that replace toy-fluid's React `useState`:
-   - `fluidSim` — simResolution, viscosity, dissipation, autoQuality, kind, forceMode
-   - `julia` — juliaC (vec2), zoom, center (vec2), orbit (enabled/radius/speed)
-   - `dye` — gradient, collisionGradient
-   - `sceneCamera` — pan/zoom
+## Remaining work
 
-2. **`toy-fluid/registerFeatures.ts`** — side-effect module that imports `featureRegistry` + `componentRegistry` and registers all features + viewport overlay. Imported at the TOP of `toy-fluid.html`'s entry (before anything touches the store).
+### Designed plugins not yet shipped
+- **`@engine/screenshot`** (`installScreenshot()`) — canvas → PNG with metadata; auto-detect via viewport registry; topbar camera icon. Design in `docs/04_Core_Plugins.md`.
+- **`@engine/environment`** (implied in architecture but not explicit) — theme, DPR, mobile-detect.
+- **Help system integration** — the shared chrome has `HelpBrowser.tsx` + `helpUtils.ts`; not yet surfaced as `@engine/help`.
 
-3. **`toy-fluid/setup.ts`** — `wireToyFluidPanels()` seeds panel state via `movePanel(...)`.
+### Fragilities still open
+See `docs/20_Fragility_Audit.md` for full list.
+- **F5** — AnimationEngine hardcodes legacy camera tracks (`camera.unified.*`, `camera.rotation.*`). Clean fix is `@engine/camera` registering its own binders via a proper `binderRegistry`. Current mitigation: `cameraKeyRegistry` lets apps opt out of the legacy tracks.
+- **F6** — `set${Feature}` name inference in `AnimationEngine.getBinder`. Replace with auto-bind at freeze time.
+- **F7** — `animationStore ↔ fractalStore` circular import via `window.useAnimationStore`. Express as explicit bridge (see `docs/09_Bridges_and_Derived.md`).
+- **F9** — `componentId` references not validated at registry freeze.
 
-4. **Mount FluidEngine**: register a `'dom'` viewport overlay that renders a `<canvas>` and attaches the existing `FluidEngine` instance to it. Read params from the store via `useFractalStore(s => s.fluidSim)` etc.
-
-5. **Rewrite `toy-fluid/savedState.ts`** as thin wrappers over `utils/SceneFormat.ts`: `downloadSceneJson`, `downloadScenePng`, `loadSceneFromFile` are all there.
-
-6. **TopBar**: either add a toy-fluid-owned top bar component mounted in its own entry (`toy-fluid.html` already exists), or keep the engine's App.tsx shell and add a minimal toy-fluid TopBar.
-
-**Deferred — rename pass.** Once the toy-fluid port proves the shape, do the one-shot rename: `fractalStore` → `engineStore`, `useFractalStore` → `useEngineStore`, `FractalEvents` → `EngineEvents`, `FractalStoreState`/`FractalActions` → `EngineStoreState`/`EngineActions`, file `store/fractalStore.ts` → `store/engineStore.ts`. Single commit.
+### Deferred
+- **Rename pass** — `fractalStore` → `engineStore`, `FractalEvents` → `EngineEvents`, etc. Single commit after more apps have ported.
+- **F8** — UI state undo (panel collapse, timeline scroll).
+- **F10** — `formula` field rename to `mode` (cosmetic).
 
 ## How to resume
 
 ```bash
 cd h:/GMT/gmt-engine
-git log --oneline -20          # full stage progression
+git log --oneline -30          # full stage progression
 npm run typecheck              # should exit 0
 npm run dev                    # plain vite on localhost:3400
+
+# Entry points:
+#   http://localhost:3400/               — engine shell (demo add-on)
+#   http://localhost:3400/fractal-toy.html — minimal Mandelbulb playground (phase 1)
+#   http://localhost:3400/fluid-toy.html   — engine-native fluid toy port (phases 3-5)
 
 # In another shell — smoke checks:
 npm run smoke:boot             # headless boot, fail on pageerrors
 npm run smoke:interact         # state-flow + save round-trip
 npm run smoke:screenshot       # visual baseline → debug/scratch/engine-boot.png
+npm run smoke:viewport         # adaptive-quality viewport plugin
+# Direct:
+npx tsx debug/smoke-anim-play.mts  # timeline playback (phase 5)
 ```
 
 Note: the `dev` script is now plain `vite`. GMT's custom Express

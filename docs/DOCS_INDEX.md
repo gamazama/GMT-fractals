@@ -51,7 +51,7 @@ Each architecture doc (01–09, 20) opens with a stability marker:
 | 01 | [Architecture](01_Architecture.md) | 🚧 | Core + plugins + apps model; engine boundaries; render-loop ownership |
 | 02 | [Feature Registry](02_Feature_Registry.md) | 🚧 | `defineFeature`, isolation via `dependsOn`, lifecycle hooks, auto-derivation |
 | 03 | [Plugin Contract](03_Plugin_Contract.md) | 🚧 | Three-step add-on: `registerFeatures.ts` → store → `setup.ts`; freeze semantics |
-| 04 | [Core Plugins](04_Core_Plugins.md) | 🚧 | shortcuts, undo, scene-io, screenshot, topbar, animation, camera — overview |
+| 04 | [Core Plugins](04_Core_Plugins.md) | 🚧 | viewport, topbar, scene-io, render-loop, shortcuts, undo, camera, animation — 8/10 shipped (phase 5) |
 
 ### Subsystems
 | # | File | Status | Scope |
@@ -67,6 +67,7 @@ Each architecture doc (01–09, 20) opens with a stability marker:
 | # | File | Status | Scope |
 |---|---|---|---|
 | 20 | [Fragility Audit](20_Fragility_Audit.md) | 🔒 | Known issues found in 2026-04-22 audit; status of each fix |
+| — | [Feature Status](FEATURE_STATUS.md) | 🔒 | Post-phase-5 snapshot of what's working, what's broken, what's missing across the engine + both toys |
 
 ## Reading paths
 
@@ -129,4 +130,4 @@ The GMT fractal explorer's documentation is preserved under its original numberi
 
 ---
 
-*Engine fork point: GMT 0.9.2 (commit ece5c84). Last doc overhaul: 2026-04-22.*
+*Engine fork point: GMT 0.9.2 (commit ece5c84). Last doc refresh: 2026-04-23 (phases 1-5 landed, HANDOFF + fragility audit + plugin docs synced with code).*
