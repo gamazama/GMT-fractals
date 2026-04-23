@@ -13,8 +13,15 @@
 
 import { featureRegistry } from '../engine/FeatureSystem';
 import { JuliaFeature } from './features/julia';
+import { DyeFeature } from './features/dye';
 
 // 3c: Julia/Mandelbrot fractal iteration params. FluidToyApp subscribes
 // to the slice and pushes into FluidEngine.setParams — no inject()
 // because FluidEngine owns its own GLSL pipeline.
 featureRegistry.register(JuliaFeature);
+
+// 3d: Dye/palette params. Uses DDFS gradient type → AutoFeaturePanel
+// auto-renders AdvancedGradientEditor (the engine's existing
+// component, no reimpl). Gradient buffers baked to LUTs in FluidToyApp
+// and pushed via engine.setGradientBuffer / setCollisionGradientBuffer.
+featureRegistry.register(DyeFeature);

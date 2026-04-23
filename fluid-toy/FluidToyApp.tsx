@@ -23,6 +23,7 @@ import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
 import { TimelineHost } from '../components/TimelineHost';
+import { generateGradientTextureBuffer } from '../utils/colorUtils';
 
 export const FluidToyApp: React.FC = () => {
     const state = useFractalStore();
@@ -48,6 +49,7 @@ export const FluidToyApp: React.FC = () => {
     const { fpsSmoothed } = useViewportFps();
     // DDFS feature slices — push into FluidEngine.setParams on change.
     const julia = useFractalStore((s: any) => s.julia);
+    const dye   = useFractalStore((s: any) => s.dye);
 
     // Boot the engine once.
     useEffect(() => {
@@ -89,6 +91,29 @@ export const FluidToyApp: React.FC = () => {
             power: julia.power ?? 2,
         });
     }, [julia]);
+
+    // Push Dye params + gradient LUTs whenever they change.
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !dye) return;
+
+        engine.setParams({
+            dyeInject:       dye.dyeInject ?? 8,
+            dyeDissipation:  dye.dyeDissipation ?? 1.03,
+            dyeMix:          dye.dyeMix ?? 2,
+            gradientRepeat:  dye.gradientRepeat ?? 1,
+            gradientPhase:   dye.gradientPhase ?? 0,
+        });
+
+        if (dye.gradient) {
+            const lut = generateGradientTextureBuffer(dye.gradient);
+            engine.setGradientBuffer(lut);
+        }
+        if (dye.collisionGradient) {
+            const lut = generateGradientTextureBuffer(dye.collisionGradient);
+            engine.setCollisionGradientBuffer(lut);
+        }
+    }, [dye]);
 
     // Resize whenever physical pixels or quality fraction change.
     useEffect(() => {
