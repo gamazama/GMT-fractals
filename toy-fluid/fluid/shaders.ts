@@ -53,6 +53,31 @@ vec3 oklabToRgb(vec3 c) {
     -0.0041960863*l - 0.7034186147*m + 1.7076147010*s
   );
 }
+
+/** Chroma-preserving OKLab → linear-RGB. When the requested chroma exceeds
+ *  what sRGB can carry at the current L + hue, binary-searches for the
+ *  largest chroma scale that keeps all three RGB channels ≥ 0 and the
+ *  maximum channel ≤ uMaxRgb. This avoids per-channel clamping (which hue-
+ *  shifts and reads as "clipping to white"); instead we sacrifice some
+ *  chroma, preserving lightness + hue. HDR-friendly: caller picks uMaxRgb. */
+vec3 oklabToRgbGamut(vec3 lab, float maxRgb) {
+  vec3 rgb = oklabToRgb(lab);
+  float lo = min(min(rgb.r, rgb.g), rgb.b);
+  float hi = max(max(rgb.r, rgb.g), rgb.b);
+  if (lo >= 0.0 && hi <= maxRgb) return rgb;          // already in gamut
+  // Binary-search chroma scale k ∈ [0,1]. At k=0 we collapse to pure grey
+  // (lab.x, 0, 0), which is always in the safe cube.
+  float lo_k = 0.0, hi_k = 1.0;
+  for (int i = 0; i < 8; i++) {
+    float mid = (lo_k + hi_k) * 0.5;
+    vec3 t = oklabToRgb(vec3(lab.x, lab.yz * mid));
+    float tLo = min(min(t.r, t.g), t.b);
+    float tHi = max(max(t.r, t.g), t.b);
+    if (tLo >= -0.002 && tHi <= maxRgb + 0.002) lo_k = mid;
+    else hi_k = mid;
+  }
+  return max(oklabToRgb(vec3(lab.x, lab.yz * lo_k)), 0.0);
+}
 `;
 
 export const GRADIENT_SAMPLE_GLSL = /* glsl */ `
@@ -413,9 +438,13 @@ ${GRADIENT_SAMPLE_GLSL}
 ${OKLAB_GLSL}
 
 /** Apply this frame's dissipation to existing dye. Lightness and chroma decay
- *  on independent schedules, then chroma is scaled by uDyeSatBoost. In "vivid"
- *  mode chroma also gets an inverse-lightness boost so colours stay punchy as
- *  they dim. */
+ *  on independent schedules; uDyeSatBoost is a per-frame chroma multiplier so
+ *  boost > 1 actively pushes dye toward maximum saturation each frame. The
+ *  per-channel clip that used to hue-shift at high boost is now replaced by
+ *  oklabToRgbGamut which binary-searches the gamut-boundary chroma scale —
+ *  so cranking the boost can only drive colours to the saturation ceiling for
+ *  that hue/L, never past it. In "vivid" mode chroma gets an inverse-lightness
+ *  lift so colours stay punchy as they dim. */
 vec3 decayDye(vec3 c) {
   float decayL = exp(-uDyeFadeHz * uDt);
   if (uDyeDecayMode == 0) return c * decayL;
@@ -424,9 +453,13 @@ vec3 decayDye(vec3 c) {
   lab.x *= decayL;
   lab.yz *= decayC * uDyeSatBoost;
   if (uDyeDecayMode == 2) {
-    lab.yz *= clamp(1.0 / max(decayL, 0.01), 1.0, 2.0);
+    // Vivid: chroma rises as lightness drops, capped by gamut mapper below.
+    lab.yz *= clamp(1.0 / max(decayL, 0.01), 1.0, 4.0);
   }
-  return max(oklabToRgb(lab), 0.0);
+  // Chroma-preserving gamut mapping. HDR-friendly cap at 8.0 — well above
+  // tone-map roll-off so bloom still picks up hot spots, while hue stays
+  // stable as we approach the boundary.
+  return oklabToRgbGamut(lab, 8.0);
 }
 
 void main() {
@@ -454,10 +487,45 @@ void main() {
   } else if (uDyeBlend == 2) {
     // Max: hold the brightest. Good for preserving vivid strokes over faded ones.
     col = max(aged, injectAdd);
-  } else {
+  } else if (uDyeBlend == 3) {
     // Over (alpha-compositing): uses grad.α + rate to mask the new colour onto old.
-    float a = clamp(rate * 8.0, 0.0, 1.0);   // scale so "rate" reads like a visible alpha
+    float a = clamp(rate * 8.0, 0.0, 1.0);
     col = aged * (1.0 - a) + grad.rgb * a;
+  } else if (uDyeBlend == 4) {
+    // Multiply: darkens where dye overlaps. Great for coloured shadows over
+    // bright fractals — the fractal peeks through rather than getting painted out.
+    vec3 i = clamp(injectAdd, 0.0, 1.0);
+    col = aged * mix(vec3(1.0), i, clamp(rate * 8.0, 0.0, 1.0));
+  } else if (uDyeBlend == 5) {
+    // Difference: |d − i|. Complementary hues reveal sharp boundaries; overlapping
+    // identical colours cancel to black. Electric / high-contrast look.
+    col = abs(aged - injectAdd);
+  } else if (uDyeBlend == 6) {
+    // Colour-dodge: d / (1 − i). Hot spots bloom bright where injection hits, great
+    // with bloom enabled. Capped at HDR 8.0 so the result stays finite.
+    vec3 i = clamp(injectAdd, 0.0, 0.999);
+    col = min(vec3(8.0), aged / (1.0 - i));
+  } else if (uDyeBlend == 7) {
+    // Vivid mix: chroma-preserving additive in OKLab. Aged + inject converted to
+    // OKLab, combined (L sums, hue/chroma interpolated in polar by L-weights),
+    // gamut-mapped back. Complementary hues stay colourful instead of averaging
+    // to grey like plain RGB add does.
+    vec3 labA = rgbToOklab(aged);
+    vec3 labB = rgbToOklab(injectAdd);
+    float Ln = labA.x + labB.x;
+    vec3 lab;
+    if (Ln < 1e-5) {
+      lab = vec3(0.0);
+    } else {
+      // Weight chroma by lightness so a dim dye doesn't fight a bright one.
+      float wA = labA.x / Ln, wB = labB.x / Ln;
+      lab = vec3(Ln, labA.y * wA + labB.y * wB, labA.z * wA + labB.z * wB);
+      // Slight chroma lift so mixing doesn't reduce saturation overall.
+      lab.yz *= 1.2;
+    }
+    col = oklabToRgbGamut(lab, 8.0);
+  } else {
+    col = aged + injectAdd;
   }
 
   // Solid obstacles: no dye inside — they're walls, not flowing medium.
@@ -606,21 +674,37 @@ void main() {
 // Splat: gaussian-weighted additive injection at (uPoint) of (uValue).rgb.
 // Used for both mouse-forces (into velocity) and mouse-dye (into dye).
 // -----------------------------------------------------------------------------
+/** Splat with controllable softness/hardness.
+ *  - uHardness=0  → pure gaussian (current behaviour, soft fringe).
+ *  - uHardness=1  → hard disc, smoothstep antialias at the rim.
+ *  - in-between   → linear blend of the two profiles.
+ *  - uOp controls what happens to the target:  0 add  |  1 subtract (eraser). */
 export const FRAG_SPLAT = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uTarget;
-uniform vec2 uPoint;
-uniform vec3 uValue;
-uniform float uRadius;
+uniform vec2  uPoint;
+uniform vec3  uValue;
+uniform float uRadius;     // soft-mode gaussian sigma² (smaller = tighter)
+uniform float uDiscR;      // hard-mode disc radius in UV (x-aspect-corrected)
+uniform float uHardness;   // 0..1 blend between soft / hard profile
 uniform float uAspect;
+uniform float uOp;         // 0 add, 1 subtract
 void main() {
   vec2 d = vUv - uPoint;
   d.x *= uAspect;
-  float g = exp(-dot(d,d) / uRadius);
+  float r2 = dot(d, d);
+  float soft = exp(-r2 / uRadius);
+  float hard = 1.0 - smoothstep(uDiscR * 0.9, uDiscR, sqrt(r2));
+  float w = mix(soft, hard, uHardness);
   vec4 base = texture(uTarget, vUv);
-  base.rgb += uValue * g;
+  vec3 delta = uValue * w;
+  vec3 next = base.rgb + mix(delta, -delta, uOp);
+  // Clamp to ≥0 ONLY for the eraser op. Velocity splats carry signed deltas —
+  // clamping them would wipe out negative components under the brush radius,
+  // which visually looks like flow reversing wherever the brush touches.
+  base.rgb = (uOp > 0.5) ? max(next, 0.0) : next;
   fragColor = base;
 }`;
 
