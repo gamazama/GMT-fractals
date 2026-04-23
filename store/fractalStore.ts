@@ -262,11 +262,20 @@ export const getShaderConfigFromState = (state: FractalStoreState): any => {
  * Wires store subscriptions → worker proxy events at app boot.
  * Apps call this once after store construction.
  */
+// Force-import the animation store at module load so its
+// `window.useAnimationStore` side effect fires before EngineBridge's
+// useEffect tries to read it. Without this, apps that only reach
+// animationStore through a lazy-loaded Timeline would see a null
+// animStore in animationEngine and playback would silently not work.
+import { useAnimationStore } from './animationStore';
+
 export const bindStoreToEngine = () => {
     const s = useFractalStore.getState();
 
-    // Connect AnimationEngine to stores (decoupled injection)
-    animationEngine.connect((window as any).useAnimationStore, useFractalStore);
+    // Connect AnimationEngine to stores (decoupled injection).
+    // window.useAnimationStore is set at module load of animationStore.ts;
+    // our eager import above ensures it's populated before this runs.
+    animationEngine.connect(useAnimationStore as any, useFractalStore);
 
     engine.isPaused = s.isPaused;
     engine.setPreviewSampleCap(s.sampleCap);

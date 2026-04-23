@@ -1,78 +1,45 @@
 /**
- * Canonical modulation tick.
+ * @engine/animation — install the canonical animation tick.
  *
- * Registers into TickRegistry's ANIMATE phase. Each frame:
- *   1. Reset ModulationEngine's offset buffer
- *   2. Update LFO oscillators from the store's `animations` array
- *   3. Apply rule-based modulations (audio / LFO chains) from any
- *      registered modulation feature
- *   4. Combine resolved offsets with base DDFS values → liveModulations
- *      map in the store
+ * Registers GMT's AnimationSystem.tick(delta) into TickRegistry's
+ * ANIMATE phase. This is the SAME tick function GMT uses — it drives:
  *
- * Apps consume liveModulations wherever they push state to their render
- * engine: read `liveModulations[targetKey]` first, fall back to the
- * base value from the DDFS slice. This is how ALL continuous drivers
- * (auto-orbit, audio-reactive, webcam-reactive, LFO modulation) feed
- * DDFS params without each feature having to own its own RAF tick.
+ *   1. animationEngine.tick(delta)          — keyframe playback
+ *   2. modulationEngine.updateOscillators()  — LFO modulation
+ *   3. modulation rules (audio, envelope)    — rule-based modulation
+ *   4. Writes resolved offsets → store.liveModulations
  *
- * Generic — no GMT-specific hardcoding. Target keys follow dotted
- * paths (`feature.param.sub`) which navigate the store root to find
- * the base value. Works for any DDFS param whose type exposes a
- * scalar-per-component path (float, int, vec2 via .x/.y/.z).
+ * Apps also mount <EngineBridge /> (which calls bindStoreToEngine →
+ * animationEngine.connect) so animationEngine has its store handles.
+ * Without both, the timeline won't play or scrub.
+ *
+ * No reinvention — this function is GMT's production logic, just
+ * registered into the plugin TickRegistry so the engine fork's apps
+ * can drive it without mounting GMT's ViewportArea.
  */
 
 import { registerTick, TICK_PHASE } from '../TickRegistry';
-import { useFractalStore } from '../../store/fractalStore';
-import { modulationEngine } from '../../features/modulation/ModulationEngine';
+import { tick as animationSystemTick } from '../../components/AnimationSystem';
+import { animationEngine } from '../AnimationEngine';
+
+if (typeof window !== 'undefined') {
+    (window as any).__animEngine = animationEngine;
+}
 
 let _unregister: (() => void) | null = null;
 
-/** Navigate store state by dotted path; returns the numeric leaf or 0. */
-const readBase = (state: any, path: string): number => {
-    const parts = path.split('.');
-    let v: any = state;
-    for (const p of parts) {
-        if (v == null) return 0;
-        v = v[p];
-    }
-    return typeof v === 'number' ? v : 0;
-};
+let _debugTickCount = 0;
 
 export const installModulation = () => {
     if (_unregister) return;
-
-    _unregister = registerTick('engine.modulation', TICK_PHASE.ANIMATE, (delta) => {
-        const state = useFractalStore.getState() as any;
-
-        const animations = state.animations ?? [];
-        const modulation = state.modulation;
-        const hasOscillators = animations.length > 0;
-        const hasRules = (modulation?.rules?.length ?? 0) > 0;
-
-        if (!hasOscillators && !hasRules) {
-            // Nothing to do. Clear any lingering liveModulations so
-            // consumers fall back to base DDFS values cleanly.
-            if (Object.keys(state.liveModulations ?? {}).length > 0) {
-                state.setLiveModulations({});
-            }
-            return;
-        }
-
-        // Step 1-3: drive the ModulationEngine.
-        modulationEngine.resetOffsets();
-        modulationEngine.updateOscillators(animations, performance.now() / 1000, delta);
-        if (hasRules) modulationEngine.update(modulation.rules, delta);
-
-        // Step 4: combine offsets with base values.
-        const offsets = modulationEngine.offsets;
-        const liveModulations: Record<string, number> = {};
-        for (const [targetKey, offset] of Object.entries(offsets)) {
-            liveModulations[targetKey] = readBase(state, targetKey) + offset;
-        }
-
-        // Commit to the store so subscribers (and save/load) see it.
-        state.setLiveModulations(liveModulations);
+    _unregister = registerTick('engine.animation', TICK_PHASE.ANIMATE, (delta) => {
+        _debugTickCount++;
+        animationSystemTick(delta);
     });
+    // Expose tick counter for smoke tests.
+    if (typeof window !== 'undefined') {
+        Object.defineProperty(window, '__animTickCount', { get: () => _debugTickCount, configurable: true });
+    }
 };
 
 export const uninstallModulation = () => {

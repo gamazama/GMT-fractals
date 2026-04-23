@@ -165,24 +165,47 @@ export class AnimationEngine {
                 const setter = (actions as any)[setterName];
                 
                 if (setter && typeof setter === 'function') {
-                    // Check if this is a vector component track (e.g., vec3A_x, vec2B_y)
-                    const vectorMatch = child.match(/^(vec[23][ABC])_(x|y|z)$/);
-                    if (vectorMatch) {
-                        const vectorName = vectorMatch[1]; // e.g., vec3A
-                        const axis = vectorMatch[2] as 'x' | 'y' | 'z'; // x, y, or z
-                        
+                    // Generic 3-part path: feature.param.axis — write
+                    // the scalar into the named axis (x/y/z/w) of the
+                    // vec-shaped param, preserving other components.
+                    // Works for any feature with vec2/vec3/vec4 DDFS
+                    // params (fluid-toy's julia.juliaC.x, fractal-toy's
+                    // camera.target.z, etc.).
+                    const thirdPart = parts[2];
+                    if (thirdPart === 'x' || thirdPart === 'y' || thirdPart === 'z' || thirdPart === 'w') {
+                        const axis = thirdPart as 'x' | 'y' | 'z' | 'w';
                         binder = (v) => {
                             const state = this.fractalStore!.getState() as any;
-                            const currentVector = state[parent]?.[vectorName];
-                            if (currentVector) {
-                                const newVector = currentVector.clone();
-                                newVector[axis] = v;
-                                setter({ [vectorName]: newVector });
+                            const current = state[parent]?.[child];
+                            if (current && typeof current === 'object') {
+                                // THREE.Vector{2,3,4} has .clone(); plain {x,y[,z,w]} we spread.
+                                const next = typeof current.clone === 'function'
+                                    ? current.clone()
+                                    : { ...current };
+                                next[axis] = v;
+                                setter({ [child]: next });
                             }
                         };
                     } else {
-                        // Standard scalar param
-                        binder = (v) => setter({ [child]: v });
+                        // GMT legacy vec[23][ABC]_(x|y|z) naming — preserved
+                        // so existing GMT formulas keep working untouched.
+                        const vectorMatch = child.match(/^(vec[23][ABC])_(x|y|z)$/);
+                        if (vectorMatch) {
+                            const vectorName = vectorMatch[1];
+                            const axis = vectorMatch[2] as 'x' | 'y' | 'z';
+                            binder = (v) => {
+                                const state = this.fractalStore!.getState() as any;
+                                const currentVector = state[parent]?.[vectorName];
+                                if (currentVector) {
+                                    const newVector = currentVector.clone();
+                                    newVector[axis] = v;
+                                    setter({ [vectorName]: newVector });
+                                }
+                            };
+                        } else {
+                            // Standard scalar param.
+                            binder = (v) => setter({ [child]: v });
+                        }
                     }
                 } else {
                     console.warn(`AnimationEngine: Setter ${setterName} not found for feature ${parent}`);

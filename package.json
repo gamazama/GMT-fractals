@@ -15,7 +15,8 @@
     "smoke:fluid-toy": "tsx debug/smoke-fluid-toy.mts",
     "smoke:undo": "tsx debug/smoke-undo.mts",
     "smoke:camera": "tsx debug/smoke-camera.mts",
-    "smoke:viewport": "tsx debug/smoke-viewport.mts"
+    "smoke:viewport": "tsx debug/smoke-viewport.mts",
+    "smoke:anim-play": "tsx debug/smoke-anim-play.mts"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",

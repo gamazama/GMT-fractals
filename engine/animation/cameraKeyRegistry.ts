@@ -22,6 +22,39 @@
 let cameraKeyTracks: readonly string[] = [];
 const listeners = new Set<() => void>();
 
+/** Optional app-provided capture function. Apps override when their
+ *  camera values live outside the DDFS store (e.g. GMT reads from
+ *  engine.activeCamera). Default reads scalar values from store paths
+ *  — works for any DDFS-resident camera (fluid-toy, fractal-toy). */
+export type CameraKeyCaptureFn = (frame: number, tracks: readonly string[]) => void;
+let _captureFn: CameraKeyCaptureFn | null = null;
+
+export function setCameraKeyCaptureFn(fn: CameraKeyCaptureFn): void {
+    _captureFn = fn;
+}
+
+import { useFractalStore } from '../../store/fractalStore';
+import { useAnimationStore } from '../../store/animationStore';
+
+export function captureCameraKeyFrame(frame: number): void {
+    if (_captureFn) { _captureFn(frame, cameraKeyTracks); return; }
+    // Default capture: path-resolve each track to a scalar in the DDFS
+    // store and call the animation-store addKeyframe.
+    const state = useFractalStore.getState() as any;
+    const animActions = useAnimationStore.getState();
+    for (const tid of cameraKeyTracks) {
+        const parts = tid.split('.');
+        let v: any = state;
+        for (const p of parts) {
+            if (v == null) break;
+            v = v[p];
+        }
+        if (typeof v === 'number' && isFinite(v)) {
+            animActions.addKeyframe(tid, frame, v);
+        }
+    }
+}
+
 /**
  * Register the set of track IDs that together represent the camera pose.
  * Calling again replaces the previous registration (apps should register

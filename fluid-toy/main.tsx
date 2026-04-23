@@ -77,7 +77,13 @@ installSceneIO({
 });
 
 // Camera tracks for the shared TimelineToolbar's Key Cam button.
-registerCameraKeyTracks(['sceneCamera.center', 'sceneCamera.zoom']);
+// Scalar paths — captureCameraKeyFrame path-resolves each to a number
+// in the DDFS store. vec2/vec3 params split into .x/.y/.z.
+registerCameraKeyTracks([
+    'sceneCamera.center.x',
+    'sceneCamera.center.y',
+    'sceneCamera.zoom',
+]);
 
 // Canonical modulation tick — processes the store's `animations` array
 // each frame into liveModulations (base + offset for every target).

@@ -30,6 +30,8 @@ import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksCon
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
 import { TimelineHost } from '../components/TimelineHost';
 import { TopBarHost } from '../engine/plugins/TopBar';
+import { EngineBridge } from '../components/EngineBridge';
+import GlobalContextMenu from '../components/GlobalContextMenu';
 import {
     viewport,
     useQualityFraction,
@@ -171,6 +173,7 @@ export const FractalToyApp: React.FC = () => {
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
             <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col">
+                <EngineBridge />
                 <DropZones />
 
                 {floatingPanels.map((p) => (
@@ -199,6 +202,17 @@ export const FractalToyApp: React.FC = () => {
                 </div>
 
                 <TimelineHost />
+
+                {state.contextMenu.visible && (
+                    <GlobalContextMenu
+                        x={state.contextMenu.x}
+                        y={state.contextMenu.y}
+                        items={state.contextMenu.items}
+                        targetHelpIds={state.contextMenu.targetHelpIds}
+                        onClose={state.closeContextMenu}
+                        onOpenHelp={state.openHelp}
+                    />
+                )}
 
                 {/* Perf HUD — global, outside the frame so it's visible
                     regardless of Fixed letterboxing. */}

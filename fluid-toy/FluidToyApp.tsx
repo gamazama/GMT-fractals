@@ -24,6 +24,9 @@ import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
 import { TimelineHost } from '../components/TimelineHost';
+import { EngineBridge } from '../components/EngineBridge';
+import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
+import GlobalContextMenu from '../components/GlobalContextMenu';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { FORCE_MODES } from './features/fluidSim';
 import { FluidPointerLayer } from './FluidPointerLayer';
@@ -185,6 +188,8 @@ export const FluidToyApp: React.FC = () => {
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
         <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col">
+            <EngineBridge />
+            <RenderLoopDriver />
             <DropZones />
 
             {floatingPanels.map((p) => (
@@ -216,6 +221,17 @@ export const FluidToyApp: React.FC = () => {
             </div>
 
             <TimelineHost />
+
+            {state.contextMenu.visible && (
+                <GlobalContextMenu
+                    x={state.contextMenu.x}
+                    y={state.contextMenu.y}
+                    items={state.contextMenu.items}
+                    targetHelpIds={state.contextMenu.targetHelpIds}
+                    onClose={state.closeContextMenu}
+                    onOpenHelp={state.openHelp}
+                />
+            )}
         </div>
         </StoreCallbacksProvider>
     );

@@ -17,6 +17,7 @@ import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import {
     getCameraKeyTracks,
     subscribeCameraKeyTracks,
+    captureCameraKeyFrame,
 } from '../../engine/animation/cameraKeyRegistry';
 import {
     getRenderPopup,
@@ -59,7 +60,17 @@ const KeyCamButton: React.FC = () => {
     }
 
     const handleKeyCam = () => {
-        captureCameraFrame(currentFrame);
+        // Apps that register with setCameraKeyCaptureFn (e.g. GMT reading
+        // from engine.activeCamera) override the default. Default captures
+        // scalar values from the DDFS store at each track path — works
+        // for fluid-toy, fractal-toy, and any future DDFS-camera app.
+        captureCameraKeyFrame(currentFrame);
+        // Retain GMT's capture hook too for apps still using camera.unified.*
+        // tracks — it's additive (a no-op if no camera tracks of that name
+        // exist). Harmless otherwise.
+        if (tracks.some((t) => t.startsWith('camera.unified') || t.startsWith('camera.rotation'))) {
+            captureCameraFrame(currentFrame);
+        }
         FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, tracks[0]);
     };
 
