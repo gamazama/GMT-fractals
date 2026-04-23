@@ -240,6 +240,12 @@ export const installShortcuts = (options: InstallShortcutsOptions = {}) => {
     };
 
     (root as any).addEventListener('keydown', _listener, capture);
+
+    // Expose on window for smoke tests + dev console — mirrors the
+    // __camera / __animEngine / __store / __screenshot pattern.
+    if (typeof window !== 'undefined') {
+        (window as any).__shortcuts = shortcuts;
+    }
 };
 
 export const uninstallShortcuts = () => {

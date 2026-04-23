@@ -14,10 +14,9 @@ Overview of the plugins that ship with the engine. Each is opt-in: apps call `in
 | `@engine/undo` | `installUndo()` | `engine/plugins/Undo.tsx` | ✅ Shipped (phase 4c) | [06_Undo_Transactions.md](06_Undo_Transactions.md) |
 | `@engine/camera` | `installCamera()` | `engine/plugins/Camera.ts` | ✅ Shipped (phase 4d) | § camera |
 | `@engine/animation` | `installModulation()` | `engine/animation/modulationTick.ts` | ✅ Shipped (phase 5) | [08_Animation.md](08_Animation.md) |
-| `@engine/screenshot` | `installScreenshot()` | — | 🔴 Not built | § screenshot (design) |
 | `@engine/environment` | `installEnvironment()` | — | 🔴 Not built | Theme, DPR, mobile-detect (placeholder) |
 
-**Eight of ten designed plugins are shipped as of phase 5 (commit `b82dc18`).** The animation plugin is named `installModulation()` for historical reasons (it registers the modulation/animation tick into `TickRegistry.ANIMATE`); `installAnimation()` is an alias candidate for the rename pass.
+**Eight shipped plugins as of 2026-04-23.** Screenshot folded into `@engine/scene-io` (2026-04-23) — standalone camera button + `Alt+S` hotkey; identical code path as the "Save PNG…" dropdown item, which matched its output byte-for-byte anyway. The animation plugin is named `installModulation()` for historical reasons (it registers the modulation/animation tick into `TickRegistry.ANIMATE`); `installAnimation()` is an alias candidate for the rename pass.
 
 **Rule:** every plugin is opt-in and idempotent. Calling `install*()` twice is a no-op.
 **Why:** when two independent bundles both want the plugin (e.g. an editor add-on and a viewer add-on in the same app), both call install — the second should be harmless.
@@ -64,30 +63,11 @@ sceneIO.registerField({
 
 ---
 
-### `@engine/screenshot`
+### Screenshot — folded into `@engine/scene-io`
 
-Canvas → PNG with optional metadata.
+When we sketched a separate `@engine/screenshot` plugin, its `capture()` method produced byte-for-byte identical output to SceneIO's "Save PNG…" dropdown item (same `snapshotSceneToPng` call, same preset, same download path). The user-facing difference was "one-click button vs menu item" — purely UX, zero code. Two plugins doing the same thing with identical primitives would drift. So it's folded in: `installSceneIO` now additionally registers a standalone camera button in the topbar (when `getCanvas` is supplied) plus an `Alt+S` hotkey. Both route through the same `saveCurrentPng()` helper SceneIO uses for its dropdown item.
 
-```ts
-installScreenshot({
-  canvasSelector?: string;                 // default: auto-detect viewport canvas
-  defaultFilename?: (ctx) => string;       // default: `engine-${timestamp}.png`
-});
-
-// Programmatic:
-screenshot.capture({
-  includePresetMetadata: true,             // embed current preset in iTXt
-  filename: 'my-shot.png',
-});
-
-screenshot.captureRaw();                   // no metadata, just the pixels
-```
-
-**Rule:** screenshot works with any canvas — WebGL2, WebGPU, OffscreenCanvas (via transferBitmap), Canvas2D. The plugin auto-detects via the viewport registry.
-**Why:** GMT and toy-fluid both want screenshot; each has a different canvas context. Uniform API means neither reimplements PNG encoding.
-
-**Topbar slot:** camera icon in the right slot when installed.
-**Hotkey:** Ctrl+Shift+S (configurable).
+**Hotkey choice:** `Alt+S`. Ctrl+S and Ctrl+Shift+S are browser-reserved for "Save" and "Save As" and never reach JavaScript; Alt+S is unclaimed across major browsers and maps to Option+S on Mac.
 
 ---
 
@@ -209,7 +189,7 @@ import '../engine/plugins/camera/presetField';  // registers cameraSlots preset 
 
 installViewport({ enabled: true, alwaysActive: true, targetFps: 45 });
 installTopBar();
-installSceneIO({ getCanvas: () => document.querySelector('canvas') });
+installSceneIO({ getCanvas: () => document.querySelector('canvas') });  // also wires Alt+S + camera button when getCanvas is supplied
 installModulation();                             // animation tick (registers into TickRegistry)
 installShortcuts();
 installUndo();

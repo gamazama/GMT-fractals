@@ -69,7 +69,7 @@ installViewport({
 // adaptive badge).
 installTopBar();
 
-// @engine/scene-io — Save + Load buttons.
+// @engine/scene-io — Save + Load buttons + Alt+S screenshot hotkey.
 installSceneIO({
     getCanvas: () => document.querySelector('canvas'),
 });

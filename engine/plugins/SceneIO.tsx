@@ -25,6 +25,7 @@ import {
     generateShareStringFromPreset,
 } from '../../utils/SceneFormat';
 import { topbar } from './TopBar';
+import { shortcuts } from './Shortcuts';
 
 // ── Install ─────────────────────────────────────────────────────────────
 
@@ -37,6 +38,24 @@ export interface InstallSceneIOOptions {
 let _installed = false;
 let _getCanvas: (() => HTMLCanvasElement | null) | undefined;
 
+/**
+ * Shared handler: grab the current canvas + preset and write a PNG to
+ * disk. Used by both the dropdown "Save PNG…" item and the standalone
+ * camera button in the topbar, and by the Alt+S keyboard shortcut.
+ * Noop + warn when no canvas accessor was supplied.
+ */
+const saveCurrentPng = async (): Promise<void> => {
+    const canvas = _getCanvas?.();
+    if (!canvas) {
+        console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
+        return;
+    }
+    const state = useFractalStore.getState();
+    const preset = state.getPreset({ includeScene: true });
+    const stem = (state.projectSettings.name || 'scene').replace(/\s+/g, '-').toLowerCase();
+    await downloadScenePng(canvas, preset, `${stem}.png`);
+};
+
 export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     if (options.getCanvas) _getCanvas = options.getCanvas;
     if (_installed) return;
@@ -44,11 +63,31 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
 
     topbar.register({ id: 'scene-save', slot: 'right', order: 20, component: SaveMenu });
     topbar.register({ id: 'scene-load', slot: 'right', order: 21, component: LoadButton });
+    // Standalone one-click PNG button — same operation as the dropdown's
+    // "Save PNG…" item, promoted to a quick-access camera affordance so
+    // users don't have to open the menu every time they want a
+    // screenshot. Hidden when the app didn't supply a canvas accessor.
+    if (_getCanvas) {
+        topbar.register({ id: 'scene-quick-png', slot: 'right', order: 19, component: QuickPngButton });
+    }
+
+    // Alt+S — the conventional single-key screenshot shortcut in
+    // creative web apps. Ctrl+S / Ctrl+Shift+S are browser-reserved
+    // (Save / Save As) and never reach JS, so don't use them.
+    shortcuts.register({
+        id: 'scene-io.quick-png',
+        key: 'Alt+S',
+        description: 'Save PNG',
+        category: 'Export',
+        handler: () => { void saveCurrentPng(); },
+    });
 };
 
 export const uninstallSceneIO = () => {
     topbar.unregister('scene-save');
     topbar.unregister('scene-load');
+    topbar.unregister('scene-quick-png');
+    shortcuts.unregister('scene-io.quick-png');
     _getCanvas = undefined;
     _installed = false;
 };
@@ -84,13 +123,7 @@ export const SaveMenu: React.FC = () => {
     };
 
     const handleSavePng = async () => {
-        const canvas = _getCanvas?.();
-        if (!canvas) {
-            console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
-            return;
-        }
-        const preset = getPreset({ includeScene: true });
-        await downloadScenePng(canvas, preset, `${fileStem}.png`);
+        await saveCurrentPng();
         close();
     };
 
@@ -111,6 +144,7 @@ export const SaveMenu: React.FC = () => {
     return (
         <div className="relative">
             <button
+                type="button"
                 onClick={() => setOpen((o) => !o)}
                 className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
                 title="Save scene"
@@ -123,17 +157,38 @@ export const SaveMenu: React.FC = () => {
                 <>
                     <div className="fixed inset-0 z-40" onClick={close} />
                     <div className="absolute top-full right-0 mt-1 w-44 bg-black/95 border border-white/10 rounded shadow-xl z-50 overflow-hidden">
-                        <button onClick={handleSaveJson}     className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Save JSON…</button>
+                        <button type="button" onClick={handleSaveJson}     className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Save JSON…</button>
                         {_getCanvas && (
-                            <button onClick={handleSavePng} className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors border-t border-white/5">Save PNG…</button>
+                            <button type="button" onClick={handleSavePng} className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors border-t border-white/5">Save PNG… (Alt+S)</button>
                         )}
-                        <button onClick={handleCopyShareLink} className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors border-t border-white/5">Copy Share Link</button>
+                        <button type="button" onClick={handleCopyShareLink} className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors border-t border-white/5">Copy Share Link</button>
                     </div>
                 </>
             )}
         </div>
     );
 };
+
+// ── Quick-PNG (camera) button ───────────────────────────────────────────
+
+const CameraIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+        <circle cx="12" cy="13" r="4" />
+    </svg>
+);
+
+export const QuickPngButton: React.FC = () => (
+    <button
+        type="button"
+        onClick={() => { void saveCurrentPng(); }}
+        className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
+        title="Save PNG (Alt+S)"
+        aria-label="Save PNG"
+    >
+        <CameraIcon />
+    </button>
+);
 
 // ── Load button ─────────────────────────────────────────────────────────
 
@@ -162,6 +217,7 @@ export const LoadButton: React.FC = () => {
                 ref={inputRef}
                 type="file"
                 accept="application/json,image/png"
+                aria-label="Load scene file"
                 className="hidden"
                 onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -171,6 +227,7 @@ export const LoadButton: React.FC = () => {
                 }}
             />
             <button
+                type="button"
                 onClick={() => inputRef.current?.click()}
                 className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
                 title="Load scene (JSON or PNG)"
