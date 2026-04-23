@@ -8,11 +8,11 @@
  * with smooth iterations; the actual fluid display uses the user's
  * gradient + phase + repeat from the Dye panel.
  *
- * The component is deliberately CPU-rasterized into a Canvas2D image
- * — at 220×220 with MAX_ITER=96 that's ~4.6M iterations per render,
- * which runs comfortably once per gradient change. Re-rendering is
- * gated by useEffect deps; only the crosshair overlay updates on
- * juliaC changes.
+ * Caching — the CPU raster is memoized at module scope keyed on the
+ * full set of inputs that influence it, so it survives the component
+ * mount/unmount cycle (e.g. when the picker hides/shows via its
+ * customUI condition) and is shared across any future caller. Each
+ * entry is ~220×220×4 = ~190 KB; we cap the cache at 16 entries.
  */
 
 import React, { useEffect, useRef, useCallback } from 'react';
@@ -52,74 +52,142 @@ const sampleLut = (lut: Uint8Array, t: number): [number, number, number] => {
   return [r, g, b];
 };
 
-const renderMandelbrot = (
-  size: number,
-  cx: number,
-  cy: number,
-  halfExt: number,
-  lut: Uint8Array,
-  repeat: number,
-  phase: number,
-  interiorRgb: [number, number, number],
-  power: number,
+// LRU-ish module-level raster cache. Key includes every input that
+// changes pixel output — `cx/cy` for the crosshair are NOT here because
+// the crosshair is stroked on top in a separate overlay pass, not
+// rasterized into the cached ImageData. Survives component unmount,
+// so toggling the picker's visibility via its customUI condition
+// doesn't force a re-raster. Cap = 16 entries × ~190 KB each = ~3 MB.
+const RASTER_CACHE_MAX = 16;
+const rasterCache = new Map<string, ImageData>();
+const lutKeyCache = new WeakMap<Uint8Array, string>();
+let lutKeyCounter = 0;
+
+const stableLutKey = (lut: Uint8Array): string => {
+    const cached = lutKeyCache.get(lut);
+    if (cached !== undefined) return cached;
+    const k = `lut${lutKeyCounter++}`;
+    lutKeyCache.set(lut, k);
+    return k;
+};
+
+const cacheKey = (
+    size: number,
+    centerX: number,
+    centerY: number,
+    halfExt: number,
+    lut: Uint8Array,
+    repeat: number,
+    phase: number,
+    interior: [number, number, number],
+    power: number,
+): string => (
+    `${size}|${centerX}|${centerY}|${halfExt}|${stableLutKey(lut)}|${repeat}|${phase}|` +
+    `${interior[0]},${interior[1]},${interior[2]}|${power}`
+);
+
+const rasterMandelbrot = (
+    size: number,
+    centerX: number,
+    centerY: number,
+    halfExt: number,
+    lut: Uint8Array,
+    repeat: number,
+    phase: number,
+    interiorRgb: [number, number, number],
+    power: number,
 ): ImageData => {
-  const img = new ImageData(size, size);
-  const data = img.data;
-  const interiorR = Math.round(interiorRgb[0] * 255);
-  const interiorG = Math.round(interiorRgb[1] * 255);
-  const interiorB = Math.round(interiorRgb[2] * 255);
-  const pInt = Math.round(power);
-  const isInt = Math.abs(power - pInt) < 0.01 && pInt >= 2 && pInt <= 8;
-  for (let j = 0; j < size; j++) {
-    const yy = cy + ((j / size) * 2 - 1) * halfExt;
-    for (let i = 0; i < size; i++) {
-      const xx = cx + ((i / size) * 2 - 1) * halfExt;
-      let zx = 0, zy = 0;
-      let iter = 0;
-      for (; iter < MAX_ITER; iter++) {
-        const x2 = zx * zx;
-        const y2 = zy * zy;
-        if (x2 + y2 > 16) break;
-        let pzx: number, pzy: number;
-        if (isInt) {
-          let rx = zx, ry = zy;
-          for (let k = 1; k < pInt; k++) {
-            const nrx = rx * zx - ry * zy;
-            ry = rx * zy + ry * zx;
-            rx = nrx;
-          }
-          pzx = rx; pzy = ry;
-        } else {
-          const mag = Math.sqrt(x2 + y2);
-          const ang = Math.atan2(zy, zx);
-          const rm = Math.pow(mag, power);
-          const ra = ang * power;
-          pzx = rm * Math.cos(ra);
-          pzy = rm * Math.sin(ra);
+    const img = new ImageData(size, size);
+    const data = img.data;
+    const interiorR = Math.round(interiorRgb[0] * 255);
+    const interiorG = Math.round(interiorRgb[1] * 255);
+    const interiorB = Math.round(interiorRgb[2] * 255);
+    const pInt = Math.round(power);
+    const isInt = Math.abs(power - pInt) < 0.01 && pInt >= 2 && pInt <= 8;
+    for (let j = 0; j < size; j++) {
+        const yy = centerY + ((j / size) * 2 - 1) * halfExt;
+        for (let i = 0; i < size; i++) {
+            const xx = centerX + ((i / size) * 2 - 1) * halfExt;
+            let zx = 0, zy = 0;
+            let iter = 0;
+            for (; iter < MAX_ITER; iter++) {
+                const x2 = zx * zx;
+                const y2 = zy * zy;
+                if (x2 + y2 > 16) break;
+                let pzx: number, pzy: number;
+                if (isInt) {
+                    let rx = zx, ry = zy;
+                    for (let k = 1; k < pInt; k++) {
+                        const nrx = rx * zx - ry * zy;
+                        ry = rx * zy + ry * zx;
+                        rx = nrx;
+                    }
+                    pzx = rx; pzy = ry;
+                } else {
+                    const mag = Math.sqrt(x2 + y2);
+                    const ang = Math.atan2(zy, zx);
+                    const rm = Math.pow(mag, power);
+                    const ra = ang * power;
+                    pzx = rm * Math.cos(ra);
+                    pzy = rm * Math.sin(ra);
+                }
+                zx = pzx + xx;
+                zy = pzy + yy;
+            }
+            const idx = ((size - 1 - j) * size + i) * 4;
+            if (iter >= MAX_ITER) {
+                data[idx + 0] = interiorR;
+                data[idx + 1] = interiorG;
+                data[idx + 2] = interiorB;
+            } else {
+                // Smooth iteration count — standard escape-time fixup:
+                // i + 1 - log2(log2(|z|²) / 2).
+                const smoothI = iter + 1 - Math.log2(Math.max(1e-6, 0.5 * Math.log2(zx * zx + zy * zy)));
+                const t0 = smoothI * 0.05;
+                const t = t0 * repeat + phase;
+                const [r, g, b] = sampleLut(lut, t);
+                data[idx + 0] = Math.round(r);
+                data[idx + 1] = Math.round(g);
+                data[idx + 2] = Math.round(b);
+            }
+            data[idx + 3] = 255;
         }
-        zx = pzx + xx;
-        zy = pzy + yy;
-      }
-      const idx = ((size - 1 - j) * size + i) * 4;
-      if (iter >= MAX_ITER) {
-        data[idx + 0] = interiorR;
-        data[idx + 1] = interiorG;
-        data[idx + 2] = interiorB;
-      } else {
-        // Smooth iteration count — standard escape-time fixup:
-        // i + 1 - log2(log2(|z|²) / 2).
-        const smoothI = iter + 1 - Math.log2(Math.max(1e-6, 0.5 * Math.log2(zx * zx + zy * zy)));
-        const t0 = smoothI * 0.05;
-        const t = t0 * repeat + phase;
-        const [r, g, b] = sampleLut(lut, t);
-        data[idx + 0] = Math.round(r);
-        data[idx + 1] = Math.round(g);
-        data[idx + 2] = Math.round(b);
-      }
-      data[idx + 3] = 255;
     }
-  }
-  return img;
+    return img;
+};
+
+/**
+ * Cached entry point. Identical-input calls return the same ImageData
+ * without re-rasterizing. Re-orders the LRU so the most-recently-touched
+ * entry survives eviction longest.
+ */
+const renderMandelbrot = (
+    size: number,
+    centerX: number,
+    centerY: number,
+    halfExt: number,
+    lut: Uint8Array,
+    repeat: number,
+    phase: number,
+    interiorRgb: [number, number, number],
+    power: number,
+): ImageData => {
+    const key = cacheKey(size, centerX, centerY, halfExt, lut, repeat, phase, interiorRgb, power);
+    const hit = rasterCache.get(key);
+    if (hit) {
+        // Touch: delete + re-insert to move to the "most recent" end.
+        rasterCache.delete(key);
+        rasterCache.set(key, hit);
+        return hit;
+    }
+    const img = rasterMandelbrot(size, centerX, centerY, halfExt, lut, repeat, phase, interiorRgb, power);
+    rasterCache.set(key, img);
+    while (rasterCache.size > RASTER_CACHE_MAX) {
+        const oldest = rasterCache.keys().next().value;
+        if (oldest === undefined) break;
+        rasterCache.delete(oldest);
+    }
+    return img;
 };
 
 // Grey fallback so the component can render before a gradient is wired.
