@@ -96,14 +96,20 @@ PresetLogic iterates registered fields instead of hardcoding.
 ---
 
 ## F5 — AnimationEngine hardcodes camera tracks
-**Status:** 🟡 In progress (phase 5 partial — commit b82dc18)
+**Status:** 🟡 In progress — pluggable registry shipped 2026-04-23; GMT-specific cases still present as fallback
 **Severity:** Medium — couples engine to camera model.
 
 **Symptom:** [engine/AnimationEngine.ts:74-105](../engine/AnimationEngine.ts#L74-L105) explicitly wires `camera.active_index`, `camera.unified.x/y/z`, `camera.rotation.x/y/z`. Apps with a 2D camera (toy-fluid) or a VR camera (future) have dead animation tracks for fields they don't use.
 
 **Partial fix landed:** `engine/animation/cameraKeyRegistry.ts` lets apps register their own camera track list, and `AnimationEngine.getBinder` was extended with a generic `feature.param.axis` resolver (case 4) that works for any vec-shaped DDFS param. Apps with a 2D camera (fluid-toy: `sceneCamera.center.x/y`, `sceneCamera.zoom`) or a 3D orbit camera (fractal-toy: `camera.orbitTheta`, `camera.orbitPhi`, `camera.distance`, `camera.target.x/y/z`) now declare their tracks via `registerCameraKeyTracks(tracks)` and the toolbar's Key Cam button captures exactly those.
 
-**Still open:** the legacy `camera.active_index`, `camera.unified.*`, `camera.rotation.*` binders (cases 0-1 in `AnimationEngine.ts`) stay hardcoded. GMT formula ports will still need them until the full `binderRegistry.register()` design lands.
+**Progress (2026-04-23):** `engine/animation/binderRegistry.ts` now ships. `AnimationEngine.getBinder` consults it *before* any convention-based fallback, so apps can register explicit writers for composite tracks that don't fit the DDFS shape:
+
+```ts
+binderRegistry.register({ id: 'camera.fov', write: (v) => adapter.setFov(v) });
+```
+
+The legacy `camera.active_index`, `camera.unified.*`, `camera.rotation.*` branches (cases 0-1 in `AnimationEngine.ts`) stay as fallbacks so GMT's existing camera code keeps working through the port. When the GMT port lands, `@engine/camera` registers the composite writers explicitly and the fallback branches become dead code we can delete in one pass.
 
 **Docs:** [04_Core_Plugins.md § camera](04_Core_Plugins.md#enginecamera), [08_Animation.md § binder-registry](08_Animation.md#binderregistry--explicit-binders)
 
@@ -115,7 +121,18 @@ PresetLogic iterates registered fields instead of hardcoding.
 
 **Symptom:** [engine/AnimationEngine.ts:164-189](../engine/AnimationEngine.ts#L164-L189) builds a binder by name-guessing: `const setterName = 'set' + capitalize(featureName)`. Silently returns undefined when naming doesn't match.
 
-**Designed fix:** auto-bind at store-construction time via the feature registry, not at animate time by name inference. See [08_Animation.md § what-replaces-gmts-setter-name-inference](08_Animation.md#what-replaces-gmts-setter-name-inference).
+**Progress (2026-04-23):** `binderRegistry` (see F5) is the escape hatch. Apps with non-conventional setters register explicitly:
+
+```ts
+binderRegistry.register({
+  id: 'myFeature.someParam',
+  write: (v) => myCustomSetter(v),
+});
+```
+
+Explicit registration wins over the name-inference branch. Conventional features (fluid-toy's `julia`, `dye`, `fluidSim`, `sceneCamera`, `orbit` all have conventional `setJulia` / `setDye` / etc.) keep working through the auto-path — no migration required.
+
+**Still open:** auto-registering EVERY DDFS param at feature-freeze time (so the inference branch can be retired entirely) is the full fix. Deferred until the first GMT non-conventional case actually shows up — no need to churn working code.
 
 ---
 
@@ -223,8 +240,8 @@ Blocking toy-fluid port (done):
 7. ~~**F13** — generic modulation dispatch~~ 🟢 Fixed (2026-04-23)
 
 Landing next:
-8. **F5** — decouple camera from AnimationEngine (partial; full `binderRegistry.register()` pending)
-9. **F6** — auto-bind replaces name inference
+8. ~~**F5** — decouple camera from AnimationEngine~~ 🟡 escape-hatch shipped (2026-04-23); GMT-legacy branches retained as fallback until GMT port
+9. ~~**F6** — auto-bind replaces name inference~~ 🟡 escape-hatch shipped (2026-04-23); full auto-registration deferred until a non-conventional case appears
 10. **F9** — componentId validation
 
 Deferred:

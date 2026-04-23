@@ -97,38 +97,40 @@ Used by `AutoFeaturePanel`'s scalar + vec2/3/4 branches (collapsed four inlined 
 
 **Rule:** do NOT inline the `${featureId}.${key}_${axis}` format at call sites. Use `deriveTrackBinding`. Drift between AnimationEngine's binder resolution, AnimationSystem's modulation dispatch, and the UI's trackKeys is what F12 was — the helper keeps them aligned.
 
-## BinderRegistry — explicit binders (designed, not yet built)
+## BinderRegistry — explicit binders (shipped 2026-04-23)
 
-The full design is: for state that's NOT a feature param, apps register binders at boot so the animation engine has a uniform lookup rather than the current name-inference chain.
+`engine/animation/binderRegistry.ts` is the pluggable-animation escape hatch. AnimationEngine consults it *before* any convention-based fallback, so an explicit entry wins over the DDFS auto-resolver + the name-inference chain. Use it for:
+
+- **Composite camera tracks** whose writer isn't a plain setter (GMT's `camera.unified.*` → split-precision scene-offset event).
+- **Features whose slice setter doesn't follow `set${FeatureId}`** — the F6 silent-no-op case.
+- **Non-feature globals** an app wants to animate (debug tints, overlay intensities).
 
 ```ts
-// Designed API — NOT YET IMPLEMENTED. Tracked as F5 + F6.
-binderRegistry.register({
-  id: 'camera.position',
-  read:  () => store.getState().camera.position,
-  write: (v) => store.getState().camera.setPosition(v),
-  interpolate: lerpVec3,
-  category?: 'Camera',
-  label?: 'Camera Position',
+import { binderRegistry } from '../engine/animation/binderRegistry';
+
+const unregister = binderRegistry.register({
+  id: 'camera.fov',
+  write: (v) => cameraAdapter.setFov(v),
+  category: 'Camera',  // optional, for ParameterSelector UI later
+  label: 'Field of View',
 });
+// Teardown on plugin uninstall:
+unregister();
 ```
 
-**Current workaround — `cameraKeyRegistry`** (`engine/animation/cameraKeyRegistry.ts`):
+Re-registering the same id replaces the previous entry (idempotent install). `binderRegistry.list()` introspects; `window.__binders` is exposed for dev-console + smoke tests, matching the `__store` / `__camera` / `__animEngine` / `__shortcuts` pattern.
 
-Apps register the track-id list that makes up their camera pose. The shared `<TimelineToolbar>`'s Key Cam button reads this list and captures a keyframe on each track from the current store state.
+**Rule:** the engine never reaches back to ask apps "what's the setter for feature X?". Apps push binders in. The existing DDFS case-4 resolver (see the table above) remains the default for conventionally-named features, so most apps don't need to touch the registry at all — it only exists for the cases where convention breaks.
+
+### Key-Cam tracks — `cameraKeyRegistry` (complementary)
+
+`engine/animation/cameraKeyRegistry.ts` is the *keyframe-capture* side: the list of tracks that together represent the camera pose, read by the TimelineToolbar's Key Cam button. Separate from `binderRegistry` — that's the *write* side. A typical camera plugin registers on both:
 
 ```ts
-// fluid-toy/main.tsx
-import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
-
-registerCameraKeyTracks([
-  'sceneCamera.center.x',
-  'sceneCamera.center.y',
-  'sceneCamera.zoom',
-]);
+registerCameraKeyTracks(['sceneCamera.center_x', 'sceneCamera.center_y', 'sceneCamera.zoom']);
+// The default capture walks the DDFS store — no writer plumbing needed
+// unless the setter is non-conventional (then register via binderRegistry).
 ```
-
-Default capture path-resolves each track id against the DDFS store. Apps with camera state outside the store (e.g. GMT reading from `engine.activeCamera`) override with `setCameraKeyCaptureFn(fn)`.
 
 ## Keyframe model
 

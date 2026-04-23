@@ -8,6 +8,7 @@ import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
 import { getViewportCamera } from './worker/ViewportRefs';
 import { AnimationMath } from './math/AnimationMath';
+import { binderRegistry } from './animation/binderRegistry';
 
 // Local stand-in for the deleted VirtualSpace.split — used to feed the
 // split-float scene offset that GMT's deep-zoom camera expected. For a
@@ -64,12 +65,22 @@ export class AnimationEngine {
     }
 
     private getBinder(id: string): ValueSetter {
+        // Explicit registration wins — checked BEFORE the per-id cache
+        // so that registering a custom binder AFTER a previous lookup
+        // (which would have cached a DDFS-derived writer in this.binders)
+        // still takes effect immediately. The registry is O(1) lookup
+        // itself; no second-level caching needed, and caching the
+        // registered writer would leak stale entries across
+        // register/unregister cycles.
+        const registered = binderRegistry.lookup(id);
+        if (registered) return registered.write;
+
         if (this.binders.has(id)) {
             return this.binders.get(id)!;
         }
 
-        let binder: ValueSetter = () => {}; 
-        
+        let binder: ValueSetter = () => {};
+
         // 0. Active Camera Switcher
         if (id === 'camera.active_index') {
             binder = (v) => {
