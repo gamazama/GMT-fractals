@@ -106,6 +106,7 @@ export default defineConfig({
         main: path.resolve(__dirname, 'index.html'),
         'toy-fluid': path.resolve(__dirname, 'toy-fluid.html'),
         'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
+        'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
       },
       output: {
         manualChunks: {
