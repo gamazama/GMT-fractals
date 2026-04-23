@@ -14,11 +14,17 @@
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
+import { defineEnumParam } from '../../engine/defineEnumParam';
 
-// Index-to-string map for the `kind` enum. AutoFeaturePanel reads the
-// options array for the dropdown labels; FluidToyApp uses the parallel
-// string map to call FluidEngine.setParams({ kind }).
-export const KIND_MODES = ['julia', 'mandelbrot'] as const;
+// Index-to-string map for the `kind` enum. Default = 1 (Mandelbrot),
+// matching FluidEngine.DEFAULT_PARAMS.kind so existing save files round-trip.
+const kindParam = defineEnumParam(
+    ['julia', 'mandelbrot'] as const,
+    'Fractal Kind',
+    { defaultIndex: 1 },
+);
+export const KIND_MODES = kindParam.values;
+export const kindFromIndex = kindParam.fromIndex;
 
 export const JuliaFeature: FeatureDefinition = {
     id: 'julia',
@@ -46,15 +52,7 @@ export const JuliaFeature: FeatureDefinition = {
     ],
 
     params: {
-        kind: {
-            type: 'float',  // numeric index — AutoFeaturePanel dropdown when options are set
-            default: 1,     // matches FluidEngine.DEFAULT_PARAMS.kind = 'mandelbrot'
-            label: 'Fractal Kind',
-            options: [
-                { label: 'Julia',      value: 0 },
-                { label: 'Mandelbrot', value: 1 },
-            ],
-        },
+        kind: kindParam.config,
         juliaC: {
             type: 'vec2',
             default: { x: -0.36303304426511473, y: 0.16845183018751916 },

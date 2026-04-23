@@ -14,9 +14,16 @@
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
+import { defineEnumParam } from '../../engine/defineEnumParam';
 
 // Maps DDFS numeric forceMode to FluidEngine's string tag.
-export const FORCE_MODES = ['gradient', 'curl', 'iterate', 'c-track', 'hue'] as const;
+const forceModeParam = defineEnumParam(
+    ['gradient', 'curl', 'iterate', 'c-track', 'hue'] as const,
+    'Force Mode',
+    { optionLabels: { 'c-track': 'C-Track' } },
+);
+export const FORCE_MODES = forceModeParam.values;
+export const forceModeFromIndex = forceModeParam.fromIndex;
 
 export const FluidSimFeature: FeatureDefinition = {
     id: 'fluidSim',
@@ -37,18 +44,7 @@ export const FluidSimFeature: FeatureDefinition = {
         pressureIters:  { type: 'int',   default: 50,   min: 1,    max: 200,  step: 1,     label: 'Pressure Iterations' },
         dissipation:    { type: 'float', default: 0.17, min: 0,    max: 4,    step: 0.001, label: 'Velocity Decay' },
 
-        forceMode: {
-            type: 'float',  // numeric index — AutoFeaturePanel dropdown renders when options are present
-            default: 0,
-            label: 'Force Mode',
-            options: [
-                { label: 'Gradient', value: 0 },
-                { label: 'Curl',     value: 1 },
-                { label: 'Iterate',  value: 2 },
-                { label: 'C-Track',  value: 3 },
-                { label: 'Hue',      value: 4 },
-            ],
-        },
+        forceMode: forceModeParam.config,
         forceGain:     { type: 'float',   default: -1200, min: -5000, max: 5000, step: 1,    label: 'Force Gain' },
         interiorDamp:  { type: 'float',   default: 0.59,  min: 0,     max: 1,    step: 0.01, label: 'Interior Damp' },
         paused:        { type: 'boolean', default: false,                                     label: 'Pause Sim' },

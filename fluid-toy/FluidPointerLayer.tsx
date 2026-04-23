@@ -37,6 +37,7 @@ import {
     PRECISION_SHIFT_MULT,
     PRECISION_ALT_MULT,
 } from './constants';
+import { brushModeFromIndex } from './features/dye';
 
 export interface FluidPointerLayerProps {
     canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -274,19 +275,15 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const strength = Math.min(50, Math.hypot(vx, vy));
 
                 // Brush-mode split — all four modes reuse FluidEngine's
-                // additive splat; the per-mode shaping happens here:
-                //   paint  → inject dye + force (classic)
-                //   erase  → subtract dye (negative grayscale), no force
-                //   stamp  → inject dye, no force (press-and-drag trail)
-                //   smudge → inject force only, no dye (push colour around)
-                const brushMode = Math.floor(
-                    (useFractalStore.getState() as any).dye?.brushMode ?? 0
+                // additive splat; the per-mode shaping happens here.
+                const brushMode = brushModeFromIndex(
+                    (useFractalStore.getState() as any).dye?.brushMode
                 );
 
-                if (brushMode === 1) {
-                    // Erase — always fire (no velocity threshold, otherwise
-                    // holding still doesn't erase anything). Negative
-                    // grayscale subtracts luminance from the HDR dye buffer.
+                if (brushMode === 'erase') {
+                    // Always fire (no velocity threshold, otherwise holding
+                    // still doesn't erase anything). Negative grayscale
+                    // subtracts luminance from the HDR dye buffer.
                     const eraseStrength = 0.5;
                     engine.splatForce(u, v, 0, 0, 0, [-eraseStrength, -eraseStrength, -eraseStrength]);
                     return;
@@ -301,15 +298,14 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const g = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.333));
                 const b = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.667));
 
-                if (brushMode === 2) {
-                    // Stamp — dye only, zero force. Dye strength scaled so
-                    // standing still (strength=0) still leaves a mark.
+                if (brushMode === 'stamp') {
+                    // Dye only, zero force.
                     engine.splatForce(u, v, 0, 0, 0, [r, g, b]);
-                } else if (brushMode === 3) {
-                    // Smudge — force only, no dye.
+                } else if (brushMode === 'smudge') {
+                    // Force only, no dye.
                     engine.splatForce(u, v, vx, vy, strength, [0, 0, 0]);
                 } else {
-                    // Paint (default / mode 0).
+                    // Paint (default).
                     engine.splatForce(u, v, vx, vy, strength, [r, g, b]);
                 }
                 return;
