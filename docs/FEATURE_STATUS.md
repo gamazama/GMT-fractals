@@ -74,9 +74,9 @@ Legend:
 | Feature | Panel label | Params | Status |
 |---|---|---|---|
 | `fluidSim` | Fluid | Resolution (auto-scaled), Vorticity, Vorticity Scale, Pressure Iters, Velocity Decay, Force Mode (enum: Gradient/Curl/Iterate/C-Track/Hue), Force Gain, Interior Damp, Pause Sim | ✅ all editable |
-| `julia` | Julia | Julia c (vec2), Iterations, Escape R, Power | ✅ scalars; 🟡 Julia c is vec2 (F12) |
+| `julia` | Julia | Fractal Kind (Julia / Mandelbrot), Julia c (vec2), Iterations, Escape R, Power | ✅ all editable + keyframeable (F12/F13 + AutoFeaturePanel vec2 trackKeys all landed 2026-04-23) |
 | `dye` | Dye | Palette (gradient), Collision Mask (gradient), Dye Inject, Dye Decay, Dye Mix, Gradient Repeat, Gradient Phase | ✅ |
-| `sceneCamera` | View | Center (vec2), Zoom | ✅ scalars; 🟡 Center is vec2 (F12) |
+| `sceneCamera` | View | Center (vec2), Zoom | ✅ all editable + keyframeable; canvas wheel/right-drag/middle-drag all write through this slice |
 | `orbit` | Orbit | Auto Orbit (bool), Radius, Speed (Hz) | ✅ — toggle registers two LFOs into `animations` array |
 
 ### Hotkeys (fluid-toy scope)
@@ -90,16 +90,24 @@ Legend:
 | Ctrl+1..9 | Save camera slot | ✅ |
 | 1..9 | Recall camera slot | ✅ |
 | Ctrl+Z / Ctrl+Y | Undo / redo | ✅ |
-| Ctrl+S | Save scene | ✅ (via `@engine/scene-io` shortcut) |
+| Ctrl+S | Save scene (opens menu) | ✅ via `@engine/scene-io` |
+| Alt+S | Quick Save PNG | ✅ via `@engine/scene-io` (Ctrl+Shift+S is browser-reserved) |
+
+### Canvas gestures (`FluidPointerLayer.tsx`)
+| Gesture | Status | Test how |
+|---|---|---|
+| Left-drag → splat (hue-cycled rainbow trail) | ✅ | Drag on canvas. |
+| Right-drag → pan scene camera | ✅ | Right-mouse drag past ~5 px; world-point under cursor stays locked. |
+| Right-click (no drag) → canvas context menu | ✅ | Right-click without moving: menu with Copy Julia c / Pause / Orbit / Recenter / Reset. |
+| Wheel → cursor-anchored zoom | ✅ | Scroll on canvas; the point under cursor stays fixed. |
+| Middle-drag → click-point-anchored zoom | ✅ | Middle-mouse vertical drag; exponential, pivots around press point. |
+| Shift = 5× coarser, Alt = 0.2× finer | ✅ | Modifier multipliers on all three camera gestures. |
 
 ### Viewport / interaction
 | Capability | Status | Note |
 |---|---|---|
 | Canvas mounts via `<ViewportFrame>` | ✅ | |
-| Pointer → splat (drag to dye/force) | ✅ | `FluidPointerLayer.tsx` |
 | Adaptive-quality down-res during interaction | ✅ | Uses `qualityFraction` from viewport plugin |
-| Mouse wheel → zoom `sceneCamera.zoom` | 🔴 unverified | Needs manual confirmation |
-| Drag-to-pan `sceneCamera.center` | 🔴 unverified | |
 | Gesture-mode switcher (brush / emitter / pick-c / pan-zoom) | 🔴 not built | Reference toy-fluid has a gesture-mode selector; engine port hasn't surfaced one yet |
 | Particle emitter overlay | 🔴 not built | Reference toy-fluid feature |
 | Artist brush preview | 🔴 not built | |

@@ -130,4 +130,4 @@ The GMT fractal explorer's documentation is preserved under its original numberi
 
 ---
 
-*Engine fork point: GMT 0.9.2 (commit ece5c84). Last doc refresh: 2026-04-23 (phases 1-5 landed, HANDOFF + fragility audit + plugin docs synced with code).*
+*Engine fork point: GMT 0.9.2 (commit ece5c84). Last doc refresh: 2026-04-23 afternoon (post-phase-5 cleanup: F12 + F13 landed, trackBinding helper extracted, canvas pan/zoom/middle-drag/right-click menu wired, Julia/Mandelbrot kind switch, Screenshot folded into SceneIO with Alt+S hotkey, design-principles section added to 01_Architecture).*

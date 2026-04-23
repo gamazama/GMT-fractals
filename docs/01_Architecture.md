@@ -2,27 +2,43 @@
 
 Foundation doc. Describes the engine's three-tier model (core → core plugins → apps), the render-loop contract, and the boundaries that separate them.
 
+## Design principles
+
+The engine exists to host multiple creative-tool apps on one substrate — initially GMT (fractal explorer) and fluid-toy (Julia/Mandelbrot fluid playground), and any future app that fits the "realtime canvas + parameter panel + timeline" shape. The target experience is that **writing a new app on this engine feels like declaring intent, not plumbing pipes.** Ship a feature registration, get a panel + save/load + keyframes + undo for free.
+
+Five rules we apply:
+
+1. **Generic by default, specific by exception.** Every path in the engine serves at least two apps. Anything that only GMT or only fluid-toy needs stays in the app folder. GMT-era residue (e.g. `AnimationSystem`'s old `julia.*` / `coloring.*` / `geometry.*` target hijacks) is gated on the slice actually existing (F13), not assumed.
+2. **Hoist patterns at first duplicate.** When the same derivation / plumbing shows up in two or more places, extract it up into the engine layer immediately — don't ship a second copy with "TODO: unify later." See `engine/animation/trackBinding.ts` as the canonical example (collapsed four inlined copies of DDFS track-ID derivation into one helper with a smoke test covering all shapes).
+3. **No duplicate UX.** If two surfaces produce byte-identical output, they are one surface with two entry points. The `@engine/screenshot` plugin was sketched as separate then folded into `@engine/scene-io` once we noticed its `capture()` was identical to "Save PNG…". One helper (`saveCurrentPng`) backs the dropdown, the standalone camera button, and the Alt+S hotkey.
+4. **Follow GMT patterns when porting — don't reinvent.** GMT is the senior dependency. Its `AnimationSystem.tick`, its `EngineBridge`, its `<RenderLoopDriver />` are reused as-is rather than rewritten from scratch; the engine just mounts them in its own tick registry. The goal is that GMT itself will port onto the engine as a plugin with minimal formula-specific rewriting.
+5. **Apps write features. Everything else is a plugin.** No app should need to touch engine core, engine plugins, or any other app's code. The preset-field registry, the binder registry (in progress — F5/F6), the topbar slot API, the camera adapter: all exist so apps contribute via opt-in registration.
+
+These rules aren't aspirational — they've been enforced at commit boundaries throughout phases 1–5 and the post-phase-5 cleanup. When we catch one being broken, we fix it *in the commit that caught it*, not later.
+
+
 ## The three tiers
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  APPS                                                       │
 │    - GMT (fractals): formula library, raymarching, lights   │
-│    - toy-fluid:      fluid sim, brush, particle emitter     │
+│    - fluid-toy:      fluid sim, brush, Julia/Mandelbrot     │
 │    - <your app>:     anything                               │
 │                                                             │
 │    Each app installs the core plugins it wants, registers   │
 │    its own features + bridges, and takes canvas ownership.  │
 ├─────────────────────────────────────────────────────────────┤
 │  CORE PLUGINS (ship with engine, opt-in per app)            │
-│    @engine/shortcuts   @engine/undo      @engine/animation  │
-│    @engine/scene-io    @engine/screenshot  @engine/topbar   │
-│    @engine/camera      @engine/render-loop                  │
+│    @engine/shortcuts   @engine/undo        @engine/animation│
+│    @engine/scene-io    @engine/topbar      @engine/camera   │
+│    @engine/viewport    @engine/render-loop                  │
 ├─────────────────────────────────────────────────────────────┤
 │  CORE (tiny, opinionated)                                   │
 │    featureRegistry      binderRegistry    bridgeRegistry    │
 │    componentRegistry    TickRegistry      EventBus          │
 │    ShaderBuilder        SceneFormat       store primitives  │
+│    trackBinding         animationEngine                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -50,8 +66,7 @@ See [04_Core_Plugins.md](04_Core_Plugins.md) for per-plugin surface. Short versi
 | `@engine/shortcuts` | Keyboard registry, scope stack, priority resolution |
 | `@engine/undo` | Unified transaction stack, scoped groups, debounce |
 | `@engine/animation` | Timeline, keyframes, modulation, auto-binding to DDFS params |
-| `@engine/scene-io` | Save/load UI, file pickers, PNG/JSON/URL surfaces on top of `SceneFormat` |
-| `@engine/screenshot` | Canvas → PNG with metadata embed |
+| `@engine/scene-io` | Save/load UI, file pickers, PNG/JSON/URL surfaces + one-click "screenshot" camera button + Alt+S hotkey, all on top of `SceneFormat` |
 | `@engine/topbar` | Slot-host component + registration API |
 | `@engine/camera` | Camera data shape, slot save/recall, animation binders. NOT navigation input. |
 | `@engine/render-loop` | Default RAF driver that calls `runTicks(dt)` each frame |

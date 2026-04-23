@@ -72,6 +72,31 @@ Animating a gradient param crossfades the two gradient configs linearly as LUTs.
 
 **Rule:** v1 gradient animation = whole-gradient crossfade. Don't block feature work on per-stop.
 
+## trackBinding helper (canonical derivation)
+
+`engine/animation/trackBinding.ts` is the single source of truth for the DDFS track-ID convention:
+
+```ts
+import { deriveTrackBinding, readLiveVec } from '../engine/animation/trackBinding';
+
+const binding = deriveTrackBinding({
+    featureId: 'julia',
+    paramKey: 'juliaC',
+    label: 'Julia c',
+    axes: ['x', 'y'],                  // [] for scalar, ['x','y','z'] for vec3, etc.
+    composeFrom: config.composeFrom,   // compound-widget override
+});
+// binding.trackKeys  = ['julia.juliaC_x', 'julia.juliaC_y']
+// binding.trackLabels = ['Julia c X', 'Julia c Y']
+
+const liveVec = readLiveVec(store.liveModulations, binding);
+// → THREE.Vector2 | Vector3 | Vector4 | undefined
+```
+
+Used by `AutoFeaturePanel`'s scalar + vec2/3/4 branches (collapsed four inlined copies of the same derivation into one call), by `@engine/camera`'s keyframe registry, and by any DDFS input primitive that wants to participate in animation. The `composeFrom` escape hatch emits one track per listed param key (`featureId.composedKey`) — used when a feature bundles multiple scalar params into one vector widget (e.g. GMT's orbit camera with `orbitTheta`, `orbitPhi`, `distance`).
+
+**Rule:** do NOT inline the `${featureId}.${key}_${axis}` format at call sites. Use `deriveTrackBinding`. Drift between AnimationEngine's binder resolution, AnimationSystem's modulation dispatch, and the UI's trackKeys is what F12 was — the helper keeps them aligned.
+
 ## BinderRegistry — explicit binders (designed, not yet built)
 
 The full design is: for state that's NOT a feature param, apps register binders at boot so the animation engine has a uniform lookup rather than the current name-inference chain.

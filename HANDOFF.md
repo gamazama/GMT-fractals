@@ -2,7 +2,7 @@
 
 **Location:** `h:/GMT/gmt-engine/`
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
-**Status:** ✅ **Phases 1–5 complete (2026-04-23).** Two playground apps (`fractal-toy.html`, `fluid-toy.html`) boot on the engine with the full shared chrome: topbar, viewport with adaptive quality, scene save/load, shortcuts, unified undo, camera slots, animation timeline with playback. `npx tsc --noEmit` → 0 errors. Six of ten designed core plugins are shipped; see `docs/04_Core_Plugins.md` for the current map.
+**Status:** ✅ **Phases 1–5 complete + post-phase-5 cleanup (2026-04-23).** Two playground apps (`fractal-toy.html`, `fluid-toy.html`) boot on the engine with the full shared chrome: topbar, viewport with adaptive quality, scene save/load with Alt+S screenshot, shortcuts, unified undo, camera slots, animation timeline with keyframe playback + vec2 binding, canvas pan/zoom/middle-drag/right-click menu. `npx tsc --noEmit` → 0 errors. Eight core plugins shipped; F12, F13 fixed; trackBinding helper extracted. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
 
 **📐 Architecture baseline committed (2026-04-22).** 12 engine-scope docs written under `docs/01_*` through `docs/20_*`. Start any session with `docs/DOCS_INDEX.md`; the table in `CLAUDE.md` maps "working on X" → "read Y". All design decisions (core+plugins model, feature isolation, unified undo, auto-binding animation, bridges/derived) live in those docs. Any architectural change goes in a doc before it goes in code.
 
@@ -133,31 +133,44 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 
 **Verified via `debug/smoke-anim-play.mts`:** playback advances frame 0 → 73.5 in 700ms; a 2-keyframe track on `julia.power` (2 → 6 over 30 frames) drives the bound param correctly.
 
-### 🚧 Known gaps after Phase 5
+### ✅ Post-phase-5 cleanup (2026-04-23 afternoon)
 
-Identified in headless + manual testing:
+Everything flagged as "known gaps after Phase 5" has landed:
 
-- **Vec2 animation tracks use UNDERSCORE format** (`featureId.key_x` / `_y`) per AutoFeaturePanel convention, but Phase 5's additions (orbit LFO targets, `cameraKeyRegistry` default paths, `AnimationEngine.getBinder` 3-part extension) use DOT format (`feature.param.x`). Result: vec2 controls don't show live modulation; Key Cam for vec2-backed camera poses doesn't round-trip cleanly. Fix queued — flip DOT→UNDERSCORE in `fluid-toy/orbitTick.ts`, `fluid-toy/main.tsx` + `fractal-toy/main.tsx` camera-track registration, and `AnimationEngine.getBinder`.
-- **Right-click context menus** — `<GlobalContextMenu />` mounted but some entry points (timeline ruler, keyframe dots) may still need wire-up verification.
+- **F12** 🟢 — UNDERSCORE vec binder in `AnimationEngine.getBinder` via shared `writeVecAxis` helper. Camera Key Cam + AutoFeaturePanel vec2/3/4 all line up on one convention. (commit `be62d7d`)
+- **F13** 🟢 — GMT-specific target hijacks (`julia.*` / `coloring.*` / `geometry.*Rot`) in `AnimationSystem.tsx` gated on their slices. Generic DDFS vec + scalar fallback populates `liveModulations` without requiring a `uniform` declaration. (commit `be62d7d`)
+- **trackBinding helper** extracted to `engine/animation/trackBinding.ts`. `deriveTrackBinding()` + `readLiveVec()` are the canonical track-ID derivation — AutoFeaturePanel's four branches all route through it. (commit `252060a`)
+- **Canvas right-click menu** wired on fluid-toy (Copy Julia c / Pause / Orbit / Recenter / Reset). (commit `ae13ce2`)
+- **Canvas pan + wheel + middle-drag zoom** in `FluidPointerLayer.tsx`. Right-drag pans, wheel zooms cursor-anchored, middle-drag zooms click-point-anchored. (commits `e518f47`, `bf1ba8d`)
+- **Julia/Mandelbrot kind switch** as a DDFS enum param. (commit `3549d4e`)
+- **Vec2 keyframe buttons** in AutoFeaturePanel (the missing `trackKeys` prop on Vector2Input). (commit `acb530c` — immediately superseded by the trackBinding refactor.)
+- **Screenshot folded into scene-io** — standalone camera button + `Alt+S` hotkey + dropdown "Save PNG…" all route through one `saveCurrentPng` helper. `Ctrl+Shift+S` is browser-reserved, never reaches JS. (commit `a6795da`)
 
 ## Remaining work
 
-### Designed plugins not yet shipped
-- **`@engine/screenshot`** (`installScreenshot()`) — canvas → PNG with metadata; auto-detect via viewport registry; topbar camera icon. Design in `docs/04_Core_Plugins.md`.
-- **`@engine/environment`** (implied in architecture but not explicit) — theme, DPR, mobile-detect.
-- **Help system integration** — the shared chrome has `HelpBrowser.tsx` + `helpUtils.ts`; not yet surfaced as `@engine/help`.
+### Not-yet-built plugins
+- **`@engine/environment`** — theme, DPR, mobile-detect. Placeholder in the roadmap; no concrete need yet.
+- **`@engine/help`** — the shared chrome has `HelpBrowser.tsx` + `helpUtils.ts`; not yet surfaced as a core plugin. Per-panel help IDs already wire through `useHelpContextMenu`.
 
 ### Fragilities still open
 See `docs/20_Fragility_Audit.md` for full list.
 - **F5** — AnimationEngine hardcodes legacy camera tracks (`camera.unified.*`, `camera.rotation.*`). Clean fix is `@engine/camera` registering its own binders via a proper `binderRegistry`. Current mitigation: `cameraKeyRegistry` lets apps opt out of the legacy tracks.
-- **F6** — `set${Feature}` name inference in `AnimationEngine.getBinder`. Replace with auto-bind at freeze time.
+- **F6** — `set${Feature}` name inference in `AnimationEngine.getBinder`. Replace with auto-bind at freeze time (tied to F5's `binderRegistry.register()`).
 - **F7** — `animationStore ↔ fractalStore` circular import via `window.useAnimationStore`. Express as explicit bridge (see `docs/09_Bridges_and_Derived.md`).
 - **F9** — `componentId` references not validated at registry freeze.
 
+### Fluid-toy polish (app-level, not architectural)
+- Gesture-mode switcher (brush / emitter / pick-c / pan-zoom).
+- MandelbrotPicker overlay (bottom-right mini-canvas to click-pick `julia.juliaC`).
+- ~34 DDFS params from the reference not yet ported (tone mapping, bloom, orbit-trap coloring, etc.).
+
+### The real confidence anchor
+- **Port one GMT formula (Mandelbulb) end-to-end** through the engine — `ShaderBuilder.addSection`, `CompileGate`, the worker proxy path. Until this runs, "GMT on the engine" is theoretical. Until F5/F6 land, GMT's camera will be using legacy binders rather than a clean `binderRegistry.register()` path.
+
 ### Deferred
-- **Rename pass** — `fractalStore` → `engineStore`, `FractalEvents` → `EngineEvents`, etc. Single commit after more apps have ported.
+- **F11 rename pass** — `fractalStore` → `engineStore`, `FractalEvents` → `EngineEvents`, etc. Single commit after the GMT vertical slice lands.
 - **F8** — UI state undo (panel collapse, timeline scroll).
-- **F10** — `formula` field rename to `mode` (cosmetic).
+- **F10** — `formula` field rename to `mode` (cosmetic; bundle with F11).
 
 ## How to resume
 

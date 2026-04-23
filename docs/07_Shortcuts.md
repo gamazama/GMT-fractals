@@ -145,11 +145,9 @@ When multiple plugins are installed, they register their default bindings. Apps 
 |---|---|
 | `Ctrl+S` | Save (opens save menu) |
 | `Ctrl+O` | Open (opens file picker) |
+| `Alt+S` | Quick Save PNG (scene-io's folded-in screenshot) |
 
-### `@engine/screenshot`
-| Key | Action |
-|---|---|
-| `Ctrl+Shift+S` | Capture with metadata |
+`Ctrl+Shift+S` is browser-reserved for "Save Page As" and never reaches JS — do not use it. `Alt+S` is unclaimed across major browsers and maps to Option+S on Mac.
 
 ## Shortcut-help overlay
 
