@@ -27,6 +27,7 @@ import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
+import { installUndo } from '../engine/plugins/Undo';
 import { installOrbitSync } from './orbitTick';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -81,6 +82,10 @@ installModulation();
 // dispatcher. Hotkey registrations happen inside FluidToyApp so they
 // can close over engineRef for FluidEngine.resetFluid().
 installShortcuts();
+
+// @engine/undo — unified transaction stack. Ctrl+Z / Ctrl+Y via
+// @engine/shortcuts; Undo/Redo buttons in topbar's right slot.
+installUndo();
 
 // Orbit → animations array sync. When orbit DDFS params change, we
 // rewrite the two sine LFOs on julia.juliaC.x/.y that drive the orbit.

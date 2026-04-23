@@ -1,17 +1,27 @@
 /**
- * HistorySlice — generic undo/redo for feature state and camera gestures.
+ * HistorySlice — unified transaction stack with scope labels.
  *
- * Two independent stacks:
- *   - paramUndoStack / paramRedoStack — parameter snapshots (driven by
- *     featureRegistry iteration so any registered feature automatically
- *     participates; zero maintenance when features are added/removed)
- *   - undoStack / redoStack — camera pose snapshots (CameraState) with
- *     gesture debouncing so a single orbit drag produces one undo entry
+ * One undoStack + one redoStack. Each entry is a Transaction carrying
+ * its scope ('param' | 'camera' | 'animation' | 'ui' | string) and a
+ * diff-based snapshot (partial store state — only keys that changed).
  *
- * Nothing here assumes a particular render pipeline, graph structure, or
- * pipeline-revision concept. App-layer code (e.g. a graph-editor plugin)
- * that needs custom snapshot handling for its own structured state adds
- * a separate snapshot hook; this slice stays minimal.
+ * The scope labels replace the previous three-stack design
+ * (F2b in docs/20_Fragility_Audit.md). Apps can pop the most recent
+ * transaction regardless of scope (undo()), or filter to a specific
+ * scope (undo('camera')) — the latter is how the timeline's dedicated
+ * Ctrl+Z can skip param entries to operate only on animation edits.
+ *
+ * Backward-compat API (kept for existing consumers):
+ *   handleInteractionStart / handleInteractionEnd — unchanged signature
+ *   undoParam / redoParam     — delegate to undo('param') / redo('param')
+ *   undoCamera / redoCamera   — delegate to undo('camera') / redo('camera')
+ *
+ * New unified API:
+ *   undo(scope?)       — pop newest matching (or any), apply diff
+ *   redo(scope?)       — pop newest matching on redo stack, apply
+ *   canUndo(scope?)    — for UI enable/disable
+ *   canRedo(scope?)
+ *   peekUndo(scope?)   — inspect newest matching
  */
 
 import { StateCreator } from 'zustand';
@@ -21,31 +31,55 @@ import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { featureRegistry } from '../../engine/FeatureSystem';
 
+export type UndoScope = 'param' | 'camera' | 'animation' | 'ui' | string;
+
+export interface Transaction {
+    scope: UndoScope;
+    label?: string;
+    /** Diff snapshot: only keys that changed. Undo applies this; redo
+     *  captures the current state of the same keys. */
+    diff: Partial<FractalStoreState>;
+    /** Origin timestamp (ms) for debug / debounce. */
+    timestamp: number;
+}
+
 export interface HistorySliceState {
-    paramUndoStack: Partial<FractalStoreState>[];
-    paramRedoStack: Partial<FractalStoreState>[];
+    undoStack: Transaction[];
+    redoStack: Transaction[];
+    /** Pre-interaction snapshot captured by handleInteractionStart. */
     interactionSnapshot: Partial<FractalStoreState> | null;
-    undoStack: CameraState[];
-    redoStack: CameraState[];
+    /** Scope of the in-progress interaction (drives the eventual commit). */
+    interactionScope: UndoScope | null;
 }
 
 export interface HistorySliceActions {
-    undoParam: () => void;
-    redoParam: () => void;
-    resetParamHistory: () => void;
-    undoCamera: () => void;
-    redoCamera: () => void;
+    /** Unified undo/redo. Scope arg filters to that scope; omit for
+     *  "most recent across any scope". */
+    undo: (scope?: UndoScope) => boolean;
+    redo: (scope?: UndoScope) => boolean;
+    canUndo: (scope?: UndoScope) => boolean;
+    canRedo: (scope?: UndoScope) => boolean;
+    peekUndo: (scope?: UndoScope) => Transaction | null;
+    peekRedo: (scope?: UndoScope) => Transaction | null;
+    clearHistory: () => void;
+
+    // Interaction boundary (set by primitives + pointer layers).
     handleInteractionStart: (mode?: 'camera' | 'param' | CameraState) => void;
     handleInteractionEnd: () => void;
+
+    // Backward-compat shims — delegate to the unified API.
+    undoParam: () => void;
+    redoParam: () => void;
+    undoCamera: () => void;
+    redoCamera: () => void;
+    resetParamHistory: () => void;
 }
 
 export type HistorySlice = HistorySliceState & HistorySliceActions;
 
-/**
- * Snapshots every registered feature's slice state. Generic: iterates the
- * feature registry so new features are captured automatically without
- * editing this file.
- */
+/** Snapshots every registered feature's slice state + any top-level
+ *  preset-round-trippable fields. Generic: iterates the feature
+ *  registry so new features are captured automatically. */
 const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
     const snap: Partial<FractalStoreState> = {
         renderRegion: s.renderRegion ? { ...s.renderRegion } : null,
@@ -59,7 +93,6 @@ const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
     return snap;
 };
 
-/** Captures a fresh snapshot of the keys present in `template` for redo. */
 const captureStateForKeys = (keys: string[], current: FractalStoreState): Partial<FractalStoreState> => {
     const snap: Partial<FractalStoreState> = {};
     for (const k of keys) {
@@ -68,35 +101,32 @@ const captureStateForKeys = (keys: string[], current: FractalStoreState): Partia
     return snap;
 };
 
-/**
- * Applies a stored snapshot back into the store. Walks keys and invokes the
- * matching DDFS setter (`set<Key>`) so feature-level uniform sync and compile
- * triggers fire naturally. Falls back to raw `set()` if no setter exists.
- */
 const applyStateRestore = (data: Partial<FractalStoreState>, set: any, get: any) => {
     const actions = get();
-
     set(data);
-
     for (const k of Object.keys(data)) {
         const val = (data as any)[k];
-        if (k === 'formula') {
-            FractalEvents.emit('config', { formula: val });
-            continue;
-        }
+        if (k === 'formula') { FractalEvents.emit('config', { formula: val }); continue; }
         const setterName = 'set' + k.charAt(0).toUpperCase() + k.slice(1);
-        if (typeof actions[setterName] === 'function') {
-            actions[setterName](val);
-        }
+        if (typeof actions[setterName] === 'function') actions[setterName](val);
     }
-
     engine.resetAccumulation();
 };
 
-// Debounce window so a single orbit/fly gesture doesn't create multiple
-// undo entries from micro-pauses mid-drag.
+const MAX_STACK = 50;
 const CAMERA_UNDO_DEBOUNCE_MS = 1500;
 let lastCameraUndoPush = 0;
+
+/** Find index (in the given stack) of newest entry matching scope.
+ *  scope undefined → newest of any scope. Returns -1 if none. */
+const findMatchIdx = (stack: Transaction[], scope?: UndoScope): number => {
+    if (stack.length === 0) return -1;
+    if (!scope) return stack.length - 1;
+    for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].scope === scope) return i;
+    }
+    return -1;
+};
 
 export const createHistorySlice: StateCreator<
     FractalStoreState & FractalActions & HistorySlice,
@@ -104,28 +134,35 @@ export const createHistorySlice: StateCreator<
     [],
     HistorySlice
 > = (set, get) => ({
-    paramUndoStack: [],
-    paramRedoStack: [],
-    interactionSnapshot: null,
     undoStack: [],
     redoStack: [],
+    interactionSnapshot: null,
+    interactionScope: null,
 
     handleInteractionStart: (mode) => {
         set({ isUserInteracting: true });
 
-        // Case 1: Camera snapshot (gesture start)
+        // Camera gesture — immediate push with debounce (matches the
+        // previous behaviour; a single orbit drag collapses into one
+        // transaction via the debounce window).
         if (mode && typeof mode === 'object' && (mode as any).position) {
             const camState = mode as unknown as CameraState;
             const now = Date.now();
             const elapsed = now - lastCameraUndoPush;
 
-            if (elapsed < CAMERA_UNDO_DEBOUNCE_MS && get().undoStack.length > 0) {
-                // Within debounce — keep existing top-of-stack
+            if (elapsed < CAMERA_UNDO_DEBOUNCE_MS && get().undoStack.some((t) => t.scope === 'camera')) {
+                // Within debounce — keep existing camera entry.
             } else {
+                const tx: Transaction = {
+                    scope: 'camera',
+                    label: 'Camera gesture',
+                    diff: { cameraRot: camState.rotation } as Partial<FractalStoreState>,
+                    timestamp: now,
+                };
                 set((state: any) => {
-                    const newStack = [...state.undoStack, camState];
+                    const next = [...state.undoStack, tx];
                     return {
-                        undoStack: newStack.length > 50 ? newStack.slice(-50) : newStack,
+                        undoStack: next.length > MAX_STACK ? next.slice(-MAX_STACK) : next,
                         redoStack: [],
                     };
                 });
@@ -134,16 +171,18 @@ export const createHistorySlice: StateCreator<
             return;
         }
 
-        // Case 2: Parameter snapshot
+        // Parameter interaction — snapshot now, commit on handleInteractionEnd
+        // if anything actually changed.
         const snap = getParamSnapshot(get());
-        set({ interactionSnapshot: snap });
+        set({ interactionSnapshot: snap, interactionScope: 'param' });
     },
 
     handleInteractionEnd: () => {
         set({ isUserInteracting: false });
 
-        const { interactionSnapshot, aaMode, aaLevel, msaaSamples, dpr } = get();
+        const { interactionSnapshot, interactionScope, aaMode, aaLevel, msaaSamples, dpr } = get() as any;
 
+        // Restore DPR to interactive baseline (kept from the original code).
         const targetDpr = (aaMode === 'Auto' || aaMode === 'Always') ? aaLevel : 1.0;
         if (Math.abs(dpr - targetDpr) > 0.0001) {
             set({ dpr: targetDpr });
@@ -167,81 +206,84 @@ export const createHistorySlice: StateCreator<
         }
 
         if (hasChanges) {
+            const tx: Transaction = {
+                scope: (interactionScope as UndoScope) ?? 'param',
+                diff,
+                timestamp: Date.now(),
+            };
             set((state: any) => {
-                const newStack = [...state.paramUndoStack, diff];
+                const next = [...state.undoStack, tx];
                 return {
-                    paramUndoStack: newStack.length > 50 ? newStack.slice(-50) : newStack,
-                    paramRedoStack: [],
+                    undoStack: next.length > MAX_STACK ? next.slice(-MAX_STACK) : next,
+                    redoStack: [],
                     interactionSnapshot: null,
+                    interactionScope: null,
                 };
             });
         } else {
-            set({ interactionSnapshot: null });
+            set({ interactionSnapshot: null, interactionScope: null });
         }
     },
 
-    undoParam: () => {
-        const { paramUndoStack, paramRedoStack } = get();
-        if (paramUndoStack.length === 0) return;
+    // ── Unified undo / redo ────────────────────────────────────────────
 
-        const undoItem = paramUndoStack[paramUndoStack.length - 1];
-        const newUndo = paramUndoStack.slice(0, -1);
-        const redoItem = captureStateForKeys(Object.keys(undoItem), get());
-
-        applyStateRestore(undoItem, set, get);
-
-        set({
-            paramUndoStack: newUndo,
-            paramRedoStack: [...paramRedoStack, redoItem],
-        });
-    },
-
-    redoParam: () => {
-        const { paramUndoStack, paramRedoStack } = get();
-        if (paramRedoStack.length === 0) return;
-
-        const redoItem = paramRedoStack[paramRedoStack.length - 1];
-        const newRedo = paramRedoStack.slice(0, -1);
-        const undoItem = captureStateForKeys(Object.keys(redoItem), get());
-
-        applyStateRestore(redoItem, set, get);
-
-        set({
-            paramUndoStack: [...paramUndoStack, undoItem],
-            paramRedoStack: newRedo,
-        });
-    },
-
-    resetParamHistory: () => {
-        set({ paramUndoStack: [], paramRedoStack: [], interactionSnapshot: null });
-    },
-
-    undoCamera: () => {
+    undo: (scope) => {
         const { undoStack, redoStack } = get();
-        if (undoStack.length === 0) return;
-        const prev = undoStack[undoStack.length - 1];
-        const newUndo = undoStack.slice(0, -1);
-        // Redo captures current camera pose via the store shape directly.
-        const curr = { position: { x: 0, y: 0, z: 0 }, rotation: get().cameraRot } as CameraState;
+        const idx = findMatchIdx(undoStack, scope);
+        if (idx === -1) return false;
+
+        const tx = undoStack[idx];
+        const keys = Object.keys(tx.diff);
+        // Capture current state for these keys → redo entry.
+        const redoDiff = captureStateForKeys(keys, get());
+        const redoTx: Transaction = { scope: tx.scope, label: tx.label, diff: redoDiff, timestamp: Date.now() };
+
+        applyStateRestore(tx.diff, set, get);
+
         set({
-            undoStack: newUndo,
-            redoStack: [...redoStack, curr],
-            cameraRot: prev.rotation,
+            undoStack: [...undoStack.slice(0, idx), ...undoStack.slice(idx + 1)],
+            redoStack: [...redoStack, redoTx],
         });
-        FractalEvents.emit('reset_accum', undefined);
+        return true;
     },
 
-    redoCamera: () => {
+    redo: (scope) => {
         const { undoStack, redoStack } = get();
-        if (redoStack.length === 0) return;
-        const next = redoStack[redoStack.length - 1];
-        const newRedo = redoStack.slice(0, -1);
-        const curr = { position: { x: 0, y: 0, z: 0 }, rotation: get().cameraRot } as CameraState;
+        const idx = findMatchIdx(redoStack, scope);
+        if (idx === -1) return false;
+
+        const tx = redoStack[idx];
+        const keys = Object.keys(tx.diff);
+        const undoDiff = captureStateForKeys(keys, get());
+        const undoTx: Transaction = { scope: tx.scope, label: tx.label, diff: undoDiff, timestamp: Date.now() };
+
+        applyStateRestore(tx.diff, set, get);
+
         set({
-            undoStack: [...undoStack, curr],
-            redoStack: newRedo,
-            cameraRot: next.rotation,
+            undoStack: [...undoStack, undoTx],
+            redoStack: [...redoStack.slice(0, idx), ...redoStack.slice(idx + 1)],
         });
-        FractalEvents.emit('reset_accum', undefined);
+        return true;
     },
+
+    canUndo: (scope) => findMatchIdx(get().undoStack, scope) !== -1,
+    canRedo: (scope) => findMatchIdx(get().redoStack, scope) !== -1,
+    peekUndo: (scope) => {
+        const st = get().undoStack;
+        const idx = findMatchIdx(st, scope);
+        return idx === -1 ? null : st[idx];
+    },
+    peekRedo: (scope) => {
+        const st = get().redoStack;
+        const idx = findMatchIdx(st, scope);
+        return idx === -1 ? null : st[idx];
+    },
+    clearHistory: () => set({ undoStack: [], redoStack: [], interactionSnapshot: null, interactionScope: null }),
+
+    // ── Backward-compat shims ──────────────────────────────────────────
+    undoParam: () => { get().undo('param'); },
+    redoParam: () => { get().redo('param'); },
+    undoCamera: () => { get().undo('camera'); },
+    redoCamera: () => { get().redo('camera'); },
+    resetParamHistory: () => { get().clearHistory(); },
 });

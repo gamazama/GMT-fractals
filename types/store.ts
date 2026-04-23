@@ -190,12 +190,15 @@ export interface FractalStoreState extends FeatureStateMap {
   sceneHistogramTrigger: number;
   sceneHistogramActiveCount: number; // Ref count
   
-  undoStack: CameraState[];
-  redoStack: CameraState[];
+  // Unified transaction stack (see store/slices/historySlice.ts). Each
+  // entry is a Transaction { scope, label?, diff, timestamp }. The scope
+  // tag replaces the previous three-stack design (F2b). Kept typed as
+  // any[] at the root to avoid a circular import with historySlice's
+  // Transaction type declaration; historySlice re-narrows internally.
+  undoStack: any[];
+  redoStack: any[];
   interactionSnapshot: Partial<FractalStoreState> | null;
-  
-  paramUndoStack: Partial<FractalStoreState>[];
-  paramRedoStack: Partial<FractalStoreState>[];
+  interactionScope: string | null;
 
   // NOTE: Modular builder state (graph/pipeline/pipelineRevision/autoCompile)
   // was removed with the modular graph system. A future plugin that wants a
@@ -370,6 +373,17 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
 
     handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
     handleInteractionEnd: () => void;
+
+    // Unified undo API (see historySlice).
+    undo: (scope?: string) => boolean;
+    redo: (scope?: string) => boolean;
+    canUndo: (scope?: string) => boolean;
+    canRedo: (scope?: string) => boolean;
+    peekUndo: (scope?: string) => any | null;
+    peekRedo: (scope?: string) => any | null;
+    clearHistory: () => void;
+
+    // Backward-compat shims — delegate to undo(scope)/redo(scope).
     undoCamera: () => void;
     redoCamera: () => void;
     undoParam: () => void;

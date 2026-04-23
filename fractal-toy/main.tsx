@@ -28,6 +28,7 @@ import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
+import { installUndo } from '../engine/plugins/Undo';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
@@ -72,6 +73,9 @@ installSceneIO({
 // registers camera reset + any app-specific hotkeys inside its App
 // component where it has access to feature state.
 installShortcuts();
+
+// @engine/undo — unified transaction stack.
+installUndo();
 
 // Tell the shared <TimelineToolbar> which tracks make up "the camera"
 // for this app — it uses these for the Key Cam button's capture +
