@@ -16,6 +16,7 @@ import { JuliaFeature } from './features/julia';
 import { DyeFeature } from './features/dye';
 import { FluidSimFeature } from './features/fluidSim';
 import { SceneCameraFeature } from './features/sceneCamera';
+import { OrbitFeature } from './features/orbit';
 
 // 3c: Julia/Mandelbrot fractal iteration params.
 featureRegistry.register(JuliaFeature);
@@ -32,3 +33,8 @@ featureRegistry.register(FluidSimFeature);
 // 3e: 2D scene camera (pan + zoom). Parallel to fractal-toy's orbit
 // camera. Both wait for the eventual @engine/camera plugin to unify.
 featureRegistry.register(SceneCameraFeature);
+
+// 3i: Auto-orbit for Julia c. DDFS params (enabled/radius/speed/anchor)
+// drive a TickRegistry handler that rewrites julia.juliaC each frame
+// when enabled. Modulation-style continuous driver, not keyframes.
+featureRegistry.register(OrbitFeature);
