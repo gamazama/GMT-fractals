@@ -193,7 +193,11 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                 {side === 'left' ? <ChevronLeft /> : <ChevronRight />}
             </button>
 
-            <div className="flex-1 overflow-y-auto custom-scroll p-4 relative">
+            {/* Dock content area — vertical padding only. Horizontal
+                padding is owned by each panel's internal rows (AutoFeaturePanel
+                already applies px-3 on every param row), so compound padding
+                was wasting ~32px of dock width. */}
+            <div className="flex-1 overflow-y-auto custom-scroll py-2 relative">
                 {activeTabId ? (
                      <PanelRouter activeTab={activeTabId} state={useFractalStore.getState()} actions={useFractalStore.getState() as any} onSwitchTab={togglePanel as any} />
                 ) : (
