@@ -27,6 +27,7 @@ import { TimelineHost } from '../components/TimelineHost';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { FORCE_MODES } from './features/fluidSim';
 import { FluidPointerLayer } from './FluidPointerLayer';
+import { registerFluidToyHotkeys } from './hotkeys';
 
 export const FluidToyApp: React.FC = () => {
     const state = useFractalStore();
@@ -80,6 +81,9 @@ export const FluidToyApp: React.FC = () => {
         } catch (e) {
             console.error('[FluidToy] failed to start engine:', e);
         }
+
+        // Register hotkeys now that engineRef is live (R needs engine.resetFluid).
+        registerFluidToyHotkeys(engineRef);
 
         return () => {
             if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);

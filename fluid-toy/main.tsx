@@ -26,6 +26,7 @@ import { installTopBar } from '../engine/plugins/TopBar';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { installModulation } from '../engine/animation/modulationTick';
+import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installOrbitSync } from './orbitTick';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -75,6 +76,11 @@ registerCameraKeyTracks(['sceneCamera.center', 'sceneCamera.zoom']);
 // Any app with continuous-driver features (LFO, audio-reactive, etc.)
 // installs this once.
 installModulation();
+
+// @engine/shortcuts — window-level keyboard listener, scope-aware
+// dispatcher. Hotkey registrations happen inside FluidToyApp so they
+// can close over engineRef for FluidEngine.resetFluid().
+installShortcuts();
 
 // Orbit → animations array sync. When orbit DDFS params change, we
 // rewrite the two sine LFOs on julia.juliaC.x/.y that drive the orbit.
