@@ -1,59 +1,94 @@
 /**
- * FluidPointerLayer — click-drag-to-splat interaction for fluid-toy.
+ * FluidPointerLayer — canvas pointer interaction for fluid-toy.
  *
- * Minimal MVP: captures pointer events on the canvas, translates to
- * UV + velocity, and calls FluidEngine.splatForce. Color cycles by
- * hue over time so repeated splats leave a rainbow trail.
+ * Gestures:
+ *   left-drag       — splat (force + dye, hue-cycled rainbow trail)
+ *   right-drag      — pan the scene camera (grab-and-drag; world-point
+ *                     under cursor stays locked during the drag)
+ *   right-click     — open canvas context menu (suppressed if the
+ *                     press became a pan drag)
+ *   wheel           — zoom the scene camera, anchored at the cursor
  *
- * Also wires right-click to a canvas context menu — Copy C / Reset /
- * Recenter / Orbit / Pause. Shares the engine's global context-menu
- * surface so the look matches every other menu in the app.
- *
- * Unlike the original toy-fluid/ToyFluidApp.tsx (which layers pan /
- * zoom / pick-c gesture modes on top of splat), this is just the
- * splat path. Extra gestures can land as follow-ups — they're
- * app-specific and not worth blocking the fluid-toy port on.
+ * Both pan and zoom write through the DDFS `sceneCamera` slice so the
+ * existing FluidToyApp subscribe → FluidEngine.setParams path handles
+ * propagation. The fluid sim field texels stay put under the cursor
+ * because FluidEngine's display shader rescales UVs by the camera.
  *
  * Filter note: no generic extract here. Pointer → splat is a
  * FluidEngine-specific contract. The generic engine already covers
- * isUserInteracting via handleInteractionStart/End (we wire it so
- * the viewport plugin's adaptive loop gets the activity signal).
+ * isUserInteracting via handleInteractionStart/End.
  */
 
 import React, { useRef, useEffect } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import type { FluidEngine } from './fluid/FluidEngine';
 import type { ContextMenuItem } from '../types/help';
+import {
+    MIN_ZOOM,
+    MAX_ZOOM,
+    PAN_DRAG_THRESHOLD_PX,
+    WHEEL_ZOOM_SENSITIVITY,
+    PRECISION_SHIFT_MULT,
+    PRECISION_ALT_MULT,
+} from './constants';
 
 export interface FluidPointerLayerProps {
     canvasRef: React.RefObject<HTMLCanvasElement>;
     engineRef: React.RefObject<FluidEngine | null>;
 }
 
+type PointerMode = 'idle' | 'splat' | 'pan-pending' | 'pan';
+
 interface PointerState {
-    down: boolean;
+    mode: PointerMode;
+    pointerId: number;
+    // Shared
     lastX: number;
     lastY: number;
     lastT: number;
+    // Pan start anchors — screen and world
+    startX: number;
+    startY: number;
+    startCx: number;
+    startCy: number;
+    // Flag set when right-press upgraded to a pan drag — tells the
+    // contextmenu handler to ignore the resulting click so the menu
+    // doesn't flash up at the end of a pan.
+    rightDragged: boolean;
 }
 
+const precisionMultiplier = (shift: boolean, alt: boolean): number => {
+    if (shift) return PRECISION_SHIFT_MULT;
+    if (alt) return PRECISION_ALT_MULT;
+    return 1.0;
+};
+
 export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef, engineRef }) => {
-    const stateRef = useRef<PointerState>({ down: false, lastX: 0, lastY: 0, lastT: 0 });
+    const stateRef = useRef<PointerState>({
+        mode: 'idle', pointerId: -1,
+        lastX: 0, lastY: 0, lastT: 0,
+        startX: 0, startY: 0, startCx: 0, startCy: 0,
+        rightDragged: false,
+    });
     const handleInteractionStart = useFractalStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useFractalStore((s) => s.handleInteractionEnd);
     const openContextMenu = useFractalStore((s) => s.openContextMenu);
 
     // Right-click context menu — reads the store at click-time via
     // getState() so the handler stays stable across prop changes and
-    // always reflects the current orbit/pause state. Actions mutate
-    // the store's DDFS slices; the shared FluidToyApp effects push
-    // the new values into FluidEngine.
+    // always reflects the current orbit/pause state. Suppresses if the
+    // right-press upgraded to a pan drag.
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const onMenu = (e: MouseEvent) => {
             e.preventDefault();
+            const ps = stateRef.current;
+            if (ps.rightDragged) {
+                ps.rightDragged = false;
+                return;
+            }
             const s = useFractalStore.getState() as any;
             const juliaC = s.julia?.juliaC;
             const orbitOn = !!s.orbit?.enabled;
@@ -91,64 +126,139 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
         return () => canvas.removeEventListener('contextmenu', onMenu);
     }, [canvasRef, engineRef, openContextMenu]);
 
-    // Attach events to the canvas directly (not React synthetic) so the
-    // layer itself doesn't have to cover the canvas (which would trap
-    // events meant for the Fixed-mode resize handles etc).
+    // Pointer + wheel handlers. Attach directly (not React synthetic)
+    // so the layer doesn't have to cover the canvas (which would trap
+    // events meant for Fixed-mode resize handles etc.).
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const onDown = (e: PointerEvent) => {
-            canvas.setPointerCapture(e.pointerId);
-            stateRef.current = {
-                down: true,
-                lastX: e.clientX,
-                lastY: e.clientY,
-                lastT: performance.now(),
-            };
-            handleInteractionStart('param');
+            const ps = stateRef.current;
+            ps.pointerId = e.pointerId;
+            ps.lastX = e.clientX; ps.lastY = e.clientY;
+            ps.lastT = performance.now();
+            ps.startX = e.clientX; ps.startY = e.clientY;
+
+            if (e.button === 2) {
+                // Right-press — start a pan-pending; upgrade to pan on travel.
+                const s = useFractalStore.getState() as any;
+                ps.mode = 'pan-pending';
+                ps.startCx = s.sceneCamera?.center?.x ?? 0;
+                ps.startCy = s.sceneCamera?.center?.y ?? 0;
+                ps.rightDragged = false;
+                canvas.setPointerCapture(e.pointerId);
+                handleInteractionStart('camera');
+                return;
+            }
+
+            if (e.button === 0) {
+                ps.mode = 'splat';
+                canvas.setPointerCapture(e.pointerId);
+                handleInteractionStart('param');
+                return;
+            }
         };
 
         const onMove = (e: PointerEvent) => {
-            const st = stateRef.current;
-            if (!st.down) return;
-            const engine = engineRef.current;
-            if (!engine) return;
-
-            const now = performance.now();
-            const dt = Math.max(1, now - st.lastT) / 1000;
-            const dxPx = e.clientX - st.lastX;
-            const dyPx = e.clientY - st.lastY;
-            st.lastX = e.clientX;
-            st.lastY = e.clientY;
-            st.lastT = now;
+            const ps = stateRef.current;
+            if (ps.mode === 'idle') return;
 
             const rect = canvas.getBoundingClientRect();
             if (rect.width < 1 || rect.height < 1) return;
 
-            // UV: origin bottom-left for WebGL convention.
-            const u = (e.clientX - rect.left) / rect.width;
-            const v = 1 - (e.clientY - rect.top) / rect.height;
+            // Right-drag pan: upgrade pan-pending → pan once cursor travel
+            // exceeds threshold. Below threshold, press-release still opens
+            // the context menu.
+            if (ps.mode === 'pan-pending') {
+                const d = Math.hypot(e.clientX - ps.startX, e.clientY - ps.startY);
+                if (d > PAN_DRAG_THRESHOLD_PX) {
+                    ps.mode = 'pan';
+                    ps.rightDragged = true;
+                } else {
+                    return;
+                }
+            }
 
-            // Velocity: px/s normalized to canvas size, scaled for sim.
-            const vx = (dxPx / rect.width) / dt * 5;
-            const vy = -(dyPx / rect.height) / dt * 5;
-            const strength = Math.min(50, Math.hypot(vx, vy));
-            if (strength < 0.01) return;
+            if (ps.mode === 'pan') {
+                // Grab-and-drag: world-space point under cursor at start
+                // stays under cursor. center moves opposite to pixel delta,
+                // scaled by current zoom × aspect.
+                const s = useFractalStore.getState() as any;
+                const zoom = s.sceneCamera?.zoom ?? 1.5;
+                const aspect = rect.width / rect.height;
+                const mul = precisionMultiplier(e.shiftKey, e.altKey);
+                const dxPx = e.clientX - ps.startX;
+                const dyPx = e.clientY - ps.startY;
+                const dcx = -(dxPx / rect.width) * 2 * aspect * zoom * mul;
+                const dcy = (dyPx / rect.height) * 2 * zoom * mul;
+                s.setSceneCamera({ center: { x: ps.startCx + dcx, y: ps.startCy + dcy } });
+                ps.lastX = e.clientX; ps.lastY = e.clientY;
+                return;
+            }
 
-            // Hue-cycle colour over time for a rainbow trail.
-            const h = (now * 0.0005) % 1;
-            const r = 0.5 + 0.5 * Math.cos(6.2831853 * h);
-            const g = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.333));
-            const b = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.667));
+            if (ps.mode === 'splat') {
+                const engine = engineRef.current;
+                if (!engine) return;
+                const now = performance.now();
+                const dt = Math.max(1, now - ps.lastT) / 1000;
+                const dxPx = e.clientX - ps.lastX;
+                const dyPx = e.clientY - ps.lastY;
+                ps.lastX = e.clientX;
+                ps.lastY = e.clientY;
+                ps.lastT = now;
 
-            engine.splatForce(u, v, vx, vy, strength, [r, g, b]);
+                const u = (e.clientX - rect.left) / rect.width;
+                const v = 1 - (e.clientY - rect.top) / rect.height;
+                const vx = (dxPx / rect.width) / dt * 5;
+                const vy = -(dyPx / rect.height) / dt * 5;
+                const strength = Math.min(50, Math.hypot(vx, vy));
+                if (strength < 0.01) return;
+
+                const h = (now * 0.0005) % 1;
+                const r = 0.5 + 0.5 * Math.cos(6.2831853 * h);
+                const g = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.333));
+                const b = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.667));
+                engine.splatForce(u, v, vx, vy, strength, [r, g, b]);
+                return;
+            }
         };
 
         const onUp = (e: PointerEvent) => {
-            stateRef.current.down = false;
-            try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+            const ps = stateRef.current;
+            if (ps.pointerId === e.pointerId) {
+                try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+                ps.pointerId = -1;
+            }
+            // Clear mode AFTER releasing so a late contextmenu event (fires
+            // between pointerup and its click-synthesis) sees rightDragged.
+            ps.mode = 'idle';
             handleInteractionEnd();
+        };
+
+        // Wheel zoom, cursor-anchored. { passive: false } so we can
+        // preventDefault — otherwise the browser scrolls the page.
+        const onWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width < 1 || rect.height < 1) return;
+            const s = useFractalStore.getState() as any;
+            const currCenter = s.sceneCamera?.center ?? { x: 0, y: 0 };
+            const currZoom = s.sceneCamera?.zoom ?? 1.5;
+            const mul = precisionMultiplier(e.shiftKey, e.altKey);
+            const zoomFactor = Math.pow(0.9, -e.deltaY * WHEEL_ZOOM_SENSITIVITY * mul);
+            const u = (e.clientX - rect.left) / rect.width;
+            const v = 1 - (e.clientY - rect.top) / rect.height;
+            const aspect = rect.width / rect.height;
+            // World point under cursor BEFORE zoom — we want to keep it
+            // fixed after. Same math as the middle-drag anchor in the
+            // reference toy-fluid.
+            const fx = currCenter.x + (u * 2 - 1) * aspect * currZoom;
+            const fy = currCenter.y + (v * 2 - 1) * currZoom;
+            const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currZoom * zoomFactor));
+            const newCx = fx - (u * 2 - 1) * aspect * newZoom;
+            const newCy = fy - (v * 2 - 1) * newZoom;
+            s.setSceneCamera({ center: { x: newCx, y: newCy }, zoom: newZoom });
         };
 
         canvas.addEventListener('pointerdown', onDown);
@@ -156,6 +266,7 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
         canvas.addEventListener('pointerup', onUp);
         canvas.addEventListener('pointercancel', onUp);
         canvas.addEventListener('pointerleave', onUp);
+        canvas.addEventListener('wheel', onWheel, { passive: false });
 
         return () => {
             canvas.removeEventListener('pointerdown', onDown);
@@ -163,6 +274,7 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             canvas.removeEventListener('pointerup', onUp);
             canvas.removeEventListener('pointercancel', onUp);
             canvas.removeEventListener('pointerleave', onUp);
+            canvas.removeEventListener('wheel', onWheel);
         };
     }, [canvasRef, engineRef, handleInteractionStart, handleInteractionEnd]);
 
