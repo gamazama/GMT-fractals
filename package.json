@@ -12,6 +12,7 @@
     "smoke:interact": "tsx debug/smoke-interact.mts",
     "smoke:screenshot": "tsx debug/smoke-screenshot.mts",
     "smoke:fractal-toy": "tsx debug/smoke-fractal-toy.mts",
+    "smoke:fluid-toy": "tsx debug/smoke-fluid-toy.mts",
     "smoke:viewport": "tsx debug/smoke-viewport.mts"
   },
   "dependencies": {

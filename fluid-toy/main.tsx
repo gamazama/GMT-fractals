@@ -23,6 +23,7 @@ import { registerUI } from '../features/ui';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
+import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -56,6 +57,13 @@ installViewport({
 // @engine/topbar — registers default items (project name, FPS, adaptive
 // badge). Save/load etc. slot-register from other plugins when those land.
 installTopBar();
+
+// @engine/scene-io — Save + Load buttons into the topbar. PNG save
+// reads from the single canvas the app mounts (query by tag since
+// fluid-toy has one top-level canvas).
+installSceneIO({
+    getCanvas: () => document.querySelector('canvas'),
+});
 
 // Camera tracks for the shared TimelineToolbar's Key Cam button.
 registerCameraKeyTracks(['sceneCamera.center', 'sceneCamera.zoom']);

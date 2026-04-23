@@ -26,6 +26,7 @@ import { registerUI } from '../features/ui';
 import { setupFractalToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
+import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
@@ -58,9 +59,13 @@ installViewport({
 });
 
 // @engine/topbar — slot host + default items (project name, FPS,
-// adaptive badge). Save/load etc. will slot-register from other
-// plugins in phase 3g.
+// adaptive badge).
 installTopBar();
+
+// @engine/scene-io — Save + Load buttons.
+installSceneIO({
+    getCanvas: () => document.querySelector('canvas'),
+});
 
 // Tell the shared <TimelineToolbar> which tracks make up "the camera"
 // for this app — it uses these for the Key Cam button's capture +
