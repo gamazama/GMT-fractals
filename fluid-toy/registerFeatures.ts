@@ -12,11 +12,18 @@
  */
 
 import { featureRegistry } from '../engine/FeatureSystem';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { JuliaFeature } from './features/julia';
 import { DyeFeature } from './features/dye';
 import { FluidSimFeature } from './features/fluidSim';
 import { SceneCameraFeature } from './features/sceneCamera';
 import { OrbitFeature } from './features/orbit';
+import { JuliaCPicker } from './components/JuliaCPicker';
+
+// Components used by feature customUI slots must be registered before
+// the registries freeze (i.e. before the store is constructed). Match
+// the id to the customUI entry in the feature definition.
+componentRegistry.register('julia-c-picker', JuliaCPicker as any);
 
 // 3c: Julia/Mandelbrot fractal iteration params.
 featureRegistry.register(JuliaFeature);

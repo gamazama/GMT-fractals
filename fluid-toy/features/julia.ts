@@ -33,6 +33,18 @@ export const JuliaFeature: FeatureDefinition = {
         defaultActive: true,
     },
 
+    // Mandelbrot preview with click-to-pick Julia c, mounted directly
+    // below the juliaC vec2 slider. Only rendered when the fractal
+    // kind is Julia — picking c makes no sense for the Mandelbrot
+    // variant (c is the pixel coord there).
+    customUI: [
+        {
+            componentId: 'julia-c-picker',
+            parentId: 'juliaC',
+            condition: { param: 'kind', eq: 0 },
+        },
+    ],
+
     params: {
         kind: {
             type: 'float',  // numeric index — AutoFeaturePanel dropdown when options are set
