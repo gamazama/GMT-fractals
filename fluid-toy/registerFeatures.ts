@@ -20,6 +20,7 @@ import { SceneCameraFeature } from './features/sceneCamera';
 import { OrbitFeature } from './features/orbit';
 import { PostFxFeature } from './features/postFx';
 import { CompositeFeature } from './features/composite';
+import { BrushFeature } from './features/brush';
 import { JuliaCPicker } from './components/JuliaCPicker';
 
 // Components used by feature customUI slots must be registered before
@@ -54,3 +55,8 @@ featureRegistry.register(PostFxFeature);
 
 // Composite — juliaMix + velocityViz balance controls.
 featureRegistry.register(CompositeFeature);
+
+// Brush — geometric + intensity knobs for left-drag splatting
+// (size / strength / flow / spacing / jitter). Brush MODE
+// (paint/erase/stamp/smudge) stays on the Dye feature.
+featureRegistry.register(BrushFeature);

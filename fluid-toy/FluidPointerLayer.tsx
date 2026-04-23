@@ -264,28 +264,51 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const dt = Math.max(1, now - ps.lastT) / 1000;
                 const dxPx = e.clientX - ps.lastX;
                 const dyPx = e.clientY - ps.lastY;
+
+                // Brush params — read at splat time so panel edits take
+                // effect immediately without a store subscription on the
+                // hot path.
+                const state = useFractalStore.getState() as any;
+                const brush = state.brush ?? {};
+                const size = brush.size ?? 0.002;
+                const brushStrengthMul = brush.strength ?? 1;
+                const flow = brush.flow ?? 1;
+                const spacingPx = brush.spacing ?? 0;
+                const jitter = brush.jitter ?? 0;
+
+                // Spacing gate — skip splats that aren't far enough from
+                // the last one. Measured in screen px.
+                if (spacingPx > 0) {
+                    const travel = Math.hypot(e.clientX - ps.lastX, e.clientY - ps.lastY);
+                    if (travel < spacingPx) return;
+                }
+
                 ps.lastX = e.clientX;
                 ps.lastY = e.clientY;
                 ps.lastT = now;
 
-                const u = (e.clientX - rect.left) / rect.width;
-                const v = 1 - (e.clientY - rect.top) / rect.height;
+                // Base UV (with optional jitter in units of splat size).
+                let u = (e.clientX - rect.left) / rect.width;
+                let v = 1 - (e.clientY - rect.top) / rect.height;
+                if (jitter > 0) {
+                    u += (Math.random() * 2 - 1) * jitter * size;
+                    v += (Math.random() * 2 - 1) * jitter * size;
+                }
+
                 const vx = (dxPx / rect.width) / dt * 5;
                 const vy = -(dyPx / rect.height) / dt * 5;
-                const strength = Math.min(50, Math.hypot(vx, vy));
+                const strength = Math.min(50, Math.hypot(vx, vy)) * brushStrengthMul;
 
                 // Brush-mode split — all four modes reuse FluidEngine's
                 // additive splat; the per-mode shaping happens here.
-                const brushMode = brushModeFromIndex(
-                    (useFractalStore.getState() as any).dye?.brushMode
-                );
+                const brushMode = brushModeFromIndex(state.dye?.brushMode);
 
                 if (brushMode === 'erase') {
-                    // Always fire (no velocity threshold, otherwise holding
-                    // still doesn't erase anything). Negative grayscale
-                    // subtracts luminance from the HDR dye buffer.
-                    const eraseStrength = 0.5;
-                    engine.splatForce(u, v, 0, 0, 0, [-eraseStrength, -eraseStrength, -eraseStrength]);
+                    // Always fire (no velocity threshold). Negative
+                    // grayscale subtracts luminance from the HDR dye
+                    // buffer; flow scales how aggressive the erase is.
+                    const eraseStrength = 0.5 * flow;
+                    engine.splatForce(u, v, 0, 0, 0, [-eraseStrength, -eraseStrength, -eraseStrength], size);
                     return;
                 }
 
@@ -294,19 +317,16 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 if (strength < 0.01) return;
 
                 const h = (now * 0.0005) % 1;
-                const r = 0.5 + 0.5 * Math.cos(6.2831853 * h);
-                const g = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.333));
-                const b = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.667));
+                const r = flow * (0.5 + 0.5 * Math.cos(6.2831853 * h));
+                const g = flow * (0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.333)));
+                const b = flow * (0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.667)));
 
                 if (brushMode === 'stamp') {
-                    // Dye only, zero force.
-                    engine.splatForce(u, v, 0, 0, 0, [r, g, b]);
+                    engine.splatForce(u, v, 0, 0, 0, [r, g, b], size);
                 } else if (brushMode === 'smudge') {
-                    // Force only, no dye.
-                    engine.splatForce(u, v, vx, vy, strength, [0, 0, 0]);
+                    engine.splatForce(u, v, vx, vy, strength, [0, 0, 0], size);
                 } else {
-                    // Paint (default).
-                    engine.splatForce(u, v, vx, vy, strength, [r, g, b]);
+                    engine.splatForce(u, v, vx, vy, strength, [r, g, b], size);
                 }
                 return;
             }

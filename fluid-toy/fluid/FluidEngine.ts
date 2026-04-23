@@ -801,27 +801,35 @@ export class FluidEngine {
   /**
    * Inject a single gaussian splat into a ping-pong field and advance the swap.
    * Called twice from splatForce (once for velocity, once for dye).
+   * `radius` overrides the default SPLAT_RADIUS_UV when provided.
    */
-  private splat(target: DoubleFBO, u: number, v: number, value: [number, number, number]) {
+  private splat(target: DoubleFBO, u: number, v: number, value: [number, number, number], radius?: number) {
     const gl = this.gl;
     this.bindFBO(target.write);
     this.useProgram(this.progSplat);
     this.bindTex(0, target.read.tex, this.progSplat.uniforms['uTarget']);
     gl.uniform2f(this.progSplat.uniforms['uPoint'], u, v);
     gl.uniform3f(this.progSplat.uniforms['uValue'], value[0], value[1], value[2]);
-    gl.uniform1f(this.progSplat.uniforms['uRadius'], SPLAT_RADIUS_UV);
+    gl.uniform1f(this.progSplat.uniforms['uRadius'], radius ?? SPLAT_RADIUS_UV);
     gl.uniform1f(this.progSplat.uniforms['uAspect'], this.simW / this.simH);
     this.drawQuad();
     target.swap();
   }
 
-  /** Inject a splat of force and dye at a UV location. */
-  splatForce(u: number, v: number, dx: number, dy: number, strength: number, color: [number, number, number]) {
+  /**
+   * Inject a splat of force and dye at a UV location.
+   *
+   * `radius` is optional — when omitted, uses SPLAT_RADIUS_UV (the old
+   * fixed default, so existing callers behave unchanged). Providing it
+   * lets the brush feature drive splat size per-splat without adding
+   * a full `engine.brush()` API.
+   */
+  splatForce(u: number, v: number, dx: number, dy: number, strength: number, color: [number, number, number], radius?: number) {
     // Clamp UV — pointer capture can fire move events from outside the canvas.
     u = Math.max(0, Math.min(1, u));
     v = Math.max(0, Math.min(1, v));
-    this.splat(this.velocity, u, v, [dx * strength, dy * strength, 0]);
-    this.splat(this.dye, u, v, color);
+    this.splat(this.velocity, u, v, [dx * strength, dy * strength, 0], radius);
+    this.splat(this.dye, u, v, color, radius);
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
   }
 
