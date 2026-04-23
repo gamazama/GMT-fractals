@@ -38,13 +38,17 @@ registerUI();
 // the user DOES notice when simResolution drops — so we ramp gradually
 // with a longer cooldown. Target 45 fps because fluid sim can usually
 // sustain that on modest hardware at reasonable resolutions.
+// Fluid sim has no idle state (simulation always runs), so alwaysActive=true
+// keeps adaptive engaged rather than letting it settle to full-res after
+// "activity" stops. Smart mode converges to targetFps via GMT's sqrt-based
+// scale math — see viewportSlice.ts reportFps.
 installViewport({
     enabled: true,
+    alwaysActive: true,
     targetFps: 45,
     minQuality: 0.4,
-    interactionDownsample: 0.7,  // less aggressive — user wants to see what they're dragging
-    graceMs: 1500,
-    changeCooldownMs: 800,
+    interactionDownsample: 0.5,  // manual-mode fallback when targetFps=0
+    activityGraceMs: 100,
 });
 
 setupFluidToy();

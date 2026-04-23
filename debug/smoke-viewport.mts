@@ -53,15 +53,18 @@ async function main() {
     console.log('baseline (adaptive suppressed):', q0);
     if (q0 < 0.99) throw new Error(`suppressed baseline should be 1.0, got ${q0}`);
 
-    // Re-enable adaptive so interaction subscription fires.
+    // Force manual mode (targetFps=0) for a deterministic interaction drop:
+    // in manual mode the installViewport subscription drops quality to
+    // interactionDownsample immediately. In smart mode (default) the
+    // drop is whatever sqrt(target/still-fps) computes, which depends on
+    // actual headless FPS and is non-deterministic.
+    await page.evaluate(() => (window as any).__store.getState().setAdaptiveConfig({ targetFps: 0 }));
     await page.evaluate(() => (window as any).__store.getState().setAdaptiveSuppressed(false));
 
-    // Start interaction — subscription should drop quality immediately
-    // to interactionDownsample.
     await page.evaluate(() => (window as any).__store.getState().handleInteractionStart('param'));
     await page.waitForTimeout(100);
     const qInteract = await page.evaluate(() => (window as any).__store.getState().qualityFraction);
-    console.log('during interaction:', qInteract);
+    console.log('during interaction (manual mode):', qInteract);
     if (qInteract > cfg.interactionDownsample + 0.001) {
         throw new Error(`quality should be ≤ interactionDownsample (${cfg.interactionDownsample}) during drag, got ${qInteract}`);
     }

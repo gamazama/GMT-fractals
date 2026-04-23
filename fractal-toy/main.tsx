@@ -45,13 +45,14 @@ registerUI();
 // target 30 FPS and let the adaptive loop drop to 35% on pressure.
 // interactionDownsample of 0.55 keeps drags responsive without
 // looking unrecognisable.
+// Fractal-toy = GMT-style: mouse-on-canvas idle → full-res (user is
+// looking at the result). alwaysActive=false (default).
 installViewport({
     enabled: true,
     targetFps: 30,
     minQuality: 0.35,
     interactionDownsample: 0.55,
-    graceMs: 1200,
-    changeCooldownMs: 500,
+    activityGraceMs: 100,
 });
 
 // Seed panel state after mount.

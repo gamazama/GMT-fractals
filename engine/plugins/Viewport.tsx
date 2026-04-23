@@ -22,21 +22,27 @@ import { useFractalStore } from '../../store/fractalStore';
 export interface ViewportAdaptiveConfig {
     /** Master adaptive toggle. When false, qualityFraction stays at 1. */
     enabled: boolean;
-    /** Target FPS the adaptive loop aims for. Typical: 30 for apps with
-     *  heavy per-frame work, 60 for lighter ones. */
+    /** Target FPS the adaptive loop aims for. 0 = manual mode (uses
+     *  interactionDownsample as a fixed factor). Typical: 30 for heavy
+     *  apps (fractal raymarching), 45-60 for lighter ones. */
     targetFps: number;
     /** Floor for qualityFraction; ensures the app never drops below
-     *  legibility. Typical: 0.35. */
+     *  legibility. Typical: 0.25 (max scale 4x) to 0.4. */
     minQuality: number;
-    /** qualityFraction used while isUserInteracting is true, regardless
-     *  of FPS. Gives responsive feel during drag. Typical: 0.6. */
+    /** Manual-mode fallback: qualityFraction when targetFps === 0.
+     *  Typical: 0.5 = half-resolution. */
     interactionDownsample: number;
-    /** Grace period (ms) after holdAdaptive() during which the loop
-     *  won't drop quality further. Use during accumulation starts,
-     *  feature compiles, etc. */
-    graceMs: number;
-    /** Minimum time between quality adjustments — avoids flip-flopping. */
-    changeCooldownMs: number;
+    /** Grace (ms) after user activity during which adaptive keeps
+     *  adjusting when the mouse is on canvas. Short (~100ms) for
+     *  GMT-style apps — the goal is "idle mouse on canvas → full
+     *  render". Ignored when alwaysActive is true. */
+    activityGraceMs: number;
+    /** When true, adaptive runs always — for apps with no idle state
+     *  (live sims like fluid-toy). When false (default, GMT-style),
+     *  adaptive settles to full-res when the mouse is on the canvas
+     *  and the user hasn't interacted recently (user is enjoying the
+     *  result, not editing). */
+    alwaysActive: boolean;
 }
 
 // Track whether installViewport has wired its one-time subscriptions.
@@ -61,10 +67,15 @@ export const installViewport = (options?: Partial<ViewportAdaptiveConfig>) => {
         (isInteracting) => {
             if (!isInteracting) return; // recovery is handled by reportFps
             const s = useFractalStore.getState();
-            if (!s.adaptiveConfig.enabled || s.adaptiveSuppressed) return;
-            if (s.qualityFraction > s.adaptiveConfig.interactionDownsample) {
+            const cfg = s.adaptiveConfig;
+            if (!cfg.enabled || s.adaptiveSuppressed) return;
+            // Manual mode (targetFps=0): drop to interactionDownsample immediately.
+            // Smart mode (targetFps>0): reportFps seeds scale from still-fps on
+            // the next tick — no imperative drop needed here.
+            if (cfg.targetFps > 0) return;
+            if (s.qualityFraction > cfg.interactionDownsample) {
                 useFractalStore.setState({
-                    qualityFraction: s.adaptiveConfig.interactionDownsample,
+                    qualityFraction: cfg.interactionDownsample,
                 });
             }
         },
