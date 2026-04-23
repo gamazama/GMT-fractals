@@ -39,17 +39,35 @@ import { useAnimationStore } from '../../store/animationStore';
 export function captureCameraKeyFrame(frame: number): void {
     if (_captureFn) { _captureFn(frame, cameraKeyTracks); return; }
     // Default capture: path-resolve each track to a scalar in the DDFS
-    // store and call the animation-store addKeyframe.
+    // store and call the animation-store addKeyframe. Supports both
+    // pure-scalar paths (`sceneCamera.zoom`) and UNDERSCORE vec-component
+    // paths (`sceneCamera.center_x`) — the latter resolves the base part
+    // (`center`) to a vec, then picks the axis.
     const state = useFractalStore.getState() as any;
     const animActions = useAnimationStore.getState();
     for (const tid of cameraKeyTracks) {
         const parts = tid.split('.');
         let v: any = state;
-        for (const p of parts) {
+        for (let i = 0; i < parts.length; i++) {
             if (v == null) break;
+            const p = parts[i];
+            // Last segment: check for `base_axis` vec-component form.
+            if (i === parts.length - 1) {
+                const m = p.match(/^(.+)_([xyzw])$/);
+                if (m && v[m[1]] != null && typeof v[m[1]] === 'object' && m[2] in v[m[1]]) {
+                    v = v[m[1]][m[2]];
+                    break;
+                }
+            }
             v = v[p];
         }
         if (typeof v === 'number' && isFinite(v)) {
+            // addKeyframe silently no-ops if the track doesn't exist yet;
+            // auto-create here so Key Cam works on first press without
+            // the app having to pre-register every track.
+            if (!(useAnimationStore.getState() as any).sequence.tracks[tid]) {
+                animActions.addTrack(tid, tid);
+            }
             animActions.addKeyframe(tid, frame, v);
         }
     }

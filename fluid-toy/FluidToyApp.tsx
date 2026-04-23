@@ -105,8 +105,8 @@ export const FluidToyApp: React.FC = () => {
         if (!engine || !julia) return;
         const baseX = julia.juliaC?.x ?? 0;
         const baseY = julia.juliaC?.y ?? 0;
-        const cx = liveMod['julia.juliaC.x'] ?? baseX;
-        const cy = liveMod['julia.juliaC.y'] ?? baseY;
+        const cx = liveMod['julia.juliaC_x'] ?? baseX;
+        const cy = liveMod['julia.juliaC_y'] ?? baseY;
         engine.setParams({
             juliaC: [cx, cy],
             maxIter: julia.maxIter ?? 310,

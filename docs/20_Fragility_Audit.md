@@ -45,14 +45,18 @@ Known issues found in the 2026-04-22 engine audit, with remediation status. This
 ---
 
 ## F2b — Three undo stacks, routed by hover state
-**Status:** 🔴 Open
+**Status:** 🟢 Fixed (commit b294a5d, part of `@engine/undo` phase 4c)
 **Severity:** High — UX confusion.
 
 **Symptom:** Ctrl+Z undoes different things depending on where the mouse is. Users can't predict what will undo. The routing logic is spread across `useKeyboardShortcuts.ts`, `Timeline.tsx`, `timeline/shortcuts.ts`, and reads `isTimelineHovered` from the fractal store.
 
 **Root cause:** three independent stacks (`historySlice`, `cameraSlice`, `sequenceSlice`), ad-hoc router based on UI hover.
 
-**Designed fix:** single unified transaction stack with scope labels (`'param'` / `'camera'` / `'animation'` / `'ui'`). Shortcut scope routes which scope's most-recent entry is popped, not which stack.
+**Fix landed:** `historySlice` now owns a single unified transaction stack with scope labels (`'param'` / `'camera'` / `'animation'` / `'ui'`). `@engine/undo` registers two shortcut bindings:
+- `Mod+Z` global → `undo()` (pops most recent regardless of scope)
+- `Mod+Z` under `'timeline-hover'` scope with priority 10 → `undo('animation')` (pops most recent animation-scoped entry only)
+
+The `'timeline-hover'` scope is pushed by the Timeline component on mouseenter; `@engine/shortcuts` priority resolution does the dispatch. No more `isTimelineHovered` flag in the store.
 
 **Docs:** [06_Undo_Transactions.md](06_Undo_Transactions.md)
 
@@ -92,12 +96,14 @@ PresetLogic iterates registered fields instead of hardcoding.
 ---
 
 ## F5 — AnimationEngine hardcodes camera tracks
-**Status:** 🔴 Open
+**Status:** 🟡 In progress (phase 5 partial — commit b82dc18)
 **Severity:** Medium — couples engine to camera model.
 
 **Symptom:** [engine/AnimationEngine.ts:74-105](../engine/AnimationEngine.ts#L74-L105) explicitly wires `camera.active_index`, `camera.unified.x/y/z`, `camera.rotation.x/y/z`. Apps with a 2D camera (toy-fluid) or a VR camera (future) have dead animation tracks for fields they don't use.
 
-**Designed fix:** the engine itself has no camera knowledge. `@engine/camera`, when installed, registers its own binders via `binderRegistry.register()`. Camera-less apps install a different camera plugin or none.
+**Partial fix landed:** `engine/animation/cameraKeyRegistry.ts` lets apps register their own camera track list, and `AnimationEngine.getBinder` was extended with a generic `feature.param.axis` resolver (case 4) that works for any vec-shaped DDFS param. Apps with a 2D camera (fluid-toy: `sceneCamera.center.x/y`, `sceneCamera.zoom`) or a 3D orbit camera (fractal-toy: `camera.orbitTheta`, `camera.orbitPhi`, `camera.distance`, `camera.target.x/y/z`) now declare their tracks via `registerCameraKeyTracks(tracks)` and the toolbar's Key Cam button captures exactly those.
+
+**Still open:** the legacy `camera.active_index`, `camera.unified.*`, `camera.rotation.*` binders (cases 0-1 in `AnimationEngine.ts`) stay hardcoded. GMT formula ports will still need them until the full `binderRegistry.register()` design lands.
 
 **Docs:** [04_Core_Plugins.md § camera](04_Core_Plugins.md#enginecamera), [08_Animation.md § binder-registry](08_Animation.md#binderregistry--explicit-binders)
 
@@ -169,25 +175,63 @@ PresetLogic iterates registered fields instead of hardcoding.
 
 ---
 
+## F13 — AnimationSystem.tsx hardcodes GMT-specific target hijacks
+**Status:** 🟢 Fixed (2026-04-23, pending commit)
+**Severity:** Medium — silent misbehavior in engine-fork apps; LFO modulation of DDFS vec params didn't reach the store.
+
+**Symptom:** [components/AnimationSystem.tsx:232](../components/AnimationSystem.tsx#L232) had a `julia.*` hijack branch that assumed GMT's `geometry.juliaX/Y/Z` slice and `uJulia` uniform existed. Any engine-fork app that named a feature `julia` (fluid-toy does) had its LFO targets swallowed — `combinedOffsets['julia.juliaC_x']` got assigned `baseX + offset` where `baseX = state.geometry?.juliaX ?? 0`, so the offset was written against a zero base and then pushed to a non-existent uniform. Same issue with the `coloring.*` branch for any app that registered a `coloring` feature.
+
+**Additionally:** the generic DDFS vec handler at line 322 (`/^(\w+)\.([\w]+)_(x|y|z|w)$/`) required `uniformName.endsWith('_{axis}')`, which meant every vec param needed a `uniform` declaration in its feature-registry config. Fluid-toy's `julia.juliaC` has no `uniform` key (it's read from the store directly by `FluidEngine`), so modulation offsets never made it into `liveModulations` for consumer reads.
+
+**Fix landed:**
+1. **GMT hijacks gated on slice presence.** `coloring.*` → requires `state.coloring`; `julia.*` / `geometry.*Rot` → requires `state.geometry`. Engine-fork apps without these slices fall through to the generic DDFS dispatch below.
+2. **Base-value resolver generalized.** The `paramId` vec regex changed from `/^(vec[234][ABC])_(x|y|z|w)$/` (GMT's specific formula param naming) to `/^(.+)_(x|y|z|w)$/`, validated by checking the base is a vec-shaped object in the slice. Any UNDERSCORE-form DDFS vec target resolves cleanly.
+3. **liveModulations decoupled from uniform write.** Section F (vec) and the scalar fallback both always write `liveModulations[targetKey] = base + offset` when the target resolves to a DDFS param. The `engine.setUniform` call is conditional on `uniformName` existing. Consumers that read `liveModulations` directly (fluid-toy's `FluidToyApp.tsx`) now see modulated values for uniformless DDFS vec params.
+4. **Orbit LFO target flipped to UNDERSCORE form** (`julia.juliaC_x` / `_y`) + `FluidToyApp.tsx` liveMod reader updated to match. Verified via `debug/smoke-anim-orbit.mts`: enabling orbit advances `liveModulations['julia.juliaC_x']` from the base (−0.363) to base+offset (−0.299) within one second.
+5. **Unresolved-target guard.** Added an `isDDFSResolved` flag so the scalar fallback doesn't pollute `liveModulations` with zeros for targets that matched neither a GMT special case nor a DDFS feature param.
+
+**Docs:** [08_Animation.md § binder-registry](08_Animation.md#binderregistry--explicit-binders)
+
+---
+
+## F12 — Vec track ID format mismatch (UNDERSCORE vs DOT)
+**Status:** 🟢 Fixed (2026-04-23, pending commit)
+**Severity:** Medium — silent fail; vec2 controls don't show live values; Key Cam doesn't round-trip cleanly for vec-backed camera poses.
+
+**Symptom:** GMT's canonical vec track naming is UNDERSCORE suffix: `featureId.param_x` / `_y` / `_z` / `_w`. `AutoFeaturePanel.tsx:313-319` reads `liveModulations[\`${featureId}.${key}_x\`]` and `Vector3Input`/`Vector4Input` pass `trackKeys` in the same form. Phase 5's additions (`cameraKeyRegistry` default paths registered by `fluid-toy/main.tsx` + `fractal-toy/main.tsx`, `AnimationEngine.getBinder` 3-part path extension) used DOT-separated form: `feature.param.x`. Writing a keyframe on `julia.juliaC.x` produced a track whose ID the panel never looked up.
+
+**Fix landed:**
+- `engine/AnimationEngine.ts` case 4 now detects UNDERSCORE form via regex `/^(.+)_([xyzw])$/` on the `child` path segment, validates the base name is a vec-shaped object in the slice, and routes to a shared `writeVecAxis` helper. Falls through to scalar when the base isn't a vec. DOT form (phase-5-era) is kept as backward-compat so saved-scene keyframes from early phase-5 don't break.
+- `engine/animation/cameraKeyRegistry.ts`'s default `captureCameraKeyFrame` now recognizes `base_axis` on the last path segment, resolves the base to a vec, and picks the axis component. Also auto-calls `addTrack(tid, tid)` if the track doesn't exist yet — the upstream `addKeyframe` silently no-ops on missing tracks.
+- `fluid-toy/main.tsx` and `fractal-toy/main.tsx` flipped their `registerCameraKeyTracks` calls to UNDERSCORE form for vec components (`sceneCamera.center_x/y`, `camera.target_x/y/z`).
+
+**Not fixed (deferred to F13):** orbit LFO target in `fluid-toy/orbitTick.ts` uses `julia.juliaC.x/y` but those targets are hijacked by `AnimationSystem.tsx`'s GMT-specific `julia.*` handler before reaching any generic dispatch. Reformatting the LFO target wouldn't help until F13 lands.
+
+**Docs:** [08_Animation.md § track-types](08_Animation.md#track-types)
+
+---
+
 ## Fragility fix priority order
 
-Blocking toy-fluid port (must do first):
+Blocking toy-fluid port (done):
 1. ~~**F1** — late registration freeze~~ 🟢 Fixed (96a4b5f)
 2. ~~**F2** — duplicate ID detection~~ 🟢 Fixed (96a4b5f)
 3. ~~**F3** — preset field registry~~ 🟢 Fixed (a4e7d6b)
 4. ~~**F4** — render-loop plugin + dev warning~~ 🟢 Fixed (c6ee640)
+5. ~~**F2b** — unified undo stack~~ 🟢 Fixed (b294a5d)
+6. ~~**F12** — vec track ID format~~ 🟢 Fixed (2026-04-23)
+7. ~~**F13** — generic modulation dispatch~~ 🟢 Fixed (2026-04-23)
 
-Can land incrementally during/after toy-fluid port:
-5. **F5** — decouple camera from AnimationEngine
-6. **F6** — auto-bind replaces name inference
-7. **F7** — animation-host coupling as bridge
-8. **F2b** — unified undo stack (major, but port can work with current 3-stack model)
-9. **F9** — componentId validation
+Landing next:
+8. **F5** — decouple camera from AnimationEngine (partial; full `binderRegistry.register()` pending)
+9. **F6** — auto-bind replaces name inference
+10. **F9** — componentId validation
 
 Deferred:
-10. **F8** — UI state undo
-11. **F10** — `formula` field rename
-12. **F11** — store/events rename pass
+11. **F7** — animation-host coupling as bridge (smell; works via window handle)
+12. **F8** — UI state undo
+13. **F10** — `formula` field rename
+14. **F11** — store/events rename pass
 
 ---
 

@@ -12,10 +12,16 @@
  * fires only when orbit.enabled / radius / speed change. The actual
  * per-frame work happens inside modulationEngine.updateOscillators.
  *
- * Two sine LFOs on julia.juliaC.x and julia.juliaC.y (the latter with
+ * Two sine LFOs on julia.juliaC_x and julia.juliaC_y (the latter with
  * a 0.25 phase offset) give circular motion around the current juliaC
  * base position. No anchor param — the base IS the anchor. Slide juliaC
  * while orbit is on and the circle moves with it.
+ *
+ * Target IDs use GMT's UNDERSCORE form (`featureId.param_<axis>`) so
+ * AnimationSystem.tsx's base-value resolver finds the vec component
+ * through the generic DDFS lookup — AutoFeaturePanel uses the same
+ * form for its live-value readout, so both read the same liveModulation
+ * keys.
  */
 
 import { useFractalStore } from '../store/fractalStore';
@@ -45,8 +51,8 @@ const sync = () => {
 
     const next = [
         ...others,
-        { id: ORBIT_ID_X, target: 'julia.juliaC.x', shape: commonShape, period, phase: 0,    amplitude: radius, smoothing: 0, enabled: true },
-        { id: ORBIT_ID_Y, target: 'julia.juliaC.y', shape: commonShape, period, phase: 0.25, amplitude: radius, smoothing: 0, enabled: true },
+        { id: ORBIT_ID_X, target: 'julia.juliaC_x', shape: commonShape, period, phase: 0,    amplitude: radius, smoothing: 0, enabled: true },
+        { id: ORBIT_ID_Y, target: 'julia.juliaC_y', shape: commonShape, period, phase: 0.25, amplitude: radius, smoothing: 0, enabled: true },
     ];
     state.setAnimations(next);
 };

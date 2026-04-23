@@ -77,11 +77,12 @@ installSceneIO({
 });
 
 // Camera tracks for the shared TimelineToolbar's Key Cam button.
-// Scalar paths — captureCameraKeyFrame path-resolves each to a number
-// in the DDFS store. vec2/vec3 params split into .x/.y/.z.
+// Vec components use UNDERSCORE form (GMT convention) — matches
+// AutoFeaturePanel's vec2 trackKeys so live-value and Key-Cam
+// keyframes index into the same tracks.
 registerCameraKeyTracks([
-    'sceneCamera.center.x',
-    'sceneCamera.center.y',
+    'sceneCamera.center_x',
+    'sceneCamera.center_y',
     'sceneCamera.zoom',
 ]);
 

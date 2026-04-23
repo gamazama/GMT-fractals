@@ -106,29 +106,40 @@ export const tick = (delta: number) => {
         let resolvedBase = 0;
         let uniformName = '';
         let isNoReset = false;
-        
+        // Tracks whether the target resolved to a known DDFS param
+        // (vec axis or scalar). Targets that don't resolve are still
+        // processed by GMT's special-case branches above; the flag
+        // controls whether the generic scalar fallback at the bottom
+        // writes to liveModulations or skips to avoid polluting the
+        // consumer map with zeros for unrecognized targets.
+        let isDDFSResolved = false;
+
         // --- BASE VALUE RESOLUTION ---
         if (targetKey.includes('.')) {
             const [featureId, paramId] = targetKey.split('.');
             const feature = featureRegistry.get(featureId);
             const slice = (storeState as any)[featureId];
             if (feature && slice) {
-                // Check for vector component target (e.g., vec3A_x, vec2B_y)
-                const vectorMatch = paramId.match(/^(vec[234][ABC])_(x|y|z|w)$/);
-                if (vectorMatch) {
-                    const vectorName = vectorMatch[1];
+                // Check for vector component target — UNDERSCORE form
+                // (e.g. `juliaC_x`, `vec3A_y`). Generic: matches any
+                // paramName ending in _x/_y/_z/_w when the base points
+                // at a vec-shaped object in the slice. Falls through
+                // to the scalar branch when the base is a scalar
+                // (e.g. a param literally named `power_x`).
+                const vectorMatch = paramId.match(/^(.+)_(x|y|z|w)$/);
+                const vectorName = vectorMatch?.[1];
+                if (vectorMatch && vectorName && slice[vectorName] && typeof slice[vectorName] === 'object') {
                     const axis = vectorMatch[2];
                     const paramConfig = feature.params[vectorName];
                     if (paramConfig) {
                         const vector = slice[vectorName];
-                        if (vector && typeof vector === 'object') {
-                            resolvedBase = (vector as any)[axis] || 0;
-                        }
+                        resolvedBase = (vector as any)[axis] ?? 0;
                         if (paramConfig.uniform) {
                             // Map to individual uniform components
                             uniformName = `${paramConfig.uniform}_${axis}`;
                         }
                         if (paramConfig.noReset) isNoReset = true;
+                        isDDFSResolved = true;
                     }
                 } else {
                     const paramConfig = feature.params[paramId];
@@ -142,6 +153,7 @@ export const tick = (delta: number) => {
                             uniformName = paramConfig.uniform;
                         }
                         if (paramConfig.noReset) isNoReset = true;
+                        isDDFSResolved = true;
                     }
                 }
             }
@@ -150,9 +162,11 @@ export const tick = (delta: number) => {
              if (targetKey === 'iterations') {
                  uniformName = 'uIterations';
                  resolvedBase = (storeState as any).coreMath?.iterations ?? 0;
+                 isDDFSResolved = true;
              } else if (targetKey.startsWith('param')) {
                  uniformName = 'u' + targetKey.charAt(0).toUpperCase() + targetKey.slice(1);
                  resolvedBase = (storeState as any).coreMath?.[targetKey] ?? 0;
+                 isDDFSResolved = true;
              }
         }
 
@@ -187,8 +201,11 @@ export const tick = (delta: number) => {
 
         // --- APPLY TO SHADER ---
 
-        // A. Coloring Repeats/Phase Special Case
-        if (targetKey.startsWith('coloring.')) {
+        // A. Coloring Repeats/Phase Special Case — GMT-specific.
+        //    Scoped to apps that have a `coloring` slice so engine-fork
+        //    apps can register their own `coloring` feature without
+        //    inheriting GMT's uColorScale/uColorOffset bindings.
+        if (targetKey.startsWith('coloring.') && (storeState as any).coloring) {
             if (targetKey === 'coloring.repeats') {
                 const c = (storeState as any).coloring as ColoringState;
                 if (c && Math.abs(c.repeats) > 0.001) {
@@ -228,20 +245,24 @@ export const tick = (delta: number) => {
             }
         }
 
-        // B. Julia Vector Composite
-        if (targetKey.startsWith('julia.') || targetKey.startsWith('geometry.julia')) {
+        // B. Julia Vector Composite — GMT-specific (`geometry.juliaX/Y/Z` →
+        //    `uJulia` composite). Scoped to apps that have a `geometry`
+        //    slice. Engine-fork apps that name a feature `julia` (e.g.
+        //    fluid-toy's Julia-set feature) fall through to the generic
+        //    DDFS vec handler below so their targets aren't hijacked.
+        if ((targetKey.startsWith('julia.') || targetKey.startsWith('geometry.julia')) && (storeState as any).geometry) {
             const g = (storeState as any).geometry;
             const baseX = g?.juliaX ?? 0;
             const baseY = g?.juliaY ?? 0;
             const baseZ = g?.juliaZ ?? 0;
-            
-            if (targetKey.endsWith('juliaX') || targetKey.endsWith('x')) { 
+
+            if (targetKey.endsWith('juliaX') || targetKey.endsWith('x')) {
                 juliaX = baseX + offset; liveModulations[targetKey] = juliaX;
                 if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaX', value: juliaX });
-            } else if (targetKey.endsWith('juliaY') || targetKey.endsWith('y')) { 
+            } else if (targetKey.endsWith('juliaY') || targetKey.endsWith('y')) {
                 juliaY = baseY + offset; liveModulations[targetKey] = juliaY;
                 if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaY', value: juliaY });
-            } else if (targetKey.endsWith('juliaZ') || targetKey.endsWith('z')) { 
+            } else if (targetKey.endsWith('juliaZ') || targetKey.endsWith('z')) {
                 juliaZ = baseZ + offset; liveModulations[targetKey] = juliaZ;
                 if (shouldRecord) keysToRecord.push({ trackId: 'geometry.juliaZ', value: juliaZ });
             }
@@ -264,9 +285,12 @@ export const tick = (delta: number) => {
             return;
         }
 
-        // D. Geometry Pre/Post/World Rotation — pass offsets to engine.modulations
-        //    UniformManager.syncFrame reads these to build rotation matrices
-        if (targetKey.startsWith('geometry.preRot') || targetKey.startsWith('geometry.postRot') || targetKey.startsWith('geometry.worldRot')) {
+        // D. Geometry Pre/Post/World Rotation — GMT-specific.
+        //    UniformManager.syncFrame reads engine.modulations to build
+        //    rotation matrices. Scoped to apps that have a `geometry`
+        //    slice; engine-fork apps registering their own `geometry`
+        //    feature take over this namespace.
+        if ((targetKey.startsWith('geometry.preRot') || targetKey.startsWith('geometry.postRot') || targetKey.startsWith('geometry.worldRot')) && (storeState as any).geometry) {
             engine.modulations[targetKey] = offset;
             if (!isRemoved) liveModulations[targetKey] = resolvedBase + offset;
             if (Math.abs(offset) > 0.0001) hasVisualChange = true;
@@ -319,19 +343,25 @@ export const tick = (delta: number) => {
             return;
         }
         
-        // F. Vector Params — any feature with vec2/3/4 params (e.g., coreMath.vec3A_x)
+        // F. Vector Params — any feature with vec2/3/4 params (e.g.,
+        //    `coreMath.vec3A_x`, `julia.juliaC_x`). Works for uniform-backed
+        //    DDFS params (GMT) AND uniformless DDFS params (engine-fork
+        //    apps like fluid-toy read liveModulations directly from the
+        //    store). The uniform write is conditional; the liveModulations
+        //    update always happens so React consumers see the modulation.
         const vectorMatch = targetKey.match(/^(\w+)\.([\w]+)_(x|y|z|w)$/);
-        if (vectorMatch && uniformName.endsWith(`_${vectorMatch[3]}`)) {
+        if (vectorMatch) {
             const featureId = vectorMatch[1];
-            const paramName = vectorMatch[2]; // e.g., 'vec3A'
-            const axis = vectorMatch[3]; // 'x', 'y', 'z', or 'w'
-            
+            const paramName = vectorMatch[2];
+            const axis = vectorMatch[3] as 'x' | 'y' | 'z' | 'w';
+
             const slice = (storeState as any)[featureId];
-            if (slice && slice[paramName]) {
+            if (slice && slice[paramName] && typeof slice[paramName] === 'object') {
                 const vec = slice[paramName];
-                const baseVal = vec[axis] ?? 0;
+                const baseVal = (vec as any)[axis] ?? 0;
                 const finalVal = baseVal + offset;
-                
+
+                let liveVal = finalVal;
                 if (shouldRecord) {
                     let cleanBase = baseVal;
                     if (animStore.recordingSnapshot && animStore.recordingSnapshot.tracks[targetKey]) {
@@ -341,26 +371,37 @@ export const tick = (delta: number) => {
                         cleanBase = initialStaticValues.current[targetKey];
                     }
                     keysToRecord.push({ trackId: targetKey, value: cleanBase + offset });
-                    liveModulations[targetKey] = cleanBase + offset;
-                } else {
-                    liveModulations[targetKey] = finalVal;
+                    liveVal = cleanBase + offset;
                 }
-                
-                // Apply full vector to uniform (strip axis suffix to get base uniform name)
-                const baseUniform = uniformName.replace(/_[xyzw]$/, '');
-                const fullVec = { ...vec, [axis]: finalVal };
-                engine.setUniform(baseUniform, fullVec);
+
+                if (!isRemoved) liveModulations[targetKey] = liveVal;
+                if (Math.abs(offset) > 0.0001) hasVisualChange = true;
+
+                // Uniform write only when the feature declares one.
+                if (uniformName && uniformName.endsWith(`_${axis}`)) {
+                    const baseUniform = uniformName.replace(/_[xyzw]$/, '');
+                    const fullVec = typeof (vec as any).clone === 'function'
+                        ? (vec as any).clone()
+                        : { ...vec };
+                    (fullVec as any)[axis] = finalVal;
+                    engine.setUniform(baseUniform, fullVec);
+                }
             }
             return;
         }
-        
-        // Apply Standard Uniforms
-        if (uniformName) {
-            const finalVal = resolvedBase + offset;
-            if (!isRemoved) {
-                liveModulations[targetKey] = finalVal;
+
+        // Apply Standard — liveModulations for every DDFS scalar;
+        // uniform only if the feature declared one. Skip entirely if
+        // the target isn't a known DDFS param AND has no uniform (it
+        // was a typo, a removed param, or handled by an earlier special
+        // case above).
+        if (uniformName || isDDFSResolved) {
+            const finalScalar = resolvedBase + offset;
+            if (!isRemoved) liveModulations[targetKey] = finalScalar;
+            if (uniformName) {
+                engine.setUniform(uniformName, finalScalar, isNoReset);
             }
-            engine.setUniform(uniformName, finalVal, isNoReset);
+            if (Math.abs(offset) > 0.0001) hasVisualChange = true;
         }
     });
 

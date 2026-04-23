@@ -1,35 +1,53 @@
 # 08 — Animation 🚧
 
-Timeline + keyframes + modulation, with **auto-binding** for every feature param and explicit `BinderRegistry` for everything else.
+Timeline + keyframes + modulation.
 
-**Rule:** if you declare a param in a feature, it's animatable. No separate wiring.
+**Rule:** if you declare a param in a feature, it's animatable — the binder is derived at animate-time from feature id + track id.
 
-## What replaces GMT's setter-name inference
+## Current implementation (as of phase 5)
 
-GMT's `AnimationEngine.ts` built binders by doing:
-```ts
-const setterName = 'set' + featureName.charAt(0).toUpperCase() + featureName.slice(1);
-const setter = (storeActions as any)[setterName];
-```
-Worked until a feature didn't follow the convention. Silent no-op when it broke.
-
-**New approach:** binders are derived from the feature registry at store-construction time.
+`engine/animation/modulationTick.ts` registers GMT's `AnimationSystem.tick(delta)` into `TickRegistry.ANIMATE` phase. Zero reinvention — this is literally GMT's production animation pipeline, re-wired into the plugin TickRegistry so any app can drive it.
 
 ```ts
-// At freeze:
-for (const [featureId, def] of featureRegistry.entries()) {
-  for (const [paramId, paramDef] of Object.entries(def.params)) {
-    const trackId = `${featureId}.${paramId}`;
-    binderRegistry.auto(trackId, {
-      read:  () => store.getState()[featureId][paramId],
-      write: (v) => store.getState()[`set${capitalize(featureId)}`]({ [paramId]: v }),
-      interpolate: interpolatorFor(paramDef.type),
+// engine/animation/modulationTick.ts (simplified)
+import { registerTick, TICK_PHASE } from '../TickRegistry';
+import { tick as animationSystemTick } from '../../components/AnimationSystem';
+
+export const installModulation = () => {
+    if (_unregister) return;
+    _unregister = registerTick('engine.animation', TICK_PHASE.ANIMATE, (delta) => {
+        animationSystemTick(delta);
     });
-  }
-}
+};
 ```
 
-Every DDFS param ⇒ one track ⇒ zero manual wiring.
+**What AnimationSystem.tick drives each frame:**
+1. `animationEngine.tick(delta)` — advances `currentFrame`, evaluates every active track's interpolated value, calls the bound setter.
+2. `modulationEngine.updateOscillators()` — LFO modulation.
+3. Modulation rules (audio band, envelope-follower) — rule-based offsets.
+4. Writes resolved offsets → `store.liveModulations`.
+
+**Store connection:** apps call `bindStoreToEngine()` once at boot, which calls `animationEngine.connect(useAnimationStore, useFractalStore)`. Without this, the animation engine has no store handles and playback silently no-ops.
+
+**Boot checklist (as demonstrated by `fluid-toy/main.tsx`):**
+1. `installModulation()` — registers the tick.
+2. Mount `<EngineBridge />` in the React tree — calls `bindStoreToEngine()`.
+3. Mount `<RenderLoopDriver />` — drives RAF → `TickRegistry.runTicks(dt)`.
+
+## Binder resolution (GMT's AnimationEngine.getBinder)
+
+When `animationEngine.scrub(frame)` evaluates a track, it looks up a binder by track id. Resolution order in [engine/AnimationEngine.ts:66-226](../engine/AnimationEngine.ts#L66):
+
+| Case | Track ID pattern | Example | Writer |
+|---|---|---|---|
+| 0 | `camera.active_index` | — | Calls `selectCamera(savedCameras[round(v)].id)` |
+| 1 | `camera.unified.{x\|y\|z}` / `camera.rotation.{x\|y\|z}` | `camera.unified.x` | Buffers into `pendingCam`, committed via `CAMERA_TELEPORT` event |
+| 2 | `lights.<i>.position.<axis>` / `lights.<i>.color` / `lights.<i>.intensity` | Legacy format — redirects to case 3 |
+| 3 | `lighting.light<i>_<prop>` | `lighting.light0_intensity` | Calls `updateLight({ index, params: {…} })` |
+| 4 | `<feature>.<param>` or `<feature>.<param>.<axis>` (DDFS) | `julia.power`, `julia.juliaC.x` | Scalar: `set${Feature}({ [param]: v })`. Vec axis: clones current vec, overwrites axis, writes whole vec back. |
+| 5 | `<rootProp>` (scalar only) | `sampleCap` | Calls `set${RootProp}(v)` — GMT legacy fallback |
+
+**Vec track-id format (F12 fixed 2026-04-23):** AutoFeaturePanel uses UNDERSCORE form (`feature.param_x`) for `trackKeys` and `liveModulations` lookup. `AnimationEngine.getBinder` case 4 now matches `/^(.+)_([xyzw])$/` on the child segment, validates the base name is a vec-shaped object in the slice, and routes to a shared `writeVecAxis` helper. DOT form kept as backward-compat for any early phase-5 saved scenes.
 
 ## Track types
 
@@ -54,25 +72,38 @@ Animating a gradient param crossfades the two gradient configs linearly as LUTs.
 
 **Rule:** v1 gradient animation = whole-gradient crossfade. Don't block feature work on per-stop.
 
-## BinderRegistry — explicit binders
+## BinderRegistry — explicit binders (designed, not yet built)
 
-For state that's NOT a feature param (camera pose, app globals, derived values), register binders manually:
+The full design is: for state that's NOT a feature param, apps register binders at boot so the animation engine has a uniform lookup rather than the current name-inference chain.
 
 ```ts
+// Designed API — NOT YET IMPLEMENTED. Tracked as F5 + F6.
 binderRegistry.register({
   id: 'camera.position',
   read:  () => store.getState().camera.position,
   write: (v) => store.getState().camera.setPosition(v),
   interpolate: lerpVec3,
-  category?: 'Camera',            // for ParameterSelector grouping
+  category?: 'Camera',
   label?: 'Camera Position',
 });
 ```
 
-**Canonical non-feature binders** (registered by `@engine/camera` when installed):
-- `camera.position`, `camera.rotation`, `camera.targetDistance`, `camera.fov`, `camera.active_index`
+**Current workaround — `cameraKeyRegistry`** (`engine/animation/cameraKeyRegistry.ts`):
 
-App-specific binders: the app registers them at boot, in the same module pattern as `registerFeatures.ts`.
+Apps register the track-id list that makes up their camera pose. The shared `<TimelineToolbar>`'s Key Cam button reads this list and captures a keyframe on each track from the current store state.
+
+```ts
+// fluid-toy/main.tsx
+import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
+
+registerCameraKeyTracks([
+  'sceneCamera.center.x',
+  'sceneCamera.center.y',
+  'sceneCamera.zoom',
+]);
+```
+
+Default capture path-resolves each track id against the DDFS store. Apps with camera state outside the store (e.g. GMT reading from `engine.activeCamera`) override with `setCameraKeyCaptureFn(fn)`.
 
 ## Keyframe model
 
@@ -221,8 +252,11 @@ Rarely needed — prefer `derive()` / `bridge()` in [09_Bridges_and_Derived.md](
 ## Known fragilities
 
 See [20_Fragility_Audit.md](20_Fragility_Audit.md):
-- **F5** — hardcoded camera tracks. Fixed by `@engine/camera` registering its own binders, not engine-bundled.
-- **F6** — `set${Feature}` name inference. Fixed by `binderRegistry.auto()` at freeze.
+- **F5** (🟡 partial) — legacy `camera.unified.*` / `camera.rotation.*` binders still hardcoded in `AnimationEngine.getBinder`. `cameraKeyRegistry` lets apps register their own tracks; full `binderRegistry.register()` still pending.
+- **F6** (🔴 open) — `set${Feature}` name inference in `AnimationEngine.getBinder`. Silent no-op when naming doesn't match.
+- **F7** (🔴 open) — `animationStore ↔ fractalStore` circular import via `window.useAnimationStore`.
+- **F12** (🟢 fixed 2026-04-23) — UNDERSCORE-form vec binder.
+- **F13** (🟢 fixed 2026-04-23) — GMT-specific target hijacks in `AnimationSystem.tsx` gated; generic DDFS vec + scalar now populate `liveModulations` without requiring a uniform declaration.
 
 ## Cross-refs
 

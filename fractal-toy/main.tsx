@@ -113,16 +113,16 @@ camera.register({
 // Tell the shared <TimelineToolbar> which tracks make up "the camera"
 // for this app — it uses these for the Key Cam button's capture +
 // dirty-detection logic. Fractal-toy uses a 4-DOF orbit camera.
-// Scalar paths — vec2/vec3 params split into .x/.y/.z components so
-// captureCameraKeyFrame can path-resolve each to a number.
+// Vec components use UNDERSCORE form (GMT convention) so Key Cam
+// tracks line up with AutoFeaturePanel's vec2/vec3 live-value readout.
 registerCameraKeyTracks([
     'camera.orbitTheta',
     'camera.orbitPhi',
     'camera.distance',
     'camera.fov',
-    'camera.target.x',
-    'camera.target.y',
-    'camera.target.z',
+    'camera.target_x',
+    'camera.target_y',
+    'camera.target_z',
 ]);
 
 // Seed panel state after mount.

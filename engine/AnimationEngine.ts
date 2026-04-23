@@ -156,56 +156,61 @@ export class AnimationEngine {
             const parts = id.split('.');
             const parent = parts[0];
             const child = parts[1];
-            
+
             const feature = featureRegistry.get(parent);
-            
+
             if (feature) {
                 const actions = this.fractalStore!.getState();
                 const setterName = `set${parent.charAt(0).toUpperCase() + parent.slice(1)}`;
                 const setter = (actions as any)[setterName];
-                
+
                 if (setter && typeof setter === 'function') {
-                    // Generic 3-part path: feature.param.axis — write
-                    // the scalar into the named axis (x/y/z/w) of the
-                    // vec-shaped param, preserving other components.
-                    // Works for any feature with vec2/vec3/vec4 DDFS
-                    // params (fluid-toy's julia.juliaC.x, fractal-toy's
-                    // camera.target.z, etc.).
+                    // Writer helper: clone the current vec-shaped param,
+                    // overwrite the named axis, commit the whole vec. Works
+                    // for THREE.Vector{2,3,4} (has .clone()) and plain
+                    // {x,y[,z,w]} objects (spread). Used by both the
+                    // UNDERSCORE and DOT forms below.
+                    const writeVecAxis = (base: string, axis: 'x' | 'y' | 'z' | 'w') => (v: number) => {
+                        const state = this.fractalStore!.getState() as any;
+                        const current = state[parent]?.[base];
+                        if (current && typeof current === 'object') {
+                            const next = typeof current.clone === 'function'
+                                ? current.clone()
+                                : { ...current };
+                            next[axis] = v;
+                            setter({ [base]: next });
+                        }
+                    };
+
+                    // UNDERSCORE form — GMT convention used by AutoFeaturePanel's
+                    // vec2/vec3/vec4 rendering: `featureId.paramName_<axis>`.
+                    // Matches if the base name exists as a vec-like object
+                    // in the slice (so `power_x` on a scalar `power` falls
+                    // through to the scalar branch below).
+                    const underscoreMatch = child.match(/^(.+)_([xyzw])$/);
+                    if (underscoreMatch) {
+                        const state = this.fractalStore!.getState() as any;
+                        const base = underscoreMatch[1];
+                        const axis = underscoreMatch[2] as 'x' | 'y' | 'z' | 'w';
+                        const current = state[parent]?.[base];
+                        if (current && typeof current === 'object' && axis in current) {
+                            binder = writeVecAxis(base, axis);
+                            this.binders.set(id, binder);
+                            return binder;
+                        }
+                    }
+
+                    // DOT form — kept as backward-compat for callers that
+                    // encode the axis as a third path segment
+                    // (phase-5-era `feature.param.axis`). Never produced
+                    // by AutoFeaturePanel, but keyframes may exist in
+                    // saved scenes from early phase-5 builds.
                     const thirdPart = parts[2];
                     if (thirdPart === 'x' || thirdPart === 'y' || thirdPart === 'z' || thirdPart === 'w') {
-                        const axis = thirdPart as 'x' | 'y' | 'z' | 'w';
-                        binder = (v) => {
-                            const state = this.fractalStore!.getState() as any;
-                            const current = state[parent]?.[child];
-                            if (current && typeof current === 'object') {
-                                // THREE.Vector{2,3,4} has .clone(); plain {x,y[,z,w]} we spread.
-                                const next = typeof current.clone === 'function'
-                                    ? current.clone()
-                                    : { ...current };
-                                next[axis] = v;
-                                setter({ [child]: next });
-                            }
-                        };
+                        binder = writeVecAxis(child, thirdPart as 'x' | 'y' | 'z' | 'w');
                     } else {
-                        // GMT legacy vec[23][ABC]_(x|y|z) naming — preserved
-                        // so existing GMT formulas keep working untouched.
-                        const vectorMatch = child.match(/^(vec[23][ABC])_(x|y|z)$/);
-                        if (vectorMatch) {
-                            const vectorName = vectorMatch[1];
-                            const axis = vectorMatch[2] as 'x' | 'y' | 'z';
-                            binder = (v) => {
-                                const state = this.fractalStore!.getState() as any;
-                                const currentVector = state[parent]?.[vectorName];
-                                if (currentVector) {
-                                    const newVector = currentVector.clone();
-                                    newVector[axis] = v;
-                                    setter({ [vectorName]: newVector });
-                                }
-                            };
-                        } else {
-                            // Standard scalar param.
-                            binder = (v) => setter({ [child]: v });
-                        }
+                        // Standard scalar param.
+                        binder = (v) => setter({ [child]: v });
                     }
                 } else {
                     console.warn(`AnimationEngine: Setter ${setterName} not found for feature ${parent}`);
