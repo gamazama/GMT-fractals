@@ -48,5 +48,16 @@ export const FluidSimFeature: FeatureDefinition = {
         forceGain:     { type: 'float',   default: -1200, min: -5000, max: 5000, step: 1,    label: 'Force Gain' },
         interiorDamp:  { type: 'float',   default: 0.59,  min: 0,     max: 1,    step: 0.01, label: 'Interior Damp' },
         paused:        { type: 'boolean', default: false,                                     label: 'Pause Sim' },
+
+        // Per-pixel clamp on force-vector magnitude — prevents the
+        // c-track force mode from blowing up when |dz| goes asymptotic.
+        forceCap:      { type: 'float',   default: 40,   min: 0,     max: 200,  step: 0.1,  label: 'Force Cap' },
+        // Fade force / dye injection + advection near the viewport edge
+        // so the sim doesn't appear to "gush" from walls. 0 disables.
+        edgeMargin:    { type: 'float',   default: 0.04, min: 0,     max: 0.25, step: 0.001, label: 'Edge Margin' },
+        // Integration timestep. The RAF loop uses a fixed 16.67 ms
+        // wall-clock step; this scales the physical dt applied per
+        // sim frame. Advanced knob — smaller = more stable but slower.
+        dt:            { type: 'float',   default: 0.016, min: 0.001, max: 0.05, step: 0.0001, label: 'Δt (advanced)', description: 'Integration timestep. Lower = more stable.' },
     },
 };

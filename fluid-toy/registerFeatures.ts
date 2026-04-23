@@ -19,6 +19,7 @@ import { FluidSimFeature } from './features/fluidSim';
 import { SceneCameraFeature } from './features/sceneCamera';
 import { OrbitFeature } from './features/orbit';
 import { PostFxFeature } from './features/postFx';
+import { CompositeFeature } from './features/composite';
 import { JuliaCPicker } from './components/JuliaCPicker';
 
 // Components used by feature customUI slots must be registered before
@@ -50,3 +51,6 @@ featureRegistry.register(OrbitFeature);
 // PostFX — tone mapping, exposure, vibrance, bloom, aberration,
 // refraction, caustics, fluid style presets. Pure display-stage knobs.
 featureRegistry.register(PostFxFeature);
+
+// Composite — juliaMix + velocityViz balance controls.
+featureRegistry.register(CompositeFeature);

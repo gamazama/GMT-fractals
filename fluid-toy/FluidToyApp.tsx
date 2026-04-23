@@ -63,6 +63,7 @@ export const FluidToyApp: React.FC = () => {
     const fluidSim    = useFractalStore((s: any) => s.fluidSim);
     const sceneCamera = useFractalStore((s: any) => s.sceneCamera);
     const postFx      = useFractalStore((s: any) => s.postFx);
+    const composite   = useFractalStore((s: any) => s.composite);
     // Live-modulated values (base + LFO/audio/rule offsets). The
     // engine/animation/modulationTick writes this each frame.
     // Read-with-fallback pattern: liveMod[target] if present, else base.
@@ -181,6 +182,9 @@ export const FluidToyApp: React.FC = () => {
             forceGain:      fluidSim.forceGain ?? -1200,
             interiorDamp:   fluidSim.interiorDamp ?? 0.59,
             paused:         !!fluidSim.paused,
+            forceCap:       fluidSim.forceCap ?? 40,
+            edgeMargin:     fluidSim.edgeMargin ?? 0.04,
+            dt:             fluidSim.dt ?? 0.016,
             // autoQuality stays off in our port — adaptive is handled by
             // @engine/viewport, not FluidEngine's internal loop.
             autoQuality:    false,
@@ -216,6 +220,16 @@ export const FluidToyApp: React.FC = () => {
             caustics:       postFx.caustics ?? 0,
         });
     }, [postFx]);
+
+    // Push composite mix (julia vs dye vs velocity viz).
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!engine || !composite) return;
+        engine.setParams({
+            juliaMix:    composite.juliaMix ?? 0.4,
+            velocityViz: composite.velocityViz ?? 0.02,
+        });
+    }, [composite]);
 
     // Resize whenever physical pixels or quality fraction change.
     useEffect(() => {
