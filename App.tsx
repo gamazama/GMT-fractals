@@ -5,14 +5,14 @@ import { useFractalStore } from './store/fractalStore';
 import { ViewportArea } from './components/ViewportArea';
 import { useGlobalContextMenu } from './hooks/useGlobalContextMenu';
 import GlobalContextMenu from './components/GlobalContextMenu';
-import { SmartphoneRotateIcon, TimelineOpenIcon } from './components/Icons';
+import { SmartphoneRotateIcon } from './components/Icons';
 import { EngineBridge } from './components/EngineBridge';
 import { RenderLoopDriver } from './engine/plugins/RenderLoop';
 import { useAppStartup } from './hooks/useAppStartup';
 import { prefetchHelpTopics } from './data/help/registry';
+import { TimelineHost } from './components/TimelineHost';
 
 // --- Code-split: loaded on demand ---
-const Timeline = React.lazy(() => import('./components/Timeline'));
 const HelpBrowser = React.lazy(() => import('./components/HelpBrowser'));
 import { useMobileLayout } from './hooks/useMobileLayout';
 import { FractalEvents } from './engine/FractalEvents';
@@ -31,7 +31,6 @@ const App: React.FC = () => {
   const state = useFractalStore();
   const [isSceneReady, setIsSceneReady] = useState(false);
   const [isLoadingVisible, setIsLoadingVisible] = useState(true);
-  const [showTimeline, setShowTimeline] = useState(false);
 
   const mainWrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -57,11 +56,6 @@ const App: React.FC = () => {
   const isCurrentlyMobile = isMobile || state.debugMobileLayout;
   const isBroadcast = state.isBroadcastMode;
   const showCrosshair = state.interactionMode !== 'none';
-
-  const handleTimelineContextMenu = (e: React.MouseEvent) => {
-      e.preventDefault(); e.stopPropagation();
-      state.openContextMenu(e.clientX, e.clientY, [], ['ui.timeline']);
-  };
 
   const handleLoadingFinished = () => {
       setIsLoadingVisible(false);
@@ -150,22 +144,7 @@ const App: React.FC = () => {
             </Suspense>
         )}
 
-        {!showTimeline && !isBroadcast && (
-            <div className={`fixed bottom-4 left-4 z-50 flex gap-2 transition-all duration-500`}>
-                <button
-                    type="button"
-                    onClick={() => setShowTimeline(true)}
-                    onContextMenu={handleTimelineContextMenu}
-                    className={`p-2 rounded-full border shadow-lg transition-all bg-gray-800 border-gray-600 text-gray-400 hover:text-white`}
-                    title="Open Timeline (T)"
-                ><TimelineOpenIcon /></button>
-            </div>
-        )}
-        {showTimeline && !isBroadcast && (
-            <Suspense fallback={null}>
-                <Timeline onClose={() => setShowTimeline(false)} />
-            </Suspense>
-        )}
+        <TimelineHost hidden={isBroadcast} />
       </div>
     </div>
     </StoreCallbacksProvider>

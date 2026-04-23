@@ -28,6 +28,7 @@ import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
+import { TimelineHost } from '../components/TimelineHost';
 import {
     viewport,
     useQualityFraction,
@@ -193,6 +194,8 @@ export const FractalToyApp: React.FC = () => {
 
                     <Dock side="right" />
                 </div>
+
+                <TimelineHost />
 
                 {/* Perf HUD — global, outside the frame so it's visible
                     regardless of Fixed letterboxing. */}

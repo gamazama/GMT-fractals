@@ -22,6 +22,7 @@ import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
+import { TimelineHost } from '../components/TimelineHost';
 
 export const FluidToyApp: React.FC = () => {
     const state = useFractalStore();
@@ -135,6 +136,8 @@ export const FluidToyApp: React.FC = () => {
 
                 <Dock side="right" />
             </div>
+
+            <TimelineHost />
         </div>
         </StoreCallbacksProvider>
     );
