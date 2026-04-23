@@ -22,6 +22,7 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
 import { EngineFeatureRow, EngineStatus } from './panels/engine/EngineFeatureRow';
 import { checkParamActive } from '../utils/paramConditions';
+import { deriveTrackBinding, readLiveVec } from '../engine/animation/trackBinding';
 import * as THREE from 'three';
 
 interface AutoFeaturePanelProps {
@@ -299,68 +300,50 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 effectiveMax = sliceState[config.dynamicMaxRef];
             }
             
-            // DDFS Live Modulation Hookup
-            const trackId = `${featureId}.${key}`;
+            // DDFS animation hookup — scalar. `deriveTrackBinding` with
+            // empty `axes` returns a single track ID matching AnimationEngine
+            // case 4's scalar branch (F12 convention).
+            const scalarBinding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: [] });
+            const trackId = scalarBinding.trackKeys[0];
             const liveValue = liveModulations[trackId];
-            
+
             // Highlight if value differs from default, or if this param has a visibility condition (it's contextually relevant when shown)
             const isHighlighted = val !== config.default || !!config.condition;
             // Conditional params: skip entry animation to prevent grey-box on re-mount (CSS animation restart issue)
             const conditionalClass = config.condition ? '!animate-none !overflow-visible' : '';
             return <div><Slider label={config.label} value={val} min={config.min ?? 0} max={effectiveMax} step={config.step ?? 0.01} onChange={(v) => handleUpdate(key, v)} highlight={isHighlighted} trackId={trackId} liveValue={liveValue} defaultValue={config.default} customMapping={mapping} overrideInputText={overrideText} mapTextInput={config.scale === 'pi'} disabled={isParamDisabled} labelSuffix={compileIndicator} className={conditionalClass} /></div>;
         }
-        
+
+        // Vec2/3/4 all share the same binding derivation + live-value
+        // plumbing; only the THREE.Vector class + default/min/max differ.
+        // `deriveTrackBinding` yields UNDERSCORE-form trackKeys by default
+        // and falls back to scalar composeFrom when the feature bundles
+        // multiple scalar params into one widget.
         if (config.type === 'vec2') {
             const x = val?.x ?? config.default?.x ?? 0;
             const y = val?.y ?? config.default?.y ?? 0;
-            // Per-axis track IDs in GMT's UNDERSCORE form — matches
-            // AnimationEngine.getBinder case 4 so per-axis keyframe
-            // buttons on Vector2Input add tracks the playback +
-            // modulation pipelines both resolve.
-            const trackKeys = config.composeFrom
-                ? config.composeFrom.map(k => `${featureId}.${k}`)
-                : [`${featureId}.${key}_x`, `${featureId}.${key}_y`];
-            const trackLabels = config.composeFrom
-                ? undefined
-                : [`${config.label} X`, `${config.label} Y`];
-            const liveVec2 = liveModulations[trackKeys[0]] !== undefined || liveModulations[trackKeys[1]] !== undefined
-                ? new THREE.Vector2(liveModulations[trackKeys[0]], liveModulations[trackKeys[1]])
-                : undefined;
-            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={trackKeys} trackLabels={trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
+            const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y'], composeFrom: config.composeFrom });
+            const liveVec2 = readLiveVec(liveModulations, binding) as THREE.Vector2 | undefined;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec3') {
-             const x = val?.x ?? config.default?.x ?? 0;
-             const y = val?.y ?? config.default?.y ?? 0;
-             const z = val?.z ?? config.default?.z ?? 0;
-             const v3 = new THREE.Vector3(x, y, z);
-             // Generate track keys for animation (x, y, z components) - using underscore format
-             const trackKeys = config.composeFrom
-                 ? config.composeFrom.map(k => `${featureId}.${k}`)
-                 : [`${featureId}.${key}_x`, `${featureId}.${key}_y`, `${featureId}.${key}_z`];
-             const trackLabels = config.composeFrom
-                 ? undefined
-                 : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`];
-             const liveVec3 = liveModulations[trackKeys[0]] !== undefined || liveModulations[trackKeys[1]] !== undefined || liveModulations[trackKeys[2]] !== undefined
-                 ? new THREE.Vector3(liveModulations[trackKeys[0]], liveModulations[trackKeys[1]], liveModulations[trackKeys[2]])
-                 : undefined;
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
+            const x = val?.x ?? config.default?.x ?? 0;
+            const y = val?.y ?? config.default?.y ?? 0;
+            const z = val?.z ?? config.default?.z ?? 0;
+            const v3 = new THREE.Vector3(x, y, z);
+            const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z'], composeFrom: config.composeFrom });
+            const liveVec3 = readLiveVec(liveModulations, binding) as THREE.Vector3 | undefined;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec4') {
-             const x = val?.x ?? config.default?.x ?? 0;
-             const y = val?.y ?? config.default?.y ?? 0;
-             const z = val?.z ?? config.default?.z ?? 0;
-             const w = val?.w ?? config.default?.w ?? 0;
-             const v4 = new THREE.Vector4(x, y, z, w);
-             const trackKeys = config.composeFrom
-                 ? config.composeFrom.map(k => `${featureId}.${k}`)
-                 : [`${featureId}.${key}_x`, `${featureId}.${key}_y`, `${featureId}.${key}_z`, `${featureId}.${key}_w`];
-             const trackLabels = config.composeFrom
-                 ? undefined
-                 : [`${config.label} X`, `${config.label} Y`, `${config.label} Z`, `${config.label} W`];
-             const liveVec4 = liveModulations[trackKeys[0]] !== undefined || liveModulations[trackKeys[1]] !== undefined || liveModulations[trackKeys[2]] !== undefined || liveModulations[trackKeys[3]] !== undefined
-                 ? new THREE.Vector4(liveModulations[trackKeys[0]], liveModulations[trackKeys[1]], liveModulations[trackKeys[2]], liveModulations[trackKeys[3]])
-                 : undefined;
-             return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={trackKeys} trackLabels={trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
+            const x = val?.x ?? config.default?.x ?? 0;
+            const y = val?.y ?? config.default?.y ?? 0;
+            const z = val?.z ?? config.default?.z ?? 0;
+            const w = val?.w ?? config.default?.w ?? 0;
+            const v4 = new THREE.Vector4(x, y, z, w);
+            const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z', 'w'], composeFrom: config.composeFrom });
+            const liveVec4 = readLiveVec(liveModulations, binding) as THREE.Vector4 | undefined;
+            return <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
         }
 
         if (config.type === 'image') {
