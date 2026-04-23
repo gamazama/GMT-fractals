@@ -5,6 +5,10 @@
  * UV + velocity, and calls FluidEngine.splatForce. Color cycles by
  * hue over time so repeated splats leave a rainbow trail.
  *
+ * Also wires right-click to a canvas context menu — Copy C / Reset /
+ * Recenter / Orbit / Pause. Shares the engine's global context-menu
+ * surface so the look matches every other menu in the app.
+ *
  * Unlike the original toy-fluid/ToyFluidApp.tsx (which layers pan /
  * zoom / pick-c gesture modes on top of splat), this is just the
  * splat path. Extra gestures can land as follow-ups — they're
@@ -19,6 +23,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import type { FluidEngine } from './fluid/FluidEngine';
+import type { ContextMenuItem } from '../types/help';
 
 export interface FluidPointerLayerProps {
     canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -36,6 +41,55 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
     const stateRef = useRef<PointerState>({ down: false, lastX: 0, lastY: 0, lastT: 0 });
     const handleInteractionStart = useFractalStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useFractalStore((s) => s.handleInteractionEnd);
+    const openContextMenu = useFractalStore((s) => s.openContextMenu);
+
+    // Right-click context menu — reads the store at click-time via
+    // getState() so the handler stays stable across prop changes and
+    // always reflects the current orbit/pause state. Actions mutate
+    // the store's DDFS slices; the shared FluidToyApp effects push
+    // the new values into FluidEngine.
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const onMenu = (e: MouseEvent) => {
+            e.preventDefault();
+            const s = useFractalStore.getState() as any;
+            const juliaC = s.julia?.juliaC;
+            const orbitOn = !!s.orbit?.enabled;
+            const paused = !!s.fluidSim?.paused;
+
+            const items: ContextMenuItem[] = [
+                {
+                    label: `Copy Julia c (${juliaC?.x?.toFixed(3) ?? '?'}, ${juliaC?.y?.toFixed(3) ?? '?'})`,
+                    action: () => {
+                        if (!juliaC) return;
+                        const txt = `${juliaC.x.toFixed(6)}, ${juliaC.y.toFixed(6)}`;
+                        navigator.clipboard?.writeText(txt).catch(() => { /* clipboard unavailable */ });
+                    },
+                },
+                {
+                    label: paused ? 'Resume Sim' : 'Pause Sim',
+                    action: () => { s.setFluidSim({ paused: !paused }); },
+                },
+                {
+                    label: orbitOn ? 'Stop Auto Orbit' : 'Start Auto Orbit',
+                    action: () => { s.setOrbit({ enabled: !orbitOn }); },
+                },
+                {
+                    label: 'Recenter View',
+                    action: () => { s.setSceneCamera({ center: { x: 0, y: 0 }, zoom: 1.5 }); },
+                },
+                {
+                    label: 'Reset Fluid Fields',
+                    action: () => { engineRef.current?.resetFluid(); },
+                },
+            ];
+            openContextMenu(e.clientX, e.clientY, items, ['ui.fluid-canvas']);
+        };
+        canvas.addEventListener('contextmenu', onMenu);
+        return () => canvas.removeEventListener('contextmenu', onMenu);
+    }, [canvasRef, engineRef, openContextMenu]);
 
     // Attach events to the canvas directly (not React synthetic) so the
     // layer itself doesn't have to cover the canvas (which would trap
