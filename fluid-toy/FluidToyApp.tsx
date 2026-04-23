@@ -26,6 +26,7 @@ import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContex
 import { TimelineHost } from '../components/TimelineHost';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { FORCE_MODES } from './features/fluidSim';
+import { FluidPointerLayer } from './FluidPointerLayer';
 
 export const FluidToyApp: React.FC = () => {
     const state = useFractalStore();
@@ -188,8 +189,9 @@ export const FluidToyApp: React.FC = () => {
                 <ViewportFrame className="flex-1">
                     <canvas
                         ref={canvasRef}
-                        className="absolute inset-0 w-full h-full block"
+                        className="absolute inset-0 w-full h-full block touch-none"
                     />
+                    <FluidPointerLayer canvasRef={canvasRef} engineRef={engineRef} />
                     <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none z-10">
                         q{(quality * 100).toFixed(0)}%
                     </div>
