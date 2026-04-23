@@ -22,6 +22,7 @@ import { FluidToyApp } from './FluidToyApp';
 import { registerUI } from '../features/ui';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
+import { installTopBar } from '../engine/plugins/TopBar';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -51,6 +52,10 @@ installViewport({
     interactionDownsample: 0.5,  // manual-mode fallback when targetFps=0
     activityGraceMs: 100,
 });
+
+// @engine/topbar — registers default items (project name, FPS, adaptive
+// badge). Save/load etc. slot-register from other plugins when those land.
+installTopBar();
 
 // Camera tracks for the shared TimelineToolbar's Key Cam button.
 registerCameraKeyTracks(['sceneCamera.center', 'sceneCamera.zoom']);

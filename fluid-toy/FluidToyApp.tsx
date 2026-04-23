@@ -13,8 +13,8 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useFractalStore } from '../store/fractalStore';
 import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
-import { AdaptiveResolutionBadge } from '../engine/plugins/viewport/AdaptiveResolutionBadge';
 import { viewport, useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
+import { TopBarHost } from '../engine/plugins/TopBar';
 import { FluidEngine } from './fluid/FluidEngine';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
@@ -182,20 +182,16 @@ export const FluidToyApp: React.FC = () => {
                 </DraggableWindow>
             ))}
 
+            <TopBarHost />
+
             <div className="flex-1 flex overflow-hidden relative">
                 <ViewportFrame className="flex-1">
                     <canvas
                         ref={canvasRef}
                         className="absolute inset-0 w-full h-full block"
                     />
-                    <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none z-10">
-                        Fluid Toy
-                    </div>
-                    <div className="absolute top-3 right-3 z-10">
-                        <AdaptiveResolutionBadge />
-                    </div>
                     <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none z-10">
-                        {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
+                        q{(quality * 100).toFixed(0)}%
                     </div>
                 </ViewportFrame>
 
