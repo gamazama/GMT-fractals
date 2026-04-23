@@ -272,13 +272,46 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const vx = (dxPx / rect.width) / dt * 5;
                 const vy = -(dyPx / rect.height) / dt * 5;
                 const strength = Math.min(50, Math.hypot(vx, vy));
+
+                // Brush-mode split — all four modes reuse FluidEngine's
+                // additive splat; the per-mode shaping happens here:
+                //   paint  → inject dye + force (classic)
+                //   erase  → subtract dye (negative grayscale), no force
+                //   stamp  → inject dye, no force (press-and-drag trail)
+                //   smudge → inject force only, no dye (push colour around)
+                const brushMode = Math.floor(
+                    (useFractalStore.getState() as any).dye?.brushMode ?? 0
+                );
+
+                if (brushMode === 1) {
+                    // Erase — always fire (no velocity threshold, otherwise
+                    // holding still doesn't erase anything). Negative
+                    // grayscale subtracts luminance from the HDR dye buffer.
+                    const eraseStrength = 0.5;
+                    engine.splatForce(u, v, 0, 0, 0, [-eraseStrength, -eraseStrength, -eraseStrength]);
+                    return;
+                }
+
+                // Paint/stamp/smudge all want a real drag; below-threshold
+                // motion is noise from a still hand and would spam splats.
                 if (strength < 0.01) return;
 
                 const h = (now * 0.0005) % 1;
                 const r = 0.5 + 0.5 * Math.cos(6.2831853 * h);
                 const g = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.333));
                 const b = 0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.667));
-                engine.splatForce(u, v, vx, vy, strength, [r, g, b]);
+
+                if (brushMode === 2) {
+                    // Stamp — dye only, zero force. Dye strength scaled so
+                    // standing still (strength=0) still leaves a mark.
+                    engine.splatForce(u, v, 0, 0, 0, [r, g, b]);
+                } else if (brushMode === 3) {
+                    // Smudge — force only, no dye.
+                    engine.splatForce(u, v, vx, vy, strength, [0, 0, 0]);
+                } else {
+                    // Paint (default / mode 0).
+                    engine.splatForce(u, v, vx, vy, strength, [r, g, b]);
+                }
                 return;
             }
         };
