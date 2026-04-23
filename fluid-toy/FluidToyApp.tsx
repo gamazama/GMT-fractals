@@ -29,6 +29,7 @@ import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { FORCE_MODES } from './features/fluidSim';
+import { KIND_MODES } from './features/julia';
 import { FluidPointerLayer } from './FluidPointerLayer';
 import { registerFluidToyHotkeys } from './hotkeys';
 
@@ -107,7 +108,9 @@ export const FluidToyApp: React.FC = () => {
         const baseY = julia.juliaC?.y ?? 0;
         const cx = liveMod['julia.juliaC_x'] ?? baseX;
         const cy = liveMod['julia.juliaC_y'] ?? baseY;
+        const kindIdx = Math.floor(julia.kind ?? 1);
         engine.setParams({
+            kind: KIND_MODES[kindIdx] ?? 'mandelbrot',
             juliaC: [cx, cy],
             maxIter: julia.maxIter ?? 310,
             escapeR: julia.escapeR ?? 32,

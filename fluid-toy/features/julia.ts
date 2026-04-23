@@ -2,16 +2,23 @@
  * JuliaFeature — DDFS bindings for the Julia/Mandelbrot iteration
  * parameters in the fluid sim's fractal pass.
  *
- * Mirrors the juliaC/maxIter/escapeR/power fields of FluidParams in
- * FluidEngine. 3c keeps this minimal — `kind` ('julia' | 'mandelbrot')
- * and the orbit-trap / color-mapping params land in later commits once
- * we pick a pattern for enum-typed DDFS params.
+ * Mirrors the kind/juliaC/maxIter/escapeR/power fields of FluidParams
+ * in FluidEngine. `kind` chooses between julia-set (c is a constant
+ * seed, z iterates from screen coords) and mandelbrot (c iterates from
+ * screen coords, z starts at 0) — same iteration loop, different
+ * initial conditions. FluidToyApp maps the DDFS numeric index to the
+ * FluidEngine's string kind via KIND_MODES.
  *
  * Defaults match FluidEngine.DEFAULT_PARAMS so this commit doesn't
- * change what renders on screen — just surfaces the panel.
+ * change what renders on screen — just surfaces the controls.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
+
+// Index-to-string map for the `kind` enum. AutoFeaturePanel reads the
+// options array for the dropdown labels; FluidToyApp uses the parallel
+// string map to call FluidEngine.setParams({ kind }).
+export const KIND_MODES = ['julia', 'mandelbrot'] as const;
 
 export const JuliaFeature: FeatureDefinition = {
     id: 'julia',
@@ -27,6 +34,15 @@ export const JuliaFeature: FeatureDefinition = {
     },
 
     params: {
+        kind: {
+            type: 'float',  // numeric index — AutoFeaturePanel dropdown when options are set
+            default: 1,     // matches FluidEngine.DEFAULT_PARAMS.kind = 'mandelbrot'
+            label: 'Fractal Kind',
+            options: [
+                { label: 'Julia',      value: 0 },
+                { label: 'Mandelbrot', value: 1 },
+            ],
+        },
         juliaC: {
             type: 'vec2',
             default: { x: -0.36303304426511473, y: 0.16845183018751916 },
