@@ -27,6 +27,7 @@ import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
 import { registry } from './engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { featureRegistry } from '../engine/FeatureSystem';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ViewportQuality } from './topbar/ViewportQuality';
 
@@ -243,6 +244,25 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         width: 'w-64',
     });
 
+    // --- File actions -------------------------------------------------
+    menu.registerItem('system', {
+        id: 'share-link',
+        type: 'button',
+        label: 'Copy Share Link',
+        title: 'Copy a URL that reproduces the current scene.',
+        onSelect: async () => {
+            try {
+                const share = (useEngineStore.getState() as any).getShareString?.();
+                if (!share) return;
+                const url = `${window.location.origin}${window.location.pathname}#s=${share}`;
+                await navigator.clipboard.writeText(url);
+                console.info('[gmt] Share URL copied to clipboard');
+            } catch (err) {
+                console.error('[gmt] Share link copy failed:', err);
+            }
+        },
+    });
+
     menu.registerItem('system', {
         id: 'formula-workshop',
         type: 'button',
@@ -250,20 +270,46 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         onSelect: openFormulaWorkshop,
     });
 
-    menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator' });
-
     menu.registerItem('system', {
-        id: 'advanced-mode',
-        type: 'toggle',
-        label: 'Advanced Mode',
-        title: 'Reveals advanced features and extra panels (e.g. Light).',
-        isActive: () => useEngineStore.getState().advancedMode,
-        onToggle: () => {
-            const s = useEngineStore.getState();
-            s.setAdvancedMode(!s.advancedMode);
-        },
+        id: 'hardware-settings',
+        type: 'button',
+        label: 'Hardware Settings…',
+        title: 'GPU caps + quality-tier thresholds.',
+        onSelect: () => console.info('[app-gmt] Hardware Settings modal pending port'),
     });
 
+    menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator' });
+
+    // --- Dynamic feature toggles --------------------------------------
+    // Each feature that declares `menuConfig` gets an auto-toggle here.
+    // `toggleParam` names the boolean param on the feature slice that
+    // the toggle flips (audio.isEnabled, drawing.enabled, etc.).
+    // `advancedOnly` gates the row behind `state.advancedMode`.
+    featureRegistry.getMenuFeatures().forEach((feat) => {
+        menu.registerItem('system', {
+            id: `feature-${feat.id}`,
+            type: 'toggle',
+            label: feat.label,
+            when: feat.advancedOnly
+                ? () => useEngineStore.getState().advancedMode
+                : undefined,
+            isActive: () => {
+                const slice: any = (useEngineStore.getState() as any)[feat.id];
+                return !!slice?.[feat.toggleParam];
+            },
+            onToggle: () => {
+                const s = useEngineStore.getState() as any;
+                const slice: any = s[feat.id];
+                const cur = !!slice?.[feat.toggleParam];
+                const setter = s[`set${feat.id.charAt(0).toUpperCase()}${feat.id.slice(1)}`];
+                if (typeof setter === 'function') setter({ [feat.toggleParam]: !cur });
+            },
+        });
+    });
+
+    menu.registerItem('system', { id: 'sys-sep-prefs', type: 'separator' });
+
+    // --- Prefs toggles -----------------------------------------------
     menu.registerItem('system', {
         id: 'invert-y',
         type: 'toggle',
@@ -290,10 +336,63 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     });
 
     menu.registerItem('system', {
+        id: 'advanced-mode',
+        type: 'toggle',
+        label: 'Advanced Mode',
+        title: 'Reveals advanced features and extra panels (e.g. Light, Engine Config).',
+        isActive: () => useEngineStore.getState().advancedMode,
+        onToggle: () => {
+            const s = useEngineStore.getState();
+            s.setAdvancedMode(!s.advancedMode);
+        },
+    });
+
+    // --- Advanced subsection (visible only when advancedMode=true) ----
+    menu.registerItem('system', {
+        id: 'sys-sep-advanced',
+        type: 'separator',
+        when: () => useEngineStore.getState().advancedMode,
+    });
+    menu.registerItem('system', {
+        id: 'sys-advanced-section',
+        type: 'section',
+        label: 'Advanced',
+        when: () => useEngineStore.getState().advancedMode,
+    });
+
+    // Engine Settings toggle — reveals the Engine panel (the bespoke
+    // compile-time feature toggles panel). Flips engineSettings.showEngineTab
+    // which the panel manifest's `showIf: 'engineSettings.showEngineTab'`
+    // watches.
+    menu.registerItem('system', {
+        id: 'engine-settings',
+        type: 'toggle',
+        label: 'Engine Config Panel',
+        title: 'Show the bespoke Engine panel (compile-time toggles + profiles).',
+        when: () => useEngineStore.getState().advancedMode,
+        isActive: () => !!(useEngineStore.getState() as any).engineSettings?.showEngineTab,
+        onToggle: () => {
+            const s = useEngineStore.getState() as any;
+            const cur = !!s.engineSettings?.showEngineTab;
+            s.setEngineSettings?.({ showEngineTab: !cur });
+        },
+    });
+
+    menu.registerItem('system', {
+        id: 'mesh-export',
+        type: 'button',
+        label: 'Mesh Export…',
+        title: 'Convert the current fractal to a VDB mesh (Pro).',
+        when: () => useEngineStore.getState().advancedMode,
+        onSelect: () => console.info('[app-gmt] Mesh Export pending port'),
+    });
+
+    menu.registerItem('system', {
         id: 'force-mobile',
         type: 'toggle',
         label: 'Force Mobile UI',
         title: 'Preview the mobile layout on desktop. Dev / debug only.',
+        when: () => useEngineStore.getState().advancedMode,
         isActive: () => useEngineStore.getState().debugMobileLayout,
         onToggle: () => {
             const s = useEngineStore.getState();

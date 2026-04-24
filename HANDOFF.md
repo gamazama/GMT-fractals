@@ -2,7 +2,7 @@
 
 **Location:** `h:/GMT/gmt-engine/`
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
-**Status:** ✅ **Phases 1–6 + panel manifest migration (2026-04-24).** Three apps boot on the engine: `fractal-toy.html`, `fluid-toy.html`, and `app-gmt.html` — the latter now renders Mandelbulb end-to-end through the GMT worker + full path tracing + Orbit/Fly navigation. `npx tsc --noEmit` → 0 errors. Dock panels migrated from per-feature `tabConfig` to app-declared `PanelManifest` (see `docs/engine/14_Panel_Manifest.md`); 22 feature files simplified, 10 GMT panels composed from 26 features. UI is functional but rough — histogram widgets, scene-widgets, formula picker, and topbar menus are next. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
+**Status:** ✅ **Phases 1–6 + panel manifest + topbar port + compile pipeline + camera round-trip (2026-04-24).** Three apps boot on the engine: `fractal-toy.html`, `fluid-toy.html`, and `app-gmt.html` — the latter now renders Mandelbulb end-to-end with: full GMT worker + path tracing + Orbit/Fly navigation, formula switching through the full setFormula pipeline (preset hydration → CompileGate → worker recompile → new shader), PT toggle driving `renderMode`, scene-widgets / coloring histograms / formula gallery with thumbnails, Light Studio in the center topbar, camera state round-trips through save/load + respects Reset Position, picking (Julia + focus) via `useInteractionManager`. `npx tsc --noEmit` → 0 errors. Dock panels use `PanelManifest` (see `docs/engine/14_Panel_Manifest.md`); 10 GMT panels composed from 26 features. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
 
 **📐 Architecture baseline committed (2026-04-22).** 12 engine-scope docs written under `docs/01_*` through `docs/20_*`. Start any session with `docs/DOCS_INDEX.md`; the table in `CLAUDE.md` maps "working on X" → "read Y". All design decisions (core+plugins model, feature isolation, unified undo, auto-binding animation, bridges/derived) live in those docs. Any architectural change goes in a doc before it goes in code.
 
@@ -161,11 +161,55 @@ App manifests:
 
 ### Known gaps after panel migration
 
-- **Widget registrations not yet ported** — GMT's `ColoringHistogram`, scene-widgets (Navigation/Optics/DofControls), Light gizmo button-row, formula picker, histogram probes. Manifest slots exist (`widgets.before` etc.) but the components aren't in `componentRegistry` yet. Gradient panel currently shows only raw coloring params.
-- **Bespoke panel components** — `'panel-graph'` referenced by the Graph panel isn't registered. Modular-formula users would see "Component not registered: panel-graph". Same for any future `'panel-cameramanager'` / `'panel-engine'` if those get reintroduced.
-- **Topbar menus, FormulaWorkshop, Timeline toggle, Help browser** — separate phase, untouched.
-- **Camera Manager / Engine panels** — currently rendered as DDFS feature panels (cameraManager has empty params, engineSettings has debug params). GMT originally had bespoke `CameraManagerPanel` + `EnginePanel` components; deferred until the topbar menu wiring lands.
-- **Advanced mode toggle** — the `advancedMode` boolean drives `showIf: 'advancedMode'` for the Light tab, but there's no UI to toggle it yet (GMT's TopBar Settings menu owned this).
+(Most of these closed in the subsequent topbar / compile / camera / formula-picker passes — see below.)
+
+### ✅ Topbar port — Passes 1-3 (2026-04-24)
+
+- **Pass 1 (inline items + menus)**: Playing badge (left, pulsing green when animating), PT toggle (left, flips `renderMode` between Direct + PathTracing), **Camera menu** (Reset Position, Camera Manager stub, 9 slots with click-to-recall / save-on-empty), **System menu** (Advanced Mode, Invert Look Y, Hide Interface, Force Mobile UI, Formula Workshop stub), extended Menu plugin with `disabled?` on button/toggle items.
+- **Pass 2 — Light Studio**: Ported `CenterHUD` verbatim — 3-orb collapsed / 8-light 3×3 expanded, shadow toggle + popup, light-gizmo toggle. Registered into the TopBar's `'center'` slot. LightControls / LightDirectionControl / ShadowControls / SingleLightGizmo were already in `engine-gmt/features/lighting/components/`.
+- **Pass 3 — Viewport Quality**: Ported `ViewportQuality.tsx` verbatim (PT-aware per-subsystem tier controls + master preset + compile-time batching).
+- **Scalability slice** — Ported `scalabilitySlice.ts` from gmt-0.8.5 to `store/slices/`. Root types already declared `scalability` + `hardwareProfile` but nothing initialised them, so ViewportQuality crashed until this landed.
+
+### ✅ Compile pipeline + formula switching (2026-04-24)
+
+- **`engineStore.setFormula` rewritten** to mirror GMT's full flow: clone defaultPreset → preserve compile-time engine params marked `onUpdate:'compile'` → honour `lockSceneOnSwitch` → `loadPreset` → `CONFIG_DONE` event → worker immediate compile.
+- **`setFormulaPresetResolver(fn)`** — engine-core stays decoupled from any specific formula registry; apps register their own resolver (engine-gmt-based apps pull from `engine-gmt/engine/FractalRegistry`).
+- **`FRACTAL_EVENTS.CONFIG_DONE`** — new generic event; `engine-gmt/renderer/GmtRendererTickDriver` bridges it to `proxy.post({type:'CONFIG_DONE'})` so the worker fires immediate compile without the 200ms scheduleCompile debounce.
+- **CompilingIndicator** mounted in AppGmt — IS_COMPILING events (forwarded by WorkerProxy from the worker's FractalEngine) now drive a visible spinner.
+- **PT toggle** flips `state.renderMode` (not `ptEnabled`) — the bindings.ts subscription forwards to `setLighting({ renderMode })`, which is the compile-triggering DDFS write GMT expects. `ptEnabled` stays always-on to avoid a second compile hop.
+
+### ✅ Formula picker (2026-04-24)
+
+- Ported GMT's `FormulaSelect` + `FormulaGallery` (full thumbnail-grid dropdown with category sections + type-to-filter + preview) + `FormulaContextMenu` into `engine-gmt/components/panels/formula/`. Registered as `'formula-select'` componentId and slotted via `widgets.before: ['formula-select']` on the Formula panel — matches GMT's layout exactly (picker at the top of the Formula panel, not in the topbar).
+- Copied 42 formula thumbnails into `public/thumbnails/` so the gallery preview works.
+
+### ✅ Camera round-trip (2026-04-24)
+
+All three broken flows fixed:
+
+- **Initial load**: after bootWithConfig, `proxy.setShadowOffset(precise)` + `proxy.post({type:'OFFSET_SET'})` so the worker's sceneOffset matches the hydrated preset from frame 1 (mirrors GMT's `useAppStartup`).
+- **Formula switch / preset load**: `engineStore.loadPreset` emits both `CAMERA_TELEPORT` AND `OFFSET_SET` directly — Navigation warps the R3F camera, the OFFSET_SET bridge pushes sceneOffset to the worker.
+- **Navigation movement**: app-gmt's `setSceneOffset` prop emits `OFFSET_SET` so orbit-absorb and fly-controller keep the worker offset in sync.
+- **Reset Position** (Camera menu): restores the current formula's `defaultPreset.{cameraRot, sceneOffset, targetDistance}` via CAMERA_TELEPORT.
+- **Preset fields**: `sceneOffset` and `cameraMode` added to `presetFieldRegistry` — save/load now preserves them.
+
+### ✅ Widget registrations (2026-04-24)
+
+- **ColoringHistogram** (per-layer, driven by HistogramProbe readbacks)
+- **scene_widgets**: `OpticsControls`, `OpticsDofControls`, `NavigationControls`, `ColorGradingHistogram`
+- **HybridAdvancedLock**, **JuliaRandomize**, **InteractionPicker** (Julia c / Mandelbrot c-param picker)
+- **EnginePanel** (bespoke, registered as `'panel-engine'`) — surfaces compile-time feature toggles in its own layout. Visibility currently gated on `engineSettings.showEngineTab`; GMT exposes that toggle in the Advanced subsection of the System menu — not yet wired.
+- **CameraManagerPanel** (bespoke, `'panel-cameramanager'`) — registered but the manifest entry + menu-button invocation are disabled until GMT's `cameraSlice` (addCamera / deleteCamera / savedCameras / undoCamera / redoCamera) gets ported.
+
+### ✅ Interaction picker (2026-04-24)
+
+- Ported `useInteractionManager` hook (focus picking + Julia picking with drag + lerp + record-keyframes) verbatim.
+- Mounted in AppGmt with a `viewportRef` on the ViewportFrame's inner wrapper.
+- Added `'picking_julia'` to root `InteractionMode` type (extraction drop).
+
+### ✅ Menu plugin — live store subscription (2026-04-24)
+
+- Menu plugin now subscribes to `useEngineStore` and bumps its notify rev on every store change, so toggle items' `isActive()` re-evaluates on each render. Previously the badge stayed stale until a menu-item re-registration. Advanced Mode badge flips correctly now.
 
 ### ✅ Post-phase-5 cleanup (2026-04-23 afternoon)
 
@@ -181,6 +225,15 @@ Everything flagged as "known gaps after Phase 5" has landed:
 - **Screenshot folded into scene-io** — standalone camera button + `Alt+S` hotkey + dropdown "Save PNG…" all route through one `saveCurrentPng` helper. `Ctrl+Shift+S` is browser-reserved, never reaches JS. (commit `a6795da`)
 
 ## Remaining work
+
+### Highest-impact gaps in app-gmt
+- **System menu fillout** — currently has Advanced Mode / Invert Y / Broadcast / Force Mobile / Workshop stub. Missing: Share Link, Hardware Settings (modal), dynamic feature toggles (iterate `featureRegistry.menuConfig`), Advanced subsection with Engine Settings toggle (reveals Engine panel), Mesh Export link.
+- **cameraSlice port** — blocks `Camera Manager` panel (add/delete/reorder saved cameras + undo/redo camera moves). 335 lines in gmt-0.8.5, drops cleanly into `store/slices/` or `engine-gmt/store/`.
+- **FlowEditor / `panel-graph`** — Modular formula uses it. Currently the Graph tab renders "Component not registered" if a user switches to `Modular`.
+- **FormulaWorkshop** — fragmentarium import pipeline. Parked but deferred.
+- **Hardware Preferences modal** — GPU caps override UI. System menu button exists as stub.
+- **Render Region + Bucket Render topbar items** — GMT had crop region selector + tiled export button with popover.
+- **Timeline toggle button** — timeline infrastructure is installed but no topbar button to show/hide the dock.
 
 ### Not-yet-built plugins
 - **`@engine/environment`** — theme, DPR, mobile-detect. Placeholder in the roadmap; no concrete need yet.
