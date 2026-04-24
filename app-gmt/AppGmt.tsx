@@ -40,7 +40,9 @@ import HistogramProbe from '../engine-gmt/components/HistogramProbe';
 import { HardwarePrefsHost } from '../engine-gmt/components/HardwarePrefsHost';
 import { useInteractionManager } from '../engine-gmt/hooks/useInteractionManager';
 import { useRegionSelection } from '../engine-gmt/hooks/useRegionSelection';
+import { usePreviewTarget } from '../engine-gmt/hooks/usePreviewTarget';
 import { RegionOverlay } from '../engine-gmt/components/viewport/RegionOverlay';
+import { PreviewGhostOverlay } from '../engine-gmt/components/viewport/PreviewGhostOverlay';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
 import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
@@ -74,6 +76,7 @@ export const AppGmt: React.FC = () => {
     const viewportRef = useRef<HTMLDivElement>(null);
     useInteractionManager(viewportRef);
     const { visualRegion, drawPreview, isGhostDragging, renderRegion } = useRegionSelection(viewportRef);
+    const { ghostRect: previewGhostRect } = usePreviewTarget(viewportRef);
     const activeRegion = drawPreview || visualRegion || renderRegion;
     const interactionMode = (state as any).interactionMode;
     const isSelectingRegion = interactionMode === 'selecting_region';
@@ -141,6 +144,8 @@ export const AppGmt: React.FC = () => {
                                 mode={cameraMode}
                                 hudRefs={hudRefs}
                                 setSceneOffset={setSceneOffset}
+                                onStart={(s) => state.handleInteractionStart(s as any)}
+                                onEnd={() => state.handleInteractionEnd()}
                             />
                         </Canvas>
 
@@ -171,6 +176,14 @@ export const AppGmt: React.FC = () => {
                             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-cyan-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-cyan-500/50 shadow-lg animate-pulse pointer-events-none z-[60]">
                                 Drag to select render region
                             </div>
+                        )}
+
+                        {/* Preview Region ghost — follows the cursor while
+                            `interactionMode === 'selecting_preview'`. Clicking
+                            captures the rect and fires to the worker (handled
+                            by usePreviewTarget). */}
+                        {previewGhostRect && (
+                            <PreviewGhostOverlay region={previewGhostRect} />
                         )}
                         </div>
                     </ViewportFrame>

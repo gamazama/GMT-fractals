@@ -1,10 +1,15 @@
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+// ReactFlow ships its own CSS — without this the graph is unstyled
+// (garbled nodes, no handles, broken pan/zoom) and pointer events land
+// on invisible elements. GMT's index.html loaded it via CDN; we use the
+// npm-resolved import so Vite bundles it.
+import 'reactflow/dist/style.css';
 
 // Module-level: survives tab switches (component unmount/remount).
 // useRef would reset to null every time the Graph tab is re-entered.
 let persistedViewport: { x: number; y: number; zoom: number } | null = null;
-import ReactFlow, { 
+import ReactFlow, {
     Background, Controls, MiniMap, 
     addEdge, ReactFlowProvider, useReactFlow,
     applyNodeChanges, applyEdgeChanges,

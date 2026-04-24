@@ -37,11 +37,12 @@ export const installGmtCameraSlice = (): void => {
     const get = useEngineStore.getState as () => any;
 
     set({
-        // Initial state — previously only declared in types, never populated.
+        // Initial state for the saved-camera library. engine-core owns
+        // `undoStack` / `redoStack` (unified Transaction-based history),
+        // so we don't seed them here — overwriting would wipe any
+        // transactions already captured before this runs.
         savedCameras: [] as SavedCamera[],
         activeCameraId: null as string | null,
-        undoStack: [] as CameraState[],
-        redoStack: [] as CameraState[],
 
         // --- Primitive setters ----------------------------------------
         setSceneOffset: (v: any) => {
@@ -256,72 +257,46 @@ export const installGmtCameraSlice = (): void => {
             FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, resetState as any);
         },
 
-        undoCamera: () => {
-            const { undoStack, redoStack } = get();
-            if (undoStack.length === 0) return;
-
-            const prev = undoStack[undoStack.length - 1];
-            const e = engine as any;
-
-            let current: CameraState;
-            if (e.activeCamera && e.virtualSpace) {
-                current = e.virtualSpace.getUnifiedCameraState(e.activeCamera, get().targetDistance);
-                e.virtualSpace.applyCameraState(e.activeCamera, prev);
-            } else {
-                const s = get();
-                current = {
-                    position: { x: 0, y: 0, z: 0 },
-                    rotation: s.cameraRot,
-                    sceneOffset: s.sceneOffset,
-                    targetDistance: s.targetDistance,
-                };
-            }
-
-            if (prev.sceneOffset) set({ sceneOffset: prev.sceneOffset });
-
-            set({
-                cameraRot: prev.rotation,
-                targetDistance: prev.targetDistance || 3.5,
-                redoStack: [...redoStack, current],
-                undoStack: undoStack.slice(0, -1),
-            });
-
+        // undoCamera / redoCamera: engine-core's historySlice already
+        // provides these as `undo('camera')` / `redo('camera')` on the
+        // unified Transaction stack. We don't override here — the
+        // Camera menu's Undo Move / Redo Move items call
+        // `state.undoCamera()` / `state.redoCamera()` directly, which
+        // resolve to engine-core's implementations. Engine-core's
+        // camera Transaction now captures full state (sceneOffset +
+        // cameraRot + targetDistance), so the diff applies cleanly on
+        // undo — no custom logic needed.
+        //
+        // After an engine-core undo applies the diff (sceneOffset +
+        // cameraRot + targetDistance), still emit CAMERA_TELEPORT so
+        // Navigation warps the R3F camera. Wrap the unified actions
+        // with a thin emitter layer.
+        _applyCameraTeleport: () => {
+            const s = get();
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
+                position: { x: 0, y: 0, z: 0 },
+                rotation: s.cameraRot,
+                sceneOffset: s.sceneOffset,
+                targetDistance: s.targetDistance,
+            } as any);
             FractalEvents.emit(FRACTAL_EVENTS.RESET_ACCUM, undefined);
-            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, prev as any);
         },
+    });
 
+    // Wrap engine-core's undoCamera / redoCamera to also fire the
+    // CAMERA_TELEPORT so the R3F camera warps to the restored pose
+    // instead of continuing to interpolate from the pre-undo position.
+    const prev = useEngineStore.getState() as any;
+    const origUndoCamera = prev.undoCamera;
+    const origRedoCamera = prev.redoCamera;
+    set({
+        undoCamera: () => {
+            origUndoCamera?.();
+            (useEngineStore.getState() as any)._applyCameraTeleport?.();
+        },
         redoCamera: () => {
-            const { undoStack, redoStack } = get();
-            if (redoStack.length === 0) return;
-
-            const next = redoStack[redoStack.length - 1];
-            const e = engine as any;
-
-            let current: CameraState;
-            if (e.activeCamera && e.virtualSpace) {
-                current = e.virtualSpace.getUnifiedCameraState(e.activeCamera, get().targetDistance);
-                e.virtualSpace.applyCameraState(e.activeCamera, next);
-            } else {
-                const s = get();
-                current = {
-                    position: { x: 0, y: 0, z: 0 },
-                    rotation: s.cameraRot,
-                    sceneOffset: s.sceneOffset,
-                    targetDistance: s.targetDistance,
-                };
-            }
-
-            if (next.sceneOffset) set({ sceneOffset: next.sceneOffset });
-
-            set({
-                cameraRot: next.rotation,
-                targetDistance: next.targetDistance || 3.5,
-                undoStack: [...undoStack, current],
-                redoStack: redoStack.slice(0, -1),
-            });
-
-            FractalEvents.emit(FRACTAL_EVENTS.RESET_ACCUM, undefined);
-            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, next as any);
+            origRedoCamera?.();
+            (useEngineStore.getState() as any)._applyCameraTeleport?.();
         },
     });
 };

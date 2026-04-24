@@ -153,10 +153,19 @@ export const createHistorySlice: StateCreator<
             if (elapsed < CAMERA_UNDO_DEBOUNCE_MS && get().undoStack.some((t) => t.scope === 'camera')) {
                 // Within debounce — keep existing camera entry.
             } else {
+                // Full camera snapshot — rot alone isn't enough for apps
+                // that also move scene offset + target distance (GMT's
+                // treadmill navigation). 2D / no-offset apps leave
+                // sceneOffset undefined in the diff, so the partial
+                // applies cleanly on undo either way.
                 const tx: Transaction = {
                     scope: 'camera',
                     label: 'Camera gesture',
-                    diff: { cameraRot: camState.rotation } as Partial<EngineStoreState>,
+                    diff: {
+                        cameraRot: camState.rotation,
+                        ...(camState.sceneOffset !== undefined ? { sceneOffset: camState.sceneOffset } : {}),
+                        ...(camState.targetDistance !== undefined ? { targetDistance: camState.targetDistance } : {}),
+                    } as Partial<EngineStoreState>,
                     timestamp: now,
                 };
                 set((state: any) => {
