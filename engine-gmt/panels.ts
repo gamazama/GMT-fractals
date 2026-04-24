@@ -111,12 +111,31 @@ export const GmtPanels: PanelManifest = [
     },
 
     // Engine — dev-only tab, hidden unless explicitly enabled. Mirrors
-    // GMT's engineSettings.showEngineTab param-flag.
+    // GMT's engineSettings.showEngineTab param-flag. Custom bespoke
+    // component (EnginePanel) instead of AutoFeaturePanel stacking —
+    // the panel has its own layout (per-feature rows with ON/OFF toggles
+    // + compile-estimate row).
     {
         id: 'Engine',
         dock: 'right',
         order: 90,
-        features: ['engineSettings'],
+        component: 'panel-engine',
         showIf: 'engineSettings.showEngineTab',
+    },
+
+    // Camera Manager — float by default; opened from the topbar Camera
+    // menu. The bespoke CameraManagerPanel renders the saved-camera list
+    // + per-camera edit row (AutoFeaturePanel doesn't fit the layout).
+    //
+    // Default visibility hidden via showIf — the Camera menu action
+    // flips a transient "open camera-manager" flag (or movePanel) to
+    // reveal it. Until wired, open from devtools via
+    // `useEngineStore.getState().togglePanel('Camera Manager', true)`.
+    {
+        id: 'Camera Manager',
+        dock: 'float',
+        order: 200,
+        component: 'panel-cameramanager',
+        isCore: false,
     },
 ];

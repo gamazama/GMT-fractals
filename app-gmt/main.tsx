@@ -23,6 +23,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
+import { registerGmtUi } from '../engine-gmt/features/ui';
 import { installViewport, viewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
@@ -57,6 +58,12 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
 }
 
 registerUI();
+
+// GMT-specific widget + bespoke-panel registrations. Must come after
+// the engine's registerUI() so it sees auto-feature-panel already
+// registered, and before applyPanelManifest() (which references these
+// componentIds for `component:` panels and `widgets:` slots).
+registerGmtUi();
 
 // Install GMT's formula-preset resolver so engineStore.setFormula can
 // hydrate the store with each formula's defaultPreset on switch.
@@ -97,8 +104,11 @@ installHud();
 // Playing badge). Must come AFTER installMenu/installCamera so the
 // registries they own exist. See engine-gmt/topbar.tsx for scope.
 registerGmtTopbar({
-    // Camera Manager panel isn't registered yet — log when user clicks.
-    openCameraManager: () => console.info('[app-gmt] Camera Manager panel pending port'),
+    openCameraManager: () => {
+        // Float the Camera Manager panel. `togglePanel` opens it and
+        // makes it the active tab in whatever dock it's in (float here).
+        useEngineStore.getState().togglePanel('Camera Manager', true);
+    },
     // Formula Workshop is a Pass 4+ item.
     openFormulaWorkshop: () => console.info('[app-gmt] Formula Workshop pending port'),
 });

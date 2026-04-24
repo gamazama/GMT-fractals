@@ -30,6 +30,30 @@ export const registerDefaultPresetFields = () => {
         },
     });
 
+    // ── Scene offset (split-float treadmill world position) ──────────────
+    // Apps that use GMT's VirtualSpace treadmill keep the camera at origin
+    // and move the world via sceneOffset (hi/lo split-floats for deep-zoom
+    // precision). 2D apps leave this undefined at both save and load, so
+    // the field is a no-op for them.
+    presetFieldRegistry.register({
+        key: 'sceneOffset',
+        serialize: (s) => (s as any).sceneOffset,
+        deserialize: (p, set) => {
+            const off = (p as any).sceneOffset;
+            if (off) set({ sceneOffset: off });
+        },
+    });
+
+    // ── Camera mode (Orbit / Fly) ────────────────────────────────────────
+    presetFieldRegistry.register({
+        key: 'cameraMode',
+        serialize: (s) => (s as any).cameraMode,
+        deserialize: (p, set) => {
+            const mode = (p as any).cameraMode;
+            if (mode) set({ cameraMode: mode });
+        },
+    });
+
     // ── Saved camera library ─────────────────────────────────────────────
     // NOTE: historically loaded-only (getPreset never serialized it). Preserving
     // that asymmetry for now — fixing it is a separate decision, not F3 scope.

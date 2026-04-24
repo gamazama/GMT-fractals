@@ -27,26 +27,33 @@ import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ViewportQuality } from './topbar/ViewportQuality';
+import { FormulaPicker } from './topbar/FormulaPicker';
 
 // ── Inline topbar items ────────────────────────────────────────────────
 
 /**
- * Path Tracing toggle. Reads/writes `state.lighting.ptEnabled` — the
- * lighting feature is the authoritative owner of render-mode state.
- * Purple highlight matches GMT's original look.
+ * Path Tracing toggle. Flips `state.renderMode` between 'Direct' and
+ * 'PathTracing'. engine-gmt/renderer/bindings.ts subscribes to this and
+ * forwards to `setLighting({ renderMode: 0|1 })`, which fires a compile
+ * via the DDFS onUpdate:'compile' path.
+ *
+ * `lighting.ptEnabled` is a separate compile-time flag that controls
+ * whether the PT module is linked into the shader at all — it's
+ * default-true and stays on; flipping it would add a second compile
+ * hop for no user-visible benefit. Purple highlight matches GMT.
  */
 const PathTracingToggle: React.FC = () => {
-    const ptEnabled = useEngineStore((s) => (s as any).lighting?.ptEnabled ?? false);
-    const setLighting = useEngineStore((s) => (s as any).setLighting);
+    const renderMode = useEngineStore((s) => s.renderMode);
+    const setRenderMode = useEngineStore((s) => s.setRenderMode);
+    const active = renderMode === 'PathTracing';
 
-    if (!setLighting) return null;
     return (
         <button
             type="button"
-            onClick={() => setLighting({ ptEnabled: !ptEnabled })}
+            onClick={() => setRenderMode(active ? 'Direct' : 'PathTracing')}
             title="Path tracing — physically-based lighting with accumulation"
             className={`flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-colors ${
-                ptEnabled
+                active
                     ? 'bg-purple-500/30 text-purple-200 border-purple-500/40'
                     : 'bg-black/40 text-gray-400 border-white/10 hover:text-white hover:border-purple-500/40'
             }`}
@@ -113,6 +120,12 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     } = options;
 
     // ── Inline items (left slot) ───────────────────────────────────────
+    topbar.register({
+        id: 'gmt-formula-picker',
+        slot: 'left',
+        order: 1,
+        component: FormulaPicker,
+    });
     topbar.register({
         id: 'gmt-viewport-quality',
         slot: 'left',

@@ -247,7 +247,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
 
                  {savedCameras.map((cam, index) => {
                      const isActive = activeCameraId === cam.id;
-                     const modified = isActive && isModified(cam);
+                     const modified = isActive && isModified(cam as unknown as SavedCamera);
                      const isDragOver = drag && drag.overIndex === index && drag.fromIndex !== index;
                      return (
                          <div
@@ -299,7 +299,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                                  ) : (
                                      <span
                                         className={`text-xs font-bold truncate block cursor-text ${modified ? 'text-amber-300 italic' : isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-300'}`}
-                                        onDoubleClick={(e) => { e.stopPropagation(); handleRenameStart(cam); }}
+                                        onDoubleClick={(e) => { e.stopPropagation(); handleRenameStart(cam as unknown as SavedCamera); }}
                                         title="Double-click to rename"
                                      >
                                          {modified ? `*${cam.label}` : cam.label}

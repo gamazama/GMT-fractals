@@ -224,6 +224,20 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
         set({ projectSettings: { name: newName, version: 0 }, lastSavedHash: null });
         applyPresetState(p, set as (partial: Record<string, unknown>) => void, get as unknown as () => Record<string, unknown>);
 
+        // Emit CAMERA_TELEPORT so apps that drive a 3D camera (GMT-style
+        // treadmill nav) warp the viewport to the loaded pose instead of
+        // continuing to interpolate from the pre-load position. 2D / no-
+        // camera apps ignore it. Preserves the preset's exact camera state.
+        const loaded = get() as any;
+        if (loaded.sceneOffset || loaded.cameraRot) {
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
+                position: { x: 0, y: 0, z: 0 },
+                rotation: loaded.cameraRot,
+                sceneOffset: loaded.sceneOffset,
+                targetDistance: loaded.targetDistance,
+            } as any);
+        }
+
         setTimeout(() => {
             const loadedState = get().getPreset({ includeScene: true });
             const { version, name, ...content } = loadedState as any;
