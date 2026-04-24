@@ -29,7 +29,6 @@ import { registry } from './engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ViewportQuality } from './topbar/ViewportQuality';
-import { FormulaPicker } from './topbar/FormulaPicker';
 
 // ── Inline topbar items ────────────────────────────────────────────────
 
@@ -144,12 +143,9 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     } = options;
 
     // ── Inline items (left slot) ───────────────────────────────────────
-    topbar.register({
-        id: 'gmt-formula-picker',
-        slot: 'left',
-        order: 1,
-        component: FormulaPicker,
-    });
+    // Formula picker lives inside the Formula panel (via FormulaSelect
+    // widget slotted via widgets.before in engine-gmt/panels.ts), not
+    // in the topbar — matches GMT's layout.
     topbar.register({
         id: 'gmt-viewport-quality',
         slot: 'left',

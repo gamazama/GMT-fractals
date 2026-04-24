@@ -228,6 +228,13 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
         // treadmill nav) warp the viewport to the loaded pose instead of
         // continuing to interpolate from the pre-load position. 2D / no-
         // camera apps ignore it. Preserves the preset's exact camera state.
+        //
+        // Also emit OFFSET_SET directly — Navigation's teleport handler
+        // updates its local camera state but relies on the OFFSET_SET
+        // bridge (engine-gmt/renderer/GmtRendererTickDriver) to push the
+        // sceneOffset to the worker. Without this extra emit, the worker's
+        // sceneOffset stays at the pre-load value until Navigation's
+        // setSceneOffset runs (which it may not for programmatic loads).
         const loaded = get() as any;
         if (loaded.sceneOffset || loaded.cameraRot) {
             FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
@@ -236,6 +243,9 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
                 sceneOffset: loaded.sceneOffset,
                 targetDistance: loaded.targetDistance,
             } as any);
+            if (loaded.sceneOffset) {
+                FractalEvents.emit(FRACTAL_EVENTS.OFFSET_SET, loaded.sceneOffset as any);
+            }
         }
 
         setTimeout(() => {

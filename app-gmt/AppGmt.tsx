@@ -37,6 +37,8 @@ import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
+import { useInteractionManager } from '../engine-gmt/hooks/useInteractionManager';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
 import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
@@ -66,8 +68,19 @@ export const AppGmt: React.FC = () => {
     const floatingPanels = (Object.values(state.panels) as PanelState[])
         .filter((p) => p.location === 'float' && p.isOpen);
 
+    const viewportRef = useRef<HTMLDivElement>(null);
+    useInteractionManager(viewportRef);
+
     const cameraMode = (state as any).cameraMode ?? 'Orbit';
-    const setSceneOffset = (v: any) => useEngineStore.setState({ sceneOffset: v } as any);
+    // Navigation (Orbit/Fly) calls setSceneOffset whenever the camera
+    // moves. The worker's sceneOffset must follow — GMT's cameraSlice
+    // setSceneOffset fires OFFSET_SET for exactly this reason. Until
+    // cameraSlice is ported, mirror that emit here so
+    // GmtRendererTickDriver's OFFSET_SET listener forwards to the worker.
+    const setSceneOffset = (v: any) => {
+        useEngineStore.setState({ sceneOffset: v } as any);
+        FractalEvents.emit(FRACTAL_EVENTS.OFFSET_SET, v);
+    };
 
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
@@ -93,6 +106,10 @@ export const AppGmt: React.FC = () => {
                     <Dock side="left" />
 
                     <ViewportFrame className="flex-1">
+                        {/* Wrapper div gives useInteractionManager a ref
+                            to measure pointer coords against. */}
+                        <div ref={viewportRef} className="absolute inset-0">
+
                         {/* Worker-rendered canvas (GMT's FractalEngine
                             renders into OffscreenCanvas, auto-presents). */}
                         <GmtRendererCanvas
@@ -131,6 +148,7 @@ export const AppGmt: React.FC = () => {
                         />
 
                         <HudHost />
+                        </div>
                     </ViewportFrame>
 
                     <Dock side="right" />

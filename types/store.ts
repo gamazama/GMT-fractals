@@ -18,7 +18,7 @@ export type PanelId = string;
 /** Canvas-gesture mode. Apps with domain-specific picks (e.g. a
  *  picker tool) widen this via declaration merging or carry the
  *  sub-state in their own feature slice. */
-export type InteractionMode = 'none' | 'picking_focus' | 'selecting_region' | 'selecting_preview';
+export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region' | 'selecting_preview';
 
 export type CompositionOverlayType = 'none' | 'grid' | 'thirds' | 'golden' | 'spiral' | 'center' | 'diagonal' | 'safearea';
 

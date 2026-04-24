@@ -34,6 +34,7 @@ import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogr
 import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
 import { JuliaRandomize } from '../components/widgets/JuliaRandomize';
 import { InteractionPicker } from '../../components/InteractionPicker';
+import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
 import {
     ColorGradingHistogram,
     OpticsControls,
@@ -100,6 +101,19 @@ const ConnectedGradingHistogram: React.FC<FeatureComponentProps> = (props) => {
     return <ColorGradingHistogram {...props as any} />;
 };
 
+// FormulaSelect wrapper — reads the current formula + setFormula from
+// the store. Registered as 'formula-select' and slotted above the
+// Formula panel via widgets.before (see engine-gmt/panels.ts).
+const ConnectedFormulaSelect: React.FC = () => {
+    const formula = useEngineStore((s) => s.formula);
+    const setFormula = useEngineStore((s) => s.setFormula);
+    return (
+        <div className="px-2 pb-2">
+            <FormulaSelect value={formula as any} onChange={(f: any) => setFormula(f)} />
+        </div>
+    );
+};
+
 // ── Entry point ────────────────────────────────────────────────────
 
 export const registerGmtUi = () => {
@@ -108,6 +122,7 @@ export const registerGmtUi = () => {
     componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock as any);
     componentRegistry.register('julia-randomize', JuliaRandomize as any);
     componentRegistry.register('interaction-picker', InteractionPicker as any);
+    componentRegistry.register('formula-select', ConnectedFormulaSelect as any);
 
     // Scene widgets — slotted via optics / navigation / colorGrading customUI.
     componentRegistry.register('scene-histogram', ConnectedGradingHistogram);

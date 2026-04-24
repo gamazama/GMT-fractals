@@ -29,12 +29,18 @@ export const GmtPanels: PanelManifest = [
 
     // Formula — core iteration math. coreMath = the formula kernel
     // params; geometry = folds/hybrids; interlace = per-iter alternation.
+    // FormulaSelect widget slots above the feature stack — click the
+    // dropdown to switch between the 42 formulas (fires setFormula →
+    // CompileGate → worker recompile).
     {
         id: 'Formula',
         dock: 'right',
         order: 10,
         active: true,
         features: ['coreMath', 'geometry', 'interlace'],
+        widgets: {
+            before: ['formula-select'],
+        },
     },
 
     // Scene — camera optics, navigation tuning, colour grading.

@@ -48,6 +48,7 @@
 
 import React, { useSyncExternalStore, useCallback, useState, useRef, useEffect } from 'react';
 import { topbar, TopBarSlot } from './TopBar';
+import { useEngineStore } from '../../store/engineStore';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -199,14 +200,23 @@ export const menu = {
 };
 
 let _installed = false;
+let _unsubStore: (() => void) | null = null;
 export const installMenu = () => {
     if (_installed) return;
     _installed = true;
     // Pure API plugin — no auto-registered menus. Apps and other plugins
     // create menus via menu.register().
+    //
+    // Bump the registry revision on every engine-store change too so
+    // toggle items' isActive() results re-render. Without this, a
+    // `type: 'toggle'` row's ON/OFF badge would stay stale until a menu
+    // re-registration bumped the internal rev.
+    _unsubStore = useEngineStore.subscribe(() => _notify());
 };
 export const uninstallMenu = () => {
     menu.clear();
+    _unsubStore?.();
+    _unsubStore = null;
     _installed = false;
 };
 

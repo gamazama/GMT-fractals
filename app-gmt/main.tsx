@@ -161,6 +161,21 @@ setTimeout(() => {
         quaternion: [camRot.x, camRot.y, camRot.z, camRot.w],
         fov: camFov,
     });
+
+    // Push scene offset to the worker immediately after BOOT — treadmill
+    // keeps camera at origin and uses sceneOffset for world position.
+    // Without this, the first frame renders from the wrong viewpoint
+    // until Navigation fires its own teleport. Mirrors GMT's useAppStartup.
+    const proxy = getProxy();
+    const offset = (state as any).sceneOffset;
+    if (offset) {
+        const precise = {
+            x: offset.x, y: offset.y, z: offset.z,
+            xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0,
+        };
+        proxy.setShadowOffset(precise);
+        proxy.post({ type: 'OFFSET_SET', offset: precise });
+    }
 }, 100);
 
 // Expose for dev-tools probing.
