@@ -36,6 +36,19 @@ import '../engine/features'; // Ensure features are registered
 
 import { compileGate } from './CompileGate';
 
+// App-registered resolver that returns a formula's defaultPreset by id.
+// Engine core stays decoupled from any specific formula registry
+// (engine-gmt has its own; a future app might use a different source).
+// Register via `setFormulaPresetResolver(fn)` at boot; `setFormula`
+// queries it on formula switch. Returns null when no resolver is
+// installed or the id is unknown — in that case `setFormula` falls
+// back to `{ formula: f }` with no feature hydration.
+type FormulaPresetResolver = (formulaId: string) => Preset | null | undefined;
+let _formulaPresetResolver: FormulaPresetResolver | null = null;
+export const setFormulaPresetResolver = (fn: FormulaPresetResolver | null) => {
+    _formulaPresetResolver = fn;
+};
+
 export const useEngineStore = create<EngineStoreState & EngineActions>()(subscribeWithSelector((set, get, api) => ({
     ...createUISlice(set, get, api),
     ...createRenderControlSlice(set, get, api),
@@ -55,10 +68,11 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
 
     setFormula: (f: string, options: { skipDefaultPreset?: boolean } = {}) => {
         const s = get();
-        if (s.formula === f) return;
+        if (s.formula === f && f !== 'Modular') return;
 
         if (!options.skipDefaultPreset) {
             get().resetParamHistory();
+            // Clear camera undo/redo — old positions make no sense for new formula
             set({ undoStack: [], redoStack: [] });
         }
 
@@ -71,9 +85,76 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
         set({ formula: f, projectSettings: { ...s.projectSettings, name: newName } });
 
         compileGate.queue("Loading Preview...", () => {
-            FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { formula: f });
+            // Forward formula + optional Modular graph/pipeline to the worker.
+            // `pipeline` and `graph` are GMT Modular-formula fields kept as
+            // optional via `as any` — they don't exist on the root store type.
+            FractalEvents.emit(FRACTAL_EVENTS.CONFIG, {
+                formula: f,
+                pipeline: (s as any).pipeline,
+                graph: (s as any).graph,
+            } as any);
+
+            if (f !== 'Modular' && !options.skipDefaultPreset) {
+                // Resolve the new formula's defaultPreset via the app-
+                // registered resolver (engine-gmt installs one at boot
+                // that pulls from its FractalRegistry). Clone so the
+                // registry's canonical preset can't be mutated by the
+                // engine-param-preservation pass below.
+                const resolved = _formulaPresetResolver?.(f);
+                const formulaPreset: Preset = resolved
+                    ? JSON.parse(JSON.stringify(resolved))
+                    : { formula: f };
+
+                // Preserve compile-time engine params from current state when the
+                // new preset doesn't specify them. Without this, switching
+                // formulas resets user-chosen engine settings (maxSteps, estimator,
+                // distance metric, etc.) every time.
+                if (!formulaPreset.features) formulaPreset.features = {};
+                const currentState = get();
+                featureRegistry.getEngineFeatures().forEach((feat) => {
+                    const currentSlice = (currentState as any)[feat.id];
+                    if (!currentSlice) return;
+                    const presetBlock = (formulaPreset.features as any)[feat.id] || {};
+                    const engineParams: Record<string, any> = {};
+                    const toggleParam = feat.engineConfig!.toggleParam;
+                    if (currentSlice[toggleParam] !== undefined && presetBlock[toggleParam] === undefined) {
+                        engineParams[toggleParam] = currentSlice[toggleParam];
+                    }
+                    Object.entries(feat.params).forEach(([key, config]) => {
+                        if (
+                            config.onUpdate === 'compile'
+                            && currentSlice[key] !== undefined
+                            && presetBlock[key] === undefined
+                        ) {
+                            engineParams[key] = currentSlice[key];
+                        }
+                    });
+                    if (!(formulaPreset.features as any)[feat.id]) (formulaPreset.features as any)[feat.id] = {};
+                    Object.assign((formulaPreset.features as any)[feat.id], engineParams);
+                });
+
+                const lockScene = (get() as any).lockSceneOnSwitch;
+                if (lockScene) {
+                    // Keep current scene state (optics, camera, lighting, …) and
+                    // only adopt the new formula's coreMath + geometry.
+                    const current = get().getPreset();
+                    const mergedFeatures = { ...(current.features || {}) };
+                    const newFeatures = (formulaPreset.features || {}) as any;
+                    if (newFeatures.coreMath) (mergedFeatures as any).coreMath = newFeatures.coreMath;
+                    if (newFeatures.geometry) (mergedFeatures as any).geometry = newFeatures.geometry;
+                    const merged: Preset = { ...current, formula: f, features: mergedFeatures } as Preset;
+                    get().loadPreset(merged);
+                } else {
+                    get().loadPreset(formulaPreset);
+                }
+            }
+
             get().handleInteractionEnd();
-            engine.post({ type: 'CONFIG_DONE' });
+
+            // Tell the worker all CONFIGs have been sent — compile immediately.
+            // Relies on engine-gmt/renderer/GmtRendererTickDriver bridging
+            // CONFIG_DONE via FractalEvents to the real worker proxy.
+            FractalEvents.emit(FRACTAL_EVENTS.CONFIG_DONE, undefined);
         });
     },
 

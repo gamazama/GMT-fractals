@@ -44,7 +44,7 @@ import {
 } from '../engine-gmt';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { registerGmtTopbar } from '../engine-gmt/topbar';
-import { useEngineStore, getShaderConfigFromState } from '../store/engineStore';
+import { useEngineStore, getShaderConfigFromState, setFormulaPresetResolver } from '../store/engineStore';
 
 // Dev-mode: unregister any stale service workers left by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -57,6 +57,12 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
 }
 
 registerUI();
+
+// Install GMT's formula-preset resolver so engineStore.setFormula can
+// hydrate the store with each formula's defaultPreset on switch.
+// Decoupled via setFormulaPresetResolver — the engine core has no
+// direct coupling to engine-gmt's FractalRegistry.
+setFormulaPresetResolver((f) => registry.get(f)?.defaultPreset as any ?? null);
 
 // @engine/viewport — GMT is CPU/GPU-heavy on path tracing; adaptive is
 // crucial. Target 30 fps; allow deeper quality drops under load since

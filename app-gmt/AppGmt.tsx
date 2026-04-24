@@ -35,6 +35,7 @@ import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
+import { CompilingIndicator } from '../components/CompilingIndicator';
 
 import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
@@ -137,6 +138,8 @@ export const AppGmt: React.FC = () => {
                 <TimelineHost />
 
                 <HelpOverlay />
+
+                <CompilingIndicator />
 
                 {state.contextMenu.visible && (
                     <GlobalContextMenu

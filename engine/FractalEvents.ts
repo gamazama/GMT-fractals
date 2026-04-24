@@ -6,6 +6,7 @@ import * as THREE from 'three';
 export const FRACTAL_EVENTS = {
     UNIFORM: 'uniform',
     CONFIG: 'config',
+    CONFIG_DONE: 'config_done',
     RESET_ACCUM: 'reset_accum',
     OFFSET_SHIFT: 'offset_shift',
     OFFSET_SET: 'offset_set',
@@ -31,6 +32,7 @@ export const FRACTAL_EVENTS = {
 type EventMap = {
     [FRACTAL_EVENTS.UNIFORM]: { key: string; value: any; noReset?: boolean };
     [FRACTAL_EVENTS.CONFIG]: Partial<ShaderConfig>;
+    [FRACTAL_EVENTS.CONFIG_DONE]: void;
     [FRACTAL_EVENTS.RESET_ACCUM]: void;
     [FRACTAL_EVENTS.OFFSET_SHIFT]: { x: number; y: number; z: number };
     [FRACTAL_EVENTS.OFFSET_SET]: PreciseVector3;

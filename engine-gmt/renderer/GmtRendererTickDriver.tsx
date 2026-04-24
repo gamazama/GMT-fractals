@@ -136,6 +136,12 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
                 // store type → GMT proxy's narrower type.
                 if (proxy.isBooted) proxy.sendConfig(config as any);
             }),
+            FractalEvents.on(FRACTAL_EVENTS.CONFIG_DONE, () => {
+                // Main-thread flushes accumulated CONFIG diffs with this
+                // signal — worker fires its own fireCompile() in response,
+                // skipping the 200ms scheduleCompile debounce.
+                if (proxy.isBooted) proxy.post({ type: 'CONFIG_DONE' });
+            }),
             FractalEvents.on(FRACTAL_EVENTS.UNIFORM, ({ key, value, noReset }) => {
                 if (proxy.isBooted) proxy.setUniform(key, value, noReset);
             }),
