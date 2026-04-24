@@ -33,6 +33,7 @@ import { useEngineStore } from '../../store/engineStore';
 import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogram';
 import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
 import { JuliaRandomize } from '../components/widgets/JuliaRandomize';
+import { InteractionPicker } from '../../components/InteractionPicker';
 import {
     ColorGradingHistogram,
     OpticsControls,
@@ -106,6 +107,7 @@ export const registerGmtUi = () => {
     componentRegistry.register('coloring-histogram', ConnectedColoringHistogram);
     componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock as any);
     componentRegistry.register('julia-randomize', JuliaRandomize as any);
+    componentRegistry.register('interaction-picker', InteractionPicker as any);
 
     // Scene widgets — slotted via optics / navigation / colorGrading customUI.
     componentRegistry.register('scene-histogram', ConnectedGradingHistogram);

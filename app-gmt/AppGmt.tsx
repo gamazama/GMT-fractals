@@ -36,6 +36,7 @@ import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
 import { CompilingIndicator } from '../components/CompilingIndicator';
+import HistogramProbe from '../engine-gmt/components/HistogramProbe';
 
 import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
@@ -140,6 +141,28 @@ export const AppGmt: React.FC = () => {
                 <HelpOverlay />
 
                 <CompilingIndicator />
+
+                {/* Histogram readback drivers — only run while there's a
+                    consumer mounted (ColoringPanel / Scene panel widgets
+                    register+unregister on mount via the connected wrappers
+                    in engine-gmt/features/ui.tsx). */}
+                {(state as any).histogramActiveCount > 0 && (
+                    <HistogramProbe
+                        source="geometry"
+                        autoUpdate={(state as any).histogramAutoUpdate}
+                        trigger={(state as any).histogramTrigger}
+                        onUpdate={(state as any).setHistogramData}
+                        onLoadingChange={(state as any).setHistogramLoading}
+                    />
+                )}
+                {(state as any).sceneHistogramActiveCount > 0 && (
+                    <HistogramProbe
+                        source="color"
+                        autoUpdate
+                        trigger={(state as any).sceneHistogramTrigger}
+                        onUpdate={(state as any).setSceneHistogramData}
+                    />
+                )}
 
                 {state.contextMenu.visible && (
                     <GlobalContextMenu

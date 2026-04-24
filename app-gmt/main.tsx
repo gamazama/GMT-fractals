@@ -104,11 +104,10 @@ installHud();
 // Playing badge). Must come AFTER installMenu/installCamera so the
 // registries they own exist. See engine-gmt/topbar.tsx for scope.
 registerGmtTopbar({
-    openCameraManager: () => {
-        // Float the Camera Manager panel. `togglePanel` opens it and
-        // makes it the active tab in whatever dock it's in (float here).
-        useEngineStore.getState().togglePanel('Camera Manager', true);
-    },
+    // Camera Manager panel crashes without GMT's cameraSlice (savedCameras
+    // array + addCamera/deleteCamera/etc actions). Reinstate the
+    // togglePanel call after porting cameraSlice from gmt-0.8.5.
+    openCameraManager: () => console.info('[app-gmt] Camera Manager pending cameraSlice port'),
     // Formula Workshop is a Pass 4+ item.
     openFormulaWorkshop: () => console.info('[app-gmt] Formula Workshop pending port'),
 });

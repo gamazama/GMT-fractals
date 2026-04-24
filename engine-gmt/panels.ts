@@ -123,19 +123,11 @@ export const GmtPanels: PanelManifest = [
         showIf: 'engineSettings.showEngineTab',
     },
 
-    // Camera Manager — float by default; opened from the topbar Camera
-    // menu. The bespoke CameraManagerPanel renders the saved-camera list
-    // + per-camera edit row (AutoFeaturePanel doesn't fit the layout).
-    //
-    // Default visibility hidden via showIf — the Camera menu action
-    // flips a transient "open camera-manager" flag (or movePanel) to
-    // reveal it. Until wired, open from devtools via
-    // `useEngineStore.getState().togglePanel('Camera Manager', true)`.
-    {
-        id: 'Camera Manager',
-        dock: 'float',
-        order: 200,
-        component: 'panel-cameramanager',
-        isCore: false,
-    },
+    // Camera Manager — panel is registered in componentRegistry
+    // (engine-gmt/features/ui.tsx) but NOT in the manifest: the panel
+    // reads `state.savedCameras / addCamera / deleteCamera / ...` which
+    // come from GMT's cameraSlice, not yet ported into the engine-gmt
+    // store surface. Re-add this manifest entry after cameraSlice is
+    // ported. Until then the Camera menu's "Camera Manager" item logs
+    // a stub message instead of opening the panel.
 ];

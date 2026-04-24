@@ -407,12 +407,12 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const childIds = Object.keys(feature.params).filter(k => feature.params[k].parentId === id);
         const renderedChildren: React.ReactNode[] = childIds.map(cid => renderNode(cid)).filter(Boolean);
         // Include customUI entries that declare this param as their parent
-        feature.customUI?.forEach((c) => {
+        feature.customUI?.forEach((c, idx) => {
             if (c.parentId !== id) return;
             if (groupFilter && c.group !== groupFilter) return;
             if (!checkParamActive(c.condition, sliceState, globalState, c.parentId)) return;
             const Component = componentRegistry.get(c.componentId);
-            if (Component) renderedChildren.push(<div key={`custom-${c.componentId}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
+            if (Component) renderedChildren.push(<div key={`custom-${c.componentId}-${c.group ?? idx}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
         });
         const containerClass = isHalfWidth ? "flex-1 min-w-0" : "flex flex-col";
         const hasCustomUIChildren = feature.customUI?.some(c => c.parentId === id) ?? false;
@@ -570,7 +570,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         renderItems.push(...buildFlatItems(paramRoots));
     }
 
-    feature.customUI?.forEach((c) => {
+    feature.customUI?.forEach((c, idx) => {
         // Prevent CustomUI leakage when using whitelist params (e.g. inserting single slider)
         if (whitelistParams && whitelistParams.length > 0) return;
         // Skip entries handled by renderNode tree-nesting
@@ -578,7 +578,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (groupFilter && c.group !== groupFilter) return;
         if (!checkParamActive(c.condition, sliceState, globalState)) return;
         const Component = componentRegistry.get(c.componentId);
-        if (Component) renderItems.push(<div key={`custom-${c.componentId}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
+        if (Component) renderItems.push(<div key={`custom-${c.componentId}-${c.group ?? idx}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
     });
 
     return (

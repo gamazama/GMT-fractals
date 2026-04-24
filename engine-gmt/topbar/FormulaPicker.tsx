@@ -74,14 +74,14 @@ export const FormulaPicker: React.FC = () => {
                 type="button"
                 onClick={() => setOpen((o) => !o)}
                 title="Switch formula"
-                className={`flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-colors ${
+                className={`flex items-center gap-1 text-[11px] font-bold transition-colors border-b border-dashed pb-0.5 ${
                     open
-                        ? 'text-cyan-300 border-cyan-500/40 bg-white/5'
-                        : 'text-gray-300 hover:text-white border-white/10 hover:border-cyan-500/40 bg-black/40 hover:bg-white/5'
+                        ? 'text-cyan-300 border-cyan-500/60'
+                        : 'text-cyan-400 border-cyan-500/30 hover:text-white hover:border-cyan-400'
                 }`}
             >
-                <span className="font-semibold">{formula || '—'}</span>
-                <span className={`transition-transform ${open ? 'rotate-180' : ''}`}>
+                <span>[{formula || '—'}]</span>
+                <span className={`text-[9px] transition-transform ${open ? 'rotate-180' : ''}`}>
                     <ChevronDown />
                 </span>
             </button>

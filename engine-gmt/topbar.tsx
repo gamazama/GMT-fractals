@@ -25,6 +25,8 @@ import { topbar } from '../engine/plugins/TopBar';
 import { camera } from '../engine/plugins/Camera';
 import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
+import { registry } from './engine/FractalRegistry';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ViewportQuality } from './topbar/ViewportQuality';
 import { FormulaPicker } from './topbar/FormulaPicker';
@@ -116,7 +118,29 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     const {
         openCameraManager = () => console.info('[gmt] Camera Manager panel not registered yet'),
         openFormulaWorkshop = () => console.info('[gmt] Formula Workshop not yet ported'),
-        resetCamera = () => { camera.recallSlot(0); },
+        resetCamera = () => {
+            // Restore the camera to the current formula's defaultPreset pose.
+            // Mirrors GMT's Reset Position — each formula's preset carries
+            // a tuned camera (sceneOffset + rotation + targetDistance) that
+            // frames the fractal well for its default look.
+            const s = useEngineStore.getState();
+            const def = registry.get(s.formula as any);
+            const preset = def?.defaultPreset as any;
+            if (!preset) {
+                console.warn('[gmt] Reset Position — no defaultPreset on current formula');
+                return;
+            }
+            const rotation = preset.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
+            const sceneOffset = preset.sceneOffset || { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+            const targetDistance = preset.targetDistance ?? 3.5;
+            useEngineStore.setState({ cameraRot: rotation, sceneOffset, targetDistance } as any);
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
+                position: { x: 0, y: 0, z: 0 },
+                rotation,
+                sceneOffset,
+                targetDistance,
+            } as any);
+        },
     } = options;
 
     // ── Inline items (left slot) ───────────────────────────────────────
