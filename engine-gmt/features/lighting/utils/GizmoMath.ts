@@ -12,8 +12,20 @@ import {
 import type { ScreenPoint } from '../../../engine/overlay/OverlayProjection';
 export type { ScreenPoint };
 
-// Re-export shared gizmo constants from the generic component
-export { GIZMO_SCALE_FACTOR, PLANE_SCALE, GizmoColors } from '../../../components/gizmo/SinglePositionGizmo';
+// Gizmo constants — shared with the future SinglePositionGizmo
+// component (not yet ported in the extraction). Inlined here so
+// light-gizmo math doesn't depend on the component being present.
+export const GIZMO_SCALE_FACTOR = 0.15;
+export const PLANE_SCALE = 0.4;
+export const GizmoColors = {
+    X:       '#ff4444',
+    Y:       '#44ff44',
+    Z:       '#4444ff',
+    Hover:   '#ffffff',
+    PlaneXY: '#4444ff',
+    PlaneXZ: '#44ff44',
+    PlaneYZ: '#ff4444',
+};
 
 /** Which light index currently has its settings popup open (-1 = none).
  *  Written by CenterHUD, read by SingleLightGizmo for range circle gating. */

@@ -43,6 +43,7 @@ import {
     getProxy,
 } from '../engine-gmt';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
+import { registerGmtTopbar } from '../engine-gmt/topbar';
 import { useEngineStore, getShaderConfigFromState } from '../store/engineStore';
 
 // Dev-mode: unregister any stale service workers left by `npm run preview`.
@@ -85,6 +86,16 @@ installCamera();
 installMenu();
 installHelp();
 installHud();
+
+// GMT topbar content (System + Camera menus, Path Tracing toggle,
+// Playing badge). Must come AFTER installMenu/installCamera so the
+// registries they own exist. See engine-gmt/topbar.tsx for scope.
+registerGmtTopbar({
+    // Camera Manager panel isn't registered yet — log when user clicks.
+    openCameraManager: () => console.info('[app-gmt] Camera Manager panel pending port'),
+    // Formula Workshop is a Pass 4+ item.
+    openFormulaWorkshop: () => console.info('[app-gmt] Formula Workshop pending port'),
+});
 
 // @engine-gmt/renderer — wire GMT-specific callbacks.
 installGmtRenderer({

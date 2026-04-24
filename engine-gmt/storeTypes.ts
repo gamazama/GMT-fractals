@@ -34,8 +34,11 @@ import type { WaterPlaneState } from './features/water_plane';
 import type { AOState } from './features/ao/index';
 import type { ReflectionsState } from './features/reflections/index';
 import type { DrawingState } from './features/drawing/index';
+import type { LightingActions } from './features/lighting/index';
 
 declare module '../engine/features/types' {
+    interface FeatureCustomActions extends LightingActions {}
+
     interface FeatureStateMap {
         coreMath:    CoreMathState;
         geometry:    GeometryState;

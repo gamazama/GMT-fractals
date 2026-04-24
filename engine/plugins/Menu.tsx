@@ -73,6 +73,9 @@ export interface MenuButtonItem extends MenuItemBase {
     onSelect: () => void;
     /** Default true — runs onSelect then closes the popover. */
     closeOnSelect?: boolean;
+    /** Grey-out the row and suppress onSelect. Bool or predicate for
+     *  live state (e.g. Undo/Redo disabled when stack is empty). */
+    disabled?: boolean | (() => boolean);
 }
 
 export interface MenuToggleItem extends MenuItemBase {
@@ -86,6 +89,8 @@ export interface MenuToggleItem extends MenuItemBase {
     onToggle: () => void;
     /** Badge color. Default 'cyan'. */
     color?: 'cyan' | 'green' | 'purple';
+    /** Grey-out the row and suppress onToggle. Bool or predicate. */
+    disabled?: boolean | (() => boolean);
 }
 
 export interface MenuSeparatorItem extends MenuItemBase {
@@ -314,16 +319,19 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
             );
         case 'button': {
             const b = item;
+            const isDisabled = typeof b.disabled === 'function' ? b.disabled() : !!b.disabled;
             return (
                 <button
                     type="button"
                     title={b.title}
+                    disabled={isDisabled}
                     onClick={(e) => {
                         e.stopPropagation();
+                        if (isDisabled) return;
                         b.onSelect();
                         if (b.closeOnSelect !== false) close();
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded hover:bg-white/10 text-xs text-gray-300 hover:text-white transition-colors ${b.className || ''}`}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-gray-600 cursor-not-allowed' : 'text-gray-300 hover:text-white hover:bg-white/10'} ${b.className || ''}`}
                 >
                     <span className="flex items-center gap-2 min-w-0">
                         {renderIcon(b.icon)}
@@ -338,12 +346,14 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
         case 'toggle': {
             const t = item;
             const active = t.isActive();
+            const isDisabled = typeof t.disabled === 'function' ? t.disabled() : !!t.disabled;
             return (
                 <button
                     type="button"
                     title={t.title}
-                    onClick={(e) => { e.stopPropagation(); t.onToggle(); }}
-                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded hover:bg-white/10 text-xs ${active ? 'text-white' : 'text-gray-300 hover:text-white'} transition-colors ${t.className || ''}`}
+                    disabled={isDisabled}
+                    onClick={(e) => { e.stopPropagation(); if (!isDisabled) t.onToggle(); }}
+                    className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs transition-colors ${isDisabled ? 'text-gray-600 cursor-not-allowed' : active ? 'text-white hover:bg-white/10' : 'text-gray-300 hover:text-white hover:bg-white/10'} ${t.className || ''}`}
                 >
                     <span className="flex items-center gap-2 min-w-0">
                         {renderIcon(t.icon)}
