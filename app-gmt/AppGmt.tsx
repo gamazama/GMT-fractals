@@ -37,6 +37,7 @@ import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
+import { HardwarePrefsHost } from '../engine-gmt/components/HardwarePrefsHost';
 import { useInteractionManager } from '../engine-gmt/hooks/useInteractionManager';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
@@ -159,6 +160,8 @@ export const AppGmt: React.FC = () => {
                 <HelpOverlay />
 
                 <CompilingIndicator />
+
+                <HardwarePrefsHost />
 
                 {/* Histogram readback drivers — only run while there's a
                     consumer mounted (ColoringPanel / Scene panel widgets

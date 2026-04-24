@@ -30,6 +30,7 @@ import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ViewportQuality } from './topbar/ViewportQuality';
+import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
 
 // ── Inline topbar items ────────────────────────────────────────────────
 
@@ -66,6 +67,47 @@ const PathTracingToggle: React.FC = () => {
 };
 
 /**
+ * Render Region toggle — click cycles None → Selecting → Active → None.
+ * When Active, `state.renderRegion` is set and the worker renders only
+ * that crop; clicking again clears it. When Selecting, user drags in
+ * the viewport to define the rectangle (picked up by whatever region-
+ * selection handler the app wires — e.g. the BucketRender flow, pending
+ * port, or a simple drag overlay).
+ */
+const RenderRegionToggle: React.FC = () => {
+    const region = useEngineStore((s) => s.renderRegion);
+    const mode = useEngineStore((s) => s.interactionMode);
+    const setInteractionMode = useEngineStore((s) => s.setInteractionMode);
+    const setRenderRegion = useEngineStore((s) => s.setRenderRegion);
+
+    const selecting = mode === 'selecting_region';
+    const active = !!region;
+
+    const onClick = () => {
+        if (active) { setRenderRegion(null); return; }
+        setInteractionMode(selecting ? 'none' : 'selecting_region');
+    };
+
+    const cls = active
+        ? 'text-green-400 bg-green-900/30 border border-green-500/30'
+        : selecting
+            ? 'text-cyan-400 bg-cyan-900/30 border border-cyan-500/30'
+            : 'text-gray-500 border border-white/10 hover:text-white hover:border-cyan-500/40';
+    const title = active ? 'Clear Region' : selecting ? 'Cancel Selection' : 'Select Render Region';
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            title={title}
+            className={`flex items-center justify-center p-1 rounded transition-colors ${cls}`}
+        >
+            {active ? <CloseRegionIcon /> : <CropIcon />}
+        </button>
+    );
+};
+
+/**
  * "Playing" indicator — small pulsing green badge when the timeline is
  * advancing. Pure read from useAnimationStore; no interaction.
  */
@@ -84,6 +126,20 @@ const PlayingBadge: React.FC = () => {
 };
 
 // ── Menu icons (minimal inline SVG — no external dep) ──────────────────
+
+const CropIcon: React.FC = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+        <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+    </svg>
+);
+const CloseRegionIcon: React.FC = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <line x1="9" y1="9" x2="15" y2="15" />
+        <line x1="15" y1="9" x2="9" y2="15" />
+    </svg>
+);
 
 const CameraIcon: React.FC = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -164,6 +220,12 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         slot: 'left',
         order: 20,
         component: PlayingBadge,
+    });
+    topbar.register({
+        id: 'gmt-render-region',
+        slot: 'left',
+        order: 25,
+        component: RenderRegionToggle,
     });
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
@@ -275,7 +337,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         type: 'button',
         label: 'Hardware Settings…',
         title: 'GPU caps + quality-tier thresholds.',
-        onSelect: () => console.info('[app-gmt] Hardware Settings modal pending port'),
+        onSelect: () => { toggleHardwarePrefs(); },
     });
 
     menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator' });

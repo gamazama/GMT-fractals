@@ -24,6 +24,7 @@ import ReactDOM from 'react-dom/client';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
 import { registerGmtUi } from '../engine-gmt/features/ui';
+import { installGmtCameraSlice } from '../engine-gmt/store/cameraSlice';
 import { installViewport, viewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
@@ -46,6 +47,7 @@ import {
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { registerGmtTopbar } from '../engine-gmt/topbar';
 import { useEngineStore, getShaderConfigFromState, setFormulaPresetResolver } from '../store/engineStore';
+import { parseShareString } from '../utils/Sharing';
 
 // Dev-mode: unregister any stale service workers left by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -64,6 +66,12 @@ registerUI();
 // registered, and before applyPanelManifest() (which references these
 // componentIds for `component:` panels and `widgets:` slots).
 registerGmtUi();
+
+// GMT camera slice — savedCameras / undo / redo / addCamera / resetCamera.
+// Patches the store with actions engine-core doesn't provide. Must land
+// before any component that reads `state.savedCameras.length` (e.g.
+// CameraManagerPanel).
+installGmtCameraSlice();
 
 // Install GMT's formula-preset resolver so engineStore.setFormula can
 // hydrate the store with each formula's defaultPreset on switch.
@@ -104,10 +112,9 @@ installHud();
 // Playing badge). Must come AFTER installMenu/installCamera so the
 // registries they own exist. See engine-gmt/topbar.tsx for scope.
 registerGmtTopbar({
-    // Camera Manager panel crashes without GMT's cameraSlice (savedCameras
-    // array + addCamera/deleteCamera/etc actions). Reinstate the
-    // togglePanel call after porting cameraSlice from gmt-0.8.5.
-    openCameraManager: () => console.info('[app-gmt] Camera Manager pending cameraSlice port'),
+    openCameraManager: () => {
+        useEngineStore.getState().togglePanel('Camera Manager', true);
+    },
     // Formula Workshop is a Pass 4+ item.
     openFormulaWorkshop: () => console.info('[app-gmt] Formula Workshop pending port'),
 });
@@ -131,19 +138,31 @@ shortcuts.register({
     },
 });
 
-// Hydrate store from Mandelbulb's defaultPreset. Mirrors GMT's
-// useAppStartup — populates every DDFS slice (coloring, lighting,
-// geometry, optics, quality, materials, …) plus scene fields
-// (cameraRot, sceneOffset, targetDistance, cameraMode) via the
-// presetFieldRegistry. Without this, getShaderConfigFromState
-// reads undefined slices and the worker boots a half-formed shader.
-const mandelbulbDef = registry.get('Mandelbulb');
-if (mandelbulbDef?.defaultPreset) {
-    useEngineStore.getState().loadScene({
-        preset: JSON.parse(JSON.stringify(mandelbulbDef.defaultPreset)),
-    });
+// Hydrate store from either a shared URL (#s=...) or the current
+// formula's defaultPreset. Mirrors GMT's useAppStartup — populates
+// every DDFS slice + scene fields via the presetFieldRegistry.
+// Without this, getShaderConfigFromState reads undefined slices and
+// the worker boots a half-formed shader.
+let bootPreset: any = null;
+const hash = typeof window !== 'undefined' ? window.location.hash : '';
+if (hash.startsWith('#s=')) {
+    try {
+        bootPreset = parseShareString(hash.slice(3));
+        if (bootPreset) console.info('[app-gmt] Loaded scene from share URL');
+    } catch (err) {
+        console.error('[app-gmt] Share URL parse failed:', err);
+    }
+}
+if (!bootPreset) {
+    const mandelbulbDef = registry.get('Mandelbulb');
+    bootPreset = mandelbulbDef?.defaultPreset
+        ? JSON.parse(JSON.stringify(mandelbulbDef.defaultPreset))
+        : null;
+}
+if (bootPreset) {
+    useEngineStore.getState().loadScene({ preset: bootPreset });
 } else {
-    console.warn('[app-gmt] Mandelbulb default preset missing — worker may boot un-hydrated');
+    console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
 }
 
 applyPanelManifest(GmtPanels);

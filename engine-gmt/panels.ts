@@ -120,20 +120,27 @@ export const GmtPanels: PanelManifest = [
     // GMT's engineSettings.showEngineTab param-flag. Custom bespoke
     // component (EnginePanel) instead of AutoFeaturePanel stacking —
     // the panel has its own layout (per-feature rows with ON/OFF toggles
-    // + compile-estimate row).
+    // + compile-estimate row). Lives on the LEFT dock to match GMT's
+    // original (keeps the right dock tidy; Engine is a dev surface).
     {
         id: 'Engine',
-        dock: 'right',
-        order: 90,
+        dock: 'left',
+        order: 10,
         component: 'panel-engine',
         showIf: 'engineSettings.showEngineTab',
     },
 
-    // Camera Manager — panel is registered in componentRegistry
-    // (engine-gmt/features/ui.tsx) but NOT in the manifest: the panel
-    // reads `state.savedCameras / addCamera / deleteCamera / ...` which
-    // come from GMT's cameraSlice, not yet ported into the engine-gmt
-    // store surface. Re-add this manifest entry after cameraSlice is
-    // ported. Until then the Camera menu's "Camera Manager" item logs
-    // a stub message instead of opening the panel.
+    // Camera Manager — bespoke saved-camera library UI. Opens as a
+    // floating panel on demand via the Camera menu → "Camera Manager"
+    // item (see engine-gmt/topbar.tsx).
+    //
+    // `dock: 'float'` + `isCore: false` = hidden from dock tab bars;
+    // only appears when the topbar action calls `togglePanel(..., true)`.
+    {
+        id: 'Camera Manager',
+        dock: 'float',
+        order: 200,
+        component: 'panel-cameramanager',
+        isCore: false,
+    },
 ];
