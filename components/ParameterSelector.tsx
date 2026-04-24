@@ -1,11 +1,21 @@
 
 import React, { useState, useRef } from 'react';
 import { featureRegistry } from '../engine/FeatureSystem';
-// FractalRegistry removed in engine extraction.
-interface StubFormulaDef {
+
+// FractalRegistry removed in engine extraction. Apps that want the
+// ParameterSelector dropdown to label coreMath items with the active
+// formula's authored names ("Power", "Fold Limit", …) install a
+// resolver here. Without one, labels fall back to the generic DDFS
+// labels ("Param A", "Vec 2 A", …).
+interface FormulaParamMeta {
     parameters: Array<{ id?: string; label?: string } | null>;
 }
-const registry = { get: (_id: string): StubFormulaDef | undefined => undefined };
+type FormulaParamResolver = (formulaId: string) => FormulaParamMeta | undefined;
+let _paramResolver: FormulaParamResolver | null = null;
+export const setFormulaParamResolver = (fn: FormulaParamResolver | null) => {
+    _paramResolver = fn;
+};
+const registry = { get: (id: string): FormulaParamMeta | undefined => _paramResolver?.(id) };
 import { MAX_LIGHTS } from '../data/constants';
 import { useEngineStore } from '../store/engineStore';
 import { CategoryPickerMenu } from './CategoryPickerMenu';

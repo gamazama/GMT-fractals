@@ -49,6 +49,7 @@ import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { registerGmtTopbar } from '../engine-gmt/topbar';
 import { useEngineStore, getShaderConfigFromState, setFormulaPresetResolver } from '../store/engineStore';
 import { parseShareString } from '../utils/Sharing';
+import { setFormulaParamResolver } from '../components/ParameterSelector';
 
 // Dev-mode: unregister any stale service workers left by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -84,6 +85,13 @@ installGmtModularSlice();
 // Decoupled via setFormulaPresetResolver — the engine core has no
 // direct coupling to engine-gmt's FractalRegistry.
 setFormulaPresetResolver((f) => registry.get(f)?.defaultPreset as any ?? null);
+
+// Same pattern for the ParameterSelector dropdown: the stub registry
+// in components/ParameterSelector.tsx hands back per-formula param
+// metadata (authored labels, id list) when a resolver is installed.
+// Lets the LFO/modulation target dropdown show "P-A: Power" instead
+// of "Param A" for coreMath items.
+setFormulaParamResolver((f) => registry.get(f) as any);
 
 // @engine/viewport — GMT is CPU/GPU-heavy on path tracing; adaptive is
 // crucial. Target 30 fps; allow deeper quality drops under load since

@@ -23,7 +23,21 @@ import { animationEngine } from '../AnimationEngine';
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { getProxy } from '../worker/WorkerProxy';
+import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 const engine = getProxy();
+
+// Uniform writes flow through FRACTAL_EVENTS.UNIFORM so apps that have
+// installed a real worker-proxy bridge (engine-gmt via
+// GmtRendererTickDriver) receive them. Engine-core's WorkerProxy
+// is a stub — calling engine.setUniform directly would be a no-op and
+// the modulated uniform never reaches the render pipeline.
+const emitUniform = (key: string, value: unknown, noReset = false) => {
+    FractalEvents.emit(FRACTAL_EVENTS.UNIFORM, { key, value, noReset });
+};
+const emitResetAccum = () => {
+    FractalEvents.emit(FRACTAL_EVENTS.RESET_ACCUM, undefined);
+};
+
 import { featureRegistry } from '../FeatureSystem';
 import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
@@ -231,7 +245,7 @@ export const tick = (delta: number) => {
                     const ratio = c.scale / effectiveBase; 
                     const finalScale = (effectiveBase + offset) * ratio;
                     if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
-                    engine.setUniform('uColorScale', finalScale);
+                    emitUniform('uColorScale', finalScale);
                 }
                 return;
             }
@@ -239,7 +253,7 @@ export const tick = (delta: number) => {
                 const c = (storeState as any).coloring as ColoringState;
                 const effectiveBase = shouldRecord ? resolvedBase : c.phase;
                 if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
-                engine.setUniform('uColorOffset', c.offset + offset);
+                emitUniform('uColorOffset', c.offset + offset);
                 return;
             }
             // ... same for repeats2/phase2 ...
@@ -250,7 +264,7 @@ export const tick = (delta: number) => {
                     const ratio = c.scale2 / effectiveBase;
                     const finalScale = (effectiveBase + offset) * ratio;
                     if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
-                    engine.setUniform('uColorScale2', finalScale);
+                    emitUniform('uColorScale2', finalScale);
                 }
                 return;
             }
@@ -258,7 +272,7 @@ export const tick = (delta: number) => {
                 const c = (storeState as any).coloring as ColoringState;
                 const effectiveBase = shouldRecord ? resolvedBase : c.phase2;
                 if (!isRemoved) liveModulations[targetKey] = effectiveBase + offset;
-                engine.setUniform('uColorOffset2', c.offset2 + offset);
+                emitUniform('uColorOffset2', c.offset2 + offset);
                 return;
             }
         }
@@ -402,7 +416,7 @@ export const tick = (delta: number) => {
                         ? (vec as any).clone()
                         : { ...vec };
                     (fullVec as any)[axis] = finalVal;
-                    engine.setUniform(baseUniform, fullVec);
+                    emitUniform(baseUniform, fullVec);
                 }
             }
             return;
@@ -417,7 +431,7 @@ export const tick = (delta: number) => {
             const finalScalar = resolvedBase + offset;
             if (!isRemoved) liveModulations[targetKey] = finalScalar;
             if (uniformName) {
-                engine.setUniform(uniformName, finalScalar, isNoReset);
+                emitUniform(uniformName, finalScalar, isNoReset);
             }
             if (Math.abs(offset) > 0.0001) hasVisualChange = true;
         }
@@ -436,12 +450,12 @@ export const tick = (delta: number) => {
          if (liveModulations['geometry.juliaZ'] === undefined && liveModulations['julia.z'] === undefined) juliaZ = geom?.juliaZ ?? 0;
          
          juliaScratch.set(juliaX, juliaY, juliaZ);
-         engine.setUniform('uJulia', juliaScratch);
+         emitUniform('uJulia', juliaScratch);
     }
 
     // --- CRITICAL: Reset Accumulation if Visuals Changed ---
     if (hasVisualChange) {
-        engine.resetAccumulation();
+        emitResetAccum();
     }
 
     // Sync to UI (Visual Feedback)
