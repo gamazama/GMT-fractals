@@ -21,6 +21,7 @@ import { EngineStoreState, EngineActions, Preset } from '../types';
 import { createUISlice } from './slices/uiSlice';
 import { createRenderControlSlice } from './slices/renderControlSlice';
 import { createViewportSlice } from './slices/viewportSlice';
+import { createScalabilitySlice } from './slices/scalabilitySlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createFeatureSlice } from './createFeatureSlice';
 import { getProxy } from '../engine/worker/WorkerProxy';
@@ -53,6 +54,7 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
     ...createUISlice(set, get, api),
     ...createRenderControlSlice(set, get, api),
     ...createViewportSlice(set, get, api),
+    ...createScalabilitySlice(set, get),
     ...createHistorySlice(set, get, api),
     ...createFeatureSlice(set, get, api),
 
