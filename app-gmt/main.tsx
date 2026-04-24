@@ -25,6 +25,7 @@ import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
 import { registerGmtUi } from '../engine-gmt/features/ui';
 import { installGmtCameraSlice } from '../engine-gmt/store/cameraSlice';
+import { installGmtModularSlice } from '../engine-gmt/store/modularSlice';
 import { installViewport, viewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
@@ -72,6 +73,11 @@ registerGmtUi();
 // before any component that reads `state.savedCameras.length` (e.g.
 // CameraManagerPanel).
 installGmtCameraSlice();
+
+// GMT modular slice — Modular formula's pipeline + graph state.
+// Without this, switching to the Modular formula crashes FlowEditor
+// on `state.graph.nodes` (undefined).
+installGmtModularSlice();
 
 // Install GMT's formula-preset resolver so engineStore.setFormula can
 // hydrate the store with each formula's defaultPreset on switch.
@@ -136,6 +142,25 @@ shortcuts.register({
         const cur = (useEngineStore.getState() as any).cameraMode ?? 'Orbit';
         useEngineStore.setState({ cameraMode: cur === 'Fly' ? 'Orbit' : 'Fly' } as any);
     },
+});
+
+// Camera move undo/redo — Ctrl+Shift+Z / Ctrl+Shift+Y. Distinct from
+// the engine's generic Ctrl+Z unified undo (which captures param
+// changes); these specifically roll back sceneOffset + rotation moves
+// recorded by the camera plugin.
+shortcuts.register({
+    id: 'gmt.undoCameraMove',
+    key: 'Ctrl+Shift+Z',
+    description: 'Undo last camera movement',
+    category: 'Navigation',
+    handler: () => { (useEngineStore.getState() as any).undoCamera?.(); },
+});
+shortcuts.register({
+    id: 'gmt.redoCameraMove',
+    key: 'Ctrl+Shift+Y',
+    description: 'Redo last camera movement',
+    category: 'Navigation',
+    handler: () => { (useEngineStore.getState() as any).redoCamera?.(); },
 });
 
 // Hydrate store from either a shared URL (#s=...) or the current

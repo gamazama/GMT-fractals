@@ -30,6 +30,7 @@ import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ViewportQuality } from './topbar/ViewportQuality';
+import BucketRenderSettingsPopup from './topbar/BucketRenderControls';
 import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
 
 // ── Inline topbar items ────────────────────────────────────────────────
@@ -63,6 +64,53 @@ const PathTracingToggle: React.FC = () => {
         >
             PT
         </button>
+    );
+};
+
+/**
+ * Bucket Render button — opens the tiled-render settings popover.
+ * The popover component itself (BucketRenderSettingsPopup) comes
+ * verbatim from GMT; this wrapper owns the open-state + anchor.
+ */
+const BucketRenderToggle: React.FC = () => {
+    const isBucketRendering = useEngineStore((s) => (s as any).isBucketRendering);
+    const rootRef = React.useRef<HTMLDivElement>(null);
+    const [open, setOpen] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!open) return;
+        const onClick = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+        };
+        const id = setTimeout(() => document.addEventListener('mousedown', onClick), 0);
+        return () => { clearTimeout(id); document.removeEventListener('mousedown', onClick); };
+    }, [open]);
+
+    return (
+        <div className="relative" ref={rootRef}>
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+                title="Render!"
+                className={`flex items-center justify-center p-1 rounded border transition-colors ${
+                    isBucketRendering
+                        ? 'text-cyan-300 bg-cyan-900/30 border-cyan-500/40 animate-pulse'
+                        : open
+                            ? 'text-cyan-300 border-cyan-500/40'
+                            : 'text-gray-500 border-white/10 hover:text-white hover:border-cyan-500/40'
+                }`}
+            >
+                <RenderGridIcon />
+            </button>
+            {open && (
+                <div
+                    className="absolute top-full left-0 mt-2 z-50"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <BucketRenderSettingsPopup />
+                </div>
+            )}
+        </div>
     );
 };
 
@@ -126,6 +174,15 @@ const PlayingBadge: React.FC = () => {
 };
 
 // ── Menu icons (minimal inline SVG — no external dep) ──────────────────
+
+const RenderGridIcon: React.FC = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <path d="M3 14h7v7H3z" fill="currentColor" stroke="none" />
+    </svg>
+);
 
 const CropIcon: React.FC = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -227,6 +284,12 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         order: 25,
         component: RenderRegionToggle,
     });
+    topbar.register({
+        id: 'gmt-bucket-render',
+        slot: 'left',
+        order: 30,
+        component: BucketRenderToggle,
+    });
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
     // Vibration feedback callback — noop here; apps that want haptic
@@ -251,6 +314,28 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         align: 'end',
         width: 'w-56',
     });
+
+    menu.registerItem('camera', {
+        id: 'camera-undo',
+        type: 'button',
+        label: 'Undo Move',
+        shortcut: 'Ctrl+Shift+Z',
+        title: 'Revert the last camera movement',
+        onSelect: () => { (useEngineStore.getState() as any).undoCamera?.(); },
+        disabled: () => ((useEngineStore.getState() as any).undoStack?.length ?? 0) === 0,
+    });
+
+    menu.registerItem('camera', {
+        id: 'camera-redo',
+        type: 'button',
+        label: 'Redo Move',
+        shortcut: 'Ctrl+Shift+Y',
+        title: 'Re-apply a reverted camera movement',
+        onSelect: () => { (useEngineStore.getState() as any).redoCamera?.(); },
+        disabled: () => ((useEngineStore.getState() as any).redoStack?.length ?? 0) === 0,
+    });
+
+    menu.registerItem('camera', { id: 'camera-sep-reset', type: 'separator' });
 
     menu.registerItem('camera', {
         id: 'camera-reset',

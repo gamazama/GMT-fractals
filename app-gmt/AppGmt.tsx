@@ -39,6 +39,8 @@ import { CompilingIndicator } from '../components/CompilingIndicator';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
 import { HardwarePrefsHost } from '../engine-gmt/components/HardwarePrefsHost';
 import { useInteractionManager } from '../engine-gmt/hooks/useInteractionManager';
+import { useRegionSelection } from '../engine-gmt/hooks/useRegionSelection';
+import { RegionOverlay } from '../engine-gmt/components/viewport/RegionOverlay';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
 import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
@@ -71,6 +73,10 @@ export const AppGmt: React.FC = () => {
 
     const viewportRef = useRef<HTMLDivElement>(null);
     useInteractionManager(viewportRef);
+    const { visualRegion, drawPreview, isGhostDragging, renderRegion } = useRegionSelection(viewportRef);
+    const activeRegion = drawPreview || visualRegion || renderRegion;
+    const interactionMode = (state as any).interactionMode;
+    const isSelectingRegion = interactionMode === 'selecting_region';
 
     const cameraMode = (state as any).cameraMode ?? 'Orbit';
     // Navigation (Orbit/Fly) calls setSceneOffset whenever the camera
@@ -149,6 +155,23 @@ export const AppGmt: React.FC = () => {
                         />
 
                         <HudHost />
+
+                        {/* Region-selection overlay — mounted inside
+                            viewportRef so useRegionSelection's mouse
+                            listeners anchor to the same bounds. */}
+                        {activeRegion && (
+                            <RegionOverlay
+                                region={activeRegion}
+                                isGhostDragging={isGhostDragging}
+                                isDrawing={!!drawPreview}
+                                onClear={() => (state as any).setRenderRegion(null)}
+                            />
+                        )}
+                        {isSelectingRegion && (
+                            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-cyan-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-cyan-500/50 shadow-lg animate-pulse pointer-events-none z-[60]">
+                                Drag to select render region
+                            </div>
+                        )}
                         </div>
                     </ViewportFrame>
 
