@@ -2,31 +2,30 @@
  * Side-effect registration for Fractal Toy.
  *
  * Imported at the TOP of fractal-toy/main.tsx. All featureRegistry.register()
- * and componentRegistry.register() calls happen here, before the engine
+ * and formulaRegistry.register() calls happen here, before the engine
  * store is constructed (and the registries are frozen).
  *
- * Features + components will land here across phase-1 commits:
- *   1b  (nothing yet — assembler tested with zero features)
- *   1c  MandelbulbFeature
- *   1d  CameraFeature + 'fractal-toy-canvas' viewport overlay
- *   1e  LightingFeature
+ * Features are generic (camera, lighting). Formulas go through the
+ * separate formulaRegistry: only one is active at a time, and
+ * `registerFormula` auto-lifts the formula's params into the DDFS feature
+ * registry so panels + preset round-trip come for free.
  */
 
 import { featureRegistry } from '../engine/FeatureSystem';
-import { MandelbulbFeature } from './features/mandelbulb';
+import { registerFormula } from './renderer/formulaRegistry';
+import { MandelbulbFormula } from './renderer/formulas/mandelbulb';
+import { MandelboxFormula } from './renderer/formulas/mandelbox';
 import { CameraFeature } from './features/camera';
 import { LightingFeature } from './features/lighting';
 
-// 1c: the fractal formula. Injects GLSL via ShaderBuilder.addSection
-// under the 'formulaFunction' and 'formulaCall' names that
-// fractal-toy/shaderAssembler.ts reads back.
-featureRegistry.register(MandelbulbFeature);
+// Formulas — registered first so the DDFS features they lift are
+// available when setup.ts seeds the default layout.
+registerFormula(MandelbulbFormula);
+registerFormula(MandelboxFormula);
 
-// 1d: orbit-style camera. Declares uniforms only — the pinhole-ray
-// construction lives in the assembler, since camera math is pipeline
-// level rather than per-formula.
+// Orbit camera — uniforms only; pinhole ray construction lives in the
+// assembler because camera math is pipeline-level rather than per-formula.
 featureRegistry.register(CameraFeature);
 
-// 1e: directional light + ambient + AO + albedo. Assembler's shading
-// block consumes the uniforms this feature declares.
+// Directional light + ambient + AO + albedo.
 featureRegistry.register(LightingFeature);

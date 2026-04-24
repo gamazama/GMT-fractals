@@ -1,11 +1,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { FractalActions } from '../types';
+import { EngineActions } from '../types';
 
 interface DockInteractionProps {
     isDocked: boolean;
     isMinimized: boolean;
-    actions: FractalActions;
+    actions: EngineActions;
     onDragStart?: () => void;
     onDragEnd?: () => void;
 }

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { CompositionOverlayType, CompositionOverlaySettings } from '../../types';
 import { hexToRgb } from '../../utils/colorUtils';
 
@@ -16,8 +16,8 @@ interface CompositionOverlayProps {
  * Inspired by Blender/C4D composition guides.
  */
 export const CompositionOverlay: React.FC<CompositionOverlayProps> = ({ width, height }) => {
-    const overlayType = useFractalStore(s => s.compositionOverlay);
-    const settings = useFractalStore(s => s.compositionOverlaySettings);
+    const overlayType = useEngineStore(s => s.compositionOverlay);
+    const settings = useEngineStore(s => s.compositionOverlaySettings);
     
     if (overlayType === 'none' || !overlayType) return null;
     

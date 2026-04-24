@@ -1,14 +1,11 @@
 
 import React, { useRef, useEffect } from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { PanelRouter } from '../PanelRouter';
 import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
 import { collectHelpIds } from '../../utils/helpUtils';
-import { AudioState, DrawnShape } from '../../features/types';
-// Drawing feature was removed during engine extraction; keep an
-// opaque stand-in so component code that read DrawingState still types.
-type DrawingState = { active?: boolean; shapes?: DrawnShape[]; [k: string]: unknown };
+import { getPanelDefinition, evalShowIf } from '../../engine/PanelManifest';
 import { accent, surface, text, border, tabActive, tabInactive, collapsedIconActive, collapsedIconInactive, dragHandleActive, dragHandleInactive } from '../../data/theme';
 
 // Mobile detection helper
@@ -22,51 +19,40 @@ interface DockProps {
 }
 
 export const Dock: React.FC<DockProps> = ({ side }) => {
-    const { 
-        panels, 
-        activeLeftTab, activeRightTab, 
+    const state = useEngineStore();
+    const {
+        panels,
+        activeLeftTab, activeRightTab,
         togglePanel, movePanel, reorderPanel,
         startPanelDrag, endPanelDrag, draggingPanelId,
-        setDockSize, 
+        setDockSize,
         isLeftDockCollapsed, isRightDockCollapsed, setDockCollapsed,
         openContextMenu,
         leftDockSize, rightDockSize,
-        formula,
-        advancedMode
-    } = useFractalStore();
-    
-    // Mobile detection
+    } = state;
+
     const isMobile = checkIsMobile();
-    
-    // Access Feature States for Visibility Logic
-    const audioState = (useFractalStore.getState() as any).audio as AudioState;
-    const drawingState = (useFractalStore.getState() as any).drawing as DrawingState;
 
     const activeTabId = side === 'left' ? activeLeftTab : activeRightTab;
     const isCollapsed = side === 'left' ? isLeftDockCollapsed : isRightDockCollapsed;
     const width = side === 'left' ? leftDockSize : rightDockSize;
 
-    // Filter panels for this dock, sorted by order
-    // On mobile: Engine and Camera Manager go to right side
+    // Filter panels for this dock, sorted by order. Visibility comes
+    // from the manifest's `showIf` predicate; legacy per-id conditionals
+    // (Graph/Light/Audio/Drawing) now live in the manifest.
     const dockPanels = (Object.values(panels) as PanelState[])
         .filter((p) => {
             let location = p.location;
-            
-            // On mobile, redirect Engine and Camera Manager to right dock
+
+            // On mobile, redirect Engine and Camera Manager to right dock.
             if (isMobile && (p.id === 'Engine' || p.id === 'Camera Manager')) {
                 location = 'right';
             }
-            
             if (location !== side) return false;
-            
-            // Conditional Visibility Logic
-            if (p.id === 'Graph' && formula !== 'Modular') return false;
-            if (p.id === 'Light' && !advancedMode) return false;
-            
-            // Feature Switches
-            if (p.id === 'Audio' && !audioState?.isEnabled) return false;
-            if (p.id === 'Drawing' && !drawingState?.enabled) return false;
-            
+
+            const def = getPanelDefinition(p.id);
+            if (def && !evalShowIf(def.showIf, state as never)) return false;
+
             return true;
         })
         .sort((a, b) => a.order - b.order);
@@ -199,7 +185,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                 was wasting ~32px of dock width. */}
             <div className="flex-1 overflow-y-auto custom-scroll py-2 relative">
                 {activeTabId ? (
-                     <PanelRouter activeTab={activeTabId} state={useFractalStore.getState()} actions={useFractalStore.getState() as any} onSwitchTab={togglePanel as any} />
+                     <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />
                 ) : (
                     <div className="flex h-full items-center justify-center text-gray-700 text-xs italic">
                         Select a panel

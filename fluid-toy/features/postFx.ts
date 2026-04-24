@@ -1,15 +1,18 @@
 /**
- * PostFxFeature — display-side post-processing knobs.
+ * PostFxFeature — the Post-FX tab.
  *
- * Everything between the raw composited fluid+fractal+dye buffer and
- * the screen. Tone mapping, exposure, vibrance, bloom, chromatic
- * aberration, refraction, caustics, plus the "style preset" shortcut
- * that stamps a handful of the above into an electric/liquid/plain
- * look in one click.
+ * Matches the reference toy-fluid "Post-FX" tab exactly: the fluid-style
+ * chip row (Plain / Electric / Liquid), bloom + threshold, aberration,
+ * refraction + smoothing, caustics, and the Tone-mapping subsection
+ * (4 chips + exposure + vibrance). Ranges aligned 1:1 with the
+ * reference ScalarInput bounds; defaults match FluidEngine.DEFAULT_PARAMS.
  *
- * All values already have setParams keys on FluidEngine (see
- * DEFAULT_PARAMS lines 309–320 in FluidEngine.ts). This feature is
- * pure DDFS wiring; no engine or shader changes needed.
+ * The fluid-style preset behaviour (each chip also stamps bloom /
+ * aberration / refraction / caustics values) is owned by FluidEngine
+ * itself — the shader checks uFluidStyle alongside the individual
+ * knobs, so setting style=electric gets the energy look even if each
+ * slider reads 0. No preset-stamping lives here; we just expose the
+ * chip.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
@@ -18,17 +21,14 @@ import { defineEnumParam } from '../../engine/defineEnumParam';
 // 4 tone-map modes matching FluidEngine.toneMappingToIndex.
 const toneMappingParam = defineEnumParam(
     ['none', 'reinhard', 'agx', 'filmic'] as const,
-    'Tone Mapping',
+    'Tone mapping',
     { optionLabels: { agx: 'AgX' } },
 );
 export const TONE_MAPPINGS = toneMappingParam.values;
 export const toneMappingFromIndex = toneMappingParam.fromIndex;
 
-// 3 style presets — "Electric" / "Liquid" buttons in the reference
-// hit a preset bundle; here we expose the underlying enum and let the
-// user layer tweaks on top. The shader checks uFluidStyle alongside
-// the individual knobs, so setting style=electric gets the energy
-// look even with all the bloom/aberration sliders at 0.
+// 3 post-process style presets. Engine uses uFluidStyle to tint the
+// look independently of the individual knobs.
 const fluidStyleParam = defineEnumParam(
     ['plain', 'electric', 'liquid'] as const,
     'Style',
@@ -42,32 +42,65 @@ export const PostFxFeature: FeatureDefinition = {
     category: 'Look',
 
     tabConfig: {
-        label: 'Post FX',
-        componentId: 'auto-feature-panel',
-        order: 2,
-        dock: 'right',
+        label: 'Post-FX',
     },
 
     params: {
-        // Display-stage knobs (always visible)
-        fluidStyle:  fluidStyleParam.config,
-        toneMapping: toneMappingParam.config,
-        exposure:    { type: 'float', default: 1,     min: 0,    max: 8,    step: 0.01,  label: 'Exposure' },
-        vibrance:    { type: 'float', default: 1.645, min: 0,    max: 3,    step: 0.001, label: 'Vibrance' },
+        fluidStyle: {
+            ...fluidStyleParam.config,
+            description: 'Post-process pack. Pick a style to preset bloom / aberration / refraction, or mix them yourself below.',
+        },
 
-        // Bloom — used by 'electric' style, controllable standalone.
-        bloomAmount:    { type: 'float', default: 0,    min: 0, max: 3, step: 0.01,  label: 'Bloom Amount' },
-        bloomThreshold: { type: 'float', default: 0.9,  min: 0, max: 3, step: 0.001, label: 'Bloom Threshold' },
+        bloomAmount: {
+            type: 'float', default: 0, min: 0, max: 3, step: 0.01,
+            label: 'Bloom',
+            description: 'Bloom strength — wide soft glow on bright pixels. Core of the electric look.',
+        },
+        bloomThreshold: {
+            type: 'float', default: 1, min: 0, max: 3, step: 0.01,
+            label: 'Bloom threshold',
+            condition: { param: 'bloomAmount', gt: 0 },
+            description: 'Luminance threshold: pixels below this don\'t contribute to bloom. Lower = more of the image glows.',
+        },
 
-        // Chromatic aberration — velocity-keyed RGB split.
-        aberration: { type: 'float', default: 0,   min: 0,    max: 0.05, step: 0.0001, label: 'Aberration' },
+        aberration: {
+            type: 'float', default: 0.27, min: 0, max: 3, step: 0.01,
+            label: 'Aberration',
+            description: 'Chromatic aberration keyed to local velocity — plasma fringing on fast-moving dye regions. Affects dye only; fractal stays sharp.',
+        },
 
-        // Refraction — used by 'liquid' style; samples the fractal at
-        // a dye-gradient-driven offset.
-        refraction:    { type: 'float', default: 0,   min: 0, max: 0.08, step: 0.0001, label: 'Refraction' },
-        refractSmooth: { type: 'float', default: 3,   min: 0, max: 8,    step: 0.01,   label: 'Refract Smooth' },
+        refraction: {
+            type: 'float', default: 0.037, min: 0, max: 0.3, step: 0.001,
+            label: 'Refraction',
+            description: 'Screen-space refraction: dye\'s luminance acts as a height field — the fractal underneath warps like glass.',
+        },
+        refractSmooth: {
+            type: 'float', default: 3, min: 1, max: 12, step: 0.1,
+            label: 'Refract smooth',
+            condition: { param: 'refraction', gt: 0 },
+            description: 'Stencil width (in dye texels) for the refraction gradient. Higher = smoother distortion, less pixel jitter; 1 = raw single-pixel gradient.',
+        },
 
-        // Caustics — laplacian of the dye luminance, composited additive.
-        caustics: { type: 'float', default: 0, min: 0, max: 2, step: 0.001, label: 'Caustics' },
+        caustics: {
+            type: 'float', default: 1, min: 0, max: 25, step: 0.1,
+            label: 'Caustics',
+            description: 'Laplacian-of-dye highlight — simulates focused-light caustics where the liquid surface bends.',
+        },
+
+        // ── Tone-mapping subsection ─────────────────────────────────
+        toneMapping: {
+            ...toneMappingParam.config,
+            description: 'How final colour gets compressed. None = maximally vivid (may clip). AgX = 2023 hue-stable roll-off (best for rich colours). Reinhard desaturates highlights.',
+        },
+        exposure: {
+            type: 'float', default: 1, min: 0.1, max: 5, step: 0.01,
+            label: 'Exposure',
+            description: 'Multiplier on final colour BEFORE tone mapping. Crank up to make dim gradient stops punch.',
+        },
+        vibrance: {
+            type: 'float', default: 1.645, min: 0, max: 1, step: 0.01,
+            label: 'Vibrance',
+            description: 'Chroma-aware saturation — boosts dull pixels without posterising already-vivid ones.',
+        },
     },
 };

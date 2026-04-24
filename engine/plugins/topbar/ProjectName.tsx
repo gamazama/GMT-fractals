@@ -1,7 +1,7 @@
 /**
  * ProjectName — editable project title + version pill for the topbar.
  *
- * Reads from useFractalStore's projectSettings (shared engine state).
+ * Reads from useEngineStore's projectSettings (shared engine state).
  * Click to edit; Enter/Escape/blur commits.
  *
  * Generic for any engine app: fluid-toy, fractal-toy, future GMT port
@@ -9,12 +9,12 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useFractalStore } from '../../../store/fractalStore';
+import { useEngineStore } from '../../../store/engineStore';
 
 export const ProjectName: React.FC = () => {
-    const name = useFractalStore((s) => s.projectSettings.name);
-    const version = useFractalStore((s) => s.projectSettings.version);
-    const setProjectSettings = useFractalStore((s) => s.setProjectSettings);
+    const name = useEngineStore((s) => s.projectSettings.name);
+    const version = useEngineStore((s) => s.projectSettings.version);
+    const setProjectSettings = useEngineStore((s) => s.setProjectSettings);
 
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(name);

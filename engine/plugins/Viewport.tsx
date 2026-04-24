@@ -17,7 +17,7 @@
  * See docs/10_Viewport.md for full design + integration patterns.
  */
 
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 
 export interface ViewportAdaptiveConfig {
     /** Master adaptive toggle. When false, qualityFraction stays at 1. */
@@ -58,15 +58,15 @@ let _interactionUnsub: (() => void) | null = null;
  *  reportFps sample window (which is throttled to ~500ms). Keeps UI
  *  responsive during scrub gestures. */
 export const installViewport = (options?: Partial<ViewportAdaptiveConfig>) => {
-    if (options) useFractalStore.getState().setAdaptiveConfig(options);
+    if (options) useEngineStore.getState().setAdaptiveConfig(options);
     if (_installed) return;
     _installed = true;
 
-    _interactionUnsub = useFractalStore.subscribe(
+    _interactionUnsub = useEngineStore.subscribe(
         (s) => s.isUserInteracting,
         (isInteracting) => {
             if (!isInteracting) return; // recovery is handled by reportFps
-            const s = useFractalStore.getState();
+            const s = useEngineStore.getState();
             const cfg = s.adaptiveConfig;
             if (!cfg.enabled || s.adaptiveSuppressed) return;
             // Manual mode (targetFps=0): drop to interactionDownsample immediately.
@@ -74,7 +74,7 @@ export const installViewport = (options?: Partial<ViewportAdaptiveConfig>) => {
             // the next tick — no imperative drop needed here.
             if (cfg.targetFps > 0) return;
             if (s.qualityFraction > cfg.interactionDownsample) {
-                useFractalStore.setState({
+                useEngineStore.setState({
                     qualityFraction: cfg.interactionDownsample,
                 });
             }
@@ -96,13 +96,13 @@ export const viewport = {
      *  timestamp buffer, then runs the adaptive loop. The simplest
      *  correct path for any app. */
     frameTick(): void {
-        useFractalStore.getState().reportFps(0);
+        useEngineStore.getState().reportFps(0);
     },
 
     /** If your render engine already has an fps number, use this
      *  instead of frameTick. */
     reportFps(fps: number): void {
-        useFractalStore.getState().reportFps(fps);
+        useEngineStore.getState().reportFps(fps);
     },
 
     /** Hold the adaptive loop at its current quality for the next
@@ -110,19 +110,19 @@ export const viewport = {
      *  events the user expects full quality for: loading a preset,
      *  starting an accumulation, finishing a compile. */
     holdAdaptive(durationMs?: number): void {
-        useFractalStore.getState().holdAdaptive(durationMs);
+        useEngineStore.getState().holdAdaptive(durationMs);
     },
 
     /** Hard-suppress adaptive. When true, qualityFraction goes to 1
      *  and stays there. Use during export so frames ship at full
      *  resolution regardless of FPS. */
     suppressAdaptive(v: boolean): void {
-        useFractalStore.getState().setAdaptiveSuppressed(v);
+        useEngineStore.getState().setAdaptiveSuppressed(v);
     },
 
     /** Update any subset of the adaptive config at runtime. */
     setConfig(cfg: Partial<ViewportAdaptiveConfig>): void {
-        useFractalStore.getState().setAdaptiveConfig(cfg);
+        useEngineStore.getState().setAdaptiveConfig(cfg);
     },
 };
 
@@ -131,31 +131,31 @@ export const viewport = {
 
 /** Subscribe to the quality fraction. Re-renders only when it changes. */
 export const useQualityFraction = (): number =>
-    useFractalStore((s) => s.qualityFraction);
+    useEngineStore((s) => s.qualityFraction);
 
 /** Subscribe to the physical-pixel size + DPR. Re-renders on resize or DPR change. */
 export const useViewportSize = () => {
-    const canvasPixelSize = useFractalStore((s) => s.canvasPixelSize);
-    const dpr = useFractalStore((s) => s.dpr);
+    const canvasPixelSize = useEngineStore((s) => s.canvasPixelSize);
+    const dpr = useEngineStore((s) => s.dpr);
     return { canvasPixelSize, dpr };
 };
 
 /** Subscribe to the current FPS values (smoothed + instantaneous). */
 export const useViewportFps = () => {
-    const fps = useFractalStore((s) => s.fps);
-    const fpsSmoothed = useFractalStore((s) => s.fpsSmoothed);
+    const fps = useEngineStore((s) => s.fps);
+    const fpsSmoothed = useEngineStore((s) => s.fpsSmoothed);
     return { fps, fpsSmoothed };
 };
 
 /** Subscribe to interaction state. True when user is dragging a
  *  slider/knob/gizmo/etc. via the engine's StoreCallbacksContext. */
 export const useViewportInteraction = (): boolean =>
-    useFractalStore((s) => s.isUserInteracting);
+    useEngineStore((s) => s.isUserInteracting);
 
 /** Subscribe to the viewport mode + fixed resolution. */
 export const useViewportMode = () => {
-    const mode = useFractalStore((s) => s.resolutionMode);
-    const fixedResolution = useFractalStore((s) => s.fixedResolution);
+    const mode = useEngineStore((s) => s.resolutionMode);
+    const fixedResolution = useEngineStore((s) => s.fixedResolution);
     return { mode, fixedResolution };
 };
 

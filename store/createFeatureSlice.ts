@@ -2,7 +2,7 @@
 import { StateCreator } from 'zustand';
 import * as THREE from 'three';
 import { featureRegistry } from '../engine/FeatureSystem';
-import { registerFeatures } from '../features';
+import { registerFeatures } from '../engine/features';
 import { FractalEvents } from '../engine/FractalEvents';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { presetFieldRegistry } from '../utils/PresetFieldRegistry';

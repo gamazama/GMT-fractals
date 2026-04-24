@@ -1,12 +1,12 @@
 
 import React, { useEffect } from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 
 export const DropZones: React.FC = () => {
     const { 
         draggingPanelId, movePanel, endPanelDrag, cancelPanelDrag, panels,
         leftDockSize, rightDockSize, isLeftDockCollapsed, isRightDockCollapsed
-    } = useFractalStore();
+    } = useEngineStore();
 
     // Global Cancel Handler (catches drops outside the browser or valid zones)
     useEffect(() => {

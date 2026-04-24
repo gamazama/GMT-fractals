@@ -12,6 +12,7 @@
     "smoke:interact": "tsx debug/smoke-interact.mts",
     "smoke:screenshot": "tsx debug/smoke-screenshot.mts",
     "smoke:fractal-toy": "tsx debug/smoke-fractal-toy.mts",
+    "smoke:formula-switch": "tsx debug/smoke-formula-switch.mts",
     "smoke:fluid-toy": "tsx debug/smoke-fluid-toy.mts",
     "smoke:undo": "tsx debug/smoke-undo.mts",
     "smoke:camera": "tsx debug/smoke-camera.mts",

@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import GraphEditor from './GraphEditor';
 import { TimelineToolbar } from './timeline/TimelineToolbar';
 import { KeyframeInspector } from './timeline/KeyframeInspector';
@@ -23,8 +23,8 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         setIsScrubbing
     } = useAnimationStore();
 
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
-    const setIsTimelineHovered = useFractalStore(s => s.setIsTimelineHovered);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
+    const setIsTimelineHovered = useEngineStore(s => s.setIsTimelineHovered);
     
     // Reset hover/scrub flags on unmount so they can't get stuck if the timeline
     // closes while the mouse is inside it or while a drag is in progress.

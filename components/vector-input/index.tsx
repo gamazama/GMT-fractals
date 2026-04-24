@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { KeyframeButton } from '../KeyframeButton';
 import { KeyStatus } from '../Icons';
@@ -24,7 +24,7 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
     trackLabels,
     ...props
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
     const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
     const lastValueRef = useRef(props.value);
 
@@ -161,7 +161,7 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
     trackLabels,
     ...props
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
     const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
     const lastValueRef = useRef(props.value);
 
@@ -297,7 +297,7 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
     trackLabels,
     ...props
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
     const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
     const lastValueRef = useRef(props.value);
 

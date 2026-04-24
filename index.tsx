@@ -8,7 +8,7 @@ import './demo/registerFeatures';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { registerUI } from './features/ui';
+import { registerUI } from './engine/features/ui';
 import { wireDemoPanel } from './demo/setup';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.

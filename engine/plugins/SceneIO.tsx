@@ -17,7 +17,7 @@
  */
 
 import React, { useRef, useState, useCallback } from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import {
     downloadSceneJson,
     downloadScenePng,
@@ -50,7 +50,7 @@ const saveCurrentPng = async (): Promise<void> => {
         console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
         return;
     }
-    const state = useFractalStore.getState();
+    const state = useEngineStore.getState();
     const preset = state.getPreset({ includeScene: true });
     const stem = (state.projectSettings.name || 'scene').replace(/\s+/g, '-').toLowerCase();
     await downloadScenePng(canvas, preset, `${stem}.png`);
@@ -110,8 +110,8 @@ const ChevronDownIcon = () => (
 
 export const SaveMenu: React.FC = () => {
     const [open, setOpen] = useState(false);
-    const getPreset = useFractalStore((s) => s.getPreset);
-    const projectName = useFractalStore((s) => s.projectSettings.name);
+    const getPreset = useEngineStore((s) => s.getPreset);
+    const projectName = useEngineStore((s) => s.projectSettings.name);
 
     const close = useCallback(() => setOpen(false), []);
     const fileStem = (projectName || 'scene').replace(/\s+/g, '-').toLowerCase();
@@ -129,7 +129,7 @@ export const SaveMenu: React.FC = () => {
 
     const handleCopyShareLink = async () => {
         const preset = getPreset({ includeScene: true });
-        const advanced = !!(useFractalStore.getState() as any).advancedMode;
+        const advanced = !!(useEngineStore.getState() as any).advancedMode;
         const share = generateShareStringFromPreset(preset, advanced);
         const url = `${location.origin}${location.pathname}?s=${share}`;
         try {
@@ -200,7 +200,7 @@ const LoadIcon = () => (
 
 export const LoadButton: React.FC = () => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const loadPreset = useFractalStore((s) => s.loadPreset);
+    const loadPreset = useEngineStore((s) => s.loadPreset);
 
     const handleFile = async (file: File) => {
         const preset = await loadSceneFromFile(file);

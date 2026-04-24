@@ -6,7 +6,7 @@
  * because neither registry depends on the Zustand store.
  *
  * IMPORTANT: this module must be imported *before* anything imports
- * the store (`store/fractalStore.ts`), otherwise the store's feature
+ * the store (`store/engineStore.ts`), otherwise the store's feature
  * slice is created before the Demo feature lands in the registry and
  * the demo state slice will be missing.
  *

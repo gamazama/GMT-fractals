@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { featureRegistry } from '../engine/FeatureSystem';
 import ToggleSwitch from './ToggleSwitch';
 import { FractalEvents } from '../engine/FractalEvents';
@@ -25,7 +25,7 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
     label, featureId, toggleParam, children, description,
     statusContent, headerClassName = '', enabled, onToggle,
 }) => {
-    const store = useFractalStore();
+    const store = useEngineStore();
     const feature = featureRegistry.get(featureId);
 
     // Determine the toggle parameter (The "Power Switch" for this feature)

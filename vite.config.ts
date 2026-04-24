@@ -104,9 +104,9 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
-        'toy-fluid': path.resolve(__dirname, 'toy-fluid.html'),
         'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
         'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
+        'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
       },
       output: {
         manualChunks: {

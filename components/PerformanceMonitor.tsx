@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { useFractalStore, getCanvasPhysicalPixelSize } from '../store/fractalStore';
+import { useEngineStore, getCanvasPhysicalPixelSize } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
@@ -56,7 +56,7 @@ export const tick = () => {
         performanceState.lastFrameCount = engine.frameCount;
 
         // --- Logic Gate ---
-        const state = useFractalStore.getState();
+        const state = useEngineStore.getState();
 
         // Check if Accumulation is finished (Engine stops rendering intentionally)
         const isAccumulationComplete = state.sampleCap > 0 && engine.accumulationCount >= state.sampleCap;
@@ -120,10 +120,10 @@ export const PerformanceMonitor = () => {
         aaLevel, setAALevel,
         renderMode,
         dpr
-    } = useFractalStore();
-    const quality = (useFractalStore.getState() as any).quality as QualityState | undefined;
+    } = useEngineStore();
+    const quality = (useEngineStore.getState() as any).quality as QualityState | undefined;
 
-    const isPaused = useFractalStore(s => s.isPaused);
+    const isPaused = useEngineStore(s => s.isPaused);
     const isScrubbing = useAnimationStore(s => s.isScrubbing);
     
     // UI State
@@ -168,8 +168,8 @@ export const PerformanceMonitor = () => {
     // --- Suggestions Logic ---
 
     // 1. Resolution Reduction — use the canonical canvas-size accessor.
-    // (Avoids ResizeObserver lag after Fixed-mode toggles — see store/fractalStore.ts.)
-    const [currentW, currentH] = getCanvasPhysicalPixelSize(useFractalStore.getState());
+    // (Avoids ResizeObserver lag after Fixed-mode toggles — see store/engineStore.ts.)
+    const [currentW, currentH] = getCanvasPhysicalPixelSize(useEngineStore.getState());
     
     const canReduce = currentW > 480;
 
@@ -200,8 +200,8 @@ export const PerformanceMonitor = () => {
     const handleLiteMode = () => {
         // We use the Engine Settings logic via a direct action if possible,
         // or just manually set the critical params to save perf.
-        const setQuality = (useFractalStore.getState() as any).setQuality;
-        const setLighting = (useFractalStore.getState() as any).setLighting;
+        const setQuality = (useEngineStore.getState() as any).setQuality;
+        const setLighting = (useEngineStore.getState() as any).setLighting;
 
         if (setQuality) setQuality({ precisionMode: 1.0, bufferPrecision: 1.0 });
         if (setLighting) setLighting({ shadows: false }); // Disable shadows for massive gain
@@ -213,7 +213,7 @@ export const PerformanceMonitor = () => {
     const dynamicScaling = (qState as any)?.dynamicScaling;
     const canEnableAdaptive = !dynamicScaling;
     const handleAdaptive = () => {
-        const setQuality = (useFractalStore.getState() as any).setQuality;
+        const setQuality = (useEngineStore.getState() as any).setQuality;
         if (setQuality) setQuality({ dynamicScaling: true, adaptiveTarget: 30 });
         dismissTemporarily();
     };

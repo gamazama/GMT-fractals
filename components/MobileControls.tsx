@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 
 const Joystick = ({ onMove, label, active }: { onMove: (x: number, y: number) => void, label: string, active: boolean }) => {
@@ -113,7 +113,7 @@ const Joystick = ({ onMove, label, active }: { onMove: (x: number, y: number) =>
 };
 
 const MobileControls: React.FC = () => {
-    const { cameraMode, setCameraMode, debugMobileLayout } = useFractalStore();
+    const { cameraMode, setCameraMode, debugMobileLayout } = useEngineStore();
     const { isMobile: isDeviceMobile } = useMobileLayout();
     const [visible, setVisible] = useState(false);
 

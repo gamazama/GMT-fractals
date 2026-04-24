@@ -19,7 +19,7 @@
  */
 
 import { registerTick, TICK_PHASE } from '../TickRegistry';
-import { tick as animationSystemTick } from '../../components/AnimationSystem';
+import { tick as animationSystemTick } from './AnimationSystem';
 import { animationEngine } from '../AnimationEngine';
 
 if (typeof window !== 'undefined') {

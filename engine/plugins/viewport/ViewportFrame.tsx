@@ -32,13 +32,13 @@
  *
  * For GMT's bucket-rendering guard (don't resize while exporting):
  *
- *   <ViewportFrame shouldResize={() => !useFractalStore.getState().isBucketRendering}>
+ *   <ViewportFrame shouldResize={() => !useEngineStore.getState().isBucketRendering}>
  *     ...
  *   </ViewportFrame>
  */
 
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { useFractalStore } from '../../../store/fractalStore';
+import { useEngineStore } from '../../../store/engineStore';
 import { ViewportModeControls } from './ViewportModeControls';
 
 export interface ViewportFrameProps {
@@ -84,9 +84,9 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
     const outerRef = useRef<HTMLDivElement>(null);
     const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
 
-    const mode = useFractalStore((s) => s.resolutionMode);
-    const fixedResolution = useFractalStore((s) => s.fixedResolution);
-    const setCanvasPixelSize = useFractalStore((s) => s.setCanvasPixelSize);
+    const mode = useEngineStore((s) => s.resolutionMode);
+    const fixedResolution = useEngineStore((s) => s.fixedResolution);
+    const setCanvasPixelSize = useEngineStore((s) => s.setCanvasPixelSize);
 
     useLayoutEffect(() => {
         const el = outerRef.current;

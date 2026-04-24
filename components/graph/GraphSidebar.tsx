@@ -1,7 +1,7 @@
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { getLiveValue } from '../../utils/timelineUtils';
 import { TRACK_COLORS } from '../../utils/GraphRenderer';
 import { EyeIcon, FolderIcon, SelectAllIcon, TrashIcon } from '../Icons';
@@ -34,7 +34,7 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
 
 export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, setVisibleTracks }) => {
     const { sequence, selectedTrackIds, selectTrack, selectKeyframes, removeTrack, setTrackBehavior } = useAnimationStore();
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
     // Grouping State
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['Formula', 'Optics', 'Lighting', 'Shading']));

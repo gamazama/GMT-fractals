@@ -1,0 +1,140 @@
+
+
+export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
+    
+     const noiseLogic = renderMode === 'PathTracing' ? 
+        `needNoise = true;` :
+        `
+        // Always apply DOF noise for blur preview - even during navigation
+        if (uDOFStrength > 0.00001) needNoise = true;
+        if (!isMoving) needNoise = true;  // Other effects need noise when stationary
+        if (uAreaLights > 0.5) needNoise = true;
+        `;
+
+    return `
+// ------------------------------------------------------------------
+// STAGE 1: RAY GENERATION
+// Handles Camera Basis and Depth of Field
+// ------------------------------------------------------------------
+void getCameraRay(vec2 uvCoord, out vec3 ro, out vec3 rd, out float stochasticSeed, out vec3 roClean, out vec3 rdClean) {
+    // IMAGE-TILE UV REMAP: map the fullscreen quad's UV (0..1 across this render surface)
+    // into the full-output image's UV space. Default uImageTileOrigin=(0,0), uImageTileSize=(1,1)
+    // makes this a no-op (uvFull == uvCoord). During tiled bucket export, each tile sets
+    // origin/size to its slice so primary rays cover the correct sub-frame of the full image
+    // while the camera basis stays configured for the full-output aspect.
+    vec2 uvFull = uImageTileOrigin + uvCoord * uImageTileSize;
+    vec2 uv = uvFull * 2.0 - 1.0;
+
+    // Store original UV for stable noise lookup (before jitter)
+    vec2 uvOriginal = uv;
+
+    // --- TAA JITTER (Calculated on CPU) ---
+    // Jitter behavior:
+    // - During navigation (blendFactor >= 0.99): NO jitter (stable view)
+    // - During accumulation (blendFactor < 0.99): Jitter applied for TAA anti-aliasing
+    // isMoving = true means camera is moving (navigation), false means accumulating
+    bool isMoving = uBlendFactor >= 0.99;
+    if (!isMoving && uResolution.x > 0.5) {
+        // Jitter magnitude = 1 render-surface pixel in NDC, then scaled to full-output NDC
+        // by uImageTileSize so it corresponds to 1 output pixel regardless of tiling.
+        vec2 pixelSize = 2.0 / uResolution * uImageTileSize;
+        uv += uJitter * pixelSize * 0.5;
+    }
+
+    stochasticSeed = 0.5; // Default safe value
+    
+    // Cache blending factor locally to help compiler optimization
+    float blendFactor = uBlendFactor;
+    
+    // --- STOCHASTIC SEED GENERATION ---
+    bool needNoise = false;
+    
+    ${noiseLogic}
+    
+    // Use Blue Noise Red Channel as base seed
+    // Use stable noise during navigation, animated during accumulation for better convergence
+    if (needNoise) {
+        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1] (full-output UV)
+        // Use full-output resolution so the blue-noise LUT sampling is continuous across image tiles.
+        // In single-image mode uFullOutputResolution == uResolution, so behavior is unchanged.
+        vec2 noisePixel = noiseCoord * uFullOutputResolution;
+        stochasticSeed = isMoving ? getStableBlueNoise4(noisePixel).r
+                                 : getBlueNoise4(noisePixel).r;
+    }
+    
+    vec3 forward = uCamForward;
+    vec3 right = uCamBasisX;
+    vec3 up = uCamBasisY;
+    
+    // --- PROJECTION SWITCH ---
+    if (uCamType > 1.5) {
+        // EQUIRECTANGULAR (360 SKYBOX)
+        float lambda = uv.x * PI;
+        float phi = uv.y * 1.5707963268;
+        float cPhi = cos(phi);
+        vec3 localRd = vec3(
+            sin(lambda) * cPhi,
+            sin(phi),
+            -cos(lambda) * cPhi
+        );
+        vec3 r = normalize(right);
+        vec3 u = normalize(up);
+        vec3 f = normalize(forward);
+        mat3 rot = mat3(r, u, -f);
+        rd = r * localRd.x + u * localRd.y + f * -localRd.z;
+        ro = vec3(0.0);
+        // Fallthrough to DOF logic allowed
+    } else if (uCamType > 0.5) {
+        // ORTHOGRAPHIC
+        rd = normalize(forward);
+        ro = uv.x * right + uv.y * up;
+    } else {
+        // PERSPECTIVE
+        rd = normalize(forward + uv.x * right + uv.y * up);
+        ro = vec3(0.0);
+    }
+
+    // Save clean ray before DoF jitter — used for stable depth readback
+    roClean = ro;
+    rdClean = rd;
+
+    // --- DEPTH OF FIELD ---
+    // DOF noise behavior:
+    // - During navigation (isMoving): Stable per-pixel noise for blur preview
+    // - During accumulation: Animated noise for Monte Carlo convergence
+    if (uDOFStrength > 0.00001) {
+        vec3 focalPoint = ro + rd * uDOFFocus;
+        
+        // Use stable blue noise during navigation, animated during accumulation
+        vec2 noiseCoord = uvOriginal * 0.5 + 0.5; // Convert from NDC [-1,1] to [0,1] (full-output UV)
+        vec2 noisePixel = noiseCoord * uFullOutputResolution;
+        vec4 blue = isMoving ? getStableBlueNoise4(noisePixel)
+                             : getBlueNoise4(noisePixel);
+        
+        float r = sqrt(blue.r);
+        float theta = blue.g * TAU;
+
+        // Polygonal Bokeh Shape (Hexagon)
+        float blades = 6.0;
+        float segment = TAU / blades;
+        float localTheta = mod(theta, segment) - (segment * 0.5);
+        float polyRadius = cos(PI / blades) / cos(localTheta);
+        r *= polyRadius;
+        
+        theta += 0.26; // Rotation offset
+        
+        vec2 offset = vec2(cos(theta), sin(theta)) * r * uDOFStrength;
+        offset.y *= 1.3; // Anamorphic squash
+        
+        vec3 lensOffset = normalize(right) * offset.x + normalize(up) * offset.y; 
+        ro += lensOffset;
+        
+        // Recalculate ray direction to converge at focal point
+        // Works for both Perspective and Orthographic (Tilt-Shift effect)
+        rd = normalize(focalPoint - ro);
+    }
+}
+`;
+};
+
+export const RAY = getRayGLSL('Direct');

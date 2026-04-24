@@ -17,7 +17,7 @@
  */
 
 import React from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { shortcuts } from './Shortcuts';
 import { topbar } from './TopBar';
 
@@ -38,9 +38,9 @@ const RedoIcon = () => (
 );
 
 export const UndoButton: React.FC = () => {
-    const canUndo = useFractalStore((s) => s.canUndo());
-    const peek = useFractalStore((s) => s.peekUndo());
-    const undo = useFractalStore((s) => s.undo);
+    const canUndo = useEngineStore((s) => s.canUndo());
+    const peek = useEngineStore((s) => s.peekUndo());
+    const undo = useEngineStore((s) => s.undo);
 
     const label = peek ? `Undo: ${peek.label ?? peek.scope}` : 'Nothing to undo';
     return (
@@ -56,9 +56,9 @@ export const UndoButton: React.FC = () => {
 };
 
 export const RedoButton: React.FC = () => {
-    const canRedo = useFractalStore((s) => s.canRedo());
-    const peek = useFractalStore((s) => s.peekRedo());
-    const redo = useFractalStore((s) => s.redo);
+    const canRedo = useEngineStore((s) => s.canRedo());
+    const peek = useEngineStore((s) => s.peekRedo());
+    const redo = useEngineStore((s) => s.redo);
 
     const label = peek ? `Redo: ${peek.label ?? peek.scope}` : 'Nothing to redo';
     return (
@@ -95,21 +95,21 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
             key: 'Mod+Z',
             description: 'Undo',
             category: 'Edit',
-            handler: () => { useFractalStore.getState().undo(); },
+            handler: () => { useEngineStore.getState().undo(); },
         });
         shortcuts.register({
             id: 'redo.global',
             key: 'Mod+Y',
             description: 'Redo',
             category: 'Edit',
-            handler: () => { useFractalStore.getState().redo(); },
+            handler: () => { useEngineStore.getState().redo(); },
         });
         shortcuts.register({
             id: 'redo.global.shift',
             key: 'Mod+Shift+Z',
             description: 'Redo (Mac)',
             category: 'Edit',
-            handler: () => { useFractalStore.getState().redo(); },
+            handler: () => { useEngineStore.getState().redo(); },
         });
 
         // Timeline-hover scope: Ctrl+Z routes to animation scope. This
@@ -122,7 +122,7 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
             priority: 10,
             description: 'Undo animation edit',
             category: 'Animation',
-            handler: () => { useFractalStore.getState().undo('animation'); },
+            handler: () => { useEngineStore.getState().undo('animation'); },
         });
         shortcuts.register({
             id: 'redo.animation',
@@ -131,7 +131,7 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
             priority: 10,
             description: 'Redo animation edit',
             category: 'Animation',
-            handler: () => { useFractalStore.getState().redo('animation'); },
+            handler: () => { useEngineStore.getState().redo('animation'); },
         });
     }
 

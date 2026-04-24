@@ -7,7 +7,7 @@ interface StubFormulaDef {
 }
 const registry = { get: (_id: string): StubFormulaDef | undefined => undefined };
 import { MAX_LIGHTS } from '../data/constants';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { CategoryPickerMenu } from './CategoryPickerMenu';
 import type { PickerCategory, PickerItem } from './CategoryPickerMenu';
 import { checkParamActive } from '../utils/paramConditions';
@@ -160,7 +160,7 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
     const buttonRef = useRef<HTMLButtonElement>(null);
     const [coords, setCoords] = useState({ x: 0, y: 0, right: 0 });
 
-    const activeFormula = useFractalStore(s => s.formula);
+    const activeFormula = useEngineStore(s => s.formula);
 
     const handleClick = () => {
         if (buttonRef.current) {
@@ -223,7 +223,7 @@ export const ParameterSelector: React.FC<ParameterSelectorProps> = ({ value, onC
 
     const categories = buildCategories();
     const getItems = (catId: string) => {
-        const storeState = useFractalStore.getState();
+        const storeState = useEngineStore.getState();
         return buildItems(catId, activeFormula, storeState);
     };
 

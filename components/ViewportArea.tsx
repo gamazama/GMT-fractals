@@ -1,9 +1,9 @@
 
 import React, { useRef, useState, useLayoutEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import HistogramProbe from './HistogramProbe';
-import { AnimationSystem } from './AnimationSystem';
+import { AnimationSystem } from '../engine/animation/AnimationSystem';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from './registry/ComponentRegistry';
@@ -46,8 +46,8 @@ interface ViewportAreaProps {
 
 const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
-    const state = useFractalStore();
-    const actions = useFractalStore();
+    const state = useEngineStore();
+    const actions = useEngineStore();
 
     return (
         <div className="absolute inset-0 pointer-events-none z-[20]">
@@ -73,8 +73,8 @@ const DomOverlays: React.FC = () => {
 
 const SceneOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => !o.type || o.type === 'scene');
-    const state = useFractalStore();
-    const actions = useFractalStore();
+    const state = useEngineStore();
+    const actions = useEngineStore();
 
     return (
         <>
@@ -99,7 +99,7 @@ const SceneOverlays: React.FC = () => {
 };
 
 export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
-    const state = useFractalStore();
+    const state = useEngineStore();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
     // Latch so onSceneReady fires exactly once regardless of parent-provided
@@ -114,7 +114,7 @@ export const ViewportArea: React.FC<ViewportAreaProps> = ({ onSceneReady }) => {
         if (!viewportRef.current) return;
         const pushCanvasSize = (w: number, h: number) => {
             const dpr = window.devicePixelRatio || 1;
-            const st = useFractalStore.getState();
+            const st = useEngineStore.getState();
             if (st.isBucketRendering) return;
             st.setCanvasPixelSize(Math.floor(w * dpr), Math.floor(h * dpr));
         };

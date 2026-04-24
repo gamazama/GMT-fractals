@@ -1,19 +1,33 @@
 /**
- * CompositeFeature — how the three layers (Julia fractal, dye, velocity
- * field) mix into the final image.
+ * CompositeFeature — the Composite tab.
  *
- * Small feature, but it's the main user control over the "balance" of
- * the piece. juliaMix=1 + dyeMix=0 gives a pure fractal readout with
- * no fluid colour; dyeMix=1 + juliaMix=0 is pure fluid; velocityViz
- * overlays a debug rainbow of the velocity direction, useful for
- * understanding the force-mode behaviour.
+ * Chooses WHAT the display pass shows (Mixed / Fractal / Dye / Velocity)
+ * and — in Mixed mode — how the three layers balance. The fluid sim
+ * runs the same either way; this tab only affects the final composited
+ * image.
  *
- * All values already have setParams keys on FluidEngine
- * (juliaMix at FluidParams line 175, velocityViz at line 177).
- * Pure DDFS wiring — no engine or shader changes.
+ * Slice absorbs dyeMix (previously on Palette) so all three mix
+ * sliders live together, matching the reference toy-fluid's layout.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
+import { defineEnumParam } from '../../engine/defineEnumParam';
+
+// 4 show modes, index-aligned with FluidEngine.showToIndex.
+const showParam = defineEnumParam(
+    ['composite', 'julia', 'dye', 'velocity'] as const,
+    'Show',
+    {
+        optionLabels: {
+            composite: 'Mixed',
+            julia: 'Fractal',
+        },
+    },
+);
+export const SHOW_MODES = showParam.values;
+export const showFromIndex = showParam.fromIndex;
+
+const SHOW_COMPOSITE = 0;
 
 export const CompositeFeature: FeatureDefinition = {
     id: 'composite',
@@ -22,18 +36,31 @@ export const CompositeFeature: FeatureDefinition = {
 
     tabConfig: {
         label: 'Composite',
-        componentId: 'auto-feature-panel',
-        order: 3,
-        dock: 'right',
     },
 
     params: {
-        // 0 hides the fractal beneath the dye; 1 shows it at full
-        // brightness. Works with dyeMix to balance the two layers.
-        juliaMix:    { type: 'float', default: 0.4,  min: 0, max: 1, step: 0.001, label: 'Julia Mix' },
-        // Additive velocity-direction overlay. 0 = off; higher values
-        // paint a faint hue-keyed map of the velocity field for debug
-        // / visualizing force modes.
-        velocityViz: { type: 'float', default: 0.02, min: 0, max: 1, step: 0.001, label: 'Velocity Viz' },
+        show: {
+            ...showParam.config,
+            description: 'What you see. The simulation runs the same either way. Mixed = fractal + dye + optional velocity overlay. Fractal = pure fractal, fluid hidden. Dye = fluid dye only (what the fractal wrote). Velocity = per-pixel velocity as a hue wheel.',
+        },
+
+        juliaMix: {
+            type: 'float', default: 0.4, min: 0, max: 2, step: 0.01,
+            label: 'Julia mix',
+            condition: { param: 'show', eq: SHOW_COMPOSITE },
+            description: 'How much fractal color shows through in Mixed view.',
+        },
+        dyeMix: {
+            type: 'float', default: 2, min: 0, max: 2, step: 0.01,
+            label: 'Dye mix',
+            condition: { param: 'show', eq: SHOW_COMPOSITE },
+            description: 'How much fluid dye shows through in Mixed view.',
+        },
+        velocityViz: {
+            type: 'float', default: 0.02, min: 0, max: 2, step: 0.01,
+            label: 'Velocity viz',
+            condition: { param: 'show', eq: SHOW_COMPOSITE },
+            description: 'Overlay velocity-hue on top of the composite. Diagnostic.',
+        },
     },
 };

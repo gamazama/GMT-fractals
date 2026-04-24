@@ -1,5 +1,5 @@
 
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import * as THREE from 'three';
@@ -39,7 +39,7 @@ const getLightFromSlice = (_lighting: unknown, _idx: number): StubLight | null =
 export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: number, sequence: any): number => {
     if (isPlaying) return 0;
 
-    const fs = useFractalStore.getState();
+    const fs = useEngineStore.getState();
     const geom = (fs as any).geometry;
     const lighting = (fs as any).lighting;
     

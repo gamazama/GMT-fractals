@@ -1,0 +1,53 @@
+Retrived from Beth Chen's paper
+
+      |0  0  1|
+gamma=|q -p  0|
+      |p  q  0|
+
+      |0  1  0|
+g    =|0  0  1|
+      |1  0  0|
+
+      |1  0  0|
+h    =|q -1  0|
+      |0  0 -1|
+
+
+
+             |0  0  1|
+gamma0=gamma=|q -p  0|
+             |p  q  0|
+
+
+               |0  0  1| |0  1  0| |1  0  0|
+gamma1=gamma*g=|q -p  0|*|0  0  1|=|0  q -p|
+               |p  q  0| |1  0  0| |0  p  q|
+
+
+                |1  0  0| |0  1  0| |0  1  0|
+gamma2=gamma1*g=|0  q -p|*|0  0  1|=|-p 0  q|
+                |0  p  q| |1  0  0| |q  0  p|
+
+
+                |0  0  1| |1  0  0| |0  0 -1|
+gamma3=gamma *h=|q -p  0|*|0 -1  0|=|q  p  0|
+                |p  q  0| |0  0 -1| |p -q  0|
+
+
+                |0  0 -1| |0  1  0| |-1 0  0|
+gamma4=gamma3*g=|q  p  0|*|0  0  1|=|0  q  p|
+                |p -q  0| |1  0  0| |0  p -q|
+
+
+                |-1 0  0| |0  1  0| |0 -1  0|
+gamma5=gamma4*g=|0  q  p|*|0  0  1|=|p  0  q|
+                |0  p -q| |1  0  0| |-q 0  p|
+
+
+p=sqrt((5+sqrt(5))/10)
+
+q=sqrt((5-sqrt(5))/10)
+
+remarque:
+la matrice g est une matrice de permutation.
+la matrice gamma est une rotation.

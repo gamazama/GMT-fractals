@@ -105,21 +105,22 @@ export interface ParamConfig {
     estCompileMs?: number;
 }
 
+/**
+ * Feature-level tab metadata. Panels themselves — dock placement, order,
+ * default-active state, composition, visibility — are declared by the
+ * app's PanelManifest (see engine/PanelManifest.ts). This struct remains
+ * only for feature-internal introspection: the display label and icon
+ * that a panel might show above the feature's params. Dock / ordering /
+ * grouping fields from the pre-manifest era have been removed.
+ */
 export interface FeatureTabConfig {
     label: string;
     iconId?: string;
-    componentId: string;
-    order: number;
+    /** Optional UI-guard predicate gating whether the feature's
+     *  AutoFeaturePanel should render at all (e.g. hide a whole feature
+     *  behind a toggle param). Per-param visibility stays on param
+     *  entries; this is for feature-wide hiding. */
     condition?: ParamCondition | ParamCondition[];
-    /** Target dock for automatic panel placement via
-     *  `applyDefaultPanelLayout()`. If omitted, the panel is not
-     *  auto-placed — the app must call `movePanel()` itself (useful
-     *  for custom layouts or conditionally-shown panels). */
-    dock?: 'left' | 'right' | 'float';
-    /** If multiple features are auto-placed into the same dock,
-     *  the one marked `defaultActive: true` is selected as the
-     *  active tab. If none are marked, the lowest-order panel wins. */
-    defaultActive?: boolean;
 }
 
 export interface FeatureViewportConfig {
@@ -215,7 +216,14 @@ export interface FeatureDefinition {
     // --- Shader Injection ---
     // inject(): injects GLSL into the RAYMARCHING shader (main render pass).
     // Consumed by engine/ShaderFactory.ts. Use for SDFs, lighting, material effects.
-    inject?: (builder: ShaderBuilder, config: ShaderConfig, variant: RenderVariant) => void;
+    //
+    // The `builder` parameter is typed as `any` because different renderers
+    // subclass ShaderBuilder with additional methods (GMT's version has
+    // addPostDEFunction/setFormula/setRotation/…; fractal-toy uses the base
+    // primitives only). Typing this as the base `ShaderBuilder` would make
+    // GMT's feature definitions contravariant-incompatible with the shared
+    // registry. Tool-specific features type the parameter themselves.
+    inject?: (builder: any, config: ShaderConfig, variant: RenderVariant) => void;
 
     // postShader: injects GLSL into the POST-PROCESS shader (screen-space pass after raymarching).
     // Consumed by shaders/chunks/post_process.ts. Use for UV warps, color corrections, overlays.
@@ -234,14 +242,25 @@ export interface FeatureDefinition {
  * frozen (i.e. after `createEngineStore` ran). See docs/02_Feature_Registry.md.
  * Thrown in dev; downgraded to a console warning in prod to avoid crashing
  * shipped apps on a late-arriving plugin.
+ *
+ * In dev the message also includes the stack from the first `freeze()` call
+ * — that's the code path that triggered the premature store construction,
+ * which is usually the real bug (the late-registering feature is innocent).
  */
 export class FeatureRegistryFrozenError extends Error {
-    constructor(featureId: string) {
+    constructor(featureId: string, freezeStack?: string) {
+        const diagnosis = freezeStack
+            ? `\n\nThe registry was frozen by this call chain (first import that touched useEngineStore):\n${freezeStack}\n\n` +
+              `Fix: move the offending import AFTER all feature registrations in your app entry, ` +
+              `or change the offending module to defer the store reference to call time ` +
+              `(read globalThis.__store inside a handler instead of importing at module scope).`
+            : '';
         super(
             `Feature "${featureId}" registered after featureRegistry was frozen. ` +
             `All features must register BEFORE createEngineStore runs (i.e. before any ` +
-            `module that touches useFractalStore / useEngineStore is imported). See ` +
-            `docs/03_Plugin_Contract.md § boot-timeline.`
+            `module that touches useEngineStore / useEngineStore is imported). See ` +
+            `docs/03_Plugin_Contract.md § boot-timeline.` +
+            diagnosis
         );
         this.name = 'FeatureRegistryFrozenError';
     }
@@ -269,6 +288,12 @@ class FeatureRegistry {
     private features = new Map<string, FeatureDefinition>();
     private sortedCache: FeatureDefinition[] | null = null;
     private frozen = false;
+    /** Captured at freeze() time in dev so FeatureRegistryFrozenError can
+     *  point at the module that prematurely triggered store construction
+     *  (usually a stray `import { useEngineStore }` in a plugin's
+     *  top-level import graph). Stays null in prod — capturing the stack
+     *  would cost a throw on every boot. */
+    private freezeStack: string | null = null;
 
     public register(def: FeatureDefinition) {
         const existing = this.features.get(def.id);
@@ -296,7 +321,7 @@ class FeatureRegistry {
 
         // New feature. Reject if registry was frozen.
         if (this.frozen) {
-            const err = new FeatureRegistryFrozenError(def.id);
+            const err = new FeatureRegistryFrozenError(def.id, this.freezeStack ?? undefined);
             if (import.meta.env.DEV) throw err;
             console.warn(`[FeatureRegistry] ${err.message}`);
             return;
@@ -316,9 +341,19 @@ class FeatureRegistry {
 
     /** Freeze the registry. Subsequent `register()` calls for NEW ids throw
      *  in dev and no-op (with warning) in prod. Called by the store during
-     *  construction to lock the feature set before state slices are built. */
+     *  construction to lock the feature set before state slices are built.
+     *
+     *  In dev we capture the call stack so a later `FeatureRegistryFrozenError`
+     *  can show "who froze the registry" — usually a plugin that top-level-
+     *  imported `useEngineStore`, which is the actual bug. */
     public freeze() {
+        if (this.frozen) return;
         this.frozen = true;
+        if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+            const stack = new Error('freeze trace').stack ?? '';
+            // Drop the first line ("Error: freeze trace") and keep ~10 frames.
+            this.freezeStack = stack.split('\n').slice(1, 11).join('\n');
+        }
     }
 
     public isFrozen() {
@@ -336,13 +371,6 @@ class FeatureRegistry {
         return this.sortedCache;
     }
     
-    public getTabs() {
-        return Array.from(this.features.values())
-            .filter(f => f.tabConfig)
-            .map(f => ({ id: f.id, ...f.tabConfig! }))
-            .sort((a, b) => a.order - b.order);
-    }
-
     public getViewportOverlays() {
         return Array.from(this.features.values())
             .filter(f => f.viewportConfig)

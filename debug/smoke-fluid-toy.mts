@@ -3,10 +3,13 @@
  *
  * Mirrors smoke:fractal-toy — mutates every feature slice, captures the
  * preset, mutates again to distinguish, loads the captured preset, and
- * verifies state matches the first-mutation snapshot. Proves all four
- * fluid-toy features (julia, dye, fluidSim, sceneCamera) survive a
- * full save→mutate→load cycle via SceneFormat + the store's preset
- * round-trip path.
+ * verifies state matches the first-mutation snapshot. Proves all
+ * fluid-toy features (julia, coupling, dye, fluidSim) survive a full
+ * save→mutate→load cycle via SceneFormat + the store's preset round-trip.
+ *
+ * SceneCameraFeature + OrbitFeature were retired during the tab-parity
+ * restructure — zoom/center merged onto julia, orbit enabled/radius/
+ * speed merged onto coupling.
  */
 import { chromium } from 'playwright';
 
@@ -24,28 +27,29 @@ async function main() {
     await page.goto(URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
 
-    // 1. Confirm all four feature slices exist
+    // 1. Confirm all feature slices exist
     const slices = await page.evaluate(() => {
         const s = (window as any).__store?.getState?.();
         return {
             julia: !!s?.julia,
-            dye: !!s?.dye,
+            coupling: !!s?.coupling,
+            palette: !!s?.palette,
             fluidSim: !!s?.fluidSim,
-            sceneCamera: !!s?.sceneCamera,
         };
     });
     console.log('slices present:', JSON.stringify(slices));
-    for (const k of ['julia', 'dye', 'fluidSim', 'sceneCamera'] as const) {
+    for (const k of ['julia', 'coupling', 'palette', 'fluidSim'] as const) {
         if (!(slices as any)[k]) throw new Error(`${k} slice missing`);
     }
 
     // 2. Mutate each feature via its auto-generated setter
     await page.evaluate(() => {
         const s = (window as any).__store?.getState?.();
-        s.setJulia({ juliaC: { x: 0.3, y: -0.45 }, maxIter: 128, power: 3.5 });
-        s.setDye({ dyeInject: 12, dyeDissipation: 0.7, gradientRepeat: 2.5 });
-        s.setFluidSim({ vorticity: 40, pressureIters: 75, forceMode: 2, forceGain: -800 });
-        s.setSceneCamera({ center: { x: 0.25, y: -0.1 }, zoom: 3.2 });
+        s.setJulia({ juliaC: { x: 0.3, y: -0.45 }, maxIter: 128, power: 3.5, zoom: 3.2, center: { x: 0.25, y: -0.1 } });
+        s.setCoupling({ forceMode: 2, forceGain: -800, orbitRadius: 0.12 });
+        s.setPalette({ gradientRepeat: 2.5, colorIter: 120 });
+        s.setComposite({ dyeMix: 1.5 });
+        s.setFluidSim({ vorticity: 40, pressureIters: 55, dyeInject: 2.2, dyeDissipation: 2.1 });
     });
     await page.waitForTimeout(200);
 
@@ -54,11 +58,15 @@ async function main() {
         return {
             ju_power: s.julia.power,
             ju_iter: s.julia.maxIter,
-            dy_inj:  s.dye.dyeInject,
-            dy_dis:  s.dye.dyeDissipation,
+            ju_zoom: s.julia.zoom,
+            cp_mode: s.coupling.forceMode,
+            cp_rad:  s.coupling.orbitRadius,
+            pa_rep:  s.palette.gradientRepeat,
+            pa_ci:   s.palette.colorIter,
+            co_mix:  s.composite.dyeMix,
             fs_vort: s.fluidSim.vorticity,
-            fs_mode: s.fluidSim.forceMode,
-            sc_zoom: s.sceneCamera.zoom,
+            fs_inj:  s.fluidSim.dyeInject,
+            fs_dis:  s.fluidSim.dyeDissipation,
         };
     });
     console.log('after mutate:', JSON.stringify(snapshot1));
@@ -71,17 +79,18 @@ async function main() {
     const preset = JSON.parse(presetJson);
     console.log('preset feature ids:', Object.keys(preset.features ?? {}).join(', '));
 
-    for (const f of ['julia', 'dye', 'fluidSim', 'sceneCamera']) {
+    for (const f of ['julia', 'coupling', 'palette', 'fluidSim']) {
         if (!preset.features?.[f]) throw new Error(`preset missing features.${f}`);
     }
 
     // 4. Mutate to different values so loadPreset actually has to work
     await page.evaluate(() => {
         const s = (window as any).__store?.getState?.();
-        s.setJulia({ power: 2 });
-        s.setDye({ dyeInject: 1 });
-        s.setFluidSim({ vorticity: 0 });
-        s.setSceneCamera({ zoom: 1 });
+        s.setJulia({ power: 2, zoom: 1 });
+        s.setCoupling({ forceMode: 0, orbitRadius: 0 });
+        s.setPalette({ colorIter: 50 });
+        s.setComposite({ dyeMix: 0 });
+        s.setFluidSim({ vorticity: 0, dyeInject: 0 });
     });
     await page.waitForTimeout(100);
 
@@ -96,11 +105,15 @@ async function main() {
         return {
             ju_power: s.julia.power,
             ju_iter: s.julia.maxIter,
-            dy_inj:  s.dye.dyeInject,
-            dy_dis:  s.dye.dyeDissipation,
+            ju_zoom: s.julia.zoom,
+            cp_mode: s.coupling.forceMode,
+            cp_rad:  s.coupling.orbitRadius,
+            pa_rep:  s.palette.gradientRepeat,
+            pa_ci:   s.palette.colorIter,
+            co_mix:  s.composite.dyeMix,
             fs_vort: s.fluidSim.vorticity,
-            fs_mode: s.fluidSim.forceMode,
-            sc_zoom: s.sceneCamera.zoom,
+            fs_inj:  s.fluidSim.dyeInject,
+            fs_dis:  s.fluidSim.dyeDissipation,
         };
     });
     console.log('after load:', JSON.stringify(snapshot2));
@@ -115,7 +128,7 @@ async function main() {
         throw new Error('page errors during smoke:\n  ' + errors.join('\n  '));
     }
 
-    console.log('\n✓ 4 fluid-toy features present, auto-setters work, preset roundtrip exact');
+    console.log('\n✓ fluid-toy features present (julia+coupling+palette+fluidSim), auto-setters work, preset roundtrip exact');
     await browser.close();
 }
 

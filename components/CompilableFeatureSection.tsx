@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { featureRegistry } from '../engine/FeatureSystem';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { FractalEvents } from '../engine/FractalEvents';
 import { AutoFeaturePanel } from './AutoFeaturePanel';
 import { FeatureSection } from './FeatureSection';
@@ -57,7 +57,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     const helpId = props.helpId ?? pc?.helpId;
 
     // Store state
-    const store = useFractalStore();
+    const store = useEngineStore();
     const sliceState = (store as any)[featureId];
     const isCompiled = !!sliceState?.[compileParam];
     const isOn = runtimeToggleParam ? !!sliceState?.[runtimeToggleParam] : isCompiled;
@@ -115,7 +115,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
 
     // Open engine panel and queue compile flag + any pending compile settings
     const handleOpenEngine = useCallback(() => {
-        useFractalStore.getState().movePanel('Engine', 'left');
+        useEngineStore.getState().movePanel('Engine', 'left');
         setTimeout(() => {
             // Queue the compile gate
             if (!isCompiled) {

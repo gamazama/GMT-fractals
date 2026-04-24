@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 
 let _camera: THREE.Camera | null = null;
 let _canvasElement: HTMLCanvasElement | null = null;
@@ -58,7 +58,7 @@ export function getViewportCanvas(): HTMLCanvasElement | null {
  * `.project()` produces correct screen-space positions for overlays.
  */
 export function snapshotDisplayCamera(cam: THREE.Camera) {
-    const optics = (useFractalStore.getState() as any).optics;
+    const optics = (useEngineStore.getState() as any).optics;
     const isOrtho = optics ? optics.camType > 0.5 && optics.camType < 1.5 : false;
     _isOrthoActive = isOrtho;
 

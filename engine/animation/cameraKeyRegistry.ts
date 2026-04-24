@@ -33,7 +33,7 @@ export function setCameraKeyCaptureFn(fn: CameraKeyCaptureFn): void {
     _captureFn = fn;
 }
 
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 
 export function captureCameraKeyFrame(frame: number): void {
@@ -43,7 +43,7 @@ export function captureCameraKeyFrame(frame: number): void {
     // pure-scalar paths (`sceneCamera.zoom`) and UNDERSCORE vec-component
     // paths (`sceneCamera.center_x`) — the latter resolves the base part
     // (`center`) to a vec, then picks the axis.
-    const state = useFractalStore.getState() as any;
+    const state = useEngineStore.getState() as any;
     const animActions = useAnimationStore.getState();
     for (const tid of cameraKeyTracks) {
         const parts = tid.split('.');

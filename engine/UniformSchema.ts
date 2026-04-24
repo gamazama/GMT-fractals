@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Uniforms } from './UniformNames';
 import { featureRegistry } from './FeatureSystem';
-import { registerFeatures } from '../features';
+import { registerFeatures } from './features';
 
 // Ensure features are registered before schema is built
 registerFeatures();

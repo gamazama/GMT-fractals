@@ -1,3 +1,6 @@
+import { BLUE_NOISE } from '../../shaders/chunks/blue_noise';
+import { TSAA } from '../../shaders/chunks/tsaa';
+
 // All shaders for the Julia-Fluid toy. WebGL2 (GLSL ES 3.00).
 //
 // Texture contents by convention:
@@ -153,6 +156,18 @@ uniform vec2  uTrapNormal;    // unit normal for line trap
 uniform float uTrapOffset;    // d for line trap
 uniform float uStripeFreq;    // k in sin(k·arg z)
 
+// TSAA sub-pixel jitter — when > 0, primary sample position is jittered
+// by blue-noise to drive temporal anti-aliasing. Value is the jitter
+// AMPLITUDE in pixel fractions (1.0 = ±0.5 px). Set to 0 to disable.
+uniform float uJitterScale;
+uniform vec2  uResolution;
+uniform sampler2D uBlueNoiseTexture;
+uniform vec2  uBlueNoiseResolution;
+uniform int   uFrameCount;
+
+${BLUE_NOISE}
+${TSAA}
+
 // complex multiply
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
 
@@ -190,7 +205,16 @@ float trapDistance(vec2 q) {
 }
 
 void main() {
-  vec2 uv = vUv * 2.0 - 1.0;
+  // TSAA sub-pixel jitter — offset vUv by blue-noise-driven sub-pixel
+  // amount before mapping into fractal space. Over successive frames the
+  // accumulator in FluidEngine averages jittered samples, producing AA.
+  // When uJitterScale is 0, the offset is zero and we render un-jittered.
+  vec2 jitter = (uJitterScale > 0.0)
+      ? tsaaJitter(gl_FragCoord.xy) * uJitterScale
+      : vec2(0.0);
+  vec2 uvJ = vUv + jitter / max(uResolution, vec2(1.0));
+
+  vec2 uv = uvJ * 2.0 - 1.0;
   uv.x *= uAspect;
   vec2 p = uCenter + uv * uScale;
 
@@ -603,24 +627,41 @@ void main() {
 }`;
 
 // -----------------------------------------------------------------------------
-// Splat: gaussian-weighted additive injection at (uPoint) of (uValue).rgb.
-// Used for both mouse-forces (into velocity) and mouse-dye (into dye).
+// Splat: additive injection at (uPoint) of (uValue).rgb with a hardness-
+// blended gaussian → hard-disc profile. Used for mouse-forces (velocity),
+// mouse-dye (dye buffer), and the artist brush via FluidEngine.brush().
 // -----------------------------------------------------------------------------
+/** Splat with controllable softness/hardness.
+ *  - uHardness=0  → pure gaussian (soft airbrush fringe).
+ *  - uHardness=1  → hard disc, smoothstep antialias at the rim.
+ *  - in-between   → linear blend of the two profiles.
+ *  - uOp controls what happens to the target:  0 add  |  1 subtract (eraser). */
 export const FRAG_SPLAT = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uTarget;
-uniform vec2 uPoint;
-uniform vec3 uValue;
-uniform float uRadius;
+uniform vec2  uPoint;
+uniform vec3  uValue;
+uniform float uRadius;     // soft-mode gaussian sigma² (smaller = tighter)
+uniform float uDiscR;      // hard-mode disc radius in UV (x-aspect-corrected)
+uniform float uHardness;   // 0..1 blend between soft / hard profile
 uniform float uAspect;
+uniform float uOp;         // 0 add, 1 subtract
 void main() {
   vec2 d = vUv - uPoint;
   d.x *= uAspect;
-  float g = exp(-dot(d,d) / uRadius);
+  float r2 = dot(d, d);
+  float soft = exp(-r2 / uRadius);
+  float hard = 1.0 - smoothstep(uDiscR * 0.9, uDiscR, sqrt(r2));
+  float w = mix(soft, hard, uHardness);
   vec4 base = texture(uTarget, vUv);
-  base.rgb += uValue * g;
+  vec3 delta = uValue * w;
+  vec3 next = base.rgb + mix(delta, -delta, uOp);
+  // Clamp to ≥0 ONLY for the eraser op. Velocity splats carry signed deltas —
+  // clamping them would wipe out negative components under the brush radius,
+  // which visually looks like flow reversing wherever the brush touches.
+  base.rgb = (uOp > 0.5) ? max(next, 0.0) : next;
   fragColor = base;
 }`;
 
@@ -954,4 +995,42 @@ void main() {
   vec2 inside = step(vec2(0.0), oldUv) * step(oldUv, vec2(1.0));
   float inside01 = inside.x * inside.y;
   fragColor = texture(uSource, oldUv) * inside01;
+}`;
+
+// -----------------------------------------------------------------------------
+// TSAA BLEND — progressive accumulator for the Julia MRT output.
+// Reads the current jittered Julia frame (main + aux) and the TSAA history
+// (main + aux), outputs the running average as new history. `uSampleIndex`
+// is the 1-based count since the last reset (frame 1 → history overwritten,
+// frame 2 → mix 50/50, etc). FluidEngine resets the index on param changes.
+// -----------------------------------------------------------------------------
+export const FRAG_TSAA_BLEND = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+layout(location=0) out vec4 outMain;
+layout(location=1) out vec4 outAux;
+
+uniform sampler2D uCurrentMain;
+uniform sampler2D uCurrentAux;
+uniform sampler2D uHistoryMain;
+uniform sampler2D uHistoryAux;
+uniform int uSampleIndex;
+
+void main() {
+    vec4 curMain = texture(uCurrentMain, vUv);
+    vec4 curAux  = texture(uCurrentAux,  vUv);
+    // Frame-1 safety: when uSampleIndex is 1 the history texture hasn't
+    // been written yet (MRT FBOs allocate with undefined contents in
+    // WebGL2 — some drivers return NaN for RGBA16F). Skip the history
+    // read entirely and just pass the current sample through.
+    if (uSampleIndex <= 1) {
+        outMain = curMain;
+        outAux  = curAux;
+        return;
+    }
+    vec4 histMain = texture(uHistoryMain, vUv);
+    vec4 histAux  = texture(uHistoryAux,  vUv);
+    float w = 1.0 / float(uSampleIndex);
+    outMain = mix(histMain, curMain, w);
+    outAux  = mix(histAux,  curAux,  w);
 }`;

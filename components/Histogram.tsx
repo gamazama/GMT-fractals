@@ -4,7 +4,7 @@ import { getGradientCssString } from '../utils/colorUtils';
 import { GradientStop, GradientConfig } from '../types';
 import { DraggableNumber } from './Slider';
 import { analyzeHistogram, calculateSmartLevels } from '../utils/histogramUtils';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { collectHelpIds } from '../utils/helpUtils';
 
 interface HistogramProps {
@@ -65,7 +65,7 @@ const Histogram: React.FC<HistogramProps> = ({
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [viewRange, setViewRange] = useState(fixedRange || { min: 0, max: 1 });
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
     // Process data into buckets
     const histogramBuckets = useMemo(() => {

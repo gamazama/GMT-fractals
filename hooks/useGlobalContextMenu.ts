@@ -1,10 +1,10 @@
 
 import { useEffect } from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { collectHelpIds } from '../utils/helpUtils';
 
 export const useGlobalContextMenu = () => {
-    const openMenu = useFractalStore(s => s.openContextMenu);
+    const openMenu = useEngineStore(s => s.openContextMenu);
 
     useEffect(() => {
         const handleContextMenu = (e: MouseEvent) => {

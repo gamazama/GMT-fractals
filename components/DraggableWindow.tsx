@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CloseIcon, ResizeHandleIcon, DragHandleIcon } from './Icons';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 
 export interface DraggableWindowProps {
     id?: string;
@@ -29,7 +29,7 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
     onClose, disableClose, zIndex,
     initialPos, initialSize
 }) => {
-    const { panels, setFloatPosition, setFloatSize, togglePanel, startPanelDrag } = useFractalStore();
+    const { panels, setFloatPosition, setFloatSize, togglePanel, startPanelDrag } = useEngineStore();
     
     // Determine mode
     const isManaged = !!id;
@@ -68,7 +68,7 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
         if (onClose) onClose();
         else if (isManaged && id) {
             // Special logic for Feature Panels: Closing them turns off the switch
-            const state = useFractalStore.getState();
+            const state = useEngineStore.getState();
             const actions = state as any;
             if (id === 'Audio') actions.setAudio({ isEnabled: false });
             else if (id === 'Drawing') actions.setDrawing({ enabled: false });

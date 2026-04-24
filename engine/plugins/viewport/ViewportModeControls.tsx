@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { useFractalStore } from '../../../store/fractalStore';
+import { useEngineStore } from '../../../store/engineStore';
 import { FixedResolutionControls } from './FixedResolutionControls';
 
 export interface ViewportModeControlsProps {
@@ -38,10 +38,10 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     availableWidth,
     availableHeight,
 }) => {
-    const mode = useFractalStore((s) => s.resolutionMode);
-    const fixedResolution = useFractalStore((s) => s.fixedResolution);
-    const setMode = useFractalStore((s) => s.setResolutionMode);
-    const setFixedResolution = useFractalStore((s) => s.setFixedResolution);
+    const mode = useEngineStore((s) => s.resolutionMode);
+    const fixedResolution = useEngineStore((s) => s.fixedResolution);
+    const setMode = useEngineStore((s) => s.setResolutionMode);
+    const setFixedResolution = useEngineStore((s) => s.setFixedResolution);
 
     if (mode === 'Fixed') {
         const [w, h] = fixedResolution;

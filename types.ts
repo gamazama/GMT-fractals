@@ -4,7 +4,7 @@ import type React from 'react';
 export * from './types/common';
 export * from './types/graphics';
 export * from './types/animation';
-export * from './types/fractal';
+export * from './types/preset';
 export * from './types/store';
 
 // Explicitly extend the JSX namespace to include React Three Fiber elements.

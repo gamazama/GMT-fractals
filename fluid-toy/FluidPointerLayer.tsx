@@ -14,7 +14,7 @@
  *   wheel            — zoom the scene camera, anchored at the cursor
  *                      (per-tick anchor; cursor tracks world-space)
  *
- * Both pan and zoom write through the DDFS `sceneCamera` slice so the
+ * Both pan and zoom write through the DDFS `julia` slice so the
  * existing FluidToyApp subscribe → FluidEngine.setParams path handles
  * propagation. The fluid sim field texels stay put under the cursor
  * because FluidEngine's display shader rescales UVs by the camera.
@@ -25,7 +25,7 @@
  */
 
 import React, { useRef, useEffect } from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import type { FluidEngine } from './fluid/FluidEngine';
 import type { ContextMenuItem } from '../types/help';
 import {
@@ -37,14 +37,42 @@ import {
     PRECISION_SHIFT_MULT,
     PRECISION_ALT_MULT,
 } from './constants';
-import { brushModeFromIndex } from './features/dye';
+import { brushModeFromIndex, brushColorModeFromIndex } from './features/brush';
+import { emitStrokeSplat, emitPressSplat, beginStroke, type BrushParams } from './brush';
+import { brushHandles, cursorHandles } from './engineHandles';
+
+// Build a BrushParams object from the current store slice + cached LUT.
+// Lives next to FluidPointerLayer because both onDown and onMove need it.
+const readBrushParams = (): BrushParams => {
+    const b = (useEngineStore.getState() as any).brush ?? {};
+    return {
+        mode: brushModeFromIndex(b.mode),
+        colorMode: brushColorModeFromIndex(b.colorMode),
+        solidColor: [b.solidColor?.x ?? 1, b.solidColor?.y ?? 1, b.solidColor?.z ?? 1],
+        gradientLut: brushHandles.ref.current.gradientLut,
+        size: b.size ?? 0.1,
+        hardness: b.hardness ?? 0,
+        strength: b.strength ?? 1,
+        flow: b.flow ?? 50,
+        spacing: b.spacing ?? 0.005,
+        jitter: b.jitter ?? 0,
+        particleEmitter: !!b.particleEmitter,
+        particleRate: b.particleRate ?? 120,
+        particleVelocity: b.particleVelocity ?? 0.3,
+        particleSpread: b.particleSpread ?? 0.35,
+        particleGravity: b.particleGravity ?? 0,
+        particleDrag: b.particleDrag ?? 0.6,
+        particleLifetime: b.particleLifetime ?? 1.2,
+        particleSizeScale: b.particleSizeScale ?? 0.35,
+    };
+};
 
 export interface FluidPointerLayerProps {
     canvasRef: React.RefObject<HTMLCanvasElement>;
     engineRef: React.RefObject<FluidEngine | null>;
 }
 
-type PointerMode = 'idle' | 'splat' | 'pan-pending' | 'pan' | 'zoom';
+type PointerMode = 'idle' | 'splat' | 'pan-pending' | 'pan' | 'zoom' | 'resize-brush' | 'pick-c';
 
 interface PointerState {
     mode: PointerMode;
@@ -72,7 +100,17 @@ interface PointerState {
     // contextmenu handler to ignore the resulting click so the menu
     // doesn't flash up at the end of a pan.
     rightDragged: boolean;
+    // B+drag resize-brush anchor — captured at press so the whole drag
+    // scales relative to the starting size. Log-scaled so feel is
+    // uniform across the 0.003..0.4 size range.
+    startBrushSize: number;
 }
+
+/** Held-modifier state for B (brush-resize) and C (pick-c) gestures.
+ *  Tracked via window key events so the user can press+release
+ *  independently of canvas focus. Refs live at module scope so
+ *  registerModifierKeys can be called once at mount. */
+const mods = { b: false, c: false };
 
 const precisionMultiplier = (shift: boolean, alt: boolean): number => {
     if (shift) return PRECISION_SHIFT_MULT;
@@ -87,10 +125,42 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
         startX: 0, startY: 0, startCx: 0, startCy: 0,
         startZoom: 1, zoomAnchorX: 0, zoomAnchorY: 0, zoomAnchorU: 0.5, zoomAnchorV: 0.5,
         rightDragged: false,
+        startBrushSize: 0.15,
     });
-    const handleInteractionStart = useFractalStore((s) => s.handleInteractionStart);
-    const handleInteractionEnd = useFractalStore((s) => s.handleInteractionEnd);
-    const openContextMenu = useFractalStore((s) => s.openContextMenu);
+    const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
+    const openContextMenu = useEngineStore((s) => s.openContextMenu);
+
+    // B / C modifier key tracking. Listeners live on window so press
+    // and release are captured regardless of canvas focus. Bail out of
+    // the modifier when the user focuses a text input so B and C in
+    // e.g. a name field don't silently arm the canvas gestures.
+    useEffect(() => {
+        const isTyping = () => {
+            const el = document.activeElement as HTMLElement | null;
+            if (!el) return false;
+            const tag = el.tagName;
+            return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+        };
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (isTyping()) return;
+            if (e.code === 'KeyB') mods.b = true;
+            if (e.code === 'KeyC') mods.c = true;
+        };
+        const onKeyUp = (e: KeyboardEvent) => {
+            if (e.code === 'KeyB') mods.b = false;
+            if (e.code === 'KeyC') mods.c = false;
+        };
+        const onBlur = () => { mods.b = false; mods.c = false; };
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+        window.addEventListener('blur', onBlur);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup', onKeyUp);
+            window.removeEventListener('blur', onBlur);
+        };
+    }, []);
 
     // Right-click context menu — reads the store at click-time via
     // getState() so the handler stays stable across prop changes and
@@ -107,9 +177,9 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 ps.rightDragged = false;
                 return;
             }
-            const s = useFractalStore.getState() as any;
+            const s = useEngineStore.getState() as any;
             const juliaC = s.julia?.juliaC;
-            const orbitOn = !!s.orbit?.enabled;
+            const orbitOn = !!s.coupling?.orbitEnabled;
             const paused = !!s.fluidSim?.paused;
 
             const items: ContextMenuItem[] = [
@@ -127,11 +197,11 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 },
                 {
                     label: orbitOn ? 'Stop Auto Orbit' : 'Start Auto Orbit',
-                    action: () => { s.setOrbit({ enabled: !orbitOn }); },
+                    action: () => { s.setCoupling({ orbitEnabled: !orbitOn }); },
                 },
                 {
                     label: 'Recenter View',
-                    action: () => { s.setSceneCamera({ center: { x: 0, y: 0 }, zoom: 1.5 }); },
+                    action: () => { s.setJulia({ center: { x: 0, y: 0 }, zoom: 1.5 }); },
                 },
                 {
                     label: 'Reset Fluid Fields',
@@ -160,10 +230,10 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
 
             if (e.button === 2) {
                 // Right-press — start a pan-pending; upgrade to pan on travel.
-                const s = useFractalStore.getState() as any;
+                const s = useEngineStore.getState() as any;
                 ps.mode = 'pan-pending';
-                ps.startCx = s.sceneCamera?.center?.x ?? 0;
-                ps.startCy = s.sceneCamera?.center?.y ?? 0;
+                ps.startCx = s.julia?.center?.x ?? 0;
+                ps.startCy = s.julia?.center?.y ?? 0;
                 ps.rightDragged = false;
                 canvas.setPointerCapture(e.pointerId);
                 handleInteractionStart('camera');
@@ -178,9 +248,9 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 e.preventDefault();
                 const rect = canvas.getBoundingClientRect();
                 if (rect.width < 1 || rect.height < 1) return;
-                const s = useFractalStore.getState() as any;
-                const currCenter = s.sceneCamera?.center ?? { x: 0, y: 0 };
-                const currZoom = s.sceneCamera?.zoom ?? 1.5;
+                const s = useEngineStore.getState() as any;
+                const currCenter = s.julia?.center ?? { x: 0, y: 0 };
+                const currZoom = s.julia?.zoom ?? 1.5;
                 const u = (e.clientX - rect.left) / rect.width;
                 const v = 1 - (e.clientY - rect.top) / rect.height;
                 const aspect = rect.width / rect.height;
@@ -196,9 +266,49 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             }
 
             if (e.button === 0) {
-                ps.mode = 'splat';
                 canvas.setPointerCapture(e.pointerId);
+                const s = useEngineStore.getState() as any;
+                // Pick-c: hold C + left-drag to drag Julia c directly on
+                // canvas. Captures the starting c so the drag delta is
+                // absolute regardless of subsequent zoom changes.
+                if (mods.c) {
+                    ps.mode = 'pick-c';
+                    ps.startCx = s.julia?.juliaC?.x ?? 0;
+                    ps.startCy = s.julia?.juliaC?.y ?? 0;
+                    handleInteractionStart('param');
+                    return;
+                }
+                // Resize-brush: hold B + left-drag horizontally to scale
+                // the brush. Log-scaled so feel is uniform across the
+                // 0.003..0.4 size range.
+                if (mods.b) {
+                    ps.mode = 'resize-brush';
+                    ps.startBrushSize = s.brush?.size ?? 0.15;
+                    handleInteractionStart('param');
+                    return;
+                }
+                // Default left-drag: splat.
+                ps.mode = 'splat';
                 handleInteractionStart('param');
+                // Reset stroke-local state and mark dragging so the RAF
+                // loop starts emitting particles (if the emitter is on).
+                beginStroke(brushHandles.ref.current.runtime);
+                cursorHandles.ref.current.dragging = true;
+                // Drop a splat at the click point so a single click always
+                // leaves a mark — matches reference "mark the spot" polish.
+                const rect = canvas.getBoundingClientRect();
+                if (rect.width >= 1 && rect.height >= 1 && engineRef.current) {
+                    const u = (e.clientX - rect.left) / rect.width;
+                    const v = 1 - (e.clientY - rect.top) / rect.height;
+                    cursorHandles.ref.current.uv = { u, v };
+                    cursorHandles.ref.current.velUv = null;
+                    emitPressSplat(brushHandles.ref.current.runtime, {
+                        u, v, dvx: 0, dvy: 0,
+                        params: readBrushParams(),
+                        engine: engineRef.current,
+                        wallClockMs: performance.now(),
+                    });
+                }
                 return;
             }
         };
@@ -209,6 +319,40 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
 
             const rect = canvas.getBoundingClientRect();
             if (rect.width < 1 || rect.height < 1) return;
+
+            // C+drag — drag Julia c directly on the canvas. Pixel delta
+            // from drag start maps through zoom × aspect to fractal
+            // space, so the same drag gives a bigger c-delta when
+            // zoomed out. Matches reference toy-fluid.
+            if (ps.mode === 'pick-c') {
+                const s = useEngineStore.getState() as any;
+                const zoom = s.julia?.zoom ?? 1.5;
+                const aspect = rect.width / rect.height;
+                const mul = precisionMultiplier(e.shiftKey, e.altKey);
+                const dxPx = e.clientX - ps.startX;
+                const dyPx = e.clientY - ps.startY;
+                const dfx =  (dxPx / rect.width)  * 2 * aspect * zoom * mul;
+                const dfy = -(dyPx / rect.height) * 2 * zoom * mul;
+                s.setJulia({ juliaC: { x: ps.startCx + dfx, y: ps.startCy + dfy } });
+                ps.lastX = e.clientX; ps.lastY = e.clientY;
+                return;
+            }
+
+            // B+drag — resize the brush live. Horizontal drag scales
+            // log-space so a uniform swipe covers the full 0.003..0.4
+            // size range naturally. Vertical drag is ignored — keeps
+            // the gesture flavour of "horizontal = scale".
+            if (ps.mode === 'resize-brush') {
+                const s = useEngineStore.getState() as any;
+                const mul = precisionMultiplier(e.shiftKey, e.altKey);
+                const dxPx = e.clientX - ps.startX;
+                // 300 px sweep ≈ ×e (~2.7×) size change at default precision.
+                const factor = Math.exp(dxPx * 0.0033 * mul);
+                const next = Math.max(0.003, Math.min(0.4, ps.startBrushSize * factor));
+                s.setBrush({ size: next });
+                ps.lastX = e.clientX; ps.lastY = e.clientY;
+                return;
+            }
 
             // Right-drag pan: upgrade pan-pending → pan once cursor travel
             // exceeds threshold. Below threshold, press-release still opens
@@ -227,15 +371,15 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 // Grab-and-drag: world-space point under cursor at start
                 // stays under cursor. center moves opposite to pixel delta,
                 // scaled by current zoom × aspect.
-                const s = useFractalStore.getState() as any;
-                const zoom = s.sceneCamera?.zoom ?? 1.5;
+                const s = useEngineStore.getState() as any;
+                const zoom = s.julia?.zoom ?? 1.5;
                 const aspect = rect.width / rect.height;
                 const mul = precisionMultiplier(e.shiftKey, e.altKey);
                 const dxPx = e.clientX - ps.startX;
                 const dyPx = e.clientY - ps.startY;
                 const dcx = -(dxPx / rect.width) * 2 * aspect * zoom * mul;
                 const dcy = (dyPx / rect.height) * 2 * zoom * mul;
-                s.setSceneCamera({ center: { x: ps.startCx + dcx, y: ps.startCy + dcy } });
+                s.setJulia({ center: { x: ps.startCx + dcx, y: ps.startCy + dcy } });
                 ps.lastX = e.clientX; ps.lastY = e.clientY;
                 return;
             }
@@ -243,16 +387,19 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             if (ps.mode === 'zoom') {
                 // Middle-drag: exponential zoom on vertical motion; pivots
                 // around the click-point (anchor captured in onDown).
-                // Drag up (dyPx negative) → zoom in.
-                const s = useFractalStore.getState() as any;
+                // Reference convention: drag DOWN (dyPx positive) expands
+                // the world-space zoom value = zooms OUT; drag UP (dyPx
+                // negative) contracts zoom = zooms IN. zoomFactor uses
+                // exp(+dyPx) so those signs match.
+                const s = useEngineStore.getState() as any;
                 const mul = precisionMultiplier(e.shiftKey, e.altKey);
                 const dyPx = e.clientY - ps.startY;
-                const zoomFactor = Math.exp(-dyPx * MIDDLE_DRAG_ZOOM_SENSITIVITY * mul);
+                const zoomFactor = Math.exp(dyPx * MIDDLE_DRAG_ZOOM_SENSITIVITY * mul);
                 const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ps.startZoom * zoomFactor));
                 const aspect = rect.width / rect.height;
                 const newCx = ps.zoomAnchorX - (ps.zoomAnchorU * 2 - 1) * aspect * newZoom;
                 const newCy = ps.zoomAnchorY - (ps.zoomAnchorV * 2 - 1) * newZoom;
-                s.setSceneCamera({ center: { x: newCx, y: newCy }, zoom: newZoom });
+                s.setJulia({ center: { x: newCx, y: newCy }, zoom: newZoom });
                 ps.lastX = e.clientX; ps.lastY = e.clientY;
                 return;
             }
@@ -261,73 +408,35 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const engine = engineRef.current;
                 if (!engine) return;
                 const now = performance.now();
-                const dt = Math.max(1, now - ps.lastT) / 1000;
+                const dt = Math.max(1e-3, (now - ps.lastT) / 1000);
                 const dxPx = e.clientX - ps.lastX;
                 const dyPx = e.clientY - ps.lastY;
 
-                // Brush params — read at splat time so panel edits take
-                // effect immediately without a store subscription on the
-                // hot path.
-                const state = useFractalStore.getState() as any;
-                const brush = state.brush ?? {};
-                const size = brush.size ?? 0.002;
-                const brushStrengthMul = brush.strength ?? 1;
-                const flow = brush.flow ?? 1;
-                const spacingPx = brush.spacing ?? 0;
-                const jitter = brush.jitter ?? 0;
+                const u = (e.clientX - rect.left) / rect.width;
+                const v = 1 - (e.clientY - rect.top) / rect.height;
+                const vx = (dxPx / rect.width) / dt;
+                const vy = -(dyPx / rect.height) / dt;
 
-                // Spacing gate — skip splats that aren't far enough from
-                // the last one. Measured in screen px.
-                if (spacingPx > 0) {
-                    const travel = Math.hypot(e.clientX - ps.lastX, e.clientY - ps.lastY);
-                    if (travel < spacingPx) return;
-                }
+                // Arc-length accumulator drives the spacing gate inside
+                // emitStrokeSplat.
+                const dUv = Math.hypot(dxPx / rect.width, dyPx / rect.height);
+                brushHandles.ref.current.runtime.distSinceSplat += dUv;
+
+                // Shared cursor state — the RAF loop's particle emitter
+                // reads position + velocity from here each frame.
+                cursorHandles.ref.current.uv = { u, v };
+                cursorHandles.ref.current.velUv = { vx, vy };
+
+                emitStrokeSplat(brushHandles.ref.current.runtime, {
+                    u, v, dvx: vx, dvy: vy,
+                    params: readBrushParams(),
+                    engine,
+                    wallClockMs: now,
+                });
 
                 ps.lastX = e.clientX;
                 ps.lastY = e.clientY;
                 ps.lastT = now;
-
-                // Base UV (with optional jitter in units of splat size).
-                let u = (e.clientX - rect.left) / rect.width;
-                let v = 1 - (e.clientY - rect.top) / rect.height;
-                if (jitter > 0) {
-                    u += (Math.random() * 2 - 1) * jitter * size;
-                    v += (Math.random() * 2 - 1) * jitter * size;
-                }
-
-                const vx = (dxPx / rect.width) / dt * 5;
-                const vy = -(dyPx / rect.height) / dt * 5;
-                const strength = Math.min(50, Math.hypot(vx, vy)) * brushStrengthMul;
-
-                // Brush-mode split — all four modes reuse FluidEngine's
-                // additive splat; the per-mode shaping happens here.
-                const brushMode = brushModeFromIndex(state.dye?.brushMode);
-
-                if (brushMode === 'erase') {
-                    // Always fire (no velocity threshold). Negative
-                    // grayscale subtracts luminance from the HDR dye
-                    // buffer; flow scales how aggressive the erase is.
-                    const eraseStrength = 0.5 * flow;
-                    engine.splatForce(u, v, 0, 0, 0, [-eraseStrength, -eraseStrength, -eraseStrength], size);
-                    return;
-                }
-
-                // Paint/stamp/smudge all want a real drag; below-threshold
-                // motion is noise from a still hand and would spam splats.
-                if (strength < 0.01) return;
-
-                const h = (now * 0.0005) % 1;
-                const r = flow * (0.5 + 0.5 * Math.cos(6.2831853 * h));
-                const g = flow * (0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.333)));
-                const b = flow * (0.5 + 0.5 * Math.cos(6.2831853 * (h + 0.667)));
-
-                if (brushMode === 'stamp') {
-                    engine.splatForce(u, v, 0, 0, 0, [r, g, b], size);
-                } else if (brushMode === 'smudge') {
-                    engine.splatForce(u, v, vx, vy, strength, [0, 0, 0], size);
-                } else {
-                    engine.splatForce(u, v, vx, vy, strength, [r, g, b], size);
-                }
                 return;
             }
         };
@@ -341,6 +450,9 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             // Clear mode AFTER releasing so a late contextmenu event (fires
             // between pointerup and its click-synthesis) sees rightDragged.
             ps.mode = 'idle';
+            // Stop emitting particles on release; living particles keep
+            // flying on their own inertia until their lifetime expires.
+            cursorHandles.ref.current.dragging = false;
             handleInteractionEnd();
         };
 
@@ -350,9 +462,9 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
             if (rect.width < 1 || rect.height < 1) return;
-            const s = useFractalStore.getState() as any;
-            const currCenter = s.sceneCamera?.center ?? { x: 0, y: 0 };
-            const currZoom = s.sceneCamera?.zoom ?? 1.5;
+            const s = useEngineStore.getState() as any;
+            const currCenter = s.julia?.center ?? { x: 0, y: 0 };
+            const currZoom = s.julia?.zoom ?? 1.5;
             const mul = precisionMultiplier(e.shiftKey, e.altKey);
             const zoomFactor = Math.pow(0.9, -e.deltaY * WHEEL_ZOOM_SENSITIVITY * mul);
             const u = (e.clientX - rect.left) / rect.width;
@@ -366,7 +478,7 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currZoom * zoomFactor));
             const newCx = fx - (u * 2 - 1) * aspect * newZoom;
             const newCy = fy - (v * 2 - 1) * newZoom;
-            s.setSceneCamera({ center: { x: newCx, y: newCy }, zoom: newZoom });
+            s.setJulia({ center: { x: newCx, y: newCy }, zoom: newZoom });
         };
 
         canvas.addEventListener('pointerdown', onDown);

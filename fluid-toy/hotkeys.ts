@@ -8,16 +8,18 @@
  * Canonical fluid-toy hotkeys (from the original prototype):
  *   Space = pause / unpause the sim (flip fluidSim.paused)
  *   R     = reset fluid fields (dye + velocity → zero; FluidEngine.resetFluid)
- *   H     = toggle hint visibility
  *   O     = toggle auto-orbit
- *   Home  = recenter view (sceneCamera.center=[0,0], zoom=1.5)
+ *   Home  = recenter view (julia.center=[0,0], zoom=1.5)
  *
  * R requires an engine handle, so it takes an engineRef. All others
  * mutate store state only.
+ *
+ * H (toggle hints) lives in @engine/help — it's a generic shortcut,
+ * not a fluid-toy concern.
  */
 
 import type { FluidEngine } from './fluid/FluidEngine';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { shortcuts } from '../engine/plugins/Shortcuts';
 
 export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine | null>) => {
@@ -27,7 +29,7 @@ export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine |
         description: 'Pause / resume the fluid simulation',
         category: 'Playback',
         handler: () => {
-            const s = useFractalStore.getState() as any;
+            const s = useEngineStore.getState() as any;
             s.setFluidSim({ paused: !s.fluidSim?.paused });
         },
     });
@@ -46,8 +48,8 @@ export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine |
         description: 'Toggle Julia-c auto-orbit',
         category: 'Simulation',
         handler: () => {
-            const s = useFractalStore.getState() as any;
-            s.setOrbit({ enabled: !s.orbit?.enabled });
+            const s = useEngineStore.getState() as any;
+            s.setCoupling({ orbitEnabled: !s.coupling?.orbitEnabled });
         },
     });
 
@@ -57,19 +59,9 @@ export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine |
         description: 'Recenter view (center=[0,0], zoom=1.5)',
         category: 'View',
         handler: () => {
-            const s = useFractalStore.getState() as any;
-            s.setSceneCamera({ center: { x: 0, y: 0 }, zoom: 1.5 });
+            const s = useEngineStore.getState() as any;
+            s.setJulia({ center: { x: 0, y: 0 }, zoom: 1.5 });
         },
     });
 
-    // H — hint toggle. Fluid-toy has no per-control hints yet, so this
-    // is a placeholder that logs; when hints land, this flips a store
-    // field the hint UI reads.
-    shortcuts.register({
-        id: 'fluid-toy.hints-toggle',
-        key: 'H',
-        description: 'Toggle hint visibility (no-op until hints land)',
-        category: 'UI',
-        handler: () => { /* TODO: when hint system lands */ },
-    });
 };

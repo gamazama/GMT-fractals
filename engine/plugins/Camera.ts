@@ -24,11 +24,11 @@
  * harness, a VR app, or a 2D side-scroller all plug in with the same API.
  */
 
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { shortcuts } from './Shortcuts';
 // NOTE: the preset-field registration for cameraSlots lives in
 // `./camera/presetField.ts` as a standalone module. Importing THIS
-// file pulls in useFractalStore, which constructs the store, which
+// file pulls in useEngineStore, which constructs the store, which
 // freezes the preset-field registry — so the field registration
 // can't happen here. Apps import the presetField submodule as an
 // early side effect (before any store-touching import) — see the
@@ -58,13 +58,13 @@ let _installed = false;
 const SLOT_COUNT = 10; // index 0 unused, slots 1-9
 
 const getSlots = (): (CameraSlot | null)[] => {
-    const s = useFractalStore.getState() as any;
+    const s = useEngineStore.getState() as any;
     return s.cameraSlots ?? Array(SLOT_COUNT).fill(null);
 };
 
 const setSlots = (slots: (CameraSlot | null)[]) => {
     // Use raw set — slot state is UI meta, not a DDFS feature.
-    (useFractalStore as any).setState({ cameraSlots: slots });
+    (useEngineStore as any).setState({ cameraSlots: slots });
 };
 
 export const camera = {

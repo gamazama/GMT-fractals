@@ -23,9 +23,6 @@ export const CameraFeature: FeatureDefinition = {
 
     tabConfig: {
         label: 'Camera',
-        componentId: 'auto-feature-panel',
-        order: 1,
-        dock: 'right',
     },
 
     params: {

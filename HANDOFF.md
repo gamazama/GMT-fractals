@@ -2,7 +2,7 @@
 
 **Location:** `h:/GMT/gmt-engine/`
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
-**Status:** ✅ **Phases 1–5 complete + post-phase-5 cleanup (2026-04-23).** Two playground apps (`fractal-toy.html`, `fluid-toy.html`) boot on the engine with the full shared chrome: topbar, viewport with adaptive quality, scene save/load with Alt+S screenshot, shortcuts, unified undo, camera slots, animation timeline with keyframe playback + vec2 binding, canvas pan/zoom/middle-drag/right-click menu. `npx tsc --noEmit` → 0 errors. Eight core plugins shipped; F12, F13 fixed; trackBinding helper extracted. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
+**Status:** ✅ **Phases 1–6 + panel manifest migration (2026-04-24).** Three apps boot on the engine: `fractal-toy.html`, `fluid-toy.html`, and `app-gmt.html` — the latter now renders Mandelbulb end-to-end through the GMT worker + full path tracing + Orbit/Fly navigation. `npx tsc --noEmit` → 0 errors. Dock panels migrated from per-feature `tabConfig` to app-declared `PanelManifest` (see `docs/engine/14_Panel_Manifest.md`); 22 feature files simplified, 10 GMT panels composed from 26 features. UI is functional but rough — histogram widgets, scene-widgets, formula picker, and topbar menus are next. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
 
 **📐 Architecture baseline committed (2026-04-22).** 12 engine-scope docs written under `docs/01_*` through `docs/20_*`. Start any session with `docs/DOCS_INDEX.md`; the table in `CLAUDE.md` maps "working on X" → "read Y". All design decisions (core+plugins model, feature isolation, unified undo, auto-binding animation, bridges/derived) live in those docs. Any architectural change goes in a doc before it goes in code.
 
@@ -68,7 +68,7 @@ HANDOFF.md        This doc
 
 1–11. Delete-by-domain stages (formulas, mesh export, Fragmentarium, raymarching shader chunks, fractal DDFS features, fractal engine internals, modular graph, prototypes/test harnesses, misc ephemera, fractal UI, 4 truly fractal files).
 
-12. Genericize stage — ShaderBuilder rewritten to 5 generic primitives + `addSection`, ShaderFactory/ConfigManager/historySlice/fractalStore/PresetLogic all stripped to their generic kernel. FractalEngine, MaterialController, SceneController, UniformManager, controllers/, overlay/, FormulaFormat, remaining shader chunks deleted.
+12. Genericize stage — ShaderBuilder rewritten to 5 generic primitives + `addSection`, ShaderFactory/ConfigManager/historySlice/engineStore/PresetLogic all stripped to their generic kernel. FractalEngine, MaterialController, SceneController, UniformManager, controllers/, overlay/, FormulaFormat, remaining shader chunks deleted.
 
 13. **Fix pass to zero tsc errors** — deleted remaining fractal-leaning features (camera_manager, coloring, navigation, optics, droste, drawing), stubbed the worker subsystem (WorkerProxy as in-memory stub; internals deleted), rewrote App/LoadingScreen/ViewportArea/useAppStartup as minimal generic shells, property-access-cast all downstream feature consumers, fixed type mismatches (QualityState typed numerics, WorkerProxy overloads, Timeline onZoom, registry stub shape).
 
@@ -128,10 +128,44 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 - `engine/animation/modulationTick.ts` now **delegates to GMT's AnimationSystem.tick** via `TickRegistry.ANIMATE`. No reinvention — same code path GMT uses, so keyframe playback, LFO modulation, audio-reactive rules, and resolved liveModulations all work identically.
 - `engine/animation/cameraKeyRegistry.ts` — generic Key Cam track list. Default capture path-resolves scalar paths in DDFS store; apps override via `setCameraKeyCaptureFn`.
 - `engine/AnimationEngine.ts` extended binder resolution: generic 3-part vec paths (`feature.param.x/y/z/w`) alongside GMT's legacy `vec[23][ABC]_axis` convention.
-- `store/fractalStore.ts` eagerly imports `animationStore` so `window.useAnimationStore` is set before `bindStoreToEngine()` runs → `animationEngine.connect(animStore, hostStore)` always succeeds.
+- `store/engineStore.ts` eagerly imports `animationStore` so `window.useAnimationStore` is set before `bindStoreToEngine()` runs → `animationEngine.connect(animStore, hostStore)` always succeeds.
 - Both toys now mount `<EngineBridge />`, `<RenderLoopDriver />`, `<GlobalContextMenu />` from the GMT chrome — not reinvented, just mounted.
 
 **Verified via `debug/smoke-anim-play.mts`:** playback advances frame 0 → 73.5 in 700ms; a 2-keyframe track on `julia.power` (2 → 6 over 30 frames) drives the bound param correctly.
+
+### ✅ Phase 6 — GMT vertical slice (2026-04-24)
+
+The "real confidence anchor" previously flagged in Remaining Work has landed: GMT runs end-to-end on the engine. **app-gmt/** boots the full worker renderer, compiles the Mandelbulb shader, renders with path tracing, and responds to Orbit/Fly navigation. All 26 GMT DDFS features + 42 formulas are registered. Key landmarks:
+
+- **Renderer plugin** (`engine-gmt/renderer/`) — `installGmtRenderer` + `GmtRendererCanvas` (OffscreenCanvas + worker) + `GmtRendererTickDriver`.
+- **Navigation ported verbatim** (`engine-gmt/navigation/`) — `GmtNavigation`, `useInputController`, `usePhysicsProbe`, `HudOverlay`. No logic edits, only path rewrites.
+- **Store hydration via preset** — app-gmt's boot loads `registry.get('Mandelbulb').defaultPreset` through `loadScene()` so every DDFS slice is populated before the worker compiles. Without this the worker booted with a half-formed config and rendered black. Mirrors GMT's `useAppStartup` exactly.
+- **Declaration-merged DDFS slices** (`engine-gmt/storeTypes.ts`) — `FeatureStateMap` augmented so the 18 GMT slices (coloring, lighting, geometry, …) typecheck on the root store without local copy-type drift.
+
+### ✅ Panel manifest migration (2026-04-24)
+
+Dock panels moved from "each feature declares its own tab" to "apps declare a PanelManifest". The old tabConfig path suited fluid-toy (9 features, 1:1 panels) but blocked the GMT port (26 features → 10 curated panels composing 2-9 features each). New model:
+
+- **`engine/PanelManifest.ts`** — `PanelDefinition` type with `features[]` stacking, `component` path for bespoke panels (Graph/FlowEditor), `widgets.before/after/between` slotting, and `showIf` predicates (string path or function). See `docs/engine/14_Panel_Manifest.md`.
+- **`applyPanelManifest(m)` + `addPanel(def)`** — merge-seed `state.panels`; dynamic additions (fractal-toy formulas) survive regardless of call order.
+- **`PanelRouter` rewritten** — three render paths (bespoke component / feature stack with widgets / empty). No hardcoded Graph/CameraManager/Engine special-cases.
+- **`Dock.tsx` filters via `evalShowIf`** — hardcoded `Graph if Modular` / `Light if advanced` / `Audio if enabled` / `Drawing if enabled` conditionals pulled out, now declared in each app's manifest.
+- **Both docks now mount unconditionally** in AppGmt + FluidToyApp. Fixes the "julia disappears on left-dock drop" bug (panels moved to left had nowhere to render).
+- **`FeatureTabConfig` reduced to `{label, iconId?, condition?}`** — `dock / order / componentId / defaultActive / aggregatesFrom` removed from 22 feature files and the type.
+- **`applyDefaultPanelLayout.ts` + `featureRegistry.getTabs()` deleted** — no consumers.
+
+App manifests:
+- `engine-gmt/panels.ts` — 10 panels (Formula / Scene / Shader / Gradient / Quality / Light / Audio / Drawing / Graph / Engine).
+- `fluid-toy/panels.ts` — 9 panels, 1:1 with features.
+- `fractal-toy/panels.ts` — 2 static + formulas via `addPanel`.
+
+### Known gaps after panel migration
+
+- **Widget registrations not yet ported** — GMT's `ColoringHistogram`, scene-widgets (Navigation/Optics/DofControls), Light gizmo button-row, formula picker, histogram probes. Manifest slots exist (`widgets.before` etc.) but the components aren't in `componentRegistry` yet. Gradient panel currently shows only raw coloring params.
+- **Bespoke panel components** — `'panel-graph'` referenced by the Graph panel isn't registered. Modular-formula users would see "Component not registered: panel-graph". Same for any future `'panel-cameramanager'` / `'panel-engine'` if those get reintroduced.
+- **Topbar menus, FormulaWorkshop, Timeline toggle, Help browser** — separate phase, untouched.
+- **Camera Manager / Engine panels** — currently rendered as DDFS feature panels (cameraManager has empty params, engineSettings has debug params). GMT originally had bespoke `CameraManagerPanel` + `EnginePanel` components; deferred until the topbar menu wiring lands.
+- **Advanced mode toggle** — the `advancedMode` boolean drives `showIf: 'advancedMode'` for the Light tab, but there's no UI to toggle it yet (GMT's TopBar Settings menu owned this).
 
 ### ✅ Post-phase-5 cleanup (2026-04-23 afternoon)
 
@@ -165,10 +199,10 @@ See `docs/20_Fragility_Audit.md` for full list.
 - ~34 DDFS params from the reference not yet ported (tone mapping, bloom, orbit-trap coloring, etc.).
 
 ### The real confidence anchor
-- **Port one GMT formula (Mandelbulb) end-to-end** through the engine — `ShaderBuilder.addSection`, `CompileGate`, the worker proxy path. Until this runs, "GMT on the engine" is theoretical. Until F5/F6 land, GMT's camera will be using legacy binders rather than a clean `binderRegistry.register()` path.
+- ✅ **Mandelbulb end-to-end** — landed in Phase 6 (2026-04-24). app-gmt renders Mandelbulb through the engine's worker proxy, CompileGate, and ShaderBuilder. F5/F6 camera-binder cleanup still pending; current GMT camera uses the legacy binder path.
 
 ### Deferred
-- **F11 rename pass** — `fractalStore` → `engineStore`, `FractalEvents` → `EngineEvents`, etc. Single commit after the GMT vertical slice lands.
+- **F11 rename pass** — `engineStore` → `engineStore`, `FractalEvents` → `EngineEvents`, etc. Single commit after the GMT vertical slice lands.
 - **F8** — UI state undo (panel collapse, timeline scroll).
 - **F10** — `formula` field rename to `mode` (cosmetic; bundle with F11).
 

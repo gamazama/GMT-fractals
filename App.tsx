@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, Suspense } from 'react';
 import MobileControls from './components/MobileControls';
 import { LoadingScreen } from './components/LoadingScreen';
-import { useFractalStore } from './store/fractalStore';
+import { useEngineStore } from './store/engineStore';
 import { ViewportArea } from './components/ViewportArea';
 import { useGlobalContextMenu } from './hooks/useGlobalContextMenu';
 import GlobalContextMenu from './components/GlobalContextMenu';
@@ -28,7 +28,7 @@ import type { StoreCallbacks } from './components/contexts/StoreCallbacksContext
 // overlays on top of this skeleton; the engine itself provides only viewport,
 // docks, floating windows, timeline, context menu, loading screen.
 const App: React.FC = () => {
-  const state = useFractalStore();
+  const state = useEngineStore();
   const [isSceneReady, setIsSceneReady] = useState(false);
   const [isLoadingVisible, setIsLoadingVisible] = useState(true);
 

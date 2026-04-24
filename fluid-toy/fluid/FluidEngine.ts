@@ -18,8 +18,11 @@ import {
   FRAG_BLOOM_DOWN,
   FRAG_BLOOM_UP,
   FRAG_MASK,
+  FRAG_TSAA_BLEND,
 } from './shaders';
-import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH, SPLAT_RADIUS_UV } from '../constants';
+import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH } from '../constants';
+import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 
 export type ForceMode = 'gradient' | 'curl' | 'iterate' | 'c-track' | 'hue';
 export type ShowMode = 'composite' | 'julia' | 'dye' | 'velocity';
@@ -239,6 +242,16 @@ export interface FluidParams {
   paused: boolean;
   simResolution: number;      // target sim grid height (cells) — may be adaptively reduced
   autoQuality: boolean;       // if true, adaptive-scaler may reduce simResolution when FPS is low
+
+  /** TSAA on/off for the background fractal. When true, the Julia pass
+   *  jitters its sampling per frame and a blend pass averages the result
+   *  into a persistent accumulator. Dye + fluid passes are unaffected. */
+  tsaa: boolean;
+  /** TSAA jitter amplitude in pixel fractions. 1.0 = ±0.5 px. */
+  tsaaJitterAmount: number;
+  /** Max accumulated samples before TSAA stops blending (saves GPU
+   *  work once the image has converged). */
+  tsaaSampleCap: number;
 }
 
 interface FBO {
@@ -330,6 +343,9 @@ export const DEFAULT_PARAMS: FluidParams = {
   paused: false,
   simResolution: 1344,
   autoQuality: true,
+  tsaa: true,
+  tsaaJitterAmount: 1.0,
+  tsaaSampleCap: 64,
 };
 
 export class FluidEngine {
@@ -355,6 +371,27 @@ export class FluidEngine {
   private progBloomDown!: Program;
   private progBloomUp!: Program;
   private progMask!: Program;
+  private progTsaaBlend!: Program;
+
+  /** TSAA history ping-pong. juliaTsaa is the current accumulator; the
+   *  blend pass reads it + juliaCur and writes juliaTsaaPrev (which we
+   *  then swap). Composite reads juliaTsaa — the averaged image. */
+  private juliaTsaa!: MrtFbo;
+  private juliaTsaaPrev!: MrtFbo;
+  /** 1-based sample index since last reset. When 1, the blend overwrites
+   *  history with the current frame; when N, mixes 1/N current with
+   *  (N-1)/N history. Clamped at params.tsaaSampleCap. */
+  private tsaaSampleIndex = 0;
+  /** Hash of every param that affects the Julia output. When it changes,
+   *  tsaaSampleIndex resets. Compared stringified each step — cheap. */
+  private tsaaParamHash = '';
+  /** Blue-noise texture for sub-pixel jitter. Shared generic loader. */
+  private blueNoise: BlueNoiseTexture | null = null;
+  /** Frame counter — advances every step. Feeds shader uFrameCount for
+   *  blue-noise temporal animation. */
+  private frameCount = 0;
+  /** Unsubscribe handle for the FractalEvents reset_accum listener. */
+  private resetAccumUnsub: (() => void) | null = null;
 
   /** Bloom scratch textures. Allocated to the DISPLAY canvas size / 2, /4, /8. */
   private bloomA!: FBO;   // half-res — extraction target + final upsample target
@@ -392,6 +429,17 @@ export class FluidEngine {
   private lastTimeMs = 0;
   private framebufferFormat!: { internal: number; format: number; type: number };
 
+  // ── CPU-side copy of the collision mask ────────────────────────────
+  // Downsample of maskTex into a small RGBA8 FBO, then readPixels
+  // into a Uint8Array each frame. Exposed via sampleMask(u,v) so the
+  // CPU brush / particle code can test for walls and bounce off them
+  // without a GPU readback per particle. Size chosen to balance
+  // spatial resolution vs readback cost (64K bytes/frame @ 128×128).
+  private maskReadFBO: FBO | null = null;
+  private maskCpuBuf = new Uint8Array(0);
+  private readonly MASK_CPU_W = 128;
+  private readonly MASK_CPU_H = 128;
+
   /** Called after each frame's draw. Use to report a frame tick to
    *  @engine/viewport's adaptive loop without coupling this class to
    *  plugin imports. Mirror of fractal-toy/FractalEngine.ts pattern. */
@@ -424,6 +472,17 @@ export class FluidEngine {
 
     this.compileAll();
     this.allocateTextures(this.params.simResolution);
+
+    // TSAA blue noise — shared loader (engine/utils/createBlueNoiseWebGL2).
+    // Async, returns a 1×1 neutral fallback until PNG decodes.
+    this.blueNoise = createBlueNoiseWebGL2(gl);
+
+    // Reset TSAA accumulation on the generic engine signal. renderControl-
+    // Slice emits reset_accum when AA / region / accumulation flip —
+    // listening here lets GMT-style "force a full reset" work for free.
+    this.resetAccumUnsub = FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => {
+        this.tsaaSampleIndex = 0;
+    });
   }
 
   private detectFormat() {
@@ -490,7 +549,10 @@ export class FluidEngine {
   private compileAll() {
     this.progJulia = this.linkProgram(VERT_FULLSCREEN, FRAG_JULIA,
       ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower',
-       'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq']);
+       'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq',
+       'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount']);
+    this.progTsaaBlend = this.linkProgram(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
+      ['uCurrentMain', 'uCurrentAux', 'uHistoryMain', 'uHistoryAux', 'uSampleIndex']);
     this.progMotion = this.linkProgram(VERT_FULLSCREEN, FRAG_MOTION,
       ['uTexel', 'uJulia', 'uJuliaPrev', 'uJuliaAux', 'uGradient', 'uMask', 'uMode', 'uGain', 'uDt',
        'uInteriorDamp', 'uDyeGain',
@@ -515,7 +577,7 @@ export class FluidEngine {
     this.progGradSub = this.linkProgram(VERT_FULLSCREEN, FRAG_GRADSUB,
       ['uTexel', 'uPressure', 'uVelocity', 'uMask']);
     this.progSplat = this.linkProgram(VERT_FULLSCREEN, FRAG_SPLAT,
-      ['uTexel', 'uTarget', 'uPoint', 'uValue', 'uRadius', 'uAspect']);
+      ['uTexel', 'uTarget', 'uPoint', 'uValue', 'uRadius', 'uDiscR', 'uHardness', 'uAspect', 'uOp']);
     this.progDisplay = this.linkProgram(VERT_FULLSCREEN, FRAG_DISPLAY,
       ['uTexel', 'uTexelDisplay', 'uTexelDye', 'uJulia', 'uJuliaAux', 'uDye', 'uVelocity', 'uGradient', 'uBloom', 'uMask',
        'uShowMode', 'uJuliaMix', 'uDyeMix', 'uVelocityViz',
@@ -628,6 +690,8 @@ export class FluidEngine {
     // Clean old
     this.deleteMrtFbo(this.juliaCur);
     this.deleteMrtFbo(this.juliaPrev);
+    this.deleteMrtFbo(this.juliaTsaa);
+    this.deleteMrtFbo(this.juliaTsaaPrev);
     this.deleteFBO(this.forceTex);
     this.deleteDoubleFBO(this.velocity);
     this.deleteDoubleFBO(this.dye);
@@ -641,6 +705,9 @@ export class FluidEngine {
 
     this.juliaCur  = this.createMrtFbo(w, h);
     this.juliaPrev = this.createMrtFbo(w, h);
+    this.juliaTsaa     = this.createMrtFbo(w, h);
+    this.juliaTsaaPrev = this.createMrtFbo(w, h);
+    this.tsaaSampleIndex = 0; // fresh accumulator on resize
     this.forceTex  = this.createFBO(w, h);
     this.velocity  = this.createDoubleFBO(w, h);
     this.dye       = this.createDoubleFBO(w, h);
@@ -806,38 +873,162 @@ export class FluidEngine {
   }
 
   /**
-   * Inject a single gaussian splat into a ping-pong field and advance the swap.
-   * Called twice from splatForce (once for velocity, once for dye).
-   * `radius` overrides the default SPLAT_RADIUS_UV when provided.
+   * Inject a gaussian/disc splat into a ping-pong field and advance the swap.
+   * `sizeUv` is the visual radius of the brush in UV space.
+   * `hardness` blends between soft gaussian (0) and hard disc (1).
+   * `op` selects add / sub (eraser).
+   *
+   * Soft-mode needs sigma² ≈ (0.5·r)² so the 1-stddev ring lines up with
+   * the user-visible brush ring.
    */
-  private splat(target: DoubleFBO, u: number, v: number, value: [number, number, number], radius?: number) {
+  private splat(
+    target: DoubleFBO,
+    u: number, v: number,
+    value: [number, number, number],
+    sizeUv: number,
+    hardness: number,
+    op: 'add' | 'sub',
+  ) {
     const gl = this.gl;
     this.bindFBO(target.write);
     this.useProgram(this.progSplat);
     this.bindTex(0, target.read.tex, this.progSplat.uniforms['uTarget']);
     gl.uniform2f(this.progSplat.uniforms['uPoint'], u, v);
     gl.uniform3f(this.progSplat.uniforms['uValue'], value[0], value[1], value[2]);
-    gl.uniform1f(this.progSplat.uniforms['uRadius'], radius ?? SPLAT_RADIUS_UV);
+    gl.uniform1f(this.progSplat.uniforms['uRadius'], Math.max(1e-6, (sizeUv * 0.5) * (sizeUv * 0.5)));
+    gl.uniform1f(this.progSplat.uniforms['uDiscR'], Math.max(1e-6, sizeUv));
+    gl.uniform1f(this.progSplat.uniforms['uHardness'], hardness);
     gl.uniform1f(this.progSplat.uniforms['uAspect'], this.simW / this.simH);
+    gl.uniform1f(this.progSplat.uniforms['uOp'], op === 'sub' ? 1 : 0);
     this.drawQuad();
     target.swap();
   }
 
   /**
-   * Inject a splat of force and dye at a UV location.
+   * Artist brush — single atomic splat respecting the current brush mode.
+   *   mode='paint'  → dye + drag-velocity
+   *   mode='erase'  → subtract dye
+   *   mode='stamp'  → dye only
+   *   mode='smudge' → velocity only
    *
-   * `radius` is optional — when omitted, uses SPLAT_RADIUS_UV (the old
-   * fixed default, so existing callers behave unchanged). Providing it
-   * lets the brush feature drive splat size per-splat without adding
-   * a full `engine.brush()` API.
+   * `color` is the already-resolved RGB (the caller's brush/color.ts
+   * turns brushColorMode + gradient/solid/rainbow + hue jitter into RGB).
+   * `strength` is the dye-amount multiplier (0 = dry brush, 3 = saturated).
    */
-  splatForce(u: number, v: number, dx: number, dy: number, strength: number, color: [number, number, number], radius?: number) {
-    // Clamp UV — pointer capture can fire move events from outside the canvas.
+  brush(
+    u: number, v: number,
+    velX: number, velY: number,
+    color: [number, number, number],
+    sizeUv: number,
+    hardness: number,
+    strength: number,
+    mode: 'paint' | 'erase' | 'stamp' | 'smudge',
+  ) {
     u = Math.max(0, Math.min(1, u));
     v = Math.max(0, Math.min(1, v));
-    this.splat(this.velocity, u, v, [dx * strength, dy * strength, 0], radius);
-    this.splat(this.dye, u, v, color, radius);
+    const dye: [number, number, number] = [color[0] * strength, color[1] * strength, color[2] * strength];
+    const vel: [number, number, number] = [velX, velY, 0];
+    switch (mode) {
+      case 'paint':
+        this.splat(this.velocity, u, v, vel, sizeUv, hardness, 'add');
+        this.splat(this.dye,      u, v, dye, sizeUv, hardness, 'add');
+        break;
+      case 'erase':
+        this.splat(this.dye,      u, v, [strength, strength, strength], sizeUv, hardness, 'sub');
+        break;
+      case 'stamp':
+        this.splat(this.dye,      u, v, dye, sizeUv, hardness, 'add');
+        break;
+      case 'smudge':
+        this.splat(this.velocity, u, v, vel, sizeUv, hardness, 'add');
+        break;
+    }
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+  }
+
+  // ---------------------------- Collision mask CPU readback ----------------
+  //
+  // `maskTex` lives on the GPU at sim resolution (RGBA16F). For particle
+  // bounce we need per-particle wall lookups, which would be a pipeline
+  // stall if read one pixel at a time. So each frame we:
+  //   1. Blit maskTex → maskReadFBO (128×128, RGBA8) with LINEAR filtering
+  //      — WebGL2 blitFramebuffer handles the format conversion.
+  //   2. readPixels into `maskCpuBuf` — one round-trip, ~64 KB.
+  // Then CPU callers hit sampleMask(u,v) without touching the GPU.
+
+  private ensureMaskReadFBO() {
+    if (this.maskReadFBO) return;
+    const gl = this.gl;
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.MASK_CPU_W, this.MASK_CPU_H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.maskReadFBO = {
+      tex, fbo,
+      width: this.MASK_CPU_W, height: this.MASK_CPU_H,
+      texel: [1 / this.MASK_CPU_W, 1 / this.MASK_CPU_H],
+    };
+    this.maskCpuBuf = new Uint8Array(this.MASK_CPU_W * this.MASK_CPU_H * 4);
+  }
+
+  /** Refresh the CPU-side copy of the mask. Call once per frame after
+   *  computeMask has written fresh mask data. No-op when collision is
+   *  disabled — sampleMask() guards independently so no CPU buffer
+   *  allocation is needed until walls are actually on. */
+  private readMaskToCPU() {
+    // Fast path: collision off → skip entirely. Avoids allocating the
+    // readback FBO and CPU buffer until the first time walls turn on,
+    // which also means no readPixels stall on apps that never use
+    // collision. readPixels every frame is expensive enough to trigger
+    // Chromium's GPU-process watchdog on long WebGL sessions.
+    if (!this.params.collisionEnabled) return;
+    const gl = this.gl;
+    this.ensureMaskReadFBO();
+    // Blit maskTex (RGBA16F, simW×simH) → maskReadFBO (RGBA8, 128×128).
+    // LINEAR sampling gives a sensible downsample (a bilinear average,
+    // not nearest-neighbour holes).
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.maskTex.fbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.maskReadFBO!.fbo);
+    gl.blitFramebuffer(
+      0, 0, this.simW, this.simH,
+      0, 0, this.MASK_CPU_W, this.MASK_CPU_H,
+      gl.COLOR_BUFFER_BIT, gl.LINEAR,
+    );
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.maskReadFBO!.fbo);
+    gl.readPixels(0, 0, this.MASK_CPU_W, this.MASK_CPU_H, gl.RGBA, gl.UNSIGNED_BYTE, this.maskCpuBuf);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /**
+   * Public: sample the collision mask at UV (0..1) as 0..1 (1 = solid wall).
+   * Uses nearest-neighbour on the 128×128 CPU copy — good enough for
+   * particle-bounce queries, and cheap (one array index per call).
+   *
+   * Always returns 0 when collision is disabled, so callers can invoke
+   * unconditionally without a collisionEnabled check.
+   */
+  sampleMask(u: number, v: number): number {
+    if (!this.params.collisionEnabled) return 0;
+    // Buffer hasn't been allocated yet — collision just turned on and
+    // readMaskToCPU hasn't run yet. Return 0 (fluid) so particles
+    // don't false-bounce on the first frame.
+    if (this.maskCpuBuf.length === 0) return 0;
+    const W = this.MASK_CPU_W;
+    const H = this.MASK_CPU_H;
+    if (u < 0 || u > 1 || v < 0 || v > 1) return 0;
+    const x = Math.min(W - 1, Math.max(0, Math.floor(u * W)));
+    const y = Math.min(H - 1, Math.max(0, Math.floor(v * H)));
+    return this.maskCpuBuf[(y * W + x) * 4] / 255;
   }
 
   // ---------------------------- Per-frame passes ----------------------------
@@ -870,7 +1061,67 @@ export class FluidEngine {
     gl.uniform2f(this.progJulia.uniforms['uTrapNormal'], this.params.trapNormal[0], this.params.trapNormal[1]);
     gl.uniform1f(this.progJulia.uniforms['uTrapOffset'], this.params.trapOffset);
     gl.uniform1f(this.progJulia.uniforms['uStripeFreq'], this.params.stripeFreq);
+
+    // TSAA: push jitter scale + blue-noise texture. When tsaa is off or
+    // jitter has converged to the sample cap, uJitterScale drops to 0 so
+    // the iteration runs at exact pixel centers (no wobble).
+    const jitterActive = this.params.tsaa && this.tsaaSampleIndex < this.params.tsaaSampleCap;
+    const jitterScale = jitterActive ? this.params.tsaaJitterAmount : 0.0;
+    gl.uniform1f(this.progJulia.uniforms['uJitterScale'], jitterScale);
+    gl.uniform2f(this.progJulia.uniforms['uResolution'], this.simW, this.simH);
+    gl.uniform1i(this.progJulia.uniforms['uFrameCount'], this.frameCount);
+    if (this.blueNoise) {
+        this.bindTex(5, this.blueNoise.texture, this.progJulia.uniforms['uBlueNoiseTexture']);
+        const [bnw, bnh] = this.blueNoise.getResolution();
+        gl.uniform2f(this.progJulia.uniforms['uBlueNoiseResolution'], bnw, bnh);
+    }
     this.drawQuad();
+  }
+
+  /** TSAA blend pass. Reads juliaCur (current jittered frame) + juliaTsaa
+   *  (history), writes the running average to juliaTsaaPrev, swaps.
+   *  Samples past the cap are skipped — accumulator is already converged. */
+  private runTsaaBlend() {
+    if (this.tsaaSampleIndex >= this.params.tsaaSampleCap) return;
+    const gl = this.gl;
+
+    // Increment first so frame 1 gets index=1 (overwrite history with current).
+    this.tsaaSampleIndex = Math.min(this.tsaaSampleIndex + 1, this.params.tsaaSampleCap);
+
+    // Write to juliaTsaaPrev; we swap at the end so juliaTsaa is always "current history".
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaTsaaPrev.fbo);
+    gl.viewport(0, 0, this.juliaTsaaPrev.width, this.juliaTsaaPrev.height);
+    this.useProgram(this.progTsaaBlend);
+    this.bindTex(0, this.juliaCur.texMain,    this.progTsaaBlend.uniforms['uCurrentMain']);
+    this.bindTex(1, this.juliaCur.texAux,     this.progTsaaBlend.uniforms['uCurrentAux']);
+    this.bindTex(2, this.juliaTsaa.texMain,   this.progTsaaBlend.uniforms['uHistoryMain']);
+    this.bindTex(3, this.juliaTsaa.texAux,    this.progTsaaBlend.uniforms['uHistoryAux']);
+    gl.uniform1i(this.progTsaaBlend.uniforms['uSampleIndex'], this.tsaaSampleIndex);
+    this.drawQuad();
+
+    // Swap so juliaTsaa points at the freshly-written history.
+    const t = this.juliaTsaa;
+    this.juliaTsaa = this.juliaTsaaPrev;
+    this.juliaTsaaPrev = t;
+  }
+
+  /** Returns the MRT fbo consumers (mask, motion, composite) should read
+   *  to get the "visible" julia image. When TSAA is on, that's the
+   *  averaged accumulator; when off, it's the current per-frame render. */
+  private juliaReadFbo(): MrtFbo {
+    return this.params.tsaa ? this.juliaTsaa : this.juliaCur;
+  }
+
+  /** Check whether any Julia-affecting parameter changed since the last
+   *  step; if so, reset the TSAA accumulator. Called each step before
+   *  renderJulia. Hashes to stringified key for a cheap equality test. */
+  private updateTsaaHash() {
+    const p = this.params;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}`;
+    if (hash !== this.tsaaParamHash) {
+        this.tsaaParamHash = hash;
+        this.tsaaSampleIndex = 0;
+    }
   }
 
   /**
@@ -891,8 +1142,9 @@ export class FluidEngine {
     }
     this.useProgram(this.progMask);
     this.setTexel(this.progMask, this.simW, this.simH);
-    this.bindTex(0, this.juliaCur.texMain, this.progMask.uniforms['uJulia']);
-    this.bindTex(1, this.juliaCur.texAux, this.progMask.uniforms['uJuliaAux']);
+    const juliaRead = this.juliaReadFbo();
+    this.bindTex(0, juliaRead.texMain, this.progMask.uniforms['uJulia']);
+    this.bindTex(1, juliaRead.texAux, this.progMask.uniforms['uJuliaAux']);
     this.bindTex(2, this.gradientTex!, this.progMask.uniforms['uGradient']);
     this.bindTex(3, this.collisionGradientTex!, this.progMask.uniforms['uCollisionGradient']);
     gl.uniform1i(this.progMask.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
@@ -950,10 +1202,11 @@ export class FluidEngine {
     this.bindFBO(this.dye.write);
     this.useProgram(this.progInjectDye);
     this.setTexel(this.progInjectDye, this.simW, this.simH);
+    const juliaReadInject = this.juliaReadFbo();
     this.bindTex(0, this.dye.read.tex, this.progInjectDye.uniforms['uDye']);
-    this.bindTex(1, this.juliaCur.texMain, this.progInjectDye.uniforms['uJulia']);
+    this.bindTex(1, juliaReadInject.texMain, this.progInjectDye.uniforms['uJulia']);
     this.bindTex(2, this.gradientTex!, this.progInjectDye.uniforms['uGradient']);
-    this.bindTex(4, this.juliaCur.texAux, this.progInjectDye.uniforms['uJuliaAux']);
+    this.bindTex(4, juliaReadInject.texAux, this.progInjectDye.uniforms['uJuliaAux']);
     this.bindTex(5, this.maskTex.tex, this.progInjectDye.uniforms['uMask']);
     gl.uniform1f(this.progInjectDye.uniforms['uDyeGain'], this.params.dyeInject);
     gl.uniform1f(this.progInjectDye.uniforms['uDyeFadeHz'], this.params.dyeDissipation);
@@ -1154,8 +1407,9 @@ export class FluidEngine {
     this.useProgram(this.progDisplay);
     gl.uniform2f(this.progDisplay.uniforms['uTexelDisplay'], 1 / this.canvas.width, 1 / this.canvas.height);
     gl.uniform2f(this.progDisplay.uniforms['uTexelDye'], 1 / this.simW, 1 / this.simH);
-    this.bindTex(0, this.juliaCur.texMain, this.progDisplay.uniforms['uJulia']);
-    this.bindTex(4, this.juliaCur.texAux, this.progDisplay.uniforms['uJuliaAux']);
+    const juliaReadDisplay = this.juliaReadFbo();
+    this.bindTex(0, juliaReadDisplay.texMain, this.progDisplay.uniforms['uJulia']);
+    this.bindTex(4, juliaReadDisplay.texAux, this.progDisplay.uniforms['uJuliaAux']);
     this.bindTex(1, this.dye.read.tex, this.progDisplay.uniforms['uDye']);
     this.bindTex(2, this.velocity.read.tex, this.progDisplay.uniforms['uVelocity']);
     this.bindTex(3, this.gradientTex!, this.progDisplay.uniforms['uGradient']);
@@ -1200,11 +1454,23 @@ export class FluidEngine {
     this.lastTimeMs = timeMs;
     this.params.dt = dt;
 
+    // TSAA hash check — invalidate accumulator on any param change that
+    // would alter the Julia output. Must happen BEFORE renderJulia so the
+    // shader sees the current sample index for jitter scheduling.
+    this.updateTsaaHash();
+    this.frameCount++;
+
     // 1. Julia pass
     this.renderJulia();
-    // 1a. Collision mask (always — emits zeros when disabled so downstream
+    // 1b. TSAA blend — averages the jittered Julia into a history FBO.
+    // When disabled, skips (consumers fall back to juliaCur via juliaReadFbo).
+    if (this.params.tsaa) this.runTsaaBlend();
+    // 1c. Collision mask (always — emits zeros when disabled so downstream
     // shaders have a single fast path through texture(uMask, ...)).
     this.computeMask();
+    // 1a-ii. Downsample + readback the mask to CPU for particle-bounce
+    // queries. Skips the actual GPU round-trip when collision is off.
+    this.readMaskToCPU();
 
     if (!this.params.paused) {
       // 1b. Camera-locked dye/velocity — if the user panned or zoomed since the last
@@ -1245,6 +1511,8 @@ export class FluidEngine {
     const gl = this.gl;
     this.deleteMrtFbo(this.juliaCur);
     this.deleteMrtFbo(this.juliaPrev);
+    this.deleteMrtFbo(this.juliaTsaa);
+    this.deleteMrtFbo(this.juliaTsaaPrev);
     this.deleteFBO(this.forceTex);
     this.deleteDoubleFBO(this.velocity);
     this.deleteDoubleFBO(this.dye);
@@ -1252,6 +1520,7 @@ export class FluidEngine {
     this.deleteDoubleFBO(this.pressure);
     this.deleteFBO(this.curl);
     this.deleteFBO(this.maskTex);
+    if (this.maskReadFBO) { this.deleteFBO(this.maskReadFBO); this.maskReadFBO = null; }
     if (this.gradientTex) { gl.deleteTexture(this.gradientTex); this.gradientTex = null; }
     if (this.collisionGradientTex) { gl.deleteTexture(this.collisionGradientTex); this.collisionGradientTex = null; }
     this.deleteFBO(this.bloomA); this.deleteFBO(this.bloomB); this.deleteFBO(this.bloomC);
@@ -1260,11 +1529,13 @@ export class FluidEngine {
       this.progJulia, this.progMotion, this.progAddForce, this.progInjectDye,
       this.progAdvect, this.progDivergence, this.progCurl, this.progVorticity,
       this.progPressure, this.progGradSub, this.progSplat, this.progDisplay, this.progClear,
-      this.progReproject, this.progMask,
+      this.progReproject, this.progMask, this.progTsaaBlend,
       this.progBloomExtract, this.progBloomDown, this.progBloomUp,
     ]) {
       if (p?.prog) gl.deleteProgram(p.prog);
     }
+    if (this.blueNoise) { gl.deleteTexture(this.blueNoise.texture); this.blueNoise = null; }
+    if (this.resetAccumUnsub) { this.resetAccumUnsub(); this.resetAccumUnsub = null; }
   }
 
   /** Map canvas pixel coords to fractal coords (for c-picking). */

@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, Suspense } from 'react';
 import { featureRegistry, ParamConfig, ParamCondition, CustomUIConfig, GroupConfig } from '../engine/FeatureSystem';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import Slider, { DraggableNumber } from './Slider';
 import ToggleSwitch from './ToggleSwitch';
 import SmallColorPicker from './SmallColorPicker';
@@ -68,20 +68,20 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 }) => {
     const feature = featureRegistry.get(featureId);
     // Use forcedState if provided (for Engine Panel pending changes), otherwise fallback to Store
-    const storeSliceState = useFractalStore(state => (state as any)[featureId]);
+    const storeSliceState = useEngineStore(state => (state as any)[featureId]);
     const sliceState = forcedState || storeSliceState;
     
     // Access Live Modulations
-    const liveModulations = useFractalStore(state => state.liveModulations);
+    const liveModulations = useEngineStore(state => state.liveModulations);
 
     // Read full store imperatively for condition evaluation (avoids full-store subscription re-renders)
-    const globalStateRef = React.useRef(useFractalStore.getState());
-    globalStateRef.current = useFractalStore.getState();
+    const globalStateRef = React.useRef(useEngineStore.getState());
+    globalStateRef.current = useEngineStore.getState();
     const globalState = globalStateRef.current;
     const actions = globalState;
-    const advancedMode = useFractalStore(s => s.advancedMode);
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
-    const showHints = useFractalStore(s => s.showHints);
+    const advancedMode = useEngineStore(s => s.advancedMode);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
+    const showHints = useEngineStore(s => s.showHints);
     
     const [confirming, setConfirming] = useState<{key: string, value: any, message: string} | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -102,7 +102,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         // Route compile-time params to Engine Panel instead of updating store directly
         if (config?.onUpdate === 'compile') {
             // Open engine panel first, then emit after it has time to mount its listener
-            useFractalStore.getState().movePanel('Engine', 'left');
+            useEngineStore.getState().movePanel('Engine', 'left');
             setTimeout(() => FractalEvents.emit('engine_queue', { featureId, param: key, value }), 50);
             return;
         }

@@ -3,7 +3,7 @@ import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, valueToPixel as v2pH, pixelToValue } from '../utils/GraphUtils';
 import { calculateViewBounds } from '../utils/keyframeViewBounds';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { useGraphInteraction } from '../hooks/useGraphInteraction';
 import { useGraphTools } from '../hooks/useGraphTools';
 import { GraphSidebar } from './graph/GraphSidebar';
@@ -45,7 +45,7 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
         copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes
     } = useAnimationStore();
     
-    const { openContextMenu: openGlobalContextMenu } = useFractalStore();
+    const { openContextMenu: openGlobalContextMenu } = useEngineStore();
     
     const [viewY, setViewY] = useState({ pan: 0, scale: 50 });
     const [normalized, setNormalized] = useState(propNormalized); 

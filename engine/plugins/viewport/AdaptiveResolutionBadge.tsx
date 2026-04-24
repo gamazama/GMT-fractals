@@ -23,7 +23,7 @@
  */
 
 import React from 'react';
-import { useFractalStore } from '../../../store/fractalStore';
+import { useEngineStore } from '../../../store/engineStore';
 import { isMouseOverCanvas } from '../../worker/ViewportRefs';
 
 const AdaptiveIcon = () => (
@@ -39,9 +39,9 @@ export interface AdaptiveResolutionBadgeProps {
 }
 
 export const AdaptiveResolutionBadge: React.FC<AdaptiveResolutionBadgeProps> = ({ className = '' }) => {
-    const cfg = useFractalStore((s) => s.adaptiveConfig);
-    const suppressed = useFractalStore((s) => s.adaptiveSuppressed);
-    const setAdaptiveConfig = useFractalStore((s) => s.setAdaptiveConfig);
+    const cfg = useEngineStore((s) => s.adaptiveConfig);
+    const suppressed = useEngineStore((s) => s.adaptiveSuppressed);
+    const setAdaptiveConfig = useEngineStore((s) => s.setAdaptiveConfig);
 
     const isEnabled = cfg.enabled;
     const isActive = isEnabled && !suppressed;

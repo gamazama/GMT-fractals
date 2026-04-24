@@ -14,7 +14,7 @@
  */
 
 import type { Preset } from '../types';
-import type { FractalActions } from '../types/store';
+import type { EngineActions } from '../types/store';
 import { FractalEvents } from '../engine/FractalEvents';
 import { useAnimationStore } from '../store/animationStore';
 import { featureRegistry } from '../engine/FeatureSystem';
@@ -108,7 +108,7 @@ export const applyPresetState = (
 
     // Animations & timeline — generic
     if (p.sequence) useAnimationStore.getState().setSequence(p.sequence);
-    (actions as unknown as FractalActions).setAnimations(p.animations || []);
+    (actions as unknown as EngineActions).setAnimations(p.animations || []);
 
     // Non-feature scene fields (cameraRot, targetDistance, savedCameras, …).
     // Registered by utils/defaultPresetFields.ts at boot; future apps/plugins

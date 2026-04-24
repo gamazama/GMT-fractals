@@ -25,7 +25,7 @@
  */
 
 import { StateCreator } from 'zustand';
-import { FractalStoreState, FractalActions, CameraState } from '../../types';
+import { EngineStoreState, EngineActions, CameraState } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
@@ -38,7 +38,7 @@ export interface Transaction {
     label?: string;
     /** Diff snapshot: only keys that changed. Undo applies this; redo
      *  captures the current state of the same keys. */
-    diff: Partial<FractalStoreState>;
+    diff: Partial<EngineStoreState>;
     /** Origin timestamp (ms) for debug / debounce. */
     timestamp: number;
 }
@@ -47,7 +47,7 @@ export interface HistorySliceState {
     undoStack: Transaction[];
     redoStack: Transaction[];
     /** Pre-interaction snapshot captured by handleInteractionStart. */
-    interactionSnapshot: Partial<FractalStoreState> | null;
+    interactionSnapshot: Partial<EngineStoreState> | null;
     /** Scope of the in-progress interaction (drives the eventual commit). */
     interactionScope: UndoScope | null;
 }
@@ -80,8 +80,8 @@ export type HistorySlice = HistorySliceState & HistorySliceActions;
 /** Snapshots every registered feature's slice state + any top-level
  *  preset-round-trippable fields. Generic: iterates the feature
  *  registry so new features are captured automatically. */
-const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
-    const snap: Partial<FractalStoreState> = {
+const getParamSnapshot = (s: EngineStoreState): Partial<EngineStoreState> => {
+    const snap: Partial<EngineStoreState> = {
         renderRegion: s.renderRegion ? { ...s.renderRegion } : null,
     };
     for (const feat of featureRegistry.getAll()) {
@@ -93,15 +93,15 @@ const getParamSnapshot = (s: FractalStoreState): Partial<FractalStoreState> => {
     return snap;
 };
 
-const captureStateForKeys = (keys: string[], current: FractalStoreState): Partial<FractalStoreState> => {
-    const snap: Partial<FractalStoreState> = {};
+const captureStateForKeys = (keys: string[], current: EngineStoreState): Partial<EngineStoreState> => {
+    const snap: Partial<EngineStoreState> = {};
     for (const k of keys) {
         (snap as any)[k] = (current as any)[k];
     }
     return snap;
 };
 
-const applyStateRestore = (data: Partial<FractalStoreState>, set: any, get: any) => {
+const applyStateRestore = (data: Partial<EngineStoreState>, set: any, get: any) => {
     const actions = get();
     set(data);
     for (const k of Object.keys(data)) {
@@ -129,7 +129,7 @@ const findMatchIdx = (stack: Transaction[], scope?: UndoScope): number => {
 };
 
 export const createHistorySlice: StateCreator<
-    FractalStoreState & FractalActions & HistorySlice,
+    EngineStoreState & EngineActions & HistorySlice,
     [["zustand/subscribeWithSelector", never]],
     [],
     HistorySlice
@@ -156,7 +156,7 @@ export const createHistorySlice: StateCreator<
                 const tx: Transaction = {
                     scope: 'camera',
                     label: 'Camera gesture',
-                    diff: { cameraRot: camState.rotation } as Partial<FractalStoreState>,
+                    diff: { cameraRot: camState.rotation } as Partial<EngineStoreState>,
                     timestamp: now,
                 };
                 set((state: any) => {
@@ -193,7 +193,7 @@ export const createHistorySlice: StateCreator<
         if (!interactionSnapshot) return;
 
         const current = get();
-        const diff: Partial<FractalStoreState> = {};
+        const diff: Partial<EngineStoreState> = {};
         let hasChanges = false;
 
         for (const k of Object.keys(interactionSnapshot)) {

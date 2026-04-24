@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
-import { useFractalStore } from '../../store/fractalStore';
-import { modulationEngine } from '../../features/modulation/ModulationEngine';
+import { useEngineStore } from '../../store/engineStore';
+import { modulationEngine } from '../../engine/features/modulation/ModulationEngine';
 import { featureRegistry } from '../../engine/FeatureSystem';
 
 /**
@@ -12,7 +12,7 @@ import { featureRegistry } from '../../engine/FeatureSystem';
  * Sets uniforms via engine.setUniform() (forwarded to worker) and engine.modulations dict.
  */
 export function applyExportModulations(time: number, dt: number) {
-    const storeState = useFractalStore.getState();
+    const storeState = useEngineStore.getState();
     const animations = storeState.animations;
 
     // 1. Reset

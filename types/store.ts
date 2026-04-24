@@ -1,9 +1,9 @@
 
 import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LfoTarget, AnimationParams } from './animation';
-import { Preset, FractalDefinition } from './fractal';
+import { Preset, FractalDefinition } from './preset';
 import { ContextMenuItem } from './help';
-import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../features/types';
+import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../engine/features/types';
 import { LightParams } from './graphics';
 import type { ScalabilityState, HardwareProfile } from './viewport';
 
@@ -15,7 +15,10 @@ type OpticsState = Record<string, unknown>;
 // string tag so apps/add-ons can register any panel they need.
 export type PanelId = string;
 
-export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region' | 'selecting_preview';
+/** Canvas-gesture mode. Apps with domain-specific picks (e.g. a
+ *  picker tool) widen this via declaration merging or carry the
+ *  sub-state in their own feature slice. */
+export type InteractionMode = 'none' | 'picking_focus' | 'selecting_region' | 'selecting_preview';
 
 export type CompositionOverlayType = 'none' | 'grid' | 'thirds' | 'golden' | 'spiral' | 'center' | 'diagonal' | 'safearea';
 
@@ -66,7 +69,7 @@ export interface PanelState {
 }
 
 // --- MAIN STORE STATE ---
-export interface FractalStoreState extends FeatureStateMap {
+export interface EngineStoreState extends FeatureStateMap {
   formula: FormulaType;
   
   // Project Metadata
@@ -197,13 +200,13 @@ export interface FractalStoreState extends FeatureStateMap {
   // Transaction type declaration; historySlice re-narrows internally.
   undoStack: any[];
   redoStack: any[];
-  interactionSnapshot: Partial<FractalStoreState> | null;
+  interactionSnapshot: Partial<EngineStoreState> | null;
   interactionScope: string | null;
 
   // NOTE: Modular builder state (graph/pipeline/pipelineRevision/autoCompile)
   // was removed with the modular graph system. A future plugin that wants a
   // node-graph authoring surface should carry its state inside
-  // `features[pluginId]` rather than at the root of FractalStoreState.
+  // `features[pluginId]` rather than at the root of EngineStoreState.
 
   isTimelineHovered: boolean;
   
@@ -242,10 +245,10 @@ export interface FractalStoreState extends FeatureStateMap {
   tutorialCompleted: number[];
 }
 
-export type FractalState = FractalStoreState;
+export type EngineState = EngineStoreState;
 
 // --- ACTIONS INTERFACE ---
-export interface FractalActions extends FeatureSetters, FeatureCustomActions {
+export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setFormula: (f: FormulaType, options?: { skipDefaultPreset?: boolean }) => void;
     
     setProjectSettings: (s: Partial<{ name: string, version: number }>) => void;
@@ -296,7 +299,7 @@ export interface FractalActions extends FeatureSetters, FeatureCustomActions {
     // + grace period. See engine/plugins/Viewport.ts.
     reportFps: (fps: number) => void;
     holdAdaptive: (durationMs?: number) => void;
-    setAdaptiveConfig: (cfg: Partial<FractalStoreState['adaptiveConfig']>) => void;
+    setAdaptiveConfig: (cfg: Partial<EngineStoreState['adaptiveConfig']>) => void;
 
     setLockSceneOnSwitch: (v: boolean) => void;
     setExportIncludeScene: (v: boolean) => void;

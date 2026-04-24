@@ -11,7 +11,7 @@
  */
 
 import React, { Suspense, useState } from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { TimelineOpenIcon } from './Icons';
 
 const Timeline = React.lazy(() => import('./Timeline'));
@@ -23,7 +23,7 @@ export interface TimelineHostProps {
 
 export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) => {
     const [showTimeline, setShowTimeline] = useState(false);
-    const openContextMenu = useFractalStore((s) => s.openContextMenu);
+    const openContextMenu = useEngineStore((s) => s.openContextMenu);
 
     if (hidden) return null;
 

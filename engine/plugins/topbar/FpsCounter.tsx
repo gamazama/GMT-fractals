@@ -8,12 +8,12 @@
  */
 
 import React from 'react';
-import { useFractalStore } from '../../../store/fractalStore';
+import { useEngineStore } from '../../../store/engineStore';
 import { useViewportFps } from '../Viewport';
 
 export const FpsCounter: React.FC = () => {
     const { fpsSmoothed } = useViewportFps();
-    const isPaused = useFractalStore((s) => (s as any).isPaused);
+    const isPaused = useEngineStore((s) => (s as any).isPaused);
 
     return (
         <span

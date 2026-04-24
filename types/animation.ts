@@ -1,6 +1,6 @@
 
 export type LfoShape = 'Sine' | 'Triangle' | 'Sawtooth' | 'Pulse' | 'Noise';
-export type LfoTarget = string; // E.g. 'coreMath.paramA', 'geometry.juliaX'
+export type LfoTarget = string; // Feature-path string, e.g. `myFeature.paramA` or `myFeature.vec_x`
 
 export type SoftSelectionType = 'Linear' | 'Dome' | 'Pinpoint' | 'S-Curve';
 export type LoopMode = 'Loop' | 'Once' | 'PingPong';

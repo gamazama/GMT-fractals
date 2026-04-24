@@ -33,7 +33,7 @@
  */
 
 import { StateCreator } from 'zustand';
-import { FractalStoreState, FractalActions } from '../../types';
+import { EngineStoreState, EngineActions } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { isMouseOverCanvas } from '../../engine/worker/ViewportRefs';
 
@@ -53,10 +53,10 @@ const defaultDpr = () => {
     return Math.min(window.devicePixelRatio || 1.0, 2.0);
 };
 
-export type ViewportSlice = Pick<FractalStoreState,
+export type ViewportSlice = Pick<EngineStoreState,
     'canvasPixelSize' | 'dpr' | 'resolutionMode' | 'fixedResolution' |
     'qualityFraction' | 'fps' | 'fpsSmoothed' | 'adaptiveConfig'
-> & Pick<FractalActions,
+> & Pick<EngineActions,
     'setCanvasPixelSize' | 'setDpr' | 'setResolutionMode' | 'setFixedResolution' |
     'reportFps' | 'holdAdaptive' | 'setAdaptiveConfig'
 >;
@@ -85,7 +85,7 @@ const DEFAULT_ADAPTIVE = {
 };
 
 export const createViewportSlice: StateCreator<
-    FractalStoreState & FractalActions,
+    EngineStoreState & EngineActions,
     [['zustand/subscribeWithSelector', never]],
     [],
     ViewportSlice

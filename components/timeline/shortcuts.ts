@@ -1,5 +1,5 @@
 
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 
 /**
@@ -19,7 +19,7 @@ import { useAnimationStore } from '../../store/animationStore';
 export function handleTimelineShortcut(e: KeyboardEvent, showTimeline: boolean): boolean {
     if (e.code !== 'Space') return false;
 
-    const { cameraMode, isTimelineHovered } = useFractalStore.getState();
+    const { cameraMode, isTimelineHovered } = useEngineStore.getState();
     const { sequence, isPlaying, play, pause } = useAnimationStore.getState();
 
     let shouldTogglePlay = false;

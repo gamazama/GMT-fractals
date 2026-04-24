@@ -1,6 +1,6 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useFractalStore, getShaderConfigFromState } from '../store/fractalStore';
+import { useEngineStore, getShaderConfigFromState } from '../store/engineStore';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { parseShareString } from '../utils/Sharing';
@@ -22,7 +22,7 @@ import { detectHardwareProfileMainThread } from '../engine/HardwareDetection';
  *      display layer is ready
  */
 export const useAppStartup = (_isSceneReady: boolean) => {
-    const state = useFractalStore();
+    const state = useEngineStore();
 
     const [startupMode, setStartupMode] = useState<'default' | 'url'>('default');
     const [isHydrated, setIsHydrated] = useState(false);
@@ -35,7 +35,7 @@ export const useAppStartup = (_isSceneReady: boolean) => {
 
         try {
             setTimeout(() => {
-                const currentStore = useFractalStore.getState();
+                const currentStore = useEngineStore.getState();
                 const startConfig = getShaderConfigFromState(currentStore);
                 const camRot = currentStore.cameraRot || { x: 0, y: 0, z: 0, w: 1 };
                 const camFov = (currentStore as any).optics?.camFov ?? 60;

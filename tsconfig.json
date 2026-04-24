@@ -20,5 +20,5 @@
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "dist", "**/*.min.mjs", "vite.config.ts"]
+  "exclude": ["node_modules", "dist", "**/*.min.mjs", "vite.config.ts", "engine-gmt"]
 }

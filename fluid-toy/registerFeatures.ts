@@ -14,10 +14,12 @@
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { JuliaFeature } from './features/julia';
-import { DyeFeature } from './features/dye';
+import { CouplingFeature } from './features/coupling';
+import { PaletteFeature } from './features/palette';
+import { CollisionFeature } from './features/collision';
 import { FluidSimFeature } from './features/fluidSim';
-import { SceneCameraFeature } from './features/sceneCamera';
-import { OrbitFeature } from './features/orbit';
+import { PresetsFeature } from './features/presets';
+import { PresetGrid } from './components/PresetGrid';
 import { PostFxFeature } from './features/postFx';
 import { CompositeFeature } from './features/composite';
 import { BrushFeature } from './features/brush';
@@ -27,27 +29,33 @@ import { JuliaCPicker } from './components/JuliaCPicker';
 // the registries freeze (i.e. before the store is constructed). Match
 // the id to the customUI entry in the feature definition.
 componentRegistry.register('julia-c-picker', JuliaCPicker as any);
+componentRegistry.register('preset-grid', PresetGrid as any);
 
-// 3c: Julia/Mandelbrot fractal iteration params.
+// Fractal tab — kind, c, zoom, center, iter, power, plus the
+// palette-bound params (hidden from this tab, surfaced in Palette).
 featureRegistry.register(JuliaFeature);
 
-// 3d: Dye/palette params with gradient editor via DDFS gradient type.
-featureRegistry.register(DyeFeature);
+// Coupling tab — force mode + intensity knobs + auto-orbit subsection.
+// Absorbs the pre-refactor split across FluidSim (force*) and Orbit.
+featureRegistry.register(CouplingFeature);
 
-// 3e: Fluid-sim dynamics knobs (vorticity, pressure, forces, target
-// resolution, force-mode dropdown). Uses numeric enum pattern for
-// forceMode since DDFS param types don't include 'string' — app-side
-// mapping via FORCE_MODES array.
+// Palette tab — gradient, colour mapping, trap geometry, colour iter,
+// interior colour, dye blend. Absorbs the palette-bound iteration
+// params that were previously hidden on JuliaFeature. Still carries
+// (hidden) brushMode / dyeMix — those move to their own features on
+// later tabs.
+featureRegistry.register(PaletteFeature);
+
+// Collision tab — enabled toggle + gradient + preview + independent
+// repeat/phase. Absorbs the wall params previously hidden on Palette.
+featureRegistry.register(CollisionFeature);
+
+// Fluid tab — vorticity / dissipation / pressure / resolution / dt.
+// Tab 3 of this restructure pass will absorb dye-inject + dye-decay.
 featureRegistry.register(FluidSimFeature);
 
-// 3e: 2D scene camera (pan + zoom). Parallel to fractal-toy's orbit
-// camera. Both wait for the eventual @engine/camera plugin to unify.
-featureRegistry.register(SceneCameraFeature);
-
-// 3i: Auto-orbit for Julia c. DDFS params (enabled/radius/speed/anchor)
-// drive a TickRegistry handler that rewrites julia.juliaC each frame
-// when enabled. Modulation-style continuous driver, not keyframes.
-featureRegistry.register(OrbitFeature);
+// (SceneCameraFeature retired — zoom + center moved onto JuliaFeature.)
+// (OrbitFeature retired — orbitEnabled/Radius/Speed moved onto CouplingFeature.)
 
 // PostFX — tone mapping, exposure, vibrance, bloom, aberration,
 // refraction, caustics, fluid style presets. Pure display-stage knobs.
@@ -58,5 +66,11 @@ featureRegistry.register(CompositeFeature);
 
 // Brush — geometric + intensity knobs for left-drag splatting
 // (size / strength / flow / spacing / jitter). Brush MODE
-// (paint/erase/stamp/smudge) stays on the Dye feature.
+// (paint/erase/stamp/smudge) stays on the Palette feature (hidden)
+// until the FluidEngine brush overhaul (Tab 4 of restructure pass).
 featureRegistry.register(BrushFeature);
+
+// Presets — chip grid backed by the reference preset pack. Applying
+// dispatches every affected slice setter via presets/apply.ts and
+// resets the fluid fields via engineHandles.
+featureRegistry.register(PresetsFeature);

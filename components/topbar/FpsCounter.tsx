@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { useFractalStore, selectIsGlobalInteraction } from '../../store/fractalStore';
+import { useEngineStore, selectIsGlobalInteraction } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 
@@ -32,8 +32,8 @@ export const tick = () => {
 
 const FpsCounter = () => {
     // We check effective pause state to show active color during interaction
-    const isPaused = useFractalStore(s => s.isPaused);
-    const isGlobalInteraction = useFractalStore(selectIsGlobalInteraction);
+    const isPaused = useEngineStore(s => s.isPaused);
+    const isGlobalInteraction = useEngineStore(selectIsGlobalInteraction);
     const isCameraInteracting = useAnimationStore(s => s.isCameraInteracting);
     const isScrubbing = useAnimationStore(s => s.isScrubbing);
     

@@ -1,0 +1,106 @@
+
+export const getAOGLSL = (aoEnabled: boolean, enableStochastic: boolean, maxSamples: number = 32) => {
+    // If feature is hard-disabled in Engine, return dummy function
+    if (!aoEnabled) {
+        return `
+        float GetAO(vec3 p, vec3 n, float seed) { return 1.0; }
+        `;
+    }
+
+    let helperFunctions = '';
+    
+    if (enableStochastic) {
+        helperFunctions = `
+        vec3 getCosHemisphereDir(vec3 n, vec2 seedVec) {
+            // Use provided vector (Blue Noise Green/Alpha) instead of calculating hash
+            vec2 r = seedVec;
+            
+            float sign = n.z >= 0.0 ? 1.0 : -1.0;
+            float a = -1.0 / (sign + n.z);
+            float b = n.x * n.y * a;
+            vec3 tangent = vec3(1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+            vec3 bitangent = vec3(b, sign + n.y * n.y * a, -n.y);
+            
+            float ra = sqrt(r.y);
+            float rx = ra * cos(6.2831 * r.x);
+            float ry = ra * sin(6.2831 * r.x);
+            float rz = sqrt(1.0 - r.y);
+            return normalize(rx * tangent + ry * bitangent + rz * n);
+        }`;
+    }
+
+    return `
+// ------------------------------------------------------------------
+// AMBIENT OCCLUSION (Modular Feature)
+// ------------------------------------------------------------------
+
+${helperFunctions}
+
+float GetAO(vec3 p_ray, vec3 n, float seed) {
+    if (uAOIntensity < 0.001) return 1.0;
+
+    float occ = 0.0;
+    float weight = 1.0;
+    float spread = max(uAOSpread, 0.001);
+    
+    bool isMoving = uBlendFactor >= 0.99;
+    bool isStochastic = uAOMode > 0.5;
+    
+    // Sample Blue Noise Texture
+    vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy);
+    
+    // Green channel for standard jitter
+    float jitter = blueNoise.g;
+    
+    #if defined(RENDER_MODE_PATHTRACING)
+        jitter = fract(seed * 13.5 + blueNoise.g);
+    #endif
+
+    vec3 dir = n;
+    bool useRandomDir = isStochastic;
+    
+    #if !defined(RENDER_MODE_PATHTRACING)
+        if (isMoving) useRandomDir = false;
+    #endif
+
+    #if ${enableStochastic ? 1 : 0}
+        if (useRandomDir) {
+            // Use Green and Alpha channels for 2D direction sampling
+            dir = getCosHemisphereDir(n, blueNoise.ga);
+        } else if (isStochastic) {
+            // Stochastic enabled but camera moving (non-PT): use blue noise for stable bias
+            dir = normalize(mix(n, getCosHemisphereDir(n, blueNoise.ga), 0.5));
+        }
+    #endif
+    
+    vec3 p_bias = p_ray;
+    float totalWeight = 0.0;
+    int limit = uAOSamples;
+    float jitterBias = isMoving ? 0.0 : jitter * 0.1 * spread;
+
+    // Use dynamic limit injected from DDFS
+    for(int i = 0; i < ${maxSamples}; i++) {
+        if (i >= limit) break;
+
+        float h = (0.1 + 0.125 * float(i)) * spread + jitterBias;
+        
+        vec3 aopos = p_bias + dir * h;
+        
+        // OPTIMIZATION: Use DE_Dist for geometry-only check
+        float d = DE_Dist(aopos);
+        
+        if (d < h) {
+            float diff = h - d;
+            occ += diff * weight;
+        }
+        
+        totalWeight += h * weight;
+        weight *= 0.8; 
+    }
+    
+    occ /= (totalWeight + 0.0001);
+    
+    return clamp(1.0 - (occ * uAOIntensity * 2.5), 0.0, 1.0);
+}
+`;
+};

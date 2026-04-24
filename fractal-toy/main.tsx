@@ -25,15 +25,17 @@ import '../engine/plugins/camera/presetField';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { FractalToyApp } from './FractalToyApp';
-import { registerUI } from '../features/ui';
+import { registerUI } from '../engine/features/ui';
 import { setupFractalToy } from './setup';
-import { installViewport } from '../engine/plugins/Viewport';
+import { installViewport, viewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
+import { installMenu } from '../engine/plugins/Menu';
 import { installCamera, camera } from '../engine/plugins/Camera';
-import { useFractalStore } from '../store/fractalStore';
+import { installFractalRenderer, fractalRenderer } from './renderer';
+import { useEngineStore } from '../store/engineStore';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
@@ -71,7 +73,16 @@ installTopBar();
 
 // @engine/scene-io — Save + Load buttons + Alt+S screenshot hotkey.
 installSceneIO({
-    getCanvas: () => document.querySelector('canvas'),
+    getCanvas: () => fractalRenderer.getCanvas(),
+});
+
+// @engine/menu — dropdown host used by Help, Formula, etc.
+installMenu();
+
+// Fractal-toy renderer plugin — owns canvas, engine, shader rebuilds,
+// uniform dispatch + the Formula dropdown in the topbar.
+installFractalRenderer({
+    onFrameEnd: () => viewport.frameTick(),
 });
 
 // @engine/shortcuts — window-level keyboard dispatcher. Fractal-toy
@@ -89,7 +100,7 @@ installCamera();
 camera.register({
     featureId: 'camera',
     captureState: () => {
-        const s = useFractalStore.getState() as any;
+        const s = useEngineStore.getState() as any;
         const c = s.camera;
         return {
             orbitTheta: c?.orbitTheta,
@@ -100,7 +111,7 @@ camera.register({
         };
     },
     applyState: (state) => {
-        (useFractalStore.getState() as any).setCamera({
+        (useEngineStore.getState() as any).setCamera({
             orbitTheta: state.orbitTheta,
             orbitPhi: state.orbitPhi,
             distance: state.distance,
@@ -127,6 +138,11 @@ registerCameraKeyTracks([
 
 // Seed panel state after mount.
 setupFractalToy();
+
+// Initial formula. Without this the store holds `formula: ''` and the
+// Formula dropdown shows no active marker on first paint. The subscription
+// inside <FractalRendererCanvas /> picks up the change and rebuilds once.
+useEngineStore.setState({ formula: 'Mandelbulb' } as any);
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

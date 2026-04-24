@@ -1,11 +1,11 @@
 /**
  * Post-mount setup for Fluid Toy.
  *
- * Delegates to the engine's applyDefaultPanelLayout helper — panels are
- * auto-placed via each feature's tabConfig.dock, same pattern as
- * fractal-toy. No setup boilerplate needed per new feature.
+ * Applies the app's panel manifest — the engine reads PanelRouter and
+ * Dock from the registered manifest at render time.
  */
 
-import { applyDefaultPanelLayout } from '../engine/applyDefaultPanelLayout';
+import { applyPanelManifest } from '../engine/PanelManifest';
+import { FluidToyPanels } from './panels';
 
-export const setupFluidToy = applyDefaultPanelLayout;
+export const setupFluidToy = () => applyPanelManifest(FluidToyPanels);

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import Button from './Button';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { FeatureComponentProps } from './registry/ComponentRegistry';
 import { InteractionMode } from '../types';
 
@@ -22,7 +22,7 @@ export const InteractionPicker: React.FC<InteractionPickerProps> = ({
     variant = 'primary'
 }) => {
     // Read global interaction state directly from store hooks
-    const currentMode = useFractalStore(s => s.interactionMode);
+    const currentMode = useEngineStore(s => s.interactionMode);
     
     // Access the global setter. 
     // Note: 'actions' passed from AutoFeaturePanel contains all store actions.

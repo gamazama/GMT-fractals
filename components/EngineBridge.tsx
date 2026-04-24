@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { bindStoreToEngine } from '../store/fractalStore';
+import { bindStoreToEngine } from '../store/engineStore';
 
 /**
  * Initializes the connection between the React Store and the render worker.

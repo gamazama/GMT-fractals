@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import { TimeNavigator } from './TimeNavigator';
 import { useAnimationStore } from '../../store/animationStore';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { DraggableNumber } from '../Slider';
 import { animationEngine } from '../../engine/AnimationEngine';
 import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
@@ -52,7 +52,7 @@ const KeyCamButton: React.FC = () => {
     // Force rerender on ANY fractalStore change so "dirty" status stays
     // live as the camera (or anything else) moves. The selector returns
     // a monotonic version — Zustand only bumps the render when it changes.
-    useFractalStore(s => s);
+    useEngineStore(s => s);
 
     if (tracks.length === 0) {
         // No app has registered camera tracks — hide the button entirely

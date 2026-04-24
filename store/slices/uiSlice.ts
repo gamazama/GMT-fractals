@@ -1,11 +1,11 @@
 
 import { StateCreator } from 'zustand';
-import { FractalStoreState, FractalActions, PanelId, PanelState, DockZone, CompositionOverlayType, CompositionOverlaySettings } from '../../types';
+import { EngineStoreState, EngineActions, PanelId, PanelState, DockZone, CompositionOverlayType, CompositionOverlaySettings } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
-export type UISlice = Pick<FractalStoreState,
+export type UISlice = Pick<EngineStoreState,
     'showLightGizmo' | 'isGizmoDragging' |
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
@@ -25,7 +25,7 @@ export type UISlice = Pick<FractalStoreState,
     'workshopOpen' | 'workshopEditFormula' |
     // Tutorial
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
-> & Pick<FractalActions,
+> & Pick<EngineActions,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
@@ -64,7 +64,7 @@ const getUrlParam = (key: string) => {
 // an app-specific initial state into the Zustand creator.
 const DEFAULT_PANELS: Record<string, PanelState> = {};
 
-export const createUISlice: StateCreator<FractalStoreState & FractalActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
+export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
     showLightGizmo: true, 
     isGizmoDragging: false, 
     interactionMode: 'none',

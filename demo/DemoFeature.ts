@@ -29,14 +29,12 @@ export const DemoFeature: FeatureDefinition = {
     // generic AutoFeaturePanel registered in features/ui.tsx.
     tabConfig: {
         label: 'Demo',
-        componentId: 'auto-feature-panel',
-        order: 0,
     },
 
     // viewportConfig renders a feature-scoped overlay inside the
     // ViewportArea. 'dom' means an HTML overlay (not an R3F scene node).
     viewportConfig: {
-        componentId: 'overlay-demo',
+        componentId: 'demo-overlay',
         type: 'dom',
     },
 

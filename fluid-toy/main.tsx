@@ -19,22 +19,32 @@
 // registries). Plugins with preset fields are imported here purely
 // for their module-level side effects.
 import './registerFeatures';
+// storeTypes.ts is a type-only declaration file — no runtime import
+// needed; its declare-module augments AppFeatureSlices wherever
+// typedSlices is imported.
+import './migrations';                         // registers fluid-toy slice migrations
 import '../engine/plugins/camera/presetField';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { FluidToyApp } from './FluidToyApp';
-import { registerUI } from '../features/ui';
+import { registerUI } from '../engine/features/ui';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
+import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installCamera, camera } from '../engine/plugins/Camera';
-import { useFractalStore } from '../store/fractalStore';
+import { installMenu } from '../engine/plugins/Menu';
+import { installHelp, help } from '../engine/plugins/Help';
+import { installHud, hud } from '../engine/plugins/Hud';
+import { QualityBadge } from './components/QualityBadge';
+import { HotkeysCheatsheet } from './components/HotkeysCheatsheet';
+import { useEngineStore } from '../store/engineStore';
 import { installOrbitSync } from './orbitTick';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -69,6 +79,12 @@ installViewport({
 // badge). Save/load etc. slot-register from other plugins when those land.
 installTopBar();
 
+// @engine/topbar/PauseControls — GMT-style pause button + accumulation
+// sample-cap popover. Reads renderControlSlice (isPaused, sampleCap)
+// which fluid-toy also consumes for TSAA gating, so one click toggles
+// both render-loop pause AND TSAA accumulation.
+installPauseControls();
+
 // @engine/scene-io — Save + Load buttons into the topbar. PNG save
 // reads from the single canvas the app mounts (query by tag since
 // fluid-toy has one top-level canvas).
@@ -79,11 +95,13 @@ installSceneIO({
 // Camera tracks for the shared TimelineToolbar's Key Cam button.
 // Vec components use UNDERSCORE form (GMT convention) — matches
 // AutoFeaturePanel's vec2 trackKeys so live-value and Key-Cam
-// keyframes index into the same tracks.
+// keyframes index into the same tracks. Pan/zoom live on the julia
+// slice (moved out of the retired SceneCamera feature to match the
+// reference toy-fluid's Fractal-tab layout).
 registerCameraKeyTracks([
-    'sceneCamera.center_x',
-    'sceneCamera.center_y',
-    'sceneCamera.zoom',
+    'julia.center_x',
+    'julia.center_y',
+    'julia.zoom',
 ]);
 
 // Canonical modulation tick — processes the store's `animations` array
@@ -107,19 +125,58 @@ installCamera();
 
 // Register fluid-toy's 2D camera with the plugin. captureState +
 // applyState work on an opaque JSON blob — the plugin doesn't need
-// to know it's 2D (center + zoom) vs 3D.
+// to know it's 2D (center + zoom) vs 3D. Pan/zoom live on the julia
+// slice after the Fractal-tab consolidation pass.
 camera.register({
-    featureId: 'sceneCamera',
+    featureId: 'julia',
     captureState: () => {
-        const s = useFractalStore.getState() as any;
-        return { center: { ...s.sceneCamera?.center }, zoom: s.sceneCamera?.zoom };
+        const s = useEngineStore.getState() as any;
+        return { center: { ...s.julia?.center }, zoom: s.julia?.zoom };
     },
     applyState: (state) => {
-        (useFractalStore.getState() as any).setSceneCamera({
+        (useEngineStore.getState() as any).setJulia({
             center: state.center,
             zoom: state.zoom,
         });
     },
+});
+
+// @engine/menu — generic dropdown-menu host. Plugins register their own
+// menus (help, system, …) into topbar slots; each menu can be extended
+// with items by other plugins. No auto-registered menus; installing is
+// purely "make the API ready."
+installMenu();
+
+// @engine/help — the "?" menu in the topbar right slot with Getting
+// Started, Keyboard Shortcuts, and the "Show Hints" toggle. Also
+// registers the H shortcut and provides <HelpOverlay /> (mounted in
+// FluidToyApp) which renders the lazy HelpBrowser when opened.
+installHelp();
+
+// @engine/hud — generic slot-based overlay host. <HudHost /> is mounted
+// inside FluidToyApp's ViewportFrame. Apps register whatever widgets
+// they want; the engine only prescribes the layout slots.
+installHud();
+
+// Bottom-left HUD stack (reference matches this layout):
+//   - Hotkeys cheatsheet (via help.registerHudHint, gated on showHints)
+//   - Adaptive-quality q##% badge (always on)
+
+help.registerHudHint({
+    id: 'fluid-toy-controls',
+    slot: 'bottom-left',
+    order: 0,
+    // Custom component — matches the reference toy-fluid's hotkeys
+    // panel with a collapsible "? hotkeys" pill state. The engine's
+    // default pill-row hud hint is kept for simpler apps.
+    component: HotkeysCheatsheet,
+});
+
+hud.register({
+    id: 'fluid-toy.quality',
+    slot: 'bottom-left',
+    order: 10,  // below the cheatsheet
+    component: QualityBadge,
 });
 
 // Orbit → animations array sync. When orbit DDFS params change, we

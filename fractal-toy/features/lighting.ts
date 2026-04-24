@@ -20,9 +20,6 @@ export const LightingFeature: FeatureDefinition = {
 
     tabConfig: {
         label: 'Lighting',
-        componentId: 'auto-feature-panel',
-        order: 2,
-        dock: 'right',
     },
 
     params: {

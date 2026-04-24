@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { RawDraggableNumber } from './Slider';
 
 interface KnobProps {
@@ -165,7 +165,7 @@ export const RawKnob: React.FC<KnobProps> = ({
 
 // Connected Wrapper
 export const Knob: React.FC<KnobProps> = (props) => {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
 
     return (
         <RawKnob

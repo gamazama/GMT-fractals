@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useFractalStore } from '../../store/fractalStore';
+import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { collectHelpIds } from '../../utils/helpUtils';
 import { ContextMenuItem } from '../../types/help';
@@ -92,7 +92,7 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
     isSmoothing, onSmoothDown,
     isSimplifying, onSimplifyDown
 }) => {
-    const openGlobalMenu = useFractalStore(s => s.openContextMenu);
+    const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
     const handleContextMenu = (e: React.MouseEvent) => {
         const ids = collectHelpIds(e.currentTarget);

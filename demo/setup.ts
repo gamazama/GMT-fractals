@@ -6,10 +6,10 @@
  * `demo/registerFeatures.ts` so it can run before store creation.
  */
 
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 
 export const wireDemoPanel = () => {
-    const store = useFractalStore.getState();
+    const store = useEngineStore.getState();
     store.movePanel('Demo', 'right', 0);
     store.togglePanel('Demo', true);
 };

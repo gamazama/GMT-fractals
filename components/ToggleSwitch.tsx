@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useFractalStore } from '../store/fractalStore';
+import { useEngineStore } from '../store/engineStore';
 import { useHelpContextMenu } from '../hooks/useHelpContextMenu';
 import { GenericToggleSwitch } from './GenericToggleSwitch';
 import type { GenericToggleOption } from './GenericToggleSwitch';
@@ -40,7 +40,7 @@ function ToggleSwitch<T extends string | number | boolean>({
     variant = 'default',
     labelSuffix
 }: ToggleSwitchProps<T>) {
-    const { handleInteractionStart, handleInteractionEnd } = useFractalStore();
+    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
     const handleContextMenu = useHelpContextMenu();
 
     const handleChange = (val: T) => {
