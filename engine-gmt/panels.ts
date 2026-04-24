@@ -27,20 +27,20 @@ export const GmtPanels: PanelManifest = [
         showIf: (s) => (s as { formula?: string }).formula === 'Modular',
     },
 
-    // Formula — core iteration math. coreMath = the formula kernel
-    // params; geometry = folds/hybrids; interlace = per-iter alternation.
-    // FormulaSelect widget slots above the feature stack — click the
-    // dropdown to switch between the 42 formulas (fires setFormula →
-    // CompileGate → worker recompile).
+    // Formula — bespoke GMT FormulaPanel. Uses the current formula's
+    // `parameters` array from FractalRegistry to emit per-param sliders
+    // with the formula-authored labels ("Power", "Fold Limit", "Phase
+    // (θ, φ)", …) instead of the generic coreMath ones. Also stacks
+    // FormulaSelect + geometry + interlace + LfoList + Modular graph
+    // entry-point inside its own layout — AutoFeaturePanel can't
+    // express the per-formula label overrides or the vec3 mode-specific
+    // controls (rotation / direction / axes).
     {
         id: 'Formula',
         dock: 'right',
         order: 10,
         active: true,
-        features: ['coreMath', 'geometry', 'interlace'],
-        widgets: {
-            before: ['formula-select'],
-        },
+        component: 'panel-formula',
     },
 
     // Scene — camera optics, navigation tuning, colour grading.
@@ -97,17 +97,24 @@ export const GmtPanels: PanelManifest = [
         features: ['quality'],
     },
 
-    // Audio — visible only while audio reactivity is on. When hidden,
-    // it still exists in state.panels, just omitted from the tab bar.
+    // Audio — visible only while audio reactivity is on. Uses the
+    // bespoke panel-audio component (AudioPanel) which contains the
+    // full GMT modulation UI: dual decks with playback, spectrum canvas
+    // with draggable frequency-band rules, per-rule LinkControls editor,
+    // and the collapsible ModulationList of all active bindings.
     {
         id: 'Audio',
         dock: 'right',
         order: 70,
-        features: ['audio'],
+        component: 'panel-audio',
         showIf: 'audio.isEnabled',
     },
 
-    // Drawing — visible only while drawing mode is on.
+    // Drawing — visible only while drawing mode is on. Uses
+    // AutoFeaturePanel for now; the bespoke DrawingPanel expects
+    // `removeDrawnShape / clearDrawnShapes / updateDrawnShape`
+    // actions that need a dedicated drawing slice port (same pattern
+    // as cameraSlice / modularSlice). Deferred to a follow-up pass.
     {
         id: 'Drawing',
         dock: 'right',

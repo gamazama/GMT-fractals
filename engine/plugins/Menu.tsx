@@ -211,7 +211,18 @@ export const installMenu = () => {
     // toggle items' isActive() results re-render. Without this, a
     // `type: 'toggle'` row's ON/OFF badge would stay stale until a menu
     // re-registration bumped the internal rev.
-    _unsubStore = useEngineStore.subscribe(() => _notify());
+    //
+    // Defer the notify via queueMicrotask — Zustand fires the
+    // subscriber synchronously during `setState`, so if setState
+    // happens while React is rendering a different component,
+    // immediate `_notify()` calls `setState` on MenuAnchor's
+    // useSyncExternalStore subscribers while it's still committing,
+    // triggering React's "Cannot update a component while rendering
+    // a different component" warning. Microtask batching moves the
+    // notify to after the current render completes.
+    _unsubStore = useEngineStore.subscribe(() => {
+        queueMicrotask(_notify);
+    });
 };
 export const uninstallMenu = () => {
     menu.clear();

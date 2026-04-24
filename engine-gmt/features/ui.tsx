@@ -46,6 +46,7 @@ import {
 import { EnginePanel } from '../components/panels/EnginePanel';
 import { CameraManagerPanel } from './camera_manager/CameraManagerPanel';
 import React_FlowEditor from '../components/panels/flow/FlowEditor';
+import FormulaPanel from '../components/panels/FormulaPanel';
 
 // ── Connectors: widgets that need to subscribe to store-managed
 // histogram probe registration (coloring + scene color grading).
@@ -135,4 +136,5 @@ export const registerGmtUi = () => {
     componentRegistry.register('panel-engine', EnginePanel as any);
     componentRegistry.register('panel-cameramanager', CameraManagerPanel as any);
     componentRegistry.register('panel-graph', React_FlowEditor as any);
+    componentRegistry.register('panel-formula', FormulaPanel as any);
 };
