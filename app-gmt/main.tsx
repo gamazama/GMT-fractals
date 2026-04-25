@@ -35,6 +35,7 @@ import { installShortcuts, shortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installCamera } from '../engine/plugins/Camera';
 import { installGmtCameraBinders } from '../engine-gmt/animation/cameraBinders';
+import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { installMenu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { prefetchHelpTopics } from '../data/help/registry';
@@ -130,6 +131,20 @@ installHud();
 // per animated frame. Used to live inline inside AnimationEngine; moved
 // out as part of F5 (see docs/engine/20_Fragility_Audit.md).
 installGmtCameraBinders();
+
+// Camera tracks the Key Cam button (in TimelineToolbar) captures into
+// keyframes. Without this registration the button hides itself
+// (tracks.length === 0 short-circuit). GMT's camera is split-precision
+// sceneOffset (`camera.unified.{x,y,z}`) plus Euler rotation
+// (`camera.rotation.{x,y,z}`) — same id strings the binders above own.
+registerCameraKeyTracks([
+    'camera.unified.x',
+    'camera.unified.y',
+    'camera.unified.z',
+    'camera.rotation.x',
+    'camera.rotation.y',
+    'camera.rotation.z',
+]);
 
 // Warm the help-topics chunk on idle so the first ?-button click
 // doesn't fall back to an empty topic map. Mirrors gmt-0.8.5's App.tsx.
