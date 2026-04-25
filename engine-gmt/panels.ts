@@ -99,14 +99,28 @@ export const GmtPanels: PanelManifest = [
         ],
     },
 
-    // Light — advanced-only tab for per-light controls + gizmos.
-    // Will gain LightGizmo / LightPanel widgets once those are ported.
+    // Light — advanced-only tab. The bulk of the panel (per-light tab
+    // strip, active-light editor, light-gizmo toggle) lives in the
+    // bespoke 'light-panel-controls' widget — that block is a tightly
+    // coupled tabbed editor that doesn't decompose cleanly into
+    // separate manifest items today (active-light state is shared).
+    // The Shadows global section migrates out: a feature item for the
+    // shadows toggle, a conditional group-filtered feature item for
+    // the inner shadow params. lightSpheres feature appended at the
+    // bottom via AutoFeaturePanel.
+    //
+    // FUTURE: the per-light tab strip could become a generic
+    // <TabStrip> primitive — when a second app needs it.
     {
         id: 'Light',
         dock: 'right',
         order: 30,
-        features: ['lighting', 'lightSpheres'],
         showIf: 'advancedMode',
+        items: [
+            { type: 'widget', id: 'light-panel-controls' },
+            { type: 'separator' },
+            { type: 'feature', id: 'lightSpheres' },
+        ],
     },
 
     // Shader — surface + atmosphere + ambient-occlusion + reflections +

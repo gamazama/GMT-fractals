@@ -36,6 +36,7 @@ import { JuliaRandomize } from '../components/widgets/JuliaRandomize';
 import { InteractionPicker } from '../../components/InteractionPicker';
 import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
 import { QualityRenderControls } from '../components/panels/quality/QualityRenderControls';
+import LightPanelControls from '../components/panels/lighting/LightPanelControls';
 import {
     ColorGradingHistogram,
     OpticsControls,
@@ -127,6 +128,7 @@ export const registerGmtUi = () => {
     componentRegistry.register('interaction-picker', InteractionPicker as any);
     componentRegistry.register('formula-select', ConnectedFormulaSelect as any);
     componentRegistry.register('quality-render-controls', QualityRenderControls as any);
+    componentRegistry.register('light-panel-controls', LightPanelControls as any);
 
     // Scene widgets — slotted via optics / navigation / colorGrading customUI.
     componentRegistry.register('scene-histogram', ConnectedGradingHistogram);
