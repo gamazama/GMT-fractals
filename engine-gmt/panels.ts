@@ -43,12 +43,60 @@ export const GmtPanels: PanelManifest = [
         component: 'panel-formula',
     },
 
-    // Scene — camera optics, navigation tuning, colour grading.
+    // Scene — camera optics, atmosphere, water, color grading + an
+    // Effects roll-up. Mirrors GMT's hand-written ScenePanel layout
+    // via the manifest's `items` model (sections, group-filtered
+    // feature blocks, conditional sub-blocks, collapsible). No
+    // bespoke component required.
     {
         id: 'Scene',
         dock: 'right',
         order: 20,
-        features: ['optics', 'navigation', 'colorGrading'],
+        items: [
+            // --- Optics: depth-of-field + projection ---
+            { type: 'feature', id: 'optics', groupFilter: 'dof' },
+            { type: 'feature', id: 'optics', groupFilter: 'projection' },
+
+            // --- Navigation (advanced-only) ---
+            { type: 'section', label: 'Camera & Navigation', showIf: 'advancedMode' },
+            { type: 'feature', id: 'navigation', groupFilter: 'controls', showIf: 'advancedMode' },
+
+            { type: 'separator' },
+
+            // --- Atmosphere (fog) ---
+            { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
+
+            // --- Volumetric scatter (compile-toggle is in the feature itself) ---
+            { type: 'feature', id: 'volumetric' },
+
+            { type: 'separator' },
+
+            // --- Water plane (only when enabled) ---
+            { type: 'section', label: 'Water Plane', showIf: 'waterPlane.waterEnabled' },
+            { type: 'feature', id: 'waterPlane', groupFilter: 'main',     showIf: 'waterPlane.waterEnabled' },
+            { type: 'feature', id: 'waterPlane', groupFilter: 'geometry', showIf: 'waterPlane.waterEnabled' },
+            { type: 'feature', id: 'waterPlane', groupFilter: 'material', showIf: 'waterPlane.waterEnabled' },
+            { type: 'feature', id: 'waterPlane', groupFilter: 'waves',    showIf: 'waterPlane.waterEnabled' },
+
+            // --- Color grading ---
+            { type: 'feature', id: 'colorGrading', groupFilter: 'grading' },
+
+            { type: 'separator' },
+
+            // --- Effects roll-up ---
+            {
+                type: 'collapsible',
+                label: 'Effects',
+                items: [
+                    { type: 'feature', id: 'postEffects', groupFilter: 'bloom' },
+                    { type: 'feature', id: 'postEffects', groupFilter: 'lens' },
+                    { type: 'feature', id: 'droste',      groupFilter: 'main' },
+                    { type: 'feature', id: 'droste',      groupFilter: 'geometry',  showIf: 'droste.active' },
+                    { type: 'feature', id: 'droste',      groupFilter: 'structure', showIf: 'droste.active' },
+                    { type: 'feature', id: 'droste',      groupFilter: 'transform', showIf: 'droste.active' },
+                ],
+            },
+        ],
     },
 
     // Light — advanced-only tab for per-light controls + gizmos.

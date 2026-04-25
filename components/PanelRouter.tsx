@@ -2,27 +2,38 @@
  * PanelRouter — renders the content of the currently-active dock tab by
  * looking up its manifest entry (see engine/PanelManifest.ts).
  *
- * Three render paths per panel, picked by its PanelDefinition:
- *   1. `component: '…'`  → render that registered component verbatim
- *      (used for panels that aren't DDFS-shaped: FlowEditor, CameraManager,
- *      EnginePanel, etc.). Widgets are NOT wrapped around it — the
- *      component owns its whole layout.
- *   2. `features: [...]` → render an <AutoFeaturePanel> for each listed
- *      feature, in order. Optional `widgets.before / after / between`
- *      slot custom components (histograms, pickers, etc.) registered in
- *      componentRegistry.
- *   3. Neither set     → fallback "Select a module" placeholder (also
- *      used when the active tab isn't in the manifest).
+ * Resolution order (richest first):
+ *   1. `component: '…'`  — bespoke escape hatch. Renders that
+ *      componentRegistry entry verbatim. Use only when `items` can't
+ *      express the layout (e.g. ReactFlow node graph). Other content
+ *      paths are ignored.
+ *   2. `items: [...]`    — ordered render list of features, widgets
+ *      (with optional props), section headers, and separators. The
+ *      richest layout the manifest can produce.
+ *   3. `features: [...]` + `widgets:` — shorthand. Compiles to an
+ *      `items` list of features in order, with `widgets.before/
+ *      between/after` injected at the obvious positions.
+ *   4. Neither — fallback "Select a module" placeholder (also when the
+ *      active tab isn't in the manifest at all).
  *
- * PanelRouter does NOT decide visibility; Dock filters panels via the
- * manifest's `showIf` predicates before picking an active tab.
+ * PanelRouter does NOT decide tab visibility; Dock applies the
+ * manifest's panel-level `showIf` before picking an active tab. Item-
+ * level `showIf` is evaluated here.
  */
 
 import React, { memo } from 'react';
 import { EngineState, EngineActions, PanelId } from '../types';
 import { componentRegistry } from './registry/ComponentRegistry';
 import { AutoFeaturePanel } from './AutoFeaturePanel';
-import { getPanelDefinition, PanelDefinition } from '../engine/PanelManifest';
+import {
+    getPanelDefinition,
+    evalShowIf,
+    PanelDefinition,
+    PanelItem,
+} from '../engine/PanelManifest';
+import { SectionLabel } from './SectionLabel';
+import { CollapsibleSection } from './CollapsibleSection';
+import { useEngineStore } from '../store/engineStore';
 
 interface PanelRouterProps {
     activeTab: PanelId;
@@ -37,13 +48,85 @@ interface WidgetProps {
     onSwitchTab: (t: PanelId) => void;
 }
 
-const renderWidget = (id: string, keySuffix: string, props: WidgetProps): React.ReactNode => {
-    const Component = componentRegistry.get(id) as React.FC<WidgetProps> | undefined;
+const renderWidget = (
+    id: string,
+    keySuffix: string,
+    props: WidgetProps,
+    extraProps?: Record<string, unknown>,
+): React.ReactNode => {
+    const Component = componentRegistry.get(id) as React.FC<any> | undefined;
     if (!Component) {
         console.warn(`[PanelRouter] widget "${id}" not in componentRegistry`);
         return null;
     }
-    return <Component key={`${id}::${keySuffix}`} {...props} />;
+    return <Component key={`${id}::${keySuffix}`} {...props} {...(extraProps ?? {})} />;
+};
+
+/** Compile the legacy shorthand (`features` + `widgets`) into a flat
+ *  `items` array so the renderer below has one code path. */
+const featuresToItems = (def: PanelDefinition): PanelItem[] => {
+    if (!def.features || def.features.length === 0) return [];
+    const w = def.widgets;
+    const out: PanelItem[] = [];
+    (w?.before ?? []).forEach((id) => out.push({ type: 'widget', id }));
+    def.features.forEach((featureId) => {
+        out.push({ type: 'feature', id: featureId });
+        (w?.between?.[featureId] ?? []).forEach((id) => out.push({ type: 'widget', id }));
+    });
+    (w?.after ?? []).forEach((id) => out.push({ type: 'widget', id }));
+    return out;
+};
+
+const renderItem = (
+    item: PanelItem,
+    index: number,
+    state: EngineState,
+    widgetProps: WidgetProps,
+): React.ReactNode => {
+    if (!evalShowIf(item.showIf, state as never)) return null;
+
+    switch (item.type) {
+        case 'separator':
+            return <div key={`sep-${index}`} className="h-px bg-white/10 my-2 mx-3" />;
+
+        case 'section':
+            return (
+                <div key={`section-${index}-${item.label}`} className="px-2 pt-2">
+                    <SectionLabel>{item.label}</SectionLabel>
+                </div>
+            );
+
+        case 'widget':
+            return renderWidget(item.id, `item-${index}`, widgetProps, item.props);
+
+        case 'feature':
+            return (
+                <AutoFeaturePanel
+                    key={`feat-${item.id}-${index}`}
+                    featureId={item.id}
+                    groupFilter={item.groupFilter}
+                    whitelistParams={item.whitelistParams}
+                    excludeParams={item.excludeParams}
+                    className={item.className}
+                />
+            );
+
+        case 'collapsible':
+            return (
+                <CollapsibleSection
+                    key={`collapsible-${index}-${item.label}`}
+                    label={item.label}
+                    defaultOpen={item.defaultOpen}
+                >
+                    {item.items.map((child, childIdx) =>
+                        renderItem(child, index * 1000 + childIdx, state, widgetProps),
+                    )}
+                </CollapsibleSection>
+            );
+
+        default:
+            return null;
+    }
 };
 
 const PanelRouterInner: React.FC<PanelRouterProps> = ({
@@ -53,6 +136,12 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
     onSwitchTab,
 }) => {
     const def: PanelDefinition | undefined = getPanelDefinition(activeTab);
+    // Subscribe to store changes so item-level `showIf` predicates re-evaluate.
+    // (`state` prop is captured by the parent's render but item showIf reads
+    // are done via getState calls that won't re-trigger renders here without
+    // a subscription. The Dock-level subscription already covers most cases.)
+    useEngineStore((s) => s);
+
     if (!def) {
         return (
             <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
@@ -61,7 +150,7 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
         );
     }
 
-    // Path 1 — bespoke component. Owns its whole layout; widgets ignored.
+    // Escape hatch — bespoke component owns its layout.
     if (def.component) {
         const Component = componentRegistry.get(def.component) as React.FC<WidgetProps> | undefined;
         if (!Component) {
@@ -79,34 +168,23 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
         );
     }
 
-    // Path 2 — stacked AutoFeaturePanels with widget slots.
-    if (def.features && def.features.length > 0) {
-        const widgets = def.widgets ?? {};
-        const widgetProps: WidgetProps = { state, actions, onSwitchTab };
-        const rows: React.ReactNode[] = [];
+    // Items wins over the legacy shorthand if explicitly set.
+    const items: PanelItem[] = def.items && def.items.length > 0
+        ? def.items
+        : featuresToItems(def);
 
-        (widgets.before ?? []).forEach((w, i) => {
-            rows.push(renderWidget(w, `before-${i}`, widgetProps));
-        });
-
-        def.features.forEach((featureId, idx) => {
-            rows.push(<AutoFeaturePanel key={`feat-${featureId}-${idx}`} featureId={featureId} />);
-            (widgets.between?.[featureId] ?? []).forEach((w, i) => {
-                rows.push(renderWidget(w, `between-${featureId}-${i}`, widgetProps));
-            });
-        });
-
-        (widgets.after ?? []).forEach((w, i) => {
-            rows.push(renderWidget(w, `after-${i}`, widgetProps));
-        });
-
-        return <div className="flex flex-col">{rows}</div>;
+    if (items.length === 0) {
+        return (
+            <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
+                Select a module
+            </div>
+        );
     }
 
-    // Path 3 — manifest entry exists but declares neither content path.
+    const widgetProps: WidgetProps = { state, actions, onSwitchTab };
     return (
-        <div className="flex h-full items-center justify-center text-gray-600 text-xs italic">
-            Select a module
+        <div className="flex flex-col">
+            {items.map((item, idx) => renderItem(item, idx, state, widgetProps))}
         </div>
     );
 };

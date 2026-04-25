@@ -33,7 +33,11 @@ export type ShowIfPredicate = string | ((state: EngineStoreState) => boolean);
 /** Widgets are components pre-registered in componentRegistry by id. They
  *  render as siblings of the feature panels — not attached to any specific
  *  param. For per-param attachment use the feature-level `customUI` field
- *  (see FeatureSystem.ts). */
+ *  (see FeatureSystem.ts).
+ *
+ *  This shorthand is preserved for simple panels. Richer layouts (section
+ *  headers, widgets-with-props, conditional sub-blocks) should use the
+ *  `items` field on PanelDefinition instead. */
 export interface PanelWidgets {
     /** Rendered at the top of the panel, above all features. */
     before?: string[];
@@ -43,6 +47,70 @@ export interface PanelWidgets {
      *  listed widgets should appear. */
     between?: Record<string, string[]>;
 }
+
+/** A single render unit inside a panel's `items` array. The PanelRouter
+ *  walks `items` in order and emits one node per entry.
+ *
+ *  This unified shape replaces the older (features[] + widgets.before/
+ *  between/after) split for panels that need richer compositions —
+ *  multiple section headers, widgets that take props, conditional
+ *  sub-blocks. The shorthand path stays for trivial panels.
+ *
+ *  Layout patterns expressible with `items`:
+ *
+ *    Section labels — { type: 'section', label: 'Optics' }
+ *    Widget with props — { type: 'widget', id: 'navigation-controls',
+ *                          props: { fitScale: 0.7 } }
+ *    Group-filtered feature — { type: 'feature', id: 'optics',
+ *                               groupFilter: 'surface' }
+ *    Whitelist a few params — { type: 'feature', id: 'lighting',
+ *                               whitelistParams: ['shadows', 'shadowSoftness'] }
+ *    Conditional sub-block — any item type can carry `showIf`. */
+export type PanelItem =
+    | {
+          type: 'feature';
+          id: string;
+          /** Render only the params in this DDFS group. Other groups on
+           *  the same feature are silently skipped — useful when one
+           *  feature shows up in multiple sections of the same panel. */
+          groupFilter?: string;
+          /** Render only these param keys (mutually exclusive with
+           *  groupFilter). Lets a panel cherry-pick a few sliders out
+           *  of a larger feature. */
+          whitelistParams?: string[];
+          /** Skip these param keys (combines with the other filters). */
+          excludeParams?: string[];
+          /** Optional Tailwind classes appended to the AutoFeaturePanel. */
+          className?: string;
+          /** Per-item visibility — re-evaluated on every render. */
+          showIf?: ShowIfPredicate;
+      }
+    | {
+          type: 'widget';
+          id: string;
+          props?: Record<string, unknown>;
+          showIf?: ShowIfPredicate;
+      }
+    | {
+          type: 'section';
+          label: string;
+          showIf?: ShowIfPredicate;
+      }
+    | {
+          type: 'separator';
+          showIf?: ShowIfPredicate;
+      }
+    | {
+          /** A roll-up group with a clickable label. Children render
+           *  inside an animated container; closed by default unless
+           *  `defaultOpen: true`. Children can be any PanelItem,
+           *  including nested collapsibles. */
+          type: 'collapsible';
+          label: string;
+          items: PanelItem[];
+          defaultOpen?: boolean;
+          showIf?: ShowIfPredicate;
+      };
 
 export interface PanelDefinition {
     /** Unique id, also used as the PanelId in the store and the tab
@@ -67,22 +135,35 @@ export interface PanelDefinition {
      *  omitted from the dock's tab bar. Omit for always-visible. */
     showIf?: ShowIfPredicate;
 
-    // --- Content composition — set one of `features` or `component` ---
+    // --- Content composition — pick one of `items`, `features`, `component` ---
+    // Resolution order in PanelRouter: `component` (escape hatch) wins,
+    // else `items` (rich layout) if non-empty, else `features` + `widgets`
+    // (shorthand) if `features` is non-empty, else "Select a module".
 
-    /** Feature ids whose AutoFeaturePanel should render stacked in this
-     *  panel, in the declared order. Features keep per-param customUI
-     *  (feature-level) and per-param conditions intact. */
+    /** Ordered list of render units. Use this for panels that need
+     *  section headers, widgets-with-props, group-filtered features,
+     *  or conditional sub-blocks. See PanelItem for the union. */
+    items?: PanelItem[];
+
+    /** SHORTHAND: feature ids whose AutoFeaturePanel should render
+     *  stacked in this panel. Equivalent to
+     *  `items: features.map(id => ({ type: 'feature', id }))`.
+     *  Convenient for trivial panels that don't need section headers
+     *  or widget props. */
     features?: string[];
 
     /** Name of a component registered in componentRegistry to render
-     *  verbatim instead of auto-generated feature panels. Use for panels
-     *  that don't map to features (Graph / FlowEditor), or when you need
-     *  a bespoke layout. `widgets` is ignored when `component` is set —
-     *  the custom component owns its whole layout. */
+     *  verbatim instead of auto-generated feature panels. Use ONLY for
+     *  panels that genuinely can't be expressed via `items` (custom
+     *  layouts that don't correspond to a feature stack — e.g. the
+     *  Modular formula's FlowEditor). Prefer `items` when possible —
+     *  it keeps the panel app-portable and other apps can reuse the
+     *  individual widgets. */
     component?: string;
 
     /** Panel-level widgets to slot before/after/between features.
-     *  Ignored when `component` is set. */
+     *  Shorthand companion to `features:`. Ignored when `items` or
+     *  `component` is set. */
     widgets?: PanelWidgets;
 
     /** Preserves the "core" flag on PanelState. Core panels can't be

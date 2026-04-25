@@ -54,13 +54,51 @@ addPanel({ id: 'Mandelbulb', dock: 'right', order: 0, active: true, features: ['
 - **Active tab resolution:** lowest-order panel with `active: true` wins; else the current active stays (if still in the manifest); else the lowest-order panel in the dock.
 - **Dock visibility:** handled by `Dock.tsx` via `evalShowIf(def.showIf, state)`. Panels with a false predicate are omitted from the tab bar but remain in `state.panels`.
 
-## Three render paths in `PanelRouter`
+## Composition paths
 
-1. **Bespoke component** — `def.component: 'panel-graph'` renders `componentRegistry.get('panel-graph')` verbatim. Widgets are NOT wrapped around it. Use for panels that don't map to features: FlowEditor, CameraManager, bespoke layouts.
+PanelRouter resolves a panel's content in this order (richest first):
 
-2. **Feature stack** — `def.features: ['materials', 'atmosphere', 'ao']` renders `<AutoFeaturePanel featureId={...} />` for each, in order. `widgets.before` / `widgets.after` / `widgets.between[featureId]` slot in registered components (histograms, pickers). Per-param positioning still lives on the feature definition's `customUI` field.
+1. **`component: '…'`** — bespoke escape hatch. Renders that componentRegistry entry verbatim. Use only when `items` genuinely can't express the layout (e.g. ReactFlow node graph). Other content fields are ignored.
 
-3. **Empty fallback** — "Select a module" placeholder. Also shown when the active tab isn't in the manifest.
+2. **`items: [...]`** — ordered list of render units. The richest layout the manifest can produce. Each item is one of:
+
+   ```ts
+   type PanelItem =
+     | { type: 'feature',  id, groupFilter?, whitelistParams?, excludeParams?, className?, showIf? }
+     | { type: 'widget',   id, props?, showIf? }
+     | { type: 'section',  label, showIf? }
+     | { type: 'separator', showIf? }
+     | { type: 'collapsible', label, items, defaultOpen?, showIf? };
+   ```
+
+   - **`feature`** renders `<AutoFeaturePanel>` for that feature. `groupFilter` shows only params with that DDFS group; `whitelistParams` shows only the listed keys; `excludeParams` skips them.
+   - **`widget`** renders a componentRegistry entry. `props` are forwarded; the standard `{state, actions, onSwitchTab}` are always passed.
+   - **`section`** is a section-label header (`<SectionLabel>`).
+   - **`separator`** is a thin divider line.
+   - **`collapsible`** is a roll-up group with a clickable label; nested `items` can be any PanelItem (including more collapsibles).
+   - **`showIf`** on any item is re-evaluated each render — same predicate model as panel-level `showIf`.
+
+3. **`features: [...]` + `widgets: {…}`** — shorthand. Compiles internally to an equivalent `items` list (`widgets.before` → leading widgets, each feature → a `feature` item, `widgets.between[id]` → widgets right after that feature, `widgets.after` → trailing widgets). Convenient for trivial panels.
+
+4. **Empty fallback** — "Select a module" placeholder. Shown when neither path produced any content, or the active tab isn't in the manifest at all.
+
+## When to use `items` vs `features:` shorthand
+
+Use the `features:` shorthand when:
+
+- The panel renders one or more features back-to-back with no headers between them.
+- Custom widgets fit cleanly in `before` / `after` / `between` positions.
+- All params of each feature should appear (no group filtering, no advanced-only sub-blocks).
+
+Use `items: [...]` when **any** of these apply:
+
+- Section headers separate logical groups (e.g. "Optics" / "Camera & Navigation" / "Atmosphere").
+- A feature appears more than once in the same panel with different `groupFilter` values (GMT's optics panel has a "DoF" block and a "Projection" block, both backed by the same feature).
+- Advanced-only sub-blocks need `showIf: 'advancedMode'` (or any other predicate) on individual items rather than the whole panel.
+- A roll-up section folds extra controls behind a clickable header (`type: 'collapsible'`).
+- A widget needs props supplied at the manifest level rather than reading from the global store.
+
+The two are not mutually exclusive in practice — most apps will use `features:` for simple panels and `items:` for the few that need richer layouts.
 
 ## Example — GMT's 10 panels (abridged)
 
