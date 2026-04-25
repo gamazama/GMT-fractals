@@ -49,6 +49,7 @@ import { installOrbitSync } from './orbitTick';
 import { installFluidToyViewLibrary } from './viewLibrary';
 import { ViewLibraryPanel } from './components/ViewLibraryPanel';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
+import { registerFluidToyTopbar } from './topbar';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -199,6 +200,11 @@ installFluidToyViewLibrary();
 // into the module graph, which would freeze the registry before
 // feature registrations complete.
 componentRegistry.register('panel-views', ViewLibraryPanel as any);
+
+// Topbar Camera menu — Views entry opens the floating Views panel.
+// Must come AFTER installMenu() / installCamera() so their registries
+// exist. Mirrors engine-gmt/topbar.tsx's registerGmtTopbar pattern.
+registerFluidToyTopbar();
 
 setupFluidToy();
 
