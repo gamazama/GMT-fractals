@@ -36,6 +36,8 @@ import { installUndo } from '../engine/plugins/Undo';
 import { installCamera } from '../engine/plugins/Camera';
 import { installGmtCameraBinders } from '../engine-gmt/animation/cameraBinders';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
+import { registerRenderPopup } from '../engine/animation/renderPopupRegistry';
+import { RenderPopup } from '../engine-gmt/components/timeline/RenderPopup';
 import { installMenu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { prefetchHelpTopics } from '../data/help/registry';
@@ -145,6 +147,12 @@ registerCameraKeyTracks([
     'camera.rotation.y',
     'camera.rotation.z',
 ]);
+
+// Register the GMT video-export popup. The shared TimelineToolbar's
+// "Render" button (component-level visibility gated on a registered
+// popup) shows once this fires and opens the popup on click. The
+// popup itself drives mediabunny via WorkerExporter.
+registerRenderPopup(RenderPopup);
 
 // Warm the help-topics chunk on idle so the first ?-button click
 // doesn't fall back to an empty topic map. Mirrors gmt-0.8.5's App.tsx.
