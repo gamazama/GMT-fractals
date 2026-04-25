@@ -35,6 +35,7 @@ vec4 map(vec3 p) {
     float dr = 1.0;
     float trap = 1e10;
     g_orbitTrap = vec4(1e10);
+    g_geomTrap = 1e10;
 
     float iter = 0.0;
     float smoothIter = 0.0;
@@ -46,6 +47,7 @@ vec4 map(vec3 p) {
     // Color iteration limit: snapshot coloring state at boundary (branchless)
     vec4 savedOrbitTrap = vec4(1e10);
     float savedTrap = 1e10;
+    float savedGeomTrap = 1e10;
     float savedIter = 0.0;
 
     ${distOverrideInit}
@@ -101,6 +103,7 @@ vec4 map(vec3 p) {
         float colorGate = step(iter, uColorIter);  // 1.0 while iter <= uColorIter, 0.0 after
         savedOrbitTrap = mix(savedOrbitTrap, g_orbitTrap, colorGate);
         savedTrap = mix(savedTrap, trap, colorGate);
+        savedGeomTrap = mix(savedGeomTrap, g_geomTrap, colorGate);
         savedIter = mix(savedIter, iter, colorGate);
 
         if (!decompCaptured && r2 > uEscapeThresh) {
@@ -137,6 +140,7 @@ vec4 map(vec3 p) {
     float useColorSnap = step(0.5, uColorIter);
     g_orbitTrap = mix(g_orbitTrap, savedOrbitTrap, useColorSnap);
     trap = mix(trap, savedTrap, useColorSnap);
+    g_geomTrap = mix(g_geomTrap, savedGeomTrap, useColorSnap);
 
     // Color mode 8 = LLI (Last Length Iteration) decomposition — needs lastLength from escape check
     bool useLLI = (abs(uColorMode - 8.0) < 0.1) || (abs(uColorMode2 - 8.0) < 0.1);
@@ -167,8 +171,9 @@ float mapDist(vec3 p) {
     
     float dr = 1.0;
     // We still need 'trap' for formula signatures, but the compiler will DCE it since we don't return it.
-    float trap = 1e10; 
-    
+    float trap = 1e10;
+    g_geomTrap = 1e10;
+
     // Add missing iter definition for compatibility with loopInit chunks that might expect it
     float iter = 0.0;
 

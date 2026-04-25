@@ -120,6 +120,12 @@ export const MAPPING_MODES: MappingDefinition[] = [
         label: 'Orbit W (Origin)',
         description: 'Per-component orbit trap: closest squared distance to the origin.',
         glsl: `v = logTrap(g_orbitTrap.w);`
+    },
+    {
+        value: 14.0,
+        label: 'Geometric Trap',
+        description: 'Closest approach to a geometric shape (Point, Sphere, Cross, or Plane) — set shape in the Gradient panel trap section.',
+        glsl: `v = logTrap(g_geomTrap);`
     }
 ];
 

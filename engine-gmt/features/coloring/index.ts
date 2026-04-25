@@ -31,6 +31,11 @@ export interface ColoringState {
     layer3Bump: number;
     layer3Turbulence: number;
     layer3Enabled: boolean;
+    trapShape: number;
+    trapCenter: THREE.Vector3;
+    trapRadius: number;
+    trapNormal: THREE.Vector3;
+    trapOffset: number;
 }
 
 const mappingOptions = MAPPING_MODES.map(m => ({ label: m.label, value: m.value }));
@@ -53,6 +58,7 @@ export const ColoringFeature: FeatureDefinition = {
         layer2_hist:   { label: 'Histogram',                                                               helpId: 'grad.params'  },
         layer2_bottom: { label: 'Output',                                                                  helpId: 'grad.escape'  },
         noise:         { label: 'Noise',       description: 'High-frequency noise mixed into the surface colour.',  helpId: 'grad.noise'  },
+        trap_geom:     { label: 'Orbit Trap',  description: 'Geometric shape for orbit trap accumulation (pairs with Geometric Trap mapping mode).' },
     },
     customUI: [
         {
@@ -117,6 +123,7 @@ export const ColoringFeature: FeatureDefinition = {
                     { param: 'mode', eq: 11.0 },  // Orbit Y
                     { param: 'mode', eq: 12.0 },  // Orbit Z
                     { param: 'mode', eq: 13.0 },  // Orbit W
+                    { param: 'mode', eq: 14.0 },  // Geometric Trap
                     { param: 'mode2', eq: 0.0 },
                     { param: 'mode2', eq: 1.0 },
                     { param: 'mode2', eq: 7.0 },
@@ -125,7 +132,8 @@ export const ColoringFeature: FeatureDefinition = {
                     { param: 'mode2', eq: 10.0 },
                     { param: 'mode2', eq: 11.0 },
                     { param: 'mode2', eq: 12.0 },
-                    { param: 'mode2', eq: 13.0 }
+                    { param: 'mode2', eq: 13.0 },
+                    { param: 'mode2', eq: 14.0 }
                 ]
             }
         },
@@ -279,6 +287,42 @@ export const ColoringFeature: FeatureDefinition = {
             description: 'Compiles simplex noise into the shader. Disable to reduce compile time when Layer 3 is not needed.',
             onUpdate: 'compile',
             noReset: true
+        },
+
+        // --- GEOMETRIC TRAP ---
+        trapShape: {
+            type: 'float', default: 0.0, label: 'Shape', shortId: 'tsh',
+            uniform: 'uTrapShape',
+            group: 'trap_geom',
+            options: [
+                { label: 'None', value: 0.0 },
+                { label: 'Point', value: 1.0 },
+                { label: 'Sphere', value: 2.0 },
+                { label: 'Cross', value: 3.0 },
+                { label: 'Plane', value: 4.0 }
+            ],
+            onUpdate: 'compile',
+            description: 'Geometric orbit trap shape. Pairs with the Geometric Trap mapping mode.'
+        },
+        trapCenter: {
+            type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Center', shortId: 'tce',
+            uniform: 'uTrapCenter', group: 'trap_geom', min: -10, max: 10, step: 0.01,
+            condition: { param: 'trapShape', neq: 0.0 }
+        },
+        trapRadius: {
+            type: 'float', default: 1.0, label: 'Radius', shortId: 'tra',
+            uniform: 'uTrapRadius', group: 'trap_geom', min: 0, max: 10, step: 0.01,
+            condition: { param: 'trapShape', eq: 2.0 }
+        },
+        trapNormal: {
+            type: 'vec3', default: new THREE.Vector3(0, 1, 0), label: 'Normal', shortId: 'tno',
+            uniform: 'uTrapNormal', group: 'trap_geom', min: -1, max: 1, step: 0.01,
+            condition: { param: 'trapShape', eq: 4.0 }
+        },
+        trapOffset: {
+            type: 'float', default: 0.0, label: 'Offset', shortId: 'tof',
+            uniform: 'uTrapOffset', group: 'trap_geom', min: -10, max: 10, step: 0.01,
+            condition: { param: 'trapShape', eq: 4.0 }
         }
     },
     inject: (builder, config, variant) => {
@@ -290,8 +334,27 @@ export const ColoringFeature: FeatureDefinition = {
         // Per-component orbit trap global — must be declared before getMappingValue (which reads it)
         // and before DE_MASTER (which writes it). Preambles come before both.
         builder.addPreamble('vec4 g_orbitTrap = vec4(1e10);');
+        // Geometric trap accumulator — closest approach to the chosen shape, per iteration.
+        builder.addPreamble('float g_geomTrap = 1e10;');
         // Float accumulator used by some imported DEC formulas for orbit trap coloring
         builder.addPreamble('float escape = 0.0;');
+
+        // Inject per-iteration geometric trap distance computation when a shape is selected.
+        if ((state?.trapShape ?? 0) > 0) {
+            builder.addHybridFold('', '', `
+                {
+                    vec3 _zp = z.xyz;
+                    vec3 _d = _zp - uTrapCenter;
+                    float _td;
+                    int _ts = int(uTrapShape + 0.1);
+                    if (_ts == 1) _td = length(_d);
+                    else if (_ts == 2) _td = abs(length(_d) - uTrapRadius);
+                    else if (_ts == 3) _td = min(min(abs(_d.x), abs(_d.y)), abs(_d.z));
+                    else _td = abs(dot(_zp, uTrapNormal) - uTrapOffset);
+                    g_geomTrap = min(g_geomTrap, _td);
+                }
+            `);
+        }
 
         // Histogram variant needs the mapping logic to show meaningful data distributions
         if (variant === 'Main' || variant === 'Histogram') {
