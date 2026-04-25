@@ -43,13 +43,9 @@ export const GmtPanels: PanelManifest = [
             // active formula at runtime — not expressible as static manifest items.
             { type: 'widget', id: 'formula-params' },
 
-            { type: 'separator' },
-
             // Geometry modifiers: transform + burn groups (rotation, fold, scale).
             { type: 'feature', id: 'geometry', groupFilter: 'transform' },
             { type: 'feature', id: 'geometry', groupFilter: 'burning' },
-
-            { type: 'separator' },
 
             // Julia mode — hidden for formulas whose juliaType is 'none'.
             {
@@ -60,17 +56,11 @@ export const GmtPanels: PanelManifest = [
                 showIf: (s: any) => registry.get(s.formula)?.juliaType !== 'none',
             },
 
-            { type: 'separator' },
-
             // Hybrid Box Fold — compile/runtime split driven by geometry.panelConfig.
             { type: 'compilable', id: 'geometry', helpId: 'hybrid.mode' },
 
-            { type: 'separator' },
-
             // Formula Interlace — compile/runtime split driven by interlace.panelConfig.
             { type: 'compilable', id: 'interlace' },
-
-            { type: 'separator' },
 
             // LFO / modulation list.
             { type: 'widget', id: 'lfo-list' },
