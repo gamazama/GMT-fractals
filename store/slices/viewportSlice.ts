@@ -68,6 +68,7 @@ let _adaptiveLast = 0;               // window-start timestamp (0 = not started)
 let _adaptiveStillFps = 60;          // last measured idle FPS (seeds next activity)
 let _adaptiveStillFrames = 0;
 let _adaptiveStillLast = 0;
+let _adaptiveFirstWindow = false;    // true for the first sample window after seed — faster + no EMA
 let _lastActivityMs = 0;             // last time user activity happened
 let _holdUntilMs = 0;                // don't downscale until this timestamp
 let _lastStateUpdateMs = 0;          // throttle for HUD state writes
@@ -157,8 +158,9 @@ export const createViewportSlice: StateCreator<
 
         if (needsAdaptive) {
             if (cfg.targetFps > 0) {
-                // Smart mode — track 500ms windows, adjust scale by sqrt(ratio),
-                // smoothed 0.7/0.3.
+                // Smart mode — track sample windows, adjust scale by sqrt(ratio).
+                // First window after seeding: 200ms + no EMA (instant response).
+                // Subsequent windows: 500ms + 0.7/0.3 EMA (smooth, no churn).
                 if (_adaptiveLast === 0) {
                     // Seed from still-FPS so the first active frame is
                     // already at a predicted-good resolution.
@@ -168,14 +170,19 @@ export const createViewportSlice: StateCreator<
                         : 1;
                     _adaptiveLast = now;
                     _adaptiveFrames = 0;
+                    _adaptiveFirstWindow = true;
                 }
                 _adaptiveFrames++;
                 const elapsed = now - _adaptiveLast;
-                if (elapsed >= 500 && _adaptiveFrames > 2) {
+                const windowMs = _adaptiveFirstWindow ? 200 : 500;
+                if (elapsed >= windowMs && _adaptiveFrames > 2) {
                     const actualFps = _adaptiveFrames / (elapsed / 1000);
                     const ratio = cfg.targetFps / Math.max(1, actualFps);
                     const idealScale = _adaptiveScale * Math.sqrt(ratio);
-                    let nextScale = _adaptiveScale * 0.7 + idealScale * 0.3;
+                    // First window: jump directly to ideal (no EMA lag).
+                    // Subsequent: smooth 0.7/0.3.
+                    const blend = _adaptiveFirstWindow ? 1.0 : 0.3;
+                    let nextScale = _adaptiveScale * (1 - blend) + idealScale * blend;
                     nextScale = Math.max(1, Math.min(maxScale, nextScale));
                     // Hold grace: don't allow downscale during grace window.
                     if (withinHold && nextScale > _adaptiveScale) {
@@ -185,6 +192,7 @@ export const createViewportSlice: StateCreator<
                     }
                     _adaptiveFrames = 0;
                     _adaptiveLast = now;
+                    _adaptiveFirstWindow = false;
                 }
             } else {
                 // Manual mode — fixed divisor from interactionDownsample.
@@ -205,6 +213,7 @@ export const createViewportSlice: StateCreator<
             _adaptiveScale = 1;
             _adaptiveFrames = 0;
             _adaptiveLast = 0;
+            _adaptiveFirstWindow = false;
         }
 
         // Compute qualityFraction. 5% delta threshold to avoid churn.
