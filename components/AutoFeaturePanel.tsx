@@ -438,21 +438,29 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                     <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
                 )}
                 {renderedChildren.length > 0 && (
-                    <div className="flex flex-col">
-                        {renderedChildren.map((child, i) => {
-                            const isLast = i === renderedChildren.length - 1;
-                            return (
-                                <div key={i} className="flex">
-                                    <div className={`w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
-                                    <div className={`flex-1 min-w-0 relative ${isLast ? 'border-b border-b-white/20' : ''}`}>
-                                        <div className="absolute inset-0 bg-black/20 pointer-events-none z-10" />
-                                        {child}
+                    <>
+                        {/* Bracketed-children layout: same primitive
+                         * (ParentSection-style markup) the standalone
+                         * ParentSection component renders. Inlined here
+                         * because the parent label was already rendered
+                         * above by `control` — only the indented
+                         * children portion is needed. */}
+                        <div className="flex flex-col">
+                            {renderedChildren.map((child, i) => {
+                                const isLast = i === renderedChildren.length - 1;
+                                return (
+                                    <div key={i} className="flex">
+                                        <div className={`w-2 shrink-0 self-stretch border-l border-white/20 bg-white/[0.12] ${isLast ? 'border-b border-b-white/20 rounded-bl-lg' : ''}`} />
+                                        <div className={`flex-1 min-w-0 relative ${isLast ? 'border-b border-b-white/20' : ''}`}>
+                                            <div className="absolute inset-0 bg-black/20 pointer-events-none z-10" />
+                                            {child}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                         <SectionDivider />
-                    </div>
+                    </>
                 )}
             </div>
         );
