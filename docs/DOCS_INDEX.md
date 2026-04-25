@@ -89,6 +89,7 @@ Each engine architecture doc opens with a marker:
 | # | File | Status | Scope |
 |---|---|---|---|
 | 20 | [Fragility Audit](engine/20_Fragility_Audit.md) | 🔒 | Known issues + remediation status |
+| 21 | [Code Review 2026-04-25](engine/21_Code_Review_2026-04-25.md) | 🔒 | Independent multi-agent survey: what matches docs, what's overstated, 3 live bugs, onboarding gaps |
 | — | [Feature Status](FEATURE_STATUS.md) | 🔒 | Post-phase-5 snapshot across engine + apps |
 
 ## Reading paths

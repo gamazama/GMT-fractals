@@ -195,6 +195,17 @@ export const GeometryFeature: FeatureDefinition = {
         label: 'Geometry Modifiers',
         groupFilter: 'engine_settings'
     },
+
+    panelConfig: {
+        compileParam: 'hybridCompiled',
+        runtimeToggleParam: 'hybridMode',
+        compileSettingsParams: ['hybridFoldType', 'hybridComplex', 'hybridSwap', 'hybridPermute'],
+        runtimeGroup: 'hybrid',
+        runtimeExcludeParams: ['hybridMode'],
+        label: 'Hybrid Box Fold',
+        compileMessage: 'Compiling Hybrid Shader...',
+        helpId: 'hybrid.mode',
+    },
     params: {
         // --- MASTER CONTAINER SWITCH ---
         applyTransformLogic: {

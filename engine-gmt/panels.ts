@@ -14,6 +14,7 @@
  */
 
 import type { PanelManifest } from '../engine/PanelManifest';
+import { registry } from './engine/FractalRegistry';
 
 export const GmtPanels: PanelManifest = [
     // Graph (Modular-only) sits at order 1 so it slots between Formula
@@ -27,21 +28,53 @@ export const GmtPanels: PanelManifest = [
         showIf: (s) => (s as { formula?: string }).formula === 'Modular',
     },
 
-    // Formula — bespoke GMT FormulaPanel. Uses the current formula's
-    // `parameters` array from FractalRegistry to emit per-param sliders
-    // with the formula-authored labels ("Power", "Fold Limit", "Phase
-    // (θ, φ)", …) instead of the generic coreMath ones. Also stacks
-    // FormulaSelect + geometry + interlace + LfoList + Modular graph
-    // entry-point inside its own layout — AutoFeaturePanel can't
-    // express the per-formula label overrides or the vec3 mode-specific
-    // controls (rotation / direction / axes).
+    // Formula — manifest-driven. FormulaParamsWidget handles the dynamic
+    // per-formula params (iterations + registry-driven scalar/vec controls);
+    // everything else is expressed as items so the layout lives here, not JSX.
     {
         id: 'Formula',
         dock: 'right',
         order: 10,
         active: true,
-        component: 'panel-formula',
         helpId: 'panel.formula',
+        items: [
+            // Per-formula params: iterations slider + registry-driven scalar/vec controls.
+            // Kept as a widget because the param list is dynamically determined by the
+            // active formula at runtime — not expressible as static manifest items.
+            { type: 'widget', id: 'formula-params' },
+
+            { type: 'separator' },
+
+            // Geometry modifiers: transform + burn groups (rotation, fold, scale).
+            { type: 'feature', id: 'geometry', groupFilter: 'transform' },
+            { type: 'feature', id: 'geometry', groupFilter: 'burning' },
+
+            { type: 'separator' },
+
+            // Julia mode — hidden for formulas whose juliaType is 'none'.
+            {
+                type: 'feature',
+                id: 'geometry',
+                groupFilter: 'julia',
+                helpId: 'julia.mode',
+                showIf: (s: any) => registry.get(s.formula)?.juliaType !== 'none',
+            },
+
+            { type: 'separator' },
+
+            // Hybrid Box Fold — compile/runtime split driven by geometry.panelConfig.
+            { type: 'compilable', id: 'geometry', helpId: 'hybrid.mode' },
+
+            { type: 'separator' },
+
+            // Formula Interlace — compile/runtime split driven by interlace.panelConfig.
+            { type: 'compilable', id: 'interlace' },
+
+            { type: 'separator' },
+
+            // LFO / modulation list.
+            { type: 'widget', id: 'lfo-list' },
+        ],
     },
 
     // Scene — camera optics, atmosphere, water, color grading + an

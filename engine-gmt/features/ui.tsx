@@ -41,6 +41,8 @@ import { InteractionPicker } from '../../components/InteractionPicker';
 import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
 import { QualityRenderControls } from '../components/panels/quality/QualityRenderControls';
 import LightPanelControls from '../components/panels/lighting/LightPanelControls';
+import { FormulaParamsWidget } from '../components/panels/formula/FormulaParamsWidget';
+import { LfoList } from '../components/panels/formula/LfoList';
 import LightGizmo, { tick as lightGizmoTick } from './lighting/LightGizmo';
 import {
     ColorGradingHistogram,
@@ -53,7 +55,6 @@ import {
 import { EnginePanel } from '../components/panels/EnginePanel';
 import { CameraManagerPanel } from './camera_manager/CameraManagerPanel';
 import React_FlowEditor from '../components/panels/flow/FlowEditor';
-import FormulaPanel from '../components/panels/FormulaPanel';
 
 // ── Connectors: widgets that need to subscribe to store-managed
 // histogram probe registration (coloring + scene color grading).
@@ -138,6 +139,14 @@ export const registerGmtUi = () => {
     componentRegistry.register('formula-select', ConnectedFormulaSelect as any);
     componentRegistry.register('quality-render-controls', QualityRenderControls as any);
     componentRegistry.register('light-panel-controls', LightPanelControls as any);
+    componentRegistry.register('formula-params', FormulaParamsWidget as any);
+
+    // LfoList reads full store state + actions — wrap to FeatureComponentProps shape
+    const LfoListWidget: React.FC<FeatureComponentProps> = () => {
+        const store = useEngineStore();
+        return <LfoList state={store as any} actions={store as any} />;
+    };
+    componentRegistry.register('lfo-list', LfoListWidget as any);
     componentRegistry.register('overlay-lighting', LightGizmo as any);
     registerTick('lightGizmoTick', TICK_PHASE.OVERLAY, lightGizmoTick);
 
@@ -151,5 +160,4 @@ export const registerGmtUi = () => {
     componentRegistry.register('panel-engine', EnginePanel as any);
     componentRegistry.register('panel-cameramanager', CameraManagerPanel as any);
     componentRegistry.register('panel-graph', React_FlowEditor as any);
-    componentRegistry.register('panel-formula', FormulaPanel as any);
 };
