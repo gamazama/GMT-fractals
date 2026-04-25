@@ -98,12 +98,27 @@ function buildItems(catId: string, activeFormula: string, storeState: any): Pick
     const formulaDef = catId === 'coreMath' && activeFormula ? registry.get(activeFormula) : null;
     const formulaParamIds = formulaDef?.parameters?.map(p => p?.id).filter(id => !!id) as string[] || [];
 
-    Object.entries(feat.params).forEach(([key, config]) => {
-        if (!isModulatable(config)) return;
+    Object.entries(feat.params).forEach(([key, config_raw]) => {
+        if (!isModulatable(config_raw)) return;
 
         // coreMath: only show params the active formula uses
         if (catId === 'coreMath' && formulaParamIds.length > 0) {
             if (!formulaParamIds.includes(key)) return;
+        }
+
+        // Apply DDFS dynamicConfig + dynamicVisible — same path
+        // AutoFeaturePanel uses for its sliders. Without this,
+        // interlace.interlaceParam{A..F} surface as static "Param A"
+        // labels in the modulation target dropdown instead of the
+        // secondary formula's authored names ("Power" / "Fold Limit"
+        // / etc.); slots the secondary doesn't use also still show.
+        let config: any = config_raw;
+        if ((config_raw as any).dynamicConfig) {
+            const overrides = (config_raw as any).dynamicConfig(sliceState);
+            if (overrides) config = { ...config_raw, ...overrides };
+        }
+        if ((config_raw as any).dynamicVisible) {
+            if (!(config_raw as any).dynamicVisible(sliceState)) return;
         }
 
         // Check if the param's parent condition is active (e.g., juliaMode must be on for juliaX)
