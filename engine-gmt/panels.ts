@@ -142,13 +142,86 @@ export const GmtPanels: PanelManifest = [
         ],
     },
 
-    // Gradient — colour-map authoring. Gets the ColoringHistogram widget
-    // once ported (widgets.before: ['coloring-histogram']).
+    // Gradient — colour-map authoring. Mirrors GMT's ColoringPanel
+    // accordion: Layer 1 + Layer 2 are mutually exclusive (Layer 1 is
+    // the fallback), Noise is independent. Layer 1 has an internal
+    // Gradient/Image-Texture switch that swaps the body content.
+    //
+    // Body layout uses the engine Accordion primitive. Headers carry a
+    // bespoke gradient-strip preview (registered widgets) plus an "off"
+    // badge when the layer's mix is 0. The histogram-layer marker
+    // connector flips the histogram probe while a given layer is open.
     {
         id: 'Gradient',
         dock: 'right',
         order: 50,
-        features: ['coloring'],
+        items: [
+            {
+                type: 'accordion',
+                sections: [
+                    {
+                        id: 'layer1',
+                        label: 'Layer 1',
+                        group: 'coloring-layers',
+                        groupFallback: true,
+                        headerWidget: 'gradient-preview-layer1',
+                        items: [
+                            { type: 'widget', id: 'coloring-histogram-layer-marker', props: { layer: 0 } },
+                            { type: 'widget', id: 'texturing-source-toggle' },
+
+                            // Gradient mode: full coloring stack.
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer1_top',
+                              showIf: (s: any) => !s.texturing?.active },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer1_grad',
+                              showIf: (s: any) => !s.texturing?.active },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer1_hist',
+                              showIf: (s: any) => !s.texturing?.active },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer1_bottom',
+                              showIf: (s: any) => !s.texturing?.active },
+
+                            // Image Texture mode: texturing groups + reduced layer1_bottom.
+                            { type: 'feature', id: 'texturing', groupFilter: 'main',
+                              showIf: 'texturing.active' },
+                            { type: 'feature', id: 'texturing', groupFilter: 'mapping',
+                              showIf: 'texturing.active' },
+                            { type: 'feature', id: 'texturing', groupFilter: 'transform',
+                              showIf: 'texturing.active' },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer1_bottom',
+                              excludeParams: ['twist'],
+                              showIf: 'texturing.active' },
+                        ],
+                    },
+                    {
+                        id: 'layer2',
+                        label: 'Layer 2',
+                        group: 'coloring-layers',
+                        headerWidget: 'gradient-preview-layer2',
+                        activePredicate: (s: any) => (s.coloring?.blendOpacity ?? 0) > 0,
+                        closedBadge: 'off',
+                        items: [
+                            { type: 'widget', id: 'coloring-histogram-layer-marker', props: { layer: 1 } },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer2_top' },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer2_grad' },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer2_hist' },
+                            // Escape radius — only relevant for layer 2 modes 6 / 8.
+                            { type: 'feature', id: 'coloring', whitelistParams: ['escape'],
+                              showIf: (s: any) => s.coloring?.mode2 === 6.0 || s.coloring?.mode2 === 8.0 },
+                            { type: 'feature', id: 'coloring', groupFilter: 'layer2_bottom' },
+                        ],
+                    },
+                    {
+                        id: 'noise',
+                        label: 'Noise',
+                        activePredicate: (s: any) => (s.coloring?.layer3Strength ?? 0) > 0,
+                        closedBadge: 'off',
+                        defaultOpen: (s: any) => (s.coloring?.layer3Strength ?? 0) > 0,
+                        items: [
+                            { type: 'feature', id: 'coloring', groupFilter: 'noise' },
+                        ],
+                    },
+                ],
+            },
+        ],
     },
 
     // Quality — render-engine selector + resolution + AA + step

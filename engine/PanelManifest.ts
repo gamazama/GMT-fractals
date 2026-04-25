@@ -110,7 +110,47 @@ export type PanelItem =
           items: PanelItem[];
           defaultOpen?: boolean;
           showIf?: ShowIfPredicate;
+      }
+    | {
+          /** A vertical accordion with optional exclusive groups.
+           *  Mirrors GMT's coloring-panel layer pattern (Layer 1 +
+           *  Layer 2 mutually exclusive, Noise independent) without
+           *  app-specific code. See engine/components/Accordion.tsx
+           *  for behavior details. */
+          type: 'accordion';
+          sections: PanelAccordionSection[];
+          showIf?: ShowIfPredicate;
       };
+
+/** One section inside a `type: 'accordion'` PanelItem. */
+export interface PanelAccordionSection {
+    id: string;
+    label: string;
+    /** Items rendered when the section is open. */
+    items: PanelItem[];
+    /** Optional widget id rendered on the right side of the header
+     *  (gradient strip preview, color swatch, etc). The widget is
+     *  pulled from componentRegistry; receives (state, actions). */
+    headerWidget?: string;
+    /** Optional small text shown next to the (dimmed) label when the
+     *  section is collapsed and `activePredicate` resolves to false.
+     *  Mirrors GMT's "off" indicator on Layer 2 / Noise headers. */
+    closedBadge?: string;
+    /** When this resolves to false, the header label dims and the
+     *  closedBadge (if any) is shown next to it. */
+    activePredicate?: ShowIfPredicate;
+    /** Independent default-open. Ignored when `group` is set.
+     *  Accepts a predicate so the initial-open state can depend on
+     *  store fields (e.g. open Noise only if its mix strength > 0). */
+    defaultOpen?: boolean | ShowIfPredicate;
+    /** Sections sharing this group toggle exclusively. */
+    group?: string;
+    /** Within a group, the section that stays open as a fallback
+     *  when others close. */
+    groupFallback?: boolean;
+    /** Per-section visibility predicate. */
+    showIf?: ShowIfPredicate;
+}
 
 export interface PanelDefinition {
     /** Unique id, also used as the PanelId in the store and the tab

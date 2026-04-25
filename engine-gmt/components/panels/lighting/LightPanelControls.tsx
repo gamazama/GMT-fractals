@@ -9,7 +9,8 @@ import { useEngineStore } from '../../../../store/engineStore';
 import { collectHelpIds } from '../../../../utils/helpUtils';
 import { AutoFeaturePanel } from '../../../../components/AutoFeaturePanel';
 import { getLightFromSlice } from '../../../features/lighting';
-import { PlusIcon, TrashIcon } from '../../../../components/Icons';
+import { TrashIcon } from '../../../../components/Icons';
+import { TabStrip } from '../../../../components/TabStrip';
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { MAX_LIGHTS } from '../../../../data/constants';
 import * as THREE from 'three';
@@ -202,31 +203,17 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
   return (
  <div className="animate-fade-in" onContextMenu={handleLightStudioMenu}>
    <div className="mb-4">
-      <div className="flex flex-wrap gap-1 bg-black/40 p-1 rounded border border-white/5">
-          {lighting.lights.map((l, i) => (
-              <button
-                key={i}
-                onClick={() => setActiveLight(i)}
-                className={`flex-1 min-w-[60px] py-1.5 px-2 text-[9px] font-bold rounded border transition-all relative ${
-                    activeLight === i 
-                    ? 'bg-cyan-900/50 border-cyan-500/50 text-cyan-200 shadow-sm' 
-                    : 'bg-transparent border-transparent text-gray-500 hover:bg-white/5 hover:text-gray-300'
-                }`}
-              >
-                 Light {i+1}
-                 {l.visible && <div className="absolute top-1 right-1 w-1 h-1 rounded-full bg-cyan-400" />}
-              </button>
-          ))}
-          {lighting.lights.length < MAX_LIGHTS && (
-              <button 
-                onClick={handleAddLight}
-                className="w-8 flex items-center justify-center text-gray-500 hover:text-cyan-400 hover:bg-white/5 rounded transition-colors"
-                title="Add Light"
-              >
-                  <PlusIcon />
-              </button>
-          )}
-      </div>
+      <TabStrip
+          items={lighting.lights.map((l, i) => ({
+              id: i,
+              label: `Light ${i + 1}`,
+              indicator: !!l.visible,
+          }))}
+          activeId={activeLight}
+          onSelect={(id) => setActiveLight(id)}
+          onAdd={lighting.lights.length < MAX_LIGHTS ? handleAddLight : undefined}
+          addTitle="Add Light"
+      />
    </div>
 
    <div className="mb-4 space-y-3" data-help-id="panel.light">

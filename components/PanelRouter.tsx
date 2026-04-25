@@ -30,9 +30,11 @@ import {
     evalShowIf,
     PanelDefinition,
     PanelItem,
+    PanelAccordionSection,
 } from '../engine/PanelManifest';
 import { SectionLabel } from './SectionLabel';
 import { CollapsibleSection } from './CollapsibleSection';
+import { Accordion, AccordionSection } from './Accordion';
 import { useEngineStore } from '../store/engineStore';
 
 interface PanelRouterProps {
@@ -124,9 +126,64 @@ const renderItem = (
                 </CollapsibleSection>
             );
 
+        case 'accordion': {
+            const visible = item.sections.filter((s) =>
+                evalShowIf(s.showIf, state as never),
+            );
+            const sections: AccordionSection[] = visible.map((s, sIdx) =>
+                accordionSectionToProp(s, sIdx, index, state, widgetProps),
+            );
+            return <Accordion key={`accordion-${index}`} sections={sections} />;
+        }
+
         default:
             return null;
     }
+};
+
+const accordionSectionToProp = (
+    s: PanelAccordionSection,
+    sIdx: number,
+    panelItemIdx: number,
+    state: EngineState,
+    widgetProps: WidgetProps,
+): AccordionSection => {
+    const isActive = evalShowIf(s.activePredicate, state as never);
+    const headerRight = s.headerWidget
+        ? renderWidget(s.headerWidget, `accordion-${panelItemIdx}-${sIdx}-hdr`, widgetProps)
+        : undefined;
+    const closedBadge =
+        !isActive && s.closedBadge ? (
+            <span className="text-[8px] text-gray-600">{s.closedBadge}</span>
+        ) : undefined;
+    const defaultOpen =
+        typeof s.defaultOpen === 'boolean'
+            ? s.defaultOpen
+            : s.defaultOpen
+              ? evalShowIf(s.defaultOpen, state as never)
+              : undefined;
+    return {
+        id: s.id,
+        label: s.label,
+        dimmed: s.activePredicate !== undefined && !isActive,
+        defaultOpen,
+        group: s.group,
+        groupFallback: s.groupFallback,
+        headerRight,
+        closedBadge,
+        children: (
+            <>
+                {s.items.map((child, childIdx) =>
+                    renderItem(
+                        child,
+                        panelItemIdx * 10000 + sIdx * 100 + childIdx,
+                        state,
+                        widgetProps,
+                    ),
+                )}
+            </>
+        ),
+    };
 };
 
 const PanelRouterInner: React.FC<PanelRouterProps> = ({

@@ -31,6 +31,9 @@ import { useEngineStore } from '../../store/engineStore';
 
 // --- Widget components ---
 import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogram';
+import { GradientPreviewLayer1, GradientPreviewLayer2 } from '../components/panels/gradient/GradientPreview';
+import { TexturingSourceToggle } from '../components/panels/gradient/TexturingSourceToggle';
+import { HistogramLayerMarker } from '../components/panels/gradient/HistogramLayerMarker';
 import { HybridAdvancedLock } from '../components/panels/HybridAdvancedLock';
 import { JuliaRandomize } from '../components/widgets/JuliaRandomize';
 import { InteractionPicker } from '../../components/InteractionPicker';
@@ -123,6 +126,10 @@ const ConnectedFormulaSelect: React.FC = () => {
 export const registerGmtUi = () => {
     // Widgets — auto-slotted by AutoFeaturePanel via each feature's customUI.
     componentRegistry.register('coloring-histogram', ConnectedColoringHistogram);
+    componentRegistry.register('gradient-preview-layer1', GradientPreviewLayer1 as any);
+    componentRegistry.register('gradient-preview-layer2', GradientPreviewLayer2 as any);
+    componentRegistry.register('texturing-source-toggle', TexturingSourceToggle as any);
+    componentRegistry.register('coloring-histogram-layer-marker', HistogramLayerMarker as any);
     componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock as any);
     componentRegistry.register('julia-randomize', JuliaRandomize as any);
     componentRegistry.register('interaction-picker', InteractionPicker as any);
