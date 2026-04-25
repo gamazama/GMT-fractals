@@ -347,7 +347,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('camera', {
         id: 'camera-manager',
         type: 'button',
-        label: 'Camera Manager',
+        label: 'View Manager',
         onSelect: openCameraManager,
     });
 

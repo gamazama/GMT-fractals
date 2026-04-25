@@ -15,6 +15,7 @@ import React, { useCallback } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { StateLibraryPanel } from '../../components/StateLibraryPanel';
 import { ActiveSnapshotFeatures } from '../../components/ActiveSnapshotFeatures';
+import { CompositionOverlayControls } from '../../components/CompositionOverlayControls';
 import { PlusIcon } from '../../components/Icons';
 import type { StateSnapshot } from '../../engine/store/createStateLibrarySlice';
 import type { JuliaViewState } from '../viewLibrary';
@@ -98,12 +99,17 @@ export const ViewLibraryPanel: React.FC = () => {
                 </div>
             }
             footer={
-                <ActiveSnapshotFeatures
-                    activeIdKey="activeViewId"
-                    featureIds={['julia']}
-                    label="Active View"
-                    onDeselect={() => selectView?.(null)}
-                />
+                <>
+                    <ActiveSnapshotFeatures
+                        activeIdKey="activeViewId"
+                        featureIds={['julia']}
+                        label="Active View"
+                        onDeselect={() => selectView?.(null)}
+                    />
+                    <div className="border-t border-white/10 bg-black/40 p-2">
+                        <CompositionOverlayControls />
+                    </div>
+                </>
             }
         />
     );

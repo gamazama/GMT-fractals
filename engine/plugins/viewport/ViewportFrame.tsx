@@ -40,6 +40,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { ViewportModeControls } from './ViewportModeControls';
+import { CompositionOverlay } from '../../../components/viewport/CompositionOverlay';
 
 export interface ViewportFrameProps {
     /** Children render inside the sized canvas container. Position
@@ -170,6 +171,14 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
 
             <div style={innerStyle} className={`relative bg-[#111] ${innerClassName}`}>
                 {children}
+                {/* Composition guides overlay — rendered on top of
+                    children, sized to the inner container. Both apps
+                    expose the controls via their View Manager panel.
+                    Renders nothing when overlay type is 'none'. */}
+                <CompositionOverlay
+                    width={isFixed ? fw : viewportSize.w}
+                    height={isFixed ? fh : viewportSize.h}
+                />
             </div>
 
             {showModeControls && (

@@ -19,9 +19,10 @@ export const FluidToyPanels: PanelManifest = [
     { id: 'Composite', dock: 'right', order: 7,               features: ['composite'] },
     { id: 'Presets',   dock: 'right', order: 8,               features: ['presets'] },
 
-    // Views — saved-view library (state-library primitive). Hidden from
-    // dock tab bars (`dock: 'float'`, `isCore: false`); opens on demand
-    // via the topbar Camera menu's "Views" entry. Mirrors GMT's
-    // Camera Manager panel placement.
-    { id: 'Views',     dock: 'float', order: 200, component: 'panel-views', isCore: false },
+    // View Manager — saved-view library (state-library primitive).
+    // Hidden from dock tab bars (`dock: 'float'`, `isCore: false`);
+    // opens on demand via the topbar Camera menu. Same role as GMT's
+    // View Manager (which keeps the legacy `Camera Manager` id for
+    // help-topic compat).
+    { id: 'Views',     dock: 'float', order: 200, component: 'panel-views', isCore: false, label: 'View Manager' },
 ];

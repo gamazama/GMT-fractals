@@ -19,13 +19,12 @@ import React, { useCallback } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { AutoFeaturePanel } from '../../../components/AutoFeaturePanel';
 import { StateLibraryPanel } from '../../../components/StateLibraryPanel';
+import { CompositionOverlayControls } from '../../../components/CompositionOverlayControls';
 import { PlusIcon } from '../../../components/Icons';
-import type { SavedCamera, CompositionOverlayType } from '../../types';
+import type { SavedCamera } from '../../types';
 import { calculateDirectionalView } from './logic';
 import { isCameraModified } from '../../store/cameraSlice';
 import { CameraUtils } from '../../utils/CameraUtils';
-import Slider from '../../../components/Slider';
-import SmallColorPicker from '../../../components/SmallColorPicker';
 import { SectionLabel } from '../../../components/SectionLabel';
 import { CollapsibleSection } from '../../../components/CollapsibleSection';
 import { CameraPositionDisplay } from '../../components/panels/scene_widgets';
@@ -35,17 +34,6 @@ import type { OpticsState } from '../../features/optics';
 interface CameraManagerPanelProps {
     className?: string;
 }
-
-const OVERLAY_OPTIONS: { type: CompositionOverlayType; label: string }[] = [
-    { type: 'none', label: 'None' },
-    { type: 'thirds', label: 'Rule of Thirds' },
-    { type: 'golden', label: 'Golden Ratio' },
-    { type: 'grid', label: 'Grid' },
-    { type: 'center', label: 'Center Mark' },
-    { type: 'diagonal', label: 'Diagonal' },
-    { type: 'spiral', label: 'Spiral' },
-    { type: 'safearea', label: 'Safe Areas' },
-];
 
 export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ className = "-m-3" }) => {
     const savedCameras = useEngineStore(s => s.savedCameras as unknown as SavedCamera[]);
@@ -67,10 +55,6 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
     useEngineStore(s => s.sceneOffset);
     useEngineStore(s => s.cameraRot);
 
-    const compositionOverlay = useEngineStore(s => s.compositionOverlay);
-    const setCompositionOverlay = useEngineStore(s => s.setCompositionOverlay);
-    const compositionOverlaySettings = useEngineStore(s => s.compositionOverlaySettings);
-    const setCompositionOverlaySettings = useEngineStore(s => s.setCompositionOverlaySettings);
     const setOptics = useEngineStore(s => (s as any).setOptics) as ((update: Partial<OpticsState>) => void) | undefined;
 
     // --- Cardinal-direction toolbar handlers ---
@@ -159,94 +143,7 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
                     </div>
 
                     <div className="border-t border-white/10 pt-2">
-                        <CollapsibleSection
-                            label="Composition Guide"
-                            defaultOpen={false}
-                            rightContent={compositionOverlay !== 'none' ? <span className="text-[8px] text-cyan-400">{OVERLAY_OPTIONS.find(o => o.type === compositionOverlay)?.label}</span> : null}
-                        >
-                            <div className="mt-2 space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <label className="text-[9px] text-gray-500 w-16">Type</label>
-                                    <select
-                                        title="Composition guide overlay"
-                                        value={compositionOverlay}
-                                        onChange={(e) => setCompositionOverlay(e.target.value as CompositionOverlayType)}
-                                        className="flex-1 t-select"
-                                    >
-                                        {OVERLAY_OPTIONS.map(opt => (
-                                            <option key={opt.type} value={opt.type}>{opt.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {compositionOverlay !== 'none' && (
-                                    <>
-                                        <Slider label="Opacity" value={compositionOverlaySettings.opacity}
-                                            min={0.1} max={1} step={0.1}
-                                            onChange={(v) => setCompositionOverlaySettings({ opacity: v })} />
-                                        <Slider label="Line Width" value={compositionOverlaySettings.lineThickness}
-                                            min={0.5} max={3} step={0.5}
-                                            onChange={(v) => setCompositionOverlaySettings({ lineThickness: v })} />
-
-                                        <div className="flex items-center gap-2">
-                                            <label className="text-[9px] text-gray-500 w-16">Color</label>
-                                            <SmallColorPicker
-                                                color={compositionOverlaySettings.color}
-                                                onChange={(c: string) => setCompositionOverlaySettings({ color: c })}
-                                            />
-                                        </div>
-
-                                        {compositionOverlay === 'grid' && (
-                                            <>
-                                                <Slider label="Divisions X" value={compositionOverlaySettings.gridDivisionsX}
-                                                    min={2} max={16} step={1}
-                                                    onChange={(v) => setCompositionOverlaySettings({ gridDivisionsX: v })} />
-                                                <Slider label="Divisions Y" value={compositionOverlaySettings.gridDivisionsY}
-                                                    min={2} max={16} step={1}
-                                                    onChange={(v) => setCompositionOverlaySettings({ gridDivisionsY: v })} />
-                                            </>
-                                        )}
-
-                                        {compositionOverlay === 'spiral' && (
-                                            <>
-                                                <Slider label="Rotation" value={compositionOverlaySettings.spiralRotation}
-                                                    min={0} max={360} step={15}
-                                                    onChange={(v) => setCompositionOverlaySettings({ spiralRotation: v })} />
-                                                <Slider label="Position X" value={compositionOverlaySettings.spiralPositionX}
-                                                    min={0} max={1} step={0.05}
-                                                    onChange={(v) => setCompositionOverlaySettings({ spiralPositionX: v })} />
-                                                <Slider label="Position Y" value={compositionOverlaySettings.spiralPositionY}
-                                                    min={0} max={1} step={0.05}
-                                                    onChange={(v) => setCompositionOverlaySettings({ spiralPositionY: v })} />
-                                                <Slider label="Scale" value={compositionOverlaySettings.spiralScale}
-                                                    min={0.5} max={2} step={0.1}
-                                                    onChange={(v) => setCompositionOverlaySettings({ spiralScale: v })} />
-                                                <Slider label="Ratio (Phi)" value={compositionOverlaySettings.spiralRatio}
-                                                    min={1.0} max={2.0} step={0.01}
-                                                    onChange={(v) => setCompositionOverlaySettings({ spiralRatio: v })} />
-                                            </>
-                                        )}
-
-                                        <div className="flex items-center gap-3 pt-1">
-                                            <label className="flex items-center gap-1 cursor-pointer">
-                                                <input type="checkbox"
-                                                    checked={compositionOverlaySettings.showCenterMark}
-                                                    onChange={(e) => setCompositionOverlaySettings({ showCenterMark: e.target.checked })}
-                                                    className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded" />
-                                                <span className="text-[9px] text-gray-400">Center</span>
-                                            </label>
-                                            <label className="flex items-center gap-1 cursor-pointer">
-                                                <input type="checkbox"
-                                                    checked={compositionOverlaySettings.showSafeAreas}
-                                                    onChange={(e) => setCompositionOverlaySettings({ showSafeAreas: e.target.checked })}
-                                                    className="w-3 h-3 accent-cyan-500 bg-gray-800 border-gray-600 rounded" />
-                                                <span className="text-[9px] text-gray-400">Safe Areas</span>
-                                            </label>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </CollapsibleSection>
+                        <CompositionOverlayControls />
                     </div>
                 </div>
             }

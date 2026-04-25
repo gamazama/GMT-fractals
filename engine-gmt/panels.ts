@@ -342,6 +342,7 @@ export const GmtPanels: PanelManifest = [
     // only appears when the topbar action calls `togglePanel(..., true)`.
     {
         id: 'Camera Manager',
+        label: 'View Manager',
         dock: 'float',
         order: 200,
         component: 'panel-cameramanager',
