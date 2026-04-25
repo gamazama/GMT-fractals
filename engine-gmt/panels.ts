@@ -123,22 +123,23 @@ export const GmtPanels: PanelManifest = [
         ],
     },
 
-    // Shader — surface + atmosphere + ambient-occlusion + reflections +
-    // volumetric + texturing + water + post-effects + droste.
+    // Shader — material surface + environment + reflections + glow +
+    // emission + ambient occlusion. Mirrors GMT's RenderPanel layout
+    // exactly: a flat sequence of group-filtered features rather than
+    // the whole feature stack. The features listed here are *only*
+    // used for the groups they expose to this panel — other panels
+    // (Light / Scene / Quality) own the rest of each feature.
     {
         id: 'Shader',
         dock: 'right',
         order: 40,
-        features: [
-            'materials',
-            'atmosphere',
-            'ao',
-            'reflections',
-            'volumetric',
-            'texturing',
-            'waterPlane',
-            'postEffects',
-            'droste',
+        items: [
+            { type: 'feature', id: 'materials',   groupFilter: 'surface'   },
+            { type: 'feature', id: 'materials',   groupFilter: 'env'       },
+            { type: 'feature', id: 'reflections', groupFilter: 'shading'   },
+            { type: 'feature', id: 'atmosphere',  groupFilter: 'glow'      },
+            { type: 'feature', id: 'materials',   groupFilter: 'emission'  },
+            { type: 'feature', id: 'ao',          groupFilter: 'shading'   },
         ],
     },
 
