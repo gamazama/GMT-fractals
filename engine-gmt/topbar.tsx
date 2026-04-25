@@ -412,6 +412,16 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     // --- File actions (share link lives in the topbar button, not the menu) ---
 
     menu.registerItem('system', {
+        id: 'fluid-toy',
+        type: 'button',
+        label: 'Open Fluid Toy',
+        title: 'Switch to the 2D fluid / Julia set playground.',
+        onSelect: () => window.open('fluid-toy.html', '_blank', 'noopener'),
+    });
+
+    menu.registerItem('system', { id: 'sys-sep-apps', type: 'separator' });
+
+    menu.registerItem('system', {
         id: 'formula-workshop',
         type: 'button',
         label: 'Formula Workshop…',
