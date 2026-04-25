@@ -325,16 +325,12 @@ export const GmtPanels: PanelManifest = [
         helpId: 'panel.audio',
     },
 
-    // Drawing — visible only while drawing mode is on. Uses
-    // AutoFeaturePanel for now; the bespoke DrawingPanel expects
-    // `removeDrawnShape / clearDrawnShapes / updateDrawnShape`
-    // actions that need a dedicated drawing slice port (same pattern
-    // as cameraSlice / modularSlice). Deferred to a follow-up pass.
+    // Drawing — visible only while drawing mode is on.
     {
         id: 'Drawing',
         dock: 'right',
         order: 80,
-        features: ['drawing'],
+        component: 'panel-drawing',
         showIf: 'drawing.enabled',
         helpId: 'panel.drawing',
     },

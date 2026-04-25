@@ -18,7 +18,9 @@ interface DrawingPanelProps {
 }
 
 export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) => {
-    const { drawing, setDrawing, removeDrawnShape, clearDrawnShapes, updateDrawnShape } = useEngineStore();
+    const store = useEngineStore() as any;
+    const { drawing, setDrawing } = store;
+    const { removeDrawnShape, clearDrawnShapes, updateDrawnShape } = store;
     const { active, activeTool, originMode, color, showLabels, showAxes, shapes, refreshTrigger } = drawing;
     
     // Local state for depth readout
@@ -171,7 +173,7 @@ export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) =>
                          </div>
                      ) : (
                          <div className="space-y-1 animate-fade-in">
-                             {(shapes || []).map((shape, i) => {
+                             {(shapes || []).map((shape: any, i: number) => {
                                      const isCube = shape.type === 'rect' && (shape.size.z || 0) > 0.001;
                                      return (
                                          <div key={shape.id} className="flex flex-col bg-white/5 rounded border border-white/5 hover:border-cyan-500/30 transition-colors group">

@@ -454,6 +454,29 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         });
     });
 
+    // --- Feature menuItems (e.g. State Debugger, GLSL Debugger) -------
+    // These are sub-items from features that use menuItems[] rather than
+    // the top-level menuConfig toggle (single on/off entry).
+    featureRegistry.getExtraMenuItems().forEach((item) => {
+        menu.registerItem('system', {
+            id: `feature-item-${item.featureId}-${item.toggleParam}`,
+            type: 'toggle',
+            label: item.label,
+            when: item.advancedOnly ? () => useEngineStore.getState().advancedMode : undefined,
+            isActive: () => {
+                const slice: any = (useEngineStore.getState() as any)[item.featureId];
+                return !!slice?.[item.toggleParam];
+            },
+            onToggle: () => {
+                const s = useEngineStore.getState() as any;
+                const slice: any = s[item.featureId];
+                const cur = !!slice?.[item.toggleParam];
+                const setter = s[`set${item.featureId.charAt(0).toUpperCase()}${item.featureId.slice(1)}`];
+                if (typeof setter === 'function') setter({ [item.toggleParam]: !cur });
+            },
+        });
+    });
+
     menu.registerItem('system', { id: 'sys-sep-prefs', type: 'separator' });
 
     // --- Prefs toggles -----------------------------------------------

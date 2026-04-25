@@ -160,7 +160,16 @@ export const AppGmt: React.FC = () => {
                 <TopBarHost />
 
                 <div className="flex-1 flex overflow-hidden relative">
-                    <Dock side="left" />
+                    {(state as any).workshopOpen ? (
+                        <React.Suspense fallback={null}>
+                            <FormulaWorkshop
+                                onClose={() => (state as any).closeWorkshop()}
+                                editFormula={(state as any).workshopEditFormula}
+                            />
+                        </React.Suspense>
+                    ) : (
+                        <Dock side="left" />
+                    )}
 
                     <ViewportFrame className="flex-1">
                         {/* Wrapper div gives useInteractionManager a ref
@@ -248,12 +257,6 @@ export const AppGmt: React.FC = () => {
 
                 <CompilingIndicator />
 
-                {(state as any).workshopOpen && (
-                    <FormulaWorkshop
-                        onClose={() => (state as any).closeWorkshop()}
-                        editFormula={(state as any).workshopEditFormula}
-                    />
-                )}
 
                 <HardwarePrefsHost />
 

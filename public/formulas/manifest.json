@@ -1,0 +1,5048 @@
+{
+  "generated": "2026-04-18",
+  "references": {
+    "frag": "https://github.com/3Dickulus/Fragmentarium_Examples_Folder",
+    "dec": "https://jbaker.graphics/writings/DEC.html"
+  },
+  "frags": [
+    {
+      "id": "3DickUlus/3Dickulus.frag",
+      "name": "3Dickulus",
+      "folder": "3DickUlus",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "3DickUlus/AndyPolygon-Landscape.frag",
+      "name": "AndyPolygon Landscape",
+      "folder": "3DickUlus",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "3DickUlus/BuffaloBulb.frag",
+      "name": "BuffaloBulb",
+      "folder": "3DickUlus",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "3DickUlus/BurtsBisectorBulb.frag",
+      "name": "BurtsBisectorBulb",
+      "folder": "3DickUlus",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "3DickUlus/LionBulb.frag",
+      "name": "LionBulb",
+      "folder": "3DickUlus",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "3DickUlus/Magnetic-Curiosity.frag",
+      "name": "Magnetic Curiosity",
+      "folder": "3DickUlus",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "3DickUlus/MMM.frag",
+      "name": "MMM",
+      "folder": "3DickUlus",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "3DickUlus/Pengbulb.frag",
+      "name": "Pengbulb",
+      "folder": "3DickUlus",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "3DickUlus/PetraBox.frag",
+      "name": "PetraBox",
+      "folder": "3DickUlus",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "Benesi/BenesiFoldedBulb.frag",
+      "name": "BenesiFoldedBulb",
+      "folder": "Benesi",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Benesi/BenesiPineFoldDE.frag",
+      "name": "BenesiPineFoldDE",
+      "folder": "Benesi",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Benesi/MengerSmooth.frag",
+      "name": "MengerSmooth",
+      "folder": "Benesi",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Benesi/MengerSmoothforWeb.frag",
+      "name": "MengerSmoothforWeb",
+      "folder": "Benesi",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Benesi/MengersmoothPolyhedra.frag",
+      "name": "MengersmoothPolyhedra",
+      "folder": "Benesi",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Benesi/MengerWorkOnStella.frag",
+      "name": "MengerWorkOnStella",
+      "folder": "Benesi",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Benesi/PineV322.frag",
+      "name": "PineV322",
+      "folder": "Benesi",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Benesi/pinewithgoodcolor.frag",
+      "name": "pinewithgoodcolor",
+      "folder": "Benesi",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Benesi/pinewithoptionsDE.frag",
+      "name": "pinewithoptionsDE",
+      "folder": "Benesi",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Claude/BuiltinFloat.frag",
+      "name": "BuiltinFloat",
+      "folder": "Claude",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "CozyG/abox_inCyl-10.frag",
+      "name": "abox inCyl 10",
+      "folder": "CozyG",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "CozyG/aboxMinR2Bias-6.frag",
+      "name": "aboxMinR2Bias 6",
+      "folder": "CozyG",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "CozyG/aboxMinR2Cuboid-2.frag",
+      "name": "aboxMinR2Cuboid 2",
+      "folder": "CozyG",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "CozyG/mboxR2-3.frag",
+      "name": "mboxR2 3",
+      "folder": "CozyG",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "DarkBeam/BioCube.frag",
+      "name": "BioCube",
+      "folder": "DarkBeam",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "DarkBeam/FoldcutToy.frag",
+      "name": "FoldcutToy",
+      "folder": "DarkBeam",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Experimental/3DMandel.frag",
+      "name": "3DMandel",
+      "folder": "Experimental",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Experimental/BenesiFoldedMandelbulb.frag",
+      "name": "BenesiFoldedMandelbulb",
+      "folder": "Experimental",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Experimental/boxfold_kleinian.frag",
+      "name": "boxfold kleinian",
+      "folder": "Experimental",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Experimental/Knot.frag",
+      "name": "Knot",
+      "folder": "Experimental",
+      "category": "Geometric",
+      "tags": [
+        "knot"
+      ]
+    },
+    {
+      "id": "Experimental/LogisticBulb.frag",
+      "name": "LogisticBulb",
+      "folder": "Experimental",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Experimental/Mixed.frag",
+      "name": "Mixed",
+      "folder": "Experimental",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Experimental/Moebiusbulb.frag",
+      "name": "Moebiusbulb",
+      "folder": "Experimental",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Experimental/OctahedronOT.frag",
+      "name": "OctahedronOT",
+      "folder": "Experimental",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Experimental/PseudoKleinian-Progressive-DOF.frag",
+      "name": "PseudoKleinian Progressive DOF",
+      "folder": "Experimental",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Experimental/QuaternionMandelbrot4D.frag",
+      "name": "QuaternionMandelbrot4D",
+      "folder": "Experimental",
+      "category": "Quaternion",
+      "tags": [
+        "quaternion",
+        "4d"
+      ]
+    },
+    {
+      "id": "Experimental/SphereSponge.frag",
+      "name": "SphereSponge",
+      "folder": "Experimental",
+      "category": "Geometric",
+      "tags": [
+        "geometric"
+      ]
+    },
+    {
+      "id": "Experimental/Spudsville2.frag",
+      "name": "Spudsville2",
+      "folder": "Experimental",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Experimental/Stereographic4DJulia.frag",
+      "name": "Stereographic4DJulia",
+      "folder": "Experimental",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Experimental/StereographicQuaternionJulia.frag",
+      "name": "StereographicQuaternionJulia",
+      "folder": "Experimental",
+      "category": "Quaternion",
+      "tags": [
+        "quaternion",
+        "4d"
+      ]
+    },
+    {
+      "id": "Historical 3D Fractals/Mandelbox.frag",
+      "name": "Mandelbox",
+      "folder": "Historical 3D Fractals",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "Historical 3D Fractals/Mandelbulb.frag",
+      "name": "Mandelbulb",
+      "folder": "Historical 3D Fractals",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Historical 3D Fractals/QuaternionJulia.frag",
+      "name": "QuaternionJulia",
+      "folder": "Historical 3D Fractals",
+      "category": "Quaternion",
+      "tags": [
+        "quaternion",
+        "4d"
+      ]
+    },
+    {
+      "id": "Include/Classic-Noise.frag",
+      "name": "Classic Noise",
+      "folder": "Include",
+      "category": "Noise & Textures",
+      "tags": [
+        "noise"
+      ]
+    },
+    {
+      "id": "Include/Shipbulb_DeltaDE_FastPow2.frag",
+      "name": "Shipbulb DeltaDE FastPow2",
+      "folder": "Include",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Include/Shipbulb_DeltaDE.frag",
+      "name": "Shipbulb DeltaDE",
+      "folder": "Include",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Kaleidoscopic IFS/Dodecahedron.frag",
+      "name": "Dodecahedron",
+      "folder": "Kaleidoscopic IFS",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kaleidoscopic IFS/Icosahedron.frag",
+      "name": "Icosahedron",
+      "folder": "Kaleidoscopic IFS",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kaleidoscopic IFS/Menger.frag",
+      "name": "Menger",
+      "folder": "Kaleidoscopic IFS",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kaleidoscopic IFS/NewMenger.frag",
+      "name": "NewMenger",
+      "folder": "Kaleidoscopic IFS",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kaleidoscopic IFS/Octahedron.frag",
+      "name": "Octahedron",
+      "folder": "Kaleidoscopic IFS",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kaleidoscopic IFS/Tetrahedron.frag",
+      "name": "Tetrahedron",
+      "folder": "Kaleidoscopic IFS",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kali's Creations/amazingsurface.frag",
+      "name": "amazingsurface",
+      "folder": "Kali's Creations",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Kali's Creations/Kalibox.frag",
+      "name": "Kalibox",
+      "folder": "Kali's Creations",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Kali's Creations/KboxExpSmooth.frag",
+      "name": "KboxExpSmooth",
+      "folder": "Kali's Creations",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Kali's Creations/LivingKIFS.frag",
+      "name": "LivingKIFS",
+      "folder": "Kali's Creations",
+      "category": "IFS",
+      "tags": [
+        "ifs",
+        "kaleidoscopic"
+      ]
+    },
+    {
+      "id": "Kali's Creations/Treebroccoli.frag",
+      "name": "Treebroccoli",
+      "folder": "Kali's Creations",
+      "category": "Organic",
+      "tags": [
+        "organic",
+        "tree"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/IFS/SimpleIFS-DE3D-final.frag",
+      "name": "SimpleIFS DE3D final",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/Baird-Delta.frag",
+      "name": "Baird Delta",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/carpet-sierpinski.frag",
+      "name": "carpet sierpinski",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/Cross-menger.frag",
+      "name": "Cross menger",
+      "folder": "Kashaders",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/CubeKoch01.frag",
+      "name": "CubeKoch01",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/Menger11.frag",
+      "name": "Menger11",
+      "folder": "Kashaders",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/MsltoeIFS02.frag",
+      "name": "MsltoeIFS02",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/pythagore.frag",
+      "name": "pythagore",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/sqareKoch/ClusterFoam.frag",
+      "name": "ClusterFoam",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/sqareKoch/koch-darkbeam-40.frag",
+      "name": "koch darkbeam 40",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/KIFSandCO/sqareKoch/koch102.frag",
+      "name": "koch102",
+      "folder": "Kashaders",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/hybrids/bulbox.frag",
+      "name": "bulbox",
+      "folder": "Kashaders",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M3-jacobian.frag",
+      "name": "Mandalabeth M3 jacobian",
+      "folder": "Kashaders",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M3.frag",
+      "name": "Mandalabeth M3",
+      "folder": "Kashaders",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M4-jacobian.frag",
+      "name": "Mandalabeth M4 jacobian",
+      "folder": "Kashaders",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M4.frag",
+      "name": "Mandalabeth M4",
+      "folder": "Kashaders",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M5-jacobian.frag",
+      "name": "Mandalabeth M5 jacobian",
+      "folder": "Kashaders",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandalabeth/Mandalabeth-M5.frag",
+      "name": "Mandalabeth M5",
+      "folder": "Kashaders",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandalay/mandalay-Mbox03.frag",
+      "name": "mandalay Mbox03",
+      "folder": "Kashaders",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandelbrot2.5D/Julia2.5D13.frag",
+      "name": "Julia2.5D13",
+      "folder": "Kashaders",
+      "category": "Mandelbrot Variants",
+      "tags": [
+        "mandelbrot-variant"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Mandos/mandelbrot2.5D/MB2.5D02.frag",
+      "name": "MB2.5D02",
+      "folder": "Kashaders",
+      "category": "Mandelbrot Variants",
+      "tags": [
+        "mandelbrot-variant"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Simple_Kleinians/Simple_Kleinian-1st-flawed-version-DE.frag",
+      "name": "Simple Kleinian 1st flawed version DE",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/Simple_Kleinians/Simple_Kleinian-2nd-attempt-Slow-DE.frag",
+      "name": "Simple Kleinian 2nd attempt Slow DE",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/SuperEllipsoidify-Menger/SpherifyMenger00.frag",
+      "name": "SpherifyMenger00",
+      "folder": "Kashaders",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Fractals/SuperEllipsoidify-Menger/SuperEllipsoidifyMenger.frag",
+      "name": "SuperEllipsoidifyMenger",
+      "folder": "Kashaders",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/polyhedra/FaCPoly-catalan-colored.frag",
+      "name": "FaCPoly catalan colored",
+      "folder": "Kashaders",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/polyhedra/FaCPoly-common-colored.frag",
+      "name": "FaCPoly common colored",
+      "folder": "Kashaders",
+      "category": "Tessellation",
+      "tags": [
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/polyhedra/FaCPoly-compound-colored.frag",
+      "name": "FaCPoly compound colored",
+      "folder": "Kashaders",
+      "category": "Tessellation",
+      "tags": [
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/polyhedra/FaCPoly-duals-colored.frag",
+      "name": "FaCPoly duals colored",
+      "folder": "Kashaders",
+      "category": "Tessellation",
+      "tags": [
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/polyhedra/FaCPoly-interesting-colored.frag",
+      "name": "FaCPoly interesting colored",
+      "folder": "Kashaders",
+      "category": "Tessellation",
+      "tags": [
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/polyhedra/foldandcutpoly.frag",
+      "name": "foldandcutpoly",
+      "folder": "Kashaders",
+      "category": "Tessellation",
+      "tags": [
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/polyhedra/Stellations-icosahedron-try-colored.frag",
+      "name": "Stellations icosahedron try colored",
+      "folder": "Kashaders",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/experiment/hyperbolic-tesselation-3-5-3-colored-named-half-plane-00.frag",
+      "name": "hyperbolic tesselation 3 5 3 colored named half plane 00",
+      "folder": "Kashaders",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/experiment/hyperbolic-tesselation-3-5-3-colored-named-Klein-model-00.frag",
+      "name": "hyperbolic tesselation 3 5 3 colored named Klein model 00",
+      "folder": "Kashaders",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-3-5-3-colored-named.frag",
+      "name": "hyperbolic tesselation 3 5 3 colored named",
+      "folder": "Kashaders",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-5-3-n-colored-named.frag",
+      "name": "hyperbolic tesselation 5 3 n colored named",
+      "folder": "Kashaders",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-bifurcating-5-3-3-colored-named.frag",
+      "name": "hyperbolic tesselation bifurcating 5 3 3 colored named",
+      "folder": "Kashaders",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/tess-3D/3D-hyperbolic-tess/hyperbolic-tesselation-cyclic-m-3-n-3-colored-named.frag",
+      "name": "hyperbolic tesselation cyclic m 3 n 3 colored named",
+      "folder": "Kashaders",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Kashaders/Tessellations/tess-3D/polychora/polychora-special.frag",
+      "name": "polychora special",
+      "folder": "Kashaders",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/CubeKochMosely01.frag",
+      "name": "CubeKochMosely01",
+      "folder": "Kashaders",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "koch",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/FaCPoly-catalan-colored08.frag",
+      "name": "FaCPoly catalan colored08",
+      "folder": "Kashaders",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Kleinian_angles_10.frag",
+      "name": "Kleinian angles 10",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Kleinian_angles_24.frag",
+      "name": "Kleinian angles 24",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Kleinian_test23.frag",
+      "name": "Kleinian test23",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/LittleBunny_NN_SDF_03.frag",
+      "name": "LittleBunny NN SDF 03",
+      "folder": "Kashaders",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Mandelbox2.frag",
+      "name": "Mandelbox2",
+      "folder": "Kashaders",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Mandelbulb_.frag",
+      "name": "Mandelbulb",
+      "folder": "Kashaders",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Mandelbulb_02.frag",
+      "name": "Mandelbulb 02",
+      "folder": "Kashaders",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Menger_box00.frag",
+      "name": "Menger box00",
+      "folder": "Kashaders",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Monkey_NN_SDF_02.frag",
+      "name": "Monkey NN SDF 02",
+      "folder": "Kashaders",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/PseudoKleinian06---.frag",
+      "name": "PseudoKleinian06",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/pythagore.frag",
+      "name": "pythagore",
+      "folder": "Kashaders",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "koch",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/renderer/murmurHash.frag",
+      "name": "murmurHash",
+      "folder": "Kashaders",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02-----.frag",
+      "name": "Simple Kleinian Slow DE 02",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag",
+      "name": "Simple Kleinian Slow DE 02 l",
+      "folder": "Kashaders",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/voxel11.frag",
+      "name": "voxel11",
+      "folder": "Kashaders",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Kashaders/With_CRrenderer/voxel12.frag",
+      "name": "voxel12",
+      "folder": "Kashaders",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Baird-Delta.frag",
+      "name": "Baird Delta",
+      "folder": "Knighty Collection",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Fold and Cut Polyhedra - Original.frag",
+      "name": "Fold and Cut Polyhedra Original",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_10.frag",
+      "name": "Icosahedral polyhedra iterated 10",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_11.frag",
+      "name": "Icosahedral polyhedra iterated 11",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra_iterated_20.frag",
+      "name": "Icosahedral polyhedra iterated 20",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/Icosahedral_polyhedra02.frag",
+      "name": "Icosahedral polyhedra02",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/menger_iterated_20.frag",
+      "name": "menger iterated 20",
+      "folder": "Knighty Collection",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Fold_and_cut_polyhedra_examples/octahedral_polyhedra02.frag",
+      "name": "octahedral polyhedra02",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-3-5-3-colored-named-00.frag",
+      "name": "hyperbolic tesselation 3 5 3 colored named 00",
+      "folder": "Knighty Collection",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-5-3-n-colored-named-00.frag",
+      "name": "hyperbolic tesselation 5 3 n colored named 00",
+      "folder": "Knighty Collection",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-bifurcating-5-3-3-colored-named-00.frag",
+      "name": "hyperbolic tesselation bifurcating 5 3 3 colored named 00",
+      "folder": "Knighty Collection",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Hyperbolic-tesselations-named/hyperbolic-tesselation-cyclic-m-3-n-3-colored-named-00.frag",
+      "name": "hyperbolic tesselation cyclic m 3 n 3 colored named 00",
+      "folder": "Knighty Collection",
+      "category": "Hyperbolic Tessellation",
+      "tags": [
+        "hyperbolic",
+        "tessellation"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Icosahedral_polyhedra_iterated_11.frag",
+      "name": "Icosahedral polyhedra iterated 11",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Icosahedral_polyhedra_iterated_20.frag",
+      "name": "Icosahedral polyhedra iterated 20",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Knot.frag",
+      "name": "Knot",
+      "folder": "Knighty Collection",
+      "category": "Geometric",
+      "tags": [
+        "knot"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Koch01.frag",
+      "name": "Koch01",
+      "folder": "Knighty Collection",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "koch",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Mandalabeth-generic-with-jacobian/Mandalabeth-M3-jacobian.frag",
+      "name": "Mandalabeth M3 jacobian",
+      "folder": "Knighty Collection",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Mandalabeth-generic-with-jacobian/Mandalabeth-M4-jacobian.frag",
+      "name": "Mandalabeth M4 jacobian",
+      "folder": "Knighty Collection",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Mandalabeth-generic-with-jacobian/Mandalabeth-M5-jacobian.frag",
+      "name": "Mandalabeth M5 jacobian",
+      "folder": "Knighty Collection",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Knighty Collection/MandalayBox.frag",
+      "name": "MandalayBox",
+      "folder": "Knighty Collection",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Knighty Collection/mdifs.frag",
+      "name": "mdifs",
+      "folder": "Knighty Collection",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Menger_iterated_20.frag",
+      "name": "Menger iterated 20",
+      "folder": "Knighty Collection",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Menger_Sphere.frag",
+      "name": "Menger Sphere",
+      "folder": "Knighty Collection",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Knighty Collection/NewtonHeightfield.frag",
+      "name": "NewtonHeightfield",
+      "folder": "Knighty Collection",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Knighty Collection/polychora-special.frag",
+      "name": "polychora special",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/polychora-special02.frag",
+      "name": "polychora special02",
+      "folder": "Knighty Collection",
+      "category": "Polyhedra",
+      "tags": [
+        "polyhedra",
+        "geometric"
+      ]
+    },
+    {
+      "id": "Knighty Collection/Pseudo-MandalayBox.frag",
+      "name": "Pseudo MandalayBox",
+      "folder": "Knighty Collection",
+      "category": "Mandalabeth",
+      "tags": [
+        "mandalabeth"
+      ]
+    },
+    {
+      "id": "Knighty Collection/PseudoKleinian_4D_Quaternion_Julia.frag",
+      "name": "PseudoKleinian 4D Quaternion Julia",
+      "folder": "Knighty Collection",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Knighty Collection/PseudoKleinian.frag",
+      "name": "PseudoKleinian",
+      "folder": "Knighty Collection",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "Knighty Collection/PseudoKleinianMenger.frag",
+      "name": "PseudoKleinianMenger",
+      "folder": "Knighty Collection",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "Knighty Collection/PseudoKnightyan.frag",
+      "name": "PseudoKnightyan",
+      "folder": "Knighty Collection",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Knighty Collection/pythagore.frag",
+      "name": "pythagore",
+      "folder": "Knighty Collection",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "koch",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "Knighty Collection/SimpleIFS/SimpleIFS-DE3D-final.frag",
+      "name": "SimpleIFS DE3D final",
+      "folder": "Knighty Collection",
+      "category": "IFS",
+      "tags": [
+        "ifs"
+      ]
+    },
+    {
+      "id": "kosalos/Apollonian.frag",
+      "name": "Apollonian",
+      "folder": "kosalos",
+      "category": "Apollonian",
+      "tags": [
+        "apollonian",
+        "sphere-packing"
+      ]
+    },
+    {
+      "id": "kosalos/Apollonian2-FirstSurface.frag",
+      "name": "Apollonian2 FirstSurface",
+      "folder": "kosalos",
+      "category": "Apollonian",
+      "tags": [
+        "apollonian",
+        "sphere-packing"
+      ]
+    },
+    {
+      "id": "kosalos/Apollonian2.frag",
+      "name": "Apollonian2",
+      "folder": "kosalos",
+      "category": "Apollonian",
+      "tags": [
+        "apollonian",
+        "sphere-packing"
+      ]
+    },
+    {
+      "id": "kosalos/EvilSpuds.frag",
+      "name": "EvilSpuds",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/Floral.frag",
+      "name": "Floral",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/Flower.frag",
+      "name": "Flower",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/Gold.frag",
+      "name": "Gold",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/HalfTetra.frag",
+      "name": "HalfTetra",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/KaliBox.frag",
+      "name": "KaliBox",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/KIFS.frag",
+      "name": "KIFS",
+      "folder": "kosalos",
+      "category": "IFS",
+      "tags": [
+        "ifs",
+        "kaleidoscopic"
+      ]
+    },
+    {
+      "id": "kosalos/Mandelbulb.frag",
+      "name": "Mandelbulb",
+      "folder": "kosalos",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "kosalos/Monster.frag",
+      "name": "Monster",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/PlanetEarth.frag",
+      "name": "PlanetEarth",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/PseudoKleinian-FirstSurface.frag",
+      "name": "PseudoKleinian FirstSurface",
+      "folder": "kosalos",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "kosalos/PseudoKleinianMenger-FirstSurface.frag",
+      "name": "PseudoKleinianMenger FirstSurface",
+      "folder": "kosalos",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "kosalos/Quaternion.frag",
+      "name": "Quaternion",
+      "folder": "kosalos",
+      "category": "Quaternion",
+      "tags": [
+        "quaternion",
+        "4d"
+      ]
+    },
+    {
+      "id": "kosalos/SierpinskTetra.frag",
+      "name": "SierpinskTetra",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/Sponge.frag",
+      "name": "Sponge",
+      "folder": "kosalos",
+      "category": "Geometric",
+      "tags": [
+        "geometric"
+      ]
+    },
+    {
+      "id": "kosalos/SpudsVille.frag",
+      "name": "SpudsVille",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/Tower.frag",
+      "name": "Tower",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "kosalos/Vertebrae.frag",
+      "name": "Vertebrae",
+      "folder": "kosalos",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "LoicVDB/Mandelbulb.frag",
+      "name": "Mandelbulb",
+      "folder": "LoicVDB",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "LoicVDB/VolumeAndDE.frag",
+      "name": "VolumeAndDE",
+      "folder": "LoicVDB",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "mclarekin/abox inCyl-10.frag",
+      "name": "abox inCyl 10",
+      "folder": "mclarekin",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "mclarekin/aboxMinR2Bias-6.frag",
+      "name": "aboxMinR2Bias 6",
+      "folder": "mclarekin",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "mclarekin/aboxMinR2Cuboid-2.frag",
+      "name": "aboxMinR2Cuboid 2",
+      "folder": "mclarekin",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "mclarekin/aboxMod14a.frag",
+      "name": "aboxMod14a",
+      "folder": "mclarekin",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "mclarekin/AexionnSphereBoxRot4D.frag",
+      "name": "AexionnSphereBoxRot4D",
+      "folder": "mclarekin",
+      "category": "Geometric",
+      "tags": [
+        "geometric"
+      ]
+    },
+    {
+      "id": "mclarekin/Aexions_TetraBox2.frag",
+      "name": "Aexions TetraBox2",
+      "folder": "mclarekin",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "mclarekin/darkbeam_MixPinski.frag",
+      "name": "darkbeam MixPinski",
+      "folder": "mclarekin",
+      "category": "Hybrid",
+      "tags": [
+        "hybrid"
+      ]
+    },
+    {
+      "id": "mclarekin/darkbeam_surfbox.frag",
+      "name": "darkbeam surfbox",
+      "folder": "mclarekin",
+      "category": "Hybrid",
+      "tags": [
+        "hybrid"
+      ]
+    },
+    {
+      "id": "mclarekin/Mandelbulb_messC.frag",
+      "name": "Mandelbulb messC",
+      "folder": "mclarekin",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "mclarekin/Mandelbulb_pwrs1234_ cosmix.frag",
+      "name": "Mandelbulb pwrs1234 cosmix",
+      "folder": "mclarekin",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "mclarekin/Mandelbulb_pwrs1234_sinmix.frag",
+      "name": "Mandelbulb pwrs1234 sinmix",
+      "folder": "mclarekin",
+      "category": "Mandelbulb",
+      "tags": [
+        "mandelbulb",
+        "power-formula"
+      ]
+    },
+    {
+      "id": "mclarekin/mboxR2-3.frag",
+      "name": "mboxR2 3",
+      "folder": "mclarekin",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "mclarekin/menge4 4D rot-1.frag",
+      "name": "menge4 4D rot 1",
+      "folder": "mclarekin",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "mclarekin/menger3_1.frag",
+      "name": "menger3 1",
+      "folder": "mclarekin",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "mclarekin/mengerDeltaAnalytic.frag",
+      "name": "mengerDeltaAnalytic",
+      "folder": "mclarekin",
+      "category": "Menger Sponge",
+      "tags": [
+        "menger",
+        "ifs"
+      ]
+    },
+    {
+      "id": "mclarekin/msltoe riemann_DeltaDE.frag",
+      "name": "msltoe riemann DeltaDE",
+      "folder": "mclarekin",
+      "category": "Hybrid",
+      "tags": [
+        "hybrid"
+      ]
+    },
+    {
+      "id": "mclarekin/primitives.frag",
+      "name": "primitives",
+      "folder": "mclarekin",
+      "category": "Geometric",
+      "tags": [
+        "geometric"
+      ]
+    },
+    {
+      "id": "mclarekin/PseudoKleinian_3D_Quaternion_Julia_1.frag",
+      "name": "PseudoKleinian 3D Quaternion Julia 1",
+      "folder": "mclarekin",
+      "category": "Kleinian",
+      "tags": [
+        "kleinian",
+        "limit-set"
+      ]
+    },
+    {
+      "id": "mclarekin/sym4_1.frag",
+      "name": "sym4 1",
+      "folder": "mclarekin",
+      "category": "Other",
+      "tags": [
+        "experimental"
+      ]
+    },
+    {
+      "id": "Theory/Mandelbox - Dual Numbers DE.frag",
+      "name": "Mandelbox Dual Numbers DE",
+      "folder": "Theory",
+      "category": "Mandelbox",
+      "tags": [
+        "mandelbox",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "Tutorials/10 - Simple Distance Estimated 3D system.frag",
+      "name": "Simple Distance Estimated 3D system",
+      "folder": "Tutorials",
+      "category": "Tutorial",
+      "tags": [
+        "tutorial",
+        "learning"
+      ]
+    },
+    {
+      "id": "Tutorials/11 - Simple Distance Estimated 3D fractal.frag",
+      "name": "Simple Distance Estimated 3D fractal",
+      "folder": "Tutorials",
+      "category": "Tutorial",
+      "tags": [
+        "tutorial",
+        "learning"
+      ]
+    },
+    {
+      "id": "Tutorials/12 - Faster raytracing of 3D fractals.frag",
+      "name": "Faster raytracing of 3D fractals",
+      "folder": "Tutorials",
+      "category": "Tutorial",
+      "tags": [
+        "tutorial",
+        "learning"
+      ]
+    },
+    {
+      "id": "Tutorials/22 - Progressive 3D Rendering.frag",
+      "name": "Progressive 3D Rendering",
+      "folder": "Tutorials",
+      "category": "Tutorial",
+      "tags": [
+        "tutorial",
+        "learning"
+      ]
+    },
+    {
+      "id": "Tutorials/30 - Simple Keyframe Animation.frag",
+      "name": "Simple Keyframe Animation",
+      "folder": "Tutorials",
+      "category": "Tutorial",
+      "tags": [
+        "tutorial",
+        "learning"
+      ]
+    },
+    {
+      "id": "Tutorials/31 - Simple Focal Plane Tracking Target.frag",
+      "name": "Simple Focal Plane Tracking Target",
+      "folder": "Tutorials",
+      "category": "Tutorial",
+      "tags": [
+        "tutorial",
+        "learning"
+      ]
+    },
+    {
+      "id": "Tutorials/32 - Simple Multi-Parameter Easing Animation.frag",
+      "name": "Simple Multi Parameter Easing Animation",
+      "folder": "Tutorials",
+      "category": "Tutorial",
+      "tags": [
+        "tutorial",
+        "learning"
+      ]
+    }
+  ],
+  "decs": [
+    {
+      "id": "fractal_de",
+      "name": "DEC #0",
+      "author": "unknown",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de3",
+      "name": "DEC #3",
+      "author": "unknown",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de4",
+      "name": "DEC #4",
+      "author": "unknown",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de5",
+      "name": "DEC #5",
+      "author": "unknown",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de6",
+      "name": "DEC #6",
+      "author": "unknown",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de7",
+      "name": "DEC #7",
+      "author": "unknown",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de8",
+      "name": "DEC #8",
+      "author": "iq",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de9",
+      "name": "DEC #9",
+      "author": "unknown",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de10",
+      "name": "DEC #10",
+      "author": "unknown",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de12",
+      "name": "DEC #12",
+      "author": "unknown",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de15",
+      "name": "DEC #15",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de16",
+      "name": "DEC #16",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de17",
+      "name": "DEC #17",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de18",
+      "name": "DEC #18",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de19",
+      "name": "DEC #19",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de20",
+      "name": "DEC #20",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de21",
+      "name": "DEC #21",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de22",
+      "name": "DEC #22",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de23",
+      "name": "DEC #23",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de24",
+      "name": "DEC #24",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de25",
+      "name": "DEC #25",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de26",
+      "name": "DEC #26",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de27",
+      "name": "DEC #27",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de28",
+      "name": "DEC #28",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de29",
+      "name": "DEC #29",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de30",
+      "name": "DEC #30",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbulb",
+      "tags": [
+        "dec",
+        "power-formula",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de31",
+      "name": "DEC #31",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de32",
+      "name": "DEC #32",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de35",
+      "name": "DEC #35",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de36",
+      "name": "DEC #36",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de37",
+      "name": "DEC #37",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de38",
+      "name": "DEC #38",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de40",
+      "name": "DEC #40",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de41",
+      "name": "DEC #41",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de44",
+      "name": "DEC #44",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de45",
+      "name": "DEC #45",
+      "author": "gaziya5 aka gaz",
+      "category": "Geometric",
+      "tags": [
+        "dec",
+        "geometric",
+        "rotation"
+      ]
+    },
+    {
+      "id": "fractal_de46",
+      "name": "DEC #46",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de47",
+      "name": "DEC #47",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de48",
+      "name": "DEC #48",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de49",
+      "name": "DEC #49",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de50",
+      "name": "DEC #50",
+      "author": "gaziya5 aka gaz",
+      "category": "Hybrid",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de51",
+      "name": "DEC #51",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de52",
+      "name": "DEC #52",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de55",
+      "name": "DEC #55",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de56",
+      "name": "DEC #56",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de57",
+      "name": "DEC #57",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de59",
+      "name": "DEC #59",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de61",
+      "name": "DEC #61",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de66",
+      "name": "DEC #66",
+      "author": "xem",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de72",
+      "name": "DEC #72",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de75",
+      "name": "DEC #75",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de76",
+      "name": "DEC #76",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de78",
+      "name": "DEC #78",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de79",
+      "name": "DEC #79",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de80",
+      "name": "DEC #80",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de81",
+      "name": "DEC #81",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de82",
+      "name": "DEC #82",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de84",
+      "name": "DEC #84",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de86",
+      "name": "DEC #86",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de87",
+      "name": "DEC #87",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de88",
+      "name": "DEC #88",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de89",
+      "name": "DEC #89",
+      "author": "Ivan Dianov",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de90",
+      "name": "DEC #90",
+      "author": "yonatan",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de92",
+      "name": "DEC #92",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de93",
+      "name": "DEC #93",
+      "author": "eiffie",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de94",
+      "name": "DEC #94",
+      "author": "yonatan",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de95",
+      "name": "DEC #95",
+      "author": "yonatan",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de96",
+      "name": "DEC #96",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de97",
+      "name": "DEC #97",
+      "author": "adapted from gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de98",
+      "name": "DEC #98",
+      "author": "adapted from gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de99",
+      "name": "DEC #99",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de100",
+      "name": "DEC #100",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de101",
+      "name": "DEC #101",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de103",
+      "name": "DEC #103",
+      "author": "Kali",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de106",
+      "name": "DEC #106",
+      "author": "yonatan",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de107",
+      "name": "DEC #107",
+      "author": "yonatan",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de108",
+      "name": "DEC #108",
+      "author": "yonatan",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de109",
+      "name": "DEC #109",
+      "author": "yonatan",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de110",
+      "name": "DEC #110",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de111",
+      "name": "DEC #111",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de112",
+      "name": "DEC #112",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de113",
+      "name": "DEC #113",
+      "author": "adapted from code by catzpaw",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de114",
+      "name": "DEC #114",
+      "author": "adapted from code by catzpaw",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de116",
+      "name": "DEC #116",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de117",
+      "name": "DEC #117",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de118",
+      "name": "DEC #118",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de119",
+      "name": "DEC #119",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de121",
+      "name": "DEC #121",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de122",
+      "name": "DEC #122",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de124",
+      "name": "DEC #124",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de125",
+      "name": "DEC #125",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de126",
+      "name": "DEC #126",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de127",
+      "name": "DEC #127",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de128",
+      "name": "DEC #128",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de129",
+      "name": "DEC #129",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de130",
+      "name": "DEC #130",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de131",
+      "name": "DEC #131",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de133",
+      "name": "DEC #133",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de134",
+      "name": "DEC #134",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de135",
+      "name": "DEC #135",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de136",
+      "name": "DEC #136",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de137",
+      "name": "DEC #137",
+      "author": "takusakuw",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de138",
+      "name": "DEC #138",
+      "author": "yosshin",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de139",
+      "name": "DEC #139",
+      "author": "takusakuw",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de140",
+      "name": "DEC #140",
+      "author": "yuruyurau",
+      "category": "Hybrid",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de141",
+      "name": "DEC #141",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de142",
+      "name": "DEC #142",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de143",
+      "name": "DEC #143",
+      "author": "adapted from code by alia",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de144",
+      "name": "DEC #144",
+      "author": "adapted from code by wrighter",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de145",
+      "name": "DEC #145",
+      "author": "phi16",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de146",
+      "name": "DEC #146",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de147",
+      "name": "DEC #147",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de148",
+      "name": "DEC #148",
+      "author": "yonatan",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de149",
+      "name": "DEC #149",
+      "author": "yonatan",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de150",
+      "name": "DEC #150",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de151",
+      "name": "DEC #151",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de152",
+      "name": "DEC #152",
+      "author": "kamoshika",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de153",
+      "name": "DEC #153",
+      "author": "kamoshika",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de154",
+      "name": "DEC #154",
+      "author": "yonatan",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de156",
+      "name": "DEC #156",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de157",
+      "name": "DEC #157",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de158",
+      "name": "DEC #158",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de159",
+      "name": "DEC #159",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de160",
+      "name": "DEC #160",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de161",
+      "name": "DEC #161",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de162",
+      "name": "DEC #162",
+      "author": "yonatan",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de163",
+      "name": "DEC #163",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de164",
+      "name": "DEC #164",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de165",
+      "name": "DEC #165",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de166",
+      "name": "DEC #166",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de167",
+      "name": "DEC #167",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de168",
+      "name": "DEC #168",
+      "author": "gaziya5 aka gaz",
+      "category": "Mandelbulb",
+      "tags": [
+        "dec",
+        "power-formula",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de169",
+      "name": "DEC #169",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de170",
+      "name": "DEC #170",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de171",
+      "name": "DEC #171",
+      "author": "gaziya5 aka gaz",
+      "category": "Geometric",
+      "tags": [
+        "dec",
+        "geometric",
+        "rotation"
+      ]
+    },
+    {
+      "id": "fractal_de172",
+      "name": "DEC #172",
+      "author": "yonatan",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de173",
+      "name": "DEC #173",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de174",
+      "name": "DEC #174",
+      "author": "gaziya5 aka gaz",
+      "category": "Geometric",
+      "tags": [
+        "dec",
+        "geometric",
+        "rotation"
+      ]
+    },
+    {
+      "id": "fractal_de175",
+      "name": "DEC #175",
+      "author": "gaziya5 aka gaz",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de176",
+      "name": "DEC #176",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de177",
+      "name": "DEC #177",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de180",
+      "name": "DEC #180",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de181",
+      "name": "DEC #181",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de182",
+      "name": "DEC #182",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de183",
+      "name": "DEC #183",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de184",
+      "name": "DEC #184",
+      "author": "gaziya5 aka gaz",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de185",
+      "name": "DEC #185",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de186",
+      "name": "DEC #186",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de187",
+      "name": "DEC #187",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de188",
+      "name": "DEC #188",
+      "author": "amini",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de191",
+      "name": "DEC #191",
+      "author": "Kali",
+      "category": "Hybrid",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de192",
+      "name": "DEC #192",
+      "author": "Kali",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de193",
+      "name": "DEC #193",
+      "author": "Kali",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de194",
+      "name": "DEC #194",
+      "author": "shane",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de195",
+      "name": "DEC #195",
+      "author": "avi",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de196",
+      "name": "DEC #196",
+      "author": "guil",
+      "category": "Mandelbulb",
+      "tags": [
+        "dec",
+        "power-formula",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de197",
+      "name": "DEC #197",
+      "author": "marvelousbilly",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de198",
+      "name": "DEC #198",
+      "author": "adapted from code by marvelousbilly",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de199",
+      "name": "DEC #199",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de200",
+      "name": "DEC #200",
+      "author": "evilryu",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de203",
+      "name": "DEC #203",
+      "author": "adapted from code by jorge2017a1",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de204",
+      "name": "DEC #204",
+      "author": "unknown",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de211",
+      "name": "DEC #211",
+      "author": "shane",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de212",
+      "name": "DEC #212",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de215",
+      "name": "DEC #215",
+      "author": "unknown",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de216",
+      "name": "DEC #216",
+      "author": "macbooktall",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de213",
+      "name": "DEC #213",
+      "author": "macbooktall",
+      "category": "Hybrid",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de217",
+      "name": "DEC #217",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de218",
+      "name": "DEC #218",
+      "author": "butadiene",
+      "category": "Mandelbulb",
+      "tags": [
+        "dec",
+        "power-formula",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de219",
+      "name": "DEC #219",
+      "author": "gaziya5 aka gaz",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de221",
+      "name": "DEC #221",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de222",
+      "name": "DEC #222",
+      "author": "Nameless",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de223",
+      "name": "DEC #223",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de224",
+      "name": "DEC #224",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de225",
+      "name": "DEC #225",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de226",
+      "name": "DEC #226",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de227",
+      "name": "DEC #227",
+      "author": "Nameless",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de228",
+      "name": "DEC #228",
+      "author": "unknown",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de229",
+      "name": "DEC #229",
+      "author": "unknown",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de230",
+      "name": "DEC #230",
+      "author": "kamoshika",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de231",
+      "name": "DEC #231",
+      "author": "kamoshika",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de232",
+      "name": "DEC #232",
+      "author": "kamoshika",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de233",
+      "name": "DEC #233",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de234",
+      "name": "DEC #234",
+      "author": "kamoshika",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de235",
+      "name": "DEC #235",
+      "author": "kamoshika",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de236",
+      "name": "DEC #236",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de237",
+      "name": "DEC #237",
+      "author": "kamoshika",
+      "category": "Hybrid",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de238",
+      "name": "DEC #238",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de239",
+      "name": "DEC #239",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de240",
+      "name": "DEC #240",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de241",
+      "name": "DEC #241",
+      "author": "adapted from code by kamoshika",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de242",
+      "name": "DEC #242",
+      "author": "gaziya5 aka gaz",
+      "category": "Hybrid",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de243",
+      "name": "DEC #243",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de244",
+      "name": "DEC #244",
+      "author": "adapted from code by notargs",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de245",
+      "name": "DEC #245",
+      "author": "kamoshika",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de247",
+      "name": "DEC #247",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de248",
+      "name": "DEC #248",
+      "author": "kamoshika",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de250",
+      "name": "DEC #250",
+      "author": "kamoshika",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de251",
+      "name": "DEC #251",
+      "author": "kamoshika",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de252",
+      "name": "DEC #252",
+      "author": "kamoshika",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de253",
+      "name": "DEC #253",
+      "author": "Nameless",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de254",
+      "name": "DEC #254",
+      "author": "Nameless",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox",
+        "box-fold",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de255",
+      "name": "DEC #255",
+      "author": "Nameless",
+      "category": "Sphere Fold",
+      "tags": [
+        "dec",
+        "sphere-fold"
+      ]
+    },
+    {
+      "id": "fractal_de256",
+      "name": "DEC #256",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de257",
+      "name": "DEC #257",
+      "author": "gaziya5 aka gaz",
+      "category": "DEC Experimental",
+      "tags": [
+        "dec",
+        "experimental"
+      ]
+    },
+    {
+      "id": "fractal_de258",
+      "name": "DEC #258",
+      "author": "gaziya5 aka gaz",
+      "category": "Hybrid",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "fractal_de261",
+      "name": "DEC #261",
+      "author": "Nameless",
+      "category": "Mod Fold",
+      "tags": [
+        "dec",
+        "mod-fold",
+        "geometric"
+      ]
+    },
+    {
+      "id": "fractal_de262",
+      "name": "DEC #262",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de263",
+      "name": "DEC #263",
+      "author": "Nameless",
+      "category": "Box Fold",
+      "tags": [
+        "dec",
+        "box-fold"
+      ]
+    },
+    {
+      "id": "fractal_de264",
+      "name": "DEC #264",
+      "author": "gaziya5 aka gaz",
+      "category": "Trigonometric",
+      "tags": [
+        "dec",
+        "trigonometric"
+      ]
+    },
+    {
+      "id": "swirl",
+      "name": "swirl",
+      "author": "nimitz/yonatan",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "water",
+      "name": "water",
+      "author": "yonatan",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "organic"
+      ]
+    },
+    {
+      "id": "htree",
+      "name": "htree",
+      "author": "kamoshika",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "boxframe",
+      "name": "boxframe",
+      "author": "gaziya5 aka gaz",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "flipper",
+      "name": "flipper",
+      "author": "Adapted from code by Kali",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "KIFS",
+      "name": "KIFS",
+      "author": "Adapted from code by P_Malin",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "curly1",
+      "name": "curly1",
+      "author": "Jos Leys / Knighty",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "curly2",
+      "name": "curly2",
+      "author": "Jos Leys / Knighty",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "curly3",
+      "name": "curly3",
+      "author": "Jos Leys / Knighty / tdhooper",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "curly4",
+      "name": "curly4",
+      "author": "Jos Leys / Knighty / tdhooper",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "SpiderApollo",
+      "name": "SpiderApollo",
+      "author": "gaziya5 aka gaz",
+      "category": "Apollonian",
+      "tags": [
+        "dec",
+        "apollonian"
+      ]
+    },
+    {
+      "id": "ConstrainedApollo",
+      "name": "ConstrainedApollo",
+      "author": "gaziya5 aka gaz",
+      "category": "Apollonian",
+      "tags": [
+        "dec",
+        "apollonian"
+      ]
+    },
+    {
+      "id": "BoneGrid",
+      "name": "BoneGrid",
+      "author": "gaziya5 aka gaz",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "TreeBell",
+      "name": "TreeBell",
+      "author": "wyatt",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "TreeBell2",
+      "name": "TreeBell2",
+      "author": "wyatt",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "teef",
+      "name": "teef",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "ringo",
+      "name": "ringo",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "whorl",
+      "name": "whorl",
+      "author": "yonatan",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "tree",
+      "name": "tree",
+      "author": "yonatan",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "threads",
+      "name": "threads",
+      "author": "kamoshika",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "gate0",
+      "name": "gate0",
+      "author": "gaziya5 aka gaz",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "gates",
+      "name": "gates",
+      "author": "yonatan",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "castleRing",
+      "name": "castleRing",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "hatRing",
+      "name": "hatRing",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "gRails",
+      "name": "gRails",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "tree2",
+      "name": "tree2",
+      "author": "yonatan",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "ballDiamond",
+      "name": "ballDiamond",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "sinDungeon",
+      "name": "sinDungeon",
+      "author": "gaziya5 aka gaz",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "Julia",
+      "name": "Julia",
+      "author": "athibaul",
+      "category": "Quaternion",
+      "tags": [
+        "dec",
+        "julia"
+      ]
+    },
+    {
+      "id": "noby0",
+      "name": "noby0",
+      "author": "noby",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "noby1",
+      "name": "noby1",
+      "author": "noby",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "whorl2",
+      "name": "whorl2",
+      "author": "aiekick",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "snowflake",
+      "name": "snowflake",
+      "author": "Catzpaw",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "dec",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "cagedStar",
+      "name": "cagedStar",
+      "author": "Catzpaw",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "doubleNut",
+      "name": "doubleNut",
+      "author": "aiekick",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "snoflake3d",
+      "name": "snoflake3d",
+      "author": "gaz",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "dec",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "grid",
+      "name": "grid",
+      "author": "yonatan",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "bug",
+      "name": "bug",
+      "author": "yonatan",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "organic"
+      ]
+    },
+    {
+      "id": "spike",
+      "name": "spike",
+      "author": "gaz",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "fractalPump",
+      "name": "fractalPump",
+      "author": "snolot",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "flowerz",
+      "name": "flowerz",
+      "author": "yonatan",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "organic"
+      ]
+    },
+    {
+      "id": "griddy",
+      "name": "griddy",
+      "author": "Catzpaw",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "dark",
+      "name": "dark",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "reeds",
+      "name": "reeds",
+      "author": "gaz",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "organic"
+      ]
+    },
+    {
+      "id": "temple",
+      "name": "temple",
+      "author": "sxolastikos",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "rolls",
+      "name": "rolls",
+      "author": "gaz",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "warpedKlein",
+      "name": "warpedKlein",
+      "author": "catzpaw",
+      "category": "Kleinian",
+      "tags": [
+        "dec",
+        "kleinian"
+      ]
+    },
+    {
+      "id": "heartcube",
+      "name": "heartcube",
+      "author": "gaz",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "manscaped",
+      "name": "manscaped",
+      "author": "yonatan",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox"
+      ]
+    },
+    {
+      "id": "chorse",
+      "name": "chorse",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "gripple",
+      "name": "gripple",
+      "author": "gaz",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "getwork",
+      "name": "getwork",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "flor",
+      "name": "flor",
+      "author": "catzpaw",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "organic"
+      ]
+    },
+    {
+      "id": "mipple",
+      "name": "mipple",
+      "author": "catzpaw",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "prisnm",
+      "name": "prisnm",
+      "author": "gaz",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "tokamak",
+      "name": "tokamak",
+      "author": "i_dianov",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "gweave",
+      "name": "gweave",
+      "author": "gaz",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "rincut",
+      "name": "rincut",
+      "author": "illus0r",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "torii",
+      "name": "torii",
+      "author": "illus0r",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "bali",
+      "name": "bali",
+      "author": "illus0r",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "kalib",
+      "name": "kalib",
+      "author": "illus0r (modified)",
+      "category": "IFS",
+      "tags": [
+        "dec",
+        "ifs"
+      ]
+    },
+    {
+      "id": "schwarz",
+      "name": "schwarz",
+      "author": "Schwarz P",
+      "category": "Polyhedra",
+      "tags": [
+        "dec",
+        "schwarz"
+      ]
+    },
+    {
+      "id": "munger",
+      "name": "munger",
+      "author": "i_dianov",
+      "category": "Menger Sponge",
+      "tags": [
+        "dec",
+        "menger"
+      ]
+    },
+    {
+      "id": "viking",
+      "name": "viking",
+      "author": "i_dianov",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "knitt",
+      "name": "knitt",
+      "author": "i_dianov",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "rifs",
+      "name": "rifs",
+      "author": "illus0r",
+      "category": "IFS",
+      "tags": [
+        "dec",
+        "ifs"
+      ]
+    },
+    {
+      "id": "swizz",
+      "name": "swizz",
+      "author": "illus0r",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "swizz2",
+      "name": "swizz2",
+      "author": "illus0r",
+      "category": "Spirals & Swirls",
+      "tags": [
+        "dec",
+        "spiral"
+      ]
+    },
+    {
+      "id": "kalic",
+      "name": "kalic",
+      "author": "illus0r",
+      "category": "IFS",
+      "tags": [
+        "dec",
+        "ifs"
+      ]
+    },
+    {
+      "id": "spicy",
+      "name": "spicy",
+      "author": "leon",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "blocktree",
+      "name": "blocktree",
+      "author": "Jeyko",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "Lewpen_snowflake",
+      "name": "Lewpen snowflake",
+      "author": "Lewpen",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "dec",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "OriginFlowers",
+      "name": "OriginFlowers",
+      "author": "Lewpen",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "organic"
+      ]
+    },
+    {
+      "id": "Converge",
+      "name": "Converge",
+      "author": "Lewpen",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "mrange_apollo1",
+      "name": "mrange apollo1",
+      "author": "mrange",
+      "category": "Apollonian",
+      "tags": [
+        "dec",
+        "apollonian"
+      ]
+    },
+    {
+      "id": "mrange_apollo2",
+      "name": "mrange apollo2",
+      "author": "mrange",
+      "category": "Apollonian",
+      "tags": [
+        "dec",
+        "apollonian"
+      ]
+    },
+    {
+      "id": "mrange_tree1",
+      "name": "mrange tree1",
+      "author": "mrange",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "mrange_tree2",
+      "name": "mrange tree2",
+      "author": "mrange",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "mrange_mandelbox",
+      "name": "mrange mandelbox",
+      "author": "mrange",
+      "category": "Mandelbox",
+      "tags": [
+        "dec",
+        "mandelbox"
+      ]
+    },
+    {
+      "id": "ballFlake",
+      "name": "ballFlake",
+      "author": "natchinoyuchi ( modified )",
+      "category": "Koch & Pythagoras",
+      "tags": [
+        "dec",
+        "fractal-curve"
+      ]
+    },
+    {
+      "id": "greenDragon",
+      "name": "greenDragon",
+      "author": "guil",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "feeingers",
+      "name": "feeingers",
+      "author": "stduhpf",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "hexx",
+      "name": "hexx",
+      "author": "krakel",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "abbox",
+      "name": "abbox",
+      "author": "zackpudil",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "sonolith",
+      "name": "sonolith",
+      "author": "zackpudil",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "blobelisk",
+      "name": "blobelisk",
+      "author": "zackpudil",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "ringoo",
+      "name": "ringoo",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "shreddissimo",
+      "name": "shreddissimo",
+      "author": "yonatan",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "gnollum",
+      "name": "gnollum",
+      "author": "Kamoshika",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "cage",
+      "name": "cage",
+      "author": "aiekick",
+      "category": "Architectural",
+      "tags": [
+        "dec",
+        "geometric"
+      ]
+    },
+    {
+      "id": "stairs",
+      "name": "stairs",
+      "author": "Kamoshika",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "jumpthecrater",
+      "name": "jumpthecrater",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "toomanytrees",
+      "name": "toomanytrees",
+      "author": "michael0884",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    },
+    {
+      "id": "holeinone",
+      "name": "holeinone",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "aroundtheworld",
+      "name": "aroundtheworld",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "bewareofbumps",
+      "name": "bewareofbumps",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "mountainclimbing",
+      "name": "mountainclimbing",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "mindthegap",
+      "name": "mindthegap",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "thesponge",
+      "name": "thesponge",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "aroundthecitadel",
+      "name": "aroundthecitadel",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "megacitadel",
+      "name": "megacitadel",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "buildupspeed",
+      "name": "buildupspeed",
+      "author": "michael0884",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "ripplecube",
+      "name": "ripplecube",
+      "author": "leon",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "kaleidomecha",
+      "name": "kaleidomecha",
+      "author": "leon",
+      "category": "Other",
+      "tags": [
+        "dec"
+      ]
+    },
+    {
+      "id": "tree4",
+      "name": "tree4",
+      "author": "yonatan",
+      "category": "Organic",
+      "tags": [
+        "dec",
+        "tree"
+      ]
+    }
+  ]
+}

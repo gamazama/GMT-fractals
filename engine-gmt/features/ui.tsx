@@ -45,6 +45,7 @@ import { FormulaParamsWidget } from '../components/panels/formula/FormulaParamsW
 import { LfoList } from '../components/panels/formula/LfoList';
 import LightGizmo, { tick as lightGizmoTick } from './lighting/LightGizmo';
 import { DrawingOverlay, tick as drawingOverlayTick } from './drawing/DrawingOverlay';
+import { DrawingPanel } from './drawing/DrawingPanel';
 import { WebcamOverlay } from '../../engine/features/webcam/WebcamOverlay';
 import { DebugToolsOverlay } from '../../engine/features/debug_tools/DebugToolsOverlay';
 import {
@@ -155,6 +156,7 @@ export const registerGmtUi = () => {
 
     componentRegistry.register('overlay-drawing', DrawingOverlay as any);
     registerTick('drawingOverlayTick', TICK_PHASE.OVERLAY, drawingOverlayTick);
+    componentRegistry.register('panel-drawing', DrawingPanel as any);
 
     componentRegistry.register('overlay-webcam', WebcamOverlay as any);
     componentRegistry.register('overlay-debug-tools', DebugToolsOverlay as any);
