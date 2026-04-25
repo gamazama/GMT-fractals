@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { useAnimationStore } from '../../../store/animationStore';
 import { captureCameraKeyFrame } from '../../../engine/animation/cameraKeyRegistry';
-import { getProxy } from '../../../engine/worker/WorkerProxy';
+import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { FeatureComponentProps } from '../../../components/registry/ComponentRegistry';
 import Histogram from '../../../components/Histogram';

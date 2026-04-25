@@ -2,6 +2,16 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-25
+
+### Fix: FOV Dolly Link — correct WorkerProxy import in scene_widgets
+
+`engine-gmt/components/panels/scene_widgets.tsx` imported `getProxy` from `'../../../engine/worker/WorkerProxy'` (3 levels up = project root → the engine-core extraction stub). The stub's `_shadow.lastMeasuredDistance` defaults to `1` and is never updated. `handleDollyStart` read `probeDist = 1`, which passes the range guard `(> 0.0001 && < 900)`, so the dolly always assumed the subject was 1 unit away regardless of camera depth — making the zoom-and-move compensation wildly wrong.
+
+Fix: changed import to `'../../engine/worker/WorkerProxy'` (2 levels up = `engine-gmt/` → the real engine-gmt proxy that receives `FRAME_READY` with live `lastMeasuredDistance`).
+
+This is the same duplicate-module-state pattern as the Key Cam dirty bug (ViewportRefs). `scene_widgets.tsx` was 2 directories deep inside `engine-gmt/`, so the 3-level import climbed out of the overlay entirely; all other engine-gmt files using `'../../../engine/worker/WorkerProxy'` are ≥3 directories deep and correctly land on the engine-gmt copy.
+
 ## 2026-04-20
 
 ### Image-sequence export: PNG (RGBA) + JPG (per-pass)
