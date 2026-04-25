@@ -27,6 +27,7 @@ import { GmtLogo } from './topbar/Logo';
 import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
 import { registry } from './engine/FractalRegistry';
+import { saveGMFScene } from './utils/FormulaFormat';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { CenterHUD } from './topbar/CenterHUD';
@@ -556,9 +557,17 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         id: 'mesh-export',
         type: 'button',
         label: 'Mesh Export…',
-        title: 'Convert the current fractal to a VDB mesh (Pro).',
+        title: 'Convert the current fractal to a mesh.',
         when: () => useEngineStore.getState().advancedMode,
-        onSelect: () => console.info('[app-gmt] Mesh Export pending port'),
+        onSelect: () => {
+            try {
+                const gmf = saveGMFScene(useEngineStore.getState().getPreset() as any);
+                localStorage.setItem('gmt-mesh-export-scene', gmf);
+            } catch (err) {
+                console.warn('[app-gmt] Failed to save scene for Mesh Export:', err);
+            }
+            window.open('mesh-export/index.html', '_blank', 'noopener');
+        },
     });
 
     menu.registerItem('system', {
