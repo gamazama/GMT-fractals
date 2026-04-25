@@ -21,8 +21,15 @@ import type { Preset } from '../types';
 import { injectMetadata, extractMetadata } from './pngMetadata';
 import { generateShareStringFromPreset, parseShareString } from './Sharing';
 
-/** iTXt keyword used when embedding a scene in a PNG. */
+/** iTXt keyword used when embedding a scene in a PNG (new engine saves). */
 export const SCENE_METADATA_KEY = 'SceneData';
+
+/**
+ * Legacy iTXt keyword used by GMT (gmt-0.8.5) saves. PNGs exported by
+ * the original app embed their data under this key. We try it as a
+ * fallback so old saves round-trip cleanly.
+ */
+const LEGACY_GMT_METADATA_KEY = 'FractalData';
 
 // ── JSON ──────────────────────────────────────────────────────────────
 
@@ -31,10 +38,34 @@ export const serializeScene = (preset: Preset): string => {
     return JSON.stringify(preset, null, 2);
 };
 
-/** Parse a scene from a JSON string. Returns null on invalid JSON. */
-export const parseSceneJson = (json: string): Preset | null => {
+/**
+ * Parse a scene from a string — handles three formats:
+ *   1. Plain JSON preset  (engine saves, most .json files)
+ *   2. GMF with <Scene>   (GMT scene-saves: GMF header + <Scene>JSON</Scene>)
+ *   3. GMF formula-only   (v1 GMF: no <Scene> block — returns null, can't restore scene)
+ *
+ * Returns null on invalid / unrecognised content.
+ */
+export const parseSceneJson = (content: string): Preset | null => {
+    // GMF format: starts with a <!-- GMT comment block
+    if (content.trimStart().startsWith('<!--')) {
+        const sceneMatch = content.match(/<Scene>([\s\S]*?)<\/Scene>/);
+        if (sceneMatch) {
+            try {
+                return JSON.parse(sceneMatch[1].trim()) as Preset;
+            } catch (e) {
+                console.error('[SceneFormat] Invalid JSON in GMF <Scene> block:', e);
+                return null;
+            }
+        }
+        // v1 formula-only GMF — no scene state embedded, can't restore
+        console.warn('[SceneFormat] GMF has no <Scene> block — formula-only preset, scene not restored');
+        return null;
+    }
+
+    // Plain JSON
     try {
-        return JSON.parse(json) as Preset;
+        return JSON.parse(content) as Preset;
     } catch (e) {
         console.error('[SceneFormat] Invalid scene JSON:', e);
         return null;
@@ -56,20 +87,23 @@ export const embedScenePng = (png: Blob, preset: Preset): Promise<Blob> => {
 /**
  * Extract a scene from a PNG's iTXt chunk. Returns null if the PNG has
  * no embedded scene data or the data fails to parse.
+ *
+ * Tries the engine's own key ('SceneData') first, then the legacy GMT
+ * key ('FractalData') so PNGs saved by gmt-0.8.5 load correctly.
  */
 export const extractScenePng = async (png: File): Promise<Preset | null> => {
-    const json = await extractMetadata(png, SCENE_METADATA_KEY);
-    if (!json) return null;
-    return parseSceneJson(json);
+    let content = await extractMetadata(png, SCENE_METADATA_KEY);
+    if (!content) content = await extractMetadata(png, LEGACY_GMT_METADATA_KEY);
+    if (!content) return null;
+    return parseSceneJson(content);
 };
 
 // ── Universal file loader ─────────────────────────────────────────────
 
 /**
- * Load a scene from any supported file. Auto-detects format from MIME
- * type / extension:
- *   - image/png → extracts from iTXt
- *   - anything else → parses as JSON text
+ * Load a scene from any supported file. Auto-detects format:
+ *   - image/png   → extracts scene from iTXt chunk (SceneData or FractalData key)
+ *   - .gmf / .json / anything else → parseSceneJson handles GMF + plain JSON
  */
 export const loadSceneFromFile = async (file: File): Promise<Preset | null> => {
     const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');

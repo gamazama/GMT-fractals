@@ -216,7 +216,7 @@ export const LoadButton: React.FC = () => {
             <input
                 ref={inputRef}
                 type="file"
-                accept="application/json,image/png"
+                accept="application/json,.json,.gmf,image/png"
                 aria-label="Load scene file"
                 className="hidden"
                 onChange={(e) => {
