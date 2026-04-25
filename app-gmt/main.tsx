@@ -36,6 +36,7 @@ import { installUndo } from '../engine/plugins/Undo';
 import { installCamera } from '../engine/plugins/Camera';
 import { installGmtCameraBinders } from '../engine-gmt/animation/cameraBinders';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
+import { useAnimationStore } from '../store/animationStore';
 import { registerRenderPopup } from '../engine/animation/renderPopupRegistry';
 import { RenderPopup } from '../engine-gmt/components/timeline/RenderPopup';
 import { installMenu } from '../engine/plugins/Menu';
@@ -228,12 +229,9 @@ shortcuts.register({
         if (s.interactionMode && s.interactionMode !== 'none') {
             s.setInteractionMode?.('none');
         }
-        // Animation deselect — best-effort; not all apps mount the
-        // animation store.
-        try {
-            const aw = (window as any).useAnimationStore;
-            aw?.getState?.().deselectAll?.();
-        } catch { /* no-op */ }
+        // Animation deselect — direct import; no window-handle needed
+        // (F7 cleanup landed: animationStore is just a regular module).
+        (useAnimationStore.getState() as any).deselectAll?.();
     },
 });
 

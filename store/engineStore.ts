@@ -34,6 +34,13 @@ import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { animationEngine } from '../engine/AnimationEngine';
 import '../engine/features'; // Ensure features are registered
+// Eager import so the animation store's module is loaded before
+// anything in this file (and the EngineBridge that calls
+// bindStoreToEngine) tries to read it. Removes the need for the
+// window.useAnimationStore handle that previously bridged the two
+// stores at runtime — animationStore depends only on its own slice
+// files, no cycle back into here.
+import { useAnimationStore } from './animationStore';
 
 import { compileGate } from './CompileGate';
 
@@ -296,12 +303,13 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
         p.animations = s.animations;
 
         try {
-            // @ts-expect-error — window global for cross-store access without import cycle
-            const animStore = window.useAnimationStore?.getState?.();
-            if (animStore) {
-                p.sequence = animStore.sequence;
-                p.duration = animStore.durationFrames;
-            }
+            // Imported eagerly at module bottom (line ~383) — no cycle,
+            // no window-handle indirection. animationStore depends on
+            // its slice files; nothing in that subtree imports back
+            // into engineStore.
+            const animStore = useAnimationStore.getState();
+            p.sequence = animStore.sequence;
+            p.duration = animStore.durationFrames;
         } catch (e) {
             console.warn("Failed to save animation sequence:", e);
         }
@@ -375,19 +383,12 @@ export const getShaderConfigFromState = (state: EngineStoreState): any => {
  * Wires store subscriptions → worker proxy events at app boot.
  * Apps call this once after store construction.
  */
-// Force-import the animation store at module load so its
-// `window.useAnimationStore` side effect fires before EngineBridge's
-// useEffect tries to read it. Without this, apps that only reach
-// animationStore through a lazy-loaded Timeline would see a null
-// animStore in animationEngine and playback would silently not work.
-import { useAnimationStore } from './animationStore';
-
 export const bindStoreToEngine = () => {
     const s = useEngineStore.getState();
 
     // Connect AnimationEngine to stores (decoupled injection).
-    // window.useAnimationStore is set at module load of animationStore.ts;
-    // our eager import above ensures it's populated before this runs.
+    // useAnimationStore is imported eagerly above (alongside the
+    // other slices), no window-handle indirection needed.
     animationEngine.connect(useAnimationStore as any, useEngineStore);
 
     engine.isPaused = s.isPaused;

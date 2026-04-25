@@ -12,8 +12,11 @@ export const useAnimationStore = create<AnimationStore>()(subscribeWithSelector(
     ...createSequenceSlice(set, get, api)
 })));
 
-// Expose for FractalStore to avoid circular dependency lookup issues during save
+// Dev-console handle (matching the __camera / __animEngine / __store
+// pattern). Production code uses the imported reference directly —
+// the cross-store access path that previously needed this handle was
+// resolved by importing animationStore eagerly into engineStore (no
+// cycle: animationStore depends only on its own slice files).
 if (typeof window !== 'undefined') {
-    // @ts-expect-error — custom window global for cross-store access without import cycle
-    window.useAnimationStore = useAnimationStore;
+    (window as any).useAnimationStore = useAnimationStore;
 }

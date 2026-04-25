@@ -18,6 +18,7 @@
 
 import React from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { useAnimationStore } from '../../store/animationStore';
 import { shortcuts } from './Shortcuts';
 import { topbar } from './TopBar';
 
@@ -119,14 +120,12 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
         // by scope-score.
         //
         // Animation history lives in animationStore.undoStack (sequence
-        // snapshots), not in the unified historySlice. The plugin
-        // resolves animationStore via window.useAnimationStore — which
-        // animationStore.ts sets at module load — to avoid a hard
-        // dep on the animation package from engine-core. Apps that
-        // don't mount the animation store get a no-op handler.
+        // snapshots), not in the unified historySlice — F2b's planned
+        // unification never landed. Direct import of useAnimationStore
+        // is fine: the animation store's slice files don't import back
+        // into engine-core, so there's no cycle.
         const animUndo = (action: 'undo' | 'redo') => {
-            const aw = (typeof window !== 'undefined' ? (window as any).useAnimationStore : undefined);
-            const fn = aw?.getState?.()?.[action];
+            const fn = (useAnimationStore.getState() as any)[action];
             if (typeof fn === 'function') fn();
         };
         shortcuts.register({
