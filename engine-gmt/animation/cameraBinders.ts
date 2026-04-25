@@ -138,7 +138,11 @@ const captureGmtCameraKeyFrame = (
 
     const animActions = useAnimationStore.getState() as any;
 
-    // Snapshot for undo unless caller opted out (record-mode loops do).
+    // Snapshot ONCE for undo unless caller opted out (record-mode loops
+    // do). Bypasses the per-action snapshot path on addTrack/addKeyframe
+    // — those would emit one snapshot per call (7 entries from one Key
+    // Cam press on the very first capture, since all six tracks are
+    // missing). One press → one undo entry.
     if (!opts?.skipSnapshot && typeof animActions.snapshot === 'function') {
         animActions.snapshot();
     }
@@ -150,12 +154,31 @@ const captureGmtCameraKeyFrame = (
     const isFirstCamKey = !xTrack || xTrack.keyframes.length === 0;
     const interpolation = opts?.interpolation ?? (isFirstCamKey ? 'Linear' : 'Bezier');
 
-    for (const t of tracks) {
-        if (!animActions.sequence.tracks[t.id]) {
-            animActions.addTrack(t.id, t.label);
+    // Single state update — track create (when missing) + keyframe
+    // upsert for all six tracks in one go. No intermediate snapshots.
+    useAnimationStore.setState((state: any) => {
+        const newTracks = { ...state.sequence.tracks };
+        for (const t of tracks) {
+            let track = newTracks[t.id];
+            if (!track) {
+                track = { id: t.id, type: 'float', label: t.label, keyframes: [] };
+                newTracks[t.id] = track;
+            }
+            const keys = track.keyframes.filter((k: any) => Math.abs(k.frame - frame) > 0.001);
+            keys.push({
+                id: Math.random().toString(36).slice(2),
+                frame,
+                value: t.val,
+                interpolation,
+                autoTangent: interpolation === 'Bezier',
+                brokenTangents: false,
+            });
+            keys.sort((a: any, b: any) => a.frame - b.frame);
+            // Replace the track object so React sees the change.
+            newTracks[t.id] = { ...track, keyframes: keys };
         }
-        animActions.addKeyframe(t.id, frame, t.val, interpolation);
-    }
+        return { sequence: { ...state.sequence, tracks: newTracks } };
+    });
 };
 
 /** Register all GMT camera-track binders + scrub hooks against the
