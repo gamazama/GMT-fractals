@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { animationEngine, type ScrubContext } from '../../engine/AnimationEngine';
 import { binderRegistry } from '../../engine/animation/binderRegistry';
-import { setCameraKeyCaptureFn } from '../../engine/animation/cameraKeyRegistry';
+import { setCameraKeyCaptureFn, type CameraKeyCaptureOptions } from '../../engine/animation/cameraKeyRegistry';
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
@@ -100,18 +100,27 @@ const postScrub = (_ctx: ScrubContext) => {
 };
 
 /** Capture the live camera into `camera.unified.{x,y,z}` +
- *  `camera.rotation.{x,y,z}` keyframes. Used by the TimelineToolbar
- *  Key Cam button via setCameraKeyCaptureFn — the default capture in
- *  cameraKeyRegistry walks store paths, but GMT's camera lives in
- *  `cameraRot` (quaternion) + `sceneOffset` (split-precision vec3),
- *  not under a `camera.*` field, so the default no-ops. This path
- *  reads from the live R3F camera via CameraUtils, mirroring the
- *  legacy sequenceSlice.captureCameraFrame logic.
+ *  `camera.rotation.{x,y,z}` keyframes. Single source of truth for
+ *  every site in the app that wants to snapshot the camera — Key Cam
+ *  button, record-mode driver in Navigation, manual capture buttons
+ *  in scene_widgets all funnel here through `captureCameraKeyFrame`.
  *
- *  Auto-creates each track on first press so the user doesn't have to
- *  pre-add empty tracks. Idempotent for the existing-track case.
+ *  Reads from the live R3F camera via CameraUtils. Auto-creates each
+ *  track on first press so callers don't need to pre-add tracks.
+ *  Idempotent for the existing-track case.
+ *
+ *  Options:
+ *    skipSnapshot — pass true from per-frame record loops so the undo
+ *      stack doesn't fill with intermediate frames.
+ *    interpolation — explicit override; otherwise picks Linear for
+ *      the very first key on `camera.unified.x` and Bezier afterwards
+ *      (smart-default mirrors the original sequenceSlice behaviour).
  */
-const captureGmtCameraKeyFrame = (frame: number, _tracks: readonly string[]): void => {
+const captureGmtCameraKeyFrame = (
+    frame: number,
+    _tracks: readonly string[],
+    opts?: CameraKeyCaptureOptions,
+): void => {
     const cam = getViewportCamera() || engine.activeCamera;
     if (!cam) return;
 
@@ -127,14 +136,25 @@ const captureGmtCameraKeyFrame = (frame: number, _tracks: readonly string[]): vo
         { id: 'camera.rotation.z', val: euler.z,   label: 'Rotation Z' },
     ];
 
-    const animActions = useAnimationStore.getState();
-    const seq = (animActions as any).sequence;
+    const animActions = useAnimationStore.getState() as any;
+
+    // Snapshot for undo unless caller opted out (record-mode loops do).
+    if (!opts?.skipSnapshot && typeof animActions.snapshot === 'function') {
+        animActions.snapshot();
+    }
+
+    // Smart default: Linear for the first key on camera.unified.x,
+    // Bezier for subsequent. Matches the legacy sequenceSlice
+    // .captureCameraFrame heuristic so existing recordings roundtrip.
+    const xTrack = animActions.sequence?.tracks?.['camera.unified.x'];
+    const isFirstCamKey = !xTrack || xTrack.keyframes.length === 0;
+    const interpolation = opts?.interpolation ?? (isFirstCamKey ? 'Linear' : 'Bezier');
 
     for (const t of tracks) {
-        if (!seq.tracks[t.id]) {
-            (animActions as any).addTrack(t.id, t.label);
+        if (!animActions.sequence.tracks[t.id]) {
+            animActions.addTrack(t.id, t.label);
         }
-        (animActions as any).addKeyframe(t.id, frame, t.val);
+        animActions.addKeyframe(t.id, frame, t.val, interpolation);
     }
 };
 

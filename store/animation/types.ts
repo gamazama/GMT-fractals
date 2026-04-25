@@ -99,7 +99,6 @@ export interface SequenceSliceActions {
     duplicateSelection: () => void;
     loopSelection: (times: number) => void;
     
-    captureCameraFrame: (frame: number, skipSnapshot?: boolean, interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
     simplifySelectedKeys: (tolerance?: number) => void;
 
     snapshot: () => void;

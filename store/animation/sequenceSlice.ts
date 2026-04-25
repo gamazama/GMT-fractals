@@ -1,20 +1,8 @@
 
 import { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
-import * as THREE from 'three';
 import { AnimationStore, SequenceSliceState, SequenceSliceActions, HistoryItem, CopiedKeyframe } from './types';
 import { Track, Keyframe, AnimationSequence } from '../../types';
-import { getProxy } from '../../engine/worker/WorkerProxy';
-const engine = getProxy();
-import { getViewportCamera } from '../../engine/worker/ViewportRefs';
-
-// Stub: GMT's CameraUtils.getUnifiedFromEngine read the engine's active
-// camera + split-float offset. The generic engine has no camera math,
-// so apps that want to record keyframes from a live camera install
-// their own helper.
-const CameraUtils = {
-    getUnifiedFromEngine: () => ({ x: 0, y: 0, z: 0 }),
-};
 import { simplifyTrack } from '../../utils/CurveFitting';
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';
@@ -497,70 +485,12 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         });
     },
 
-    // --- COMPLEX OPS ---
-    captureCameraFrame: (frame, skipSnapshot = false, interpolation) => {
-        const cam = getViewportCamera() || engine.activeCamera;
-        if (!cam) return;
-        if (!skipSnapshot) get().snapshot();
-
-        // Use Unified Coordinate Utility
-        const unified = CameraUtils.getUnifiedFromEngine();
-
-        // Get Rotation as Euler (Radians for storage)
-        const q = cam.quaternion;
-        const euler = new THREE.Euler().setFromQuaternion(q);
-        
-        const cameraTracks = [
-            { id: 'camera.unified.x', val: unified.x, label: 'Position X' },
-            { id: 'camera.unified.y', val: unified.y, label: 'Position Y' },
-            { id: 'camera.unified.z', val: unified.z, label: 'Position Z' },
-            { id: 'camera.rotation.x', val: euler.x, label: 'Rotation X' },
-            { id: 'camera.rotation.y', val: euler.y, label: 'Rotation Y' },
-            { id: 'camera.rotation.z', val: euler.z, label: 'Rotation Z' }
-        ];
-
-        set(state => {
-            const newTracks = { ...state.sequence.tracks };
-            
-            const xTrack = newTracks['camera.unified.x'];
-            const isFirstCamKey = !xTrack || xTrack.keyframes.length === 0;
-            const smartInterp = interpolation || (isFirstCamKey ? 'Linear' : 'Bezier');
-            
-            cameraTracks.forEach(t => {
-                let track = newTracks[t.id];
-                if (!track) {
-                    track = { id: t.id, type: 'float', label: t.label, keyframes: [], hidden: false };
-                    newTracks[t.id] = track;
-                }
-                
-                const newKey: Keyframe = { 
-                    id: nanoid(), 
-                    frame, 
-                    value: t.val, 
-                    interpolation: smartInterp, 
-                    autoTangent: smartInterp === 'Bezier', 
-                    brokenTangents: false 
-                };
-                
-                const others = track.keyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
-                const sorted = [...others, newKey].sort((a,b) => a.frame - b.frame);
-                const idx = sorted.findIndex(k => k.id === newKey.id);
-                
-                if (smartInterp === 'Bezier') {
-                    const prev = idx > 0 ? sorted[idx-1] : undefined;
-                    const next = idx < sorted.length-1 ? sorted[idx+1] : undefined;
-                    const { l, r } = AnimationMath.calculateTangents(newKey, prev, next, 'Auto');
-                    newKey.leftTangent = l; 
-                    newKey.rightTangent = r;
-                }
-                
-                TrackUtils.updateNeighbors(sorted, idx);
-                track.keyframes = sorted;
-            });
-            
-            return { sequence: { ...state.sequence, tracks: newTracks } };
-        });
-    },
+    // captureCameraFrame removed — was a GMT-shaped action stuck on the
+    // engine-core animation store, with a stub CameraUtils that always
+    // returned (0,0,0) for non-GMT apps. All call sites now go through
+    // engine/animation/cameraKeyRegistry.captureCameraKeyFrame which is
+    // the single host-pluggable entry point. See F5 in
+    // docs/engine/20_Fragility_Audit.md.
 
     simplifySelectedKeys: (tolerance = 0.01) => {
         get().snapshot();

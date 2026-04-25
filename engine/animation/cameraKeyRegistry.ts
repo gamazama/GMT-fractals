@@ -22,11 +22,37 @@
 let cameraKeyTracks: readonly string[] = [];
 const listeners = new Set<() => void>();
 
-/** Optional app-provided capture function. Apps override when their
- *  camera values live outside the DDFS store (e.g. GMT reads from
- *  engine.activeCamera). Default reads scalar values from store paths
- *  — works for any DDFS-resident camera (fluid-toy, fractal-toy). */
-export type CameraKeyCaptureFn = (frame: number, tracks: readonly string[]) => void;
+/** Options threaded into the registered capture function. Mirror what
+ *  the legacy sequenceSlice.captureCameraFrame supported — apps pass
+ *  these from per-frame record-mode loops + manual Scene-panel captures. */
+export interface CameraKeyCaptureOptions {
+    /** Skip the undo/redo snapshot. Default false. Set true for
+     *  per-frame record-mode loops so the undo stack doesn't fill
+     *  with intermediate frames. */
+    skipSnapshot?: boolean;
+    /** Interpolation type for the new keyframe. Apps can pass 'Linear'
+     *  during playback so Bezier auto-tangents don't overshoot. Capture
+     *  fns are free to ignore this and pick a default. */
+    interpolation?: 'Linear' | 'Bezier' | 'Step';
+}
+
+/** App-provided capture function. The registered fn is the SINGLE
+ *  source of truth for "snapshot the live camera into keyframes" — Key
+ *  Cam button, record-mode auto-capture, scene-panel manual captures
+ *  all funnel through `captureCameraKeyFrame` below.
+ *
+ *  Apps register this when their camera values live outside the DDFS
+ *  store (e.g. GMT reads sceneOffset + cameraRot from R3F). When no fn
+ *  is registered, the default DDFS-store walker runs — works for any
+ *  camera whose values live under a feature slice (fluid-toy / fractal-
+ *  toy). Skip-stub-fail-loud is the rule: register or accept the walker
+ *  fallback; never half-register one path and let another stub win.
+ */
+export type CameraKeyCaptureFn = (
+    frame: number,
+    tracks: readonly string[],
+    opts?: CameraKeyCaptureOptions,
+) => void;
 let _captureFn: CameraKeyCaptureFn | null = null;
 
 export function setCameraKeyCaptureFn(fn: CameraKeyCaptureFn): void {
@@ -36,13 +62,23 @@ export function setCameraKeyCaptureFn(fn: CameraKeyCaptureFn): void {
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
 
-export function captureCameraKeyFrame(frame: number): void {
-    if (_captureFn) { _captureFn(frame, cameraKeyTracks); return; }
+/** Capture the current camera into keyframes at `frame`. The single
+ *  entry point — every site that wants to snapshot the camera (Key
+ *  Cam button, record-mode driver, manual capture buttons) calls this.
+ *  Routes through the host-registered fn if any; falls back to the
+ *  default DDFS-store walker otherwise. */
+export function captureCameraKeyFrame(
+    frame: number,
+    opts?: CameraKeyCaptureOptions,
+): void {
+    if (_captureFn) { _captureFn(frame, cameraKeyTracks, opts); return; }
     // Default capture: path-resolve each track to a scalar in the DDFS
     // store and call the animation-store addKeyframe. Supports both
     // pure-scalar paths (`sceneCamera.zoom`) and UNDERSCORE vec-component
     // paths (`sceneCamera.center_x`) — the latter resolves the base part
-    // (`center`) to a vec, then picks the axis.
+    // (`center`) to a vec, then picks the axis. The walker doesn't honor
+    // skipSnapshot / interpolation — apps that need those options register
+    // a host-side capture fn instead.
     const state = useEngineStore.getState() as any;
     const animActions = useAnimationStore.getState();
     for (const tid of cameraKeyTracks) {

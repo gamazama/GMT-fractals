@@ -13,6 +13,7 @@ import { CameraState, CameraMode, PreciseVector3 } from '../types';
 import { useInputController } from './useInputController';
 import { usePhysicsProbe } from './usePhysicsProbe';
 import { useAnimationStore } from '../../store/animationStore';
+import { captureCameraKeyFrame } from '../../engine/animation/cameraKeyRegistry';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
 import { CameraController } from '../engine/controllers/CameraController';
 import { VirtualSpace } from '../engine/PrecisionMath';
@@ -267,7 +268,11 @@ const Navigation: React.FC<NavigationProps> = ({
   const recordCamera = useAnimationStore(s => s.recordCamera);
   const currentFrame = useAnimationStore(s => s.currentFrame);
   const sequence = useAnimationStore(s => s.sequence);
-  const captureCameraFrame = useAnimationStore(s => s.captureCameraFrame);
+  // Camera-keyframe captures funnel through the cameraKeyRegistry's
+  // single entry point — host (engine-gmt) registered captureGmtCameraKeyFrame
+  // resolves it to a sceneOffset + Euler-rotation snapshot. Replaces the
+  // legacy captureCameraFrame on useAnimationStore which had a stub
+  // CameraUtils.getUnifiedFromEngine in engine-core (returned 0,0,0).
   
   const isMovingRef = useRef(false);
   const stopTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -475,7 +480,12 @@ const Navigation: React.FC<NavigationProps> = ({
                     : { position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, rotation: { x: camera.quaternion.x, y: camera.quaternion.y, z: camera.quaternion.z, w: camera.quaternion.w }, sceneOffset: { ...engine.sceneOffset }, targetDistance: engine.lastMeasuredDistance };
                 onStart(camState);
             }
-            if (isRecording && recordCamera) captureCameraFrame(currentFrame, true, isPlaying ? 'Linear' : 'Bezier');
+            if (isRecording && recordCamera) {
+                captureCameraKeyFrame(currentFrame, {
+                    skipSnapshot: true,
+                    interpolation: isPlaying ? 'Linear' : 'Bezier',
+                });
+            }
         }
 
       if (posChanged || rotChanged || isCurrentlyActive) {

@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { useAnimationStore } from '../../../store/animationStore';
+import { captureCameraKeyFrame } from '../../../engine/animation/cameraKeyRegistry';
 import { getProxy } from '../../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { FeatureComponentProps } from '../../../components/registry/ComponentRegistry';
@@ -157,11 +158,11 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
 
         // --- KEYFRAME RECORDING FOR SIDE EFFECTS ---
         // (FOV slider handles its own keyframe, but we must handle Focus & Camera Move)
-        const { isRecording, captureCameraFrame, addKeyframe, addTrack, currentFrame, sequence, isPlaying } = useAnimationStore.getState();
-        
+        const { isRecording, addKeyframe, addTrack, currentFrame, sequence, isPlaying } = useAnimationStore.getState();
+
         if (isRecording) {
-            const interp = isPlaying ? 'Linear' : 'Bezier';
-            
+            const interp: 'Linear' | 'Bezier' = isPlaying ? 'Linear' : 'Bezier';
+
             // 1. Record Focus Distance Change
             if (updates.dofFocus !== undefined) {
                  const tid = 'optics.dofFocus';
@@ -169,18 +170,20 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
                  addKeyframe(tid, currentFrame, updates.dofFocus, interp);
             }
 
-            // 2. Record Camera Move (Dolly)
+            // 2. Record Camera Move (Dolly) — single capture path via
+            //    cameraKeyRegistry; host-registered fn (engine-gmt's
+            //    captureGmtCameraKeyFrame) reads sceneOffset + rotation.
             if (dollyLocked) {
-                 captureCameraFrame(currentFrame, true, interp);
+                 captureCameraKeyFrame(currentFrame, { skipSnapshot: true, interpolation: interp });
             }
         }
     };
 
     const handleFovKeyToggle = () => {
         if (dollyLocked) {
-            const { currentFrame, captureCameraFrame, isPlaying } = useAnimationStore.getState();
+            const { currentFrame, isPlaying } = useAnimationStore.getState();
             // Capture camera frame when keying FOV if locked, because the camera position is tied to the FOV
-            captureCameraFrame(currentFrame, true, isPlaying ? 'Linear' : 'Bezier');
+            captureCameraKeyFrame(currentFrame, { skipSnapshot: true, interpolation: isPlaying ? 'Linear' : 'Bezier' });
         }
     };
 
