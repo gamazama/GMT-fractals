@@ -45,14 +45,22 @@ export interface ParamConfig {
     type: ParamType;
     default: any;
     label: string;
-    shortId?: string; 
+    shortId?: string;
     uniform?: string;
     min?: number;
     max?: number;
     step?: number;
     group?: string;
+    /** One-line hint copy. Rendered under the param row when the
+     *  global `showHints` toggle is on (engine reads from store). Keep
+     *  this short — for depth, point at a help topic via `helpId`. */
     description?: string;
-    hidden?: boolean; 
+    /** Help topic id this param links to. Emitted on the row as
+     *  `data-help-id` so the right-click contextual menu can pick it
+     *  up via the DOM walk; also drives the `?` button rendered
+     *  alongside the description (clicking it calls `openHelp`). */
+    helpId?: string;
+    hidden?: boolean;
     noReset?: boolean; 
     confirmation?: string;      
     isAdvanced?: boolean;       
@@ -160,6 +168,13 @@ export interface FeatureEngineConfig {
 export interface GroupConfig {
     label: string;
     collapsible?: boolean;
+    /** Optional one-line hint shown above the group's params when
+     *  `showHints` is on. */
+    description?: string;
+    /** Help topic id for the group as a whole. Emitted as
+     *  `data-help-id` on the group's wrapper div so right-clicking
+     *  anywhere in the group surfaces it. */
+    helpId?: string;
 }
 
 export interface FeatureDefinition {

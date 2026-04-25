@@ -56,6 +56,13 @@ export const MaterialFeature: FeatureDefinition = {
     tabConfig: {
         label: 'Shader', // Renamed from Shading
     },
+    groups: {
+        surface: {
+            label: 'Surface',
+            description: 'Direct-light shading on the fractal surface.',
+            helpId: 'mat.surface',
+        },
+    },
     params: {
         // --- SURFACE ---
         diffuse: {
@@ -65,7 +72,9 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'di',
             uniform: 'uDiffuse',
             min: 0.0, max: 2.0, step: 0.01,
-            group: 'surface'
+            group: 'surface',
+            description: 'Strength of the gradient colour applied to lit surfaces.',
+            helpId: 'mat.diffuse',
         },
         reflection: {
             type: 'float',
@@ -74,7 +83,9 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 're',
             uniform: 'uReflection',
             min: 0.0, max: 1.0, step: 0.01,
-            group: 'surface'
+            group: 'surface',
+            description: 'Tints highlights with the surface colour as the surface gets more metallic.',
+            helpId: 'mat.metallic',
         },
         specular: {
             type: 'float',
@@ -83,7 +94,9 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'sp',
             uniform: 'uSpecular',
             min: 0.0, max: 2.0, step: 0.01,
-            group: 'surface'
+            group: 'surface',
+            description: 'Brightness of direct-light specular highlights.',
+            helpId: 'mat.specular',
         },
         roughness: {
             type: 'float',
@@ -92,9 +105,11 @@ export const MaterialFeature: FeatureDefinition = {
             shortId: 'ro',
             uniform: 'uRoughness',
             min: 0.001, max: 1.0, step: 0.001,
-            group: 'surface'
+            group: 'surface',
+            description: 'Spreads highlights wider as roughness increases.',
+            helpId: 'mat.roughness',
         },
-        
+
         // --- RIM ---
         rim: {
             type: 'float',
@@ -104,7 +119,9 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uRim',
             min: 0.0, max: 10.0, step: 0.01,
             scale: 'log',
-            group: 'surface'
+            group: 'surface',
+            description: 'Adds a glow along edges that face away from the camera.',
+            helpId: 'mat.rim',
         },
         rimExponent: {
             type: 'float',
@@ -115,7 +132,9 @@ export const MaterialFeature: FeatureDefinition = {
             min: 1.0, max: 16.0, step: 0.1,
             group: 'surface',
             parentId: 'rim',
-            condition: { gt: 0.0 }
+            condition: { gt: 0.0 },
+            description: 'Higher values keep the rim glow tight to the silhouette.',
+            helpId: 'mat.rim',
         },
         rimColor: {
             type: 'color',
@@ -125,7 +144,9 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uRimColor',
             group: 'surface',
             parentId: 'rim',
-            condition: { gt: 0.0 }
+            condition: { gt: 0.0 },
+            description: 'Tint of the rim glow.',
+            helpId: 'mat.rim',
         },
 
         // --- ENVIRONMENT ---

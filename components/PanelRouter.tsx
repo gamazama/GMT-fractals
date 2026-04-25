@@ -79,6 +79,21 @@ const featuresToItems = (def: PanelDefinition): PanelItem[] => {
     return out;
 };
 
+/** Wrap a node in a data-help-id div when the manifest item declares
+ *  one. Lets right-click contextual help pick up panel-level grouping
+ *  (e.g. an Effects roll-up) without requiring the underlying feature
+ *  to know about it. Skips the wrapper when no helpId is set so we
+ *  don't litter the DOM. */
+const withHelpId = (node: React.ReactNode, helpId: string | undefined, key: string): React.ReactNode => {
+    if (node === null || node === undefined) return node;
+    if (!helpId) return node;
+    return (
+        <div key={key} data-help-id={helpId}>
+            {node}
+        </div>
+    );
+};
+
 const renderItem = (
     item: PanelItem,
     index: number,
@@ -87,22 +102,25 @@ const renderItem = (
 ): React.ReactNode => {
     if (!evalShowIf(item.showIf, state as never)) return null;
 
+    let node: React.ReactNode;
     switch (item.type) {
         case 'separator':
             return <div key={`sep-${index}`} className="h-px bg-white/10 my-2 mx-3" />;
 
         case 'section':
-            return (
+            node = (
                 <div key={`section-${index}-${item.label}`} className="px-2 pt-2">
                     <SectionLabel>{item.label}</SectionLabel>
                 </div>
             );
+            break;
 
         case 'widget':
-            return renderWidget(item.id, `item-${index}`, widgetProps, item.props);
+            node = renderWidget(item.id, `item-${index}`, widgetProps, item.props);
+            break;
 
         case 'feature':
-            return (
+            node = (
                 <AutoFeaturePanel
                     key={`feat-${item.id}-${index}`}
                     featureId={item.id}
@@ -112,9 +130,10 @@ const renderItem = (
                     className={item.className}
                 />
             );
+            break;
 
         case 'collapsible':
-            return (
+            node = (
                 <CollapsibleSection
                     key={`collapsible-${index}-${item.label}`}
                     label={item.label}
@@ -125,6 +144,7 @@ const renderItem = (
                     )}
                 </CollapsibleSection>
             );
+            break;
 
         case 'accordion': {
             const visible = item.sections.filter((s) =>
@@ -133,12 +153,14 @@ const renderItem = (
             const sections: AccordionSection[] = visible.map((s, sIdx) =>
                 accordionSectionToProp(s, sIdx, index, state, widgetProps),
             );
-            return <Accordion key={`accordion-${index}`} sections={sections} />;
+            node = <Accordion key={`accordion-${index}`} sections={sections} />;
+            break;
         }
 
         default:
             return null;
     }
+    return withHelpId(node, item.helpId, `helpwrap-${index}`);
 };
 
 const accordionSectionToProp = (
@@ -165,6 +187,7 @@ const accordionSectionToProp = (
     return {
         id: s.id,
         label: s.label,
+        helpId: s.helpId,
         dimmed: s.activePredicate !== undefined && !isActive,
         defaultOpen,
         group: s.group,

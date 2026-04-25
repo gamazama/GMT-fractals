@@ -82,6 +82,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     const advancedMode = useEngineStore(s => s.advancedMode);
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const showHints = useEngineStore(s => s.showHints);
+    const openHelp = useEngineStore(s => s.openHelp);
     
     const [confirming, setConfirming] = useState<{key: string, value: any, message: string} | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -396,6 +397,30 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         return null;
     };
 
+    /** Hint row rendered under a param when showHints is on. The
+     *  `?` button on the right opens the help topic when `helpId` is
+     *  set; without a helpId it's just static hint copy. */
+    const renderHint = (text: string, helpId: string | undefined, key: string) => (
+        <div
+            key={key}
+            className="flex items-center gap-1 px-3 py-1.5 bg-white/[0.06] group/hint"
+        >
+            <p className="flex-1 text-[9px] text-gray-600 leading-tight group-hover/hint:text-gray-300 transition-colors cursor-default">
+                {text}
+            </p>
+            {helpId && openHelp && (
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); openHelp(helpId); }}
+                    title={`Help: ${helpId}`}
+                    className="shrink-0 w-3.5 h-3.5 flex items-center justify-center text-[8px] font-bold rounded-sm bg-white/5 text-gray-500 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors"
+                >
+                    ?
+                </button>
+            )}
+        </div>
+    );
+
     const renderNode = (id: string, isHalfWidth: boolean = false) => {
         const config = feature.params[id];
         // EXCLUSION CHECK
@@ -418,25 +443,25 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const hasCustomUIChildren = feature.customUI?.some(c => c.parentId === id) ?? false;
         const isParentSlider = childIds.length > 0 || hasCustomUIChildren;
 
-        // For parent params, inject description as first indented child
+        // For parent params, inject description as first indented child.
+        // The `?` help-link button comes free when config.helpId is set.
         const showDescription = showHints && config.description && !isDisabled && variant !== 'dense'
             && (config.type !== 'boolean' || sliceState?.[id]);
         if (showDescription && isParentSlider) {
-            renderedChildren.unshift(
-                <div key={`desc-${id}`}>
-                    <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
-                </div>
-            );
+            renderedChildren.unshift(renderHint(config.description!, config.helpId, `desc-${id}`));
         }
 
         const hasChildren = renderedChildren.length > 0;
         return (
-            <div key={id} data-tut={id} className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}>
+            <div
+                key={id}
+                data-tut={id}
+                data-help-id={config.helpId}
+                className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}
+            >
                 {isParentSlider && <div className={`absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
-                {showDescription && !isParentSlider && (
-                    <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{config.description}</p>
-                )}
+                {showDescription && !isParentSlider && renderHint(config.description!, config.helpId, `leaf-desc-${id}`)}
                 {renderedChildren.length > 0 && (
                     <>
                         {/* Bracketed-children layout: same primitive
@@ -554,24 +579,33 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             if (gc.collapsible) {
                 const filtered = visibleItems.filter(Boolean);
                 renderItems.push(
-                    <CollapsibleSection
-                        key={`group-${groupId}`}
-                        label={gc.label}
-                        open={!collapsedGroups.has(groupId)}
-                        onToggle={() => toggleGroup(groupId)}
-                        defaultOpen={true}
-                        variant="panel"
-                    >
-                        <div className="flex flex-col">
-                            {filtered.map((item, idx) => (
-                                <div key={idx}>{item}</div>
-                            ))}
-                            <div className="ml-[9px] border-b border-white/10 rounded-bl mb-0.5" />
-                        </div>
-                    </CollapsibleSection>
+                    <div key={`group-${groupId}`} data-help-id={gc.helpId}>
+                        <CollapsibleSection
+                            label={gc.label}
+                            open={!collapsedGroups.has(groupId)}
+                            onToggle={() => toggleGroup(groupId)}
+                            defaultOpen={true}
+                            variant="panel"
+                        >
+                            <div className="flex flex-col">
+                                {showHints && gc.description &&
+                                    renderHint(gc.description, gc.helpId, `group-desc-${groupId}`)}
+                                {filtered.map((item, idx) => (
+                                    <div key={idx}>{item}</div>
+                                ))}
+                                <div className="ml-[9px] border-b border-white/10 rounded-bl mb-0.5" />
+                            </div>
+                        </CollapsibleSection>
+                    </div>
                 );
             } else {
-                renderItems.push(...visibleItems);
+                renderItems.push(
+                    <div key={`group-${groupId}`} data-help-id={gc.helpId} className="flex flex-col">
+                        {showHints && gc.description &&
+                            renderHint(gc.description, gc.helpId, `group-desc-${groupId}`)}
+                        {visibleItems}
+                    </div>
+                );
             }
         }
     } else {
@@ -589,8 +623,25 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (Component) renderItems.push(<div key={`custom-${c.componentId}-${c.group ?? idx}`} className={`flex flex-col mb-px ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>);
     });
 
+    // When the panel is rendering a single group via groupFilter, surface
+    // that group's helpId on the outer wrapper so right-click context
+    // menus and a header-level hint can pick it up.
+    const filteredGroupConfig = groupFilter ? groupConfigs?.[groupFilter] : undefined;
+    const outerHelpId = filteredGroupConfig?.helpId;
+    const outerHint =
+        showHints && filteredGroupConfig?.description && renderHint(
+            filteredGroupConfig.description,
+            filteredGroupConfig.helpId,
+            `group-desc-${groupFilter}`,
+        );
+
     return (
-        <div className={`flex flex-col relative ${className || ''}`} onContextMenu={handleContextMenu}>
+        <div
+            className={`flex flex-col relative ${className || ''}`}
+            data-help-id={outerHelpId}
+            onContextMenu={handleContextMenu}
+        >
+            {outerHint}
             {renderItems}
             {confirming && (
                 <div className="absolute inset-0 z-50 animate-pop-in">

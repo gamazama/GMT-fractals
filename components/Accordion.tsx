@@ -25,6 +25,9 @@ import React, { useState, useCallback, useMemo } from 'react';
 export interface AccordionSection {
     id: string;
     label: string;
+    /** Optional data-help-id emitted on the section's outer wrapper.
+     *  Picked up by the right-click contextual help DOM walk. */
+    helpId?: string;
     /** Body content. Hidden when the section is collapsed. */
     children: React.ReactNode;
     /** Right-aligned header content — preview strips, badges, etc. */
@@ -129,7 +132,7 @@ export const Accordion: React.FC<AccordionProps> = ({ sections, className = '' }
                 const open = !!openMap[section.id];
                 const isLast = idx === sections.length - 1;
                 return (
-                    <div key={section.id} className="flex flex-col">
+                    <div key={section.id} data-help-id={section.helpId} className="flex flex-col">
                         <div
                             className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${
                                 open ? 'bg-neutral-800' : 'bg-neutral-800/50 hover:bg-white/5'

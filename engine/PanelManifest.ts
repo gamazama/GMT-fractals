@@ -66,8 +66,19 @@ export interface PanelWidgets {
  *    Whitelist a few params — { type: 'feature', id: 'lighting',
  *                               whitelistParams: ['shadows', 'shadowSoftness'] }
  *    Conditional sub-block — any item type can carry `showIf`. */
+/** Help-system fields shared by every PanelItem variant. The wrapper
+ *  PanelRouter emits around the item carries `data-help-id={helpId}`
+ *  when set, so right-click contextual menus pick it up via the
+ *  existing `collectHelpIds` DOM walk. */
+interface PanelItemHelp {
+    /** data-help-id attached to the item's wrapper. Used when the
+     *  panel groups things the underlying feature doesn't know about
+     *  (e.g. an Effects roll-up that aggregates multiple features). */
+    helpId?: string;
+}
+
 export type PanelItem =
-    | {
+    | (PanelItemHelp & {
           type: 'feature';
           id: string;
           /** Render only the params in this DDFS group. Other groups on
@@ -84,23 +95,23 @@ export type PanelItem =
           className?: string;
           /** Per-item visibility — re-evaluated on every render. */
           showIf?: ShowIfPredicate;
-      }
-    | {
+      })
+    | (PanelItemHelp & {
           type: 'widget';
           id: string;
           props?: Record<string, unknown>;
           showIf?: ShowIfPredicate;
-      }
-    | {
+      })
+    | (PanelItemHelp & {
           type: 'section';
           label: string;
           showIf?: ShowIfPredicate;
-      }
-    | {
+      })
+    | (PanelItemHelp & {
           type: 'separator';
           showIf?: ShowIfPredicate;
-      }
-    | {
+      })
+    | (PanelItemHelp & {
           /** A roll-up group with a clickable label. Children render
            *  inside an animated container; closed by default unless
            *  `defaultOpen: true`. Children can be any PanelItem,
@@ -110,8 +121,8 @@ export type PanelItem =
           items: PanelItem[];
           defaultOpen?: boolean;
           showIf?: ShowIfPredicate;
-      }
-    | {
+      })
+    | (PanelItemHelp & {
           /** A vertical accordion with optional exclusive groups.
            *  Mirrors GMT's coloring-panel layer pattern (Layer 1 +
            *  Layer 2 mutually exclusive, Noise independent) without
@@ -120,12 +131,15 @@ export type PanelItem =
           type: 'accordion';
           sections: PanelAccordionSection[];
           showIf?: ShowIfPredicate;
-      };
+      });
 
 /** One section inside a `type: 'accordion'` PanelItem. */
 export interface PanelAccordionSection {
     id: string;
     label: string;
+    /** Help topic id for the section as a whole. Emitted as
+     *  `data-help-id` on the section wrapper. */
+    helpId?: string;
     /** Items rendered when the section is open. */
     items: PanelItem[];
     /** Optional widget id rendered on the right side of the header
