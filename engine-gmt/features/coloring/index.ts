@@ -31,6 +31,7 @@ export interface ColoringState {
     layer3Bump: number;
     layer3Turbulence: number;
     layer3Enabled: boolean;
+    trapEnabled: boolean;
     trapShape: number;
     trapCenter: THREE.Vector3;
     trapRadius: number;
@@ -290,24 +291,27 @@ export const ColoringFeature: FeatureDefinition = {
         },
 
         // --- GEOMETRIC TRAP ---
+        trapEnabled: {
+            type: 'boolean', default: false, label: 'Orbit Trap', shortId: 'ten',
+            group: 'trap_geom',
+            onUpdate: 'compile',
+            description: 'Compiles per-iteration geometric trap distance into the shader. Select shape + mapping mode "Geometric Trap" to colour by trap distance.'
+        },
         trapShape: {
-            type: 'float', default: 0.0, label: 'Shape', shortId: 'tsh',
+            type: 'float', default: 1.0, label: 'Shape', shortId: 'tsh',
             uniform: 'uTrapShape',
             group: 'trap_geom',
             options: [
-                { label: 'None', value: 0.0 },
                 { label: 'Point', value: 1.0 },
                 { label: 'Sphere', value: 2.0 },
                 { label: 'Cross', value: 3.0 },
                 { label: 'Plane', value: 4.0 }
             ],
-            onUpdate: 'compile',
-            description: 'Geometric orbit trap shape. Pairs with the Geometric Trap mapping mode.'
+            description: 'Geometric shape to measure orbit distance against.'
         },
         trapCenter: {
             type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Center', shortId: 'tce',
-            uniform: 'uTrapCenter', group: 'trap_geom', min: -10, max: 10, step: 0.01,
-            condition: { param: 'trapShape', neq: 0.0 }
+            uniform: 'uTrapCenter', group: 'trap_geom', min: -10, max: 10, step: 0.01
         },
         trapRadius: {
             type: 'float', default: 1.0, label: 'Radius', shortId: 'tra',
@@ -339,8 +343,8 @@ export const ColoringFeature: FeatureDefinition = {
         // Float accumulator used by some imported DEC formulas for orbit trap coloring
         builder.addPreamble('float escape = 0.0;');
 
-        // Inject per-iteration geometric trap distance computation when a shape is selected.
-        if ((state?.trapShape ?? 0) > 0) {
+        // Inject per-iteration geometric trap distance when enabled.
+        if (state?.trapEnabled) {
             builder.addHybridFold('', '', `
                 {
                     vec3 _zp = z.xyz;
