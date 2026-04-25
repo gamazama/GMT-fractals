@@ -18,4 +18,5 @@ export const FluidToyPanels: PanelManifest = [
     { id: 'Collision', dock: 'right', order: 6,               features: ['collision'] },
     { id: 'Composite', dock: 'right', order: 7,               features: ['composite'] },
     { id: 'Presets',   dock: 'right', order: 8,               features: ['presets'] },
+    { id: 'Views',     dock: 'right', order: 9,               component: 'panel-views' },
 ];

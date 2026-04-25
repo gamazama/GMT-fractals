@@ -24,12 +24,14 @@ import { PostFxFeature } from './features/postFx';
 import { CompositeFeature } from './features/composite';
 import { BrushFeature } from './features/brush';
 import { JuliaCPicker } from './components/JuliaCPicker';
+import { ViewLibraryPanel } from './components/ViewLibraryPanel';
 
 // Components used by feature customUI slots must be registered before
 // the registries freeze (i.e. before the store is constructed). Match
 // the id to the customUI entry in the feature definition.
 componentRegistry.register('julia-c-picker', JuliaCPicker as any);
 componentRegistry.register('preset-grid', PresetGrid as any);
+componentRegistry.register('panel-views', ViewLibraryPanel as any);
 
 // Fractal tab — kind, c, zoom, center, iter, power, plus the
 // palette-bound params (hidden from this tab, surfaced in Palette).

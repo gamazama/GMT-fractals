@@ -46,6 +46,7 @@ import { QualityBadge } from './components/QualityBadge';
 import { HotkeysCheatsheet } from './components/HotkeysCheatsheet';
 import { useEngineStore } from '../store/engineStore';
 import { installOrbitSync } from './orbitTick';
+import { installFluidToyViewLibrary } from './viewLibrary';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -183,6 +184,12 @@ hud.register({
 // rewrite the two sine LFOs on julia.juliaC.x/.y that drive the orbit.
 // No per-frame work here; modulationTick does the oscillator math.
 installOrbitSync();
+
+// Saved-views library — generic state-library slice with capture/apply
+// wired into the julia slice. Patches addView / selectView / etc. onto
+// the store. Must run before setupFluidToy() so the Views panel finds
+// the slice when the manifest mounts.
+installFluidToyViewLibrary();
 
 setupFluidToy();
 
