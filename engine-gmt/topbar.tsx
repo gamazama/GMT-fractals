@@ -23,6 +23,7 @@ import { useSyncExternalStore } from 'react';
 import { menu } from '../engine/plugins/Menu';
 import { topbar } from '../engine/plugins/TopBar';
 import { camera } from '../engine/plugins/Camera';
+import { GmtLogo } from './topbar/Logo';
 import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
 import { registry } from './engine/FractalRegistry';
@@ -260,6 +261,18 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     // Formula picker lives inside the Formula panel (via FormulaSelect
     // widget slotted via widgets.before in engine-gmt/panels.ts), not
     // in the topbar — matches GMT's layout.
+
+    // GMT wordmark — leftmost item, ahead of the engine's default
+    // project-name (order 0). Mirrors gmt-0.8.5/components/topbar/
+    // RenderTools.tsx which had the wordmark inline before the
+    // project-name pill.
+    topbar.register({
+        id: 'gmt-logo',
+        slot: 'left',
+        order: -10,
+        component: GmtLogo,
+    });
+
     topbar.register({
         id: 'gmt-viewport-quality',
         slot: 'left',
