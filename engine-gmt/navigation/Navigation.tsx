@@ -554,10 +554,17 @@ const Navigation: React.FC<NavigationProps> = ({
           const movementLocked = selectMovementLock(useFractalStore.getState());
           orbitRef.current.enabled = !movementLocked && !isCameraLockedRef.current && (allowOrbitInteraction.current || isOrbitDragging.current || isScrollingRef.current);
           orbitRef.current.zoomSpeed = currentZoomSensitivity.current;
-          
+
           orbitRef.current.rotateSpeed = 1.0 / (fitScale || 1.0);
-          
-          if (Math.abs(inputRollVel.current) > 0.01) {
+
+          // Q/E roll velocity application — gated on movementLocked too,
+          // otherwise a held Q or E (or a tiny residual after release)
+          // rotates the camera even while interactionMode is 'picking_focus'
+          // / 'selecting_region' / etc. Generic across every lock predicate
+          // (interactionMode, isExporting, isBucketRendering, feature
+          // interactionConfig.blockCamera) since selectMovementLock covers
+          // all of them.
+          if (!movementLocked && Math.abs(inputRollVel.current) > 0.01) {
               const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
               camera.up.applyAxisAngle(fwd, -inputRollVel.current * 2.0 * delta).normalize();
               orbitRef.current.update();
