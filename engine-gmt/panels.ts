@@ -137,12 +137,61 @@ export const GmtPanels: PanelManifest = [
         features: ['coloring'],
     },
 
-    // Quality — precision / step / performance knobs.
+    // Quality — render-engine selector + resolution + AA + step
+    // tuning + shadow quality. The bespoke header (render-mode tabs,
+    // resolution preset, internal-scale buttons) lives in the
+    // 'quality-render-controls' widget; the rest is per-group / per-
+    // whitelisted-param feature blocks. Mirrors GMT's QualityPanel
+    // top-to-bottom order.
     {
         id: 'Quality',
         dock: 'right',
         order: 60,
-        features: ['quality'],
+        items: [
+            // Bespoke header: render mode + PT global + resolution + AA scale
+            { type: 'widget', id: 'quality-render-controls' },
+
+            { type: 'separator' },
+
+            // Shadow quality — only when shadows are enabled at compile-time
+            // AND turned on at runtime.
+            {
+                type: 'feature',
+                id: 'lighting',
+                groupFilter: 'shadow_quality',
+                showIf: (s: any) => !!(s.lighting?.shadowsCompile && s.lighting?.shadows),
+            },
+
+            { type: 'separator' },
+
+            // Raymarching: max steps
+            { type: 'feature', id: 'quality', whitelistParams: ['maxSteps'] },
+
+            // Step tuning
+            {
+                type: 'feature',
+                id: 'quality',
+                whitelistParams: ['fudgeFactor', 'stepRelaxation', 'stepJitter'],
+            },
+
+            { type: 'separator' },
+
+            // Detail + threshold
+            {
+                type: 'feature',
+                id: 'quality',
+                whitelistParams: ['refinementSteps', 'detail', 'pixelThreshold', 'overstepTolerance'],
+            },
+
+            { type: 'separator' },
+
+            // Distance metric + estimator
+            {
+                type: 'feature',
+                id: 'quality',
+                whitelistParams: ['distanceMetric', 'estimator'],
+            },
+        ],
     },
 
     // Audio — visible only while audio reactivity is on. Uses the
