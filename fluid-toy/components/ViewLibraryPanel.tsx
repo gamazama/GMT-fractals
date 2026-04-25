@@ -14,6 +14,7 @@
 import React, { useCallback } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { StateLibraryPanel } from '../../components/StateLibraryPanel';
+import { ActiveSnapshotFeatures } from '../../components/ActiveSnapshotFeatures';
 import { PlusIcon } from '../../components/Icons';
 import type { StateSnapshot } from '../../engine/store/createStateLibrarySlice';
 import type { JuliaViewState } from '../viewLibrary';
@@ -95,6 +96,14 @@ export const ViewLibraryPanel: React.FC = () => {
                         RESET
                     </button>
                 </div>
+            }
+            footer={
+                <ActiveSnapshotFeatures
+                    activeIdKey="activeViewId"
+                    featureIds={['julia']}
+                    label="Active View"
+                    onDeselect={() => selectView?.(null)}
+                />
             }
         />
     );

@@ -1,23 +1,21 @@
 /**
- * fluid-toy view library — installs an engine state-library slice that
- * saves named view snapshots (julia kind/c/center/zoom/iter/power).
+ * fluid-toy view library — wires the engine state-library plugin with
+ * julia-slice capture/apply. One install call sets up the slice, slot
+ * shortcuts, and topbar Camera menu.
  *
  * "View" is the user-facing label; the underlying primitive is the
- * generic state-library factory shared with GMT's Camera Manager.
+ * generic state-library shared with GMT's Camera Manager.
  *
  * Snapshot payload is the full Fractal-tab fingerprint, not just a
  * camera. fluid-toy's "view" couples the camera-like fields (center,
  * zoom) with the fractal config (kind, juliaC, maxIter, power) — they
  * shape what the user is looking at, and a saved view should restore
  * the *whole* picture in one click.
- *
- * Coexists with @engine/plugins/Camera's slot system (Ctrl+1..9 quick
- * recall on {center, zoom} only). The library is the named, browseable,
- * thumbnailed alternative for the Views panel.
  */
 
 import { useEngineStore } from '../store/engineStore';
-import { installStateLibrarySlice } from '../engine/store/createStateLibrarySlice';
+import { installStateLibrary } from '../engine/store/installStateLibrary';
+import { CameraIcon } from '../components/Icons';
 
 export interface JuliaViewState {
     kind: number;
@@ -89,7 +87,8 @@ const resetView = () => {
 };
 
 export const installFluidToyViewLibrary = (): void => {
-    installStateLibrarySlice<JuliaViewState>({
+    installStateLibrary<JuliaViewState>({
+        panelId: 'Views',
         arrayKey: 'savedViews',
         activeIdKey: 'activeViewId',
         actions: {
@@ -108,5 +107,25 @@ export const installFluidToyViewLibrary = (): void => {
         isModified: isViewModified,
         captureThumbnail: captureCanvasThumbnail,
         onReset: resetView,
+
+        // Slot shortcuts: Ctrl+1..9 save, 1..9 recall. Same key bindings
+        // as the legacy @engine/plugins/Camera slot system — that
+        // plugin's shortcuts are disabled in main.tsx (hideShortcuts).
+        slotShortcuts: { count: 9, category: 'Views' },
+
+        // Topbar menu — Camera icon, right slot. The wrapper auto-adds
+        // Open / Reset / Slot 1..9 entries.
+        menu: {
+            menuId: 'camera',
+            slot: 'right',
+            order: 29,
+            icon: CameraIcon,
+            title: 'Camera',
+            align: 'end',
+            width: 'w-48',
+            openItem: { label: 'Views…', title: 'Open the saved-views library' },
+            resetItem: { label: 'Reset View', title: 'Reset to default fractal view' },
+            slotLabelPrefix: 'View',
+        },
     });
 };

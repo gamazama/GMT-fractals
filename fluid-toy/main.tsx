@@ -49,7 +49,6 @@ import { installOrbitSync } from './orbitTick';
 import { installFluidToyViewLibrary } from './viewLibrary';
 import { ViewLibraryPanel } from './components/ViewLibraryPanel';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
-import { registerFluidToyTopbar } from './topbar';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -125,7 +124,13 @@ installUndo();
 
 // @engine/camera — adapter-based slot system (Ctrl+1..9 save, 1..9 recall)
 // + preset round-trip for saved camera state.
-installCamera();
+//
+// Slot shortcuts are skipped here (`hideShortcuts: true`) — the
+// state-library install below registers the same key bindings, but
+// drives the named/thumbnailed `savedViews` library instead of the
+// legacy anonymous-numbered cameraSlots[]. The camera plugin's
+// preset-field round-trip stays active for scene save/load.
+installCamera({ hideShortcuts: true });
 
 // Register fluid-toy's 2D camera with the plugin. captureState +
 // applyState work on an opaque JSON blob — the plugin doesn't need
@@ -188,10 +193,10 @@ hud.register({
 // No per-frame work here; modulationTick does the oscillator math.
 installOrbitSync();
 
-// Saved-views library — generic state-library slice with capture/apply
-// wired into the julia slice. Patches addView / selectView / etc. onto
-// the store. Must run before setupFluidToy() so the Views panel finds
-// the slice when the manifest mounts.
+// Saved-views library — one call wires everything: slice CRUD, slot
+// shortcuts (Ctrl+1..9 save, 1..9 recall), and topbar Camera menu.
+// Must run AFTER installMenu / installShortcuts so their registries
+// exist, and BEFORE setupFluidToy so the Views panel finds the slice.
 installFluidToyViewLibrary();
 
 // `panel-views` is referenced from the manifest by `component:`. It's
@@ -200,11 +205,6 @@ installFluidToyViewLibrary();
 // into the module graph, which would freeze the registry before
 // feature registrations complete.
 componentRegistry.register('panel-views', ViewLibraryPanel as any);
-
-// Topbar Camera menu — Views entry opens the floating Views panel.
-// Must come AFTER installMenu() / installCamera() so their registries
-// exist. Mirrors engine-gmt/topbar.tsx's registerGmtTopbar pattern.
-registerFluidToyTopbar();
 
 setupFluidToy();
 
