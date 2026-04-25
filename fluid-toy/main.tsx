@@ -47,6 +47,8 @@ import { HotkeysCheatsheet } from './components/HotkeysCheatsheet';
 import { useEngineStore } from '../store/engineStore';
 import { installOrbitSync } from './orbitTick';
 import { installFluidToyViewLibrary } from './viewLibrary';
+import { ViewLibraryPanel } from './components/ViewLibraryPanel';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -190,6 +192,13 @@ installOrbitSync();
 // the store. Must run before setupFluidToy() so the Views panel finds
 // the slice when the manifest mounts.
 installFluidToyViewLibrary();
+
+// `panel-views` is referenced from the manifest by `component:`. It's
+// registered here (after the store + slice install) rather than in
+// registerFeatures.ts because importing the panel pulls useEngineStore
+// into the module graph, which would freeze the registry before
+// feature registrations complete.
+componentRegistry.register('panel-views', ViewLibraryPanel as any);
 
 setupFluidToy();
 
