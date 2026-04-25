@@ -143,14 +143,20 @@ Explicit registration wins over the name-inference branch. Conventional features
 ---
 
 ## F7 — Circular store dependency (animationStore ↔ fractalStore)
-**Status:** 🔴 Open
-**Severity:** Low — smell; works today via window handle workaround.
+**Status:** 🟢 Fixed (2026-04-25)
+**Severity:** Was: Low — smell; works today via window handle workaround.
 
-**Symptom:** [store/animationStore.ts:16-19](../store/animationStore.ts#L16-L19) exports itself to `window.useAnimationStore` to avoid a circular import with `fractalStore`.
+**Symptom:** Cross-store reads went through `window.useAnimationStore` to dodge a presumed circular import.
 
-**Root cause:** implicit bidirectional coupling.
+**Resolution:** No cycle existed. animationStore depends on its three slice files (playbackSlice / selectionSlice / sequenceSlice), none of which import back into engineStore. The window-handle was leftover scaffolding from an earlier shape that got refactored. Replaced every consumer with a direct `import { useAnimationStore } from '../../store/animationStore'`:
 
-**Designed fix:** express the animation ↔ host coupling as an explicit bridge (see [09_Bridges_and_Derived.md § migration-notes](09_Bridges_and_Derived.md#migration-notes-gmt--engine)). No circular imports; coupling visible in `bridgeRegistry.list()`.
+  - `store/engineStore.ts` — top-level eager import; getPreset reader and bindStoreToEngine use the imported reference.
+  - `engine/plugins/Undo.tsx` — timeline-hover scoped Mod+Z / Mod+Y use the import.
+  - `app-gmt/main.tsx` — Escape handler's animation deselect uses the import.
+
+The `window.useAnimationStore` export stays in animationStore.ts as a dev-console handle (matches the `__camera` / `__animEngine` / `__store` pattern), but it's no longer load-bearing for any in-tree consumer.
+
+**Designed fix from the audit (an explicit `bridgeRegistry`) was not needed** — the cycle was imaginary. Logged the simpler-than-expected resolution.
 
 ---
 
