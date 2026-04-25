@@ -22,6 +22,7 @@
  */
 
 import * as THREE from 'three';
+import { nanoid } from 'nanoid';
 import { animationEngine, type ScrubContext } from '../../engine/AnimationEngine';
 import { binderRegistry } from '../../engine/animation/binderRegistry';
 import { setCameraKeyCaptureFn, type CameraKeyCaptureOptions } from '../../engine/animation/cameraKeyRegistry';
@@ -32,6 +33,9 @@ import { getProxy } from '../engine/worker/WorkerProxy';
 import { getViewportCamera } from '../engine/worker/ViewportRefs';
 import { VirtualSpace } from '../engine/PrecisionMath';
 import { CameraUtils } from '../utils/CameraUtils';
+import { AnimationMath } from '../../engine/math/AnimationMath';
+import { TrackUtils } from '../../engine/algorithms/TrackUtils';
+import type { Keyframe } from '../../types';
 
 const engine = getProxy() as any;
 
@@ -155,28 +159,47 @@ const captureGmtCameraKeyFrame = (
     const interpolation = opts?.interpolation ?? (isFirstCamKey ? 'Linear' : 'Bezier');
 
     // Single state update — track create (when missing) + keyframe
-    // upsert for all six tracks in one go. No intermediate snapshots.
+    // upsert for all six tracks in one go. Body ported verbatim from
+    // the legacy sequenceSlice.captureCameraFrame so the dirty check
+    // (which compares k.value to the live camera) sees identical
+    // values. The tangent + neighbor updates aren't load-bearing for
+    // the dirty check itself, but the original GMT path included them
+    // and we want to match the working shape exactly.
     useAnimationStore.setState((state: any) => {
         const newTracks = { ...state.sequence.tracks };
-        for (const t of tracks) {
+
+        tracks.forEach((t) => {
             let track = newTracks[t.id];
             if (!track) {
-                track = { id: t.id, type: 'float', label: t.label, keyframes: [] };
+                track = { id: t.id, type: 'float', label: t.label, keyframes: [], hidden: false };
                 newTracks[t.id] = track;
             }
-            const keys = track.keyframes.filter((k: any) => Math.abs(k.frame - frame) > 0.001);
-            keys.push({
-                id: Math.random().toString(36).slice(2),
+
+            const newKey: Keyframe = {
+                id: nanoid(),
                 frame,
                 value: t.val,
                 interpolation,
                 autoTangent: interpolation === 'Bezier',
                 brokenTangents: false,
-            });
-            keys.sort((a: any, b: any) => a.frame - b.frame);
-            // Replace the track object so React sees the change.
-            newTracks[t.id] = { ...track, keyframes: keys };
-        }
+            };
+
+            const others = track.keyframes.filter((k: Keyframe) => Math.abs(k.frame - frame) > 0.001);
+            const sorted = [...others, newKey].sort((a, b) => a.frame - b.frame);
+            const idx = sorted.findIndex((k) => k.id === newKey.id);
+
+            if (interpolation === 'Bezier') {
+                const prev = idx > 0 ? sorted[idx - 1] : undefined;
+                const next = idx < sorted.length - 1 ? sorted[idx + 1] : undefined;
+                const { l, r } = AnimationMath.calculateTangents(newKey, prev, next, 'Auto');
+                newKey.leftTangent = l;
+                newKey.rightTangent = r;
+            }
+
+            TrackUtils.updateNeighbors(sorted, idx);
+            newTracks[t.id] = { ...track, keyframes: sorted };
+        });
+
         return { sequence: { ...state.sequence, tracks: newTracks } };
     });
 };

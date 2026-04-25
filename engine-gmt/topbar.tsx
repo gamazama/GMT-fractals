@@ -22,6 +22,7 @@ import React from 'react';
 import { useSyncExternalStore } from 'react';
 import { menu } from '../engine/plugins/Menu';
 import { topbar } from '../engine/plugins/TopBar';
+import { AdaptiveResolution } from './topbar/AdaptiveResolution';
 import { camera } from '../engine/plugins/Camera';
 import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
@@ -255,6 +256,19 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
             } as any);
         },
     } = options;
+
+    // ── GMT-specific adaptive-resolution badge (overrides default) ─────
+    // installTopBar() registers a generic AdaptiveResolutionBadge that
+    // toggles adaptiveConfig.enabled on viewportSlice — disconnected
+    // from GMT's worker UniformManager (which reads quality.dynamicScaling).
+    // Re-registering the 'adaptive' slot id with the GMT-specific badge
+    // hooks the button to the field the worker actually consumes.
+    topbar.register({
+        id: 'adaptive',
+        slot: 'right',
+        order: 0,
+        component: AdaptiveResolution,
+    });
 
     // ── Inline items (left slot) ───────────────────────────────────────
     // Formula picker lives inside the Formula panel (via FormulaSelect

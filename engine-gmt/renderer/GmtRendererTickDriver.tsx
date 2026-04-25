@@ -35,7 +35,6 @@ import {
     isMouseOverCanvas,
 } from '../engine/worker/ViewportRefs';
 import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
-import { viewport } from '../../engine/plugins/Viewport';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
 // Capture the display camera for overlay components (light gizmos, drawing
@@ -201,15 +200,6 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
 
         // Run all registered ticks: SNAPSHOT → ANIMATE → OVERLAY → UI.
         runTicks(clampedDelta);
-
-        // Drive the viewport plugin's adaptive-quality loop. Without
-        // this, viewportSlice.reportFps() never runs (returns at the
-        // `if (fps <= 0)` guard) and qualityFraction stays pinned —
-        // adaptive resolution silently no-ops even with the topbar
-        // badge showing "Auto". fluid-toy / fractal-toy already do
-        // this from their own renderer onFrameEnd hooks; GMT's hook
-        // wasn't ported when the legacy ViewportArea path was retired.
-        viewport.frameTick();
 
         // Sync R3F camera FOV with optics — raycaster/gizmo projections
         // must match the rendered image's FOV.
