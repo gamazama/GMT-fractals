@@ -106,7 +106,12 @@ const renderItem = (
     let node: React.ReactNode;
     switch (item.type) {
         case 'separator':
-            return <div key={`sep-${index}`} className="h-px bg-white/10 my-2 mx-3" />;
+            return (
+                <div key={`sep-${index}`}>
+                    <div className="h-1.5 bg-neutral-800 rounded-b-lg" />
+                    <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
+                </div>
+            );
 
         case 'section':
             node = (
