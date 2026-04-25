@@ -189,6 +189,11 @@ export interface PanelDefinition {
      *  omitted from the dock's tab bar. Omit for always-visible. */
     showIf?: ShowIfPredicate;
 
+    /** Help topic id for the panel as a whole. PanelRouter emits this
+     *  on the panel's outer wrapper so right-clicking any blank area
+     *  surfaces it via the existing collectHelpIds DOM walk. */
+    helpId?: string;
+
     // --- Content composition — pick one of `items`, `features`, `component` ---
     // Resolution order in PanelRouter: `component` (escape hatch) wins,
     // else `items` (rich layout) if non-empty, else `features` + `widgets`

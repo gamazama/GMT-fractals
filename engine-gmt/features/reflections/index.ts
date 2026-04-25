@@ -116,6 +116,13 @@ export const ReflectionsFeature: FeatureDefinition = {
         label: 'Reflection Tracing',
         groupFilter: 'engine_settings'
     },
+    groups: {
+        shading: {
+            label: 'Reflections',
+            description: 'Screen-space reflection tracing for glossy surfaces.',
+            helpId: 'render.reflections',
+        },
+    },
     params: {
         // --- REFLECTION MODE (Engine Panel) ---
         reflectionMode: {

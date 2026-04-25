@@ -64,6 +64,18 @@ export const AtmosphereFeature: FeatureDefinition = {
         label: 'Volumetric Glow',
         groupFilter: 'engine_settings'
     },
+    groups: {
+        fog: {
+            label: 'Fog',
+            description: 'Distance-based fog that fades the scene toward a colour.',
+            helpId: 'fog.settings',
+        },
+        glow: {
+            label: 'Glow',
+            description: 'Soft halo emitted around bright surfaces.',
+            helpId: 'mat.glow',
+        },
+    },
     params: {
         // --- MASTER SWITCH (Compile Time) ---
         glowEnabled: {

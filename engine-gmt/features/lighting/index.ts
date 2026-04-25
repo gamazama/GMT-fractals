@@ -86,6 +86,13 @@ export const LightingFeature: FeatureDefinition = {
         label: 'Lighting Engine', 
         groupFilter: 'engine_settings'
     },
+    groups: {
+        shadows: {
+            label: 'Shadows',
+            description: 'Per-light shadow tracing and softness.',
+            helpId: 'shadows',
+        },
+    },
     extraUniforms: [
         { name: Uniforms.LightCount, type: 'int', default: 0 },
         { name: Uniforms.LightType, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },

@@ -17,6 +17,11 @@ export const TexturingFeature: FeatureDefinition = {
     shortId: 'tx',
     name: 'Texture',
     category: 'Coloring',
+    groups: {
+        main:      { label: 'Image',     description: 'Image texture sampled instead of the gradient for layer 1.', helpId: 'grad.texture' },
+        mapping:   { label: 'Mapping',   description: 'How the image projects onto fractal surfaces.',              helpId: 'grad.texture' },
+        transform: { label: 'Transform', description: 'Rotation and scaling applied to the texture lookup.',        helpId: 'grad.texture' },
+    },
     params: {
         active: {
             type: 'boolean',

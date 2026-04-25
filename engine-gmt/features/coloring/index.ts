@@ -43,6 +43,17 @@ export const ColoringFeature: FeatureDefinition = {
     tabConfig: {
         label: 'Gradient', // Renamed from Gradients
     },
+    groups: {
+        layer1_top:    { label: 'Mapping',     description: 'How fractal data feeds the gradient lookup.', helpId: 'grad.mapping' },
+        layer1_grad:   { label: 'Gradient',                                                                helpId: 'grad.editor'  },
+        layer1_hist:   { label: 'Histogram',                                                               helpId: 'grad.params'  },
+        layer1_bottom: { label: 'Output',      description: 'Final adjustments applied after the gradient lookup.', helpId: 'grad.escape' },
+        layer2_top:    { label: 'Mapping',     description: 'Layer 2 mapping mode and blend.',             helpId: 'grad.mapping' },
+        layer2_grad:   { label: 'Gradient',                                                                helpId: 'grad.editor'  },
+        layer2_hist:   { label: 'Histogram',                                                               helpId: 'grad.params'  },
+        layer2_bottom: { label: 'Output',                                                                  helpId: 'grad.escape'  },
+        noise:         { label: 'Noise',       description: 'High-frequency noise mixed into the surface colour.',  helpId: 'grad.noise'  },
+    },
     customUI: [
         {
             componentId: 'coloring-histogram',

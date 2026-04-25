@@ -62,6 +62,16 @@ export const MaterialFeature: FeatureDefinition = {
             description: 'Direct-light shading on the fractal surface.',
             helpId: 'mat.surface',
         },
+        env: {
+            label: 'Environment',
+            description: 'Image-based lighting and sky source for indirect light.',
+            helpId: 'mat.env',
+        },
+        emission: {
+            label: 'Self-Illumination',
+            description: 'Surface glow that emits its own light independently of scene lighting.',
+            helpId: 'mat.emission',
+        },
     },
     params: {
         // --- SURFACE ---

@@ -41,6 +41,7 @@ export const GmtPanels: PanelManifest = [
         order: 10,
         active: true,
         component: 'panel-formula',
+        helpId: 'panel.formula',
     },
 
     // Scene — camera optics, atmosphere, water, color grading + an
@@ -52,6 +53,7 @@ export const GmtPanels: PanelManifest = [
         id: 'Scene',
         dock: 'right',
         order: 20,
+        helpId: 'panel.scene',
         items: [
             // --- Optics: depth-of-field + projection ---
             { type: 'feature', id: 'optics', groupFilter: 'dof' },
@@ -116,6 +118,7 @@ export const GmtPanels: PanelManifest = [
         dock: 'right',
         order: 30,
         showIf: 'advancedMode',
+        helpId: 'panel.light',
         items: [
             { type: 'widget', id: 'light-panel-controls' },
             { type: 'separator' },
@@ -133,6 +136,7 @@ export const GmtPanels: PanelManifest = [
         id: 'Shader',
         dock: 'right',
         order: 40,
+        helpId: 'panel.render',
         items: [
             { type: 'feature', id: 'materials',   groupFilter: 'surface'   },
             { type: 'feature', id: 'materials',   groupFilter: 'env'       },
@@ -156,6 +160,7 @@ export const GmtPanels: PanelManifest = [
         id: 'Gradient',
         dock: 'right',
         order: 50,
+        helpId: 'panel.gradient',
         items: [
             {
                 type: 'accordion',
@@ -166,6 +171,7 @@ export const GmtPanels: PanelManifest = [
                         group: 'coloring-layers',
                         groupFallback: true,
                         headerWidget: 'gradient-preview-layer1',
+                        helpId: 'panel.gradient',
                         items: [
                             { type: 'widget', id: 'coloring-histogram-layer-marker', props: { layer: 0 } },
                             { type: 'widget', id: 'texturing-source-toggle' },
@@ -199,6 +205,7 @@ export const GmtPanels: PanelManifest = [
                         headerWidget: 'gradient-preview-layer2',
                         activePredicate: (s: any) => (s.coloring?.blendOpacity ?? 0) > 0,
                         closedBadge: 'off',
+                        helpId: 'panel.gradient',
                         items: [
                             { type: 'widget', id: 'coloring-histogram-layer-marker', props: { layer: 1 } },
                             { type: 'feature', id: 'coloring', groupFilter: 'layer2_top' },
@@ -216,6 +223,7 @@ export const GmtPanels: PanelManifest = [
                         activePredicate: (s: any) => (s.coloring?.layer3Strength ?? 0) > 0,
                         closedBadge: 'off',
                         defaultOpen: (s: any) => (s.coloring?.layer3Strength ?? 0) > 0,
+                        helpId: 'grad.noise',
                         items: [
                             { type: 'feature', id: 'coloring', groupFilter: 'noise' },
                         ],
@@ -235,6 +243,7 @@ export const GmtPanels: PanelManifest = [
         id: 'Quality',
         dock: 'right',
         order: 60,
+        helpId: 'panel.quality',
         items: [
             // Bespoke header: render mode + PT global + resolution + AA scale
             { type: 'widget', id: 'quality-render-controls' },
@@ -293,6 +302,7 @@ export const GmtPanels: PanelManifest = [
         order: 70,
         component: 'panel-audio',
         showIf: 'audio.isEnabled',
+        helpId: 'panel.audio',
     },
 
     // Drawing — visible only while drawing mode is on. Uses
@@ -306,6 +316,7 @@ export const GmtPanels: PanelManifest = [
         order: 80,
         features: ['drawing'],
         showIf: 'drawing.enabled',
+        helpId: 'panel.drawing',
     },
 
     // Engine — dev-only tab, hidden unless explicitly enabled. Mirrors
@@ -320,6 +331,7 @@ export const GmtPanels: PanelManifest = [
         order: 10,
         component: 'panel-engine',
         showIf: 'engineSettings.showEngineTab',
+        helpId: 'panel.engine',
     },
 
     // Camera Manager — bespoke saved-camera library UI. Opens as a

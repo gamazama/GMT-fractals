@@ -25,6 +25,13 @@ export const AOFeature: FeatureDefinition = {
         label: 'Ambient Occlusion',
         groupFilter: 'engine_settings'
     },
+    groups: {
+        shading: {
+            label: 'Ambient Occlusion',
+            description: 'Darkens crevices where surfaces close in on themselves.',
+            helpId: 'mat.ao',
+        },
+    },
     params: {
         // --- SHADING PARAMETERS (Runtime, in Shading Panel) ---
         aoIntensity: {

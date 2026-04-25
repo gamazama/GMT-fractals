@@ -242,7 +242,7 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
             );
         }
         return (
-            <div className="h-full">
+            <div className="h-full" data-help-id={def.helpId}>
                 <Component state={state} actions={actions} onSwitchTab={onSwitchTab} />
             </div>
         );
@@ -263,7 +263,7 @@ const PanelRouterInner: React.FC<PanelRouterProps> = ({
 
     const widgetProps: WidgetProps = { state, actions, onSwitchTab };
     return (
-        <div className="flex flex-col">
+        <div className="flex flex-col" data-help-id={def.helpId}>
             {items.map((item, idx) => renderItem(item, idx, state, widgetProps))}
         </div>
     );
