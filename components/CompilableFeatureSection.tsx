@@ -156,7 +156,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                 enabled={isOn}
                 onToggle={handleToggle}
                 statusContent={statusDots}
-                headerClassName={isCompiled ? '' : 'bg-transparent'}
+                headerClassName=""
             >
                 <div className="bg-white/[0.02]">
                     {/* --- Compile bar (when not compiled, no compile settings sub-section) --- */}
