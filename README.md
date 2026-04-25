@@ -1,106 +1,41 @@
-# GMT - Fractal Explorer
+# gmt-engine
 
-**GMT** is a professional-grade, real-time 3D fractal engineering tool running entirely in the browser. It combines high-performance GPU Raymarching with a reactive, data-driven UI to render complex mathematical structures (Mandelbulbs, Mandelboxes, IFS) with photorealistic lighting, Path Tracing, and high zoom capabilities.
+A generic, plugin-based application engine extracted from [GMT (Fractal Explorer)](https://gmt-fractals.com).
 
-## 🌟 Key Features
+Provides: DDFS (data-driven feature system), animation engine, undo/redo, save/load, URL sharing, adaptive viewport, topbar/dock/timeline chrome, worker-offload stub — all usable by any real-time interactive app without fractal-specific coupling.
 
-*   **Hybrid Render Engine:**
-    *   **Direct Mode:** 60FPS real-time raymarching with soft shadows, reflections, and ambient occlusion.
-    *   **Path Tracer:** Physically-based Monte Carlo rendering with Global Illumination (GI) and emissive materials.
-*   **High Zoom:** Uses a custom "Split-Float" precision system to exceed standard WebGL limits ($10^{5}$ zoom factor).
-*   **Animation Studio:** Full keyframe timeline with Bezier curves, Dope Sheet, and Graph Editor.
-*   **Fragmentarium and formula import:** through the Formula Workshop.
-*   **Video Export:** Offline rendering pipeline supporting 4K+ resolution and high-bitrate WebM/MP4 export (using WebCodecs).
-*   **Environment Features:**
-    *   **Volumetrics:** Atmospheric fog and glow.
-    *   **HDRI maps**
-*   **Data-Driven Architecture:** Features are defined in a registry, automatically generating UI, State, and Shaders.
-*   **Modular Builder:** A node-based graph editor to construct custom fractal formulas (JIT Compiled to GLSL).
+Three apps ship in this repo as proof:
 
-## 🚀 Quick Start
+| App | Entry | What it shows |
+|-----|-------|---------------|
+| `app-gmt` | `app-gmt.html` | Full GMT fractal renderer on the engine |
+| `fluid-toy` | `fluid-toy.html` | 2D fluid simulation (Julia/Mandelbrot) |
+| `fractal-toy` | `fractal-toy.html` | Minimal Mandelbulb playground |
 
-### Prerequisites
-*   Node.js (v18+)
-*   npm or yarn
+## Quick start
 
-### Installation
 ```bash
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
+npm run dev        # dev server at http://localhost:3400
 ```
 
-Open `http://localhost:5173` (or the port shown in your terminal).
+Entry points:
+- `http://localhost:3400/` — engine demo (hello-world add-on)
+- `http://localhost:3400/app-gmt.html` — GMT fractal explorer
+- `http://localhost:3400/fluid-toy.html` — fluid toy
+- `http://localhost:3400/fractal-toy.html` — fractal toy
 
-## 🗺️ Documentation
+## Plugin model
 
-GMT has a comprehensive documentation system. **Start with [DOCS_INDEX.md](docs/DOCS_INDEX.md)** for a complete overview and table of contents.
+Every app is a plugin. See `demo/` for the minimal three-file contract (`registerFeatures.ts` → `setup.ts` → mount), and `docs/03_Plugin_Contract.md` for the full spec.
 
-### Documentation System Structure
+## Docs
 
-1.  **[DOCS_INDEX.md](docs/DOCS_INDEX.md)**: **Central Entry Point** - Master index with quick reference, cross-referenced guides, and documentation guidelines
-2.  **Technical Documentation**: Detailed architecture, rendering, and implementation guides (in `docs/` folder)
-3.  **In-App Help System**: User-facing documentation accessible from the application (`data/help/`)
-4.  **README.md**: This file - Project overview, quick start, and high-level documentation
-5.  **Context File**: Condensed architecture overview for AI sessions (`docs/archive/context2.md`)
+Architecture docs live in `docs/`. Start with `docs/DOCS_INDEX.md`.
 
-### Key Technical Guides (available via DOCS_INDEX)
-- **System Architecture**: Engine-Bridge pattern, Data-Driven Feature System (DDFS)
-- **Rendering Internals**: Raymarching, precision math, path tracing
-- **Modular System**: Node graph to GLSL compilation
-- **Animation Engine**: Timeline, keyframes, interpolation
-- **Data & Export**: Video export, GMF format, presets
-- **Troubleshooting**: WebGL issues, precision artifacts, browser quirks
-- **Code Health**: Technical debt, refactor status
-- **File Structure**: Complete file map and responsibilities
+## Tests
 
-## 🛠️ Technology Stack
-
-*   **Core:** React 18, TypeScript, Vite.
-*   **3D/WebGL:** Three.js, React-Three-Fiber (R3F), Drei.
-*   **State:** Zustand (with `subscribeWithSelector`).
-*   **Compute:** Raw GLSL Fragment Shaders (Custom `ShaderMaterial`).
-*   **Video:** `mediabunny` (Custom Wrapper around WebCodecs).
-
-## 📂 Directory Structure
-
-*   **`components/`**: React UI (Panels, Timeline, Viewport).
-    *   `components/panels/`: Feature-specific control panels.
-    *   `components/registry/`: Dynamic component loader.
-*   **`engine/`**: The imperative WebGL core (Runs outside React render cycle).
-    *   `FractalEngine.ts`: The Singleton managing the render loop.
-    *   `ShaderFactory.ts`: Assembles GLSL chunks dynamically.
-    *   `RenderPipeline.ts`: Manages resolution, accumulation, and buckets.
-*   **`features/`**: **DDFS Modules**. Each folder contains the State, Config, and UI definition for a feature (e.g., `lighting`, `coloring`).
-*   **`formulas/`**: Fractal math definitions (Mandelbulb, Menger, etc.).
-*   **`shaders/`**: Static GLSL chunks.
-*   **`store/`**: Zustand store slices.
-*   **`utils/`**: Math helpers, Graph algorithms, Encoders.
-
-## 📜 License
-
-**GPL-3.0 License**
-
-Copyright (c) 2024-2026 Guy Zack
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read the technical documentation in `/docs` before submitting a Pull Request.
-1.  Fork the repo.
-2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
-
+```bash
+npm run smoke:all       # all smoke tests
+npm run typecheck       # tsc --noEmit
+```

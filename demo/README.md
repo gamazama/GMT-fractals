@@ -17,6 +17,7 @@ The engine's verification / hello-world add-on. Demonstrates the pattern any oth
 
 | File | Purpose |
 |------|---------|
+| `registerFeatures.ts` | **Must be the first import** — registers feature definitions before any store or React code runs |
 | `DemoFeature.ts` | DDFS feature definition (params + tabConfig + viewportConfig) |
 | `DemoOverlay.tsx` | React component rendered inside ViewportArea |
 | `setup.ts` | Side-effect registration — call once before React mounts |
