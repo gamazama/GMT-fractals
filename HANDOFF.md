@@ -2,7 +2,23 @@
 
 **Location:** `h:/GMT/gmt-engine/`
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
-**Status:** ✅ **Phases 1–6 + panel manifest + topbar port + compile pipeline + camera round-trip (2026-04-24).** Three apps boot on the engine: `fractal-toy.html`, `fluid-toy.html`, and `app-gmt.html` — the latter now renders Mandelbulb end-to-end with: full GMT worker + path tracing + Orbit/Fly navigation, formula switching through the full setFormula pipeline (preset hydration → CompileGate → worker recompile → new shader), PT toggle driving `renderMode`, scene-widgets / coloring histograms / formula gallery with thumbnails, Light Studio in the center topbar, camera state round-trips through save/load + respects Reset Position, picking (Julia + focus) via `useInteractionManager`. `npx tsc --noEmit` → 0 errors. Dock panels use `PanelManifest` (see `docs/engine/14_Panel_Manifest.md`); 10 GMT panels composed from 26 features. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
+**Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors.
+
+**📋 2026-04-26 — GMT port complete. Final wiring pass:**
+- **Loading screen** — GMT-branded splash with CPU Julia spinner, formula picker dropdown, Load From File, Lite Render toggle ported to `app-gmt/LoadingScreen.tsx`. Replaces the minimal engine stub.
+- **Share Link** — `ShareLinkButton` topbar component with Copied!/N/A/Long URL feedback. Workshop formula detection. URL length guard strips animations if >4096 chars.
+- **Adaptive warmup** — first sample window after interaction seed uses 200ms (not 500ms) and jumps directly to `idealScale` (no EMA). Subsequent windows revert to normal 500ms + 0.7/0.3 smoothing.
+- **Drawing tools** — `DrawingPanel` registered as `'panel-drawing'`; manifest switched from `features:` to `component:`. Drawing overlay and tick registered.
+- **Formula Workshop** — wired from stub to `openWorkshop()`; mounted as left-dock replacement (same as gmt-0.8.5 layout).
+- **Webcam overlay + State Debugger** — registered in componentRegistry; State Debugger appears under System → Advanced.
+- **`getExtraMenuItems()`** — was never called in topbar.tsx; added loop so features using `menuItems[]` (not `menuConfig`) get system-menu entries.
+- **Mesh Export** — saves scene to localStorage + opens `public/mesh-export/index.html` in new tab.
+- **Public assets** — `public/formulas/` (manifest.json + dec.json + frag library), `public/gmf/` (gallery.json + fragmentarium GMFs), `public/mesh-export/` (full pipeline) all committed.
+- **Scene loading fixed** — PNG (`FractalData` key) + GMF (`<Scene>` block) both parse correctly.
+- **FPS counter unified** — `GmtRendererTickDriver` feeds real FPS to `viewport.reportFps()`.
+- **Formula panel migration** — last bespoke panel converted to manifest `items:`. `FormulaPanel.tsx` deleted. All 10 GMT panels now manifest-driven.
+- **Light gizmos** — `SinglePositionGizmo` + `OverlayProjection` promoted to `engine/`. `DomOverlays` in all three app layouts.
+- **F16/F17/F18** — TopBar snapshot, GLSLToJS dead require, dual singleton — all fixed/closed.
 
 **📋 2026-04-25 (continued) — Formula panel migration, scene loading, FPS, light gizmos:**
 - **Formula panel migration** — last bespoke panel converted to manifest-driven `items:` array. `FormulaPanel.tsx` deleted. Per-formula params (iterations + `FractalRegistry`-driven scalar/vec controls) extracted to `FormulaParamsWidget` registered as `'formula-params'`. `LfoList` registered as `'lfo-list'`. `geometry` feature gained `panelConfig` for Hybrid Box Fold compilable section. Julia group uses `showIf` predicate (hidden when `formulaDef.juliaType === 'none'`). All 10 GMT panels are now manifest-driven — no bespoke panel components remain except the genuinely domain-specific ones (LightPanelControls, EnginePanel, CameraManagerPanel). `PanelRouter` separator updated to match `SectionDivider` visual treatment (raised block + gradient, not a thin white line).
@@ -246,45 +262,22 @@ Everything flagged as "known gaps after Phase 5" has landed:
 
 ## Remaining work
 
-### Highest-impact gaps in app-gmt
-- **System menu fillout** — currently has Advanced Mode / Invert Y / Broadcast / Force Mobile / Workshop stub. Missing: Share Link, Hardware Settings (modal), dynamic feature toggles (iterate `featureRegistry.menuConfig`), Advanced subsection with Engine Settings toggle (reveals Engine panel), Mesh Export link.
-- **cameraSlice port** — blocks `Camera Manager` panel (add/delete/reorder saved cameras + undo/redo camera moves). 335 lines in gmt-0.8.5, drops cleanly into `store/slices/` or `engine-gmt/store/`.
-- **FlowEditor / `panel-graph`** — Modular formula uses it. Currently the Graph tab renders "Component not registered" if a user switches to `Modular`.
-- **FormulaWorkshop** — fragmentarium import pipeline. Parked but deferred.
-- **Hardware Preferences modal** — GPU caps override UI. System menu button exists as stub.
-- **Render Region + Bucket Render topbar items** — GMT had crop region selector + tiled export button with popover.
-- **Timeline toggle button** — timeline infrastructure is installed but no topbar button to show/hide the dock.
+### Active backlog
 
-### Not-yet-built plugins
-- **`@engine/environment`** — theme, DPR, mobile-detect. Placeholder in the roadmap; no concrete need yet.
-- **`@engine/help`** — the shared chrome has `HelpBrowser.tsx` + `helpUtils.ts`; not yet surfaced as a core plugin. Per-panel help IDs already wire through `useHelpContextMenu`.
+**Visual / features:**
+- **Orbit-trap gradient mapping in GMT** — fluid-toy has richer trap-gradient coloring modes (multi-stop, radial, angular) that would benefit GMT renders. Port is a compile-permutation addition; benchmark FPS impact before enabling by default.
+- **Fluid-toy polish** — gesture-mode switcher (brush/emitter/pick-c/pan-zoom), MandelbrotPicker overlay, ~34 DDFS params not yet ported (tone mapping, bloom, orbit-trap coloring, etc.).
 
-### Fragilities still open
-See `docs/engine/20_Fragility_Audit.md` for full list. F16/F17/F18 from 2026-04-25 code review — all fixed (commit `f2b119d`).
-- **F5** — AnimationEngine hardcodes legacy camera tracks (`camera.unified.*`, `camera.rotation.*`). Clean fix is `@engine/camera` registering its own binders via a proper `binderRegistry`. Current mitigation: `cameraKeyRegistry` lets apps opt out of the legacy tracks.
-- **F6** — `set${Feature}` name inference in `AnimationEngine.getBinder`. Replace with auto-bind at freeze time (tied to F5's `binderRegistry.register()`).
-- **F7** — `animationStore ↔ fractalStore` circular import via `window.useAnimationStore`. Express as explicit bridge (see `docs/09_Bridges_and_Derived.md`).
-- **F9** — `componentId` references not validated at registry freeze.
+**Structural integrity (low effort, low urgency):**
+- **F14 remaining shims** — `RenderPipeline.ts`, `BezierMath.ts`, `BloomPass.ts`, `UniformNames.ts` are verbatim copies in engine-gmt with no GMT-specific content. Replace with one-line re-exports each. No state, no bugs, just drift risk.
+- **Onboarding** — README describes the wrong product (fractal explorer, wrong port 5173 vs 3400). `demo/README.md` omits `registerFeatures.ts`. 18/28 smoke tests not wired into `package.json`. `package.json` `"name"` is `"gmt-fractal"`, `express` in wrong deps section.
 
-### Fluid-toy polish (app-level, not architectural)
-- Gesture-mode switcher (brush / emitter / pick-c / pan-zoom).
-- MandelbrotPicker overlay (bottom-right mini-canvas to click-pick `julia.juliaC`).
-- ~34 DDFS params from the reference not yet ported (tone mapping, bloom, orbit-trap coloring, etc.).
-- **Orbit-trap gradient mapping in GMT** — fluid-toy has richer trap-gradient options (multi-stop, radial, angular modes) that would visually benefit GMT too. Port is non-trivial because each trap mode adds GLSL compile permutations; benchmark FPS impact before enabling by default. Caveat: will increase shader compile time (another permutation axis on top of formula × features).
-
-### App-gmt scene loading
-- ✅ **Fixed (2026-04-25, commit `f1e6e91`)** — GMT PNGs (`FractalData` iTXt key) and `.gmf` files (GMF `<Scene>` block format) now load correctly. `utils/SceneFormat.ts` handles both key and format.
-
-### Adaptive resolution warmup
-- **Slow warm-up when returning from hi-res** — adaptive currently takes many frames to climb back to full res after a hi-res still. Root is in the viewport `_adaptiveScale` ramp math in `store/slices/viewportSlice.ts`. GMT's original used a more aggressive ramp-up multiplier when `actual > target`. Consider a faster `rampUp` coefficient (e.g. `sqrt(target/actual)` on drop, `(target/actual)^0.75` on climb) or a "boost on settle" that jumps to 1.0 immediately when `isMouseOverCanvas` goes false for >N frames. Measure against the current 30fps target.
-
-### The real confidence anchor
-- ✅ **Mandelbulb end-to-end** — landed in Phase 6 (2026-04-24). app-gmt renders Mandelbulb through the engine's worker proxy, CompileGate, and ShaderBuilder. F5/F6 camera-binder cleanup still pending; current GMT camera uses the legacy binder path.
-
-### Deferred
-- **F11 rename pass** — `engineStore` → `engineStore`, `FractalEvents` → `EngineEvents`, etc. Single commit after the GMT vertical slice lands.
-- **F8** — UI state undo (panel collapse, timeline scroll).
-- **F10** — `formula` field rename to `mode` (cosmetic; bundle with F11).
+### Deferred (no visible symptoms, cosmetic or architectural cleanup)
+- **F5/F6** — camera binder cleanup. Functional via legacy path; clean fix is `@engine/camera` registering binders through `binderRegistry`.
+- **F9** — `componentId` references not validated at registry freeze (dev-mode guard).
+- **F8** — UI state undo (panel collapse, timeline scroll position).
+- **F10/F11** — `formula` field rename to `mode` + `FractalEvents` → `EngineEvents` rename pass. One commit, cosmetic only. Bundle together.
+- **F15** — Worker `_localOffset` guard-clear race. Flagged but no visible symptoms in normal use.
 
 ## How to resume
 
