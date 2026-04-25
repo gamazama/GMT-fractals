@@ -43,7 +43,6 @@ import { useRegionSelection } from '../engine-gmt/hooks/useRegionSelection';
 import { usePreviewTarget } from '../engine-gmt/hooks/usePreviewTarget';
 import { RegionOverlay } from '../engine-gmt/components/viewport/RegionOverlay';
 import { PreviewGhostOverlay } from '../engine-gmt/components/viewport/PreviewGhostOverlay';
-import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
 import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
@@ -83,13 +82,17 @@ export const AppGmt: React.FC = () => {
 
     const cameraMode = (state as any).cameraMode ?? 'Orbit';
     // Navigation (Orbit/Fly) calls setSceneOffset whenever the camera
-    // moves. The worker's sceneOffset must follow — GMT's cameraSlice
-    // setSceneOffset fires OFFSET_SET for exactly this reason. Until
-    // cameraSlice is ported, mirror that emit here so
-    // GmtRendererTickDriver's OFFSET_SET listener forwards to the worker.
+    // moves. Delegate to cameraSlice's action — it updates BOTH the
+    // store AND engine.virtualSpace.state in lockstep, then emits
+    // OFFSET_SET for the worker forwarder. The previous local
+    // implementation here only updated the store; engine.virtualSpace
+    // .state stayed stale, so anything reading engine.sceneOffset
+    // (CameraUtils.getUnifiedFromEngine, the Key Cam capture path)
+    // diverged from the store's sceneOffset (read by timelineUtils
+    // .getLiveValue) — making the Key Cam dirty check always fire and
+    // the button always render red after any navigation.
     const setSceneOffset = (v: any) => {
-        useEngineStore.setState({ sceneOffset: v } as any);
-        FractalEvents.emit(FRACTAL_EVENTS.OFFSET_SET, v);
+        (useEngineStore.getState() as any).setSceneOffset(v);
     };
 
     return (
