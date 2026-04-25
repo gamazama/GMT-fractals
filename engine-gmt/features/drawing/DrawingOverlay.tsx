@@ -12,7 +12,7 @@ import {
     getOverlayViewport,
     projectWorldToXY,
     preciseToWorld,
-} from '../../engine/overlay/OverlayProjection';
+} from '../../../engine/overlay/OverlayProjection';
 
 // ── Pre-allocated temporaries (module-scoped, never exposed) ─────────
 

@@ -28,6 +28,23 @@ import { EngineBridge } from '../components/EngineBridge';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { FractalRendererCanvas } from './renderer';
 import { useViewportFps, useQualityFraction, ViewportFrame } from '../engine/plugins/Viewport';
+import { featureRegistry } from '../engine/FeatureSystem';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
+
+const DomOverlays: React.FC = () => {
+    const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
+    const state = useEngineStore();
+    return (
+        <div className="absolute inset-0 pointer-events-none z-[20]">
+            {overlays.map(cfg => {
+                const C = componentRegistry.get(cfg.componentId);
+                const slice = (state as any)[cfg.id];
+                if (C && slice) return <C key={cfg.id} featureId={cfg.id} sliceState={slice} actions={state} />;
+                return null;
+            })}
+        </div>
+    );
+};
 
 export const FractalToyApp: React.FC = () => {
     const state = useEngineStore();
@@ -65,6 +82,7 @@ export const FractalToyApp: React.FC = () => {
                 <div className="flex-1 flex overflow-hidden relative">
                     <ViewportFrame>
                         <FractalRendererCanvas />
+                        <DomOverlays />
                     </ViewportFrame>
 
                     <Dock side="right" />

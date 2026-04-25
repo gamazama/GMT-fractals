@@ -16,6 +16,8 @@ import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
 import { viewport, useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
 import { TopBarHost } from '../engine/plugins/TopBar';
 import { HudHost } from '../engine/plugins/Hud';
+import { featureRegistry } from '../engine/FeatureSystem';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { FluidEngine } from './fluid/FluidEngine';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
@@ -67,6 +69,21 @@ const readBrushParamsForFrame = (): BrushParams => {
         particleLifetime: b.particleLifetime ?? 1.2,
         particleSizeScale: b.particleSizeScale ?? 0.35,
     };
+};
+
+const DomOverlays: React.FC = () => {
+    const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
+    const state = useEngineStore();
+    return (
+        <div className="absolute inset-0 pointer-events-none z-[20]">
+            {overlays.map(cfg => {
+                const C = componentRegistry.get(cfg.componentId);
+                const slice = (state as any)[cfg.id];
+                if (C && slice) return <C key={cfg.id} featureId={cfg.id} sliceState={slice} actions={state} />;
+                return null;
+            })}
+        </div>
+    );
 };
 
 export const FluidToyApp: React.FC = () => {
@@ -380,6 +397,7 @@ export const FluidToyApp: React.FC = () => {
                     />
                     <FluidPointerLayer canvasRef={canvasRef} engineRef={engineRef} />
                     <HudHost />
+                    <DomOverlays />
                 </ViewportFrame>
 
                 <Dock side="right" />

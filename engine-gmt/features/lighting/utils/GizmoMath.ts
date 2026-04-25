@@ -7,9 +7,9 @@ import {
     storeToWorld,
     getScreenAxisTip,
     MIN_OVERLAY_DEPTH,
-} from '../../../engine/overlay/OverlayProjection';
+} from '../../../../engine/overlay/OverlayProjection';
 // Re-export ScreenPoint from the shared module so existing imports keep working
-import type { ScreenPoint } from '../../../engine/overlay/OverlayProjection';
+import type { ScreenPoint } from '../../../../engine/overlay/OverlayProjection';
 export type { ScreenPoint };
 
 // Gizmo constants — shared with the future SinglePositionGizmo

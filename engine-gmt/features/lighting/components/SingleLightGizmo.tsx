@@ -7,8 +7,8 @@ const engine = getProxy();
 import { useEngineStore } from '../../../../store/engineStore';
 import { getViewportCamera, getViewportCanvas, getDisplayCamera } from '../../../engine/worker/ViewportRefs';
 import { AnchorIcon, UnanchoredIcon } from '../../../../components/Icons';
-import { SinglePositionGizmo } from '../../../components/gizmo/SinglePositionGizmo';
-import type { PositionGizmoHandle } from '../../../components/gizmo/SinglePositionGizmo';
+import { SinglePositionGizmo } from '../../../../engine/components/gizmo/SinglePositionGizmo';
+import type { PositionGizmoHandle } from '../../../../engine/components/gizmo/SinglePositionGizmo';
 import {
     getLightWorldPosition,
     projectToScreen,
