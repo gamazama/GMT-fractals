@@ -40,7 +40,7 @@ import {
  * Works for any app without knowing its store shape.
  */
 const KeyCamButton: React.FC = () => {
-    const { sequence, currentFrame, isPlaying, captureCameraFrame } = useAnimationStore();
+    const { sequence, currentFrame, isPlaying } = useAnimationStore();
 
     // Rebuild camera track list when apps (re-)register
     const tracks = useSyncExternalStore(
@@ -60,17 +60,14 @@ const KeyCamButton: React.FC = () => {
     }
 
     const handleKeyCam = () => {
-        // Apps that register with setCameraKeyCaptureFn (e.g. GMT reading
-        // from engine.activeCamera) override the default. Default captures
-        // scalar values from the DDFS store at each track path — works
-        // for fluid-toy, fractal-toy, and any future DDFS-camera app.
+        // Apps register a capture function via setCameraKeyCaptureFn —
+        // GMT's reads from engine.activeCamera + sceneOffset, fluid-toy
+        // and fractal-toy use the default DDFS-store path walker. The
+        // legacy sequenceSlice.captureCameraFrame is NOT called here:
+        // its underlying CameraUtils.getUnifiedFromEngine is stubbed in
+        // engine-core (returns 0,0,0), so it would overwrite the
+        // just-captured keyframes with zeros for camera.unified.* tracks.
         captureCameraKeyFrame(currentFrame);
-        // Retain GMT's capture hook too for apps still using camera.unified.*
-        // tracks — it's additive (a no-op if no camera tracks of that name
-        // exist). Harmless otherwise.
-        if (tracks.some((t) => t.startsWith('camera.unified') || t.startsWith('camera.rotation'))) {
-            captureCameraFrame(currentFrame);
-        }
         FractalEvents.emit(FRACTAL_EVENTS.TRACK_FOCUS, tracks[0]);
     };
 

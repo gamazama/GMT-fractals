@@ -10,9 +10,10 @@
  * buttons on primitives are meaningless without it.
  */
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, useCallback } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { TimelineOpenIcon } from './Icons';
+import { useShortcut } from '../engine/plugins/Shortcuts';
 
 const Timeline = React.lazy(() => import('./Timeline'));
 
@@ -24,6 +25,18 @@ export interface TimelineHostProps {
 export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) => {
     const [showTimeline, setShowTimeline] = useState(false);
     const openContextMenu = useEngineStore((s) => s.openContextMenu);
+
+    // T toggles timeline visibility — matches GMT's KeyT binding. The
+    // state lives in this component, so the shortcut is registered
+    // here rather than in app/main where the rest of the bindings sit.
+    const toggleTimeline = useCallback(() => setShowTimeline((s) => !s), []);
+    useShortcut({
+        id: 'engine.timeline.toggle',
+        key: 't',
+        description: 'Toggle timeline panel',
+        category: 'Timeline',
+        handler: toggleTimeline,
+    });
 
     if (hidden) return null;
 

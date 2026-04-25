@@ -24,11 +24,14 @@
 import * as THREE from 'three';
 import { animationEngine, type ScrubContext } from '../../engine/AnimationEngine';
 import { binderRegistry } from '../../engine/animation/binderRegistry';
+import { setCameraKeyCaptureFn } from '../../engine/animation/cameraKeyRegistry';
 import { useEngineStore } from '../../store/engineStore';
+import { useAnimationStore } from '../../store/animationStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { getProxy } from '../engine/worker/WorkerProxy';
 import { getViewportCamera } from '../engine/worker/ViewportRefs';
 import { VirtualSpace } from '../engine/PrecisionMath';
+import { CameraUtils } from '../utils/CameraUtils';
 
 const engine = getProxy() as any;
 
@@ -96,11 +99,55 @@ const postScrub = (_ctx: ScrubContext) => {
     useEngineStore.setState({ cameraRot: rot } as any);
 };
 
+/** Capture the live camera into `camera.unified.{x,y,z}` +
+ *  `camera.rotation.{x,y,z}` keyframes. Used by the TimelineToolbar
+ *  Key Cam button via setCameraKeyCaptureFn — the default capture in
+ *  cameraKeyRegistry walks store paths, but GMT's camera lives in
+ *  `cameraRot` (quaternion) + `sceneOffset` (split-precision vec3),
+ *  not under a `camera.*` field, so the default no-ops. This path
+ *  reads from the live R3F camera via CameraUtils, mirroring the
+ *  legacy sequenceSlice.captureCameraFrame logic.
+ *
+ *  Auto-creates each track on first press so the user doesn't have to
+ *  pre-add empty tracks. Idempotent for the existing-track case.
+ */
+const captureGmtCameraKeyFrame = (frame: number, _tracks: readonly string[]): void => {
+    const cam = getViewportCamera() || engine.activeCamera;
+    if (!cam) return;
+
+    const unified = CameraUtils.getUnifiedFromEngine();
+    const euler = new THREE.Euler().setFromQuaternion(cam.quaternion);
+
+    const tracks = [
+        { id: 'camera.unified.x',  val: unified.x, label: 'Position X' },
+        { id: 'camera.unified.y',  val: unified.y, label: 'Position Y' },
+        { id: 'camera.unified.z',  val: unified.z, label: 'Position Z' },
+        { id: 'camera.rotation.x', val: euler.x,   label: 'Rotation X' },
+        { id: 'camera.rotation.y', val: euler.y,   label: 'Rotation Y' },
+        { id: 'camera.rotation.z', val: euler.z,   label: 'Rotation Z' },
+    ];
+
+    const animActions = useAnimationStore.getState();
+    const seq = (animActions as any).sequence;
+
+    for (const t of tracks) {
+        if (!seq.tracks[t.id]) {
+            (animActions as any).addTrack(t.id, t.label);
+        }
+        (animActions as any).addKeyframe(t.id, frame, t.val);
+    }
+};
+
 /** Register all GMT camera-track binders + scrub hooks against the
  *  engine's animationEngine. Idempotent — re-registering a binder
  *  replaces the previous entry; the scrub-hook function references
  *  are captured and removed by the returned teardown. */
 export const installGmtCameraBinders = (): (() => void) => {
+    // Tell the cameraKeyRegistry how to capture GMT's live camera.
+    // Without this, the default capture walks `state.camera.unified.x`
+    // paths that don't exist in GMT's store (camera state lives in
+    // cameraRot + sceneOffset) and the Key Cam button is a no-op.
+    setCameraKeyCaptureFn(captureGmtCameraKeyFrame);
     // active_index: timeline can animate the saved-camera selector.
     // Calls selectCamera which fires CAMERA_TRANSITION (smooth), not
     // CAMERA_TELEPORT — same UX as clicking a saved camera.

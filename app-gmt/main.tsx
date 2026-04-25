@@ -180,6 +180,55 @@ shortcuts.register({
     },
 });
 
+// ` (Backquote) → toggle advanced mode. Matches GMT's tilde binding
+// from useKeyboardShortcuts.ts:115. The Light + advanced-only manifest
+// items (e.g. Camera & Navigation section) flip visibility from this.
+shortcuts.register({
+    id: 'gmt.toggleAdvancedMode',
+    key: '`',
+    description: 'Toggle Advanced Mode',
+    category: 'View',
+    handler: () => {
+        const s = useEngineStore.getState() as any;
+        s.setAdvancedMode?.(!s.advancedMode);
+    },
+});
+
+// B → toggle broadcast (clean-feed) mode — hides chrome for screenshots
+// / screen recording. Mirrors GMT's KeyB binding.
+shortcuts.register({
+    id: 'gmt.toggleBroadcastMode',
+    key: 'b',
+    description: 'Toggle Broadcast / Clean-Feed mode',
+    category: 'View',
+    handler: () => {
+        const s = useEngineStore.getState() as any;
+        s.setIsBroadcastMode?.(!s.isBroadcastMode);
+    },
+});
+
+// Escape → exit any active interaction mode (pick focus, draw, etc.)
+// and clear timeline selection. Mirrors GMT's Escape handler.
+shortcuts.register({
+    id: 'gmt.escapeInteraction',
+    key: 'Escape',
+    description: 'Exit interaction mode / deselect',
+    category: 'View',
+    handler: () => {
+        const s = useEngineStore.getState() as any;
+        if (s.isBroadcastMode) s.setIsBroadcastMode?.(false);
+        if (s.interactionMode && s.interactionMode !== 'none') {
+            s.setInteractionMode?.('none');
+        }
+        // Animation deselect — best-effort; not all apps mount the
+        // animation store.
+        try {
+            const aw = (window as any).useAnimationStore;
+            aw?.getState?.().deselectAll?.();
+        } catch { /* no-op */ }
+    },
+});
+
 // Camera move undo/redo — Ctrl+Shift+Z / Ctrl+Shift+Y. Distinct from
 // the engine's generic Ctrl+Z unified undo (which captures param
 // changes); these specifically roll back sceneOffset + rotation moves
