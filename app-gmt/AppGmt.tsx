@@ -46,6 +46,33 @@ import { PreviewGhostOverlay } from '../engine-gmt/components/viewport/PreviewGh
 
 import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
+import { featureRegistry } from '../engine/FeatureSystem';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
+
+const DomOverlays: React.FC = () => {
+    const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
+    const state = useEngineStore();
+    return (
+        <div className="absolute inset-0 pointer-events-none z-[20]">
+            {overlays.map(config => {
+                const Component = componentRegistry.get(config.componentId);
+                const featureId = config.id;
+                const sliceState = (state as any)[featureId];
+                if (Component && sliceState) {
+                    return (
+                        <Component
+                            key={config.id}
+                            featureId={featureId}
+                            sliceState={sliceState}
+                            actions={state}
+                        />
+                    );
+                }
+                return null;
+            })}
+        </div>
+    );
+};
 
 export const AppGmt: React.FC = () => {
     const state     = useEngineStore();
@@ -163,6 +190,10 @@ export const AppGmt: React.FC = () => {
                         />
 
                         <HudHost />
+
+                        {/* DOM viewport overlays — LightGizmo, DrawingOverlay, etc.
+                            Iterated from featureRegistry.getViewportOverlays() */}
+                        <DomOverlays />
 
                         {/* Region-selection overlay — mounted inside
                             viewportRef so useRegionSelection's mouse

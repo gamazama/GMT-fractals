@@ -27,6 +27,7 @@
 
 import React, { useEffect } from 'react';
 import { componentRegistry, FeatureComponentProps } from '../../components/registry/ComponentRegistry';
+import { registerTick, TICK_PHASE } from '../engine/TickRegistry';
 import { useEngineStore } from '../../store/engineStore';
 
 // --- Widget components ---
@@ -40,6 +41,7 @@ import { InteractionPicker } from '../../components/InteractionPicker';
 import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
 import { QualityRenderControls } from '../components/panels/quality/QualityRenderControls';
 import LightPanelControls from '../components/panels/lighting/LightPanelControls';
+import LightGizmo, { tick as lightGizmoTick } from './lighting/LightGizmo';
 import {
     ColorGradingHistogram,
     OpticsControls,
@@ -136,6 +138,8 @@ export const registerGmtUi = () => {
     componentRegistry.register('formula-select', ConnectedFormulaSelect as any);
     componentRegistry.register('quality-render-controls', QualityRenderControls as any);
     componentRegistry.register('light-panel-controls', LightPanelControls as any);
+    componentRegistry.register('overlay-lighting', LightGizmo as any);
+    registerTick('lightGizmoTick', TICK_PHASE.OVERLAY, lightGizmoTick);
 
     // Scene widgets — slotted via optics / navigation / colorGrading customUI.
     componentRegistry.register('scene-histogram', ConnectedGradingHistogram);
