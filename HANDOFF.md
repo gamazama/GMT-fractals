@@ -4,6 +4,17 @@
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
 **Status:** ✅ **Phases 1–6 + panel manifest + topbar port + compile pipeline + camera round-trip (2026-04-24).** Three apps boot on the engine: `fractal-toy.html`, `fluid-toy.html`, and `app-gmt.html` — the latter now renders Mandelbulb end-to-end with: full GMT worker + path tracing + Orbit/Fly navigation, formula switching through the full setFormula pipeline (preset hydration → CompileGate → worker recompile → new shader), PT toggle driving `renderMode`, scene-widgets / coloring histograms / formula gallery with thumbnails, Light Studio in the center topbar, camera state round-trips through save/load + respects Reset Position, picking (Julia + focus) via `useInteractionManager`. `npx tsc --noEmit` → 0 errors. Dock panels use `PanelManifest` (see `docs/engine/14_Panel_Manifest.md`); 10 GMT panels composed from 26 features. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
 
+**📋 2026-04-25 sweep (see `docs/engine/20_Fragility_Audit.md` F5–F15 entries):**
+- **F5 closed** — AnimationEngine camera tracks moved to GMT-side binder module; engine pipeline is camera-shape-agnostic.
+- **F7 closed** — `window.useAnimationStore` was leftover scaffolding (no real cycle). Direct imports everywhere.
+- **F14 fixed** — Duplicate `ViewportRefs.ts` in `engine/worker/` and `engine-gmt/engine/worker/` had separate module-level `_camera`. Capture path used one copy, dirty-check used the other. Collapsed to a re-export shim. The whole class of "engine-gmt overlay duplicates an engine-core module" is now an audit target.
+- **F15 deferred** — Worker `_localOffset` reads zeros for ~20ms at boot before preset values arrive; flagged via Key Cam logging, no visible symptoms.
+- **Verbatim ports** — Adaptive resolution badge, Key Cam keyframe body, RenderPopup (video render), GMT logo all ported from `gmt-0.8.5/` rather than reinvented. Lesson saved: when fixing GMT-specific behaviour, the working code is upstream; copy + rewrite imports beats bending engine-core generics.
+- **Lifecycle-in-unmounted-components** — Modulation-record overrides cleanup, timeline-hover scope push, `setMouseOverCanvas` for adaptive's settle-on-canvas all moved off legacy `<ViewportArea>` useEffects to plugin-tick or `ViewportFrame` DOM handlers.
+- **Panel-manifest** gained `compilable` item type so `<CompilableFeatureSection>` can drive volume scatter / hybrid box / interlace from items lists, not bespoke JSX.
+- **State-library plugin** validated by 2nd-app reuse: fluid-toy's "Views" + GMT's "Camera Manager" share `StateLibraryPanel` + `installStateLibrary` (slice + slot shortcuts + topbar menu in one call). View Manager dock-left default, GMT-style preset button grid, ActiveSnapshotFeatures footer helper.
+- **Help system** — `helpId` on PanelDefinition / ParamConfig / GroupConfig / PanelItem; `?` button next to hint copy; right-click context-menu DOM walk.
+
 **📐 Architecture baseline committed (2026-04-22).** 12 engine-scope docs written under `docs/01_*` through `docs/20_*`. Start any session with `docs/DOCS_INDEX.md`; the table in `CLAUDE.md` maps "working on X" → "read Y". All design decisions (core+plugins model, feature isolation, unified undo, auto-binding animation, bridges/derived) live in those docs. Any architectural change goes in a doc before it goes in code.
 
 ## What this is
