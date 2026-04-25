@@ -166,8 +166,7 @@ registerGmtTopbar({
     openCameraManager: () => {
         useEngineStore.getState().togglePanel('Camera Manager', true);
     },
-    // Formula Workshop is a Pass 4+ item.
-    openFormulaWorkshop: () => console.info('[app-gmt] Formula Workshop pending port'),
+    openFormulaWorkshop: () => useEngineStore.getState().openWorkshop(),
 });
 
 // @engine-gmt/renderer — wire GMT-specific callbacks.

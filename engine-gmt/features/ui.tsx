@@ -44,6 +44,9 @@ import LightPanelControls from '../components/panels/lighting/LightPanelControls
 import { FormulaParamsWidget } from '../components/panels/formula/FormulaParamsWidget';
 import { LfoList } from '../components/panels/formula/LfoList';
 import LightGizmo, { tick as lightGizmoTick } from './lighting/LightGizmo';
+import { DrawingOverlay, tick as drawingOverlayTick } from './drawing/DrawingOverlay';
+import { WebcamOverlay } from '../../engine/features/webcam/WebcamOverlay';
+import { DebugToolsOverlay } from '../../engine/features/debug_tools/DebugToolsOverlay';
 import {
     ColorGradingHistogram,
     OpticsControls,
@@ -149,6 +152,12 @@ export const registerGmtUi = () => {
     componentRegistry.register('lfo-list', LfoListWidget as any);
     componentRegistry.register('overlay-lighting', LightGizmo as any);
     registerTick('lightGizmoTick', TICK_PHASE.OVERLAY, lightGizmoTick);
+
+    componentRegistry.register('overlay-drawing', DrawingOverlay as any);
+    registerTick('drawingOverlayTick', TICK_PHASE.OVERLAY, drawingOverlayTick);
+
+    componentRegistry.register('overlay-webcam', WebcamOverlay as any);
+    componentRegistry.register('overlay-debug-tools', DebugToolsOverlay as any);
 
     // Scene widgets — slotted via optics / navigation / colorGrading customUI.
     componentRegistry.register('scene-histogram', ConnectedGradingHistogram);

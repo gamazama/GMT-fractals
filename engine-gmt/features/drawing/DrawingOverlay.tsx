@@ -176,7 +176,7 @@ function getOrCreateLabelGroup(labelsEl: HTMLDivElement, id: string): HTMLDivEle
         if (deleteBtn) {
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                useEngineStore.getState().removeDrawnShape(id);
+                (useEngineStore.getState() as any).removeDrawnShape(id);
             });
         }
         labelsEl.appendChild(el);
@@ -447,7 +447,9 @@ export const tick = () => {
 // =============================================
 
 export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
-    const { drawing, setDrawing, addDrawnShape } = useEngineStore();
+    const drawing = useEngineStore((s: any) => s.drawing);
+    const setDrawing = useEngineStore((s: any) => s.setDrawing);
+    const addDrawnShape = (useEngineStore.getState() as any).addDrawnShape;
     const { active, activeTool, originMode } = drawing;
 
     const svgRef = useRef<SVGSVGElement>(null);

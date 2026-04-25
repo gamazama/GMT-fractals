@@ -49,6 +49,7 @@ import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LoadingScreen } from './LoadingScreen';
+import { FormulaWorkshop } from '../engine-gmt/features/fragmentarium_import/FormulaWorkshop';
 
 const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
@@ -246,6 +247,13 @@ export const AppGmt: React.FC = () => {
                 <HelpOverlay />
 
                 <CompilingIndicator />
+
+                {(state as any).workshopOpen && (
+                    <FormulaWorkshop
+                        onClose={() => (state as any).closeWorkshop()}
+                        editFormula={(state as any).workshopEditFormula}
+                    />
+                )}
 
                 <HardwarePrefsHost />
 
