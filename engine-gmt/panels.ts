@@ -340,12 +340,16 @@ export const GmtPanels: PanelManifest = [
     //
     // `dock: 'float'` + `isCore: false` = hidden from dock tab bars;
     // only appears when the topbar action calls `togglePanel(..., true)`.
+    // View Manager — saved-view library + cardinal/preset toolbar +
+    // composition guides. Lives in the (hidden-by-default) left dock
+    // so the right dock stays focused on authoring tabs. Opens via
+    // the topbar Camera menu's "View Manager" entry; the dock surfaces
+    // when activated (see Dock.tsx).
     {
         id: 'Camera Manager',
         label: 'View Manager',
-        dock: 'float',
-        order: 200,
+        dock: 'left',
+        order: 20,
         component: 'panel-cameramanager',
-        isCore: false,
     },
 ];

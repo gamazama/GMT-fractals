@@ -11,14 +11,15 @@
  * already has the Fractal tab for fine-tuning a selected view.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
-import { StateLibraryPanel } from '../../components/StateLibraryPanel';
+import { StateLibraryPanel, type StateLibraryPreset } from '../../components/StateLibraryPanel';
 import { ActiveSnapshotFeatures } from '../../components/ActiveSnapshotFeatures';
 import { CompositionOverlayControls } from '../../components/CompositionOverlayControls';
 import { PlusIcon } from '../../components/Icons';
 import type { StateSnapshot } from '../../engine/store/createStateLibrarySlice';
 import type { JuliaViewState } from '../viewLibrary';
+import { KIND_MODES } from '../features/julia';
 
 type ViewSnapshot = StateSnapshot<JuliaViewState>;
 
@@ -60,6 +61,29 @@ export const ViewLibraryPanel: React.FC = () => {
         return false;
     }, []);
 
+    // 2D view-shortcut presets — analogous to GMT's cardinal toolbar
+    // (FRONT/BACK/etc) but for the fluid-toy fractal-canvas. Each
+    // button drives setJulia with a fixed payload. RESET falls through
+    // to the slice's resetView. Memoised so the array identity is
+    // stable across renders.
+    const presets: StateLibraryPreset[] = useMemo(() => {
+        const setJulia = (useEngineStore.getState() as any).setJulia;
+        const setOrZoom = (zoom: number) => {
+            const c = (useEngineStore.getState() as any).julia?.center ?? { x: 0, y: 0 };
+            setJulia?.({ center: { x: c.x, y: c.y }, zoom });
+        };
+        const mandIdx = KIND_MODES.indexOf('mandelbrot' as any);
+        const juliaIdx = KIND_MODES.indexOf('julia' as any);
+        return [
+            { id: 'reset', label: 'RESET', onSelect: () => handleReset(), title: 'Reset view to defaults' },
+            { id: 'home',  label: 'HOME',  onSelect: () => setJulia?.({ center: { x: 0, y: 0 } }),    title: 'Center to (0, 0); keep zoom' },
+            { id: '1x',    label: '1:1',   onSelect: () => setOrZoom(1.0),                            title: 'Zoom 1×' },
+            { id: 'wide',  label: 'WIDE',  onSelect: () => setOrZoom(0.5),                            title: 'Zoom out' },
+            { id: 'mand',  label: 'MAND',  onSelect: () => setJulia?.({ kind: mandIdx >= 0 ? mandIdx : 1 }), title: 'Switch to Mandelbrot kind' },
+            { id: 'julia', label: 'JULIA', onSelect: () => setJulia?.({ kind: juliaIdx >= 0 ? juliaIdx : 0 }), title: 'Switch to Julia kind' },
+        ];
+    }, [handleReset]);
+
     if (!addView) {
         // Slice not installed yet — render placeholder rather than crash.
         return <div className="p-4 text-[10px] text-gray-600 italic">View library not initialized.</div>;
@@ -79,22 +103,16 @@ export const ViewLibraryPanel: React.FC = () => {
             isModified={isModified}
             emptyState="No saved views — pan, zoom, tweak, then click New View"
             slotHintPrefix={null}
+            presets={presets}
+            presetGridCols={3}
             toolbarBefore={
-                <div className="p-2 border-b border-white/10 bg-black/40 flex gap-1">
+                <div className="px-2 pb-2 bg-black/40 border-b border-white/10">
                     <button
                         type="button"
                         onClick={handleAdd}
-                        className="flex-1 bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
+                        className="w-full bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
                     >
                         <PlusIcon /> New View
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleReset}
-                        className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1 px-3"
-                        title="Reset to default view"
-                    >
-                        RESET
                     </button>
                 </div>
             }

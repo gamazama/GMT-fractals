@@ -31,6 +31,19 @@ interface DragState {
     overIndex: number;
 }
 
+/** A quick-action button rendered in the top-of-panel preset grid.
+ *  Each app prescribes its own list — GMT's are cardinal-direction
+ *  views (FRONT / BACK / LEFT / …); fluid-toy's are 2D view shortcuts
+ *  (RESET / HOME / ZOOM / kind toggles). The library doesn't know what
+ *  "preset" means semantically — just renders the buttons and fires
+ *  onSelect. */
+export interface StateLibraryPreset {
+    id: string;
+    label: string;
+    title?: string;
+    onSelect: () => void;
+}
+
 export interface StateLibraryPanelProps<T> {
     snapshots: StateSnapshot<T>[];
     activeId: string | null;
@@ -56,6 +69,13 @@ export interface StateLibraryPanelProps<T> {
     emptyState?: string;
     /** Slot-shortcut hint label, e.g. "Ctrl+". Set to null to hide. */
     slotHintPrefix?: string | null;
+
+    /** Quick-action preset buttons rendered as a grid above any
+     *  toolbarBefore content. Each app provides its own list — see
+     *  StateLibraryPreset. Skipping this prop suppresses the grid. */
+    presets?: StateLibraryPreset[];
+    /** Number of columns in the preset grid. Default 4. */
+    presetGridCols?: number;
 
     /** Optional content rendered above the list — typical home for a
      *  cardinal-direction toolbar or a "New" button row. */
@@ -84,6 +104,8 @@ export function StateLibraryPanel<T>({
     isModified,
     emptyState = 'No saved snapshots',
     slotHintPrefix = 'Ctrl+',
+    presets,
+    presetGridCols = 4,
     toolbarBefore,
     toolbarAfter,
     footer,
@@ -136,6 +158,28 @@ export function StateLibraryPanel<T>({
 
     return (
         <div className={className}>
+            {presets && presets.length > 0 && (
+                <div
+                    className="p-2 border-b border-white/10 bg-black/40 grid gap-1"
+                    // Dynamic column count — Tailwind's JIT can't statically
+                    // extract a class built from a prop, so an inline style
+                    // is the right tool here.
+                    // eslint-disable-next-line react/forbid-dom-props
+                    style={{ gridTemplateColumns: `repeat(${presetGridCols}, minmax(0, 1fr))` }}
+                >
+                    {presets.map((p) => (
+                        <button
+                            key={p.id}
+                            type="button"
+                            onClick={p.onSelect}
+                            title={p.title ?? p.label}
+                            className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 hover:text-gray-200 rounded py-1 transition-colors"
+                        >
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+            )}
             {toolbarBefore}
 
             <div className="p-2 space-y-1">
@@ -188,6 +232,8 @@ export function StateLibraryPanel<T>({
                                 {editId === snap.id ? (
                                     <input
                                         type="text"
+                                        aria-label="Rename snapshot"
+                                        title="Rename snapshot"
                                         value={editName}
                                         onChange={(e) => setEditName(e.target.value)}
                                         onBlur={handleRenameSubmit}

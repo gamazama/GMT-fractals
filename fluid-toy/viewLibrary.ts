@@ -16,10 +16,6 @@
 import { useEngineStore } from '../store/engineStore';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
 import { CameraIcon } from '../components/Icons';
-import { nanoid } from 'nanoid';
-import { PRESETS } from './presets/data';
-import { KIND_MODES } from './features/julia';
-import type { StateSnapshot } from '../engine/store/createStateLibrarySlice';
 
 export interface JuliaViewState {
     kind: number;
@@ -90,39 +86,6 @@ const resetView = () => {
     if (setJulia) setJulia({ center: { x: 0, y: 0 }, zoom: 1.5 });
 };
 
-/** Seed the library with view fingerprints pulled from the curated
- *  preset pack (fluid-toy/presets/data.ts). The full presets affect
- *  the whole sim (forces, dye, post-fx, etc.); we only pull the
- *  view-shaped subset here so selecting a default doesn't yank the
- *  user's coupling/palette settings out from under them.
- *
- *  Called once at install time. Skipped on subsequent installs so
- *  user-curated views aren't clobbered. */
-const seedDefaultViews = (): void => {
-    const existing = (useEngineStore.getState() as any).savedViews;
-    if (existing && existing.length > 0) return;
-
-    const seeded: StateSnapshot<JuliaViewState>[] = PRESETS.map((p) => {
-        const params = p.params as any;
-        const kindIdx = KIND_MODES.indexOf(params.kind);
-        return {
-            id: nanoid(),
-            label: p.name,
-            createdAt: Date.now(),
-            state: {
-                kind: kindIdx >= 0 ? kindIdx : 0,
-                juliaC: { x: params.juliaC[0], y: params.juliaC[1] },
-                center: { x: params.center[0], y: params.center[1] },
-                zoom: params.zoom,
-                maxIter: params.maxIter,
-                power: params.power,
-            },
-        };
-    });
-
-    (useEngineStore as any).setState({ savedViews: seeded });
-};
-
 export const installFluidToyViewLibrary = (): void => {
     installStateLibrary<JuliaViewState>({
         panelId: 'Views',
@@ -165,9 +128,4 @@ export const installFluidToyViewLibrary = (): void => {
             slotLabelPrefix: 'View',
         },
     });
-
-    // Seed the library with the curated preset pack on first install
-    // so users have something to play with immediately — matches the
-    // GMT-style "comes with examples" vibe.
-    seedDefaultViews();
 };

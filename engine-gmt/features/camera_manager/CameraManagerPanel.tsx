@@ -99,20 +99,22 @@ export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ classNam
             isModified={isModifiedFn}
             emptyState="No saved cameras"
             slotHintPrefix="Ctrl+"
+            presets={[
+                { id: 'front', label: 'FRONT', onSelect: () => handleDirectional('Front') },
+                { id: 'back',  label: 'BACK',  onSelect: () => handleDirectional('Back') },
+                { id: 'left',  label: 'LEFT',  onSelect: () => handleDirectional('Left') },
+                { id: 'right', label: 'RIGHT', onSelect: () => handleDirectional('Right') },
+                { id: 'top',   label: 'TOP',   onSelect: () => handleDirectional('Top') },
+                { id: 'bot',   label: 'BTM',   onSelect: () => handleDirectional('Bottom') },
+                { id: 'iso',   label: 'ISO',   onSelect: () => handleDirectional('Isometric') },
+                { id: 'reset', label: 'RESET', onSelect: handleReset, title: 'Reset camera to formula default' },
+            ]}
             toolbarBefore={
-                <div className="p-2 border-b border-white/10 bg-black/40 grid grid-cols-4 gap-1" data-help-id="panel.camera_manager">
-                    <button type="button" onClick={() => handleDirectional('Front')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">FRONT</button>
-                    <button type="button" onClick={() => handleDirectional('Back')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">BACK</button>
-                    <button type="button" onClick={() => handleDirectional('Left')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">LEFT</button>
-                    <button type="button" onClick={() => handleDirectional('Right')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">RIGHT</button>
-                    <button type="button" onClick={() => handleDirectional('Top')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">TOP</button>
-                    <button type="button" onClick={() => handleDirectional('Bottom')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">BTM</button>
-                    <button type="button" onClick={() => handleDirectional('Isometric')} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">ISO</button>
-                    <button type="button" onClick={handleReset} className="bg-white/5 hover:bg-white/10 text-[9px] text-gray-400 rounded py-1">RESET</button>
+                <div className="px-2 pb-2 bg-black/40 border-b border-white/10" data-help-id="panel.camera_manager">
                     <button
                         type="button"
                         onClick={handleAddCamera}
-                        className="col-span-4 bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1 mt-1"
+                        className="w-full bg-cyan-900/40 hover:bg-cyan-800 text-cyan-300 border border-cyan-500/30 rounded py-1 text-[9px] font-bold flex items-center justify-center gap-1"
                     >
                         <PlusIcon /> New Camera
                     </button>
