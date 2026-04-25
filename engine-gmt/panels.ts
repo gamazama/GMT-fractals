@@ -68,8 +68,13 @@ export const GmtPanels: PanelManifest = [
             // --- Atmosphere (fog) ---
             { type: 'feature', id: 'atmosphere', groupFilter: 'fog' },
 
-            // --- Volumetric scatter (compile-toggle is in the feature itself) ---
-            { type: 'feature', id: 'volumetric' },
+            // --- Volumetric scatter (compile-toggle UI) ---
+            // Renders via <CompilableFeatureSection> reading the
+            // feature's panelConfig — same shape hybrid box and
+            // interlace use. Plain `type: 'feature'` showed only the
+            // runtime sliders without the compile toggle, leaving the
+            // user dependent on the Engine panel to compile it on.
+            { type: 'compilable', id: 'volumetric' },
 
             { type: 'separator' },
 

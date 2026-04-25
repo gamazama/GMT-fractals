@@ -131,6 +131,20 @@ export type PanelItem =
           type: 'accordion';
           sections: PanelAccordionSection[];
           showIf?: ShowIfPredicate;
+      })
+    | (PanelItemHelp & {
+          /** Renders the feature via <CompilableFeatureSection>: a
+           *  compile/runtime-split UI that shows the compile-toggle
+           *  status dot, runtime sliders, and an "is compiling"
+           *  spinner. The feature must declare a `panelConfig` block
+           *  describing its compileParam / runtimeToggleParam / etc.
+           *  Used for hybrid box, interlace, volumetric scatter — any
+           *  feature with a compile-time switch alongside runtime
+           *  params. Mirrors GMT's inline `<CompilableFeatureSection>`
+           *  usage in ScenePanel / FormulaPanel without bespoke JSX. */
+          type: 'compilable';
+          id: string;
+          showIf?: ShowIfPredicate;
       });
 
 /** One section inside a `type: 'accordion'` PanelItem. */

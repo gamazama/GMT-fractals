@@ -35,6 +35,7 @@ import {
 import { SectionLabel } from './SectionLabel';
 import { CollapsibleSection } from './CollapsibleSection';
 import { Accordion, AccordionSection } from './Accordion';
+import { CompilableFeatureSection } from './CompilableFeatureSection';
 import { useEngineStore } from '../store/engineStore';
 
 interface PanelRouterProps {
@@ -156,6 +157,16 @@ const renderItem = (
             node = <Accordion key={`accordion-${index}`} sections={sections} />;
             break;
         }
+
+        case 'compilable':
+            node = (
+                <CompilableFeatureSection
+                    key={`compilable-${item.id}-${index}`}
+                    featureId={item.id}
+                    helpId={item.helpId}
+                />
+            );
+            break;
 
         default:
             return null;
