@@ -328,7 +328,7 @@ const FormulaPanel = ({ state, actions, onSwitchTab }: { state: FractalState, ac
   const switchFormula = (f: FormulaType) => { actions.setFormula(f); if (f === 'Modular' && onSwitchTab) onSwitchTab('Graph'); };
 
   return (
-    <div className="animate-fade-in -mx-4 -mt-4 min-h-full flex flex-col" onContextMenu={handlePanelContextMenu}>
+    <div className="animate-fade-in min-h-full flex flex-col" onContextMenu={handlePanelContextMenu}>
        <div className={`${surface.panelHeader} border-b ${themeBorder.subtle} p-4 pb-3`} data-help-id="formula.active">
            <div className="flex justify-between items-baseline mb-1">
                 <SectionLabel color={themeText.dimLabel}>Active Formula</SectionLabel>

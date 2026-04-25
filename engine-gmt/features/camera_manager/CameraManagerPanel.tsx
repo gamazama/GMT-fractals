@@ -35,7 +35,7 @@ interface CameraManagerPanelProps {
     className?: string;
 }
 
-export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ className = "-m-3" }) => {
+export const CameraManagerPanel: React.FC<CameraManagerPanelProps> = ({ className = '' }) => {
     const savedCameras = useEngineStore(s => s.savedCameras as unknown as SavedCamera[]);
     const activeCameraId = useEngineStore(s => s.activeCameraId);
     const addCamera = useEngineStore(s => (s as any).addCamera) as (label?: string) => Promise<string>;

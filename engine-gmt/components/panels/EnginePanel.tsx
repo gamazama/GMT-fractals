@@ -17,7 +17,11 @@ interface EnginePanelProps {
     className?: string;
 }
 
-export const EnginePanel: React.FC<EnginePanelProps> = ({ className = "-m-4" }) => {
+// Default className is empty — the dock content area already provides
+// the breathing room. The legacy `-m-4` here was a leftover from an
+// older dock layout that had `p-4`; it caused the panel to render
+// 32px wider than its parent (see check-engine-deep diagnostic).
+export const EnginePanel: React.FC<EnginePanelProps> = ({ className = '' }) => {
     const store = useEngineStore();
     const [pendingChanges, setPendingChanges] = useState<Record<string, unknown>>({});
     const [compileFeedback, setCompileFeedback] = useState<string | null>(null);

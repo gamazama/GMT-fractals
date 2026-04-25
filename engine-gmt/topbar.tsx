@@ -522,6 +522,10 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
             const s = useEngineStore.getState() as any;
             const cur = !!s.engineSettings?.showEngineTab;
             s.setEngineSettings?.({ showEngineTab: !cur });
+            // Surface the left dock + switch to Engine when revealing
+            // (matches the View Manager / Camera Manager flow). Closing
+            // hides the tab via the manifest's showIf.
+            if (!cur) s.togglePanel?.('Engine', true);
         },
     });
 

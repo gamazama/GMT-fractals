@@ -17,7 +17,7 @@ interface DrawingPanelProps {
     className?: string;
 }
 
-export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = "-m-3" }) => {
+export const DrawingPanel: React.FC<DrawingPanelProps> = ({ className = '' }) => {
     const { drawing, setDrawing, removeDrawnShape, clearDrawnShapes, updateDrawnShape } = useEngineStore();
     const { active, activeTool, originMode, color, showLabels, showAxes, shapes, refreshTrigger } = drawing;
     

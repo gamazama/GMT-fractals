@@ -37,6 +37,38 @@ const ENGINE_COMPONENT_CSS = `
 }
 `;
 
+/**
+ * Plain CSS the engine needs but Tailwind can't express directly:
+ * scrollbar styling for `.custom-scroll`-marked containers (dock
+ * content, dropdown menus, draggable windows, etc.) and the dark
+ * color-scheme hint. Mirrors the rules previously inlined in
+ * index.html so every entry HTML doesn't have to copy them.
+ */
+const ENGINE_PLAIN_CSS = `
+html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; }
+body::-webkit-scrollbar { width: 3px; }
+body::-webkit-scrollbar-track { background: #000; }
+body::-webkit-scrollbar-thumb { background-color: #444; border-radius: 3px; }
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+.custom-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+}
+.custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.custom-scroll::-webkit-scrollbar-track { background: transparent; }
+.custom-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.25); }
+`;
+
 let _injected = false;
 
 /**
@@ -54,10 +86,19 @@ export const injectEngineStyles = (): void => {
         _injected = true;
         return;
     }
-    const style = document.createElement('style');
-    style.setAttribute('type', 'text/tailwindcss');
-    style.setAttribute('data-engine-styles', 'true');
-    style.textContent = ENGINE_COMPONENT_CSS;
-    document.head.appendChild(style);
+    const tailwindStyle = document.createElement('style');
+    tailwindStyle.setAttribute('type', 'text/tailwindcss');
+    tailwindStyle.setAttribute('data-engine-styles', 'true');
+    tailwindStyle.textContent = ENGINE_COMPONENT_CSS;
+    document.head.appendChild(tailwindStyle);
+
+    // Plain CSS (scrollbars + color-scheme) goes in a regular <style>
+    // tag — Tailwind directives in `text/tailwindcss` can't apply CSS
+    // pseudo-elements like ::-webkit-scrollbar.
+    const plainStyle = document.createElement('style');
+    plainStyle.setAttribute('data-engine-styles-plain', 'true');
+    plainStyle.textContent = ENGINE_PLAIN_CSS;
+    document.head.appendChild(plainStyle);
+
     _injected = true;
 };

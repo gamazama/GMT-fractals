@@ -201,7 +201,7 @@ interface AudioPanelProps {
     className?: string;
 }
 
-export const AudioPanel: React.FC<AudioPanelProps> = ({ className = "-m-3" }) => {
+export const AudioPanel: React.FC<AudioPanelProps> = ({ className = '' }) => {
     const { audio, setAudio } = useEngineStore();
     const { isEnabled, gain, smoothing } = audio; // Added smoothing from store
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
