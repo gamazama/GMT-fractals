@@ -16,7 +16,7 @@
  *     sibling overlay. Hud refs are created here and passed into both.
  */
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useEngineStore } from '../store/engineStore';
 import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
@@ -48,6 +48,7 @@ import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
+import { LoadingScreen } from './LoadingScreen';
 
 const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
@@ -78,6 +79,12 @@ export const AppGmt: React.FC = () => {
     const state     = useEngineStore();
     const quality   = useQualityFraction();
     const { fpsSmoothed } = useViewportFps();
+
+    const [isSceneReady, setIsSceneReady] = useState(false);
+    const [loadingVisible, setLoadingVisible] = useState(true);
+    const startupMode = typeof window !== 'undefined' && window.location.hash.startsWith('#s=') ? 'url' : 'default';
+    const handleSceneReady = useCallback(() => setIsSceneReady(true), []);
+    const handleLoadingFinished = useCallback(() => setLoadingVisible(false), []);
 
     // Shared hudRefs — HudOverlay renders DOM elements and attaches
     // refs, Navigation's useFrame reads them to update DST/SPD/reticle
@@ -125,6 +132,15 @@ export const AppGmt: React.FC = () => {
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
             <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col">
+                {loadingVisible && (
+                    <LoadingScreen
+                        isReady={isSceneReady}
+                        onFinished={handleLoadingFinished}
+                        startupMode={startupMode}
+                        bootEngine={() => {}}
+                        isHydrated={true}
+                    />
+                )}
                 <EngineBridge />
                 <RenderLoopDriver />
                 <DropZones />
@@ -169,7 +185,7 @@ export const AppGmt: React.FC = () => {
                                 s.gl.setClearAlpha(0);
                             }}
                         >
-                            <GmtRendererTickDriver />
+                            <GmtRendererTickDriver onLoaded={handleSceneReady} />
                             <GmtNavigation
                                 mode={cameraMode}
                                 hudRefs={hudRefs}

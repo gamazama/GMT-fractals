@@ -30,6 +30,7 @@ import { registry } from './engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { CenterHUD } from './topbar/CenterHUD';
+import { ShareLinkButton } from './topbar/ShareLinkButton';
 import { ViewportQuality } from './topbar/ViewportQuality';
 import BucketRenderSettingsPopup from './topbar/BucketRenderControls';
 import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
@@ -317,6 +318,9 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         component: CenterHUDWrapper,
     });
 
+    // ── Share link button (right slot, before Camera) ─────────────────
+    topbar.register({ id: 'share-link', slot: 'right', order: 27, component: ShareLinkButton });
+
     // ── Camera menu (right slot, before System) ────────────────────────
     menu.register({
         id: 'camera',
@@ -404,24 +408,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         width: 'w-64',
     });
 
-    // --- File actions -------------------------------------------------
-    menu.registerItem('system', {
-        id: 'share-link',
-        type: 'button',
-        label: 'Copy Share Link',
-        title: 'Copy a URL that reproduces the current scene.',
-        onSelect: async () => {
-            try {
-                const share = (useEngineStore.getState() as any).getShareString?.();
-                if (!share) return;
-                const url = `${window.location.origin}${window.location.pathname}#s=${share}`;
-                await navigator.clipboard.writeText(url);
-                console.info('[gmt] Share URL copied to clipboard');
-            } catch (err) {
-                console.error('[gmt] Share link copy failed:', err);
-            }
-        },
-    });
+    // --- File actions (share link lives in the topbar button, not the menu) ---
 
     menu.registerItem('system', {
         id: 'formula-workshop',
