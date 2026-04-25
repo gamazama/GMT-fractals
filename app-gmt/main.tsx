@@ -36,6 +36,7 @@ import { installUndo } from '../engine/plugins/Undo';
 import { installCamera } from '../engine/plugins/Camera';
 import { installMenu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
+import { prefetchHelpTopics } from '../data/help/registry';
 import { installHud } from '../engine/plugins/Hud';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { GmtPanels } from '../engine-gmt/panels';
@@ -121,6 +122,10 @@ installCamera();
 installMenu();
 installHelp();
 installHud();
+
+// Warm the help-topics chunk on idle so the first ?-button click
+// doesn't fall back to an empty topic map. Mirrors gmt-0.8.5's App.tsx.
+prefetchHelpTopics();
 
 // GMT topbar content (System + Camera menus, Path Tracing toggle,
 // Playing badge). Must come AFTER installMenu/installCamera so the

@@ -27,12 +27,11 @@ let _loading: Promise<HelpTopicMap> | null = null;
 /** Kick off (or reuse) the help-topics dynamic import. Safe to call repeatedly. */
 export function loadHelpTopics(): Promise<HelpTopicMap> {
     if (_cache) return Promise.resolve(_cache);
-    // Help topics bundle was fractal-content specific; apps install
-    // their own topic bundle by assigning to `_cache` via a side-effect
-    // import, or by re-implementing this loader.
     if (!_loading) {
-        _cache = {} as HelpTopicMap;
-        _loading = Promise.resolve(_cache);
+        _loading = import('./topics-bundle').then(m => {
+            _cache = m.HELP_TOPICS;
+            return _cache;
+        });
     }
     return _loading;
 }

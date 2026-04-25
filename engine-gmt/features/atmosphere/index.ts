@@ -97,24 +97,33 @@ export const AtmosphereFeature: FeatureDefinition = {
         // --- FOG (Runtime) ---
         fogIntensity: {
             type: 'float', default: 0.0, label: 'Fog Intensity', shortId: 'fi', uniform: 'uFogIntensity',
-            min: 0.0, max: 1.0, step: 0.01, group: 'fog'
+            min: 0.0, max: 1.0, step: 0.01, group: 'fog',
+            description: 'Master fog amount; fades distant geometry toward the fog colour.',
+            helpId: 'fog.settings',
         },
         fogNear: {
             type: 'float', default: 0.0, label: 'Fog Start', shortId: 'fn', uniform: 'uFogNear',
-            min: 0, max: 10, step: 0.1, scale: 'square', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 }
+            min: 0, max: 10, step: 0.1, scale: 'square', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            description: 'Distance where fog begins to appear.',
+            helpId: 'fog.settings',
         },
         fogFar: {
             type: 'float', default: 5.0, label: 'Fog End', shortId: 'ff', uniform: 'uFogFar',
-            min: 0, max: 10, step: 0.1, scale: 'square', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 }
+            min: 0, max: 10, step: 0.1, scale: 'square', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            description: 'Distance where fog reaches full opacity.',
+            helpId: 'fog.settings',
         },
         fogColor: {
             type: 'color', default: new THREE.Color(0,0,0), label: 'Fog Color', shortId: 'fc', uniform: 'uFogColor',
-            group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 }
+            group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
+            description: 'Colour distant geometry fades toward.',
+            helpId: 'fog.settings',
         },
         fogDensity: {
             type: 'float', default: 0.01, label: 'Fog Density', shortId: 'fd', uniform: 'uFogDensity',
             min: 0.001, max: 5.0, step: 0.01, scale: 'log', group: 'fog', parentId: 'fogIntensity', condition: { gt: 0.0 },
-            description: 'Basic volumetric fog absorption density. For god rays and scatter, enable Volumetric Scattering in Engine.'
+            description: 'Basic volumetric fog absorption density. For god rays and scatter, enable Volumetric Scattering in Engine.',
+            helpId: 'fog.settings',
         },
 
         // --- GLOW (Runtime) ---
@@ -122,20 +131,28 @@ export const AtmosphereFeature: FeatureDefinition = {
         glowIntensity: {
             type: 'float', default: 0.0, label: 'Glow Strength', shortId: 'gi', uniform: 'uGlowIntensity',
             min: 0, max: 5, step: 0.01, scale: 'log', group: 'glow',
-            condition: { param: 'glowEnabled', bool: true }
+            condition: { param: 'glowEnabled', bool: true },
+            description: 'Brightness of the volumetric glow accumulated along each ray.',
+            helpId: 'mat.glow',
         },
         glowSharpness: {
             type: 'float', default: 50.0, label: 'Tightness', shortId: 'gs', uniform: 'uGlowSharpness',
-            min: 0.1, max: 1000, step: 0.1, scale: 'log', group: 'glow', parentId: 'glowIntensity', condition: [{ gt: 0.0 }, { param: 'glowEnabled', bool: true }]
+            min: 0.1, max: 1000, step: 0.1, scale: 'log', group: 'glow', parentId: 'glowIntensity', condition: [{ gt: 0.0 }, { param: 'glowEnabled', bool: true }],
+            description: 'Low values give a wide haze; high values hug the surface like neon outlines.',
+            helpId: 'mat.glow',
         },
         glowMode: {
             type: 'boolean', default: true, label: 'Glow Source', shortId: 'gm', uniform: 'uGlowMode',
             group: 'glow', parentId: 'glowIntensity', condition: [{ gt: 0.0 }, { param: 'glowEnabled', bool: true }],
-            options: [{ label: 'Surface', value: false }, { label: 'Color', value: true }]
+            options: [{ label: 'Surface', value: false }, { label: 'Color', value: true }],
+            description: 'Whether the glow inherits the surface colour or uses a fixed tint.',
+            helpId: 'mat.glow',
         },
         glowColor: {
             type: 'color', default: new THREE.Color(1,1,1), label: 'Glow Color', shortId: 'gl', uniform: 'uGlowColor',
-            group: 'glow', parentId: 'glowMode', condition: [{ bool: true }, { param: 'glowEnabled', bool: true }]
+            group: 'glow', parentId: 'glowMode', condition: [{ bool: true }, { param: 'glowEnabled', bool: true }],
+            description: 'Tint applied to the glow when Glow Source is Color.',
+            helpId: 'mat.glow',
         }
     },
     inject: (builder, config, variant) => {

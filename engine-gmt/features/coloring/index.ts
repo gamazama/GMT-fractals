@@ -74,7 +74,9 @@ export const ColoringFeature: FeatureDefinition = {
             label: 'Gradient',
             shortId: 'g1',
             uniform: 'uGradientTexture',
-            group: 'layer1_grad'
+            group: 'layer1_grad',
+            description: 'Colour ramp sampled by Layer 1 mapping values.',
+            helpId: 'grad.editor',
         },
         mode: {
             type: 'float',
@@ -83,7 +85,9 @@ export const ColoringFeature: FeatureDefinition = {
             shortId: 'm1',
             uniform: 'uColorMode',
             group: 'layer1_top',
-            options: mappingOptions // Dynamic options from Registry
+            options: mappingOptions, // Dynamic options from Registry
+            description: 'Which fractal quantity drives the gradient lookup.',
+            helpId: 'grad.mapping',
         },
         scale: { type: 'float', default: 1.0, label: 'Scale', shortId: 's1', uniform: 'uColorScale', group: 'layer1_hist', hidden: true },
         offset: { type: 'float', default: 0.0, label: 'Offset', shortId: 'o1', uniform: 'uColorOffset', group: 'layer1_hist', hidden: true },
@@ -101,6 +105,7 @@ export const ColoringFeature: FeatureDefinition = {
             min: 0, max: 24, step: 1,
             group: 'layer1_bottom',
             description: 'Stop orbit trap capture at this iteration (0 = use all iterations)',
+            helpId: 'grad.escape',
             condition: {
                 or: [
                     { param: 'mode', eq: 0.0 },   // Orbit Trap
@@ -131,7 +136,9 @@ export const ColoringFeature: FeatureDefinition = {
             shortId: 'w1',
             uniform: 'uColorTwist',
             min: -5, max: 5, step: 0.1,
-            group: 'layer1_bottom'
+            group: 'layer1_bottom',
+            description: 'Rotates hues across the gradient as the lookup value grows.',
+            helpId: 'grad.escape',
         },
         escape: {
             type: 'float',
@@ -142,6 +149,8 @@ export const ColoringFeature: FeatureDefinition = {
             min: 1, max: 1000, step: 0.1,
             scale: 'log',
             group: 'layer1_bottom',
+            description: 'Threshold past which the orbit is considered escaped (used by Potential, Decomposition, Flow).',
+            helpId: 'grad.escape',
             condition: {
                 or: [
                     { param: 'mode', eq: 6.0 }, // Decomposition
@@ -177,7 +186,9 @@ export const ColoringFeature: FeatureDefinition = {
             label: 'Gradient 2',
             shortId: 'g2',
             uniform: 'uGradientTexture2',
-            group: 'layer2_grad'
+            group: 'layer2_grad',
+            description: 'Colour ramp sampled by Layer 2 mapping values, blended over Layer 1.',
+            helpId: 'grad.editor',
         },
         mode2: {
             type: 'float',
@@ -186,7 +197,9 @@ export const ColoringFeature: FeatureDefinition = {
             shortId: 'm2',
             uniform: 'uColorMode2',
             group: 'layer2_top',
-            options: mappingOptions
+            options: mappingOptions,
+            description: 'Which fractal quantity drives the Layer 2 gradient lookup.',
+            helpId: 'grad.mapping',
         },
         scale2: { type: 'float', default: 1.0, label: 'Scale 2', shortId: 's2', uniform: 'uColorScale2', group: 'layer2_hist', hidden: true },
         offset2: { type: 'float', default: 0.0, label: 'Offset 2', shortId: 'o2', uniform: 'uColorOffset2', group: 'layer2_hist', hidden: true },
@@ -195,10 +208,13 @@ export const ColoringFeature: FeatureDefinition = {
         phase2: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p2', min: -1.0, max: 1.0, step: 0.01, group: 'layer2_hist', hidden: true },
         
         bias2: { type: 'float', default: 1.0, label: 'Gamma', shortId: 'b2', uniform: 'uGradientBias2', min: 0.1, max: 10.0, step: 0.01, group: 'layer2_hist', hidden: true },
-        twist2: { type: 'float', default: 0.0, label: 'Twist', shortId: 'w2', uniform: 'uColorTwist2', min: -5, max: 5, step: 0.1, group: 'layer2_bottom' },
+        twist2: { type: 'float', default: 0.0, label: 'Twist', shortId: 'w2', uniform: 'uColorTwist2', min: -5, max: 5, step: 0.1, group: 'layer2_bottom',
+            description: 'Rotates hues across Layer 2 as the lookup value grows.',
+            helpId: 'grad.escape',
+        },
         blendMode: {
             type: 'float',
-            default: 0.0, 
+            default: 0.0,
             label: 'Blend Mode',
             shortId: 'bm',
             uniform: 'uBlendMode',
@@ -210,7 +226,9 @@ export const ColoringFeature: FeatureDefinition = {
                 { label: 'Overlay', value: 3.0 },
                 { label: 'Screen', value: 4.0 },
                 { label: 'Bump (Normal)', value: 6.0 }
-            ]
+            ],
+            description: 'How Layer 2 combines with Layer 1 (mix, add, multiply, overlay, screen, bump).',
+            helpId: 'grad.escape',
         },
         blendOpacity: {
             type: 'float',
@@ -219,23 +237,39 @@ export const ColoringFeature: FeatureDefinition = {
             shortId: 'bo',
             uniform: 'uBlendOpacity',
             min: 0.0, max: 1.0, step: 0.01,
-            group: 'layer2_bottom'
+            group: 'layer2_bottom',
+            description: 'Strength of the Layer 2 blend over Layer 1.',
+            helpId: 'grad.escape',
         },
-        
+
         // --- LAYER 3 (NOISE) ---
-        layer3Color: { 
-            type: 'color', 
-            default: new THREE.Color(1,1,1), 
-            label: 'Noise Color', 
+        layer3Color: {
+            type: 'color',
+            default: new THREE.Color(1,1,1),
+            label: 'Noise Color',
             shortId: 'n3c',
-            uniform: 'uLayer3Color', 
+            uniform: 'uLayer3Color',
             group: 'noise',
-            layout: 'embedded'
+            layout: 'embedded',
+            description: 'Tint of the procedural noise overlay.',
+            helpId: 'grad.noise',
         },
-        layer3Scale: { type: 'float', default: 2.0, label: 'Noise Scale', shortId: 'n3s', uniform: 'uLayer3Scale', min: 0.1, max: 2000, step: 0.1, scale: 'log', group: 'noise' },
-        layer3Strength: { type: 'float', default: 0.0, label: 'Mix Strength', shortId: 'n3a', uniform: 'uLayer3Strength', min: 0, max: 1, step: 0.01, group: 'noise' },
-        layer3Bump: { type: 'float', default: 0.0, label: 'Bump', shortId: 'n3b', uniform: 'uLayer3Bump', min: -1, max: 1, step: 0.01, group: 'noise' },
-        layer3Turbulence: { type: 'float', default: 0.0, label: 'Turbulence', shortId: 'n3t', uniform: 'uLayer3Turbulence', min: 0, max: 2, step: 0.01, group: 'noise' },
+        layer3Scale: { type: 'float', default: 2.0, label: 'Noise Scale', shortId: 'n3s', uniform: 'uLayer3Scale', min: 0.1, max: 2000, step: 0.1, scale: 'log', group: 'noise',
+            description: 'Frequency of the noise pattern; higher = finer detail.',
+            helpId: 'grad.noise',
+        },
+        layer3Strength: { type: 'float', default: 0.0, label: 'Mix Strength', shortId: 'n3a', uniform: 'uLayer3Strength', min: 0, max: 1, step: 0.01, group: 'noise',
+            description: 'How strongly the noise tint mixes into the surface colour.',
+            helpId: 'grad.noise',
+        },
+        layer3Bump: { type: 'float', default: 0.0, label: 'Bump', shortId: 'n3b', uniform: 'uLayer3Bump', min: -1, max: 1, step: 0.01, group: 'noise',
+            description: 'Perturbs surface normals with the noise pattern for fake displacement.',
+            helpId: 'grad.noise',
+        },
+        layer3Turbulence: { type: 'float', default: 0.0, label: 'Turbulence', shortId: 'n3t', uniform: 'uLayer3Turbulence', min: 0, max: 2, step: 0.01, group: 'noise',
+            description: 'Adds higher-frequency octaves on top of the base noise.',
+            helpId: 'grad.noise',
+        },
 
         // --- ENGINE (Compile-time) ---
         layer3Enabled: {

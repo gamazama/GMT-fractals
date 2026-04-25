@@ -216,43 +216,52 @@ export const LightingFeature: FeatureDefinition = {
         },
         // --- RUNTIME CONTROL ---
         shadows: {
-            type: 'boolean', default: true, label: 'Enable', shortId: 'sh', 
-            group: 'main', 
-            uniform: 'uShadows', 
+            type: 'boolean', default: true, label: 'Enable', shortId: 'sh',
+            group: 'main',
+            uniform: 'uShadows',
             ui: 'checkbox',
-            condition: { param: 'shadowsCompile', bool: true }
+            condition: { param: 'shadowsCompile', bool: true },
+            description: 'Toggle shadow casting at runtime without recompiling.',
+            helpId: 'shadows',
         },
         areaLights: {
             type: 'boolean', default: false, label: 'Area Lights', shortId: 'al', uniform: 'uAreaLights',
             group: 'shadows',
             hidden: true,
             condition: { param: 'ptStochasticShadows', bool: true },
-            description: 'Stochastic area light shadows. Disable for sharp analytical shadows.'
+            description: 'Stochastic area light shadows. Disable for sharp analytical shadows.',
+            helpId: 'shadows',
         },
         shadowIntensity: {
             type: 'float', default: 1.0, label: 'Opacity', shortId: 'si', uniform: 'uShadowIntensity',
             min: 0.0, max: 1.0, step: 0.01, group: 'shadows',
-            condition: { bool: true }
+            condition: { bool: true },
+            description: 'How dark the shadowed regions become (1 = fully black).',
+            helpId: 'shadows',
         },
         shadowSoftness: {
             type: 'float', default: 16.0, label: 'Hardness', shortId: 'ss', uniform: 'uShadowSoftness',
             min: 2.0, max: 2000.0, step: 1.0, group: 'shadows', scale: 'log',
-            condition: { bool: true }
+            condition: { bool: true },
+            description: 'Higher values give crisper shadows; lower values give wider penumbras.',
+            helpId: 'shadows',
         },
         shadowSteps: {
-            type: 'int', default: 128, label: 'Steps', shortId: 'st', 
-            min: 16, max: 512, step: 16, 
-            group: 'shadows', 
+            type: 'int', default: 128, label: 'Steps', shortId: 'st',
+            min: 16, max: 512, step: 16,
+            group: 'shadows',
             condition: { bool: true },
-            uniform: 'uShadowSteps', 
+            uniform: 'uShadowSteps',
             ui: 'numeric',
-            description: 'Quality vs Performance.'
+            description: 'Quality vs Performance.',
+            helpId: 'shadows',
         },
         shadowBias: {
             type: 'float', default: 0.002, label: 'Bias', shortId: 'sb', uniform: 'uShadowBias',
             min: 0.0, max: 1.0, step: 0.000001, group: 'shadows', scale: 'log',
             condition: { bool: true },
-            description: 'Too low: acne. Too high: detached.'
+            description: 'Too low: acne. Too high: detached.',
+            helpId: 'shadows',
         },
         
         lights: { type: 'complex', default: DEFAULT_LIGHTS, label: 'Light List', shortId: 'll', group: 'data', hidden: true, noReset: true }

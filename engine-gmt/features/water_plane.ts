@@ -153,14 +153,35 @@ export const WaterPlaneFeature: FeatureDefinition = {
         },
 
         // --- RUNTIME SWITCH ---
-        active: { type: 'boolean', default: true, label: 'Visible', shortId: 'on', uniform: 'uWaterActive', group: 'main', condition: { param: 'waterEnabled', bool: true }, noReset: true },
+        active: { type: 'boolean', default: true, label: 'Visible', shortId: 'on', uniform: 'uWaterActive', group: 'main', condition: { param: 'waterEnabled', bool: true }, noReset: true,
+            description: 'Toggle the water plane on or off without recompiling.',
+            helpId: 'water.settings',
+        },
 
-        height: { type: 'float', default: -2.0, label: 'Height (Y)', shortId: 'ht', uniform: 'uWaterHeight', min: -10.0, max: 10.0, step: 0.01, group: 'geometry', condition: { param: 'active', bool: true } },
-        color: { type: 'color', default: new THREE.Color('#001133'), label: 'Water Color', shortId: 'cl', uniform: 'uWaterColor', group: 'material', condition: { param: 'active', bool: true } },
-        roughness: { type: 'float', default: 0.02, label: 'Roughness', shortId: 'ro', uniform: 'uWaterRoughness', min: 0.0, max: 1.0, step: 0.01, group: 'material', condition: { param: 'active', bool: true } },
-        waveStrength: { type: 'float', default: 0.1, label: 'Wave Height', shortId: 'ws', uniform: 'uWaterWaveStrength', min: 0.0, max: 1.5, step: 0.001, group: 'waves', condition: { param: 'active', bool: true } },
-        waveSpeed: { type: 'float', default: 1.0, label: 'Wave Speed', shortId: 'wv', uniform: 'uWaterWaveSpeed', min: 0.0, max: 5.0, step: 0.1, group: 'waves', condition: [{ param: 'active', bool: true }, { param: 'waveStrength', gt: 0.0 }] },
-        waveFrequency: { type: 'float', default: 1.5, label: 'Wave Freq', shortId: 'wf', uniform: 'uWaterWaveFreq', min: 0.1, max: 10.0, step: 0.1, group: 'waves', condition: [{ param: 'active', bool: true }, { param: 'waveStrength', gt: 0.0 }] }
+        height: { type: 'float', default: -2.0, label: 'Height (Y)', shortId: 'ht', uniform: 'uWaterHeight', min: -10.0, max: 10.0, step: 0.01, group: 'geometry', condition: { param: 'active', bool: true },
+            description: 'World-space Y position of the water surface.',
+            helpId: 'water.settings',
+        },
+        color: { type: 'color', default: new THREE.Color('#001133'), label: 'Water Color', shortId: 'cl', uniform: 'uWaterColor', group: 'material', condition: { param: 'active', bool: true },
+            description: 'Albedo tint of the water (deep colour).',
+            helpId: 'water.settings',
+        },
+        roughness: { type: 'float', default: 0.02, label: 'Roughness', shortId: 'ro', uniform: 'uWaterRoughness', min: 0.0, max: 1.0, step: 0.01, group: 'material', condition: { param: 'active', bool: true },
+            description: 'Surface roughness; low values give mirror-like reflections.',
+            helpId: 'water.settings',
+        },
+        waveStrength: { type: 'float', default: 0.1, label: 'Wave Height', shortId: 'ws', uniform: 'uWaterWaveStrength', min: 0.0, max: 1.5, step: 0.001, group: 'waves', condition: { param: 'active', bool: true },
+            description: 'Amplitude of the wave displacement.',
+            helpId: 'water.settings',
+        },
+        waveSpeed: { type: 'float', default: 1.0, label: 'Wave Speed', shortId: 'wv', uniform: 'uWaterWaveSpeed', min: 0.0, max: 5.0, step: 0.1, group: 'waves', condition: [{ param: 'active', bool: true }, { param: 'waveStrength', gt: 0.0 }],
+            description: 'How fast the waves animate over time.',
+            helpId: 'water.settings',
+        },
+        waveFrequency: { type: 'float', default: 1.5, label: 'Wave Freq', shortId: 'wf', uniform: 'uWaterWaveFreq', min: 0.1, max: 10.0, step: 0.1, group: 'waves', condition: [{ param: 'active', bool: true }, { param: 'waveStrength', gt: 0.0 }],
+            description: 'Spatial frequency of the wave pattern; higher = tighter ripples.',
+            helpId: 'water.settings',
+        }
     },
     inject: (builder, config, variant) => {
         const state = config.waterPlane as WaterPlaneState;

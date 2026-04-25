@@ -77,21 +77,23 @@ export const QualityFeature: FeatureDefinition = {
             type: 'int', default: 300, label: 'Max Ray Steps', shortId: 'ms', uniform: 'uMaxSteps',
             min: 32, max: DEFAULT_HARD_CAP, step: 1, group: 'kernel',
             description: 'Runtime limit. Rays stop after this many steps. Artistic tool for limiting depth. Maximum is limited by Hard Loop Cap.',
+            helpId: 'quality.steps',
             dynamicMaxRef: 'compilerHardCap'
         },
-        distanceMetric: { 
-            type: 'float', default: 0.0, label: 'Distance Metric', shortId: 'dm', uniform: 'uDistanceMetric', 
-            group: 'kernel', 
+        distanceMetric: {
+            type: 'float', default: 0.0, label: 'Distance Metric', shortId: 'dm', uniform: 'uDistanceMetric',
+            group: 'kernel',
             options: [
-                { label: 'Euclidean (Sphere)', value: 0.0 }, 
-                { label: 'Chebyshev (Box)', value: 1.0 }, 
-                { label: 'Manhattan (Diamond)', value: 2.0 }, 
+                { label: 'Euclidean (Sphere)', value: 0.0 },
+                { label: 'Chebyshev (Box)', value: 1.0 },
+                { label: 'Manhattan (Diamond)', value: 2.0 },
                 { label: 'Minkowski 4 (Rounded)', value: 3.0 }
             ],
-            description: 'The shape of "distance". Changes the aesthetic of the fractal surface.'
+            description: 'The shape of "distance". Changes the aesthetic of the fractal surface.',
+            helpId: 'quality.metric',
         },
         estimator: {
-            type: 'float', default: 0.0, label: 'Estimator', shortId: 'es', 
+            type: 'float', default: 0.0, label: 'Estimator', shortId: 'es',
             group: 'kernel',
             options: [
                 { label: 'Analytic (Log)', value: 0.0 },
@@ -101,55 +103,67 @@ export const QualityFeature: FeatureDefinition = {
                 { label: 'Dampened', value: 3.0 }
             ],
             description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix.',
+            helpId: 'quality.estimator',
             onUpdate: 'compile',
             noReset: true,
             isAdvanced: true
         },
-        fudgeFactor: { 
-            type: 'float', default: 1.0, label: 'Slice Optimization', shortId: 'ff', uniform: 'uFudgeFactor', 
-            min: 0.01, max: 1.0, step: 0.01, group: 'kernel', 
+        fudgeFactor: {
+            type: 'float', default: 1.0, label: 'Slice Optimization', shortId: 'ff', uniform: 'uFudgeFactor',
+            min: 0.01, max: 1.0, step: 0.01, group: 'kernel',
             description: 'Multiplies step size. Lower = Higher quality but slower. Set to < 0.2 for deep zooms.',
+            helpId: 'quality.fudge',
             format: (v) => v.toFixed(2)
         },
         stepRelaxation: {
             type: 'float', default: 0.0, label: 'Step Relaxation', shortId: 'sr', uniform: 'uStepRelaxation',
             min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
             description: 'Dynamic Step Size. 0 = Fixed Fudge. 1 = Variable (Fudge near surface, 1.0 in void). Saves steps.',
+            helpId: 'quality.relaxation',
             isAdvanced: true
         },
         stepJitter: {
             type: 'float', default: 0.15, label: 'Step Jitter', shortId: 'sj', uniform: 'uStepJitter',
             min: 0.0, max: 1.0, step: 0.01, group: 'kernel',
             description: 'Stochastic step variation. Breaks banding artifacts. Higher = softer edges, artistic blur.',
+            helpId: 'quality.jitter',
             format: (v: number) => v.toFixed(2)
         },
-        refinementSteps: { 
-            type: 'int', default: 0, label: 'Edge Polish', shortId: 'rf', uniform: 'uRefinementSteps', 
-            min: 0, max: 5, step: 1, group: 'kernel', 
+        refinementSteps: {
+            type: 'int', default: 0, label: 'Edge Polish', shortId: 'rf', uniform: 'uRefinementSteps',
+            min: 0, max: 5, step: 1, group: 'kernel',
             description: 'Extra micro-steps after hitting surface. Fixes slicing/banding artifacts.',
+            helpId: 'quality.detail',
             isAdvanced: true
         },
-        detail: { 
-            type: 'float', default: 1.0, label: 'Ray detail', shortId: 'rd', uniform: 'uDetail', 
-            min: 0.1, max: 10.0, step: 0.1, group: 'kernel' 
+        detail: {
+            type: 'float', default: 1.0, label: 'Ray detail', shortId: 'rd', uniform: 'uDetail',
+            min: 0.1, max: 10.0, step: 0.1, group: 'kernel',
+            description: 'Tightens the hit threshold; higher values resolve finer surface detail.',
+            helpId: 'quality.detail',
         },
-        pixelThreshold: { 
-            type: 'float', default: 0.5, label: 'Pixel threshold', shortId: 'pt', uniform: 'uPixelThreshold', 
-            min: 0.1, max: 2.0, step: 0.1, group: 'kernel' 
+        pixelThreshold: {
+            type: 'float', default: 0.5, label: 'Pixel threshold', shortId: 'pt', uniform: 'uPixelThreshold',
+            min: 0.1, max: 2.0, step: 0.1, group: 'kernel',
+            description: 'Pixel size at which a ray is considered to have hit the surface.',
+            helpId: 'quality.threshold',
         },
-        overstepTolerance: { 
-            type: 'float', default: 0.0, label: 'Overstep Fix', shortId: 'ot', uniform: 'uOverstepTolerance', 
+        overstepTolerance: {
+            type: 'float', default: 0.0, label: 'Overstep Fix', shortId: 'ot', uniform: 'uOverstepTolerance',
             min: 0.0, max: 1000.0, step: 0.1, scale: 'log', group: 'kernel',
-            description: "Recovers details missed by the raymarcher. 0=Off. Higher values fix more holes but may create noise."
+            description: "Recovers details missed by the raymarcher. 0=Off. Higher values fix more holes but may create noise.",
+            helpId: 'quality.fudge',
         },
-        
+
         dynamicScaling: {
             type: 'boolean',
             default: true,
             label: 'Adaptive Resolution',
             shortId: 'ds',
             group: 'performance',
-            noReset: true
+            noReset: true,
+            description: 'Drop resolution while moving and during slow frames; restore when idle.',
+            helpId: 'quality.scale',
         },
         interactionDownsample: {
             type: 'float',
@@ -160,7 +174,9 @@ export const QualityFeature: FeatureDefinition = {
             group: 'performance',
             condition: { and: [{ param: 'dynamicScaling', bool: true }, { param: 'adaptiveTarget', eq: 0 }] },
             format: (v) => `1/${v}x`,
-            noReset: true
+            noReset: true,
+            description: 'How aggressively to downscale resolution during camera movement.',
+            helpId: 'quality.scale',
         },
         adaptiveTarget: {
             type: 'float',
@@ -170,7 +186,9 @@ export const QualityFeature: FeatureDefinition = {
             min: 15, max: 60, step: 5,
             group: 'performance',
             condition: { param: 'dynamicScaling', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Frame rate the adaptive resolver tries to maintain.',
+            helpId: 'quality.scale',
         },
         physicsProbeMode: {
             type: 'float',
@@ -184,6 +202,7 @@ export const QualityFeature: FeatureDefinition = {
                 { label: 'Manual', value: 2.0 }
             ],
             description: 'GPU Probe: Reads distance from render target. Manual: Fixed value for orbit control.',
+            helpId: 'panel.quality',
             noReset: true
         },
         manualDistance: {
@@ -197,6 +216,7 @@ export const QualityFeature: FeatureDefinition = {
             parentId: 'physicsProbeMode',
             condition: { param: 'physicsProbeMode', eq: 2.0 },
             description: 'Manual distance value. Used for orbit control calculations.',
+            helpId: 'panel.quality',
             format: (v) => v.toFixed(1),
             noReset: true
         }

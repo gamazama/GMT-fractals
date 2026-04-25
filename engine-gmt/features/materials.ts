@@ -165,9 +165,11 @@ export const MaterialFeature: FeatureDefinition = {
             default: 0.0,
             label: 'Environment Light',
             shortId: 'es',
-            uniform: 'uEnvStrengthSlider', 
+            uniform: 'uEnvStrengthSlider',
             min: 0.0, max: 5.0, step: 0.01,
-            group: 'env'
+            group: 'env',
+            description: 'Brightness of the sky-based reflection on the surface.',
+            helpId: 'mat.env',
         },
         envBackgroundStrength: {
             type: 'float',
@@ -178,7 +180,9 @@ export const MaterialFeature: FeatureDefinition = {
             min: 0.0, max: 2.0, step: 0.01,
             group: 'env',
             parentId: 'envStrength',
-            condition: { gt: 0.0, param: 'envStrength' }
+            condition: { gt: 0.0, param: 'envStrength' },
+            description: 'How visible the sky is behind the fractal (0 = black background).',
+            helpId: 'mat.env',
         },
         envSource: {
             type: 'float',
@@ -192,7 +196,9 @@ export const MaterialFeature: FeatureDefinition = {
             options: [
                 { label: 'Sky Image', value: 0.0 },
                 { label: 'Gradient', value: 1.0 }
-            ]
+            ],
+            description: 'Whether the environment uses a panorama image or a procedural gradient.',
+            helpId: 'mat.env',
         },
         envMapData: {
             type: 'image',
@@ -210,7 +216,9 @@ export const MaterialFeature: FeatureDefinition = {
             },
             linkedParams: {
                 colorSpace: 'envMapColorSpace'
-            }
+            },
+            description: 'Equirectangular HDR or LDR image used as the sky.',
+            helpId: 'mat.env',
         },
         // Linked Color Space Param (Hidden, controlled by Image UI)
         envMapColorSpace: {
@@ -244,21 +252,25 @@ export const MaterialFeature: FeatureDefinition = {
             condition: [
                 { param: 'envStrength', gt: 0.0 },
                 { param: 'envSource', eq: 0.0 }
-            ]
+            ],
+            description: 'Spins the sky image around the vertical axis.',
+            helpId: 'mat.env',
         },
         envGradientStops: {
             type: 'gradient',
             default: [
-                { id: 'sky', position: 0.0, color: '#000000', bias: 0.5, interpolation: 'smooth' }, 
-                { id: 'hor', position: 0.5, color: "#223344", bias: 0.5, interpolation: 'smooth' }, 
-                { id: 'zen', position: 1.0, color: '#88ccff', bias: 0.5, interpolation: 'smooth' }  
+                { id: 'sky', position: 0.0, color: '#000000', bias: 0.5, interpolation: 'smooth' },
+                { id: 'hor', position: 0.5, color: "#223344", bias: 0.5, interpolation: 'smooth' },
+                { id: 'zen', position: 1.0, color: '#88ccff', bias: 0.5, interpolation: 'smooth' }
             ],
             label: 'Sky Gradient',
             shortId: 'eg',
             uniform: 'uEnvGradient',
             group: 'env',
             parentId: 'envSource',
-            condition: { eq: 1.0 }
+            condition: { eq: 1.0 },
+            description: 'Vertical sky gradient: ground colour to zenith.',
+            helpId: 'mat.env',
         },
 
         // --- EMISSION ---
@@ -270,11 +282,13 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEmission',
             min: 0.0000, max: 5.0, step: 0.001,
             scale: 'square',
-            group: 'emission'
+            group: 'emission',
+            description: 'How brightly the surface glows on its own, independent of lights.',
+            helpId: 'mat.emission',
         },
         emissionMode: {
-            type: 'float', 
-            default: 0.0, 
+            type: 'float',
+            default: 0.0,
             label: 'Emission Source',
             shortId: 'ec',
             uniform: 'uEmissionMode',
@@ -288,7 +302,9 @@ export const MaterialFeature: FeatureDefinition = {
                 { label: 'Layer 2', value: 2.0 },
                 { label: 'Layer 3', value: 3.0 },
                 { label: 'Solid Color', value: 4.0 }
-            ]
+            ],
+            description: 'Which part of the surface colour drives the glow.',
+            helpId: 'mat.emission',
         },
         emissionColor: {
             type: 'color',
@@ -298,7 +314,9 @@ export const MaterialFeature: FeatureDefinition = {
             uniform: 'uEmissionColor',
             group: 'emission',
             parentId: 'emissionMode',
-            condition: { eq: 4.0 }
+            condition: { eq: 4.0 },
+            description: 'Constant glow tint when Emission Source is Solid Color.',
+            helpId: 'mat.emission',
         },
         ptEmissionMult: {
             type: 'float',
@@ -310,9 +328,11 @@ export const MaterialFeature: FeatureDefinition = {
             group: 'emission',
             parentId: 'emission',
             condition: [
-                { gt: 0.0001 }, 
-                { param: '$renderMode', eq: 'PathTracing' } 
-            ]
+                { gt: 0.0001 },
+                { param: '$renderMode', eq: 'PathTracing' }
+            ],
+            description: 'Path-tracing only: boosts how much light the glow casts onto other surfaces.',
+            helpId: 'mat.emission',
         }
     },
     inject: (builder, _config, variant) => {

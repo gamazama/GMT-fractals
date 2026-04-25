@@ -34,12 +34,14 @@ export const DrosteFeature: FeatureDefinition = {
             label: 'Droste Effect',
             shortId: 'ac',
             uniform: 'uDrosteActive',
-            group: 'main', 
-            noReset: true
+            group: 'main',
+            noReset: true,
+            description: 'Enable the recursive Droste image-in-image post effect.',
+            helpId: 'effect.droste',
         },
         tiling: {
-            type: 'float', 
-            default: 1.0, 
+            type: 'float',
+            default: 1.0,
             label: 'Tiling Mode',
             shortId: 'tm',
             uniform: 'uDrosteTiling',
@@ -51,7 +53,9 @@ export const DrosteFeature: FeatureDefinition = {
                 { label: 'Mirror', value: 1.0 },
                 { label: 'Clamp', value: 2.0 },
                 { label: 'Transparent', value: 3.0 }
-            ]
+            ],
+            description: 'How sampled coordinates wrap outside the source rectangle.',
+            helpId: 'droste.geometry',
         },
         center: {
             type: 'vec2',
@@ -62,7 +66,9 @@ export const DrosteFeature: FeatureDefinition = {
             min: -100, max: 100, step: 0.1,
             group: 'geometry',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Pixel offset of the spiral centre on screen.',
+            helpId: 'droste.geometry',
         },
         radiusInside: {
             type: 'float',
@@ -74,7 +80,9 @@ export const DrosteFeature: FeatureDefinition = {
             group: 'geometry',
             layout: 'half',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Inner ring radius of the recursion.',
+            helpId: 'droste.geometry',
         },
         radiusOutside: {
             type: 'float',
@@ -86,7 +94,9 @@ export const DrosteFeature: FeatureDefinition = {
             group: 'geometry',
             layout: 'half',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Outer ring radius; ratio with inner controls scaling per loop.',
+            helpId: 'droste.geometry',
         },
         strands: {
             type: 'float',
@@ -97,7 +107,9 @@ export const DrosteFeature: FeatureDefinition = {
             min: -12, max: 12, step: 1,
             group: 'structure',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Number of spiral arms (sign flips chirality).',
+            helpId: 'droste.structure',
         },
         strandMirror: {
             type: 'boolean',
@@ -108,7 +120,9 @@ export const DrosteFeature: FeatureDefinition = {
             group: 'structure',
             parentId: 'strands',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Mirrors alternating strands for kaleidoscopic symmetry.',
+            helpId: 'droste.structure',
         },
         autoPeriodicity: {
             type: 'boolean',
@@ -118,7 +132,9 @@ export const DrosteFeature: FeatureDefinition = {
             uniform: 'uDrosteAuto',
             group: 'structure',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Solve periodicity automatically from inner/outer radii.',
+            helpId: 'droste.structure',
         },
         periodicity: {
             type: 'float',
@@ -130,7 +146,9 @@ export const DrosteFeature: FeatureDefinition = {
             group: 'structure',
             parentId: 'autoPeriodicity',
             condition: [{ param: 'active', bool: true }, { param: 'autoPeriodicity', bool: false }],
-            noReset: true
+            noReset: true,
+            description: 'How many recursion loops complete before tiling repeats.',
+            helpId: 'droste.structure',
         },
         zoom: {
             type: 'float',
@@ -141,7 +159,9 @@ export const DrosteFeature: FeatureDefinition = {
             min: -10, max: 10, step: 0.1,
             group: 'transform',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Zoom along the spiral; animate to drive infinite-zoom motion.',
+            helpId: 'droste.transform',
         },
         rotate: {
             type: 'float',
@@ -152,7 +172,9 @@ export const DrosteFeature: FeatureDefinition = {
             min: -360, max: 360, step: 1,
             group: 'transform',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Twist of the spiral path in degrees.',
+            helpId: 'droste.transform',
         },
         rotateSpin: {
             type: 'float',
@@ -163,7 +185,9 @@ export const DrosteFeature: FeatureDefinition = {
             min: -360, max: 360, step: 1,
             group: 'transform',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Rotates the sampled image content independently of the spiral.',
+            helpId: 'droste.transform',
         },
         rotatePolar: {
             type: 'float',
@@ -174,7 +198,9 @@ export const DrosteFeature: FeatureDefinition = {
             min: -360, max: 360, step: 1,
             group: 'transform',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Rotates the polar coordinate map before applying the spiral.',
+            helpId: 'droste.transform',
         },
         twist: {
             type: 'boolean',
@@ -184,7 +210,9 @@ export const DrosteFeature: FeatureDefinition = {
             uniform: 'uDrosteTwist',
             group: 'transform',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Use the conformal Escher mapping; off gives a non-conformal spiral.',
+            helpId: 'droste.transform',
         },
         hyperDroste: {
             type: 'boolean',
@@ -194,7 +222,9 @@ export const DrosteFeature: FeatureDefinition = {
             uniform: 'uDrosteHyper',
             group: 'transform',
             condition: { param: 'active', bool: true },
-            noReset: true
+            noReset: true,
+            description: 'Modular multi-point variant of the Droste mapping.',
+            helpId: 'droste.transform',
         },
         fractalPoints: {
             type: 'float',
@@ -206,7 +236,9 @@ export const DrosteFeature: FeatureDefinition = {
             group: 'transform',
             parentId: 'hyperDroste',
             condition: [{ param: 'active', bool: true }, { param: 'hyperDroste', bool: true }],
-            noReset: true
+            noReset: true,
+            description: 'Number of fractal centres in the Hyper Droste mapping.',
+            helpId: 'droste.transform',
         }
     },
     postShader: {
