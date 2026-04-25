@@ -43,6 +43,18 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
             const state = useEngineStore.getState();
             const mode = state.interactionMode;
 
+            // While any picking / region-select mode is active, kill the
+            // event before it reaches drei's OrbitControls (registered on
+            // the canvas DOM element). Without this, the very first
+            // mouse-down of a pick gesture leaks through to OrbitControls
+            // because React hasn't yet committed `enabled={!disableMovement}`
+            // for that frame — the camera nudges before the lock takes
+            // effect. capture:true on the listener (below) ensures we run
+            // before OrbitControls' bubble-phase canvas handler.
+            if (mode !== 'none' && mode !== undefined) {
+                e.stopImmediatePropagation();
+            }
+
             if (canvasRef.current) {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -266,11 +278,15 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
             }
         };
 
-        window.addEventListener('pointerdown', handlePointerDown);
+        // capture:true so we run in the capture phase, BEFORE the
+        // canvas-level OrbitControls listeners. Required so the
+        // `stopImmediatePropagation` in handlePointerDown above can
+        // actually suppress orbit's drag-start mid-pick.
+        window.addEventListener('pointerdown', handlePointerDown, { capture: true });
         window.addEventListener('pointermove', handlePointerMove);
         window.addEventListener('pointerup', handlePointerUp);
         return () => {
-            window.removeEventListener('pointerdown', handlePointerDown);
+            window.removeEventListener('pointerdown', handlePointerDown, { capture: true } as any);
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
