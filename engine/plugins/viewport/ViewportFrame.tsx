@@ -41,6 +41,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { ViewportModeControls } from './ViewportModeControls';
 import { CompositionOverlay } from '../../../components/viewport/CompositionOverlay';
+import { setMouseOverCanvas } from '../../worker/ViewportRefs';
 
 export interface ViewportFrameProps {
     /** Children render inside the sized canvas container. Position
@@ -158,6 +159,15 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
             ref={outerRef}
             className={`relative flex-1 flex items-center justify-center overflow-hidden bg-[#050505] touch-none ${className}`}
             style={{ backgroundImage: isFixed ? 'radial-gradient(circle at center, #111 0%, #050505 100%)' : 'none' }}
+            // Track mouse-over-canvas for the adaptive-resolution loop's
+            // settle-on-idle behaviour. The legacy ViewportArea wired
+            // these handlers; the modern ViewportFrame missed them, so
+            // _mouseOverCanvas stayed false forever in app-gmt and the
+            // !mouseOnCanvas branch in viewportSlice.reportFps kept
+            // adaptive engaged indefinitely (no auto-disengage when
+            // the user settles on the canvas).
+            onMouseEnter={() => setMouseOverCanvas(true)}
+            onMouseLeave={() => setMouseOverCanvas(false)}
         >
             {isFixed && (
                 <div
