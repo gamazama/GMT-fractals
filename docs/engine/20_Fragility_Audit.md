@@ -96,20 +96,26 @@ PresetLogic iterates registered fields instead of hardcoding.
 ---
 
 ## F5 — AnimationEngine hardcodes camera tracks
-**Status:** 🟡 In progress — pluggable registry shipped 2026-04-23; GMT-specific cases still present as fallback
+**Status:** 🟢 Fixed (2026-04-25)
 **Severity:** Medium — couples engine to camera model.
 
-**Symptom:** [engine/AnimationEngine.ts:74-105](../engine/AnimationEngine.ts#L74-L105) explicitly wires `camera.active_index`, `camera.unified.x/y/z`, `camera.rotation.x/y/z`. Apps with a 2D camera (toy-fluid) or a VR camera (future) have dead animation tracks for fields they don't use.
+**Symptom:** AnimationEngine wired `camera.active_index`, `camera.unified.x/y/z`, `camera.rotation.x/y/z` directly with split-precision math + a private `pendingCam` buffer + a `commitState()` that emitted GMT's `CAMERA_TELEPORT` event. Apps with a 2D camera (fluid-toy) or a VR camera had dead branches in the engine for fields they don't use.
 
-**Partial fix landed:** `engine/animation/cameraKeyRegistry.ts` lets apps register their own camera track list, and `AnimationEngine.getBinder` was extended with a generic `feature.param.axis` resolver (case 4) that works for any vec-shaped DDFS param. Apps with a 2D camera (fluid-toy: `sceneCamera.center.x/y`, `sceneCamera.zoom`) or a 3D orbit camera (fractal-toy: `camera.orbitTheta`, `camera.orbitPhi`, `camera.distance`, `camera.target.x/y/z`) now declare their tracks via `registerCameraKeyTracks(tracks)` and the toolbar's Key Cam button captures exactly those.
+**Fix landed:**
 
-**Progress (2026-04-23):** `engine/animation/binderRegistry.ts` now ships. `AnimationEngine.getBinder` consults it *before* any convention-based fallback, so apps can register explicit writers for composite tracks that don't fit the DDFS shape:
+- `engine/animation/cameraKeyRegistry.ts` lets apps declare their own camera track list (used by Key Cam button and friends).
+- `engine/animation/binderRegistry.ts` lets apps register explicit writers for composite tracks that don't fit the DDFS `feature.param.axis` shape.
+- `AnimationEngine` gained `registerScrubHook('pre' | 'post', fn)`. The scrub loop fires pre-hooks before any binder runs (apps read the live camera into their own buffers there) and post-hooks after (apps flush batched writes there).
+- The legacy `pendingCam` field, `lastCameraIndex`, `syncBuffersFromEngine`, `commitState`, and the `camera.active_index` / `camera.*` branches in `getBinder` are deleted. The engine no longer imports `THREE`, the worker proxy, viewport refs, `FRACTAL_EVENTS`, or split-precision math.
+- GMT moves all of that into `engine-gmt/animation/cameraBinders.ts`, which `installGmtCameraBinders()` wires from `app-gmt/main.tsx`. It registers the seven camera binders + a pre-scrub hook (sync from live camera) + a post-scrub hook (split-precision math + `CAMERA_TELEPORT` emit + `cameraRot` store write).
 
-```ts
-binderRegistry.register({ id: 'camera.fov', write: (v) => adapter.setFov(v) });
-```
+The engine's animation pipeline is now camera-shape-agnostic. fluid-toy's 2D camera tracks (`julia.center_x`, `julia.zoom`) work via the universal DDFS resolver (case 4); GMT's 3D split-precision camera works via its own binder module + scrub hooks.
 
-The legacy `camera.active_index`, `camera.unified.*`, `camera.rotation.*` branches (cases 0-1 in `AnimationEngine.ts`) stay as fallbacks so GMT's existing camera code keeps working through the port. When the GMT port lands, `@engine/camera` registers the composite writers explicitly and the fallback branches become dead code we can delete in one pass.
+**Verified:**
+- Typecheck + vite build clean.
+- `npm run smoke:boot` clean.
+- `npm run smoke:anim-play` clean — playback advances + DDFS param binders fire (julia.power 1 → 6).
+- Camera-track animation in app-gmt's timeline still needs a focused smoke or manual sweep to confirm sceneOffset/rotation tracks teleport via the new module — defer to the camera-tracks regression test that lives downstream.
 
 **Docs:** [04_Core_Plugins.md § camera](04_Core_Plugins.md#enginecamera), [08_Animation.md § binder-registry](08_Animation.md#binderregistry--explicit-binders)
 

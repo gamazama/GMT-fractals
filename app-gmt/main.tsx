@@ -34,6 +34,7 @@ import { installModulation } from '../engine/animation/modulationTick';
 import { installShortcuts, shortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installCamera } from '../engine/plugins/Camera';
+import { installGmtCameraBinders } from '../engine-gmt/animation/cameraBinders';
 import { installMenu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { prefetchHelpTopics } from '../data/help/registry';
@@ -122,6 +123,13 @@ installCamera();
 installMenu();
 installHelp();
 installHud();
+
+// GMT camera animation binders — registers split-precision sceneOffset
+// + Euler rotation track writers via the binderRegistry, plus pre/post
+// scrub hooks that read the live camera and emit CAMERA_TELEPORT once
+// per animated frame. Used to live inline inside AnimationEngine; moved
+// out as part of F5 (see docs/engine/20_Fragility_Audit.md).
+installGmtCameraBinders();
 
 // Warm the help-topics chunk on idle so the first ?-button click
 // doesn't fall back to an empty topic map. Mirrors gmt-0.8.5's App.tsx.

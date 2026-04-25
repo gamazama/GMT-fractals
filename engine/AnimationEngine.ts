@@ -1,29 +1,9 @@
 
-import * as THREE from 'three';
-import { getProxy } from './worker/WorkerProxy';
-const engine = getProxy();
 import { Track, Keyframe } from '../types';
 import { solveBezierY } from './BezierMath';
-import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
-import { getViewportCamera } from './worker/ViewportRefs';
 import { AnimationMath } from './math/AnimationMath';
 import { binderRegistry } from './animation/binderRegistry';
-
-// Local stand-in for the deleted VirtualSpace.split — used to feed the
-// split-float scene offset that GMT's deep-zoom camera expected. For a
-// generic engine we emit just the high half; apps with their own
-// deep-zoom camera replace this via a plugin that owns the camera math.
-const splitPrecision = (v: number) => ({ high: v, low: 0 });
-
-// Pending State Buffer to prevent partial updates per frame
-interface PendingCameraState {
-    rot: THREE.Euler;
-    unified: THREE.Vector3; // The only position source of truth
-    
-    rotDirty: boolean;
-    unifiedDirty: boolean;
-}
 
 type ValueSetter = (val: number) => void;
 
@@ -33,26 +13,32 @@ interface StoreAccessor {
     setState(partial: any): void;
 }
 
+/** Per-frame context passed to scrub hooks. Apps wiring camera-style
+ *  composite binders (e.g. GMT's split-precision sceneOffset) read
+ *  this to know whether to skip camera tracks (record-camera mode). */
+export interface ScrubContext {
+    frame: number;
+    isPlaying: boolean;
+    isRecording: boolean;
+    recordCamera: boolean;
+    /** True when binders that drive the camera should be skipped this
+     *  frame (record-camera mode — the user is moving the camera and
+     *  the timeline shouldn't fight back). */
+    ignoreCamera: boolean;
+}
+
+export type ScrubHook = (ctx: ScrubContext) => void;
+
 export class AnimationEngine {
-    private pendingCam: PendingCameraState;
     private binders: Map<string, ValueSetter> = new Map();
     private overriddenTracks: Set<string> = new Set();
 
-    // Track previous active camera to prevent redundant switching
-    private lastCameraIndex: number = -1;
+    private preScrubHooks: ScrubHook[] = [];
+    private postScrubHooks: ScrubHook[] = [];
 
     // Injected store accessors — set via connect() from bridge layer
     private animStore: StoreAccessor | null = null;
     private fractalStore: StoreAccessor | null = null;
-
-    constructor() {
-        this.pendingCam = {
-            rot: new THREE.Euler(),
-            unified: new THREE.Vector3(),
-            rotDirty: false,
-            unifiedDirty: false
-        };
-    }
 
     /** Connect store accessors. Called from bindStoreToEngine() after stores are initialized. */
     public connect(animStore: StoreAccessor, fractalStore: StoreAccessor) {
@@ -62,6 +48,21 @@ export class AnimationEngine {
     
     public setOverriddenTracks(ids: Set<string>) {
         this.overriddenTracks = ids;
+    }
+
+    /** Register a function that runs before/after every scrub frame.
+     *  Used by host apps that batch composite-track updates outside
+     *  the binder pipeline — e.g. GMT's split-precision camera reads
+     *  the live camera in `pre` and emits CAMERA_TELEPORT in `post`.
+     *  Returns an unregister function so install*() teardowns don't
+     *  leak. */
+    public registerScrubHook(phase: 'pre' | 'post', fn: ScrubHook): () => void {
+        const arr = phase === 'pre' ? this.preScrubHooks : this.postScrubHooks;
+        arr.push(fn);
+        return () => {
+            const idx = arr.indexOf(fn);
+            if (idx >= 0) arr.splice(idx, 1);
+        };
     }
 
     private getBinder(id: string): ValueSetter {
@@ -81,42 +82,15 @@ export class AnimationEngine {
 
         let binder: ValueSetter = () => {};
 
-        // 0. Active Camera Switcher
-        if (id === 'camera.active_index') {
-            binder = (v) => {
-                const index = Math.round(v);
-                if (index !== this.lastCameraIndex) {
-                    const store = this.fractalStore!.getState();
-                    const cameras = store.savedCameras;
-                    if (cameras && cameras[index]) {
-                         store.selectCamera(cameras[index].id);
-                         this.lastCameraIndex = index;
-                    }
-                }
-            }
-        }
+        // Camera-shaped composite tracks (`camera.active_index`,
+        // `camera.unified.*`, `camera.rotation.*`) live on the host
+        // app — see engine-gmt/animation/cameraBinders.ts. They
+        // register via binderRegistry, which is consulted above
+        // BEFORE this fallback chain. Tracks that fall through here
+        // unmatched get a no-op binder.
 
-        // 1. Camera Properties (Unified Only)
-        else if (id.startsWith('camera.')) {
-            const parts = id.split('.');
-            const type = parts[1];
-            const axis = parts[2];
-
-            if (type === 'unified') {
-                binder = (v) => {
-                    this.pendingCam.unified[axis as 'x'|'y'|'z'] = v;
-                    this.pendingCam.unifiedDirty = true;
-                }
-            } else if (type === 'rotation') {
-                 binder = (v) => { 
-                    this.pendingCam.rot[axis as 'x'|'y'|'z'] = v; 
-                    this.pendingCam.rotDirty = true; 
-                };
-            } 
-            // Legacy tracks are ignored (no binder created)
-        }
-        // 2. Light Properties (Legacy format mapping)
-        else if (id.startsWith('lights.')) {
+        // Light Properties (Legacy format mapping)
+        if (id.startsWith('lights.')) {
              const parts = id.split('.');
              const index = parseInt(parts[1]);
              const prop = parts[2];
@@ -276,19 +250,22 @@ export class AnimationEngine {
         if (!this.animStore) return;
         const { sequence, isPlaying, isRecording, recordCamera } = this.animStore.getState();
         const tracks = Object.values(sequence.tracks) as Track[];
-        
-        this.syncBuffersFromEngine();
 
-        // If recording camera, ignore timeline camera tracks to avoid fighting
         const ignoreCamera = isPlaying && isRecording && recordCamera;
+        const ctx: ScrubContext = { frame, isPlaying, isRecording, recordCamera, ignoreCamera };
+
+        // Pre-scrub hooks — apps with composite-track batching read the
+        // live state into their own buffers here so the binders that
+        // fire below see a fresh starting point.
+        for (const h of this.preScrubHooks) h(ctx);
 
         for (let i = 0; i < tracks.length; i++) {
             const track = tracks[i];
-            
+
             if (this.overriddenTracks.has(track.id)) continue;
 
             if (track.keyframes.length === 0) continue;
-            if (track.type !== 'float') continue; 
+            if (track.type !== 'float') continue;
 
             if (track.id.includes('camera.position') || track.id.includes('camera.offset')) continue;
 
@@ -298,25 +275,10 @@ export class AnimationEngine {
             const binder = this.getBinder(track.id);
             binder(val);
         }
-        
-        this.commitState();
-    }
 
-    private syncBuffersFromEngine() {
-        const cam = getViewportCamera() || engine.activeCamera;
-        if (cam) {
-            this.pendingCam.rot.setFromQuaternion(cam.quaternion);
-            const eo = engine.sceneOffset;
-            
-            this.pendingCam.unified.set(
-                eo.x + eo.xL + cam.position.x,
-                eo.y + eo.yL + cam.position.y,
-                eo.z + eo.zL + cam.position.z
-            );
-            
-            this.pendingCam.rotDirty = false;
-            this.pendingCam.unifiedDirty = false;
-        }
+        // Post-scrub hooks — apps flush their batched composite-track
+        // state here (GMT camera teleport / accumulation reset).
+        for (const h of this.postScrubHooks) h(ctx);
     }
 
     private interpolate(track: Track, frame: number): number {
@@ -392,29 +354,6 @@ export class AnimationEngine {
         return keys[keys.length - 1].value;
     }
 
-    private commitState() {
-        if (this.pendingCam.unifiedDirty || this.pendingCam.rotDirty) {
-            engine.shouldSnapCamera = true;
-            
-            const q = new THREE.Quaternion().setFromEuler(this.pendingCam.rot);
-            const rot = { x: q.x, y: q.y, z: q.z, w: q.w };
-            
-            const sX = splitPrecision(this.pendingCam.unified.x);
-            const sY = splitPrecision(this.pendingCam.unified.y);
-            const sZ = splitPrecision(this.pendingCam.unified.z);
-            
-            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, {
-                position: { x: 0, y: 0, z: 0 },
-                rotation: rot,
-                sceneOffset: {
-                    x: sX.high, y: sY.high, z: sZ.high,
-                    xL: sX.low, yL: sY.low, zL: sZ.low
-                }
-            });
-
-            this.fractalStore!.setState({ cameraRot: rot });
-        }
-    }
 }
 
 export const animationEngine = new AnimationEngine();
