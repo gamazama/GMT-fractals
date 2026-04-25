@@ -238,6 +238,16 @@ export const GmtPanels: PanelManifest = [
                         ],
                     },
                     {
+                        id: 'orbit-trap',
+                        label: 'Orbit Trap',
+                        activePredicate: (s: any) => !!(s.coloring?.trapEnabled),
+                        closedBadge: 'off',
+                        defaultOpen: (s: any) => !!(s.coloring?.trapEnabled),
+                        items: [
+                            { type: 'feature', id: 'coloring', groupFilter: 'trap_geom' },
+                        ],
+                    },
+                    {
                         id: 'noise',
                         label: 'Noise',
                         activePredicate: (s: any) => (s.coloring?.layer3Strength ?? 0) > 0,
