@@ -2,6 +2,7 @@
 import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { useEngineStore } from '../store/engineStore';
+import { useShortcutScope } from '../engine/plugins/Shortcuts';
 import GraphEditor from './GraphEditor';
 import { TimelineToolbar } from './timeline/TimelineToolbar';
 import { KeyframeInspector } from './timeline/KeyframeInspector';
@@ -25,7 +26,15 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
 
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const setIsTimelineHovered = useEngineStore(s => s.setIsTimelineHovered);
-    
+    const isTimelineHovered = useEngineStore(s => s.isTimelineHovered);
+
+    // Push the 'timeline-hover' shortcut scope while the cursor is over
+    // the timeline. The Undo plugin registers Mod+Z / Mod+Y under this
+    // scope at priority 10, so when active they shadow the global undo
+    // and route to undo('animation') instead — independent stack from
+    // param/scene undos.
+    useShortcutScope('timeline-hover', isTimelineHovered);
+
     // Reset hover/scrub flags on unmount so they can't get stuck if the timeline
     // closes while the mouse is inside it or while a drag is in progress.
     useEffect(() => {
