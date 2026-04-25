@@ -240,6 +240,45 @@ The `window.useAnimationStore` export stays in animationStore.ts as a dev-consol
 
 ---
 
+## F14 — Duplicate module-level state across engine-core / engine-gmt overlay
+**Status:** 🟡 One instance fixed (commit 163055a, 2026-04-25); broader audit needed.
+**Severity:** High — silent data divergence, hard to debug.
+
+**Symptom:** A reader sees `null` / zero / stale state from a module the writer just updated. No type error, no runtime warning. State just isn't where you'd expect it.
+
+**Root cause:** During the engine extraction, several files were copied verbatim from `engine/` into `engine-gmt/engine/` so engine-gmt could provide a gmt-flavoured version. When the two copies are nearly identical, **TypeScript treats them as separate modules** — each gets its own module-level `let _camera = null` (or registry, or singleton). Writes to one are invisible to readers of the other.
+
+**Concrete instance fixed:** `engine/worker/ViewportRefs.ts` and `engine-gmt/engine/worker/ViewportRefs.ts` each held their own `_camera`. `GmtRendererTickDriver` registered the R3F camera on the gmt copy; `utils/timelineUtils.ts` read `null` from the engine-core copy. Manifested as the Key Cam button always going red after capture (rotation tracks couldn't read the camera quaternion). Fix: replaced the gmt copy with a re-export shim around the engine-core module.
+
+**Why it may bite the engine work going forward:** the extraction will keep duplicating files. Anywhere a file holds module-level state — registries, ref containers, event-bus singletons, lazy proxies — duplication splits the state in two without warning.
+
+**Audit checklist:**
+- Diff every file in `engine-gmt/engine/**` against its `engine/**` counterpart. If they're ~identical, replace the gmt copy with `export { … } from '../../../engine/path'`.
+- Grep for module-level `let _foo` / `const _foo = new Foo()` / `let _registry = new Map()` patterns in both trees and check whether the same name exists in the parallel tree.
+- When extracting new code, default to **re-export shims, not copies**. Only copy when the gmt-side genuinely needs different runtime behaviour, and even then keep state in engine-core if at all possible.
+
+**Suspect modules to audit (not yet checked):** anything in `engine-gmt/engine/worker/` that has a sibling in `engine/worker/`; FractalRegistry / featureRegistry / binderRegistry duplicates if any; FractalEvents emitter copies. Quick way: `diff -q -r engine engine-gmt/engine 2>&1 | grep -v "Only in"`.
+
+---
+
+## F15 — Worker `_localOffset` may zero out under FRAME_READY guard timeout
+**Status:** ⚪ Flagged — possibly a non-issue; user reports no visual symptoms.
+**Severity:** Unknown — diagnosed via `console.log` during the F14 investigation; no user-facing report.
+
+**Symptom (observed in dev console only):** after preset boot, `WorkerProxy.sceneOffset` (= `_localOffset`, the proxy's mirror of the worker's rendered offset) reads `{0,0,0}` while `useEngineStore.getState().sceneOffset` has the real preset values. Anything that reads `engine.sceneOffset` (light-gizmo world positions, the recently-fixed Key Cam capture path before F14, future overlay code) sees zeros instead of the loaded camera position.
+
+**Possible mechanism (unverified):** [WorkerProxy.ts:204-219](../../engine-gmt/engine/worker/WorkerProxy.ts#L204-L219) uses `_offsetGuarded` to ignore FRAME_READY-reported offsets after a `setShadowOffset` call. The guard is supposed to clear when the worker catches up (drift < 0.001), but it also has a 2-second auto-clear timer ([WorkerProxy.ts:524-527](../../engine-gmt/engine/worker/WorkerProxy.ts#L524-L527)). If the worker's actual sceneOffset is genuinely `{0,0,0}` (i.e. the boot-time `OFFSET_SET` message at [main.tsx:312](../../app-gmt/main.tsx#L312) didn't land for some reason), the guard never converges, the 2s timer fires, and the next FRAME_READY overwrites `_localOffset = {0,0,0}`.
+
+**Why it may be a non-issue:** the rendered image looks correct (worker and overlay are internally consistent — both use whatever sceneOffset the worker has). User has not seen visual artefacts in normal use. This was caught only because we instrumented `engine.sceneOffset` for an unrelated investigation.
+
+**If you hit a real symptom:** worker-side instrumentation will tell us which side is wrong:
+- Add `console.log('[OFFSET_SET worker recv]', offset)` in [renderWorker.ts § OFFSET_SET](../../engine-gmt/engine/worker/renderWorker.ts) — if it doesn't fire at boot, the message is being dropped on the worker side.
+- Add a log right before [WorkerProxy.ts:218](../../engine-gmt/engine/worker/WorkerProxy.ts#L218) printing `_offsetGuarded` and `msg.state.sceneOffset` — if you see `_localOffset` get assigned zeros while the store has real values, the race-after-guard-timeout is real.
+
+**Probable fix shape:** drop the 2s guard auto-clear, or require an explicit "worker has caught up" handshake (sequence number on RENDER_TICK / FRAME_READY) instead of drift-based convergence.
+
+---
+
 ## Fragility fix priority order
 
 Blocking toy-fluid port (done):
@@ -261,6 +300,8 @@ Deferred:
 12. **F8** — UI state undo
 13. **F10** — `formula` field rename
 14. **F11** — store/events rename pass
+15. **F14** — engine/engine-gmt duplicate-state audit pass (one fixed, broader sweep pending)
+16. **F15** — `_localOffset` guard-clear race (flagged, unverified, possibly non-issue)
 
 ---
 
