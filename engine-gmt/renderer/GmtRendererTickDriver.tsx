@@ -35,6 +35,7 @@ import {
     isMouseOverCanvas,
 } from '../engine/worker/ViewportRefs';
 import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
+import { viewport } from '../../engine/plugins/Viewport';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
 // Capture the display camera for overlay components (light gizmos, drawing
@@ -191,6 +192,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             t.fps = t.frames * 1000 / (now - t.lastSample);
             t.frames = 0;
             t.lastSample = now;
+            viewport.reportFps(t.fps);
         }
         if (t.fps < 20 && now - t.lastYield >= 1000) {
             t.lastYield = now;

@@ -4,6 +4,11 @@
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
 **Status:** ✅ **Phases 1–6 + panel manifest + topbar port + compile pipeline + camera round-trip (2026-04-24).** Three apps boot on the engine: `fractal-toy.html`, `fluid-toy.html`, and `app-gmt.html` — the latter now renders Mandelbulb end-to-end with: full GMT worker + path tracing + Orbit/Fly navigation, formula switching through the full setFormula pipeline (preset hydration → CompileGate → worker recompile → new shader), PT toggle driving `renderMode`, scene-widgets / coloring histograms / formula gallery with thumbnails, Light Studio in the center topbar, camera state round-trips through save/load + respects Reset Position, picking (Julia + focus) via `useInteractionManager`. `npx tsc --noEmit` → 0 errors. Dock panels use `PanelManifest` (see `docs/engine/14_Panel_Manifest.md`); 10 GMT panels composed from 26 features. See `docs/04_Core_Plugins.md` + `docs/FEATURE_STATUS.md` for the current map.
 
+**📋 2026-04-25 (continued) — light gizmos, FPS unification, engine-core promotion:**
+- **Light gizmos** — `SinglePositionGizmo` + `OverlayProjection` promoted to `engine/` (were in `engine-gmt/`). Re-export shims keep existing consumers working. `DomOverlays` component (renders `featureRegistry.getViewportOverlays().filter(type==='dom')`) added to all three app layouts. `overlay-lighting` + `lightGizmoTick` wired in `registerGmtUi()`. Gizmos tested and working.
+- **FPS counter** — `GmtRendererTickDriver` was tracking FPS privately in `throttleRef` but never calling `viewport.reportFps()`, so `useViewportFps()` / `FpsCounter` always showed the default 60. Fixed: `viewport.reportFps(t.fps)` on each 500ms sample window. `fluid-toy` was already correct (called `viewport.frameTick()` via `onFrameEnd`).
+- **F16/F17/F18** — all fixed/closed (commit `f2b119d`). TopBar snapshot now returns `_rev`; GLSLToJS dead require path corrected; dual AnimationEngine confirmed non-issue (no local copy exists).
+
 **📋 2026-04-25 sweep (see `docs/engine/20_Fragility_Audit.md` F5–F15 entries):**
 - **F5 closed** — AnimationEngine camera tracks moved to GMT-side binder module; engine pipeline is camera-shape-agnostic.
 - **F7 closed** — `window.useAnimationStore` was leftover scaffolding (no real cycle). Direct imports everywhere.
@@ -251,7 +256,7 @@ Everything flagged as "known gaps after Phase 5" has landed:
 - **`@engine/help`** — the shared chrome has `HelpBrowser.tsx` + `helpUtils.ts`; not yet surfaced as a core plugin. Per-panel help IDs already wire through `useHelpContextMenu`.
 
 ### Fragilities still open
-See `docs/20_Fragility_Audit.md` for full list.
+See `docs/engine/20_Fragility_Audit.md` for full list. F16/F17/F18 from 2026-04-25 code review — all fixed (commit `f2b119d`).
 - **F5** — AnimationEngine hardcodes legacy camera tracks (`camera.unified.*`, `camera.rotation.*`). Clean fix is `@engine/camera` registering its own binders via a proper `binderRegistry`. Current mitigation: `cameraKeyRegistry` lets apps opt out of the legacy tracks.
 - **F6** — `set${Feature}` name inference in `AnimationEngine.getBinder`. Replace with auto-bind at freeze time (tied to F5's `binderRegistry.register()`).
 - **F7** — `animationStore ↔ fractalStore` circular import via `window.useAnimationStore`. Express as explicit bridge (see `docs/09_Bridges_and_Derived.md`).
@@ -261,6 +266,13 @@ See `docs/20_Fragility_Audit.md` for full list.
 - Gesture-mode switcher (brush / emitter / pick-c / pan-zoom).
 - MandelbrotPicker overlay (bottom-right mini-canvas to click-pick `julia.juliaC`).
 - ~34 DDFS params from the reference not yet ported (tone mapping, bloom, orbit-trap coloring, etc.).
+- **Orbit-trap gradient mapping in GMT** — fluid-toy has richer trap-gradient options (multi-stop, radial, angular modes) that would visually benefit GMT too. Port is non-trivial because each trap mode adds GLSL compile permutations; benchmark FPS impact before enabling by default. Caveat: will increase shader compile time (another permutation axis on top of formula × features).
+
+### App-gmt scene loading
+- **Some scenes fail to parse** — user reports "could not parse" on certain older `.gmf` / `.json` saves. Needs a systematic debug pass: load a failing scene, read the parse error, check if the field shape diverged during extraction (e.g. a feature slice that was renamed or had fields removed). Check `utils/SceneFormat.ts` migration path and `applyMigrations` coverage.
+
+### Adaptive resolution warmup
+- **Slow warm-up when returning from hi-res** — adaptive currently takes many frames to climb back to full res after a hi-res still. Root is in the viewport `_adaptiveScale` ramp math in `store/slices/viewportSlice.ts`. GMT's original used a more aggressive ramp-up multiplier when `actual > target`. Consider a faster `rampUp` coefficient (e.g. `sqrt(target/actual)` on drop, `(target/actual)^0.75` on climb) or a "boost on settle" that jumps to 1.0 immediately when `isMouseOverCanvas` goes false for >N frames. Measure against the current 30fps target.
 
 ### The real confidence anchor
 - ✅ **Mandelbulb end-to-end** — landed in Phase 6 (2026-04-24). app-gmt renders Mandelbulb through the engine's worker proxy, CompileGate, and ShaderBuilder. F5/F6 camera-binder cleanup still pending; current GMT camera uses the legacy binder path.
@@ -307,3 +319,7 @@ If the experiment turns out not to work: `rm -rf h:/GMT/gmt-engine`. GMT is unto
 - `memory/feedback_refactor_approach_selection.md` — why clone-and-strip beat in-place workspace refactor
 - `memory/feedback_strip_vs_delete.md` — when to genericize vs delete (generic patterns worth preserving even when fractal-coupled)
 - `memory/project_gmt_engine_extraction.md` — pointer to this repo + HANDOFF.md
+
+## Code review
+
+`docs/engine/21_Code_Review_2026-04-25.md` — independent multi-agent source survey (2026-04-25). Records what matches the architecture docs, where docs overstate, three live bugs (F16–F18), and the full dual-tree inventory. Read before touching `engine/plugins/`, the dual-tree (`engine-gmt/engine/`), or the onboarding surfaces (README, demo, package.json).
