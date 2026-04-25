@@ -48,11 +48,19 @@ type FeatureSetters = {
     [K in keyof FeatureStateMap as `set${Capitalize<string & K>}`]: (update: Partial<FeatureStateMap[K]>) => void;
 };
 
-export interface SavedCamera extends CameraState {
+/** Saved-camera library entry. The library is a generic state-library
+ *  slice — the inner `state` payload holds the camera-specific fields
+ *  (CameraState plus GMT optics). See engine-gmt/store/cameraSlice.ts
+ *  for the install + capture/apply wiring. */
+export interface SavedCameraPayload extends CameraState {
+    optics: OpticsState;
+}
+export interface SavedCamera {
     id: string;
     label: string;
-    optics: OpticsState;
     thumbnail?: string;
+    state: SavedCameraPayload;
+    createdAt: number;
 }
 
 // --- NEW LAYOUT TYPES ---

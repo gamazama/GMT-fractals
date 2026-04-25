@@ -41,11 +41,15 @@ type FeatureSetters = {
     [K in keyof FeatureStateMap as `set${Capitalize<string & K>}`]: (update: Partial<FeatureStateMap[K]>) => void;
 };
 
-export interface SavedCamera extends CameraState {
+export interface SavedCameraPayload extends CameraState {
+    optics: OpticsState;
+}
+export interface SavedCamera {
     id: string;
     label: string;
-    optics: OpticsState;
     thumbnail?: string;
+    state: SavedCameraPayload;
+    createdAt: number;
 }
 
 // --- NEW LAYOUT TYPES ---
