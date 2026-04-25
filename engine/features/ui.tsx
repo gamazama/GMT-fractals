@@ -9,6 +9,7 @@
 import React, { Suspense } from 'react';
 import { componentRegistry } from '../../components/registry/ComponentRegistry';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
+import { injectEngineStyles } from '../styles/componentClasses';
 
 // --- Lazy helper for on-demand components ---
 function lazify<P extends object>(
@@ -34,6 +35,14 @@ const LazyDebugToolsOverlay = lazify(() =>
 
 // --- Registration ---
 export const registerUI = () => {
+    // Engine component-class CSS — appends a `<style type="text/tailwindcss">`
+    // block to document.head so the Tailwind CDN picks up the t-btn /
+    // t-section-* / icon-btn / glass-panel / etc. utility classes that
+    // shared UI components rely on. Idempotent + browser-only. Single
+    // source of truth — apps no longer have to copy the @apply rules
+    // into each entry HTML.
+    injectEngineStyles();
+
     // AutoFeaturePanel is imported directly by PanelRouter now; the
     // registry entry is kept for external callers that look it up by id
     // (legacy / external add-ons) and for parity with panel-* naming.
