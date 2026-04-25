@@ -279,6 +279,44 @@ The `window.useAnimationStore` export stays in animationStore.ts as a dev-consol
 
 ---
 
+## F16 — TopBar `useSyncExternalStore` snapshot returns mutable Map
+**Status:** 🟢 Fixed (2026-04-25)
+**Severity:** Low in practice (works), medium in correctness.
+
+**Symptom:** [`engine/plugins/TopBar.tsx:108-109`](../engine/plugins/TopBar.tsx#L108) — `getSnapshot` returns the `_items` Map object directly. The Map's identity never changes between calls, so React's concurrent-mode tearing detection cannot see changes. Re-renders fire via the side-channel `onStoreChange()` notification, not from a diffed snapshot. React DevTools' tearing check would flag this.
+
+**Fix:** return `_rev` integer as the snapshot — identical to the pattern `Menu.tsx` and `Hud.tsx` already use correctly.
+
+**Source:** [21_Code_Review_2026-04-25.md § B1](21_Code_Review_2026-04-25.md)
+
+---
+
+## F17 — Dead `require` in GLSLToJS.ts
+**Status:** 🟢 Fixed (2026-04-25)
+**Severity:** Medium — silent until the code path runs.
+
+**Symptom:** [`engine-gmt/engine/GLSLToJS.ts:176`](../engine-gmt/engine/GLSLToJS.ts#L176) — `require('../store/fractalStore')` — this path does not exist. The file is `store/engineStore.ts`. Will throw `Cannot find module` if this code path executes in production.
+
+**Fix:** update path to `require('../../../store/engineStore')` or convert to an ES import.
+
+**Source:** [21_Code_Review_2026-04-25.md § B2](21_Code_Review_2026-04-25.md)
+
+---
+
+## F18 — Two AnimationEngine singletons may be active simultaneously
+**Status:** 🟢 Resolved (2026-04-25) — not an issue.
+**Severity:** N/A — verified non-issue.
+
+**Verification result (2026-04-25):** `engine-gmt/engine/AnimationEngine.ts` does not exist. Grep of all `engine-gmt/` imports for `AnimationEngine` shows only two files, both pointing at `'../../engine/AnimationEngine'` (engine-core):
+- `engine-gmt/animation/cameraBinders.ts:26`
+- `engine-gmt/components/timeline/RenderPopup.tsx:17`
+
+There is exactly one singleton. No fix needed.
+
+**Source:** [21_Code_Review_2026-04-25.md § B3](21_Code_Review_2026-04-25.md)
+
+---
+
 ## Fragility fix priority order
 
 Blocking toy-fluid port (done):
@@ -294,14 +332,17 @@ Landing next:
 8. ~~**F5** — decouple camera from AnimationEngine~~ 🟡 escape-hatch shipped (2026-04-23); GMT-legacy branches retained as fallback until GMT port
 9. ~~**F6** — auto-bind replaces name inference~~ 🟡 escape-hatch shipped (2026-04-23); full auto-registration deferred until a non-conventional case appears
 10. **F9** — componentId validation
+11. ~~**F17** — GLSLToJS dead require~~ 🟢 Fixed (2026-04-25)
+12. ~~**F18** — dual AnimationEngine singletons~~ 🟢 Resolved (non-issue, 2026-04-25)
+13. ~~**F16** — TopBar snapshot~~ 🟢 Fixed (2026-04-25)
 
 Deferred:
-11. **F7** — animation-host coupling as bridge (smell; works via window handle)
-12. **F8** — UI state undo
-13. **F10** — `formula` field rename
-14. **F11** — store/events rename pass
-15. **F14** — engine/engine-gmt duplicate-state audit pass (one fixed, broader sweep pending)
-16. **F15** — `_localOffset` guard-clear race (flagged, unverified, possibly non-issue)
+14. **F7** — animation-host coupling as bridge (smell; works via window handle)
+15. **F8** — UI state undo
+16. **F10** — `formula` field rename
+17. **F11** — store/events rename pass
+18. **F14** — engine/engine-gmt duplicate-state audit pass (4 shims done; full scope in [21_Code_Review_2026-04-25.md](21_Code_Review_2026-04-25.md))
+19. **F15** — `_localOffset` guard-clear race (flagged, unverified, possibly non-issue)
 
 ---
 

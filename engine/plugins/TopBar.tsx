@@ -47,7 +47,8 @@ export interface TopBarItem {
 // (no store) so item availability matches module-load order.
 const _items = new Map<string, TopBarItem>();
 const _subscribers = new Set<() => void>();
-const _notify = () => _subscribers.forEach((fn) => fn());
+let _rev = 0;
+const _notify = () => { _rev++; _subscribers.forEach((fn) => fn()); };
 
 export const topbar = {
     register(item: TopBarItem) {
@@ -103,11 +104,14 @@ interface TopBarHostProps {
 export const TopBarHost: React.FC<TopBarHostProps> = ({ hidden = false, className = '' }) => {
     // useSyncExternalStore subscribes to the module-level registry so
     // registrations after mount still propagate.
-    const items = useSyncExternalStore(
+    const rev = useSyncExternalStore(
         (onStoreChange) => { _subscribers.add(onStoreChange); return () => { _subscribers.delete(onStoreChange); }; },
-        () => _items,
-        () => _items,
+        () => _rev,
+        () => _rev,
     );
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    void rev; // consumed only for re-render trigger
+    const items = _items;
 
     if (hidden) return null;
 

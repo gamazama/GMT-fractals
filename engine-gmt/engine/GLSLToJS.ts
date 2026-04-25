@@ -173,7 +173,7 @@ export function createCPUDEFunction(glslFunction: string, loopBody: string, para
 export function getCurrentFormulaDE(): ((pos: Vec3) => number) | null {
     try {
         // Get current formula from store
-        const store = require('../store/fractalStore').useEngineStore.getState();
+        const store = require('../../../store/engineStore').useEngineStore.getState();
         const formulaId = store?.formula || 'Mandelbulb';
         
         // Get formula definition
