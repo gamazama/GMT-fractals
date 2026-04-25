@@ -17,7 +17,7 @@
  *   know about GMT slice names.
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import * as THREE from 'three';
 import { animationEngine } from '../AnimationEngine';
 import { useEngineStore } from '../../store/engineStore';
@@ -52,19 +52,47 @@ const activeTargetsRef = { current: new Set<string>() };
 const juliaScratch = new THREE.Vector3();
 const lastFrameRecorded = { current: -1 };
 const initialStaticValues = { current: {} as Record<string, number> };
+// Tracks isRecordingModulation across ticks so the per-tick driver
+// can run the on-start / on-stop transitions itself instead of
+// relying on a React useEffect (the legacy AnimationSystem component
+// only mounts in <ViewportArea>; app-gmt uses ViewportFrame and
+// therefore never fires that effect — leaving overriddenTracks set
+// after recording stopped, which silently broke timeline playback
+// for any track that was being modulated during the recording).
+const prevIsRec = { current: false };
+const EMPTY_OVERRIDES: Set<string> = new Set();
 
 // Exported tick function for orchestrator pattern
 export const tick = (delta: number) => {
     const animStore = useAnimationStore.getState();
     const storeState = useEngineStore.getState();
-    
+
+    // Recording-on/off transitions. Used to live in the React component
+    // <AnimationSystem />'s useEffect, but app-gmt never mounts that
+    // component, so the cleanup never ran and overriddenTracks stayed
+    // populated after recording — blocking the timeline from driving
+    // the recorded params on playback. Run from the tick instead so
+    // the lifecycle is self-contained.
+    const isRecNow = animStore.isRecordingModulation;
+    if (isRecNow !== prevIsRec.current) {
+        if (isRecNow) {
+            initialStaticValues.current = {};
+            lastFrameRecorded.current = -1;
+        } else {
+            // Recording just stopped — clear overrides so AnimationEngine
+            // .scrub stops skipping the recorded tracks during playback.
+            animationEngine.setOverriddenTracks(EMPTY_OVERRIDES);
+        }
+        prevIsRec.current = isRecNow;
+    }
+
     // OPTIMIZATION: Skip animation if nothing is animated or oscillating
     const trackCount = Object.keys(animStore.sequence.tracks).length;
     const hasAnimations = trackCount > 0;
     const hasOscillators = storeState.animations.length > 0;
     const hasModulationRules = (storeState as any).modulation?.rules?.length > 0;
     const isAudioEnabled = (storeState as any).audio?.isEnabled ?? false;
-    
+
     if (!hasAnimations && !hasOscillators && !hasModulationRules && !isAudioEnabled) {
         return; // Skip all animation processing
     }
@@ -466,20 +494,9 @@ export const tick = (delta: number) => {
      activeTargetsRef.current = currentTargets;
 };
 
-// React component to handle recording state
-export const AnimationSystem: React.FC = () => {
-    // Reset static values when recording starts
-    const isRecordingModulation = useAnimationStore(s => s.isRecordingModulation);
-    
-    useEffect(() => {
-        if (isRecordingModulation) {
-            initialStaticValues.current = {};
-            lastFrameRecorded.current = -1;
-        } else {
-             // Clear overrides when not recording
-             animationEngine.setOverriddenTracks(new Set());
-        }
-    }, [isRecordingModulation]);
-
-    return null;
-};
+// React component kept as a no-op for back-compat — the legacy
+// ViewportArea mounts this; the tick function above is now the sole
+// owner of the recording-on/off lifecycle. Apps wiring AnimationSystem
+// via the engine TickRegistry (the modern path) don't need to mount
+// this at all.
+export const AnimationSystem: React.FC = () => null;

@@ -112,9 +112,23 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
             handler: () => { useEngineStore.getState().redo(); },
         });
 
-        // Timeline-hover scope: Ctrl+Z routes to animation scope. This
-        // only fires when the timeline pushes 'timeline-hover' scope;
-        // otherwise the global binding above wins by scope-score.
+        // Timeline-hover scope: Ctrl+Z / Ctrl+Y route to the animation
+        // store's separate undo stack. This only fires when the
+        // Timeline component pushes 'timeline-hover' scope (cursor
+        // over the timeline); otherwise the global binding above wins
+        // by scope-score.
+        //
+        // Animation history lives in animationStore.undoStack (sequence
+        // snapshots), not in the unified historySlice. The plugin
+        // resolves animationStore via window.useAnimationStore — which
+        // animationStore.ts sets at module load — to avoid a hard
+        // dep on the animation package from engine-core. Apps that
+        // don't mount the animation store get a no-op handler.
+        const animUndo = (action: 'undo' | 'redo') => {
+            const aw = (typeof window !== 'undefined' ? (window as any).useAnimationStore : undefined);
+            const fn = aw?.getState?.()?.[action];
+            if (typeof fn === 'function') fn();
+        };
         shortcuts.register({
             id: 'undo.animation',
             key: 'Mod+Z',
@@ -122,7 +136,7 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
             priority: 10,
             description: 'Undo animation edit',
             category: 'Animation',
-            handler: () => { useEngineStore.getState().undo('animation'); },
+            handler: () => animUndo('undo'),
         });
         shortcuts.register({
             id: 'redo.animation',
@@ -131,7 +145,7 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
             priority: 10,
             description: 'Redo animation edit',
             category: 'Animation',
-            handler: () => { useEngineStore.getState().redo('animation'); },
+            handler: () => animUndo('redo'),
         });
     }
 
