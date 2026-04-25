@@ -105,10 +105,13 @@ export const QualityRenderControls: React.FC = () => {
 
     const renderModeOptions = useMemo(
         () => [
-            { label: 'Direct (Fast)', value: 'Direct' },
+            // Per-option colors mirror GMT — Direct renders cyan
+            // (default), Path Tracer renders purple.
+            { label: 'Direct (Fast)',   value: 'Direct',      color: 'bg-cyan-500'   },
             {
                 label: 'Path Tracer (GI)',
                 value: 'PathTracing',
+                color: 'bg-purple-500',
                 tooltip: ptEnabled ? 'Switch to Path Tracer (GI)' : 'Path Tracer disabled in Engine Panel',
             },
         ],

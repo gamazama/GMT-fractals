@@ -11,6 +11,9 @@ export interface GenericToggleOption<T> {
     label: string;
     value: T;
     tooltip?: string;
+    /** Optional active-state color override for this option (overrides
+     *  the top-level `color` prop when this option is selected). */
+    color?: string;
 }
 
 export interface GenericToggleSwitchProps<T> {
@@ -110,22 +113,29 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
                     </div>
                 )}
                 <div className={`flex h-9 md:h-[26px] overflow-hidden ${label ? 'rounded-b-sm' : 'rounded-sm'}`}>
-                    {options.map((opt) => (
-                        <button
-                            key={String(opt.value)}
-                            onClick={() => handleClick(opt.value)}
-                            disabled={disabled}
-                            className={`
-                                flex-1 min-w-0 flex items-center justify-center text-[9px] font-bold border-r border-white/5 last:border-r-0 transition-all truncate
-                                ${value === opt.value
-                                    ? 'bg-cyan-500/30 text-cyan-300 border-cyan-500/40'
-                                    : 'bg-white/[0.04] text-gray-600 hover:brightness-125'}
-                            `}
-                            title={opt.tooltip || opt.label}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
+                    {options.map((opt) => {
+                        // Per-option color override falls back to the
+                        // switch-level `color` prop. Lets one switch
+                        // tint individual options differently (GMT's
+                        // Render Engine: cyan + purple).
+                        const optActive = opt.color ? getToggleColor(opt.color) : toggleColor;
+                        return (
+                            <button
+                                key={String(opt.value)}
+                                onClick={() => handleClick(opt.value)}
+                                disabled={disabled}
+                                className={`
+                                    flex-1 min-w-0 flex items-center justify-center text-[9px] font-bold border-r border-white/5 last:border-r-0 transition-all truncate
+                                    ${value === opt.value
+                                        ? optActive.on
+                                        : 'bg-white/[0.04] text-gray-600 hover:brightness-125'}
+                                `}
+                                title={opt.tooltip || opt.label}
+                            >
+                                {opt.label}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
         );

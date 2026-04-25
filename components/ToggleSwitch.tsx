@@ -9,6 +9,14 @@ export interface ToggleOption<T> {
     label: string;
     value: T;
     tooltip?: string;
+    /** Optional active-state color override for this option. Pass a
+     *  Tailwind colour stem (e.g. `'bg-purple-500'`) — same set the
+     *  top-level `color` prop accepts (cyan / red / green / amber /
+     *  purple). When omitted, the option falls back to the top-level
+     *  `color`. Lets a single segmented switch tint individual options
+     *  differently — GMT's Render Engine selector uses cyan for
+     *  Direct and purple for Path Tracer. */
+    color?: string;
 }
 
 interface ToggleSwitchProps<T> {
