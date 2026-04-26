@@ -97,8 +97,9 @@ export interface EngineStoreState extends FeatureStateMap {
   previewMode: boolean;
   renderMode: 'Direct' | 'PathTracing';
   
-  isPaused: boolean; // Manual pause
-  sampleCap: number; // Stop accumulation after N samples
+  isPaused: boolean;         // Manual pause
+  sampleCap: number;         // Stop accumulation after N samples (0 = infinite)
+  accumulationCount: number; // Current sample count reported by the render loop
   
   isUserInteracting: boolean; // Global flag for slider/gizmo interaction
 
@@ -273,6 +274,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setRenderMode: (v: 'Direct' | 'PathTracing') => void;
     setIsPaused: (v: boolean) => void;
     setSampleCap: (v: number) => void;
+    reportAccumulation: (count: number) => void;
     
     setIsBucketRendering: (v: boolean) => void;
     setBucketSize: (v: number) => void;

@@ -30,14 +30,14 @@ export type RenderControlSlice = Pick<EngineStoreState,
     'isBucketRendering' | 'bucketSize' |
     'outputWidth' | 'outputHeight' | 'tileCols' | 'tileRows' | 'matchViewportAspect' |
     'convergenceThreshold' |
-    'isPaused' | 'sampleCap' | 'samplesPerBucket'
+    'isPaused' | 'sampleCap' | 'accumulationCount' | 'samplesPerBucket'
 > & Pick<EngineActions,
     'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
     'setIsExporting' | 'setAdaptiveSuppressed' | 'setRenderRegion' | 'setPreviewRegion' |
     'setIsBucketRendering' | 'setBucketSize' |
     'setOutputWidth' | 'setOutputHeight' | 'setTileCols' | 'setTileRows' | 'setMatchViewportAspect' |
     'setConvergenceThreshold' |
-    'setIsPaused' | 'setSampleCap' | 'setSamplesPerBucket'
+    'setIsPaused' | 'setSampleCap' | 'reportAccumulation' | 'setSamplesPerBucket'
 >;
 
 export const createRenderControlSlice: StateCreator<
@@ -56,6 +56,7 @@ export const createRenderControlSlice: StateCreator<
 
     isPaused: false,
     sampleCap: 256,
+    accumulationCount: 0,
 
     isExporting: false,
     adaptiveSuppressed: false,
@@ -105,6 +106,7 @@ export const createRenderControlSlice: StateCreator<
     setRenderMode: (v) => set({ renderMode: v }),
     setIsPaused: (v) => set({ isPaused: v }),
     setSampleCap: (v) => set({ sampleCap: v }),
+    reportAccumulation: (count) => set({ accumulationCount: count }),
 
     // Region crop: changing the render region is a quality change —
     // accumulator resets so the new region starts fresh.

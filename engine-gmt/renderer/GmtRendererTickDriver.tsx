@@ -193,6 +193,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             t.frames = 0;
             t.lastSample = now;
             viewport.reportFps(t.fps);
+            useEngineStore.getState().reportAccumulation(proxy.accumulationCount);
         }
         if (t.fps < 20 && now - t.lastYield >= 1000) {
             t.lastYield = now;

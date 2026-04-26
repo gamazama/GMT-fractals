@@ -17,7 +17,7 @@ import { useSyncExternalStore } from 'react';
 import { menu } from '../engine/plugins/Menu';
 import { topbar } from '../engine/plugins/TopBar';
 import { FpsCounter } from '../engine/plugins/topbar/FpsCounter';
-import { PauseButton } from './topbar/PauseButton';
+import { PauseControls } from '../engine/plugins/topbar/PauseControls';
 import { AdaptiveResolution } from './topbar/AdaptiveResolution';
 import { camera } from '../engine/plugins/Camera';
 import { GmtLogo } from './topbar/Logo';
@@ -276,7 +276,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     topbar.unregister('fps');
     topbar.unregister('pause');
     topbar.register({ id: 'fps',   slot: 'left', order: 2, component: FpsCounter });
-    topbar.register({ id: 'pause', slot: 'left', order: 3, component: PauseButton });
+    topbar.register({ id: 'pause', slot: 'left', order: 3, component: PauseControls });
 
     // Divider between FPS/Pause and Quality group
     topbar.register({ id: 'gmt-div-2', slot: 'left', order: 4, component: TopBarDivider });
