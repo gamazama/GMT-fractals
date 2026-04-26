@@ -114,12 +114,14 @@ installViewport({
 });
 
 installTopBar();
-installPauseControls();
+// installPauseControls is NOT called here — registerGmtTopbar re-registers
+// it in the LEFT slot to match gmt-0.8.5's RenderTools layout.
 
 installSceneIO({
     // The worker-owned canvas is the first <canvas> in the DOM — it's
     // mounted by GmtRendererCanvas before the R3F Canvas sibling.
     getCanvas: () => document.querySelector('canvas'),
+    showQuickPng: true,
 });
 
 installModulation();

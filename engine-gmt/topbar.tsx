@@ -4,24 +4,21 @@
  * topbar + menu plugins. Call `registerGmtTopbar()` once at app boot
  * AFTER `installTopBar()`, `installMenu()`, and `installCamera()`.
  *
- * What's already in the engine's topbar (no port needed):
- *   - ProjectName (editable, left)
- *   - Pause button + sample-cap popover (right) via installPauseControls
- *   - FPS counter, Adaptive badge (right) via installViewport
- *   - Save / Load / Quick-PNG (right) via installSceneIO
- *   - Undo / Redo (right) via installUndo
- *   - Help menu (rightmost) via installHelp
+ * Mirrors gmt-0.8.5's RenderTools left-group layout:
+ *   Left:  Logo | Name | [div] | FPS | Pause | [div] | Quality | Adaptive | PT | Region | Bucket
+ *   Right: Undo | Redo | QuickPng | Save | Load | Share | Camera | System | Help
  *
- * What this file adds:
- *   - Left slot: Path Tracing toggle, Playing badge
- *   - Right slot: Camera menu (order 29), System menu (order 30).
- *     Help stays rightmost at order 40.
+ * FPS, Pause, and Adaptive are installed by engine-core plugins into the
+ * right slot — this file unregisters and re-registers them in the left slot.
  */
 
 import React from 'react';
 import { useSyncExternalStore } from 'react';
 import { menu } from '../engine/plugins/Menu';
 import { topbar } from '../engine/plugins/TopBar';
+import { FpsCounter } from '../engine/plugins/topbar/FpsCounter';
+import { PauseControls } from '../engine/plugins/topbar/PauseControls';
+import { AdaptiveResolutionBadge } from '../engine/plugins/viewport/AdaptiveResolutionBadge';
 import { camera } from '../engine/plugins/Camera';
 import { GmtLogo } from './topbar/Logo';
 import { useEngineStore } from '../store/engineStore';
@@ -35,6 +32,10 @@ import { ShareLinkButton } from './topbar/ShareLinkButton';
 import { ViewportQuality } from './topbar/ViewportQuality';
 import BucketRenderSettingsPopup from './topbar/BucketRenderControls';
 import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
+
+const TopBarDivider: React.FC = () => (
+    <div className="h-6 w-px bg-white/10 mx-1" />
+);
 
 // ── Inline topbar items ────────────────────────────────────────────────
 
@@ -259,52 +260,34 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         },
     } = options;
 
-    // ── Inline items (left slot) ───────────────────────────────────────
-    // Formula picker lives inside the Formula panel (via FormulaSelect
-    // widget slotted via widgets.before in engine-gmt/panels.ts), not
-    // in the topbar — matches GMT's layout.
+    // ── Left slot — mirrors gmt-0.8.5's RenderTools layout exactly ──────
+    // Order: Logo | Name | [divider] | FPS | Pause | [divider] | Quality | Adaptive | PT | (badge) | Region | Bucket
 
-    // GMT wordmark — leftmost item, ahead of the engine's default
-    // project-name (order 0). Mirrors gmt-0.8.5/components/topbar/
-    // RenderTools.tsx which had the wordmark inline before the
-    // project-name pill.
-    topbar.register({
-        id: 'gmt-logo',
-        slot: 'left',
-        order: -10,
-        component: GmtLogo,
-    });
+    topbar.register({ id: 'gmt-logo', slot: 'left', order: -10, component: GmtLogo });
 
-    topbar.register({
-        id: 'gmt-viewport-quality',
-        slot: 'left',
-        order: 5,
-        component: ViewportQuality,
-    });
-    topbar.register({
-        id: 'gmt-path-tracing',
-        slot: 'left',
-        order: 10,
-        component: PathTracingToggle,
-    });
-    topbar.register({
-        id: 'gmt-playing-badge',
-        slot: 'left',
-        order: 20,
-        component: PlayingBadge,
-    });
-    topbar.register({
-        id: 'gmt-render-region',
-        slot: 'left',
-        order: 25,
-        component: RenderRegionToggle,
-    });
-    topbar.register({
-        id: 'gmt-bucket-render',
-        slot: 'left',
-        order: 30,
-        component: BucketRenderToggle,
-    });
+    // Divider between project name and FPS/Pause group
+    topbar.register({ id: 'gmt-div-1', slot: 'left', order: 1, component: TopBarDivider });
+
+    // Move FPS + Pause from right slot (registered by installTopBar / installPauseControls)
+    // into the left slot to match gmt-0.8.5's RenderTools placement.
+    topbar.unregister('fps');
+    topbar.unregister('pause');
+    topbar.register({ id: 'fps',   slot: 'left', order: 2, component: FpsCounter });
+    topbar.register({ id: 'pause', slot: 'left', order: 3, component: PauseControls });
+
+    // Divider between FPS/Pause and Quality group
+    topbar.register({ id: 'gmt-div-2', slot: 'left', order: 4, component: TopBarDivider });
+
+    topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5, component: ViewportQuality });
+
+    // Move Adaptive badge from right slot into left slot alongside ViewportQuality
+    topbar.unregister('adaptive');
+    topbar.register({ id: 'adaptive', slot: 'left', order: 6, component: AdaptiveResolutionBadge });
+
+    topbar.register({ id: 'gmt-path-tracing',  slot: 'left', order: 10, component: PathTracingToggle });
+    topbar.register({ id: 'gmt-playing-badge', slot: 'left', order: 20, component: PlayingBadge });
+    topbar.register({ id: 'gmt-render-region', slot: 'left', order: 25, component: RenderRegionToggle });
+    topbar.register({ id: 'gmt-bucket-render', slot: 'left', order: 30, component: BucketRenderToggle });
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
     // Vibration feedback callback — noop here; apps that want haptic
