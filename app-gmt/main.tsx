@@ -276,6 +276,19 @@ if (!bootPreset) {
 }
 if (bootPreset) {
     useEngineStore.getState().loadScene({ preset: bootPreset });
+
+    // Stash camera state for GmtRendererTickDriver to replay after boot-ready.
+    // loadPreset fires CAMERA_TELEPORT before Navigation mounts, so it's lost.
+    // GmtRendererTickDriver drains pendingTeleport once the worker is booted + compiled.
+    const s = useEngineStore.getState() as any;
+    if (s.sceneOffset || s.cameraRot) {
+        getProxy().pendingTeleport = {
+            position: { x: 0, y: 0, z: 0 },
+            rotation: s.cameraRot || { x: 0, y: 0, z: 0, w: 1 },
+            sceneOffset: s.sceneOffset,
+            targetDistance: s.targetDistance,
+        };
+    }
 } else {
     console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
 }

@@ -28,6 +28,7 @@ import { registry } from '../engine/FractalRegistry';
 import { VirtualSpace } from '../engine/PrecisionMath';
 import { CameraUtils } from '../utils/CameraUtils';
 import { useEngineStore } from '../../store/engineStore';
+import { presetFieldRegistry } from '../../utils/PresetFieldRegistry';
 import {
     installStateLibrarySlice,
     type StateSnapshot,
@@ -258,6 +259,21 @@ export const installGmtCameraSlice = (): void => {
         suggestLabel: suggestCameraLabel,
         captureThumbnail: captureCameraThumbnail,
         onReset: resetToFormulaDefault,
+    });
+
+    // Register handler for legacy top-level `lights` field.
+    // Old-format presets (formula defaultPresets) store the lights array at
+    // preset.lights rather than preset.features.lighting.lights. applyPresetState
+    // only reads preset.features[feat.id], so top-level lights are silently ignored
+    // without this registration.
+    presetFieldRegistry.register({
+        key: 'lights',
+        serialize: () => undefined,
+        deserialize: (p: any, _set: any, getStore: any) => {
+            if (!Array.isArray(p.lights) || p.lights.length === 0) return;
+            const setter = getStore()?.setLighting;
+            if (typeof setter === 'function') setter({ lights: p.lights });
+        },
     });
 
     // Wrap engine-core's undoCamera / redoCamera so the R3F camera warps
