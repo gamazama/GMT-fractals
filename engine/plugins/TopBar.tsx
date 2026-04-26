@@ -126,7 +126,7 @@ export const TopBarHost: React.FC<TopBarHostProps> = ({ hidden = false, classNam
     };
 
     return (
-        <header className={`relative shrink-0 w-full h-12 z-[500] bg-black/90 border-b border-white/10 flex items-center justify-between px-4 select-none ${className}`}>
+        <header className={`relative shrink-0 w-full h-14 z-[500] bg-black/90 border-b border-white/10 flex items-center justify-between px-6 select-none ${className}`}>
             <div className="flex items-center gap-2">
                 {slotItems('left').map(renderItem)}
             </div>
