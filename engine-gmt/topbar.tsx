@@ -265,7 +265,10 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
 
     topbar.register({ id: 'gmt-logo', slot: 'left', order: -10, component: GmtLogo });
 
-    // Divider between project name and FPS/Pause group
+    // Logo now shows the project name as a subtitle — suppress the standalone pill.
+    topbar.unregister('project-name');
+
+    // Divider between logo block and FPS/Pause group
     topbar.register({ id: 'gmt-div-1', slot: 'left', order: 1, component: TopBarDivider });
 
     // Move FPS + Pause from right slot (registered by installTopBar / installPauseControls)

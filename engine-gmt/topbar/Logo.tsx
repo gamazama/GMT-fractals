@@ -9,11 +9,17 @@
  */
 
 import React from 'react';
+import { useEngineStore } from '../../store/engineStore';
 
-export const GmtLogo: React.FC = () => (
-    <div className="flex items-center pr-2 select-none">
-        <span className="text-xl font-bold tracking-tighter text-white leading-none">
-            G<span className="text-cyan-400">M</span>T
-        </span>
-    </div>
-);
+export const GmtLogo: React.FC = () => {
+    const name = useEngineStore((s) => s.projectSettings.name);
+
+    return (
+        <div className="flex flex-col leading-none select-none pr-3">
+            <span className="text-xl font-bold tracking-tighter text-white leading-none">
+                G<span className="text-cyan-400">M</span>T
+            </span>
+            <span className="text-[9px] text-gray-400 mt-0.5 truncate max-w-[120px]">{name}</span>
+        </div>
+    );
+};
