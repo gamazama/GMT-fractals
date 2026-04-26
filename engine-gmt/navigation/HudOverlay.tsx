@@ -190,11 +190,43 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                                 </>
                             )}
 
-                            {/* Distance Display (Updated by usePhysicsProbe) */}
-                            <div className={`px-6 py-3 bg-white/5 flex items-center min-w-[100px] justify-center ${state.cameraMode === 'Orbit' ? 'ring-1 ring-cyan-400/40 rounded-r-full' : ''}`}>
+                            {/* Distance Display (Updated by usePhysicsProbe).
+                                In orbit mode, hosts a small toggle for
+                                cursor-anchored orbit (rotates/zooms around
+                                whatever's under the mouse). Default on;
+                                falls back to centre-pivot on empty space. */}
+                            <div className={`px-6 py-3 bg-white/5 flex items-center gap-2 min-w-[100px] justify-center ${state.cameraMode === 'Orbit' ? 'ring-1 ring-cyan-400/40 rounded-r-full' : ''}`}>
                                 <span ref={hudRefs.dist} className="text-cyan-500/80 font-mono text-[10px]">
                                     Dst ---
                                 </span>
+                                {state.cameraMode === 'Orbit' && (() => {
+                                    const on = state.navigation?.orbitCursorAnchor ?? true;
+                                    return (
+                                        <button
+                                            type="button"
+                                            onClick={() => actions.setNavigation({ orbitCursorAnchor: !on })}
+                                            title={on ? 'Orbit/zoom around cursor (click to centre-pivot)' : 'Orbit/zoom around centre (click to cursor-anchor)'}
+                                            aria-label="Toggle cursor-anchored orbit"
+                                            className={`pointer-events-auto w-4 h-4 flex items-center justify-center rounded-full border transition-colors ${
+                                                on
+                                                    ? 'border-cyan-400/70 text-cyan-300 hover:bg-cyan-500/20'
+                                                    : 'border-white/20 text-gray-500 hover:text-gray-300 hover:border-white/30'
+                                            }`}
+                                        >
+                                            {/* Crosshair-with-dot glyph. Even size + viewBox so
+                                                everything is integer-pixel aligned in the 16 px button.
+                                                `display:block` kills inline-svg baseline whitespace
+                                                that otherwise nudges it down a fraction of a px. */}
+                                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" style={{ display: 'block' }}>
+                                                <line x1="5" y1="1" x2="5" y2="3" />
+                                                <line x1="5" y1="7" x2="5" y2="9" />
+                                                <line x1="1" y1="5" x2="3" y2="5" />
+                                                <line x1="7" y1="5" x2="9" y2="5" />
+                                                <circle cx="5" cy="5" r="0.9" fill="currentColor" stroke="none" />
+                                            </svg>
+                                        </button>
+                                    );
+                                })()}
                             </div>
                         </div>
 

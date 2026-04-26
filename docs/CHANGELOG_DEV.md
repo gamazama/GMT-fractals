@@ -2,6 +2,40 @@
 
 Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
 
+## 2026-04-26
+
+### Cursor-anchored orbit/zoom + worker offset-sync race fix
+
+**User-facing**
+- Orbit-mode left-drag now rotates around whatever's under the mouse cursor, like Blender. The cursor pixel stays put while the world rotates around it.
+- Wheel and middle-drag zoom both anchor the same way — the point under the cursor stays fixed; you zoom toward/away from it.
+- Right-drag pan unchanged (still drei native).
+- A small crosshair-with-dot toggle in the DST HUD pill flips between cursor-anchored and the original centre-pivot behaviour. Default on; click to switch. A pivot reticle dot tracks the cursor when a fractal surface is under it.
+- Subjective smoothness now matches drei's native OrbitControls even under render strain. Every interaction now resets accumulation immediately (no more motion-blur stutter on wheel/middle/pan that previously slipped past the position-delta detection).
+
+**Mechanism**
+- New custom handlers in [`engine-gmt/navigation/Navigation.tsx`](../engine-gmt/navigation/Navigation.tsx) for left-drag rotate, wheel zoom and middle-drag zoom replace drei's `ROTATE` / `DOLLY` / `MIDDLE_DOLLY`. drei still owns `PAN`. When the toggle is off, the custom handlers self-gate at the top and drei's full native path runs (mouseButtons + enableZoom flip via the toggle).
+- **Math (rotate)**: rotate `(camera.position − pivot)` and `camera.quaternion` by the same composite quaternion (azimuth around frozen `gestureUp` captured at pointerdown × polar around post-azimuth `camera.right`). Both rotations share the axis, so the pivot's direction-from-camera stays invariant in camera-space → cursor pixel stays put. `gestureUp` frozen for the gesture's duration; recaptured on next pointerdown so Q/E roll between gestures still applies, but azimuth doesn't drift within a drag.
+- **Math (zoom)**: pure translation along the cursor→pivot ray — `camera = pivot + (camera − pivot) × f`. No `lookAt`; orientation unchanged.
+- **Treadmill handover**: every gesture event absorbs `camera.position` into `engine.sceneOffset` immediately (via existing `absorbOrbitPosition`). The local pivot is shifted into the new local frame to compensate (`pivot.sub(camera.position)` before absorb). End-of-gesture absorbs become no-ops, eliminating the end-of-gesture snap. For pan, drei owns the camera so the absorb runs in `useFrame` priority 0 with `keepTarget=true` (a new option that shifts target into the new local frame instead of resetting to forward — keeps drei's pan-distance-based sensitivity stable).
+- **Hover pre-pick**: cursor anchoring needs the world-space surface point under the cursor at the moment of click. We pre-pick on `pointermove`, throttled by an in-flight gate (only one async pick at a time) plus a 10 px movement gate to skip parked-cursor picks. Cached in world space (`hoverPivotWorldRef`) so it stays valid across treadmill absorbs; localized at gesture start via the current `sceneOffset`. Skips during all gestures (pan / wheel / middle / custom orbit).
+- **Up-pole stability**: previous design used the live `camera.up` for azimuth, which polar tilts gradually rotated off vertical → up-pole tumbled across drags. Frozen `gestureUp` made each drag a clean turntable. `camera.up` is also locked to `gestureUp` throughout the drag so drei's `lookAt` (when re-enabled at gesture end) doesn't fight the rotation.
+- **Synchronous application**: rotation math runs inside `pointermove`, not deferred to `useFrame`. (We tried deferral; agent research confirmed drei's smoothness comes specifically from per-event apply — deferring adds a full render-frame of latency that perceptibly chunks under strain. The math itself is microseconds; coalescing wasn't worth it.)
+- **Drei coexistence**: when toggle is on, drei is force-disabled synchronously at custom-gesture start (`orbitRef.enabled = false`) so its priority −1 useFrame `lookAt(target)` doesn't fight our rotation. Re-enabled by the gating logic in `useFrame` when the gesture ends. When toggle is off, drei stays enabled subject to lock predicates only — fixes a regression where wheel-only interactions silently no-opped because drei's `enabled` flag was tied to a pointerdown-pointerup latch that never fired for wheel-only events.
+- **Accumulation reset**: per-event/per-frame absorb keeps `camera.position` at (0,0,0) every frame, so `useFrame`'s `posChanged` / `rotChanged` checks (which compare frame-to-frame) miss the actual view change. Each custom handler now sets `engine.dirty = true` directly, where it knows the view has moved.
+
+### Fix: worker `RENDER_TICK` overwrite drops `syncOffset` flag
+
+A subtle race in the worker's `RENDER_TICK` buffering caused occasional permanent main↔worker `sceneOffset` desyncs (~1 in 12 interactions, then all subsequent picks landed at the wrong world point until app reload).
+
+The worker buffers the latest pending tick (`_pendingTick = msg`) — if two ticks arrived between worker drains, the newer overwrote the older. When the older had `syncOffset: true` (from a main-thread treadmill absorb) and the newer didn't, the flag was lost — the worker's `RENDER_TICK` handler conditionally writes `engine.virtualSpace.state = msg.offset` only when `syncOffset` is true (other paths use `OFFSET_SHIFT` / `OFFSET_SET`), so the worker's `virtualSpace` never updated. Main kept absorbing into its own `engine.sceneOffset`; worker stayed at the pre-absorb value. Every subsequent `pickWorldPosition` returned coords against the worker's stale offset, which main localized against its newer offset → cursor pivot off by exactly the lost delta, permanently.
+
+Fix in [`engine-gmt/engine/worker/renderWorker.ts:RENDER_TICK case`](../engine-gmt/engine/worker/renderWorker.ts) — when overwriting `_pendingTick`, propagate `syncOffset` forward if either tick has it. The offset *value* in the new tick is already correct (`queueOffsetSync`'s shadow set keeps `engine.sceneOffset` synchronous on main); only the flag had to survive the merge.
+
+### Misc
+- `engine-gmt/features/navigation.ts` — new `orbitCursorAnchor` boolean param (default true, hidden from auto-panel; exposed as the DST HUD pill toggle).
+- `engine-gmt/navigation/HudOverlay.tsx` — added the cursor-anchor toggle button inside the DST HUD pill (Orbit mode only). Even-pixel SVG sizing and `display: block` on the icon to fix a visible sub-pixel offset in the small button.
+
 ## 2026-04-25
 
 ### Fix: FOV Dolly Link — correct WorkerProxy import in scene_widgets

@@ -466,6 +466,20 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 // Buffer latest tick and schedule via MessageChannel.
                 // This yields to the event loop so queued CONFIG/UNIFORM messages
                 // process first, but with near-zero delay (unlike setTimeout).
+                //
+                // CRITICAL: propagate syncOffset forward when overwriting.
+                // If the previous pending tick had syncOffset=true (from a
+                // main-thread absorb) and the new one doesn't, dropping it
+                // means virtualSpace.state never gets updated → main and
+                // worker disagree about sceneOffset → all subsequent picks
+                // return coords against a stale offset → cursor anchoring
+                // is wrong by the absorb delta, permanently. The offset
+                // VALUE in the new tick is already correct (engine.sceneOffset
+                // is updated synchronously by queueOffsetSync), so we just
+                // need to preserve the flag.
+                if (_pendingTick?.syncOffset && !msg.syncOffset) {
+                    msg = { ...msg, syncOffset: true };
+                }
                 _pendingTick = msg;
                 if (!_tickScheduled) {
                     _tickScheduled = true;
