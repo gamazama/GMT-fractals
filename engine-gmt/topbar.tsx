@@ -18,7 +18,7 @@ import { menu } from '../engine/plugins/Menu';
 import { topbar } from '../engine/plugins/TopBar';
 import { FpsCounter } from '../engine/plugins/topbar/FpsCounter';
 import { PauseControls } from '../engine/plugins/topbar/PauseControls';
-import { AdaptiveResolutionBadge } from '../engine/plugins/viewport/AdaptiveResolutionBadge';
+import { AdaptiveResolution } from './topbar/AdaptiveResolution';
 import { camera } from '../engine/plugins/Camera';
 import { GmtLogo } from './topbar/Logo';
 import { useEngineStore } from '../store/engineStore';
@@ -285,7 +285,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
 
     // Move Adaptive badge from right slot into left slot alongside ViewportQuality
     topbar.unregister('adaptive');
-    topbar.register({ id: 'adaptive', slot: 'left', order: 6, component: AdaptiveResolutionBadge });
+    topbar.register({ id: 'adaptive', slot: 'left', order: 6, component: AdaptiveResolution });
 
     topbar.register({ id: 'gmt-path-tracing',  slot: 'left', order: 10, component: PathTracingToggle });
     topbar.register({ id: 'gmt-playing-badge', slot: 'left', order: 20, component: PlayingBadge });
