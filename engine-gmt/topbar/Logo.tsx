@@ -44,7 +44,7 @@ export const GmtLogo: React.FC = () => {
             </span>
             <button
                 onClick={() => setIsRenaming(true)}
-                className="text-[8px] font-mono text-gray-500 hover:text-cyan-300 hover:underline transition-colors text-left truncate max-w-[120px] mt-0.5"
+                className="text-[8px] font-mono text-gray-400 underline decoration-white/20 hover:text-cyan-300 hover:decoration-cyan-300/50 transition-colors text-left truncate max-w-[120px] mt-1.5"
                 title="Click to rename project"
             >
                 {name}
