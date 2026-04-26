@@ -1,9 +1,13 @@
 
 name: Deploy to GitHub Pages
 
+# Triggers on main → root deploy (gamazama.github.io/GMT-fractals + gmt-fractals.com)
+# Triggers on dev  → /dev subfolder deploy (gamazama.github.io/GMT-fractals/dev)
+# vite.config.ts uses `base: './'` so the same build works at either location —
+# the only difference between deploys is the destination directory in gh-pages.
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "dev"]
   workflow_dispatch:
 
 permissions:
@@ -28,14 +32,18 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to root
+      # Only the matching branch's deploy step runs. keep_files: true means
+      # main pushes don't wipe /dev and vice-versa — gh-pages branch holds both.
+      - name: Deploy main to root
+        if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           keep_files: true
 
-      - name: Deploy to dev subfolder
+      - name: Deploy dev to /dev subfolder
+        if: github.ref == 'refs/heads/dev'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
