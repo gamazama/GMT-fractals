@@ -24,6 +24,15 @@ class ComponentRegistry {
     public get(id: string): ComponentType | undefined {
         return this.components.get(id);
     }
+
+    public has(id: string): boolean {
+        return this.components.has(id);
+    }
+
+    /** Iterate registered ids — used by dev-mode validators. */
+    public ids(): IterableIterator<string> {
+        return this.components.keys();
+    }
 }
 
 export const componentRegistry = new ComponentRegistry();

@@ -535,3 +535,46 @@ class FeatureRegistry {
 }
 
 export const featureRegistry = new FeatureRegistry();
+
+/**
+ * Dev-mode validator: walks every registered feature and checks that
+ * every `componentId` it references resolves in the supplied component
+ * registry. Catches typos and missing registrations at boot instead of
+ * "blank panel + silent fallback" at first render.
+ *
+ * NOT called from `freeze()` because the feature registry is frozen
+ * during store construction, before app-side `registerUI()` /
+ * `registerGmtUi()` have populated the component registry. Apps call
+ * this after their UI registration phase finishes (see app-gmt/main.tsx).
+ *
+ * Returns the list of missing ids (empty when all resolve). In dev,
+ * also logs each miss with the feature id that referenced it. Apps
+ * may choose to throw on a non-empty result for a hard failure.
+ */
+export const validateComponentRefs = (
+    componentRegistry: { has(id: string): boolean },
+): { featureId: string; componentId: string; site: string }[] => {
+    const missing: { featureId: string; componentId: string; site: string }[] = [];
+    for (const f of featureRegistry.getAll()) {
+        if (f.viewportConfig?.componentId && !componentRegistry.has(f.viewportConfig.componentId)) {
+            missing.push({ featureId: f.id, componentId: f.viewportConfig.componentId, site: 'viewportConfig' });
+        }
+        if (f.customUI) {
+            for (let i = 0; i < f.customUI.length; i++) {
+                const ref = f.customUI[i].componentId;
+                if (ref && !componentRegistry.has(ref)) {
+                    missing.push({ featureId: f.id, componentId: ref, site: `customUI[${i}]` });
+                }
+            }
+        }
+    }
+    if (missing.length && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+        for (const m of missing) {
+            console.error(
+                `[FeatureRegistry] feature '${m.featureId}'.${m.site} references componentId '${m.componentId}' which is not in the componentRegistry. ` +
+                `Either register the component or fix the typo.`,
+            );
+        }
+    }
+    return missing;
+};

@@ -36,6 +36,11 @@ import { StateCreator } from 'zustand';
 import { EngineStoreState, EngineActions } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { isMouseOverCanvas } from '../../engine/worker/ViewportRefs';
+import {
+    type AdaptiveResolutionState,
+    createAdaptiveResolutionState,
+    tickAdaptiveResolution,
+} from '../../engine/AdaptiveResolution';
 
 // Default DPR — mobile gets 1.0, desktop uses devicePixelRatio capped at 2.
 // This isMobile() heuristic belongs in a future @engine/environment plugin
@@ -62,19 +67,15 @@ export type ViewportSlice = Pick<EngineStoreState,
 >;
 
 // ── Adaptive loop module-level state (runtime, doesn't trigger rerenders) ──
-let _adaptiveScale = 1.0;           // current render-size divisor, 1..4
-let _adaptiveFrames = 0;             // frames in the current sample window
-let _adaptiveLast = 0;               // window-start timestamp (0 = not started)
-let _adaptiveStillFps = 60;          // last measured idle FPS (seeds next activity)
-let _adaptiveStillFrames = 0;
-let _adaptiveStillLast = 0;
-let _adaptiveFirstWindow = false;    // true for the first sample window after seed — faster + no EMA
-let _lastActivityMs = 0;             // last time user activity happened
+// Algorithm lives in engine/AdaptiveResolution.ts — shared with the GMT
+// worker's UniformManager. This slice owns the state object and the
+// FPS-from-timestamps helper; everything else delegates.
+const _adaptive: AdaptiveResolutionState = createAdaptiveResolutionState();
 let _holdUntilMs = 0;                // don't downscale until this timestamp
 let _lastStateUpdateMs = 0;          // throttle for HUD state writes
 const _frameTimestamps: number[] = [];
 
-export const markActivity = () => { _lastActivityMs = performance.now(); };
+export const markActivity = () => { _adaptive.lastActivityTime = performance.now(); };
 
 const DEFAULT_ADAPTIVE = {
     enabled: true,
@@ -116,7 +117,10 @@ export const createViewportSlice: StateCreator<
 
     /**
      * Call once per frame with the last frame's fps (or 0 to let the slice
-     * compute fps from tracked frame timestamps). Runs GMT's adaptive math.
+     * compute fps from tracked frame timestamps). Delegates the adaptive
+     * decision to engine/AdaptiveResolution — same algorithm GMT's worker
+     * uses. The slice owns: FPS-from-timestamps, qualityFraction conversion,
+     * 5% delta threshold against the current store value, and HUD throttle.
      */
     reportFps: (rawFps) => {
         const now = performance.now();
@@ -137,87 +141,28 @@ export const createViewportSlice: StateCreator<
         const state = get();
         const cfg = state.adaptiveConfig;
         const suppressed = state.adaptiveSuppressed || !cfg.enabled;
-        const maxScale = Math.max(1.0, 1 / Math.max(0.01, cfg.minQuality));
 
-        // Track activity: if user is interacting, bump the activity clock.
-        if (state.isUserInteracting) _lastActivityMs = now;
-        const timeSinceActivity = now - _lastActivityMs;
-        const mouseOnCanvas = isMouseOverCanvas();
-        const withinHold = now < _holdUntilMs;
+        const result = tickAdaptiveResolution(_adaptive, {
+            now,
+            // Slice has no accumCount visibility (renderer-side concept);
+            // pass 0 so accum-drop activity detection is a no-op here.
+            accumCount: 0,
+            isInteracting: state.isUserInteracting,
+            mouseOverCanvas: isMouseOverCanvas(),
+            dynamicScaling: cfg.enabled,
+            adaptiveTarget: cfg.targetFps,
+            // Slice's interactionDownsample is a quality fraction (0..1);
+            // module's is a downsample divisor (>=1). Convert.
+            interactionDownsample: 1 / Math.max(0.01, cfg.interactionDownsample),
+            minQuality: cfg.minQuality,
+            alwaysActive: cfg.alwaysActive,
+            holdUntilMs: _holdUntilMs,
+            suppressed,
+        });
 
-        // needsAdaptive:
-        //   - suppressed → never adaptive (force full-res)
-        //   - alwaysActive (fluid-toy) → always adaptive
-        //   - otherwise (GMT-style) → adaptive unless mouse-on-canvas & idle-past-grace
-        const needsAdaptive = !suppressed && (
-            cfg.alwaysActive
-            || state.isUserInteracting
-            || !mouseOnCanvas
-            || timeSinceActivity < cfg.activityGraceMs
-        );
-
-        if (needsAdaptive) {
-            if (cfg.targetFps > 0) {
-                // Smart mode — track sample windows, adjust scale by sqrt(ratio).
-                // First window after seeding: 200ms + no EMA (instant response).
-                // Subsequent windows: 500ms + 0.7/0.3 EMA (smooth, no churn).
-                if (_adaptiveLast === 0) {
-                    // Seed from still-FPS so the first active frame is
-                    // already at a predicted-good resolution.
-                    const seedFps = Math.max(1, _adaptiveStillFps);
-                    _adaptiveScale = seedFps < cfg.targetFps
-                        ? Math.max(1, Math.min(maxScale, Math.sqrt(cfg.targetFps / seedFps)))
-                        : 1;
-                    _adaptiveLast = now;
-                    _adaptiveFrames = 0;
-                    _adaptiveFirstWindow = true;
-                }
-                _adaptiveFrames++;
-                const elapsed = now - _adaptiveLast;
-                const windowMs = _adaptiveFirstWindow ? 200 : 500;
-                if (elapsed >= windowMs && _adaptiveFrames > 2) {
-                    const actualFps = _adaptiveFrames / (elapsed / 1000);
-                    const ratio = cfg.targetFps / Math.max(1, actualFps);
-                    const idealScale = _adaptiveScale * Math.sqrt(ratio);
-                    // First window: jump directly to ideal (no EMA lag).
-                    // Subsequent: smooth 0.7/0.3.
-                    const blend = _adaptiveFirstWindow ? 1.0 : 0.3;
-                    let nextScale = _adaptiveScale * (1 - blend) + idealScale * blend;
-                    nextScale = Math.max(1, Math.min(maxScale, nextScale));
-                    // Hold grace: don't allow downscale during grace window.
-                    if (withinHold && nextScale > _adaptiveScale) {
-                        // skip — preserve quality during hold
-                    } else {
-                        _adaptiveScale = nextScale;
-                    }
-                    _adaptiveFrames = 0;
-                    _adaptiveLast = now;
-                    _adaptiveFirstWindow = false;
-                }
-            } else {
-                // Manual mode — fixed divisor from interactionDownsample.
-                _adaptiveScale = Math.max(1, 1 / Math.max(0.01, cfg.interactionDownsample));
-            }
-            _adaptiveStillFrames = 0;
-            _adaptiveStillLast = 0;
-        } else {
-            // Idle: track still-FPS for seeding next disturbance.
-            _adaptiveStillFrames++;
-            if (_adaptiveStillLast === 0) _adaptiveStillLast = now;
-            const elapsed = now - _adaptiveStillLast;
-            if (elapsed >= 500 && _adaptiveStillFrames > 2) {
-                _adaptiveStillFps = _adaptiveStillFrames / (elapsed / 1000);
-                _adaptiveStillFrames = 0;
-                _adaptiveStillLast = now;
-            }
-            _adaptiveScale = 1;
-            _adaptiveFrames = 0;
-            _adaptiveLast = 0;
-            _adaptiveFirstWindow = false;
-        }
-
-        // Compute qualityFraction. 5% delta threshold to avoid churn.
-        const targetQuality = suppressed ? 1.0 : 1 / _adaptiveScale;
+        // Convert downsample factor → quality fraction (0..1).
+        // 5% delta threshold against current store value to avoid churn.
+        const targetQuality = 1 / result.scale;
         const current = state.qualityFraction;
         let nextQ = current;
         if (Math.abs(targetQuality - current) / Math.max(current, 0.01) > 0.05) {

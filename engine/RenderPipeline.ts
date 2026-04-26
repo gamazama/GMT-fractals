@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { Uniforms } from './UniformNames';
 import { VERTEX_SHADER } from '../shaders/chunks/vertex';
-// Quality state was a fractal-feature type; treat as a loose record here.
-// Typed numerics on known fields so downstream comparisons still compile.
-// Apps with a richer quality plugin widen this via declaration merging.
+// Quality state was a fractal-feature type; treat as a structural shape
+// here — only fields RenderPipeline actually reads. Apps with a richer
+// quality plugin (engine-gmt/features/quality) supply types that satisfy
+// this shape; declaration merging not required.
 type QualityState = {
     bufferPrecision?: number;
     precisionMode?: number;
     compilerHardCap?: number;
-    [key: string]: unknown;
 };
 import { createFullscreenPass } from './utils/FullscreenQuad';
 

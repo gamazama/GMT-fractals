@@ -17,8 +17,9 @@ import type { BucketRenderConfig } from '../BucketRenderer';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, SerializedCamera, SerializedOffset } from './WorkerProtocol';
 import { injectMetadata } from '../../../utils/pngMetadata';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
+import type { AccumulationController } from '../../../engine/AccumulationController';
 
-export class WorkerProxy {
+export class WorkerProxy implements AccumulationController {
     // ─── Stub properties ─────────────────────────────────────────────
     // These exist on FractalEngine but not on WorkerProxy.  UI code guards
     // access with `if (engine.activeCamera && ...)` so they are always falsy here.
@@ -49,7 +50,6 @@ export class WorkerProxy {
     private _localOffset = { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
     /** When true, FRAME_READY won't overwrite _localOffset until the worker catches up. */
     private _offsetGuarded = false;
-    private _offsetGuardTimer: ReturnType<typeof setTimeout> | null = null;
     private _onCompiling: ((status: boolean | string) => void) | null = null;
     private _onCompileTime: ((duration: number) => void) | null = null;
     private _onShaderCode: ((code: string) => void) | null = null;
@@ -212,7 +212,6 @@ export class WorkerProxy {
                         const drift = Math.abs((wo.x+wo.xL)-(lo.x+lo.xL)) + Math.abs((wo.y+wo.yL)-(lo.y+lo.yL)) + Math.abs((wo.z+wo.zL)-(lo.z+lo.zL));
                         if (drift < 0.001) {
                             this._offsetGuarded = false; // Worker caught up
-                            if (this._offsetGuardTimer) { clearTimeout(this._offsetGuardTimer); this._offsetGuardTimer = null; }
                         }
                     } else {
                         this._localOffset = { ...msg.state.sceneOffset };
@@ -352,7 +351,6 @@ export class WorkerProxy {
     private _clearAllTimers() {
         this._pendingTimeouts.forEach(timer => clearTimeout(timer));
         this._pendingTimeouts.clear();
-        if (this._offsetGuardTimer) { clearTimeout(this._offsetGuardTimer); this._offsetGuardTimer = null; }
         if (this._exportStartTimer) { clearTimeout(this._exportStartTimer); this._exportStartTimer = null; }
         if (this._exportFinishTimer) { clearTimeout(this._exportFinishTimer); this._exportFinishTimer = null; }
     }
@@ -515,16 +513,19 @@ export class WorkerProxy {
     /**
      * Replace the offset immediately (for OFFSET_SET events — teleports, mode switches).
      * Sets guard to prevent FRAME_READY from overwriting until the worker catches up.
+     *
+     * Guard clears via the drift-converged check in the FRAME_READY handler
+     * (when the worker's reported offset matches what we set, within 0.001).
+     * No timeout fallback — earlier 2s auto-clear was defensive paranoia
+     * that, in the slow-boot worst case, could fire BEFORE the worker
+     * rendered its first post-set frame and let stale FRAME_READY data
+     * overwrite _localOffset (F15). The drift check is the deterministic
+     * guard; if the worker hangs entirely, the gizmo overlay staying at
+     * the user's last set offset is the correct behaviour.
      */
     setShadowOffset(offset: { x: number; y: number; z: number; xL: number; yL: number; zL: number }) {
         this._localOffset = { ...offset };
         this._offsetGuarded = true;
-        // Auto-clear guard after 2s to prevent stuck gizmo overlays if worker hangs
-        if (this._offsetGuardTimer) clearTimeout(this._offsetGuardTimer);
-        this._offsetGuardTimer = setTimeout(() => {
-            this._offsetGuarded = false;
-            this._offsetGuardTimer = null;
-        }, 2000);
     }
 
     /**

@@ -36,6 +36,7 @@ import {
 } from '../engine/worker/ViewportRefs';
 import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 import { viewport } from '../../engine/plugins/Viewport';
+import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
 // Capture the display camera for overlay components (light gizmos, drawing
@@ -193,7 +194,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             t.frames = 0;
             t.lastSample = now;
             viewport.reportFps(t.fps);
-            useEngineStore.getState().reportAccumulation(proxy.accumulationCount);
+            reportAccumulationToStore(useEngineStore, proxy);
         }
         if (t.fps < 20 && now - t.lastYield >= 1000) {
             t.lastYield = now;
@@ -237,6 +238,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             lighting: storeState.lighting ?? null,
             quality:  storeState.quality  ?? null,
             geometry: storeState.geometry ?? null,
+            adaptiveSuppressed: !!storeState.adaptiveSuppressed,
         };
 
         proxy.sendRenderTick(serializedCamera, serializedOffset, clampedDelta, renderState);

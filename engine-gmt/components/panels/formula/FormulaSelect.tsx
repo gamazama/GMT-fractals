@@ -107,8 +107,20 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Compiling Formula...");
                 const { def, preset } = loadGMFScene(content);
                 if (def) {
-                    // loadScene handles: formula registration (main + worker),
-                    // store hydration, full config flush, and offset sync.
+                    // Register the imported formula in BOTH registries:
+                    //  - main thread (so UI / FractalRegistry can resolve it)
+                    //  - worker (via REGISTER_FORMULA event → bridge → proxy)
+                    // engine-core's loadScene() does neither directly; this
+                    // call site is responsible for both, then loadScene
+                    // hydrates the store + emits CONFIG so the worker
+                    // compiles the just-registered shader.
+                    if (!registry.get(def.id)) {
+                        registry.register(def);
+                    }
+                    FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
+                        id: def.id,
+                        shader: def.shader,
+                    });
                     useEngineStore.getState().loadScene({ def, preset });
                 } else {
                     // Legacy JSON — just switch formula

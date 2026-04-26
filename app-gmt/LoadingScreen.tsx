@@ -14,7 +14,7 @@ import { LoadingRendererCPU } from '../engine-gmt/engine/LoadingRendererCPU';
 import { useEngineStore } from '../store/engineStore';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { ChevronDown, UploadIcon, CubeIcon, NetworkIcon } from '../components/Icons';
-import { loadSceneFromFile } from '../utils/SceneFormat';
+import { loadSceneFile } from '../engine/plugins/SceneIO';
 import type { Preset } from '../types';
 
 const GMT_NAMES = [
@@ -95,7 +95,10 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
         const file = e.target.files?.[0];
         if (!file) return;
         try {
-            const preset = await loadSceneFromFile(file);
+            // Routes through the SceneIO-registered parser — for GMT
+            // that's the GMF-aware parser that extracts and registers
+            // embedded formula defs.
+            const preset = await loadSceneFile(file);
             if (!preset) throw new Error('Could not parse scene file.');
             loadScene({ preset });
             setIsMenuOpen(false);

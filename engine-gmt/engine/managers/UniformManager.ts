@@ -8,6 +8,12 @@ import { LightingState } from '../../features/lighting';
 import { MAX_LIGHTS } from '../../../data/constants';
 import { EngineRenderState } from '../FractalEngine';
 import type { GeometryState } from '../../features/geometry';
+import {
+    type AdaptiveResolutionState,
+    createAdaptiveResolutionState,
+    getAdaptiveGrace,
+    tickAdaptiveResolution,
+} from '../../../engine/AdaptiveResolution';
 
 export class UniformManager {
     private uniforms: { [key: string]: THREE.IUniform };
@@ -34,22 +40,15 @@ export class UniformManager {
     private rotScratch3 = new THREE.Matrix3();
     private identityMat3 = new THREE.Matrix3(); // Cached identity for disabled state
 
-    // Smart adaptive resolution: auto-adjust downsample factor to hit target FPS
-    private _adaptiveScale = 1.0;       // Current downsample factor (1.0 = full res)
-    private _adaptiveFrames = 0;
-    private _adaptiveLast = 0;
-    private _adaptiveStillFps = 60;     // FPS measured while NOT interacting (for seed)
-    private _adaptiveStillFrames = 0;
-    private _adaptiveStillLast = 0;
-    private _lastActivityTime = 0;      // Timestamp of last scene disturbance
-    private _prevAccumCount = 0;        // Track accumulation resets from external sources
-    private _selfResized = false;       // Flag to ignore self-caused accumulation resets
-    private _fullResAccum = 0;          // Accumulation count at full resolution only
+    // Smart adaptive resolution: state lives in a generic engine-core
+    // module so the same algorithm can drive any iterative renderer.
+    // See engine/AdaptiveResolution.ts.
+    private _adaptive: AdaptiveResolutionState = createAdaptiveResolutionState();
 
     /** Returns the current FPS-scaled adaptive grace period (ms). Used by FractalEngine
      *  to hold accumulation until adaptive resolution has settled at full res. */
     public getAdaptiveGrace(): number {
-        return Math.max(100, Math.min(3000, 2000 / Math.max(1, this._adaptiveStillFps)));
+        return getAdaptiveGrace(this._adaptive.stillFps);
     }
 
     constructor(
@@ -89,88 +88,31 @@ export class UniformManager {
             let targetW = w;
             let targetH = h;
             
-            // Adaptive resolution: fully automatic context-aware behavior.
-            // - Mouse over canvas: FPS-based grace period after interaction, then restore
-            //   full res for quality accumulation.
-            // - Mouse over UI (panels, menus, timelines): keep adaptive always on —
-            //   slider drags and menu interactions need responsive feedback.
-            // Grace period scales with FPS: slow scenes get more time before restoring
-            // (e.g. 1fps → 2s, 10fps → 200ms, 30fps+ → 100ms minimum).
-            const now = performance.now();
-            const accumCount = this.pipeline.accumulationCount;
-            const isInteracting = runtimeState.isGizmoInteracting || runtimeState.isCameraInteracting;
-            const mouseOnCanvas = runtimeState.mouseOverCanvas;
+            // Adaptive resolution: pure decision module in engine-core.
+            // Returns the scale to apply; we translate it into target
+            // pixel dimensions and gate on a 5% delta guard in smart
+            // mode (EMA jitter would otherwise cause constant resizes).
+            const adaptiveTarget = runtimeState.quality?.adaptiveTarget ?? 0;
+            const adaptive = tickAdaptiveResolution(this._adaptive, {
+                now: performance.now(),
+                accumCount: this.pipeline.accumulationCount,
+                isInteracting: runtimeState.isGizmoInteracting || runtimeState.isCameraInteracting,
+                mouseOverCanvas: runtimeState.mouseOverCanvas,
+                dynamicScaling: !!runtimeState.quality?.dynamicScaling,
+                adaptiveTarget,
+                interactionDownsample: runtimeState.quality?.interactionDownsample ?? 2.0,
+                // Hard-force full res when the bucket-render dialog or export flow
+                // sets the store flag. Without this, the worker keeps adaptive-
+                // scaling while the popup is open — each scale change resizes the
+                // FBO, briefly displaying the cleared (black) buffer.
+                suppressed: runtimeState.adaptiveSuppressed,
+            });
 
-            // Track activity: interaction OR external accumulation reset
-            if (isInteracting) {
-                this._lastActivityTime = now;
-            } else if (accumCount < this._prevAccumCount && !this._selfResized) {
-                this._lastActivityTime = now;
-            }
-            this._prevAccumCount = accumCount;
-            this._selfResized = false;
-
-            // Auto grace period: scales with rendering cost
-            const autoGrace = this.getAdaptiveGrace();
-            const timeSinceActivity = now - this._lastActivityTime;
-
-            // Track full-res accumulation separately: only samples rendered at full
-            // resolution count toward the protection threshold. Samples accumulated at
-            // reduced resolution don't represent quality worth protecting.
-            if (this._adaptiveScale <= 1.001) {
-                this._fullResAccum = accumCount;
-            } else {
-                this._fullResAccum = 0;
-            }
-
-            // Don't disrupt meaningful full-res accumulation — threshold scales with FPS:
-            // at 1fps ~8 samples (8s wait), at 60fps ~50 samples (<1s).
-            const accumThreshold = Math.max(8, Math.min(50, Math.round(this._adaptiveStillFps)));
-            const isDeepAccumulation = this._fullResAccum >= accumThreshold;
-
-            // Context-aware:
-            // Deep full-res accumulation → adaptive OFF everywhere. Protects quality
-            //   results when user moves mouse to UI to click snapshot/buttons.
-            //   Only full-res samples count — reduced-res accumulation stays at 0,
-            //   so no flicker cycle when adaptive is active.
-            // Mouse on UI (no deep accum) → always adaptive for responsive feedback.
-            // Mouse on canvas (no deep accum) → FPS-based grace period.
-            const needsAdaptive = runtimeState.quality?.dynamicScaling && !isDeepAccumulation && (
-                !mouseOnCanvas || timeSinceActivity < autoGrace
-            );
-
-            if (needsAdaptive) {
-                const adaptiveTarget = runtimeState.quality!.adaptiveTarget ?? 0;
+            if (adaptive.needsAdaptive) {
+                const candidateW = Math.max(64, Math.floor(w / adaptive.scale));
+                const candidateH = Math.max(64, Math.floor(h / adaptive.scale));
                 if (adaptiveTarget > 0) {
-                    // Smart adaptive: auto-adjust scale to hit target FPS
-                    if (this._adaptiveLast === 0) {
-                        // Activity just started — seed scale from still-frame FPS
-                        // so the first frame is already at an appropriate resolution.
-                        const seedFps = Math.max(1, this._adaptiveStillFps);
-                        if (seedFps < adaptiveTarget) {
-                            this._adaptiveScale = Math.max(1.0, Math.min(4.0,
-                                Math.sqrt(adaptiveTarget / seedFps)
-                            ));
-                        } else {
-                            this._adaptiveScale = 1.0;
-                        }
-                        this._adaptiveLast = now;
-                        this._adaptiveFrames = 0;
-                    }
-                    this._adaptiveFrames++;
-                    const elapsed = now - this._adaptiveLast;
-                    if (elapsed >= 500 && this._adaptiveFrames > 2) {
-                        const fps = this._adaptiveFrames / (elapsed / 1000);
-                        const ratio = adaptiveTarget / Math.max(1, fps);
-                        const idealScale = this._adaptiveScale * Math.sqrt(ratio);
-                        this._adaptiveScale = this._adaptiveScale * 0.7 + idealScale * 0.3;
-                        this._adaptiveScale = Math.max(1.0, Math.min(4.0, this._adaptiveScale));
-                        this._adaptiveFrames = 0;
-                        this._adaptiveLast = now;
-                    }
-                    const candidateW = Math.max(64, Math.floor(w / this._adaptiveScale));
-                    const candidateH = Math.max(64, Math.floor(h / this._adaptiveScale));
-                    // Skip resize if delta < 5% to avoid constant accumulation resets
+                    // Smart mode: 5% delta guard against EMA jitter.
                     const currentW2 = this.uniforms[Uniforms.Resolution].value.x;
                     const currentH2 = this.uniforms[Uniforms.Resolution].value.y;
                     if (currentW2 > 0 && Math.abs(candidateW - currentW2) / currentW2 > 0.05) {
@@ -181,28 +123,10 @@ export class UniformManager {
                         targetH = currentH2;
                     }
                 } else {
-                    // Manual mode: fixed downsample factor
-                    const downsample = Math.max(1.0, runtimeState.quality!.interactionDownsample || 2.0);
-                    targetW = Math.max(64, Math.floor(w / downsample));
-                    targetH = Math.max(64, Math.floor(h / downsample));
+                    // Manual mode: fixed downsample, no guard needed.
+                    targetW = candidateW;
+                    targetH = candidateH;
                 }
-                // Reset still-FPS tracking while active
-                this._adaptiveStillFrames = 0;
-                this._adaptiveStillLast = 0;
-            } else {
-                // Scene settled: track still-frame FPS for seeding next disturbance
-                this._adaptiveStillFrames++;
-                if (this._adaptiveStillLast === 0) this._adaptiveStillLast = now;
-                const elapsed = now - this._adaptiveStillLast;
-                if (elapsed >= 500 && this._adaptiveStillFrames > 2) {
-                    this._adaptiveStillFps = this._adaptiveStillFrames / (elapsed / 1000);
-                    this._adaptiveStillFrames = 0;
-                    this._adaptiveStillLast = now;
-                }
-                // Reset adaptive state so next disturbance re-seeds
-                this._adaptiveScale = 1.0;
-                this._adaptiveFrames = 0;
-                this._adaptiveLast = 0;
             }
             
             // OPTIMIZATION: Track previous target resolution to avoid redundant resizes
@@ -210,7 +134,7 @@ export class UniformManager {
             const currentH = this.uniforms[Uniforms.Resolution].value.y;
             
             if (currentW !== targetW || currentH !== targetH) {
-                this._selfResized = true; // flag so we don't re-trigger activity from our own reset
+                this._adaptive.selfResized = true; // flag so we don't re-trigger activity from our own reset
                 this.uniforms[Uniforms.Resolution].value.set(targetW, targetH);
                 this.pipeline.resize(targetW, targetH);
                 this.pipeline.resetAccumulation();
@@ -281,12 +205,12 @@ export class UniformManager {
         this.uniforms[Uniforms.CameraPosition].value.set(0, 0, 0);
 
         // CPU pre-compute: length(uCamBasisY) / viewportY * 2.0
-        // viewportY = resolution.y * _adaptiveScale — the pre-adaptive viewport resolution.
+        // viewportY = resolution.y * adaptive.scale — the pre-adaptive viewport resolution.
         // This makes uPixelSizeBase represent the VIEWPORT pixel size (invariant to adaptive
         // downscale), matching the intent of the SSAA bucket override (which forces viewport
         // value during upscale). Trace precision, normal epsilon, and shadow bias all stay
         // anchored to what the user sees on screen regardless of internal resolution scaling.
-        const viewportY = this.uniforms[Uniforms.Resolution].value.y * this._adaptiveScale;
+        const viewportY = this.uniforms[Uniforms.Resolution].value.y * this._adaptive.scale;
         this.uniforms[Uniforms.PixelSizeBase].value = height * 2.0 / viewportY;
 
         const camModX = modulations['camera.unified.x'] || 0;

@@ -18,11 +18,16 @@
 
 import React, { useRef, useState, useCallback } from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import type { Preset } from '../../types';
 import {
-    downloadSceneJson,
-    downloadScenePng,
-    loadSceneFromFile,
+    serializeScene,
+    parseSceneJson,
+    extractScenePng,
+    snapshotSceneToPng,
+    downloadBlob,
     generateShareStringFromPreset,
+    type SceneParser,
+    type SceneSerializer,
 } from '../../utils/SceneFormat';
 import { topbar } from './TopBar';
 import { shortcuts } from './Shortcuts';
@@ -33,31 +38,43 @@ export interface InstallSceneIOOptions {
     /** Returns the canvas whose pixels back the PNG snapshot. Omit if the
      *  app has no canvas; PNG export is hidden in that case. */
     getCanvas?: () => HTMLCanvasElement | null;
+    /** Custom parser for scene file content. Used for both .json/.gmf
+     *  text AND text extracted from PNG iTXt. Default: `parseSceneJson`
+     *  (engine-core JSON + GMF `<Scene>` block extraction).
+     *
+     *  Apps with richer formats override here. GMT injects a parser that
+     *  calls `loadGMFScene` and registers the embedded formula definition
+     *  so workshop / Fragmentarium GMFs round-trip with their shaders. */
+    parseScene?: SceneParser;
+    /** Custom serializer for scene → text. Used for JSON download AND
+     *  PNG iTXt embed. Default: pretty-printed JSON.
+     *
+     *  Apps with richer formats override here. GMT injects `saveGMFScene`
+     *  which embeds the active formula's shader source so saved scenes
+     *  load back even on a fresh runtime that doesn't have that formula
+     *  in its registry. */
+    serializeScene?: SceneSerializer;
 }
 
 let _installed = false;
 let _getCanvas: (() => HTMLCanvasElement | null) | undefined;
+let _parseScene: SceneParser | undefined;
+let _serializeScene: SceneSerializer | undefined;
 
-/**
- * Shared handler: grab the current canvas + preset and write a PNG to
- * disk. Used by both the dropdown "Save PNG…" item and the standalone
- * camera button in the topbar, and by the Alt+S keyboard shortcut.
- * Noop + warn when no canvas accessor was supplied.
- */
-const saveCurrentPng = async (): Promise<void> => {
-    const canvas = _getCanvas?.();
-    if (!canvas) {
-        console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
-        return;
-    }
-    const state = useEngineStore.getState();
-    const preset = state.getPreset({ includeScene: true });
-    const stem = (state.projectSettings.name || 'scene').replace(/\s+/g, '-').toLowerCase();
-    await downloadScenePng(canvas, preset, `${stem}.png`);
+/** Pick the registered serializer, falling back to engine-core's plain
+ *  JSON. Single source of truth — every save path routes through this. */
+const activeSerializer = (): SceneSerializer => _serializeScene ?? serializeScene;
+
+/** Compose the default download filename from the project name. */
+const defaultFileStem = (): string => {
+    const name = useEngineStore.getState().projectSettings.name || 'scene';
+    return name.replace(/\s+/g, '-').toLowerCase();
 };
 
 export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     if (options.getCanvas) _getCanvas = options.getCanvas;
+    if (options.parseScene) _parseScene = options.parseScene;
+    if (options.serializeScene) _serializeScene = options.serializeScene;
     if (_installed) return;
     _installed = true;
 
@@ -79,7 +96,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
         key: 'Alt+S',
         description: 'Save PNG',
         category: 'Export',
-        handler: () => { void saveCurrentPng(); },
+        handler: () => { void saveScenePng(); },
     });
 };
 
@@ -89,7 +106,70 @@ export const uninstallSceneIO = () => {
     topbar.unregister('scene-quick-png');
     shortcuts.unregister('scene-io.quick-png');
     _getCanvas = undefined;
+    _parseScene = undefined;
+    _serializeScene = undefined;
     _installed = false;
+};
+
+/**
+ * Universal file → preset loader. Auto-detects format:
+ *   - image/png   → extracts scene from iTXt chunk (SceneData or legacy FractalData)
+ *   - .gmf / .json / anything else → parser handles raw text
+ *
+ * Routes through the SceneIO-registered `parseScene` so apps with a
+ * custom format (e.g. GMT's GMF with embedded formula shaders) see
+ * every load through their own parser. When no parser is registered,
+ * falls back to engine-core's `parseSceneJson` (plain JSON + `<Scene>`
+ * block extraction).
+ *
+ * **The single public file-loader.** Any caller — LoadingScreen,
+ * drag-drop overlay, deep-link handler, file-picker — routes through
+ * this so a missing parser argument can never silently downgrade a
+ * GMF load to plain JSON (which was a real footgun before this was
+ * the only entry point).
+ */
+export const loadSceneFile = async (file: File): Promise<Preset | null> => {
+    const parser: SceneParser = _parseScene ?? parseSceneJson;
+    const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+    if (isPng) return extractScenePng(file, parser);
+    const text = await file.text();
+    return parser(text);
+};
+
+/**
+ * Save the current scene as a JSON download. Routes through the
+ * SceneIO-registered `serializeScene` (e.g. GMT's GMF writer that
+ * embeds the active formula's shader) — no way to bypass.
+ *
+ * @param filename Override; defaults to `<project-name>.json`. Apps
+ *   wanting a different extension (`.gmf`) pass it explicitly.
+ */
+export const saveSceneJson = (filename?: string): void => {
+    const preset = useEngineStore.getState().getPreset({ includeScene: true });
+    const text = activeSerializer()(preset);
+    const blob = new Blob([text], { type: 'application/json' });
+    downloadBlob(blob, filename ?? `${defaultFileStem()}.json`);
+};
+
+/**
+ * Snapshot the registered canvas and save as a PNG with embedded
+ * scene metadata. Routes through the SceneIO-registered
+ * `serializeScene` for the iTXt payload — same byte-format as
+ * `saveSceneJson` so a saved PNG round-trips cleanly through
+ * `loadSceneFile`.
+ *
+ * Noop with a console warning when no `getCanvas` was registered
+ * at install time — the app is headless or didn't supply one.
+ */
+export const saveScenePng = async (filename?: string): Promise<void> => {
+    const canvas = _getCanvas?.();
+    if (!canvas) {
+        console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
+        return;
+    }
+    const preset = useEngineStore.getState().getPreset({ includeScene: true });
+    const blob = await snapshotSceneToPng(canvas, preset, activeSerializer());
+    downloadBlob(blob, filename ?? `${defaultFileStem()}.png`);
 };
 
 // ── Save menu ────────────────────────────────────────────────────────────
@@ -110,25 +190,17 @@ const ChevronDownIcon = () => (
 
 export const SaveMenu: React.FC = () => {
     const [open, setOpen] = useState(false);
-    const getPreset = useEngineStore((s) => s.getPreset);
-    const projectName = useEngineStore((s) => s.projectSettings.name);
+    // Subscribe so the menu re-renders if the project name changes;
+    // saveSceneJson / saveScenePng read the current name internally.
+    useEngineStore((s) => s.projectSettings.name);
 
     const close = useCallback(() => setOpen(false), []);
-    const fileStem = (projectName || 'scene').replace(/\s+/g, '-').toLowerCase();
 
-    const handleSaveJson = () => {
-        const preset = getPreset({ includeScene: true });
-        downloadSceneJson(preset, `${fileStem}.json`);
-        close();
-    };
-
-    const handleSavePng = async () => {
-        await saveCurrentPng();
-        close();
-    };
+    const handleSaveJson = () => { saveSceneJson(); close(); };
+    const handleSavePng  = async () => { await saveScenePng(); close(); };
 
     const handleCopyShareLink = async () => {
-        const preset = getPreset({ includeScene: true });
+        const preset = useEngineStore.getState().getPreset({ includeScene: true });
         const advanced = !!(useEngineStore.getState() as any).advancedMode;
         const share = generateShareStringFromPreset(preset, advanced);
         const url = `${location.origin}${location.pathname}?s=${share}`;
@@ -181,7 +253,7 @@ const CameraIcon = () => (
 export const QuickPngButton: React.FC = () => (
     <button
         type="button"
-        onClick={() => { void saveCurrentPng(); }}
+        onClick={() => { void saveScenePng(); }}
         className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
         title="Save PNG (Alt+S)"
         aria-label="Save PNG"
@@ -200,15 +272,24 @@ const LoadIcon = () => (
 
 export const LoadButton: React.FC = () => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const loadPreset = useEngineStore((s) => s.loadPreset);
+    const loadScene = useEngineStore((s) => s.loadScene);
 
     const handleFile = async (file: File) => {
-        const preset = await loadSceneFromFile(file);
+        const preset = await loadSceneFile(file);
         if (!preset) {
             console.warn('[SceneIO] Could not parse scene from', file.name);
             return;
         }
-        loadPreset(preset);
+        // loadScene (not loadPreset) — wraps loadPreset with the compile
+        // gate AND posts CONFIG_DONE to the worker, which fires compile
+        // immediately instead of waiting on the 200 ms scheduleCompile
+        // debounce. Critical for GMF loads with a custom formula: the
+        // app's parseScene has just registered the formula def + emitted
+        // REGISTER_FORMULA; loadScene's CONFIG_DONE flushes the compile
+        // so the worker picks up the new shader. Without CONFIG_DONE the
+        // worker's debounce + REGISTER_FORMULA ordering is racy and the
+        // compile may target the wrong (or missing) formula.
+        loadScene({ preset });
     };
 
     return (

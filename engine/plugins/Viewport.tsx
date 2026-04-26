@@ -32,10 +32,13 @@ export interface ViewportAdaptiveConfig {
     /** Manual-mode fallback: qualityFraction when targetFps === 0.
      *  Typical: 0.5 = half-resolution. */
     interactionDownsample: number;
-    /** Grace (ms) after user activity during which adaptive keeps
-     *  adjusting when the mouse is on canvas. Short (~100ms) for
-     *  GMT-style apps — the goal is "idle mouse on canvas → full
-     *  render". Ignored when alwaysActive is true. */
+    /** Default hold duration multiplier for `holdAdaptive(durationMs?)`:
+     *  when called with no argument, hold = activityGraceMs * 4.
+     *
+     *  Historically this also gated the post-activity grace window, but
+     *  the shared `engine/AdaptiveResolution` module now FPS-scales the
+     *  grace (1fps → 2s, 30fps+ → 100ms) so this field no longer
+     *  influences settling time. Kept for hold-duration tuning. */
     activityGraceMs: number;
     /** When true, adaptive runs always — for apps with no idle state
      *  (live sims like fluid-toy). When false (default, GMT-style),

@@ -40,6 +40,10 @@ export interface EngineRenderState {
     quality: QualityState | null;
     geometry: GeometryState | null;
     bucketConfig: BucketRenderConfig;
+    /** Hard-suppress adaptive resolution. Bucket-render dialog and export flows
+     *  set this so the user judges quality at full res. Plumbed from the store
+     *  via RENDER_TICK so UniformManager's adaptive loop can honour it. */
+    adaptiveSuppressed: boolean;
 }
 
 // Precompute 2048 jitter values using Halton sequence for faster access
@@ -75,7 +79,8 @@ export class FractalEngine {
         lighting: null,
         quality: null,
         geometry: null,
-        bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 }
+        bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 },
+        adaptiveSuppressed: false,
     };
 
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }

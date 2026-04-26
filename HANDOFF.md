@@ -4,6 +4,108 @@
 **Origin:** Forked from `h:/GMT/gmt-0.8.5` (kept as `upstream` remote)
 **Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors.
 
+**📋 2026-04-26 (late) — Camera-undo fix + undo-system audit:**
+
+User report: parameter undo (Ctrl+Z) and timeline undo (Ctrl+Z over timeline) work, but camera undo (Ctrl+Shift+Z) does nothing.
+
+**Root cause** (NOT the agent's first hypothesis of "no camera transactions in stack" — those ARE pushed via `GmtNavigation.onStart` → `handleInteractionStart(camState)` at `app-gmt/AppGmt.tsx:203`):
+
+- `engine/plugins/Undo.tsx:108-114` registers `Mod+Shift+Z` as the Mac-redo alias (`redo.global.shift`).
+- `app-gmt/main.tsx:291-297` registers `Ctrl+Shift+Z` for camera-undo (`gmt.undoCameraMove`).
+- After `normalizeKey`, both keys are identical. Both at scope `'global'`, priority `0` → resolver tie-breaks on insertion order, and `installUndo()` runs first → **the redo handler wins**, camera-undo never fires.
+
+**Fix:** added `priority: 10` to `gmt.undoCameraMove` and `gmt.redoCameraMove` so they win the conflict resolution. GMT's UX contract is "Ctrl+Shift+Z is camera-undo, full stop"; the Mac-redo alias is intentionally suppressed for app-gmt. Mod+Y still does redo for parameters.
+
+**Audit results — undo system is unified and clean:**
+- 2 stacks total: `historySlice.undoStack` (engine-core, holds both 'param' and 'camera' scoped txs) + `animationStore.undoStack` (timeline edits, separate by design — F2b's planned unification deferred and not currently blocking).
+- 1 dead-code finding: `engineStore.setFormula` had a redundant manual `set({ undoStack: [], redoStack: [] })` after `resetParamHistory()` (which already calls `clearHistory()`). Removed.
+- Backward-compat shims (`undoParam`, `redoParam`, `undoCamera`, `redoCamera`) all delegate to `undo(scope)` / `redo(scope)` cleanly — single mechanism.
+- GMT's cameraSlice wraps `undoCamera` / `redoCamera` to fire `CAMERA_TELEPORT` after the diff applies → R3F camera warps correctly.
+- No orphan undo paths or duplicate stacks found.
+
+**📋 2026-04-26 (late) — F9 + F15 deferred-cleanup (F10/F11 reassessed):**
+
+- **F9 closed** — Dev-mode `componentId` validator. Added `validateComponentRefs(componentRegistry)` in `engine/FeatureSystem.ts` that walks every feature's `viewportConfig.componentId` and `customUI[].componentId`, asserts each resolves in the supplied registry. Console-errors each missing reference with the feature id + site (e.g. `customUI[2]`) so typos surface at boot instead of "blank panel + silent fallback" at first render. `componentRegistry` gained `has(id)` and `ids()` helpers. App-gmt invokes the validator after `registerGmtTopbar()` (lazy-imported so prod bundle doesn't include the validator code). Dev-only via `import.meta.env.DEV` gate.
+- **F15 closed** — Removed the 2s `_offsetGuardTimer` auto-clear in `engine-gmt/engine/worker/WorkerProxy.ts`. The drift-converged check in the FRAME_READY handler is the deterministic guard; the timeout was defensive paranoia that, in slow-boot worst case, could fire BEFORE the worker rendered its first post-set frame and let stale FRAME_READY data overwrite `_localOffset`. Removed `_offsetGuardTimer` field, the timer setup in `setShadowOffset`, the timer-clear in the drift check, and the entry in `_clearAllTimers`. If the worker hangs entirely, the gizmo overlay staying at the user's last-set offset is the correct behaviour (was the timeout's only "edge case" justification).
+- **F10 + F11 reassessed and deferred** — Original audit estimated both as "30-min cosmetic". Re-audit shows:
+  - **F10** (`formula` → `mode`): 54 hits across 30 files, including on-disk GMF / preset format. Naive rename breaks every existing GMT save unless paired with a migration layer in `applyMigrations` that maps `formula` → `mode` on load. That's mid-size refactor, not a paper-cut.
+  - **F11** (`FractalEvents` → `EngineEvents`): 236 references across 53 files. Mechanical but voluminous; risk-reward of 200+ atomic edits in a multi-purpose session is poor.
+  - Both deserve dedicated commits when the user wants to invest the time. Documented this scope correction in the deferred table below.
+
+**📋 2026-04-26 (late) — GMF custom-formula loading + save round-trip:**
+
+The 2026-04-25 entry claimed "all GMT PNG and .gmf saves now load correctly" — verified false in audit. Built-in formulas worked; **GMFs containing workshop / Fragmentarium / custom shaders did NOT round-trip**: parseSceneJson only extracted the `<Scene>` block; the `<Metadata>` + shader blocks containing the FractalDefinition were ignored. Saves wrote plain JSON, dropping shader content entirely.
+
+**First fix attempt** (parser plumbing + def registration):
+- **`utils/SceneFormat.ts`** — load/save helpers (`loadSceneFromFile`, `extractScenePng`, `embedScenePng`, `snapshotSceneToPng`, `downloadSceneJson`, `downloadScenePng`) all accept optional `parser` / `serialize` parameters. Defaults preserve existing behavior; apps inject richer formats via the SceneIO plugin.
+- **`engine/plugins/SceneIO.tsx`** — `InstallSceneIOOptions` gains `parseScene` + `serializeScene` overrides. Threaded through every load + save path (JSON, PNG, dropdown items, quick-PNG button).
+- **`app-gmt/main.tsx`** — installs SceneIO with `parseScene` that calls `loadGMFScene`, registers the def in both registries (local `FractalRegistry` + worker via `REGISTER_FORMULA` event), and returns the preset; `serializeScene: saveGMFScene` for round-trip.
+- **`engine-gmt/components/panels/formula/FormulaSelect.tsx`** — Import-Formula button had the same registration gap; fixed to register the def explicitly before delegating to `loadScene`.
+
+**Second fix — compile gating** (loadScene vs loadPreset):
+SceneIO's LoadButton called `loadPreset(preset)` directly. `loadPreset` only emits `CONFIG: { formula }`, never `CONFIG_DONE`. The worker waited on the 200ms scheduleCompile debounce, and the REGISTER_FORMULA + CONFIG ordering was racy. Switched to `loadScene({preset})` so CONFIG_DONE fires.
+
+**Third fix — the ACTUAL root cause** (full config flush):
+After the first two fixes, custom formulas still rendered as a fallback sphere. Side-by-side read of gmt-0.8.5's `loadScene` revealed engine-core's `loadScene` was a stripped-down stub missing **three critical steps** that 0.8.5 does between `loadPreset` and `CONFIG_DONE`:
+
+1. **Full config flush** — `getShaderConfigFromState(get())` builds a complete `ShaderConfig` snapshot (formula + every feature slice) and emits it as ONE CONFIG event. Without this, the worker only knows the formula changed, but its config still has stale values for every other field. The recompile produces a broken shader (rendered as a sphere — the fallback DE).
+2. **Offset push** — `engine.setShadowOffset(precise)` + `engine.post({type:'OFFSET_SET', offset})` ensures the first frame after recompile uses the loaded viewpoint, not a stale pre-load offset.
+3. **CONFIG_DONE** to skip the debounce (was already added in the second fix).
+
+Fix: ported all three steps from `gmt-0.8.5/store/fractalStore.ts:206-253` into [`store/engineStore.ts`](store/engineStore.ts) `loadScene`. Engine-core stays generic — `getShaderConfigFromState` already existed for this exact use case; it walks `featureRegistry.getAll()` for the slice payload, no GMT coupling.
+
+**Why this fixes the sphere bug:** the worker's recompile now sees the full feature state for the loaded scene (lighting, optics, geometry, coloring, quality, …), not just the formula change. The shader compiles correctly with the right uniforms and structure.
+
+**What this unlocks:** workshop saves load on a fresh runtime; Fragmentarium GMFs in `public/gmf/fragmentarium/` work via the file picker; PNG round-trip preserves the active formula's shader; custom-formula loads compile on the first frame after the user picks the file (no 200ms delay, no missing-formula races).
+
+**All four load paths now use `loadScene({preset})` + CONFIG_DONE**: app-gmt boot (line 282), FormulaSelect Import button, SceneIO file picker, LoadingScreen "Load From File".
+
+**Fourth fix — LoadingScreen bypass + API consolidation:**
+LoadingScreen's "Load From File" called `loadSceneFromFile(file)` with no parser argument, fell back to engine-core's plain-JSON parser, skipped formula-def registration → sphere bug at boot even after fix #3.
+
+Fix: removed `loadSceneFromFile` from `utils/SceneFormat.ts` entirely (was a footgun — easy to call without a parser and silently downgrade GMF to JSON). Replaced with single `loadSceneFile(file)` exported from `engine/plugins/SceneIO.tsx` that always routes through the registered `parseScene`. **One public file-loader, no opt-in argument, no way to bypass.** LoadingScreen + SceneIO LoadButton both use it; future file-pick affordances (drag-drop, deep links) inherit GMF parsing automatically.
+
+**Fifth fix — symmetric save-side consolidation:**
+Same footgun on the save side: `downloadSceneJson` / `downloadScenePng` accepted an optional serialize argument that defaulted to plain JSON. Only SceneIO called them (correctly with `_serializeScene`), but a future caller could bypass the GMT GMF serializer.
+
+Fix: removed `downloadSceneJson` and `downloadScenePng` from `utils/SceneFormat.ts`. Replaced with `saveSceneJson(filename?)` and `saveScenePng(filename?)` exported from `engine/plugins/SceneIO.tsx`. Both:
+- Read the current preset from the store (no `preset` arg — single source of truth)
+- Use the registered canvas accessor (no `canvas` arg for PNG)
+- Bake in `_serializeScene ?? serializeScene` (registered serializer, plain-JSON fallback)
+- Default filename derives from `projectSettings.name`
+
+Public Scene I/O surface is now symmetric and bypass-proof:
+- `loadSceneFile(file)` — read with registered parser
+- `saveSceneJson(filename?)` — write with registered serializer
+- `saveScenePng(filename?)` — snapshot + write with registered serializer
+
+Lower-level building blocks (`extractScenePng`, `parseSceneJson`, `embedScenePng`, `snapshotSceneToPng`, `serializeScene`, `downloadBlob`, `canvasToPngBlob`) stay exported from `utils/SceneFormat.ts` for advanced format authors.
+
+**PNG load path verified through GMF parser:** PNG path is `LoadButton.handleFile` → `loadSceneFromFile(file, _parseScene)` → `extractScenePng(file, parser)` → reads iTXt under `SceneData` (new) or `FractalData` (legacy 0.8.5) → `parser(content)` = app-gmt's GMF-aware `parseScene`. Same parser, same registration, same `loadScene({preset})` sequence as `.gmf` files. PNG bucket-render saves already use `saveGMFScene` so the round-trip preserves formulas.
+
+**📋 2026-04-26 (evening) — Backlog audit + quick-win cleanup:**
+
+Spawned 4 parallel research agents to verify status of every "active backlog" / "deferred" item against current source. Findings + applied fixes:
+
+- **Backlog drift corrected.** Several items listed as outstanding were already done; the doc was stale. See [Remaining work](#remaining-work) below for the corrected list.
+- **F14 shim cleanup — closed.** `BezierMath.ts`, `BloomPass.ts`, `UniformNames.ts` were already one-line re-exports. `RenderPipeline.ts` had a 19-line diff (engine-gmt imported `QualityState` from features/quality vs engine-core's inline loose record). Dropped the index-signature mismatch in engine-core's local `QualityState` shape so engine-gmt's narrower type is structurally assignable; collapsed engine-gmt's RenderPipeline.ts to a re-export.
+- **`showQuickPng` typecheck error — fixed.** Stale option in `app-gmt/main.tsx`; QuickPngButton already auto-registers when `getCanvas` is supplied. Removed.
+- **`express` + `@types/express` — removed from devDependencies.** Old `server/server.js` was deleted in stage 16; no remaining imports.
+- **README + demo/README + smoke-script wiring — verified up-to-date** (HANDOFF claims were stale: README correctly describes gmt-engine + port 3400, demo/README lists registerFeatures.ts, all 29 `debug/smoke-*.mts` files wired into `package.json`).
+- **EnginePanel visibility toggle — already wired** ([`engine-gmt/topbar.tsx:539-559`](engine-gmt/topbar.tsx#L539-L559)). HANDOFF was stale.
+- **Orbit-trap gradient port — non-issue.** Agent C found fluid-toy has identical orbit-trap modes to GMT; "richer multi-stop / radial / angular" claim in prior HANDOFF was aspirational/wrong. Removed.
+
+**📋 2026-04-26 (afternoon) — TSAA unification + bucket-dialog black-frame fix:**
+
+- **AccumulationController protocol** ([`engine/AccumulationController.ts`](engine/AccumulationController.ts)) — generic interface (accumulationCount, convergenceValue, isPaused, setPreviewSampleCap, resetAccumulation). Both WorkerProxy classes (engine-core stub + engine-gmt full) `implements AccumulationController`.
+- **`installAccumulationBindings`** ([`store/slices/installAccumulationBindings.ts`](store/slices/installAccumulationBindings.ts)) — one-call helper: subscribes `isPaused` / `sampleCap` from `renderControlSlice` to any controller. Replaces ad-hoc per-app subscriptions. Pairs with `reportAccumulationToStore` for the reverse direction.
+- **AdaptiveResolution module** ([`engine/AdaptiveResolution.ts`](engine/AdaptiveResolution.ts)) — pure decision module with the full TSAA algorithm (still-FPS seeding, first-window jump-to-ideal, 0.7/0.3 EMA, FPS-scaled grace, deep-accumulation protection, hold/suppress/alwaysActive options). Used by both GMT's worker `UniformManager.syncFrame` and engine-core's `viewportSlice.reportFps`. Net delta: −94 lines after dedup.
+- **Bucket-render black-frame fix** — `adaptiveSuppressed` was set by the bucket popup but never reached GMT's worker. Each user interaction → adaptive scale change → `pipeline.resize()` → `resetAccumulation()` → cleared (black) FBO briefly visible. Fix: plumbed through `EngineRenderState` → `renderState` payload → UniformManager → `tickAdaptiveResolution(suppressed)`.
+- **Initial `sampleCap` past max** — known race (initial SET_SAMPLE_CAP arrives at worker pre-engine-creation, silent no-op). Ported gmt-0.8.5's onBooted re-push pattern: [`engine-gmt/renderer/install.ts`](engine-gmt/renderer/install.ts) wraps the app's onBooted callback with a re-push of isPaused / sampleCap.
+- **Bucket popup stay-open conditions** — gmt-0.8.5's `RenderTools.tsx:50-69` suppresses click-outside-dismissal during isBucketRendering / previewRegion / `interactionMode === 'selecting_preview'`. Ported to `BucketRenderToggle` in `engine-gmt/topbar.tsx`.
+- **Dead code removed** — `bindStoreToEngine`'s isPaused/sampleCap subscriptions were wiring the engine-core stub proxy (different singleton from the real GMT worker proxy) — silently inert in GMT. Removed.
+- **Architecture doc**: [11_TSAA.md](docs/engine/11_TSAA.md) — full protocol + algorithm + per-app integration patterns + plumbing-pitfalls audit checklist.
+
 **📋 2026-04-26 — GMT port complete. Final wiring pass:**
 - **Loading screen** — GMT-branded splash with CPU Julia spinner, formula picker dropdown, Load From File, Lite Render toggle ported to `app-gmt/LoadingScreen.tsx`. Replaces the minimal engine stub.
 - **Share Link** — `ShareLinkButton` topbar component with Copied!/N/A/Long URL feedback. Workshop formula detection. URL length guard strips animations if >4096 chars.
@@ -234,8 +336,8 @@ All three broken flows fixed:
 - **ColoringHistogram** (per-layer, driven by HistogramProbe readbacks)
 - **scene_widgets**: `OpticsControls`, `OpticsDofControls`, `NavigationControls`, `ColorGradingHistogram`
 - **HybridAdvancedLock**, **JuliaRandomize**, **InteractionPicker** (Julia c / Mandelbrot c-param picker)
-- **EnginePanel** (bespoke, registered as `'panel-engine'`) — surfaces compile-time feature toggles in its own layout. Visibility currently gated on `engineSettings.showEngineTab`; GMT exposes that toggle in the Advanced subsection of the System menu — not yet wired.
-- **CameraManagerPanel** (bespoke, `'panel-cameramanager'`) — registered but the manifest entry + menu-button invocation are disabled until GMT's `cameraSlice` (addCamera / deleteCamera / savedCameras / undoCamera / redoCamera) gets ported.
+- **EnginePanel** (bespoke, registered as `'panel-engine'`) — surfaces compile-time feature toggles in its own layout. Visibility gated on `engineSettings.showEngineTab`; toggle wired in `engine-gmt/topbar.tsx:539-559` under System → Advanced.
+- **CameraManagerPanel** (bespoke, `'panel-cameramanager'`) — fully wired. Slice at `engine-gmt/store/cameraSlice.ts` (composes engine-core's `installStateLibrarySlice` factory), panel at `engine-gmt/features/camera_manager/CameraManagerPanel.tsx`, slot active in `engine-gmt/panels.ts:374-380`. Includes thumbnail capture, drag-reorder, slot shortcuts (Ctrl+1..9 / 1..9), and `undoCamera` / `redoCamera` wrappers that fire `CAMERA_TELEPORT` after engine-core's history slice restores the diff.
 
 ### ✅ Interaction picker (2026-04-24)
 
@@ -262,22 +364,38 @@ Everything flagged as "known gaps after Phase 5" has landed:
 
 ## Remaining work
 
-### Active backlog
+> Audited 2026-04-26 evening. Quick wins applied; this list is the post-audit truth.
 
-**Visual / features:**
-- **Orbit-trap gradient mapping in GMT** — fluid-toy has richer trap-gradient coloring modes (multi-stop, radial, angular) that would benefit GMT renders. Port is a compile-permutation addition; benchmark FPS impact before enabling by default.
-- **Fluid-toy polish** — gesture-mode switcher (brush/emitter/pick-c/pan-zoom), MandelbrotPicker overlay, ~34 DDFS params not yet ported (tone mapping, bloom, orbit-trap coloring, etc.).
+### Active backlog — real work
 
-**Structural integrity (low effort, low urgency):**
-- **F14 remaining shims** — `RenderPipeline.ts`, `BezierMath.ts`, `BloomPass.ts`, `UniformNames.ts` are verbatim copies in engine-gmt with no GMT-specific content. Replace with one-line re-exports each. No state, no bugs, just drift risk.
-- **Onboarding** — README describes the wrong product (fractal explorer, wrong port 5173 vs 3400). `demo/README.md` omits `registerFeatures.ts`. 18/28 smoke tests not wired into `package.json`. `package.json` `"name"` is `"gmt-fractal"`, `express` in wrong deps section.
+**GMT port — finish-the-job items:**
+*(none currently outstanding — cameraSlice was at `engine-gmt/store/cameraSlice.ts` all along; the audit that flagged it as missing only searched `store/slices/`.)*
 
-### Deferred (no visible symptoms, cosmetic or architectural cleanup)
-- **F5/F6** — camera binder cleanup. Functional via legacy path; clean fix is `@engine/camera` registering binders through `binderRegistry`.
-- **F9** — `componentId` references not validated at registry freeze (dev-mode guard).
-- **F8** — UI state undo (panel collapse, timeline scroll position).
-- **F10/F11** — `formula` field rename to `mode` + `FractalEvents` → `EngineEvents` rename pass. One commit, cosmetic only. Bundle together.
-- **F15** — Worker `_localOffset` guard-clear race. Flagged but no visible symptoms in normal use.
+**Fluid-toy polish:**
+- **Gesture-mode switcher** — brush / emitter / pick-c / pan-zoom UI. Today's `FluidPointerLayer.tsx` hardcodes left-drag splats / right-drag pan / middle-zoom / wheel-zoom. No mode switcher.
+- **MandelbrotPicker as viewport overlay** — component exists at `fluid-toy/components/MandelbrotPicker.tsx` registered as `'julia-c-picker'`. Currently surfaced only via the Julia panel's customUI slot; reference toy-fluid has it as a persistent bottom-right canvas overlay.
+- **DDFS-param parity audit** — 53 params currently ported across 9 features (brush/collision/composite/coupling/fluidSim/julia/palette/postFx/presets). Tone-mapping, bloom, orbit-trap coloring all DONE. No comprehensive audit of which of the original ~87 reference toy-fluid params remain unported.
+
+### Deferred — no visible symptoms, cosmetic / architectural
+
+| ID | What | Where | Realistic effort |
+|----|------|-------|------------------|
+| **F6** | Auto-register DDFS feature setters via `binderRegistry` (escape hatch shipped; full auto-reg deferred) | `engine/AnimationEngine.ts` + `engine/FeatureSystem.ts` | 30 min for scalar/vec params; camera + light tracks must stay explicit |
+| **F8** | UI-state undo (panel collapse, timeline scroll, dock layout) — `historySlice` snapshots only registered features today | `store/slices/historySlice.ts:83-94` | 5 min naive (add to snapshot loop); 2 h with scoped 'ui' undo separation |
+| **F10** | Rename `formula: string` → `mode` in store types | `types/store.ts:81` + 30 files + on-disk GMF / preset format | **2-3 h** — needs a migration in `applyMigrations` mapping `formula → mode` on load to avoid breaking existing saves. **Not a paper-cut.** |
+| **F11** | Rename `FractalEvents` → `EngineEvents` | `engine/FractalEvents.ts` + 53 consumer files (236 references) | **1-2 h** — mechanical but voluminous. Better as a focused commit, not bundled. |
+
+### Closed in 2026-04-26 audit (was listed as outstanding)
+
+- ✅ **F9** — dev-mode `componentId` validator (`validateComponentRefs`)
+- ✅ **F14** shim cleanup — all 4 files now re-exports
+- ✅ **F15** — worker `_localOffset` 2s timeout removed; drift check is the deterministic guard
+- ✅ **GMF custom-formula loading + save round-trip** — `parseScene` / `serializeScene` plugin hooks; app-gmt wires `loadGMFScene` + `saveGMFScene`; FormulaSelect import button now registers def
+- ✅ `showQuickPng` typecheck error
+- ✅ `express` / `@types/express` removal
+- ✅ README + demo/README + smoke-script wiring (verified up-to-date, claims were stale)
+- ✅ EnginePanel "Show Engine Tab" toggle wiring (already shipped in topbar.tsx)
+- ✅ Orbit-trap gradient port (non-issue — no richer modes exist in fluid-toy reference)
 
 ## How to resume
 

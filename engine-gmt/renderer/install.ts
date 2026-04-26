@@ -28,6 +28,7 @@
 import type { ShaderConfig } from '../engine/ShaderFactory';
 import { getProxy } from '../engine/worker/WorkerProxy';
 import { bindGmtRenderer } from './bindings';
+import { useEngineStore } from '../../store/engineStore';
 
 export interface InstallGmtRendererOptions {
     /** Called when the worker finishes BOOT (compile + BOOTED reply).
@@ -39,7 +40,6 @@ export interface InstallGmtRendererOptions {
 }
 
 let _installed = false;
-let _options: InstallGmtRendererOptions = {};
 
 /**
  * One-time install. Apps call this at module load before any component
@@ -47,12 +47,24 @@ let _options: InstallGmtRendererOptions = {};
  * HMR recovery).
  */
 export const installGmtRenderer = (options: InstallGmtRendererOptions = {}): void => {
-    _options = options;
     if (_installed) return;
     _installed = true;
 
     const proxy = getProxy();
-    if (options.onBooted) proxy.onBooted = options.onBooted;
+
+    // Wrap the app's onBooted with a re-push of accumulation state.
+    // The store's initial sampleCap / isPaused values are pushed via
+    // `installAccumulationBindings`, but those messages can arrive at
+    // the worker before its FractalEngine has been created (in which
+    // case `engine?.setPreviewSampleCap()` is a silent no-op). Re-push
+    // here once the worker reports BOOTED so accumulation respects the
+    // store's initial cap from the very first frame.
+    proxy.onBooted = () => {
+        const s = useEngineStore.getState();
+        proxy.isPaused = s.isPaused;
+        proxy.setPreviewSampleCap(s.sampleCap);
+        if (options.onBooted) options.onBooted();
+    };
     if (options.onCrash)  proxy.onCrash  = options.onCrash;
 
     // Bridge generic renderControlSlice state → GMT worker / feature

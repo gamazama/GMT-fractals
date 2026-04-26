@@ -4,6 +4,8 @@ The core plugin that owns viewport **dimensions**, **interaction state**, and **
 
 **Rule:** viewport size, DPR, fixed/full mode, resize signals, interaction flags, and FPS-driven quality scaling are engine concerns. How the app's canvas and render engine respond to those signals is the app's concern.
 
+> **2026-04-26 — Adaptive algorithm unified.** The adaptive-quality decision logic is no longer inlined in this slice's `reportFps`. It now lives in [`engine/AdaptiveResolution.ts`](../../engine/AdaptiveResolution.ts) as a pure decision module that both this slice and GMT's worker-side `UniformManager.syncFrame` call into. See [11_TSAA.md](11_TSAA.md) for the full architecture (AccumulationController + AdaptiveResolution).
+
 ## Why a plugin, not engine core
 
 Both GMT and toy-fluid re-invented most of this:

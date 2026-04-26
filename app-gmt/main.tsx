@@ -47,6 +47,10 @@ import { prefetchHelpTopics } from '../data/help/registry';
 import { installHud } from '../engine/plugins/Hud';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { GmtPanels } from '../engine-gmt/panels';
+import { loadGMFScene, saveGMFScene } from '../engine-gmt/utils/FormulaFormat';
+import { registry as gmtRegistry } from '../engine-gmt/engine/FractalRegistry';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import type { Preset } from '../types';
 
 import {
     installGmtRenderer,
@@ -120,8 +124,37 @@ installTopBar();
 installSceneIO({
     // The worker-owned canvas is the first <canvas> in the DOM — it's
     // mounted by GmtRendererCanvas before the R3F Canvas sibling.
+    // QuickPngButton auto-registers in the topbar when getCanvas is set.
     getCanvas: () => document.querySelector('canvas'),
-    showQuickPng: true,
+
+    // GMT scene files are GMF: a wrapper carrying both the formula's
+    // shader source AND the scene preset. The custom parser extracts
+    // both, registers the embedded formula def if it isn't already in
+    // the registry (so workshop saves and Fragmentarium imports load
+    // cleanly even on a fresh runtime), then returns the preset for
+    // engine-core's loadPreset to apply.
+    parseScene: (content) => {
+        const { def, preset } = loadGMFScene(content);
+        if (def && !gmtRegistry.get(def.id)) {
+            gmtRegistry.register(def);
+            FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, {
+                id: def.id,
+                shader: def.shader,
+            });
+        }
+        return preset;
+    },
+
+    // Saves go out as GMF so the round-trip preserves the formula's
+    // shader. saveGMFScene falls back to plain JSON when the active
+    // formula isn't in the registry (defensive — shouldn't happen for
+    // GMT scenes, but matches gmt-0.8.5 behaviour).
+    //
+    // Cast: engine-core's Preset has `formula: string`; engine-gmt's
+    // narrows to `FormulaType` (a known-formula union). The runtime
+    // shapes are identical — saveGMFScene only reads `formula` to look
+    // up the registry, which accepts any string.
+    serializeScene: (preset: Preset) => saveGMFScene(preset as any),
 });
 
 installModulation();
@@ -172,6 +205,19 @@ registerGmtTopbar({
     },
     openFormulaWorkshop: () => useEngineStore.getState().openWorkshop(),
 });
+
+// Dev-mode sanity check: every componentId referenced by a feature
+// (viewportConfig, customUI[]) must resolve in the componentRegistry.
+// Catches typos and missing registerUI / registerGmtUi entries at boot
+// instead of "blank panel + silent fallback" at first render.
+if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
+    // Lazy import to avoid widening the prod bundle with the validator path.
+    void import('../engine/FeatureSystem').then(({ validateComponentRefs }) => {
+        void import('../components/registry/ComponentRegistry').then(({ componentRegistry }) => {
+            validateComponentRefs(componentRegistry);
+        });
+    });
+}
 
 // @engine-gmt/renderer — wire GMT-specific callbacks.
 installGmtRenderer({
@@ -242,9 +288,18 @@ shortcuts.register({
 // the engine's generic Ctrl+Z unified undo (which captures param
 // changes); these specifically roll back sceneOffset + rotation moves
 // recorded by the camera plugin.
+//
+// Priority override: engine-core's Undo plugin also binds `Mod+Shift+Z`
+// as the Mac-redo alias (`redo.global.shift`). Both register at scope
+// 'global', priority 0, so the resolver tie-breaks on insertion order
+// — engine-plugin shortcuts register first and would steal the binding.
+// Setting priority 10 here lets the camera-undo win cleanly. GMT's UX
+// contract is "Ctrl+Shift+Z is camera-undo, full stop"; the Mac-redo
+// alias is intentionally suppressed here. Mod+Y still does redo.
 shortcuts.register({
     id: 'gmt.undoCameraMove',
     key: 'Ctrl+Shift+Z',
+    priority: 10,
     description: 'Undo last camera movement',
     category: 'Navigation',
     handler: () => { (useEngineStore.getState() as any).undoCamera?.(); },
@@ -252,6 +307,7 @@ shortcuts.register({
 shortcuts.register({
     id: 'gmt.redoCameraMove',
     key: 'Ctrl+Shift+Y',
+    priority: 10,
     description: 'Redo last camera movement',
     category: 'Navigation',
     handler: () => { (useEngineStore.getState() as any).redoCamera?.(); },

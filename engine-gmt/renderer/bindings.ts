@@ -22,6 +22,8 @@ import * as THREE from 'three';
 import { useEngineStore } from '../../store/engineStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { Uniforms } from '../engine/UniformNames';
+import { getProxy } from '../engine/worker/WorkerProxy';
+import { installAccumulationBindings } from '../../store/slices/installAccumulationBindings';
 
 export const bindGmtRenderer = (): (() => void) => {
     const unsubs: Array<() => void> = [];
@@ -70,6 +72,12 @@ export const bindGmtRenderer = (): (() => void) => {
             FractalEvents.emit(FRACTAL_EVENTS.UNIFORM, { key: Uniforms.RegionMax, value: max });
         },
     ));
+
+    // Generic accumulation control surface (isPaused + sampleCap) →
+    // worker proxy (which implements AccumulationController). Replaces
+    // per-app store subscriptions; any renderer that satisfies the
+    // controller protocol plugs in here.
+    unsubs.push(installAccumulationBindings(useEngineStore, getProxy()));
 
     return () => { unsubs.forEach((u) => u()); };
 };

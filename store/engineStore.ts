@@ -80,9 +80,10 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
         if (s.formula === f && f !== 'Modular') return;
 
         if (!options.skipDefaultPreset) {
+            // resetParamHistory() → clearHistory() clears BOTH 'param' and
+            // 'camera' scope transactions on the unified stack — old
+            // camera positions make no sense for a new formula either.
             get().resetParamHistory();
-            // Clear camera undo/redo — old positions make no sense for new formula
-            set({ undoStack: [], redoStack: [] });
         }
 
         const currentName = s.projectSettings.name;
@@ -263,14 +264,46 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
     },
 
     loadScene: ({ preset }: { def?: any; preset: Preset }) => {
-        // Initial startup: hydrate store immediately, no spinner needed
+        // Initial startup: hydrate store immediately, no spinner needed.
+        // bootEngine() sends the full config in its INIT message.
         if (!engine.isBooted && !engine.bootSent) {
             get().loadPreset(preset);
             return;
         }
 
+        // Post-boot: show spinner immediately, defer compile-triggering work
+        // until after the browser paints so the spinner is visible before
+        // the GPU-blocking preview compile starts on the worker.
         compileGate.queue("Loading Preview...", () => {
+            // 1. Hydrate store. loadPreset emits CONFIG({formula}) and
+            //    drives feature setters that may emit their own CONFIGs.
             get().loadPreset(preset);
+
+            // 2. Full config flush — guarantees the worker recompiles with
+            //    the COMPLETE picture (every feature slice + engine fields),
+            //    not just the formula change. Without this, scenes loaded
+            //    on a custom formula compile against the previous scene's
+            //    feature state and render as a fallback sphere. Mirrors
+            //    gmt-0.8.5's loadScene exactly.
+            const fullConfig = getShaderConfigFromState(get());
+            FractalEvents.emit(FRACTAL_EVENTS.CONFIG, fullConfig);
+
+            // 3. Push offset to the worker so the first rendered frame
+            //    after recompile uses the loaded viewpoint, not a stale
+            //    pre-load offset that would persist until RENDER_TICK.
+            const loaded = get() as any;
+            const offset = loaded.sceneOffset;
+            if (offset) {
+                const precise = {
+                    x: offset.x, y: offset.y, z: offset.z,
+                    xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0,
+                };
+                engine.setShadowOffset(precise);
+                engine.post({ type: 'OFFSET_SET', offset: precise });
+            }
+
+            // 4. Signal worker to flush queued CONFIGs and compile now,
+            //    skipping the 200 ms scheduleCompile debounce.
             engine.post({ type: 'CONFIG_DONE' });
         });
     },
@@ -382,20 +415,17 @@ export const getShaderConfigFromState = (state: EngineStoreState): any => {
 /**
  * Wires store subscriptions → worker proxy events at app boot.
  * Apps call this once after store construction.
+ *
+ * Accumulation state (`isPaused`, `sampleCap`) is wired in renderer
+ * plugins via `installAccumulationBindings` against the renderer's
+ * AccumulationController — see `engine-gmt/renderer/bindings.ts`.
+ * That keeps the binding co-located with the controller it talks to.
  */
 export const bindStoreToEngine = () => {
-    const s = useEngineStore.getState();
-
     // Connect AnimationEngine to stores (decoupled injection).
     // useAnimationStore is imported eagerly above (alongside the
     // other slices), no window-handle indirection needed.
     animationEngine.connect(useAnimationStore as any, useEngineStore);
-
-    engine.isPaused = s.isPaused;
-    engine.setPreviewSampleCap(s.sampleCap);
-
-    useEngineStore.subscribe(state => state.isPaused, (v) => { engine.isPaused = v; });
-    useEngineStore.subscribe(state => state.sampleCap, (v) => { engine.setPreviewSampleCap(v); });
 };
 
 // Expose store on window for dev console access

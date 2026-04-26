@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import type { ShaderConfig } from '../ShaderFactory';
 import type { CameraState } from '../../types/common';
+import type { AccumulationController } from '../AccumulationController';
 
 // Local type stubs for what used to come from FractalEngine / BucketRenderer.
 // Kept deliberately opaque — apps that re-introduce a render engine will
@@ -39,7 +40,7 @@ export type SerializedCamera = {
 };
 export type SerializedOffset = { x: number; y: number; z: number; xL: number; yL: number; zL: number };
 
-export class WorkerProxy {
+export class WorkerProxy implements AccumulationController {
     // Inert refs — UI code guards on truthiness
     readonly activeCamera: THREE.PerspectiveCamera | null = null;
     readonly virtualSpace: unknown | null = null;

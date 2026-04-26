@@ -84,7 +84,16 @@ const BucketRenderToggle: React.FC = () => {
     React.useEffect(() => {
         if (!open) return;
         const onClick = (e: MouseEvent) => {
-            if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+            if (rootRef.current && rootRef.current.contains(e.target as Node)) return;
+            // Don't close during active bucket render, while a preview region is
+            // active (user needs the panel open to adjust params live), or while
+            // in preview-pick mode (the canvas click that picks shouldn't also
+            // dismiss the panel). Read fresh state to avoid stale closure.
+            const s = useEngineStore.getState() as any;
+            if (s.isBucketRendering) return;
+            if (s.previewRegion) return;
+            if (s.interactionMode === 'selecting_preview') return;
+            setOpen(false);
         };
         const id = setTimeout(() => document.addEventListener('mousedown', onClick), 0);
         return () => { clearTimeout(id); document.removeEventListener('mousedown', onClick); };
