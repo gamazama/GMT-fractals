@@ -18,6 +18,8 @@ import './registerFeatures';
 
 // Plugin preset fields (cameraRot, etc.) register into presetFieldRegistry.
 import '../engine/plugins/camera/presetField';
+// GMT-specific preset fields (lights top-level array) — must precede store init.
+import '../engine-gmt/store/gmtPresetFields';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
