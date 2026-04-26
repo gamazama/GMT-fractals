@@ -42,6 +42,14 @@ jobs:
           publish_dir: ./dist
           keep_files: true
 
+      # Replace the legacy index.html with a dev landing page that lists
+      # all available app entries and points back to gmt-fractals.com for
+      # the live build. dev-landing.html is a static file (not a Vite
+      # entry) so it's never included in main builds — safe.
+      - name: Swap in dev landing page
+        if: github.ref == 'refs/heads/dev'
+        run: cp dev-landing.html dist/index.html
+
       - name: Deploy dev to /dev subfolder
         if: github.ref == 'refs/heads/dev'
         uses: peaceiris/actions-gh-pages@v4

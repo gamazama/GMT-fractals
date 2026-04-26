@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GMT — dev preview</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #000;
+      --fg: #fff;
+      --muted: #888;
+      --accent: #22d3ee;
+      --border: rgba(255, 255, 255, 0.1);
+      --hover: rgba(34, 211, 238, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .wrap { max-width: 640px; width: 100%; }
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 200;
+      letter-spacing: 0.08em;
+      margin: 0 0 0.5rem;
+    }
+    h1 .accent { color: var(--accent); }
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin: 0 0 2.5rem;
+    }
+    .notice {
+      background: rgba(34, 211, 238, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.875rem 1.125rem;
+      margin-bottom: 2rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .notice a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid currentColor;
+    }
+    .notice a:hover { color: #67e8f9; }
+    .notice code {
+      background: rgba(255, 255, 255, 0.06);
+      padding: 0.1em 0.35em;
+      border-radius: 0.25em;
+      font-size: 0.85em;
+    }
+    .apps { display: grid; gap: 0.625rem; }
+    .app {
+      display: block;
+      padding: 1rem 1.25rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      text-decoration: none;
+      color: var(--fg);
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
+    }
+    .app:hover {
+      background: var(--hover);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .app-name { font-weight: 600; font-size: 1rem; }
+    .app-desc { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; line-height: 1.4; }
+    .footer {
+      margin-top: 2.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+    }
+    .footer a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted currentColor; }
+    .footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>GMT <span class="accent">— dev preview</span></h1>
+    <p class="subtitle">Engine-architecture builds, work in progress.</p>
+
+    <div class="notice">
+      For the stable release, visit <a href="https://gmt-fractals.com">gmt-fractals.com</a>.
+      This subdirectory tracks the <code>dev</code> branch and may break or change at any time.
+    </div>
+
+    <div class="apps">
+      <a class="app" href="app-gmt.html">
+        <div class="app-name">GMT — Fractal Explorer</div>
+        <div class="app-desc">Real-time 3D fractal renderer. Engine-architecture build.</div>
+      </a>
+      <a class="app" href="fractal-toy.html">
+        <div class="app-name">Fractal Toy</div>
+        <div class="app-desc">Julia + 2D fractal playground.</div>
+      </a>
+      <a class="app" href="fluid-toy.html">
+        <div class="app-name">Fluid Toy</div>
+        <div class="app-desc">Real-time 2D fluid simulation playground.</div>
+      </a>
+      <a class="app" href="mesh-export/">
+        <div class="app-name">Mesh Export Prototype</div>
+        <div class="app-desc">SDF → mesh / VDB export tool.</div>
+      </a>
+    </div>
+
+    <div class="footer">
+      <a href="https://github.com/gamazama/GMT-fractals/tree/dev">view source on GitHub</a>
+    </div>
+  </div>
+</body>
+</html>
