@@ -142,11 +142,21 @@ export const createViewportSlice: StateCreator<
         const cfg = state.adaptiveConfig;
         const suppressed = state.adaptiveSuppressed || !cfg.enabled;
 
+        // Feed accumulationCount through so the deep-accum gate works
+        // for any app that wires reportAccumulation (fluid-toy reports
+        // tsaaSampleIndex from the RAF loop). When sampleCap is set,
+        // hold full res once we're halfway through the cap — keeps the
+        // earned partial accumulation when the user moves the mouse off
+        // the canvas mid-render. sampleCap=0 (Infinite) falls back to
+        // the FPS-derived default inside the module.
+        const accumCount = state.accumulationCount ?? 0;
+        const accumThreshold = state.sampleCap > 0
+            ? Math.max(2, Math.floor(state.sampleCap * 0.5))
+            : undefined;
+
         const result = tickAdaptiveResolution(_adaptive, {
             now,
-            // Slice has no accumCount visibility (renderer-side concept);
-            // pass 0 so accum-drop activity detection is a no-op here.
-            accumCount: 0,
+            accumCount,
             isInteracting: state.isUserInteracting,
             mouseOverCanvas: isMouseOverCanvas(),
             dynamicScaling: cfg.enabled,
@@ -158,6 +168,8 @@ export const createViewportSlice: StateCreator<
             alwaysActive: cfg.alwaysActive,
             holdUntilMs: _holdUntilMs,
             suppressed,
+            accumThreshold,
+            gateOnAccumOnly: cfg.engageOnAccumOnly,
         });
 
         // Convert downsample factor → quality fraction (0..1).

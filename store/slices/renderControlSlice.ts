@@ -106,7 +106,10 @@ export const createRenderControlSlice: StateCreator<
     setRenderMode: (v) => set({ renderMode: v }),
     setIsPaused: (v) => set({ isPaused: v }),
     setSampleCap: (v) => set({ sampleCap: v }),
-    reportAccumulation: (count) => set({ accumulationCount: count }),
+    reportAccumulation: (count) => {
+        if (get().accumulationCount === count) return;
+        set({ accumulationCount: count });
+    },
 
     // Region crop: changing the render region is a quality change —
     // accumulator resets so the new region starts fresh.

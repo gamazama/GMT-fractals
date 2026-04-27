@@ -41,13 +41,6 @@ import { useSlice, useLiveModulations } from '../engine/typedSlices';
 import { DomOverlays } from './components/DomOverlays';
 import { useFluidEngine } from './useFluidEngine';
 
-// 64 is plenty for fluid-toy's progressive grid TSAA: K=4 per frame ×
-// 16 rounds = 256 unique sub-samples by frame 64. The engine-level
-// `sampleCap` (default 256) is sized for GMT's path-traced renderer; we
-// pin the fluid-toy ceiling lower so the GPU stops accumulating once
-// the fractal background has visually settled.
-const TSAA_SAMPLE_CAP = 64;
-
 export const FluidToyApp: React.FC = () => {
     // Granular selectors — DO NOT use `useEngineStore()` with no
     // selector here. That would subscribe to the entire store; every
@@ -98,6 +91,7 @@ export const FluidToyApp: React.FC = () => {
     // fractal background. Lives in engine-core so any future app reuses it.
     const accumulation = useEngineStore((s) => s.accumulation);
     const isPaused     = useEngineStore((s) => s.isPaused);
+    const sampleCap    = useEngineStore((s) => s.sampleCap);
 
     // Live-modulated values (base + LFO/audio/rule offsets). Read by
     // syncJuliaToEngine so orbit / audio-reactive c / future drivers
@@ -107,7 +101,7 @@ export const FluidToyApp: React.FC = () => {
     useEffect(() => { const e = engineRef.current; if (e) syncJuliaToEngine(e, julia, liveMod); },               [julia, liveMod]);
     useEffect(() => { const e = engineRef.current; if (e) syncPaletteToEngine(e, palette); },                    [palette]);
     useEffect(() => { const e = engineRef.current; if (e) syncCollisionToEngine(e, collision); },                [collision]);
-    useEffect(() => { const e = engineRef.current; if (e) syncFluidSimToEngine(e, fluidSim, coupling, quality); }, [fluidSim, coupling, quality]);
+    useEffect(() => { const e = engineRef.current; if (e) syncFluidSimToEngine(e, fluidSim, coupling); },           [fluidSim, coupling]);
     useEffect(() => { const e = engineRef.current; if (e) syncPostFxToEngine(e, postFx); },                      [postFx]);
     useEffect(() => { const e = engineRef.current; if (e) syncCompositeToEngine(e, composite); },                [composite]);
 
@@ -120,20 +114,29 @@ export const FluidToyApp: React.FC = () => {
         if (!engine) return;
         engine.setParams({
             tsaa:          accumulation ?? true,
-            tsaaSampleCap: TSAA_SAMPLE_CAP,
+            tsaaSampleCap: sampleCap,
             paused:        isPaused,
         });
-    }, [accumulation, isPaused]);
+    }, [accumulation, isPaused, sampleCap]);
 
-    // Resize whenever physical pixels or quality fraction change.
+    // simAspect comes from unscaled CSS dims, not the quality-scaled
+    // logical size — adaptive nudges only resize the canvas/render
+    // target, never the sim FBOs (which would wipe dye on every nudge).
+    //
+    // Setting canvas.width / canvas.height clears the WebGL drawing
+    // buffer to transparent black; the explicit engine.frame() after
+    // resize repaints before the compositor reads the empty canvas,
+    // suppressing a black flash on every adaptive change.
     useEffect(() => {
         const engine = engineRef.current;
         const [physW, physH] = canvasPixelSize;
         if (!engine || physW < 1 || physH < 1) return;
         const dpr = window.devicePixelRatio || 1;
+        engine.setSimAspect(physW / physH);
         const logicalW = Math.max(1, Math.floor((physW / dpr) * quality));
         const logicalH = Math.max(1, Math.floor((physH / dpr) * quality));
         engine.resize(logicalW, logicalH);
+        engine.redraw();
     }, [canvasPixelSize, quality]);
 
     return (

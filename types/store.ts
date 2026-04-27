@@ -5,7 +5,7 @@ import { Preset, FractalDefinition } from './preset';
 import { ContextMenuItem } from './help';
 import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../engine/features/types';
 import { LightParams } from './graphics';
-import type { ScalabilityState, HardwareProfile } from './viewport';
+import type { ScalabilityState, HardwareProfile, ViewportAdaptiveConfig } from './viewport';
 
 // Optics was a fractal-leaning feature. Apps that need typed optics on
 // saved cameras can declaration-merge to widen this opaque record.
@@ -147,20 +147,7 @@ export interface EngineStoreState extends FeatureStateMap {
   qualityFraction: number;
   fps: number;               // last-sample instantaneous FPS
   fpsSmoothed: number;       // exponential smoothing, adaptive-loop driver
-  adaptiveConfig: {
-    enabled: boolean;
-    targetFps: number;
-    minQuality: number;          // floor for qualityFraction, i.e. 1 / maxScale
-    interactionDownsample: number; // fraction of full quality used in manual mode
-    /** Grace after last user activity during which adaptive keeps adjusting
-     *  when the mouse is on canvas. Scales with render cost (slower renders
-     *  get longer grace); this is the floor. */
-    activityGraceMs: number;
-    /** When true, adaptive is always on regardless of activity state — for
-     *  apps with no "idle" moment (live sims like fluid-toy). When false,
-     *  GMT-style: idle mouse on canvas → full-res to enjoy the result. */
-    alwaysActive: boolean;
-  };
+  adaptiveConfig: ViewportAdaptiveConfig;
   renderRegion: { minX: number, minY: number, maxX: number, maxY: number } | null;
   // Preview Region — export-resolution preview of a canvas slice. See docs/44_Preview_Region_Plan.md.
   // Truthy iff preview is active (`previewRegion !== null` == "previewing").

@@ -117,19 +117,18 @@ export const FluidSimFeature: FeatureDefinition = {
 /**
  * Push the fluid-sim slice + coupling-tab force-law knobs into
  * FluidEngine. Both slices reach FluidEngine in one call so a change to
- * either schedules a single setParams. `simResolution` is the user
- * TARGET; the actual sim grid is scaled by qualityFraction (adaptive
- * loop). autoQuality stays off — adaptive lives in @engine/viewport,
- * not FluidEngine's internal loop.
+ * either schedules a single setParams. The sim grid runs at the user's
+ * chosen `simResolution` — adaptive quality scales only the fractal
+ * render target (via FluidToyApp.engine.resize), never the sim grid.
+ * autoQuality stays off — FluidEngine's internal adaptive is unused.
  */
 export const syncFluidSimToEngine = (
     engine: FluidEngine,
     fluidSim: FluidSimSlice,
     coupling: CouplingSlice,
-    quality: number,
 ): void => {
     engine.setParams({
-        simResolution:  Math.max(64, Math.floor(fluidSim.simResolution * quality)),
+        simResolution:  Math.max(64, fluidSim.simResolution),
         vorticity:      fluidSim.vorticity,
         vorticityScale: fluidSim.vorticityScale,
         pressureIters:  fluidSim.pressureIters,

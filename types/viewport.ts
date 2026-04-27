@@ -10,6 +10,47 @@
 //   2. Subsystem tier overrides (this system)
 //   3. Hardware caps (device physical limits)
 
+// ─── Adaptive Resolution Config ─────────────────────────────
+//
+// Single source of truth for the @engine/viewport adaptive loop's
+// configuration shape. Lives here (a leaf type module) so the store
+// state shape and the plugin's installer signature can both reference
+// it without an import cycle. See engine/AdaptiveResolution.ts for the
+// algorithm and engine/plugins/Viewport.tsx for the installer.
+
+export interface ViewportAdaptiveConfig {
+    /** Master adaptive toggle. When false, qualityFraction stays at 1. */
+    enabled: boolean;
+    /** Target FPS the adaptive loop aims for. 0 = manual mode (uses
+     *  interactionDownsample as a fixed factor). Typical: 30 for heavy
+     *  apps (fractal raymarching), 45-60 for lighter ones. */
+    targetFps: number;
+    /** Floor for qualityFraction; ensures the app never drops below
+     *  legibility. Typical: 0.25 (max scale 4x) to 0.4. */
+    minQuality: number;
+    /** Manual-mode fallback: qualityFraction when targetFps === 0.
+     *  Typical: 0.5 = half-resolution. */
+    interactionDownsample: number;
+    /** Default hold duration multiplier for `holdAdaptive(durationMs?)`:
+     *  when called with no argument, hold = activityGraceMs * 4.
+     *  Note: the post-activity grace window itself is FPS-scaled inside
+     *  engine/AdaptiveResolution.ts (1fps → 2s, 30fps+ → 100ms), so this
+     *  field tunes hold duration only — not settling time. */
+    activityGraceMs: number;
+    /** When true, adaptive runs always — for apps with no idle state
+     *  (live sims like fluid-toy). When false (default, GMT-style),
+     *  adaptive settles to full-res when the mouse is on the canvas
+     *  and the user hasn't interacted recently. */
+    alwaysActive: boolean;
+    /** When true, adaptive engages ONLY when the renderer's accumCount
+     *  drops (= camera/param change actually invalidated the result).
+     *  isInteracting and mouseOverCanvas no longer trigger adaptive on
+     *  their own. Use for apps where the accumulator is the truth
+     *  signal (e.g. fluid-toy, where dragging the vorticity slider
+     *  shouldn't drop fractal resolution). */
+    engageOnAccumOnly?: boolean;
+}
+
 // ─── Core Types ──────────────────────────────────────────────
 
 /** A single quality level within a rendering subsystem */

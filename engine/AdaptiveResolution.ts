@@ -93,6 +93,21 @@ export interface AdaptiveResolutionInput {
     holdUntilMs?: number;
     /** When true, force scale=1 and needsAdaptive=false. Used by export. */
     suppressed?: boolean;
+    /** Override the deep-accumulation threshold (samples). Once
+     *  `fullResAccum >= accumThreshold`, adaptive is suppressed so the
+     *  user keeps the partial high-quality result they've already
+     *  earned. When omitted, the FPS-derived default applies (8..50).
+     *  Apps with a known sampleCap typically pass `Math.floor(sampleCap * 0.5)`
+     *  so "halfway accumulated" is the cutoff. */
+    accumThreshold?: number;
+    /** When true, the only signal that engages adaptive is an
+     *  accumulation reset (accumCount dropping). `isInteracting` and
+     *  `!mouseOverCanvas` are ignored — neither sets activity nor
+     *  triggers needsAdaptive on its own. Use for apps where the
+     *  renderer's accumCount IS the truth signal (fluid-toy: dragging
+     *  unrelated UI sliders never invalidates the fractal accumulator,
+     *  so it shouldn't drop quality either). */
+    gateOnAccumOnly?: boolean;
 }
 
 export interface AdaptiveResolutionResult {
@@ -138,6 +153,7 @@ export function tickAdaptiveResolution(
     const alwaysActive = input.alwaysActive ?? false;
     const holdUntilMs = input.holdUntilMs ?? 0;
     const suppressed = input.suppressed ?? false;
+    const gateOnAccumOnly = input.gateOnAccumOnly ?? false;
 
     // ── Suppression: hard force to full res. ──────────────────────────
     if (suppressed) {
@@ -154,7 +170,10 @@ export function tickAdaptiveResolution(
     // An accumulation drop signals that something invalidated the buffer
     // — camera move, param change, texture swap, etc. Treat as activity
     // EXCEPT when caused by our own resize (selfResized flag).
-    if (isInteracting) {
+    // gateOnAccumOnly mode skips the isInteracting branch — UI slider
+    // drags that don't actually invalidate the renderer should not
+    // count as activity for those apps.
+    if (isInteracting && !gateOnAccumOnly) {
         state.lastActivityTime = now;
     } else if (accumCount < state.prevAccumCount && !state.selfResized) {
         state.lastActivityTime = now;
@@ -175,10 +194,14 @@ export function tickAdaptiveResolution(
         state.fullResAccum = 0;
     }
 
-    // Threshold scales with FPS: 1fps → 8 samples (8s wait), 60fps → 50
-    // samples (<1s). Once past the threshold, adaptive is suppressed
-    // — protects quality results when user moves mouse to UI.
-    const accumThreshold = Math.max(8, Math.min(50, Math.round(state.stillFps)));
+    // Threshold: caller's override (e.g. sampleCap/2) takes priority,
+    // otherwise FPS-scaled default — 1fps → 8 samples (8s wait), 60fps
+    // → 50 samples (<1s). Once past the threshold, adaptive is
+    // suppressed — protects quality results when user moves mouse off
+    // the canvas mid-accumulation.
+    const accumThreshold = input.accumThreshold !== undefined && input.accumThreshold > 0
+        ? input.accumThreshold
+        : Math.max(8, Math.min(50, Math.round(state.stillFps)));
     const isDeepAccumulation = state.fullResAccum >= accumThreshold;
 
     // ── Adaptive decision ─────────────────────────────────────────────
@@ -186,12 +209,14 @@ export function tickAdaptiveResolution(
     // alwaysActive  → ON (live sims have no idle state)
     // Mouse on UI   → ON (slider drags need responsive feedback)
     // Mouse on canvas + grace expired → OFF (FPS-based settle window)
-    const needsAdaptive = dynamicScaling && !isDeepAccumulation && (
-        alwaysActive
-        || isInteracting
-        || !mouseOverCanvas
-        || timeSinceActivity < grace
-    );
+    // gateOnAccumOnly: drop the isInteracting / mouseOverCanvas
+    // clauses. Adaptive engages only while the renderer's accumulator
+    // is being actively reset (timeSinceActivity < grace). Unrelated
+    // UI activity has no effect.
+    const activitySignal = gateOnAccumOnly
+        ? timeSinceActivity < grace
+        : (isInteracting || !mouseOverCanvas || timeSinceActivity < grace);
+    const needsAdaptive = dynamicScaling && !isDeepAccumulation && (alwaysActive || activitySignal);
 
     if (needsAdaptive) {
         const adaptiveTarget = input.adaptiveTarget ?? 0;

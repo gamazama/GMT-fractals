@@ -56,10 +56,14 @@ viewport.setFixedResolution(w: number, h: number): void;   // snap-to-8 enforced
 viewport.setInteracting(mode: string | false): void;        // false → 'none'
 viewport.setAdaptive(opts: {
   enabled?: boolean;
-  targetFps?: number;        // 0 = off, otherwise auto-adjust
-  minQuality?: number;       // default 0.25
-  graceMs?: number;          // default 1000 — no down-scale during this after an accum-relevant event
-  changeCooldownMs?: number; // default 500
+  targetFps?: number;          // 0 = off, otherwise auto-adjust
+  minQuality?: number;         // default 0.25
+  graceMs?: number;            // default 1000 — no down-scale during this after an accum-relevant event
+  changeCooldownMs?: number;   // default 500
+  alwaysActive?: boolean;      // default false; true for live sims with no idle state
+  engageOnAccumOnly?: boolean; // default false; true = adaptive engages ONLY on accumCount drops
+                                //   (slider drags / mouse-off-canvas no longer trigger). For apps where
+                                //   the accumulator IS the truth signal — see 11_TSAA.md fluid-toy section.
 }): void;
 ```
 

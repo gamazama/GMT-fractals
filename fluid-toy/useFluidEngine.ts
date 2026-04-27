@@ -14,6 +14,7 @@
 import { useEffect, useRef } from 'react';
 import { FluidEngine } from './fluid/FluidEngine';
 import { viewport } from '../engine/plugins/Viewport';
+import { useEngineStore } from '../store/engineStore';
 import { appEngine, brushHandles, cursorHandles } from './engineHandles';
 import { stepBrush } from './brush';
 import { readBrushParams } from './brush/readParams';
@@ -43,6 +44,12 @@ export const useFluidEngine = (
             // (per-move emitter) and this per-frame step share one
             // instance.
             let prevT = -1;
+            // TSAA accumulation reporter — pushes engine.tsaaSampleIndex
+            // into the store's `accumulationCount` so the topbar Pause
+            // popover reads "<count>/<sampleCap>" correctly. Throttled
+            // to ~10 Hz to avoid one store mutation per frame.
+            let lastReportT = 0;
+            let lastReportedCount = -1;
             const loop = (t: number) => {
                 const dtSec = prevT < 0 ? 0 : Math.min(0.1, (t - prevT) / 1000);
                 prevT = t;
@@ -58,6 +65,14 @@ export const useFluidEngine = (
                         engine: engineRef.current,
                     });
                     engineRef.current.frame(t);
+                    if (t - lastReportT > 100) {
+                        const count = engineRef.current.getAccumulationCount();
+                        if (count !== lastReportedCount) {
+                            useEngineStore.getState().reportAccumulation(count);
+                            lastReportedCount = count;
+                        }
+                        lastReportT = t;
+                    }
                 }
                 rafRef.current = requestAnimationFrame(loop);
             };

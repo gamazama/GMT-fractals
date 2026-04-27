@@ -257,7 +257,8 @@ export interface FluidParams {
   /** TSAA jitter amplitude in pixel fractions. 1.0 = ±0.5 px. */
   tsaaJitterAmount: number;
   /** Max accumulated samples before TSAA stops blending (saves GPU
-   *  work once the image has converged). */
+   *  work once the image has converged). 0 = no cap (infinite
+   *  accumulation; the engine never short-circuits the Julia pass). */
   tsaaSampleCap: number;
   /** K-sampling: number of jittered Julia evaluations per frame, raw-
    *  averaged before pushing to the TSAA accumulator. GLSL clamps
@@ -453,6 +454,14 @@ export class FluidEngine {
 
   private simW = 0;
   private simH = 0;
+  /** Aspect ratio used to size the sim grid (simW = round(simH * simAspect)).
+   *  Driven by the app via setSimAspect() on real window resize — NOT by
+   *  the canvas dimensions, which are scaled by adaptive quality and
+   *  would otherwise wipe dye/velocity on every adaptive nudge due to
+   *  1-pixel rounding drift. Default 0 = "not set yet"; allocateTextures
+   *  falls back to the canvas aspect for the boot-time allocation, then
+   *  the app pushes a real value on first resize. */
+  private simAspect = 0;
 
   private juliaCur!: MrtFbo;
   private juliaPrev!: MrtFbo;
@@ -734,7 +743,13 @@ export class FluidEngine {
   }
 
   private allocateTextures(simHeight: number) {
-    const aspect = this.canvas.width / Math.max(1, this.canvas.height);
+    // Use the stored simAspect, not the canvas aspect. Canvas dims are
+    // adaptive-scaled and round-tripping through Math.floor/Math.round
+    // introduces 1-pixel aspect drift that would shift simW by ±1 on
+    // every quality change, missing the early-return guard below and
+    // wiping dye + velocity. simAspect changes only on real window
+    // resize, when the user actually expects a fluid reset.
+    const aspect = this.simAspect || (this.canvas.width / Math.max(1, this.canvas.height));
     const h = Math.max(32, simHeight | 0);
     const w = Math.max(32, Math.round(h * aspect));
     if (w === this.simW && h === this.simH && this.juliaCur) return;
@@ -813,6 +828,11 @@ export class FluidEngine {
     }
   }
 
+  /** Current TSAA accumulation depth (0 = freshly reset, == tsaaSampleCap = converged).
+   *  Surfaced so the app can report it back into the engine-core
+   *  renderControlSlice (`reportAccumulation`) for the Pause popover readout. */
+  getAccumulationCount(): number { return this.tsaaSampleIndex; }
+
   /**
    * Upload a baked LUT (`GRADIENT_LUT_WIDTH × 1 RGBA`, length = 4×width).
    * Shared helper: both the main colour gradient and the collision B&W gradient
@@ -873,7 +893,11 @@ export class FluidEngine {
     this.setCollisionGradientBuffer(buf);
   }
 
-  /** Resize the drawing buffer to match container. */
+  /** Resize the drawing buffer to match container.
+   *  Adaptive-quality changes call this with new (smaller) dims, so this
+   *  path must NOT touch sim FBOs (dye/velocity/pressure) — those are
+   *  driven by setSimAspect() + simResolution and stay stable across
+   *  adaptive nudges. Only the screen-sized bloom FBOs invalidate here. */
   resize(w: number, h: number) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const bw = Math.max(1, Math.round(w * dpr));
@@ -881,9 +905,32 @@ export class FluidEngine {
     if (this.canvas.width !== bw || this.canvas.height !== bh) {
       this.canvas.width = bw;
       this.canvas.height = bh;
-      this.allocateTextures(this.params.simResolution);
       this.bloomDirty = true;
     }
+  }
+
+  /** Re-blit the existing `juliaTsaa` + sim state to the canvas without
+   *  advancing the simulation. Use after a canvas resize to repaint
+   *  before the compositor reads the empty drawing buffer (suppresses
+   *  the black flash). Cheaper than a full `frame()` — skips the fluid
+   *  sim step + the mask GPU→CPU readback. */
+  redraw() {
+    this.displayToScreen();
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  /** Set the aspect ratio used for sim-grid allocation. Call from the
+   *  app on REAL window resize (driven by physical pixel size, not
+   *  adaptive quality). Reallocates sim FBOs only when the aspect
+   *  actually shifts the rounded simW by at least one cell — small
+   *  drift inside the same cell count is a no-op. */
+  setSimAspect(aspect: number) {
+    if (!isFinite(aspect) || aspect <= 0) return;
+    if (Math.abs(aspect - this.simAspect) < 1e-4) return;
+    this.simAspect = aspect;
+    this.allocateTextures(this.params.simResolution);
   }
 
   /** (Re)allocate the half/quarter/eighth bloom FBOs at the current canvas size. */
@@ -1117,7 +1164,9 @@ export class FluidEngine {
     // TSAA: push jitter scale + blue-noise texture. When tsaa is off or
     // jitter has converged to the sample cap, uJitterScale drops to 0 so
     // the iteration runs at exact pixel centers (no wobble).
-    const jitterActive = this.params.tsaa && this.tsaaSampleIndex < this.params.tsaaSampleCap;
+    // tsaaSampleCap === 0 means infinite — never converged.
+    const cap = this.params.tsaaSampleCap;
+    const jitterActive = this.params.tsaa && (cap <= 0 || this.tsaaSampleIndex < cap);
     const jitterScale = jitterActive ? this.params.tsaaJitterAmount : 0.0;
     gl.uniform1f(this.progJulia.uniforms['uJitterScale'], jitterScale);
     gl.uniform2f(this.progJulia.uniforms['uResolution'], this.simW, this.simH);
@@ -1140,13 +1189,17 @@ export class FluidEngine {
 
   /** TSAA blend pass. Reads juliaCur (current jittered frame) + juliaTsaa
    *  (history), writes the running average to juliaTsaaPrev, swaps.
-   *  Samples past the cap are skipped — accumulator is already converged. */
+   *  Samples past the cap are skipped — accumulator is already converged.
+   *  tsaaSampleCap === 0 means infinite (no clamp, no early return). */
   private runTsaaBlend() {
-    if (this.tsaaSampleIndex >= this.params.tsaaSampleCap) return;
+    const cap = this.params.tsaaSampleCap;
+    if (cap > 0 && this.tsaaSampleIndex >= cap) return;
     const gl = this.gl;
 
     // Increment first so frame 1 gets index=1 (overwrite history with current).
-    this.tsaaSampleIndex = Math.min(this.tsaaSampleIndex + 1, this.params.tsaaSampleCap);
+    this.tsaaSampleIndex = cap > 0
+        ? Math.min(this.tsaaSampleIndex + 1, cap)
+        : this.tsaaSampleIndex + 1;
 
     // Write to juliaTsaaPrev; we swap at the end so juliaTsaa is always "current history".
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaTsaaPrev.fbo);
@@ -1522,11 +1575,19 @@ export class FluidEngine {
     this.updateTsaaHash();
     this.frameCount++;
 
-    // 1. Julia pass
-    this.renderJulia();
-    // 1b. TSAA blend — averages the jittered Julia into a history FBO.
-    // When disabled, skips (consumers fall back to juliaCur via juliaReadFbo).
-    if (this.params.tsaa) this.runTsaaBlend();
+    // 1. Julia pass. Once TSAA has reached its cap the accumulator is
+    // frozen — re-rendering would just blend into a stale history.
+    // updateTsaaHash() resets the index on any Julia-affecting param
+    // change, so scrubs / camera moves re-engage rendering on the next
+    // frame. tsaaSampleCap === 0 disables the short-circuit (infinite
+    // accumulation).
+    const tsaaConverged = this.params.tsaa
+        && this.params.tsaaSampleCap > 0
+        && this.tsaaSampleIndex >= this.params.tsaaSampleCap;
+    if (!tsaaConverged) {
+      this.renderJulia();
+      if (this.params.tsaa) this.runTsaaBlend();
+    }
     // 1c. Collision mask (always — emits zeros when disabled so downstream
     // shaders have a single fast path through texture(uMask, ...)).
     this.computeMask();

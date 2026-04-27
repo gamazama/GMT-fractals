@@ -47,29 +47,48 @@ export const PauseControls: React.FC = () => {
     const handleMouseEnter = () => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current); setShowMenu(true); };
     const handleMouseLeave = () => { hoverTimeout.current = window.setTimeout(() => setShowMenu(false), 150); };
 
-    let borderText: string;
-    if (isEffectivePaused)  borderText = 'border-amber-500/40 text-amber-400';
-    else if (isDone)        borderText = 'border-green-500/40 text-green-400';
-    else                    borderText = 'border-white/10 text-gray-500 hover:text-gray-300 hover:border-white/20';
-
-    const fillColor = isDone ? 'bg-green-500/20' : isEffectivePaused ? 'bg-amber-500/20' : 'bg-cyan-500/15';
+    // The button has three visual tones — paused (amber), done
+    // (green), and active/accumulating (cyan). One lookup keeps the
+    // border, fill, edge accent, and icon colour in sync; the
+    // edge-accent + width transition give a smooth fill-up rather
+    // than per-frame snapping.
+    const tone = isEffectivePaused ? 'paused' : isDone ? 'done' : 'active';
+    const TONES = {
+        paused: { border: 'border-amber-500/40',                          fill: 'bg-amber-500/30', edge: 'bg-amber-400/60', text: 'text-amber-300' },
+        done:   { border: 'border-green-500/40',                          fill: 'bg-green-500/35', edge: 'bg-green-400/60', text: 'text-green-300' },
+        active: { border: 'border-white/10 hover:border-white/25',        fill: 'bg-cyan-500/30',  edge: 'bg-cyan-400/60',  text: 'text-cyan-200'  },
+    } as const;
+    const { border: borderClass, fill: fillColor, edge: fillEdge, text: activeColor } = TONES[tone];
+    const inactiveColor = 'text-gray-600';
 
     return (
         <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
             <button
                 onClick={() => setIsPaused(!isPaused)}
                 title={isPaused ? 'Resume Rendering' : isDone ? `Done — ${accumCount} samples` : 'Pause Rendering'}
-                className={`relative overflow-hidden p-0.5 rounded border transition-colors ${borderText}`}
+                className={`relative overflow-hidden flex items-center gap-1.5 px-2 py-1 rounded border transition-colors ${borderClass}`}
             >
                 {/* Progress fill — grows left→right as frames accumulate */}
                 {progress > 0 && (
-                    <span
-                        className={`absolute inset-0 ${fillColor}`}
-                        style={{ width: `${progress * 100}%` }}
-                    />
+                    <>
+                        <span
+                            className={`absolute inset-y-0 left-0 ${fillColor} transition-[width] duration-150`}
+                            style={{ width: `${progress * 100}%` }}
+                        />
+                        {/* Right-edge accent — 1px highlight at the fill front */}
+                        {progress < 1 && (
+                            <span
+                                className={`absolute inset-y-0 ${fillEdge} transition-[left] duration-150`}
+                                style={{ left: `calc(${progress * 100}% - 1px)`, width: '1px' }}
+                            />
+                        )}
+                    </>
                 )}
-                <span className="relative">
-                    {isEffectivePaused ? <PlayIcon /> : <PauseIcon />}
+                <span className={`relative flex items-center justify-center transition-colors ${isEffectivePaused ? activeColor : inactiveColor}`}>
+                    <PlayIcon />
+                </span>
+                <span className={`relative flex items-center justify-center transition-colors ${isEffectivePaused ? inactiveColor : activeColor}`}>
+                    <PauseIcon />
                 </span>
             </button>
 

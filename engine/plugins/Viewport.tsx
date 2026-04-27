@@ -19,34 +19,12 @@
 
 import { useEngineStore } from '../../store/engineStore';
 
-export interface ViewportAdaptiveConfig {
-    /** Master adaptive toggle. When false, qualityFraction stays at 1. */
-    enabled: boolean;
-    /** Target FPS the adaptive loop aims for. 0 = manual mode (uses
-     *  interactionDownsample as a fixed factor). Typical: 30 for heavy
-     *  apps (fractal raymarching), 45-60 for lighter ones. */
-    targetFps: number;
-    /** Floor for qualityFraction; ensures the app never drops below
-     *  legibility. Typical: 0.25 (max scale 4x) to 0.4. */
-    minQuality: number;
-    /** Manual-mode fallback: qualityFraction when targetFps === 0.
-     *  Typical: 0.5 = half-resolution. */
-    interactionDownsample: number;
-    /** Default hold duration multiplier for `holdAdaptive(durationMs?)`:
-     *  when called with no argument, hold = activityGraceMs * 4.
-     *
-     *  Historically this also gated the post-activity grace window, but
-     *  the shared `engine/AdaptiveResolution` module now FPS-scales the
-     *  grace (1fps → 2s, 30fps+ → 100ms) so this field no longer
-     *  influences settling time. Kept for hold-duration tuning. */
-    activityGraceMs: number;
-    /** When true, adaptive runs always — for apps with no idle state
-     *  (live sims like fluid-toy). When false (default, GMT-style),
-     *  adaptive settles to full-res when the mouse is on the canvas
-     *  and the user hasn't interacted recently (user is enjoying the
-     *  result, not editing). */
-    alwaysActive: boolean;
-}
+// Canonical config type lives in types/viewport.ts so types/store.ts
+// can reference it without importing this React module. Re-exported
+// here so existing `import { ViewportAdaptiveConfig } from '@engine/viewport'`
+// callers don't break.
+export type { ViewportAdaptiveConfig } from '../../types/viewport';
+import type { ViewportAdaptiveConfig } from '../../types/viewport';
 
 // Track whether installViewport has wired its one-time subscriptions.
 // Idempotent so multiple install calls (from different bundles) are safe.

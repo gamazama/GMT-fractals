@@ -61,21 +61,32 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
 
 registerUI();
 
-// Install @engine/viewport. Fluid sims are sensitive to resolution —
-// the user DOES notice when simResolution drops — so we ramp gradually
-// with a longer cooldown. Target 45 fps because fluid sim can usually
-// sustain that on modest hardware at reasonable resolutions.
-// Fluid sim has no idle state (simulation always runs), so alwaysActive=true
-// keeps adaptive engaged rather than letting it settle to full-res after
-// "activity" stops. Smart mode converges to targetFps via GMT's sqrt-based
-// scale math — see viewportSlice.ts reportFps.
+// Override the default sampleCap (256, sized for GMT's path tracer).
+// Fluid-toy's TSAA only needs a fraction of that to look clean —
+// 64 samples ≈ 1s of accumulation at 60fps. The deep-accum gate
+// in viewportSlice fires at sampleCap/2 = 32, so adaptive stops
+// kicking in well before the fractal fully settles, keeping unrelated
+// slider drags from flipping resolution.
+useEngineStore.getState().setSampleCap(64);
+
+// Install @engine/viewport. Adaptive scales ONLY the fractal/canvas
+// render target (FluidToyApp wires `quality` into engine.resize()).
+// The fluid sim grid runs at the user's chosen resolution full-time —
+// adaptive does not touch it.
+//
+// engageOnAccumOnly: adaptive fires ONLY while the fractal's
+// accumulator is being reset (camera pan, Julia param scrub). Dragging
+// unrelated UI sliders or moving the mouse off the canvas does not
+// drop quality. The deep-accum gate (sampleCap/2) closes the loop —
+// once the fractal has settled, adaptive can't re-engage until the
+// next genuine fractal-invalidating change.
 installViewport({
     enabled: true,
-    alwaysActive: true,
     targetFps: 45,
     minQuality: 0.4,
     interactionDownsample: 0.5,  // manual-mode fallback when targetFps=0
     activityGraceMs: 100,
+    engageOnAccumOnly: true,
 });
 
 // @engine/topbar — registers default items (project name, FPS, adaptive

@@ -85,6 +85,8 @@ const result = tickAdaptiveResolution(state, {
     alwaysActive,                        // default false (live sims set true)
     holdUntilMs,                         // default 0 (no hold)
     suppressed,                          // default false (export forces this)
+    accumThreshold,                      // override deep-accum threshold (e.g. floor(sampleCap*0.5))
+    gateOnAccumOnly,                     // default false; true = accum drop is the only adaptive trigger
 });
 // result.scale, result.needsAdaptive, result.grace
 ```
@@ -93,13 +95,14 @@ const result = tickAdaptiveResolution(state, {
 
 1. **Activity tracking** — bumps `lastActivityTime` on `isInteracting`, *or* on an external `accumCount` drop (something invalidated the buffer). The renderer's `selfResized` flag suppresses self-caused drops.
 
-2. **Deep-accumulation protection** — only samples accumulated at full res count toward a threshold (8–50, FPS-scaled). Past threshold, adaptive is suppressed everywhere — protects quality results when user moves mouse to UI.
+2. **Deep-accumulation protection** — only samples accumulated at full res count toward a threshold. The caller may pass `accumThreshold` to override (apps with a known sampleCap typically pass `floor(sampleCap * 0.5)` so "halfway accumulated" is the cutoff); when omitted, the FPS-scaled default applies (8–50). Past threshold, adaptive is suppressed everywhere — protects partial high-quality results when the user moves the mouse off the canvas mid-render.
 
 3. **Adaptive-on decision**:
    - Suppressed → off (force scale 1).
    - Deep accumulation → off.
    - `alwaysActive` → on (no idle settle — live sims).
-   - Otherwise: on while interacting OR mouse-off-canvas OR within grace window.
+   - `gateOnAccumOnly = true` → on only while `timeSinceActivity < grace` (i.e. the renderer's accumCount actually just dropped). `isInteracting` and `mouseOverCanvas` are ignored. Use for apps where the accumulator is the truth signal — fluid-toy: dragging the vorticity slider doesn't invalidate the fractal accumulator, so it shouldn't drop quality either.
+   - Otherwise (the default GMT-style path): on while interacting OR mouse-off-canvas OR within grace window.
 
 4. **Scale computation (smart, `adaptiveTarget > 0`)**:
    - First window after seed: 200ms + jump-to-ideal (no EMA lag).
@@ -151,16 +154,32 @@ The worker is the source of truth for adaptive scale in GMT. Main-thread `viewpo
 FluidEngine.useFrame
     viewport.frameTick()
         viewportSlice.reportFps(0)
-            tickAdaptiveResolution(_adaptive, { ...inputs }) ──┐
-                                                               │
-            qualityFraction = 1 / result.scale ◀───────────────┘
+            tickAdaptiveResolution(_adaptive, {
+                ...inputs,
+                accumCount: store.accumulationCount,        // pushed by useFluidEngine RAF
+                accumThreshold: floor(sampleCap * 0.5),     // halfway → adaptive locked off
+                gateOnAccumOnly: true,                      // only fractal-invalidating activity engages adaptive
+            }) ──┐
+                  │
+            qualityFraction = 1 / result.scale ◀──┘
             store.set({ qualityFraction })
 
-FluidToyApp subscribes to qualityFraction:
-    fluidEngine.setParams({ simResolution: target * qualityFraction })
+FluidToyApp resize useEffect:
+    engine.setSimAspect(physW / physH)                      // sim grid aspect from unscaled CSS, not canvas
+    engine.resize(logicalW * quality, logicalH * quality)   // canvas/fractal target only
+    engine.redraw()                                         // suppress black-flash on adaptive nudge
+
+FluidToyApp setParams useEffect:
+    engine.setParams({ tsaaSampleCap: store.sampleCap })    // 0 = infinite (engine-side semantic)
 ```
 
-Fluid-toy has no worker; the algorithm runs on the main thread and the renderer reads the resulting `qualityFraction` from the store.
+Two scales, decoupled:
+- **Fractal/canvas render target** scales with `qualityFraction`. Adaptive only engages when the fractal accumulator actually resets (Julia c, zoom, palette mapping, etc.); unrelated UI activity has no effect.
+- **Sim grid (dye, velocity, pressure)** runs at the user's chosen `simResolution` full-time. Aspect is locked to the unscaled CSS aspect via `setSimAspect()` so adaptive-induced canvas-dimension drift can't trip a sim FBO reallocation that would wipe dye.
+
+Fluid-toy has no worker; the algorithm runs on the main thread and the renderer reads `qualityFraction` from the store. The Pause popover's `sampleCap` (default 64 for fluid-toy, set via `setSampleCap(64)` at boot) is the source of truth for both `engine.tsaaSampleCap` (when the fractal stops re-rendering) and the adaptive deep-accum gate (`sampleCap/2`).
+
+> **FluidEngine does not implement AccumulationController.** The interface's `isPaused` is documented as "no new samples added" — designed around path tracers where pause == accumulator pause. Fluid-toy has three independent controls (`accumulation` TSAA toggle, `isPaused` *sim* pause, `sampleCap`) and pause means "freeze the dye/velocity sim while the fractal keeps accumulating." Force-fitting this onto AccumulationController would conflate two distinct controls under one name. The current direct wiring (`reportAccumulation` from the RAF loop, three small `setParams` forwarders in FluidToyApp) is shorter and more honest about the semantics. Worth revisiting if a second main-thread accumulating renderer arrives and a shared shape becomes empirical.
 
 ## Authoring a new accumulating renderer
 
