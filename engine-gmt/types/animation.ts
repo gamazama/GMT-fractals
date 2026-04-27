@@ -18,8 +18,9 @@ export interface AnimationParams {
     phase: number;
     smoothing: number;
     pulseWidth?: number;
-    /** Output range. When both defined, engine uses [min, max]; falls
-     *  back to baseValue ± amplitude otherwise. See engine/types/animation. */
+    /** Strength offsets applied to baseValue (output =
+     *  baseValue + lerp(min, max, (rawWave+1)/2)). Engine falls
+     *  back to ± amplitude when both undefined. */
     min?: number;
     max?: number;
 }

@@ -23,10 +23,13 @@ export interface AnimationParams {
     phase: number;
     smoothing: number;
     pulseWidth?: number;
-    /** Output range floor. When BOTH `min` and `max` are defined the
-     *  engine maps the waveform into [min, max] directly (rawWave −1
-     *  → min, +1 → max). Either undefined → fall back to `baseValue`
-     *  ± `amplitude`. */
+    /** Strength offsets applied to baseValue. Output is
+     *  `baseValue + lerp(min, max, (rawWave + 1) / 2)` —
+     *  rawWave=−1 hits `baseValue + min`, rawWave=+1 hits
+     *  `baseValue + max`. min < 0 lets the LFO push the param
+     *  below baseValue. Both undefined → engine falls back to
+     *  symmetric `± amplitude`. Asymmetric ranges are first-class
+     *  (e.g. min=−0.5, max=2 for a "kick up but barely dip" feel). */
     min?: number;
     max?: number;
 }

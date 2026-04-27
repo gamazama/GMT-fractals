@@ -127,11 +127,9 @@ async function main() {
         throw new Error(`Overlay did not wiggle — sweep ${sweep.toFixed(2)}% < ${MIN_DELTA_PCT}%. DemoOverlay may not be reading liveModulations correctly.`);
     }
 
-    // 7) Min/max path — push an LFO using min/max instead of amplitude.
-    //    Ranges chosen so the output should swing between 0.3 and 0.7
-    //    (centered at 0.5, half-range 0.2). With baseValue=0 the
-    //    expected offset range is [0.3, 0.7] which becomes the
-    //    liveMod value (composed as base + offset = 0 + offset).
+    // 7) min/max path — RELATIVE strengths (offset added to baseValue).
+    //    base=120, min=-40, max=+80 → output in [80, 200]. Asymmetric
+    //    on purpose to verify min != −max behaviour.
     await page.evaluate(() => {
         const s = (window as any).__store?.getState?.();
         s?.setAnimations?.([
@@ -140,11 +138,11 @@ async function main() {
                 enabled: true,
                 target: 'demo.size',
                 shape: 'Sine',
-                period: 0.5,         // fast — guaranteed sweep within 1s sampling
-                amplitude: 0,        // legacy field unused when min/max present
-                baseValue: 120,      // matches DDFS default for demo.size
-                min: 80,
-                max: 200,
+                period: 0.5,
+                amplitude: 0,
+                baseValue: 120,
+                min: -40,
+                max: 80,
                 phase: 0,
                 smoothing: 0,
             },
@@ -152,13 +150,12 @@ async function main() {
     });
     await page.waitForTimeout(400);
     const sizeMod = await page.evaluate(() => (window as any).__store?.getState?.()?.liveModulations?.['demo.size'] ?? null);
-    console.log('liveModulations[demo.size] (min/max LFO):', sizeMod);
+    console.log('liveModulations[demo.size] (relative min/max):', sizeMod);
     if (typeof sizeMod !== 'number' || sizeMod < 75 || sizeMod > 205) {
-        throw new Error(`min/max LFO output out of expected [80, 200] range: ${sizeMod}`);
+        throw new Error(`relative min/max LFO output out of [80, 200]: ${sizeMod}`);
     }
 
-    // 8) Noise path — use shape='Noise' with period=0.5, expect smooth
-    //    pseudo-random output in roughly the configured range.
+    // 8) Noise path — base=0.6, min=-0.3, max=+0.4 → output in [0.3, 1.0].
     await page.evaluate(() => {
         const s = (window as any).__store?.getState?.();
         s?.setAnimations?.([
@@ -169,9 +166,9 @@ async function main() {
                 shape: 'Noise',
                 period: 0.5,
                 amplitude: 0,
-                baseValue: 0.9,
-                min: 0.3,
-                max: 1.0,
+                baseValue: 0.6,
+                min: -0.3,
+                max: 0.4,
                 phase: 0,
                 smoothing: 0,
             },

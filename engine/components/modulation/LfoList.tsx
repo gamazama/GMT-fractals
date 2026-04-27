@@ -41,10 +41,10 @@ export const LfoList: React.FC = () => {
         if (animations.length >= cfg.maxLfos) return;
         const target = cfg.defaultTarget ?? '';
         const baseValue = target ? cfg.seedBaseValue(target, useEngineStore.getState()) : 0;
-        // Default range is baseValue ± 1, a sensible neutral starting
-        // point that gives a visible reaction for most params. The user
-        // tweaks Min / Max to taste. `amplitude` is kept in sync (= 1)
-        // for back-compat with consumers that still read it directly.
+        // Default min / max are RELATIVE strengths around baseValue
+        // (output = baseValue + lerp(min, max, half-rectified rawWave)),
+        // so −1 / +1 sweeps ± 1 around the param's authored value.
+        // `amplitude` kept at 1 for back-compat with old reads.
         const newLfo: AnimationParams = {
             id: nanoid(),
             enabled: true,
@@ -53,22 +53,21 @@ export const LfoList: React.FC = () => {
             period: 5.0,
             amplitude: 1.0,
             baseValue,
-            min: baseValue - 1,
-            max: baseValue + 1,
+            min: -1,
+            max: 1,
             phase: 0.0,
             smoothing: 0.5,
         };
         setAnimations([...animations, newLfo]);
     };
 
-    // Read effective min/max for the current LFO (handles legacy LFOs
-    // without min/max set — derive from baseValue ± amplitude). Keeps
-    // existing presets editable in the new UI.
+    // Effective relative-strength range. Legacy LFOs (no min/max) are
+    // shown as symmetric ±amplitude strengths so they edit cleanly.
     const effectiveRange = (anim: AnimationParams): { min: number; max: number } => {
         if (typeof anim.min === 'number' && typeof anim.max === 'number') {
             return { min: anim.min, max: anim.max };
         }
-        return { min: anim.baseValue - anim.amplitude, max: anim.baseValue + anim.amplitude };
+        return { min: -anim.amplitude, max: anim.amplitude };
     };
 
     const removeAnimation = (id: string) => {
@@ -163,20 +162,20 @@ export const LfoList: React.FC = () => {
                                 />
                                 {(() => {
                                     const { min, max } = effectiveRange(anim);
-                                    // Symmetric ±10 range matches the legacy
-                                    // amplitude slider's [-10, 10] reach. Apps with
-                                    // wildly different param ranges can edit values
-                                    // directly via the input field.
+                                    // RELATIVE strengths around the param's
+                                    // baseValue. Negative = downward push,
+                                    // positive = upward. Symmetric ±10 reach
+                                    // matches the legacy amplitude slider.
                                     return (
                                         <>
                                             <Slider
-                                                label="Min" value={min}
+                                                label="Min strength" value={min}
                                                 min={-10} max={10} step={0.001}
                                                 onChange={(v) => updateAnimation(anim.id, { min: v, max: Math.max(v, max) })}
                                                 overrideInputText={Math.abs(min) < 0.1 ? min.toFixed(3) : min.toFixed(2)}
                                             />
                                             <Slider
-                                                label="Max" value={max}
+                                                label="Max strength" value={max}
                                                 min={-10} max={10} step={0.001}
                                                 onChange={(v) => updateAnimation(anim.id, { min: Math.min(v, min), max: v })}
                                                 overrideInputText={Math.abs(max) < 0.1 ? max.toFixed(3) : max.toFixed(2)}

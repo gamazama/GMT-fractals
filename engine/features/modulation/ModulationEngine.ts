@@ -61,20 +61,23 @@ class ModulationEngine {
             const normalizedLfo = rawWave * 0.5 + 0.5;
             this.lfoValues[`lfo-${i+1}`] = normalizedLfo;
 
-            // Map waveform → output offset.
+            // Map waveform → offset relative to baseValue.
+            // AnimationSystem composes the final value as base + offset.
             //
-            // New (min/max) model when both are defined:
-            //   output  = mid + halfRange * rawWave    where mid = (min+max)/2, halfRange = (max-min)/2
-            //   offset  = output − baseValue            (AnimationSystem composes liveMod = base + offset)
+            // New (min/max as RELATIVE strengths, with min/max usually
+            // straddling 0 to swing both sides of base):
+            //   offset = lerp(min, max, (rawWave + 1) / 2)
+            //          = mid + halfRange * rawWave   where mid = (min+max)/2,
+            //                                              halfRange = (max-min)/2
+            //   so rawWave=−1 → baseValue + min, rawWave=+1 → baseValue + max.
             //
-            // Legacy fallback (amplitude only — preserves old preset
-            // behaviour on load until the LFO is re-edited):
-            //   offset  = amplitude * rawWave
+            // Legacy fallback (preserves old preset behaviour on load):
+            //   offset = amplitude * rawWave    (symmetric ± amplitude)
             let targetOffset: number;
             if (typeof anim.min === 'number' && typeof anim.max === 'number') {
                 const mid = (anim.min + anim.max) * 0.5;
                 const halfRange = (anim.max - anim.min) * 0.5;
-                targetOffset = (mid - anim.baseValue) + halfRange * rawWave;
+                targetOffset = mid + halfRange * rawWave;
             } else {
                 targetOffset = rawWave * anim.amplitude;
             }
