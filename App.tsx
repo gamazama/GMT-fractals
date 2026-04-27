@@ -11,6 +11,9 @@ import { RenderLoopDriver } from './engine/plugins/RenderLoop';
 import { useAppStartup } from './hooks/useAppStartup';
 import { prefetchHelpTopics } from './data/help/registry';
 import { TimelineHost } from './components/TimelineHost';
+import { TopBarHost } from './engine/plugins/TopBar';
+import { HudHost } from './engine/plugins/Hud';
+import { HelpOverlay } from './engine/plugins/Help';
 
 // --- Code-split: loaded on demand ---
 const HelpBrowser = React.lazy(() => import('./components/HelpBrowser'));
@@ -107,7 +110,9 @@ const App: React.FC = () => {
             </div>
         )}
 
-        {/* Apps install their own TopBar component here. */}
+        {/* @engine/topbar mounts here — apps that don't installTopBar()
+            see nothing rendered (the Host returns null with no items). */}
+        <TopBarHost />
 
         <div className="flex-1 flex overflow-hidden relative">
             {!isBroadcast && !isCurrentlyMobile && <Dock side="left" />}
@@ -118,9 +123,12 @@ const App: React.FC = () => {
                 activeHint={null}
                 onDismissHint={() => {}}
             />
+            <HudHost />
 
             {!isBroadcast && <Dock side="right" />}
         </div>
+
+        <HelpOverlay />
 
         {!isBroadcast && <MobileControls />}
 

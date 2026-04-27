@@ -570,9 +570,17 @@ export const validateComponentRefs = (
     }
     if (missing.length && typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
         for (const m of missing) {
-            console.error(
+            // console.warn (not error) because some customUI references
+            // are legitimately app-conditional — e.g. ColorGrading's
+            // 'scene-histogram' lives in engine-gmt's UI registration
+            // and is absent in the bare engine demo. AutoFeaturePanel
+            // already silently skips unresolved customUI at render
+            // time. The message still points at the exact feature +
+            // site + id so genuine typos are easy to spot in the
+            // console without making smokes fail on `console.error`.
+            console.warn(
                 `[FeatureRegistry] feature '${m.featureId}'.${m.site} references componentId '${m.componentId}' which is not in the componentRegistry. ` +
-                `Either register the component or fix the typo.`,
+                `Either register the component, fix the typo, or accept the silent skip if this is an app-optional reference.`,
             );
         }
     }

@@ -11,6 +11,30 @@ import App from './App';
 import { registerUI } from './engine/features/ui';
 import { wireDemoPanel } from './demo/setup';
 
+// Core plugin installs. Each is a one-liner that demonstrates
+// "register a feature, get this for free":
+//   topbar      — host slot for save/load + undo/redo + custom items
+//   scene-io    — Save / Load buttons; demo state round-trips through
+//                 SceneFormat without any per-feature plumbing
+//   shortcuts   — keyboard registry; required by undo and the R-to-
+//                 randomize binding registered in demo/setup.ts
+//   undo        — Ctrl+Z / Ctrl+Y on every DDFS slice change for free,
+//                 plus Undo/Redo topbar buttons
+//   help        — "?" menu in the topbar + <HelpOverlay /> mounted in App
+//   hud         — generic slot host so the cheatsheet pill has a home
+//   modulation  — animation/LFO tick. Demo doesn't ship a track yet but
+//                 the tick must exist for animationStore consumers (e.g.
+//                 the timeline) to advance. Cheap test of generic
+//                 behaviour: if the demo boots clean with this on,
+//                 modulation has no app-specific assumptions.
+import { installTopBar } from './engine/plugins/TopBar';
+import { installSceneIO } from './engine/plugins/SceneIO';
+import { installShortcuts } from './engine/plugins/Shortcuts';
+import { installUndo } from './engine/plugins/Undo';
+import { installHelp } from './engine/plugins/Help';
+import { installHud } from './engine/plugins/Hud';
+import { installModulation } from './engine/animation/modulationTick';
+
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -26,7 +50,17 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
 // Initialize the engine's UI registry (AutoFeaturePanel + built-in components)
 registerUI();
 
-// Add-on: wire the demo panel into the right dock. Requires the store
+// Install core plugins — order doesn't matter, they're independent.
+installTopBar();
+installSceneIO();
+installShortcuts();
+installUndo();
+installHelp();
+installHud();
+installModulation();
+
+// Add-on: wire the demo panel into the right dock + register the
+// R-to-randomize shortcut + bottom-left hint pill. Requires the store
 // to exist, so it runs after App has been imported.
 wireDemoPanel();
 
