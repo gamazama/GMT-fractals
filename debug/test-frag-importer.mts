@@ -16,7 +16,7 @@ import type { TransformedFormulaV2, FragDocumentV2 } from '../features/fragmenta
 const VERBOSE = process.argv.includes('--verbose');
 const FILTER  = process.argv.slice(2).find(a => !a.startsWith('-') && !a.includes('/') && !a.includes('\\') && !a.includes('.') && !a.includes('test-frag'));
 const REF     = 'features/fragmentarium_import/reference/Examples';
-const ROOT    = 'h:/GMT/gmt-0.8.5';
+const ROOT    = 'h:/GMT/workspace-gmt/stable';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

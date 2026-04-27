@@ -21,7 +21,7 @@ import { preprocessDEC } from '../features/fragmentarium_import/parsers/dec-prep
 const VERBOSE = process.argv.includes('--verbose');
 const FILTER = process.argv.slice(2).find(a => !a.startsWith('-') && !a.includes('/') && !a.includes('\\') && !a.includes('.') && !a.includes('test-frag'));
 const REF = 'features/fragmentarium_import/reference/Examples';
-const ROOT = 'h:/GMT/gmt-0.8.5';
+const ROOT = 'h:/GMT/workspace-gmt/stable';
 
 const ok  = (s: string) => `\x1b[32m✓\x1b[0m  ${s}`;
 const err = (s: string) => `\x1b[31m✗\x1b[0m  ${s}`;

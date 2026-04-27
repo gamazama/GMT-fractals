@@ -38,7 +38,7 @@ const FILTER   = process.argv.slice(2).find(a =>
 );
 
 const REF  = 'features/fragmentarium_import/reference/Examples';
-const ROOT = path.resolve('h:/GMT/gmt-0.8.5');
+const ROOT = path.resolve('h:/GMT/workspace-gmt/stable');
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
 
