@@ -42,7 +42,13 @@ import { FormulaSelect } from '../components/panels/formula/FormulaSelect';
 import { QualityRenderControls } from '../components/panels/quality/QualityRenderControls';
 import LightPanelControls from '../components/panels/lighting/LightPanelControls';
 import { FormulaParamsWidget } from '../components/panels/formula/FormulaParamsWidget';
-import { LfoList } from '../components/panels/formula/LfoList';
+// LfoList lifted to engine/components/modulation. installModulationUI()
+// registers `'lfo-list'` so the manifest entry below would normally be
+// redundant — but app-gmt installs UI components from this single
+// registerGmtUi() pass and we keep the explicit registration for
+// audit-traceability. setLfoListConfig (also from the lifted module)
+// configures GMT's defaults — see app-gmt/main.tsx.
+import { LfoList } from '../../engine/components/modulation';
 import LightGizmo, { tick as lightGizmoTick } from './lighting/LightGizmo';
 import { DrawingOverlay, tick as drawingOverlayTick } from './drawing/DrawingOverlay';
 import { DrawingPanel } from './drawing/DrawingPanel';
@@ -145,12 +151,9 @@ export const registerGmtUi = () => {
     componentRegistry.register('light-panel-controls', LightPanelControls);
     componentRegistry.register('formula-params', FormulaParamsWidget);
 
-    // LfoList reads full store state + actions — wrap to FeatureComponentProps shape
-    const LfoListWidget: React.FC<FeatureComponentProps> = () => {
-        const store = useEngineStore();
-        return <LfoList state={store as any} actions={store as any} />;
-    };
-    componentRegistry.register('lfo-list', LfoListWidget);
+    // LfoList no longer needs a store-wrapping shim — the lifted
+    // version reads the engine store itself via useEngineStore.
+    componentRegistry.register('lfo-list', LfoList);
     componentRegistry.register('overlay-lighting', LightGizmo);
     registerTick('lightGizmoTick', TICK_PHASE.OVERLAY, lightGizmoTick);
 

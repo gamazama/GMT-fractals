@@ -16,6 +16,12 @@
  * No reinvention — this function is GMT's production logic, just
  * registered into the plugin TickRegistry so the engine fork's apps
  * can drive it without mounting GMT's ViewportArea.
+ *
+ * Optional UI: pair with `installModulationUI()` from
+ * `engine/components/modulation` to register the `'lfo-list'`
+ * panel widget. The widget gives the user an "Add LFO" button + per-LFO
+ * controls (target / shape / period / strength / smoothing) writing
+ * into `state.animations` — which this tick then processes.
  */
 
 import { registerTick, TICK_PHASE } from '../TickRegistry';

@@ -33,6 +33,7 @@ import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installModulation } from '../engine/animation/modulationTick';
+import { installModulationUI, setLfoListConfig } from '../engine/components/modulation';
 import { installShortcuts, shortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installCamera } from '../engine/plugins/Camera';
@@ -160,6 +161,16 @@ installSceneIO({
 });
 
 installModulation();
+// GMT's LFO defaults: a fresh LFO targets coreMath.paramA (the first
+// formula param) so the user gets a visible reaction immediately
+// after clicking "Add LFO". The default seedBaseValue handler already
+// reads state.coreMath.paramA correctly via the generic `<fid>.<pid>`
+// path, so no resolver override needed.
+setLfoListConfig({ defaultTarget: 'coreMath.paramA' });
+// engine-gmt/features/ui.tsx already registers `'lfo-list'` directly
+// (it does the same registry calls as installModulationUI); this call
+// is harmless (idempotent) and documents intent for the GMT app.
+installModulationUI();
 installShortcuts();
 installUndo();
 // hideShortcuts: GMT's camera state lives in the savedCameras state-library
