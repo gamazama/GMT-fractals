@@ -20,4 +20,4 @@ import { DemoFeature } from './DemoFeature';
 import { DemoOverlay } from './DemoOverlay';
 
 featureRegistry.register(DemoFeature);
-componentRegistry.register('overlay-demo', DemoOverlay as any);
+componentRegistry.register('overlay-demo', DemoOverlay);

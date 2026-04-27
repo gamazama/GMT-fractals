@@ -34,8 +34,8 @@ import { JuliaCPicker } from './components/JuliaCPicker';
 // the feature/component registries' frozen state. Register those in
 // main.tsx after the store is constructed so their module-scope
 // `useEngineStore` imports don't freeze the registry pre-registration.
-componentRegistry.register('julia-c-picker', JuliaCPicker as any);
-componentRegistry.register('preset-grid', PresetGrid as any);
+componentRegistry.register('julia-c-picker', JuliaCPicker);
+componentRegistry.register('preset-grid', PresetGrid);
 
 // Fractal tab — kind, c, zoom, center, iter, power, plus the
 // palette-bound params (hidden from this tab, surfaced in Palette).

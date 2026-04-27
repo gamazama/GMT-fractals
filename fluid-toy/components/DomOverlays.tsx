@@ -32,7 +32,7 @@ export const DomOverlays: React.FC = () => {
 // don't change between renders so we don't subscribe to them.
 const DomOverlayInstance: React.FC<{
     cfg: { id: string; componentId: string };
-    Component: React.FC<any>;
+    Component: React.ComponentType<any>;
 }> = ({ cfg, Component }) => {
     const slice = useEngineStore((s: any) => s[cfg.id]);
     if (!slice) return null;

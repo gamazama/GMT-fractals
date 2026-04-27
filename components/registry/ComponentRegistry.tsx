@@ -1,7 +1,10 @@
 
 import React from 'react';
 
-// Define the interface for components used in the registry
+// Define the interface for components used in the registry. DDFS-driven
+// panels/overlays receive these props from AutoFeaturePanel. Bespoke
+// panels/widgets registered into the same registry may take any prop
+// shape — that's why `register` accepts `React.ComponentType<any>`.
 export interface FeatureComponentProps {
     featureId: string;
     sliceState: any;
@@ -9,7 +12,13 @@ export interface FeatureComponentProps {
     [key: string]: any; // Allow arbitrary props from definition
 }
 
-type ComponentType = React.FC<FeatureComponentProps> | React.FC<any>;
+// Use `React.ComponentType<any>` so apps can register zero-prop view
+// panels (StateLibrary, FormulaSelect, …) alongside DDFS feature
+// components without a per-call `as any`. The previous union type
+// (FC<FeatureComponentProps> | FC<any>) failed TS variance — the
+// compiler couldn't pick a branch and forced casts at every register
+// site (28 across the project before this change).
+type ComponentType = React.ComponentType<any>;
 
 class ComponentRegistry {
     private components = new Map<string, ComponentType>();

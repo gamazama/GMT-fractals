@@ -204,7 +204,7 @@ installFluidToyViewLibrary();
 // registerFeatures.ts because importing the panel pulls useEngineStore
 // into the module graph, which would freeze the registry before
 // feature registrations complete.
-componentRegistry.register('panel-views', ViewLibraryPanel as any);
+componentRegistry.register('panel-views', ViewLibraryPanel);
 
 setupFluidToy();
 

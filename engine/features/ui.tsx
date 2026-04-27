@@ -46,7 +46,7 @@ export const registerUI = () => {
     // AutoFeaturePanel is imported directly by PanelRouter now; the
     // registry entry is kept for external callers that look it up by id
     // (legacy / external add-ons) and for parity with panel-* naming.
-    componentRegistry.register('auto-feature-panel', AutoFeaturePanel as any);
+    componentRegistry.register('auto-feature-panel', AutoFeaturePanel);
 
     // Engine-shipped generic features' UI
     componentRegistry.register('panel-audio', LazyAudioPanel);

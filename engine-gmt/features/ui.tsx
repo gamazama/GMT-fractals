@@ -133,42 +133,42 @@ const ConnectedFormulaSelect: React.FC = () => {
 export const registerGmtUi = () => {
     // Widgets — auto-slotted by AutoFeaturePanel via each feature's customUI.
     componentRegistry.register('coloring-histogram', ConnectedColoringHistogram);
-    componentRegistry.register('gradient-preview-layer1', GradientPreviewLayer1 as any);
-    componentRegistry.register('gradient-preview-layer2', GradientPreviewLayer2 as any);
-    componentRegistry.register('texturing-source-toggle', TexturingSourceToggle as any);
-    componentRegistry.register('coloring-histogram-layer-marker', HistogramLayerMarker as any);
-    componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock as any);
-    componentRegistry.register('julia-randomize', JuliaRandomize as any);
-    componentRegistry.register('interaction-picker', InteractionPicker as any);
-    componentRegistry.register('formula-select', ConnectedFormulaSelect as any);
-    componentRegistry.register('quality-render-controls', QualityRenderControls as any);
-    componentRegistry.register('light-panel-controls', LightPanelControls as any);
-    componentRegistry.register('formula-params', FormulaParamsWidget as any);
+    componentRegistry.register('gradient-preview-layer1', GradientPreviewLayer1);
+    componentRegistry.register('gradient-preview-layer2', GradientPreviewLayer2);
+    componentRegistry.register('texturing-source-toggle', TexturingSourceToggle);
+    componentRegistry.register('coloring-histogram-layer-marker', HistogramLayerMarker);
+    componentRegistry.register('hybrid-advanced-lock', HybridAdvancedLock);
+    componentRegistry.register('julia-randomize', JuliaRandomize);
+    componentRegistry.register('interaction-picker', InteractionPicker);
+    componentRegistry.register('formula-select', ConnectedFormulaSelect);
+    componentRegistry.register('quality-render-controls', QualityRenderControls);
+    componentRegistry.register('light-panel-controls', LightPanelControls);
+    componentRegistry.register('formula-params', FormulaParamsWidget);
 
     // LfoList reads full store state + actions — wrap to FeatureComponentProps shape
     const LfoListWidget: React.FC<FeatureComponentProps> = () => {
         const store = useEngineStore();
         return <LfoList state={store as any} actions={store as any} />;
     };
-    componentRegistry.register('lfo-list', LfoListWidget as any);
-    componentRegistry.register('overlay-lighting', LightGizmo as any);
+    componentRegistry.register('lfo-list', LfoListWidget);
+    componentRegistry.register('overlay-lighting', LightGizmo);
     registerTick('lightGizmoTick', TICK_PHASE.OVERLAY, lightGizmoTick);
 
-    componentRegistry.register('overlay-drawing', DrawingOverlay as any);
+    componentRegistry.register('overlay-drawing', DrawingOverlay);
     registerTick('drawingOverlayTick', TICK_PHASE.OVERLAY, drawingOverlayTick);
-    componentRegistry.register('panel-drawing', DrawingPanel as any);
+    componentRegistry.register('panel-drawing', DrawingPanel);
 
-    componentRegistry.register('overlay-webcam', WebcamOverlay as any);
-    componentRegistry.register('overlay-debug-tools', DebugToolsOverlay as any);
+    componentRegistry.register('overlay-webcam', WebcamOverlay);
+    componentRegistry.register('overlay-debug-tools', DebugToolsOverlay);
 
     // Scene widgets — slotted via optics / navigation / colorGrading customUI.
     componentRegistry.register('scene-histogram', ConnectedGradingHistogram);
-    componentRegistry.register('optics-controls', OpticsControls as any);
-    componentRegistry.register('optics-dof-controls', OpticsDofControls as any);
-    componentRegistry.register('navigation-controls', NavigationControls as any);
+    componentRegistry.register('optics-controls', OpticsControls);
+    componentRegistry.register('optics-dof-controls', OpticsDofControls);
+    componentRegistry.register('navigation-controls', NavigationControls);
 
     // Bespoke panels — manifest references these by `component:`.
-    componentRegistry.register('panel-engine', EnginePanel as any);
-    componentRegistry.register('panel-cameramanager', CameraManagerPanel as any);
-    componentRegistry.register('panel-graph', React_FlowEditor as any);
+    componentRegistry.register('panel-engine', EnginePanel);
+    componentRegistry.register('panel-cameramanager', CameraManagerPanel);
+    componentRegistry.register('panel-graph', React_FlowEditor);
 };
