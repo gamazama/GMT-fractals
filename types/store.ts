@@ -137,6 +137,12 @@ export interface EngineStoreState extends FeatureStateMap {
   
   resolutionMode: 'Full' | 'Fixed';
   fixedResolution: [number, number];
+  /** Render-scale multiplier on top of the base render dimensions.
+   *  In Full mode, base = window CSS pixels; in Fixed mode, base =
+   *  fixedResolution. Final drawing-buffer = round(base × renderScale ×
+   *  qualityFraction). 1.0 = "match base" (cheap), 2.0 = "Retina-sharp"
+   *  (4× cost). UI snaps to discrete steps; see RENDER_SCALE_STEPS. */
+  renderScale: number;
 
   // Adaptive viewport quality (phase 2b). Apps consume qualityFraction
   // as a hint on [minQuality, 1] — 1 = full quality, lower = reduce
@@ -282,6 +288,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     
     setResolutionMode: (m: 'Full' | 'Fixed') => void;
     setFixedResolution: (w: number, h: number) => void;
+    setRenderScale: (v: number) => void;
     setRenderRegion: (r: { minX: number, minY: number, maxX: number, maxY: number } | null) => void;
     setPreviewRegion: (r: { minX: number, minY: number, maxX: number, maxY: number } | null) => void;
     // setIsControlsDocked: (v: boolean) => void; // Deprecated

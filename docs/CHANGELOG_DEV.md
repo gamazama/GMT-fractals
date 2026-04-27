@@ -4,6 +4,23 @@ Chronological log of significant changes during the v0.9.3 development cycle (en
 
 ## 2026-04-27
 
+### Fluid-toy: render-scale system replaces sim-resolution + Fixed mode + bilinear reprojection
+
+**User-facing**
+- The "Sim resolution" slider is gone. Render resolution is now driven by **mode** (Full / Fixed) × **Render scale** (segmented picker: 0.25× 0.5× 0.75× 1× 1.5× 2×) × adaptive quality. The sim grid and the canvas drawing buffer share one resolution, derived from those three knobs. One mental model instead of three.
+- **Fixed mode works.** Picking Fixed (or dragging the resolution pill in the top-left) sets the canvas to a specific pixel size, letterboxed in the viewport with a centred render box. The fluid sim and fractal render at exactly those dimensions. Render scale still multiplies on top — e.g. Fixed 1920×1080 + 0.5× → renders at 960×540, displayed at 1920×1080. Previously fluid-toy ignored Fixed mode entirely; the canvas stretched to fit the window regardless and the drawing buffer never matched.
+- **Resolution changes (slider, mode switch, adaptive nudge, window resize) no longer wipe dye, velocity, or fractal accumulation.** A bilinear blit reprojects everything into the new-size FBOs in one frame.
+- Adaptive resolution now produces real performance gains during navigation. The Julia iteration grid, fluid sim, and canvas all scale together with `qualityFraction` — previously only canvas/bloom/refraction-post-fx were scaling.
+- Default render scale is 1.0 (match CSS pixels). Retina users who want the full sharpness of their display set 2.0 explicitly; 0.5× and below are good for heavy fractals at deep iter depths.
+
+**Mechanism**
+- **`renderScale` field on viewportSlice.** [`store/slices/viewportSlice.ts`](../store/slices/viewportSlice.ts) gains `renderScale: number` (default 1.0) + `setRenderScale(v)` setter (clamps to [0.1, 4]). New `RENDER_SCALE_STEPS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0]` constant for the UI to snap to. Type added to [`types/store.ts`](../types/store.ts) `EngineStoreState`.
+- **`<RenderScaleControl>` segmented picker.** Mounted inside [`engine/plugins/viewport/ViewportModeControls.tsx`](../engine/plugins/viewport/ViewportModeControls.tsx) so it sits next to the Fill / Fixed pill in the viewport's top-left. Clicking a step calls `setRenderScale`; the active step highlights.
+- **One render dimension on FluidEngine.** [`fluid-toy/fluid/FluidEngine.ts`](../fluid-toy/fluid/FluidEngine.ts) drops `params.simResolution`, `params.autoQuality`, the private `simAspect` field, and the public `setSimAspect()` / `resize()` methods. New single entry point: `setRenderSize(w, h)` that sizes both the canvas drawing buffer and the sim/fractal FBOs in one call. `simW × simH` is the only resolution the engine knows about.
+- **Bilinear reprojection on resolution change.** New `reallocateAt(w, h)` on FluidEngine creates fresh FBOs at the new size, blits surviving content (`dye.read`, `velocity.read`, `juliaTsaa`) through new `progCopy` (single-tap) and `progCopyMrt` (two-attachment MRT) shaders with `LINEAR` filtering, then frees the old. New `FRAG_COPY` and `FRAG_COPY_MRT` shaders in [`fluid-toy/fluid/shaders.ts`](../fluid-toy/fluid/shaders.ts). `tsaaSampleIndex` is preserved — partial accumulation continues across resolution changes without a visible reset.
+- **App-level resize formula.** [`fluid-toy/FluidToyApp.tsx`](../fluid-toy/FluidToyApp.tsx) resize useEffect now reads `resolutionMode`, `fixedResolution`, `renderScale`, and `quality` from the store and computes `finalW = round(baseW × renderScale × quality)` (same for H). `baseW/H` is `canvasPixelSize / DPR` in Full mode (CSS pixels) or `fixedResolution` in Fixed mode (CSS pixels). One `engine.setRenderSize(finalW, finalH)` call per change; `engine.redraw()` immediately after to suppress the canvas-clear black flash.
+- **Sim slice cleanup.** [`fluid-toy/features/fluidSim.ts`](../fluid-toy/features/fluidSim.ts) drops the `simResolution` param + slider. [`fluid-toy/presets/apply.ts`](../fluid-toy/presets/apply.ts) and `presets/data.ts` drop the field from each preset blob. Save format is early-prototype so no migration shim needed. Dead `ADAPTIVE_*` constants removed from [`fluid-toy/constants.ts`](../fluid-toy/constants.ts) — those were stub values for a fluid-side adaptive loop that never shipped (the engine-side adaptive in `viewportSlice` superseded it).
+
 ### Fluid-toy: adaptive resolution overhaul + Pause button polish
 
 **User-facing**

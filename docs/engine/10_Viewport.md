@@ -18,11 +18,12 @@ The viewport concerns overlap 80% — size modes, DPR, interaction-based downsam
 
 ### The plugin owns
 - **Size management**: mode (`'Full' | 'Fixed' | 'Custom'`), fixed-resolution, DPR, canvas physical-pixel size, post-sidebar flex measurement.
+- **Render scale**: `renderScale: number` — user-facing pixel multiplier on top of the base render dimensions. Final drawing-buffer = `round(base × renderScale × qualityFraction)`. Discrete UI steps via `RENDER_SCALE_STEPS` ({0.25, 0.5, 0.75, 1.0, 1.5, 2.0}); the slice setter accepts any value in [0.1, 4]. Default 1.0 ("match CSS pixels"). Renderers consume it however they like — fluid-toy uses it to size both its sim grid and its canvas drawing buffer in one shot.
 - **Interaction state**: `isInteracting`, `interactionMode` (`'none' | 'camera' | 'drawing' | 'paint' | 'selecting_*' | string`), mouse-over-canvas.
 - **FPS tracking**: smoothed + instantaneous, with exclusions (paused, scrubbing, tab-hidden, compiling, exporting).
-- **Adaptive quality loop**: emits a `qualityFraction: number` in `[0, 1]` (1 = full quality, 0 = minimum) based on FPS target + change cooldown + grace period.
+- **Adaptive quality loop**: emits a `qualityFraction: number` in `[0, 1]` (1 = full quality, 0 = minimum) based on FPS target + change cooldown + grace period. Composes multiplicatively with `renderScale`.
 - **Authoritative measurement**: one ResizeObserver on the post-sidebar `flex-1` div. No competing observers elsewhere.
-- **UI**: `<FixedResolutionControls>`, `<PerformanceWarning>` (suggestions), `<AdaptiveResolutionBadge>` (topbar).
+- **UI**: `<FixedResolutionControls>`, `<PerformanceWarning>` (suggestions), `<AdaptiveResolutionBadge>` (topbar), render-scale segmented picker (rendered alongside the mode pill in `<ViewportModeControls>`).
 
 ### The plugin does NOT own
 - The actual `<canvas>` element — apps render their own inside a slot.

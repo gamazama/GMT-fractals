@@ -18,6 +18,7 @@
 import React from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { FixedResolutionControls } from './FixedResolutionControls';
+import { RENDER_SCALE_STEPS } from '../../../store/slices/viewportSlice';
 
 export interface ViewportModeControlsProps {
     /** Position of the controls container (absolute px from the
@@ -31,6 +32,37 @@ export interface ViewportModeControlsProps {
     availableWidth?: number;
     availableHeight?: number;
 }
+
+/** Compact segmented picker for the user's renderScale multiplier.
+ *  Sits next to the Fill/Fixed control. Reads/writes viewportSlice.
+ *  Renderers that consume `renderScale` (currently fluid-toy) will
+ *  resize on the next frame; renderers that don't are unaffected. */
+const RenderScaleControl: React.FC = () => {
+    const renderScale = useEngineStore((s) => s.renderScale);
+    const setRenderScale = useEngineStore((s) => s.setRenderScale);
+    return (
+        <div
+            className="flex items-center gap-0.5 bg-black/80 px-1 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md"
+            title="Render scale — pixel multiplier on top of the viewport size. 1.0 = match CSS pixels (cheap); 2.0 = Retina-sharp (4× cost)."
+        >
+            {RENDER_SCALE_STEPS.map((s) => {
+                const active = Math.abs(s - renderScale) < 1e-3;
+                return (
+                    <button
+                        key={s}
+                        onClick={(e) => { e.stopPropagation(); setRenderScale(s); }}
+                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded transition-colors ${active
+                            ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/40'
+                            : 'text-gray-500 hover:text-gray-200 border border-transparent'
+                        }`}
+                    >
+                        {s}×
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
 
 export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     top = 12,
@@ -46,28 +78,39 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     if (mode === 'Fixed') {
         const [w, h] = fixedResolution;
         return (
-            <FixedResolutionControls
-                width={w}
-                height={h}
-                top={top}
-                left={left}
-                maxAvailableWidth={availableWidth ?? w * 2}
-                maxAvailableHeight={availableHeight ?? h * 2}
-                onSetResolution={setFixedResolution}
-                onSetMode={setMode}
-            />
+            <div className="absolute z-50 flex items-center gap-2" style={{ top, left }}>
+                <div className="relative">
+                    <FixedResolutionControls
+                        width={w}
+                        height={h}
+                        top={0}
+                        left={0}
+                        maxAvailableWidth={availableWidth ?? w * 2}
+                        maxAvailableHeight={availableHeight ?? h * 2}
+                        onSetResolution={setFixedResolution}
+                        onSetMode={setMode}
+                    />
+                </div>
+                {/* Spacer accounts for FixedResolutionControls' three children
+                    (drag pill + chevron menu + Fill button) which render
+                    absolutely-positioned within their own box; the RenderScale
+                    pill goes after them in flow order via inline-block. */}
+                <div className="ml-[170px]"><RenderScaleControl /></div>
+            </div>
         );
     }
 
     return (
-        <button
-            onClick={(e) => { e.stopPropagation(); setMode('Fixed'); }}
-            style={{ top, left }}
-            className="absolute z-50 flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"
-            title="Switch to Fixed Resolution Mode"
-        >
-            <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform" />
-            Fixed
-        </button>
+        <div className="absolute z-50 flex items-center gap-2" style={{ top, left }}>
+            <button
+                onClick={(e) => { e.stopPropagation(); setMode('Fixed'); }}
+                className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"
+                title="Switch to Fixed Resolution Mode"
+            >
+                <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform" />
+                Fixed
+            </button>
+            <RenderScaleControl />
+        </div>
     );
 };

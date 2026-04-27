@@ -13,6 +13,8 @@ import {
   FRAG_SPLAT,
   FRAG_DISPLAY,
   FRAG_CLEAR,
+  FRAG_COPY,
+  FRAG_COPY_MRT,
   FRAG_REPROJECT,
   FRAG_BLOOM_EXTRACT,
   FRAG_BLOOM_DOWN,
@@ -247,8 +249,6 @@ export interface FluidParams {
   /** Collision LUT phase shift — independent of the dye gradientPhase. */
   collisionPhase: number;
   paused: boolean;
-  simResolution: number;      // target sim grid height (cells) — may be adaptively reduced
-  autoQuality: boolean;       // if true, adaptive-scaler may reduce simResolution when FPS is low
 
   /** TSAA on/off for the background fractal. When true, the Julia pass
    *  jitters its sampling per frame and a blend pass averages the result
@@ -382,8 +382,6 @@ export const DEFAULT_PARAMS: FluidParams = {
   collisionRepeat: 1.0,
   collisionPhase: 0.0,
   paused: false,
-  simResolution: 1344,
-  autoQuality: true,
   tsaa: true,
   tsaaJitterAmount: 1.0,
   tsaaSampleCap: 64,
@@ -415,6 +413,8 @@ export class FluidEngine {
   private progSplat!: Program;
   private progDisplay!: Program;
   private progClear!: Program;
+  private progCopy!: Program;
+  private progCopyMrt!: Program;
   private progReproject!: Program;
   private progBloomExtract!: Program;
   private progBloomDown!: Program;
@@ -452,16 +452,14 @@ export class FluidEngine {
   private lastZoom = 1.5;
   private firstFrame = true;
 
+  /** The sim/fractal grid AND the canvas drawing buffer share these
+   *  dimensions — there is one render resolution. The app drives it via
+   *  `setRenderSize(w, h)`, which is computed from window/fixed dims ×
+   *  user `renderScale` × adaptive `qualityFraction`. Resolution changes
+   *  bilinearly reproject `dye`, `velocity`, and `juliaTsaa` so dye and
+   *  in-flight accumulation survive the resize. */
   private simW = 0;
   private simH = 0;
-  /** Aspect ratio used to size the sim grid (simW = round(simH * simAspect)).
-   *  Driven by the app via setSimAspect() on real window resize — NOT by
-   *  the canvas dimensions, which are scaled by adaptive quality and
-   *  would otherwise wipe dye/velocity on every adaptive nudge due to
-   *  1-pixel rounding drift. Default 0 = "not set yet"; allocateTextures
-   *  falls back to the canvas aspect for the boot-time allocation, then
-   *  the app pushes a real value on first resize. */
-  private simAspect = 0;
 
   private juliaCur!: MrtFbo;
   private juliaPrev!: MrtFbo;
@@ -526,7 +524,11 @@ export class FluidEngine {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
     this.compileAll();
-    this.allocateTextures(this.params.simResolution);
+    // Boot at a tiny placeholder grid; the app pushes a real
+    // setRenderSize() on its first ResizeObserver callback. The
+    // placeholder still needs valid FBOs so any frame() that lands
+    // before the first resize doesn't NPE on juliaCur/dye/etc.
+    this.allocateAt(64, 64);
 
     // TSAA blue noise — shared loader (engine/utils/createBlueNoiseWebGL2).
     // Async, returns a 1×1 neutral fallback until PNG decodes.
@@ -646,6 +648,8 @@ export class FluidEngine {
        'uToneMapping', 'uExposure', 'uVibrance', 'uBloomAmount', 'uAberration', 'uRefraction', 'uRefractSmooth', 'uRefractRoughness', 'uCaustics',
        'uCollisionPreview']);
     this.progClear = this.linkProgram(VERT_FULLSCREEN, FRAG_CLEAR, ['uValue']);
+    this.progCopy    = this.linkProgram(VERT_FULLSCREEN, FRAG_COPY,     ['uSource']);
+    this.progCopyMrt = this.linkProgram(VERT_FULLSCREEN, FRAG_COPY_MRT, ['uSourceMain', 'uSourceAux']);
     this.progReproject = this.linkProgram(VERT_FULLSCREEN, FRAG_REPROJECT,
       ['uTexel', 'uSource', 'uNewCenter', 'uOldCenter', 'uNewZoom', 'uOldZoom', 'uAspect']);
     this.progBloomExtract = this.linkProgram(VERT_FULLSCREEN, FRAG_BLOOM_EXTRACT,
@@ -742,26 +746,64 @@ export class FluidEngine {
     this.deleteFBO(d.write);
   }
 
-  private allocateTextures(simHeight: number) {
-    // Use the stored simAspect, not the canvas aspect. Canvas dims are
-    // adaptive-scaled and round-tripping through Math.floor/Math.round
-    // introduces 1-pixel aspect drift that would shift simW by ±1 on
-    // every quality change, missing the early-return guard below and
-    // wiping dye + velocity. simAspect changes only on real window
-    // resize, when the user actually expects a fluid reset.
-    const aspect = this.simAspect || (this.canvas.width / Math.max(1, this.canvas.height));
-    const h = Math.max(32, simHeight | 0);
-    const w = Math.max(32, Math.round(h * aspect));
+  /** First-time allocation of all FBOs at the given size. Used at boot
+   *  before any resize has landed. Subsequent dim changes go through
+   *  `setRenderSize` → `reallocateAt` which preserves dye + accumulation. */
+  private allocateAt(w: number, h: number) {
+    this.simW = w;
+    this.simH = h;
+    this.juliaCur     = this.createMrtFbo(w, h);
+    this.juliaPrev    = this.createMrtFbo(w, h);
+    this.juliaTsaa    = this.createMrtFbo(w, h);
+    this.juliaTsaaPrev = this.createMrtFbo(w, h);
+    this.tsaaSampleIndex = 0;
+    this.forceTex   = this.createFBO(w, h);
+    this.velocity   = this.createDoubleFBO(w, h);
+    this.dye        = this.createDoubleFBO(w, h);
+    this.divergence = this.createFBO(w, h);
+    this.pressure   = this.createDoubleFBO(w, h);
+    this.curl       = this.createFBO(w, h);
+    this.maskTex    = this.createFBO(w, h);
+    this.firstFrame = true;
+  }
+
+  /** Resolution change. Bilinear-blits the surviving content (dye,
+   *  velocity, juliaTsaa) from the old FBOs into freshly-allocated FBOs
+   *  at the new size, then frees the old. tsaaSampleIndex is preserved
+   *  — the reprojected accumulator is approximately the right average,
+   *  so accumulation can continue without a visible reset.
+   *
+   *  Ephemeral FBOs (juliaCur, juliaPrev, forceTex, divergence,
+   *  pressure, curl, maskTex) are recomputed each frame, so we just
+   *  reallocate them empty. */
+  private reallocateAt(w: number, h: number) {
     if (w === this.simW && h === this.simH && this.juliaCur) return;
 
-    // Clean old
-    this.deleteMrtFbo(this.juliaCur);
-    this.deleteMrtFbo(this.juliaPrev);
+    const oldDyeRead = this.dye?.read;
+    const oldVelRead = this.velocity?.read;
+    const oldTsaa    = this.juliaTsaa;
+
+    // Allocate new FBOs at the new size.
+    const newDye      = this.createDoubleFBO(w, h);
+    const newVel      = this.createDoubleFBO(w, h);
+    const newTsaa     = this.createMrtFbo(w, h);
+    const newTsaaPrev = this.createMrtFbo(w, h);
+
+    // Bilinear-blit preserved content into the new FBOs' read targets.
+    // The TSAA accumulator survives so partial accumulation continues
+    // without a full reset on every render-scale step.
+    if (oldDyeRead) this.blitInto(oldDyeRead, newDye.read);
+    if (oldVelRead) this.blitInto(oldVelRead, newVel.read);
+    if (oldTsaa)    this.blitMrtInto(oldTsaa, newTsaa);
+
+    // Free old.
+    this.deleteDoubleFBO(this.dye);
+    this.deleteDoubleFBO(this.velocity);
     this.deleteMrtFbo(this.juliaTsaa);
     this.deleteMrtFbo(this.juliaTsaaPrev);
+    this.deleteMrtFbo(this.juliaCur);
+    this.deleteMrtFbo(this.juliaPrev);
     this.deleteFBO(this.forceTex);
-    this.deleteDoubleFBO(this.velocity);
-    this.deleteDoubleFBO(this.dye);
     this.deleteFBO(this.divergence);
     this.deleteDoubleFBO(this.pressure);
     this.deleteFBO(this.curl);
@@ -770,20 +812,59 @@ export class FluidEngine {
     this.simW = w;
     this.simH = h;
 
-    this.juliaCur  = this.createMrtFbo(w, h);
-    this.juliaPrev = this.createMrtFbo(w, h);
-    this.juliaTsaa     = this.createMrtFbo(w, h);
-    this.juliaTsaaPrev = this.createMrtFbo(w, h);
-    this.tsaaSampleIndex = 0; // fresh accumulator on resize
-    this.forceTex  = this.createFBO(w, h);
-    this.velocity  = this.createDoubleFBO(w, h);
-    this.dye       = this.createDoubleFBO(w, h);
-    this.divergence = this.createFBO(w, h);
-    this.pressure  = this.createDoubleFBO(w, h);
-    this.curl      = this.createFBO(w, h);
-    this.maskTex   = this.createFBO(w, h);
-    // New textures are zero — don't try to reproject from the previous (smaller/larger) grid.
+    this.dye           = newDye;
+    this.velocity      = newVel;
+    this.juliaTsaa     = newTsaa;
+    this.juliaTsaaPrev = newTsaaPrev;
+    this.juliaCur      = this.createMrtFbo(w, h);
+    this.juliaPrev     = this.createMrtFbo(w, h);
+    this.forceTex      = this.createFBO(w, h);
+    this.divergence    = this.createFBO(w, h);
+    this.pressure      = this.createDoubleFBO(w, h);
+    this.curl          = this.createFBO(w, h);
+    this.maskTex       = this.createFBO(w, h);
+    // The bilinear blits above already populated dye + velocity at the
+    // new resolution, so there's no need to skip the camera-reproject
+    // pass. Mark firstFrame anyway so the next frame doesn't try to
+    // reproject from a now-stale lastCenter/lastZoom (those refer to the
+    // pre-resize FBO).
     this.firstFrame = true;
+  }
+
+  /** Bilinear-blit `src` into `dst` (different sizes OK). Source min/mag
+   *  filters are forced to LINEAR so the resampled buffer stays smooth. */
+  private blitInto(src: FBO, dst: FBO) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
+    gl.viewport(0, 0, dst.width, dst.height);
+    this.useProgram(this.progCopy);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.uniform1i(this.progCopy.uniforms['uSource'], 0);
+    this.drawQuad();
+  }
+
+  /** MRT variant — copies texMain + texAux of `src` into `dst` in
+   *  lockstep. juliaTsaa stores both the colour accumulator and the
+   *  iteration/aux data; both must follow the resize. */
+  private blitMrtInto(src: MrtFbo, dst: MrtFbo) {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
+    gl.viewport(0, 0, dst.width, dst.height);
+    this.useProgram(this.progCopyMrt);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, src.texMain);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.uniform1i(this.progCopyMrt.uniforms['uSourceMain'], 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, src.texAux);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.uniform1i(this.progCopyMrt.uniforms['uSourceAux'], 1);
+    this.drawQuad();
   }
 
   // ---------------------------- Drawing primitives ----------------------------
@@ -823,9 +904,6 @@ export class FluidEngine {
 
   setParams(p: Partial<FluidParams>) {
     this.params = { ...this.params, ...p };
-    if (p.simResolution && p.simResolution !== this.simH) {
-      this.allocateTextures(p.simResolution);
-    }
   }
 
   /** Current TSAA accumulation depth (0 = freshly reset, == tsaaSampleCap = converged).
@@ -893,24 +971,31 @@ export class FluidEngine {
     this.setCollisionGradientBuffer(buf);
   }
 
-  /** Resize the drawing buffer to match container.
-   *  Adaptive-quality changes call this with new (smaller) dims, so this
-   *  path must NOT touch sim FBOs (dye/velocity/pressure) — those are
-   *  driven by setSimAspect() + simResolution and stay stable across
-   *  adaptive nudges. Only the screen-sized bloom FBOs invalidate here. */
-  resize(w: number, h: number) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const bw = Math.max(1, Math.round(w * dpr));
-    const bh = Math.max(1, Math.round(h * dpr));
-    if (this.canvas.width !== bw || this.canvas.height !== bh) {
-      this.canvas.width = bw;
-      this.canvas.height = bh;
+  /** Set the render dimensions — sim/fractal grid AND canvas drawing
+   *  buffer at the same size, no DPR multiplication or aspect drift.
+   *  Resolution changes bilinearly reproject dye, velocity, and the
+   *  TSAA accumulator so dye state and accumulation survive the resize.
+   *  Bloom FBOs invalidate (they're canvas-sized).
+   *
+   *  The app computes (w, h) from `baseW × baseH × renderScale ×
+   *  qualityFraction` where the base is window CSS in Full mode or
+   *  `fixedResolution` in Fixed mode. */
+  setRenderSize(w: number, h: number) {
+    w = Math.max(32, Math.round(w));
+    h = Math.max(32, Math.round(h));
+    if (w === this.simW && h === this.simH && this.canvas.width === w && this.canvas.height === h) {
+      return;
+    }
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
       this.bloomDirty = true;
     }
+    this.reallocateAt(w, h);
   }
 
   /** Re-blit the existing `juliaTsaa` + sim state to the canvas without
-   *  advancing the simulation. Use after a canvas resize to repaint
+   *  advancing the simulation. Use after a `setRenderSize` to repaint
    *  before the compositor reads the empty drawing buffer (suppresses
    *  the black flash). Cheaper than a full `frame()` — skips the fluid
    *  sim step + the mask GPU→CPU readback. */
@@ -919,18 +1004,6 @@ export class FluidEngine {
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, null);
-  }
-
-  /** Set the aspect ratio used for sim-grid allocation. Call from the
-   *  app on REAL window resize (driven by physical pixel size, not
-   *  adaptive quality). Reallocates sim FBOs only when the aspect
-   *  actually shifts the rounded simW by at least one cell — small
-   *  drift inside the same cell count is a no-op. */
-  setSimAspect(aspect: number) {
-    if (!isFinite(aspect) || aspect <= 0) return;
-    if (Math.abs(aspect - this.simAspect) < 1e-4) return;
-    this.simAspect = aspect;
-    this.allocateTextures(this.params.simResolution);
   }
 
   /** (Re)allocate the half/quarter/eighth bloom FBOs at the current canvas size. */

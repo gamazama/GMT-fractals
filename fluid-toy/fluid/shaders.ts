@@ -1056,6 +1056,33 @@ uniform vec4 uValue;
 void main() { fragColor = uValue; }`;
 
 // -----------------------------------------------------------------------------
+// Single-tap copy — used by render-resolution changes to bilinear-blit
+// dye / velocity into freshly-allocated FBOs at the new size. The source
+// texture's sampler is set to LINEAR by the caller so the shader sees a
+// pre-filtered sample at any (vUv) regardless of source/destination size.
+// -----------------------------------------------------------------------------
+export const FRAG_COPY = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 fragColor;
+uniform sampler2D uSource;
+void main() { fragColor = texture(uSource, vUv); }`;
+
+// MRT variant — copies juliaTsaa's two attachments (texMain + texAux)
+// in lockstep so accumulation can survive a resolution change.
+export const FRAG_COPY_MRT = /* glsl */ `#version 300 es
+precision highp float;
+in vec2 vUv;
+layout(location=0) out vec4 outMain;
+layout(location=1) out vec4 outAux;
+uniform sampler2D uSourceMain;
+uniform sampler2D uSourceAux;
+void main() {
+  outMain = texture(uSourceMain, vUv);
+  outAux  = texture(uSourceAux,  vUv);
+}`;
+
+// -----------------------------------------------------------------------------
 // Bloom chain — Jimenez dual-filter style.
 //   1) extract: luminance > threshold, soft knee → half-res source
 //   2) downsample 2×: 9-tap tent/box filter (cheap & bright)

@@ -90,7 +90,6 @@ export const PRESETS: Preset[] = [
             edgeMargin: 0.04,
             forceCap: 12,
             collisionEnabled: true,
-            simResolution: 768,
         },
         gradient: {
             stops: makeStops([
@@ -151,7 +150,6 @@ export const PRESETS: Preset[] = [
             edgeMargin: 0.04,
             forceCap: 40,
             collisionEnabled: true,
-            simResolution: 1024,
         },
         gradient: {
             stops: makeStops([[0, '#000000'], [1, '#FFFFFF']]),
@@ -210,7 +208,6 @@ export const PRESETS: Preset[] = [
             interiorColor: [0.02, 0.02, 0.04],
             edgeMargin: 0.04,
             forceCap: 40,
-            simResolution: 1344,
         },
         gradient: {
             stops: makeStops([
@@ -281,7 +278,6 @@ export const PRESETS: Preset[] = [
             edgeMargin: 0.04,
             forceCap: 38.5,
             collisionEnabled: true,
-            simResolution: 768,
         },
         gradient: {
             stops: makeStops([
@@ -344,7 +340,6 @@ export const PRESETS: Preset[] = [
             edgeMargin: 0.04,
             forceCap: 40,
             collisionEnabled: true,
-            simResolution: 1344,
         },
         gradient: {
             stops: makeStops([
@@ -406,7 +401,6 @@ export const PRESETS: Preset[] = [
             interiorColor: [0.02, 0.02, 0.03],
             edgeMargin: 0.04,
             forceCap: 12,
-            simResolution: 1536,
         },
         gradient: {
             stops: makeStops([
@@ -462,7 +456,6 @@ export const PRESETS: Preset[] = [
             edgeMargin: 0.04,
             forceCap: 12,
             collisionEnabled: true,
-            simResolution: 768,
         },
         gradient: {
             stops: makeStops([

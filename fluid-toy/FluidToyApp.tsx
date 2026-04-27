@@ -69,11 +69,19 @@ export const FluidToyApp: React.FC = () => {
         openContextMenu,
     }), [handleInteractionStart, handleInteractionEnd, openContextMenu]);
 
-    // Authoritative size (written by ViewportFrame's ResizeObserver) ×
-    // adaptive quality fraction. FluidEngine.resize() takes CSS pixels
-    // (not DPR-multiplied) for its WebGL buffer, matching toy-fluid's
-    // original contract. So we divide DPR out and apply quality.
-    const canvasPixelSize = useEngineStore((s) => s.canvasPixelSize);
+    // The render-size flow:
+    //   base (CSS pixels — window in Full mode, fixedResolution in Fixed
+    //   mode) × renderScale (user multiplier) × quality (adaptive) →
+    //   final drawing-buffer dims for both the canvas AND the sim/
+    //   fractal grid (they share one resolution in fluid-toy).
+    //
+    // canvasPixelSize from ViewportFrame's ResizeObserver is in physical
+    // pixels (CSS × DPR). We divide DPR out so renderScale acts on CSS
+    // dims — renderScale=1.0 ≡ "match CSS", renderScale=2.0 ≡ "Retina".
+    const canvasPixelSize  = useEngineStore((s) => s.canvasPixelSize);
+    const resolutionMode   = useEngineStore((s) => s.resolutionMode);
+    const fixedResolution  = useEngineStore((s) => s.fixedResolution);
+    const renderScale      = useEngineStore((s) => s.renderScale);
     const quality = useQualityFraction();
     const { fpsSmoothed } = useViewportFps();
 
@@ -119,25 +127,22 @@ export const FluidToyApp: React.FC = () => {
         });
     }, [accumulation, isPaused, sampleCap]);
 
-    // simAspect comes from unscaled CSS dims, not the quality-scaled
-    // logical size — adaptive nudges only resize the canvas/render
-    // target, never the sim FBOs (which would wipe dye on every nudge).
-    //
-    // Setting canvas.width / canvas.height clears the WebGL drawing
-    // buffer to transparent black; the explicit engine.frame() after
-    // resize repaints before the compositor reads the empty canvas,
-    // suppressing a black flash on every adaptive change.
+    // Resolution change → bilinear-reproject sim + accumulator (in
+    // setRenderSize), then redraw before compositor reads the freshly-
+    // cleared drawing buffer (suppresses the black flash).
     useEffect(() => {
         const engine = engineRef.current;
-        const [physW, physH] = canvasPixelSize;
-        if (!engine || physW < 1 || physH < 1) return;
+        if (!engine) return;
         const dpr = window.devicePixelRatio || 1;
-        engine.setSimAspect(physW / physH);
-        const logicalW = Math.max(1, Math.floor((physW / dpr) * quality));
-        const logicalH = Math.max(1, Math.floor((physH / dpr) * quality));
-        engine.resize(logicalW, logicalH);
+        const [baseW, baseH] = resolutionMode === 'Fixed'
+            ? fixedResolution
+            : [canvasPixelSize[0] / dpr, canvasPixelSize[1] / dpr];
+        if (baseW < 1 || baseH < 1) return;
+        const finalW = Math.max(1, Math.round(baseW * renderScale * quality));
+        const finalH = Math.max(1, Math.round(baseH * renderScale * quality));
+        engine.setRenderSize(finalW, finalH);
         engine.redraw();
-    }, [canvasPixelSize, quality]);
+    }, [canvasPixelSize, resolutionMode, fixedResolution, renderScale, quality]);
 
     return (
         <StoreCallbacksProvider value={storeCallbacks}>

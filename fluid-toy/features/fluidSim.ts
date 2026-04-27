@@ -6,13 +6,11 @@
  * UI groups them on their own tab.
  *
  * What stays here is the fluid's own behaviour: how it carries, swirls,
- * dissipates velocity, and its grid-resolution target. Tab 3 will merge
- * the dye-inject + dye-decay subsection from DyeFeature.
- *
- * simResolution here is the USER'S TARGET ceiling. FluidToyApp multiplies
- * it by qualityFraction (from @engine/viewport's adaptive loop) before
- * pushing to FluidEngine.setParams. So the user sees "1344" as their
- * intent; the adaptive loop scales the actual sim grid.
+ * and dissipates velocity. The render resolution (which sizes both the
+ * sim grid and the canvas) is the viewport plugin's concern — see the
+ * `renderScale` field on viewportSlice and the FluidToyApp resize
+ * useEffect that derives final pixel dims from window/fixed × scale ×
+ * adaptive quality.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
@@ -90,13 +88,6 @@ export const FluidSimFeature: FeatureDefinition = {
             description: 'Per-frame chroma gain. 1 = neutral, <1 washes out, >1 pushes toward max saturation. Gamut-mapped in OKLab so it pegs at the saturation ceiling rather than hue-shifting to white.',
         },
 
-        // Target sim grid height. FluidToyApp scales by quality fraction.
-        simResolution: {
-            type: 'int', default: 1344, min: 128, max: 1536, step: 32,
-            label: 'Sim resolution',
-            description: 'Target fluid grid height in cells. More = finer detail, slower.',
-        },
-
         // Integration timestep. The RAF loop uses a fixed 16.67 ms
         // wall-clock step; this scales the physical dt applied per
         // sim frame. Lower = more stable but slower.
@@ -117,10 +108,7 @@ export const FluidSimFeature: FeatureDefinition = {
 /**
  * Push the fluid-sim slice + coupling-tab force-law knobs into
  * FluidEngine. Both slices reach FluidEngine in one call so a change to
- * either schedules a single setParams. The sim grid runs at the user's
- * chosen `simResolution` — adaptive quality scales only the fractal
- * render target (via FluidToyApp.engine.resize), never the sim grid.
- * autoQuality stays off — FluidEngine's internal adaptive is unused.
+ * either schedules a single setParams.
  */
 export const syncFluidSimToEngine = (
     engine: FluidEngine,
@@ -128,7 +116,6 @@ export const syncFluidSimToEngine = (
     coupling: CouplingSlice,
 ): void => {
     engine.setParams({
-        simResolution:  Math.max(64, fluidSim.simResolution),
         vorticity:      fluidSim.vorticity,
         vorticityScale: fluidSim.vorticityScale,
         pressureIters:  fluidSim.pressureIters,
@@ -147,6 +134,5 @@ export const syncFluidSimToEngine = (
         interiorDamp:   coupling.interiorDamp,
         forceCap:       coupling.forceCap,
         edgeMargin:     coupling.edgeMargin,
-        autoQuality:    false,
     });
 };

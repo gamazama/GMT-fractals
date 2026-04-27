@@ -59,12 +59,18 @@ const defaultDpr = () => {
 };
 
 export type ViewportSlice = Pick<EngineStoreState,
-    'canvasPixelSize' | 'dpr' | 'resolutionMode' | 'fixedResolution' |
+    'canvasPixelSize' | 'dpr' | 'resolutionMode' | 'fixedResolution' | 'renderScale' |
     'qualityFraction' | 'fps' | 'fpsSmoothed' | 'adaptiveConfig'
 > & Pick<EngineActions,
-    'setCanvasPixelSize' | 'setDpr' | 'setResolutionMode' | 'setFixedResolution' |
+    'setCanvasPixelSize' | 'setDpr' | 'setResolutionMode' | 'setFixedResolution' | 'setRenderScale' |
     'reportFps' | 'holdAdaptive' | 'setAdaptiveConfig'
 >;
+
+/** Discrete render-scale steps the UI snaps to. Multipliers on top of
+ *  the base render dimensions (window CSS in Full mode, fixedResolution
+ *  in Fixed mode). Adaptive `quality` further multiplies the final
+ *  drawing-buffer size during navigation. */
+export const RENDER_SCALE_STEPS: readonly number[] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 
 // ── Adaptive loop module-level state (runtime, doesn't trigger rerenders) ──
 // Algorithm lives in engine/AdaptiveResolution.ts — shared with the GMT
@@ -96,6 +102,7 @@ export const createViewportSlice: StateCreator<
     dpr: defaultDpr(),
     resolutionMode: 'Full',
     fixedResolution: [800, 600],
+    renderScale: 1.0,
 
     qualityFraction: 1.0,
     fps: 60,
@@ -106,6 +113,7 @@ export const createViewportSlice: StateCreator<
     setDpr: (v) => { set({ dpr: v }); FractalEvents.emit('reset_accum', undefined); },
     setResolutionMode: (m) => { set({ resolutionMode: m }); FractalEvents.emit('reset_accum', undefined); },
     setFixedResolution: (w, h) => { set({ fixedResolution: [w, h] }); FractalEvents.emit('reset_accum', undefined); },
+    setRenderScale: (v) => set({ renderScale: Math.max(0.1, Math.min(4, v)) }),
 
     setAdaptiveConfig: (cfg) => set((s) => ({ adaptiveConfig: { ...s.adaptiveConfig, ...cfg } })),
 

@@ -88,7 +88,6 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.vorticityScale    !== undefined) fs.vorticityScale    = p.vorticityScale;
     if (p.dissipation       !== undefined) fs.dissipation       = p.dissipation;
     if (p.pressureIters     !== undefined) fs.pressureIters     = p.pressureIters;
-    if (p.simResolution     !== undefined) fs.simResolution     = p.simResolution;
     if (p.dyeInject         !== undefined) fs.dyeInject         = p.dyeInject;
     if (p.dyeDissipation    !== undefined) fs.dyeDissipation    = p.dyeDissipation;
     if (p.dyeChromaDecayHz  !== undefined) fs.dyeChromaDecayHz  = p.dyeChromaDecayHz;

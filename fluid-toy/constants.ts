@@ -29,28 +29,6 @@ export const PRECISION_ALT_MULT = 0.2;
 /** Mouse-drag splat: gaussian radius in UV-squared units. */
 export const SPLAT_RADIUS_UV = 0.002;
 
-// ── Adaptive quality ─────────────────────────────────────────────────────────
-/** Floor the FPS-driven scaler can drop simResolution to. */
-export const ADAPTIVE_MIN_SIM_RES = 192;
-
-/** Step size (in cells) per adaptive reduction. */
-export const ADAPTIVE_STEP = 128;
-
-/** FPS below which sustained → drop resolution. */
-export const ADAPTIVE_LOW_FPS = 35;
-
-/** FPS above which sustained → restore to target in one jump. */
-export const ADAPTIVE_HIGH_FPS = 58;
-
-/** Seconds of sustained low FPS before a drop. */
-export const ADAPTIVE_LOW_FPS_STREAK_SEC = 1.5;
-
-/** Seconds of sustained high FPS before restoring to target. */
-export const ADAPTIVE_HIGH_FPS_STREAK_SEC = 8.0;
-
-/** Lockout between any two adaptive adjustments (ms). */
-export const ADAPTIVE_CHANGE_COOLDOWN_MS = 1500;
-
 // ── Rendering ────────────────────────────────────────────────────────────────
 /** 1D LUT width for the gradient texture (256 × 1 RGBA). */
 export const GRADIENT_LUT_WIDTH = 256;
