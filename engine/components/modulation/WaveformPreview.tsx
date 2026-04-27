@@ -1,11 +1,18 @@
 /**
- * WaveformPreview — small canvas that draws an LFO's waveform as a
- * 5-second window. Used by LfoList rows. Pure: renders only from its
- * own props, no store reads.
+ * WaveformPreview — small canvas that draws an LFO's waveform shape
+ * as a 5-second window. Used by LfoList rows. Pure: renders only
+ * from its own props, no store reads.
  *
- * Lifted verbatim from engine-gmt/components/panels/formula/WaveformPreview.tsx
- * during the modulation-UI extraction. The shape vocab (Sine / Triangle
- * / Sawtooth / Pulse / Noise) matches LfoShape in types/animation.ts.
+ * Shows shape only — amplitude scaling is intentionally NOT applied,
+ * since the actual output range is determined by the LFO's min/max
+ * strength sliders (which work relative to baseValue). The preview's
+ * job is "what kind of signal is this", not "how big is it".
+ *
+ * Shape vocab (Sine / Triangle / Sawtooth / Pulse / Noise) matches
+ * LfoShape in types/animation.ts. Noise uses three-stdlib's
+ * ImprovedNoise (Perlin) sampled at time/period — same generator
+ * class as ModulationEngine, with a per-mount seed offset so two
+ * open Noise rows don't trace the same curve.
  */
 
 import React, { useRef, useEffect } from 'react';
@@ -21,16 +28,17 @@ export interface WaveformPreviewProps {
     shape: string;
     period: number;
     phase: number;
-    amplitude: number;
     enabled: boolean;
 }
 
-export const WaveformPreview: React.FC<WaveformPreviewProps> = ({ shape, period, phase, amplitude, enabled }) => {
+export const WaveformPreview: React.FC<WaveformPreviewProps> = ({ shape, period, phase, enabled }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     // Stable seed per mounted preview so a re-render doesn't re-randomise
     // the noise curve. New mount → new seed.
     const seedRef = useRef<number>(Math.random() * 1000);
 
+    // Re-runs whenever the visible-shape props change. `amplitude`
+    // is intentionally NOT in the dep list — preview shows shape only.
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -73,12 +81,16 @@ export const WaveformPreview: React.FC<WaveformPreviewProps> = ({ shape, period,
                 val = previewNoise.noise(sampleT, 0, 0);
             }
 
-            const py = h / 2 - (val * Math.min(1.5, amplitude) * (h / 4));
+            // Render the WAVEFORM SHAPE only (full range). Output
+            // amplitude is determined by the LFO's min/max strength
+            // sliders below; the preview's job is to show what kind of
+            // signal you're getting, not its absolute scale.
+            const py = h / 2 - (val * (h / 4));
             if (i === 0) ctx.moveTo(x * w, py);
             else ctx.lineTo(x * w, py);
         }
         ctx.stroke();
-    }, [shape, period, phase, amplitude, enabled]);
+    }, [shape, period, phase, enabled]);
 
     return (
         <div className="relative h-12 bg-black/40 rounded border border-white/5 mb-3 overflow-hidden">
