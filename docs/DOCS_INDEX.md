@@ -84,6 +84,9 @@ Each engine architecture doc opens with a marker:
 | 11 | [Plugin Authoring](engine/11_Plugin_Authoring.md) | 🚧 | How to build a new core plugin — the four-part shape, seven rules |
 | 12 | [App Handles](engine/12_App_Handles.md) | 🚧 | Typed cross-tree state (`defineAppHandles<T>`) for apps |
 | 13 | [Extracting From GMT](engine/13_Extracting_From_GMT.md) | ✅ | Cookbook for lifting GMT features into engine-core — triage + worked example (TSAA + pause button) |
+| 14 | [Panel Manifest](engine/14_Panel_Manifest.md) | 🚧 | How `panels.ts` declares which features compose into which panels |
+| 15 | [Camera Manager Extraction](engine/15_Camera_Manager_Extraction.md) | 🚧 | StateLibrary primitive — how cameras/views/palettes share one mechanism |
+| 16 | [Type Augmentation](engine/16_Type_Augmentation.md) | 🔒 | DDFS slices + state-library keys — the two-target declaration-merge rule |
 
 ### Audit
 | # | File | Status | Scope |
@@ -91,6 +94,17 @@ Each engine architecture doc opens with a marker:
 | 20 | [Fragility Audit](engine/20_Fragility_Audit.md) | 🔒 | Known issues + remediation status |
 | 21 | [Code Review 2026-04-25](engine/21_Code_Review_2026-04-25.md) | 🔒 | Independent multi-agent survey: what matches docs, what's overstated, 3 live bugs, onboarding gaps |
 | — | [Feature Status](FEATURE_STATUS.md) | 🔒 | Post-phase-5 snapshot across engine + apps |
+
+## Apps — per-app onboarding
+
+Each app folder owns a README that's the canonical entry point for "I'm
+about to work on this app":
+
+| App | README | What it covers |
+|---|---|---|
+| `fluid-toy` | [fluid-toy/README.md](../fluid-toy/README.md) | File map, "how to add a feature" recipe, deliberate-weirdness gotchas, smoke commands |
+| `demo` | [demo/README.md](../demo/README.md) | Minimal three-file plugin contract walkthrough |
+| `app-gmt` | (no dedicated README — GMT-on-engine port is documented in `HANDOFF.md` and the `gmt/` doc tree) | — |
 
 ## Reading paths
 
@@ -114,7 +128,14 @@ Each engine architecture doc opens with a marker:
 1. [engine/01_Architecture.md](engine/01_Architecture.md) — what the engine provides.
 2. [engine/04_Core_Plugins.md](engine/04_Core_Plugins.md) — which plugins to install.
 3. [engine/12_App_Handles.md](engine/12_App_Handles.md) — cross-tree state pattern.
-4. [engine/20_Fragility_Audit.md](engine/20_Fragility_Audit.md) — sharp edges to avoid.
+4. [engine/16_Type_Augmentation.md](engine/16_Type_Augmentation.md) — typed slices + state-library keys.
+5. [engine/20_Fragility_Audit.md](engine/20_Fragility_Audit.md) — sharp edges to avoid.
+
+### Working on fluid-toy
+1. [fluid-toy/README.md](../fluid-toy/README.md) — file map, recipes, gotchas. **Start here.**
+2. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — `defineFeature` shape (for adding a feature).
+3. [engine/16_Type_Augmentation.md](engine/16_Type_Augmentation.md) — when adding a slice or state library.
+4. [engine/14_Panel_Manifest.md](engine/14_Panel_Manifest.md) — when changing how panels compose.
 
 ### Debugging
 1. [engine/20_Fragility_Audit.md](engine/20_Fragility_Audit.md) — check for known issues first.
