@@ -97,12 +97,19 @@ interface HudHostProps {
     className?: string;
 }
 
+// Bottom-left reserves ~52px for `<TimelineHost>`'s timeline-toggle
+// button (`fixed bottom-4 left-4`, ~40px square + a 12px gap). Hud
+// items stack ABOVE the toggle so they don't overlap when the timeline
+// is hidden, and they sit above the timeline panel when it's open. The
+// extra whitespace is invisible when no items are registered. If a
+// future app drops TimelineHost entirely, items just gain ~52px of
+// bottom margin — harmless.
 const SLOT_CLASSES: Record<HudSlot, string> = {
     'top-left':      'absolute top-3 left-3 flex flex-col items-start gap-1',
     'top-center':    'absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1',
     'top-right':     'absolute top-3 right-3 flex flex-col items-end gap-1',
     'center':        'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1',
-    'bottom-left':   'absolute bottom-3 left-3 flex flex-col items-start gap-1',
+    'bottom-left':   'absolute bottom-16 left-3 flex flex-col items-start gap-1',
     'bottom-center': 'absolute bottom-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1',
     'bottom-right':  'absolute bottom-3 right-3 flex flex-col items-end gap-1',
 };
