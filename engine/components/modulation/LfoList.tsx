@@ -94,8 +94,18 @@ export const LfoList: React.FC = () => {
                 <DynamicListItem
                     key={anim.id}
                     title={`LFO ${idx + 1}`}
+                    // Subtitle = the modulation target so a collapsed
+                    // row is still scannable at a glance. Falls back
+                    // to a hint when the target is unset.
+                    subtitle={anim.target || '(no target)'}
                     titleColor="text-purple-400/50"
                     accent="purple"
+                    expandable
+                    // Default-open so a freshly added LFO immediately
+                    // shows its controls. Existing rows keep whatever
+                    // open/closed state the user left them in
+                    // (DynamicListItem owns the per-row toggle state).
+                    defaultExpanded
                     onRemove={() => removeAnimation(anim.id)}
                     actions={
                         <div className="w-[60px]">
@@ -107,9 +117,12 @@ export const LfoList: React.FC = () => {
                         </div>
                     }
                 >
-                    {anim.enabled && (
-                        <div className="animate-fade-in">
-                            <WaveformPreview
+                    {/* Body always renders when expanded — `enabled`
+                        controls effect, not visibility. A disabled LFO
+                        you can still see + edit (just doesn't drive
+                        liveModulations). */}
+                    <div className="animate-fade-in">
+                        <WaveformPreview
                                 shape={anim.shape}
                                 period={anim.period}
                                 phase={anim.phase}
@@ -196,7 +209,6 @@ export const LfoList: React.FC = () => {
                                 <Slider label="Smoothing" value={anim.smoothing} min={0.0} max={1.0} step={0.01} onChange={(v) => updateAnimation(anim.id, { smoothing: v })} />
                             </div>
                         </div>
-                    )}
                 </DynamicListItem>
             ))}
         </DynamicList>

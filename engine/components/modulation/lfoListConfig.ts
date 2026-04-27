@@ -27,9 +27,15 @@ export interface LfoListConfig {
      *  conventions (e.g. `'julia.juliaC_x'`) override this to do the
      *  axis split themselves. */
     seedBaseValue: (target: string, state: any) => number;
-    /** Hard cap on simultaneous LFOs. Default 3 — matches GMT's UX
-     *  where the "Add LFO" button disables. Set higher for apps that
-     *  want richer modulation. */
+    /** Hard cap on simultaneous LFOs. Default 16 — runtime cost is
+     *  trivial (one oscillator update per LFO per frame); the cap is
+     *  there only as a sanity guard against runaway preset growth.
+     *  Set lower for constrained UIs or higher (Infinity) for power
+     *  users.
+     *
+     *  Each row collapses to a single header line by default once a
+     *  target is picked, so the visual cost of many LFOs is bounded
+     *  by the dock height — see LfoList.tsx. */
     maxLfos: number;
 }
 
@@ -51,7 +57,7 @@ const DEFAULT_CONFIG: LfoListConfig = {
         }
         return Number(slice[pid]) || 0;
     },
-    maxLfos: 3,
+    maxLfos: 16,
 };
 
 let _config: LfoListConfig = DEFAULT_CONFIG;
