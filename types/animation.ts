@@ -13,11 +13,22 @@ export interface AnimationParams {
     target: LfoTarget;
     shape: LfoShape;
     period: number;
+    /** Legacy "strength": peak waveform value × amplitude is applied as
+     *  an offset on top of `baseValue`. Newer LFOs use `min` / `max`
+     *  instead — see ModulationEngine which prefers min/max when
+     *  defined and falls back to amplitude otherwise. Kept for preset
+     *  back-compat. */
     amplitude: number;
     baseValue: number;
     phase: number;
     smoothing: number;
     pulseWidth?: number;
+    /** Output range floor. When BOTH `min` and `max` are defined the
+     *  engine maps the waveform into [min, max] directly (rawWave −1
+     *  → min, +1 → max). Either undefined → fall back to `baseValue`
+     *  ± `amplitude`. */
+    min?: number;
+    max?: number;
 }
 
 export interface BezierHandle {

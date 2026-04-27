@@ -41,6 +41,10 @@ export const LfoList: React.FC = () => {
         if (animations.length >= cfg.maxLfos) return;
         const target = cfg.defaultTarget ?? '';
         const baseValue = target ? cfg.seedBaseValue(target, useEngineStore.getState()) : 0;
+        // Default range is baseValue ± 1, a sensible neutral starting
+        // point that gives a visible reaction for most params. The user
+        // tweaks Min / Max to taste. `amplitude` is kept in sync (= 1)
+        // for back-compat with consumers that still read it directly.
         const newLfo: AnimationParams = {
             id: nanoid(),
             enabled: true,
@@ -49,10 +53,22 @@ export const LfoList: React.FC = () => {
             period: 5.0,
             amplitude: 1.0,
             baseValue,
+            min: baseValue - 1,
+            max: baseValue + 1,
             phase: 0.0,
             smoothing: 0.5,
         };
         setAnimations([...animations, newLfo]);
+    };
+
+    // Read effective min/max for the current LFO (handles legacy LFOs
+    // without min/max set — derive from baseValue ± amplitude). Keeps
+    // existing presets editable in the new UI.
+    const effectiveRange = (anim: AnimationParams): { min: number; max: number } => {
+        if (typeof anim.min === 'number' && typeof anim.max === 'number') {
+            return { min: anim.min, max: anim.max };
+        }
+        return { min: anim.baseValue - anim.amplitude, max: anim.baseValue + anim.amplitude };
     };
 
     const removeAnimation = (id: string) => {
@@ -133,22 +149,41 @@ export const LfoList: React.FC = () => {
                             <div className="space-y-0">
                                 <Slider
                                     label="Period (Sec)" value={anim.period}
-                                    min={0.1} max={30.0} step={0.1}
+                                    min={0.1} max={30.0} step={0.01}
                                     hardMin={0.01}
                                     onChange={(v) => updateAnimation(anim.id, { period: v })}
-                                />
-                                <Slider
-                                    label="Strength"
-                                    value={anim.amplitude}
-                                    min={0.001} max={10.0} step={0.001}
-                                    onChange={(v) => updateAnimation(anim.id, { amplitude: v })}
+                                    // Slightly-log feel via t² mapping: low periods get
+                                    // more slider real estate (slider middle ≈ 7.6s
+                                    // instead of linear 15s; 0.1–3s fills the lower half).
                                     customMapping={{
                                         min: 0, max: 100,
-                                        toSlider: (val) => ((Math.log10(Math.max(0.001, val)) + 3) / 4) * 100,
-                                        fromSlider: (val) => Math.pow(10, (val / 100 * 4) - 3),
+                                        toSlider: (val) => Math.sqrt((Math.max(0.1, Math.min(30, val)) - 0.1) / (30 - 0.1)) * 100,
+                                        fromSlider: (val) => 0.1 + (30 - 0.1) * Math.pow(val / 100, 2),
                                     }}
-                                    overrideInputText={anim.amplitude < 0.1 ? anim.amplitude.toFixed(3) : anim.amplitude.toFixed(2)}
                                 />
+                                {(() => {
+                                    const { min, max } = effectiveRange(anim);
+                                    // Symmetric ±10 range matches the legacy
+                                    // amplitude slider's [-10, 10] reach. Apps with
+                                    // wildly different param ranges can edit values
+                                    // directly via the input field.
+                                    return (
+                                        <>
+                                            <Slider
+                                                label="Min" value={min}
+                                                min={-10} max={10} step={0.001}
+                                                onChange={(v) => updateAnimation(anim.id, { min: v, max: Math.max(v, max) })}
+                                                overrideInputText={Math.abs(min) < 0.1 ? min.toFixed(3) : min.toFixed(2)}
+                                            />
+                                            <Slider
+                                                label="Max" value={max}
+                                                min={-10} max={10} step={0.001}
+                                                onChange={(v) => updateAnimation(anim.id, { min: Math.min(v, min), max: v })}
+                                                overrideInputText={Math.abs(max) < 0.1 ? max.toFixed(3) : max.toFixed(2)}
+                                            />
+                                        </>
+                                    );
+                                })()}
                                 {advancedMode && (
                                     <Slider
                                         label="Phase Offset" value={anim.phase}

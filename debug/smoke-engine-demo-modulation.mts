@@ -127,11 +127,78 @@ async function main() {
         throw new Error(`Overlay did not wiggle — sweep ${sweep.toFixed(2)}% < ${MIN_DELTA_PCT}%. DemoOverlay may not be reading liveModulations correctly.`);
     }
 
+    // 7) Min/max path — push an LFO using min/max instead of amplitude.
+    //    Ranges chosen so the output should swing between 0.3 and 0.7
+    //    (centered at 0.5, half-range 0.2). With baseValue=0 the
+    //    expected offset range is [0.3, 0.7] which becomes the
+    //    liveMod value (composed as base + offset = 0 + offset).
+    await page.evaluate(() => {
+        const s = (window as any).__store?.getState?.();
+        s?.setAnimations?.([
+            {
+                id: 'smoke-lfo-minmax',
+                enabled: true,
+                target: 'demo.size',
+                shape: 'Sine',
+                period: 0.5,         // fast — guaranteed sweep within 1s sampling
+                amplitude: 0,        // legacy field unused when min/max present
+                baseValue: 120,      // matches DDFS default for demo.size
+                min: 80,
+                max: 200,
+                phase: 0,
+                smoothing: 0,
+            },
+        ]);
+    });
+    await page.waitForTimeout(400);
+    const sizeMod = await page.evaluate(() => (window as any).__store?.getState?.()?.liveModulations?.['demo.size'] ?? null);
+    console.log('liveModulations[demo.size] (min/max LFO):', sizeMod);
+    if (typeof sizeMod !== 'number' || sizeMod < 75 || sizeMod > 205) {
+        throw new Error(`min/max LFO output out of expected [80, 200] range: ${sizeMod}`);
+    }
+
+    // 8) Noise path — use shape='Noise' with period=0.5, expect smooth
+    //    pseudo-random output in roughly the configured range.
+    await page.evaluate(() => {
+        const s = (window as any).__store?.getState?.();
+        s?.setAnimations?.([
+            {
+                id: 'smoke-lfo-noise',
+                enabled: true,
+                target: 'demo.opacity',
+                shape: 'Noise',
+                period: 0.5,
+                amplitude: 0,
+                baseValue: 0.9,
+                min: 0.3,
+                max: 1.0,
+                phase: 0,
+                smoothing: 0,
+            },
+        ]);
+    });
+    const noiseSamples: number[] = [];
+    for (let i = 0; i < 8; i++) {
+        await page.waitForTimeout(80);
+        const v = await page.evaluate(() => (window as any).__store?.getState?.()?.liveModulations?.['demo.opacity'] ?? null);
+        if (typeof v === 'number') noiseSamples.push(v);
+    }
+    console.log('noise samples:', noiseSamples.map(v => v.toFixed(3)).join(' '));
+    const inRange = noiseSamples.every(v => v >= 0.25 && v <= 1.05);
+    if (!inRange || noiseSamples.length < 4) {
+        throw new Error(`noise samples out of range or insufficient: ${noiseSamples.join(', ')}`);
+    }
+    // Sanity: shouldn't be constant (would indicate noise not advancing).
+    const noiseSpread = Math.max(...noiseSamples) - Math.min(...noiseSamples);
+    if (noiseSpread < 0.01) {
+        throw new Error(`noise output is constant — period probably not driving sample advance. spread=${noiseSpread}`);
+    }
+
     if (errors.length > 0) {
         throw new Error('page errors during smoke:\n  ' + errors.join('\n  '));
     }
 
-    console.log('\n✓ modulation lift end-to-end: lfo-list registered, panel mounted, tick writes liveModulations, overlay wiggles');
+    console.log('\n✓ modulation lift end-to-end: lfo-list registered, panel mounted, tick writes liveModulations, overlay wiggles, min/max path works, noise path works');
     await browser.close();
 }
 

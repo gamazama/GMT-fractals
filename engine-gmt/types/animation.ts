@@ -18,6 +18,10 @@ export interface AnimationParams {
     phase: number;
     smoothing: number;
     pulseWidth?: number;
+    /** Output range. When both defined, engine uses [min, max]; falls
+     *  back to baseValue ± amplitude otherwise. See engine/types/animation. */
+    min?: number;
+    max?: number;
 }
 
 export interface BezierHandle {

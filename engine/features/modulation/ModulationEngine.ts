@@ -2,6 +2,11 @@
 import { ModulationRule } from './index';
 import { audioAnalysisEngine } from '../audioMod/AudioAnalysisEngine';
 import { AnimationParams } from '../../../types';
+import { ImprovedNoise } from 'three-stdlib';
+
+// Single shared Perlin generator. Different LFOs avoid syncing because
+// each gets its own seed offset (see lfoStates below).
+const noiseGen = new ImprovedNoise();
 
 class ModulationEngine {
     // Persistent state for envelope following (smooth transitions)
@@ -26,7 +31,7 @@ class ModulationEngine {
         for (let i = 0; i < animations.length; i++) {
             const anim = animations[i];
             if (!anim.enabled) continue;
-            
+
             const t = ((time / anim.period) + anim.phase) % 1.0;
             let rawWave = 0;
 
@@ -35,20 +40,44 @@ class ModulationEngine {
                 case 'Triangle': rawWave = 1.0 - Math.abs((t * 2.0) - 1.0) * 2.0; break;
                 case 'Sawtooth': rawWave = t * 2.0 - 1.0; break;
                 case 'Pulse': rawWave = t < 0.5 ? 1.0 : -1.0; break;
-                case 'Noise': 
+                case 'Noise': {
+                    // Perlin-noise LFO. Each LFO gets a stable per-id
+                    // seed offset so two noise LFOs at the same period
+                    // don't trace the same curve. Sampling at
+                    // `time / period` makes the period knob meaningful:
+                    // larger period = slower, smoother wiggle (the
+                    // characteristic timescale of the noise).
                     const nKey = anim.id;
-                    if (!this.lfoStates[nKey]) this.lfoStates[nKey] = Math.random();
-                    this.lfoStates[nKey] += delta * 5;
-                    rawWave = Math.sin(this.lfoStates[nKey]) * Math.cos(this.lfoStates[nKey] * 0.73); 
+                    if (this.lfoStates[nKey] === undefined) {
+                        this.lfoStates[nKey] = Math.random() * 1000;
+                    }
+                    const sampleT = (time / Math.max(0.001, anim.period)) + this.lfoStates[nKey];
+                    rawWave = noiseGen.noise(sampleT, 0, 0);
                     break;
+                }
             }
-            
+
             // Register normalized value (0..1) for Modulation Rules
             const normalizedLfo = rawWave * 0.5 + 0.5;
             this.lfoValues[`lfo-${i+1}`] = normalizedLfo;
 
-            // Legacy Direct Application Logic (with Smoothing)
-            const targetOffset = rawWave * anim.amplitude;
+            // Map waveform → output offset.
+            //
+            // New (min/max) model when both are defined:
+            //   output  = mid + halfRange * rawWave    where mid = (min+max)/2, halfRange = (max-min)/2
+            //   offset  = output − baseValue            (AnimationSystem composes liveMod = base + offset)
+            //
+            // Legacy fallback (amplitude only — preserves old preset
+            // behaviour on load until the LFO is re-edited):
+            //   offset  = amplitude * rawWave
+            let targetOffset: number;
+            if (typeof anim.min === 'number' && typeof anim.max === 'number') {
+                const mid = (anim.min + anim.max) * 0.5;
+                const halfRange = (anim.max - anim.min) * 0.5;
+                targetOffset = (mid - anim.baseValue) + halfRange * rawWave;
+            } else {
+                targetOffset = rawWave * anim.amplitude;
+            }
             const prevVal = this.lfoPrevOffsets[anim.id] ?? targetOffset;
             
             let smoothOffset = targetOffset;

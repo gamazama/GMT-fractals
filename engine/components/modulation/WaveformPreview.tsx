@@ -9,6 +9,13 @@
  */
 
 import React, { useRef, useEffect } from 'react';
+import { ImprovedNoise } from 'three-stdlib';
+
+// Shared with ModulationEngine semantics (same Perlin generator class).
+// Per-preview seed offset means two open LfoList rows showing 'Noise'
+// don't trace the identical curve, matching the engine's per-LFO seed
+// offset behaviour.
+const previewNoise = new ImprovedNoise();
 
 export interface WaveformPreviewProps {
     shape: string;
@@ -20,6 +27,9 @@ export interface WaveformPreviewProps {
 
 export const WaveformPreview: React.FC<WaveformPreviewProps> = ({ shape, period, phase, amplitude, enabled }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    // Stable seed per mounted preview so a re-render doesn't re-randomise
+    // the noise curve. New mount → new seed.
+    const seedRef = useRef<number>(Math.random() * 1000);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -48,14 +58,20 @@ export const WaveformPreview: React.FC<WaveformPreviewProps> = ({ shape, period,
 
         for (let i = 0; i <= samples; i++) {
             const x = (i / samples);
-            const t = ((x * windowSecs) / period + phase) % 1.0;
+            const elapsedSec = x * windowSecs;
+            const t = ((elapsedSec / period) + phase) % 1.0;
             let val = 0;
 
             if (shape === 'Sine') val = Math.sin(t * Math.PI * 2);
             else if (shape === 'Triangle') val = 1.0 - Math.abs((t * 2.0) - 1.0) * 2.0;
             else if (shape === 'Sawtooth') val = t * 2.0 - 1.0;
             else if (shape === 'Pulse') val = t < 0.5 ? 1.0 : -1.0;
-            else if (shape === 'Noise') val = Math.sin(t * 50) * Math.cos(t * 12);
+            else if (shape === 'Noise') {
+                // Match ModulationEngine: sample Perlin at time/period,
+                // not the wrapped phase t. Larger period → smoother curve.
+                const sampleT = (elapsedSec / Math.max(0.001, period)) + seedRef.current;
+                val = previewNoise.noise(sampleT, 0, 0);
+            }
 
             const py = h / 2 - (val * Math.min(1.5, amplitude) * (h / 4));
             if (i === 0) ctx.moveTo(x * w, py);
