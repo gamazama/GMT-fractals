@@ -16,7 +16,10 @@
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
-import { dyeDecayModeParam } from './palette';
+import { dyeDecayModeParam, dyeDecayModeFromIndex } from './palette';
+import type { FluidEngine } from '../fluid/FluidEngine';
+import type { FluidSimSlice, CouplingSlice } from '../storeTypes';
+import { forceModeFromIndex } from './coupling';
 
 export const FluidSimFeature: FeatureDefinition = {
     id: 'fluidSim',
@@ -109,4 +112,42 @@ export const FluidSimFeature: FeatureDefinition = {
             description: 'Freeze the fluid state. Splats and param changes still land; they just don\'t integrate forward.',
         },
     },
+};
+
+/**
+ * Push the fluid-sim slice + coupling-tab force-law knobs into
+ * FluidEngine. Both slices reach FluidEngine in one call so a change to
+ * either schedules a single setParams. `simResolution` is the user
+ * TARGET; the actual sim grid is scaled by qualityFraction (adaptive
+ * loop). autoQuality stays off — adaptive lives in @engine/viewport,
+ * not FluidEngine's internal loop.
+ */
+export const syncFluidSimToEngine = (
+    engine: FluidEngine,
+    fluidSim: FluidSimSlice,
+    coupling: CouplingSlice,
+    quality: number,
+): void => {
+    engine.setParams({
+        simResolution:  Math.max(64, Math.floor(fluidSim.simResolution * quality)),
+        vorticity:      fluidSim.vorticity,
+        vorticityScale: fluidSim.vorticityScale,
+        pressureIters:  fluidSim.pressureIters,
+        dissipation:    fluidSim.dissipation,
+        paused:         fluidSim.paused,
+        dt:             fluidSim.dt,
+        // Dye-inject + dye-decay subsection live on the Fluid tab.
+        dyeInject:          fluidSim.dyeInject,
+        dyeDecayMode:       dyeDecayModeFromIndex(fluidSim.dyeDecayMode),
+        dyeDissipation:     fluidSim.dyeDissipation,
+        dyeChromaDecayHz:   fluidSim.dyeChromaDecayHz,
+        dyeSaturationBoost: fluidSim.dyeSaturationBoost,
+        // Coupling-tab force law.
+        forceMode:      forceModeFromIndex(coupling.forceMode),
+        forceGain:      coupling.forceGain,
+        interiorDamp:   coupling.interiorDamp,
+        forceCap:       coupling.forceCap,
+        edgeMargin:     coupling.edgeMargin,
+        autoQuality:    false,
+    });
 };

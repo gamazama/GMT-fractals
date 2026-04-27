@@ -26,6 +26,10 @@
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { GradientConfig } from '../../types';
 import { defineEnumParam } from '../../engine/defineEnumParam';
+import type { FluidEngine } from '../fluid/FluidEngine';
+import type { PaletteSlice } from '../storeTypes';
+import { generateGradientTextureBuffer } from '../../utils/colorUtils';
+import { brushHandles } from '../engineHandles';
 
 const DEFAULT_DYE_GRADIENT: GradientConfig = {
     colorSpace: 'srgb',
@@ -198,4 +202,43 @@ export const PaletteFeature: FeatureDefinition = {
         // (Collision walls moved to CollisionFeature on Tab 7.)
         // (dyeMix moved to CompositeFeature on Tab 8.)
     },
+};
+
+/**
+ * Push the palette slice into FluidEngine — display-stage iteration
+ * colour knobs + dye-blend mode + the gradient LUT. The trap normal is
+ * normalized at the boundary so the shader's distance math stays
+ * well-defined for any user input. Also caches the LUT into
+ * `brushHandles` so the brush colour pipeline reads the same bytes.
+ */
+export const syncPaletteToEngine = (engine: FluidEngine, palette: PaletteSlice): void => {
+    const rawNx = palette.trapNormal.x;
+    const rawNy = palette.trapNormal.y;
+    const nLen = Math.hypot(rawNx, rawNy);
+    const trapNormal: [number, number] = nLen > 1e-6
+        ? [rawNx / nLen, rawNy / nLen]
+        : [1, 0];
+
+    const interior = palette.interiorColor;
+
+    engine.setParams({
+        colorMapping:        colorMappingFromIndex(palette.colorMapping),
+        colorIter:           palette.colorIter,
+        escapeR:             palette.escapeR,
+        interiorColor:       [interior.x, interior.y, interior.z],
+        trapCenter:          [palette.trapCenter.x, palette.trapCenter.y],
+        trapRadius:          palette.trapRadius,
+        trapNormal,
+        trapOffset:          palette.trapOffset,
+        stripeFreq:          palette.stripeFreq,
+        dyeBlend:            dyeBlendFromIndex(palette.dyeBlend),
+        gradientRepeat:      palette.gradientRepeat,
+        gradientPhase:       palette.gradientPhase,
+    });
+
+    if (palette.gradient) {
+        const lut = generateGradientTextureBuffer(palette.gradient);
+        engine.setGradientBuffer(lut);
+        brushHandles.ref.current.gradientLut = lut;
+    }
 };

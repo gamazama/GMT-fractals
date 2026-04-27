@@ -17,6 +17,8 @@
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import { defineEnumParam } from '../../engine/defineEnumParam';
+import type { FluidEngine } from '../fluid/FluidEngine';
+import type { PostFxSlice } from '../storeTypes';
 
 // 4 tone-map modes matching FluidEngine.toneMappingToIndex.
 const toneMappingParam = defineEnumParam(
@@ -109,4 +111,24 @@ export const PostFxFeature: FeatureDefinition = {
             description: 'Chroma-aware saturation — boosts dull pixels without posterising already-vivid ones.',
         },
     },
+};
+
+/**
+ * Push the post-FX slice into FluidEngine. Pure display-stage — doesn't
+ * touch sim state.
+ */
+export const syncPostFxToEngine = (engine: FluidEngine, postFx: PostFxSlice): void => {
+    engine.setParams({
+        fluidStyle:       fluidStyleFromIndex(postFx.fluidStyle),
+        toneMapping:      toneMappingFromIndex(postFx.toneMapping),
+        exposure:         postFx.exposure,
+        vibrance:         postFx.vibrance,
+        bloomAmount:      postFx.bloomAmount,
+        bloomThreshold:   postFx.bloomThreshold,
+        aberration:       postFx.aberration,
+        refraction:       postFx.refraction,
+        refractSmooth:    postFx.refractSmooth,
+        refractRoughness: postFx.refractRoughness,
+        caustics:         postFx.caustics,
+    });
 };

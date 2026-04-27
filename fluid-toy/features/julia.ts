@@ -14,6 +14,9 @@
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import { defineEnumParam } from '../../engine/defineEnumParam';
+import type { LfoTarget } from '../../types/animation';
+import type { FluidEngine } from '../fluid/FluidEngine';
+import type { JuliaSlice } from '../storeTypes';
 
 // Index-to-string map for the `kind` enum. Default = 1 (Mandelbrot),
 // matching FluidEngine.DEFAULT_PARAMS.kind so existing save files round-trip.
@@ -91,4 +94,28 @@ export const JuliaFeature: FeatureDefinition = {
             description: 'z-power in the iteration. 2 = classic z²+c; higher exponents make more lobes.',
         },
     },
+};
+
+/**
+ * Push the julia slice into FluidEngine. juliaC reads liveModulations
+ * first (so orbit / audio-reactive / future modulation sources compose
+ * automatically) and falls back to the slice's authored value.
+ */
+export const syncJuliaToEngine = (
+    engine: FluidEngine,
+    julia: JuliaSlice,
+    liveMod: Partial<Record<LfoTarget, number>>,
+): void => {
+    const baseX = julia.juliaC.x;
+    const baseY = julia.juliaC.y;
+    const cx = liveMod['julia.juliaC_x'] ?? baseX;
+    const cy = liveMod['julia.juliaC_y'] ?? baseY;
+    engine.setParams({
+        kind: kindFromIndex(julia.kind),
+        juliaC: [cx, cy],
+        maxIter: julia.maxIter,
+        power: julia.power,
+        center: [julia.center.x, julia.center.y],
+        zoom: julia.zoom,
+    });
 };

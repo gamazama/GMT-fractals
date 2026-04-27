@@ -17,6 +17,7 @@ import { useEngineStore } from '../store/engineStore';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
 import { lerp, easeInOutQuad } from '../engine/math/Easing';
 import { CameraIcon } from '../components/Icons';
+import type { StateSnapshot } from '../engine/store/createStateLibrarySlice';
 
 export interface JuliaViewState {
     kind: number;
@@ -27,8 +28,35 @@ export interface JuliaViewState {
     power: number;
 }
 
+// Augment the engine store with the dynamic fields written by
+// installStateLibrary. Keys are baked into installFluidToyViewLibrary
+// below, so the augmentation is purely descriptive — no risk of drift
+// against the runtime install (one source of truth: `arrayKey`,
+// `activeIdKey`, `actions` are literals here).
+export type ViewSnapshot = StateSnapshot<JuliaViewState>;
+
+declare module '../types/store' {
+    interface EngineStoreState {
+        savedViews: ViewSnapshot[];
+        activeViewId: string | null;
+        savedViews_savedToast: import('../engine/store/createStateLibrarySlice').StateLibrarySavedToast | null;
+        savedViews_notifyDot: boolean;
+        _viewIsModified?: (s: JuliaViewState) => boolean;
+    }
+    interface EngineActions {
+        addView: (label?: string) => Promise<string>;
+        updateView: (id: string, patch?: Partial<ViewSnapshot>) => void;
+        deleteView: (id: string) => void;
+        duplicateView: (id: string) => void;
+        selectView: (id: string | null) => void;
+        reorderViews: (from: number, to: number) => void;
+        saveViewToSlot: (slotIndex: number) => void;
+        resetView: () => void;
+    }
+}
+
 const captureView = (): JuliaViewState => {
-    const julia = (useEngineStore.getState() as any).julia;
+    const julia = useEngineStore.getState().julia;
     return {
         kind: julia.kind,
         juliaC: { ...julia.juliaC },
@@ -50,7 +78,7 @@ const TWEEN_MS = 500;
 let _tweenCancel: number | null = null;
 
 const tweenView = (target: JuliaViewState) => {
-    const setJulia = (useEngineStore.getState() as any).setJulia;
+    const setJulia = useEngineStore.getState().setJulia;
     if (!setJulia) return;
 
     if (_tweenCancel !== null) {
@@ -141,7 +169,7 @@ const captureCanvasThumbnail = async (): Promise<string | undefined> => {
 /** Reset the fractal view to default kind=Mandelbrot, center=0, zoom=1.5
  *  — matches the FluidPointerLayer reset action. */
 const resetView = () => {
-    const setJulia = (useEngineStore.getState() as any).setJulia;
+    const setJulia = useEngineStore.getState().setJulia;
     if (setJulia) setJulia({ center: { x: 0, y: 0 }, zoom: 1.5 });
 };
 

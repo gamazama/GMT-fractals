@@ -139,11 +139,11 @@ installCamera({ hideShortcuts: true });
 camera.register({
     featureId: 'julia',
     captureState: () => {
-        const s = useEngineStore.getState() as any;
-        return { center: { ...s.julia?.center }, zoom: s.julia?.zoom };
+        const s = useEngineStore.getState();
+        return { center: { ...s.julia.center }, zoom: s.julia.zoom };
     },
     applyState: (state) => {
-        (useEngineStore.getState() as any).setJulia({
+        useEngineStore.getState().setJulia({
             center: state.center,
             zoom: state.zoom,
         });

@@ -37,7 +37,8 @@
     "smoke:track-binding": "tsx debug/smoke-track-binding.mts",
     "smoke:tsaa": "tsx debug/smoke-tsaa.mts",
     "smoke:viewport-fixed": "tsx debug/smoke-viewport-fixed.mts",
-    "smoke:all": "tsx debug/smoke-boot.mts && tsx debug/smoke-interact.mts && tsx debug/smoke-fractal-toy.mts && tsx debug/smoke-fluid-toy.mts && tsx debug/smoke-engine-gmt.mts && tsx debug/smoke-undo.mts && tsx debug/smoke-camera.mts && tsx debug/smoke-viewport.mts && tsx debug/smoke-anim-play.mts"
+    "smoke:all": "tsx debug/smoke-boot.mts && tsx debug/smoke-interact.mts && tsx debug/smoke-fractal-toy.mts && tsx debug/smoke-fluid-toy.mts && tsx debug/smoke-engine-gmt.mts && tsx debug/smoke-undo.mts && tsx debug/smoke-camera.mts && tsx debug/smoke-viewport.mts && tsx debug/smoke-anim-play.mts",
+    "smoke:with-server": "tsx debug/runWithServer.mts --"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",

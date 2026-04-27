@@ -31,9 +31,9 @@ let _unsub: (() => void) | null = null;
 
 /** Rewrite store.animations to match the current orbit state. Idempotent. */
 const sync = () => {
-    const state = useEngineStore.getState() as any;
+    const state = useEngineStore.getState();
     const coupling = state.coupling;
-    const all = (state.animations ?? []) as any[];
+    const all = state.animations ?? [];
 
     const others = all.filter((a) => a.id !== ORBIT_ID_X && a.id !== ORBIT_ID_Y);
 
@@ -45,12 +45,11 @@ const sync = () => {
     const radius = coupling.orbitRadius ?? 0.1;
     const speedHz = Math.max(0.001, coupling.orbitSpeed ?? 0.25);
     const period = 1 / speedHz;
-    const commonShape = 'Sine';
 
     const next = [
         ...others,
-        { id: ORBIT_ID_X, target: 'julia.juliaC_x', shape: commonShape, period, phase: 0,    amplitude: radius, smoothing: 0, enabled: true },
-        { id: ORBIT_ID_Y, target: 'julia.juliaC_y', shape: commonShape, period, phase: 0.25, amplitude: radius, smoothing: 0, enabled: true },
+        { id: ORBIT_ID_X, target: 'julia.juliaC_x', shape: 'Sine' as const, period, phase: 0,    amplitude: radius, baseValue: 0, smoothing: 0, enabled: true },
+        { id: ORBIT_ID_Y, target: 'julia.juliaC_y', shape: 'Sine' as const, period, phase: 0.25, amplitude: radius, baseValue: 0, smoothing: 0, enabled: true },
     ];
     state.setAnimations(next);
 };
@@ -60,7 +59,7 @@ export const installOrbitSync = () => {
     // Initial sync so boot-time orbit state takes effect.
     sync();
     // Subscribe to coupling slice changes.
-    _unsub = useEngineStore.subscribe((s: any) => s.coupling, sync);
+    _unsub = useEngineStore.subscribe((s) => s.coupling, sync);
 };
 
 export const uninstallOrbitSync = () => {

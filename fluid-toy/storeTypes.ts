@@ -26,15 +26,43 @@ import type { PostFxFeature }     from './features/postFx';
 import type { CompositeFeature }  from './features/composite';
 import type { BrushFeature }      from './features/brush';
 
+export type JuliaSlice     = SliceFromParams<typeof JuliaFeature['params']>;
+export type CouplingSlice  = SliceFromParams<typeof CouplingFeature['params']>;
+export type PaletteSlice   = SliceFromParams<typeof PaletteFeature['params']>;
+export type CollisionSlice = SliceFromParams<typeof CollisionFeature['params']>;
+export type FluidSimSlice  = SliceFromParams<typeof FluidSimFeature['params']>;
+export type PostFxSlice    = SliceFromParams<typeof PostFxFeature['params']>;
+export type CompositeSlice = SliceFromParams<typeof CompositeFeature['params']>;
+export type BrushSlice     = SliceFromParams<typeof BrushFeature['params']>;
+
+// Augment AppFeatureSlices so `useSlice('julia')` is typed (engine-side
+// hook contract).
 declare module '../engine/typedSlices' {
     interface AppFeatureSlices {
-        julia:     SliceFromParams<typeof JuliaFeature['params']>;
-        coupling:  SliceFromParams<typeof CouplingFeature['params']>;
-        palette:   SliceFromParams<typeof PaletteFeature['params']>;
-        collision: SliceFromParams<typeof CollisionFeature['params']>;
-        fluidSim:  SliceFromParams<typeof FluidSimFeature['params']>;
-        postFx:    SliceFromParams<typeof PostFxFeature['params']>;
-        composite: SliceFromParams<typeof CompositeFeature['params']>;
-        brush:     SliceFromParams<typeof BrushFeature['params']>;
+        julia:     JuliaSlice;
+        coupling:  CouplingSlice;
+        palette:   PaletteSlice;
+        collision: CollisionSlice;
+        fluidSim:  FluidSimSlice;
+        postFx:    PostFxSlice;
+        composite: CompositeSlice;
+        brush:     BrushSlice;
+    }
+}
+
+// Augment FeatureStateMap so the main store's typed shape
+// (EngineStoreState + auto-generated `set<Feature>` actions) reflects
+// fluid-toy's slices. This is what kills the `(getState() as any).setBrush`
+// pattern across the app.
+declare module '../engine/features/types' {
+    interface FeatureStateMap {
+        julia:     JuliaSlice;
+        coupling:  CouplingSlice;
+        palette:   PaletteSlice;
+        collision: CollisionSlice;
+        fluidSim:  FluidSimSlice;
+        postFx:    PostFxSlice;
+        composite: CompositeSlice;
+        brush:     BrushSlice;
     }
 }

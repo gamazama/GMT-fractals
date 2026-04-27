@@ -29,7 +29,7 @@ export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine |
         description: 'Pause / resume the fluid simulation',
         category: 'Playback',
         handler: () => {
-            const s = useEngineStore.getState() as any;
+            const s = useEngineStore.getState();
             s.setFluidSim({ paused: !s.fluidSim?.paused });
         },
     });
@@ -48,7 +48,7 @@ export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine |
         description: 'Toggle Julia-c auto-orbit',
         category: 'Simulation',
         handler: () => {
-            const s = useEngineStore.getState() as any;
+            const s = useEngineStore.getState();
             s.setCoupling({ orbitEnabled: !s.coupling?.orbitEnabled });
         },
     });
@@ -59,7 +59,7 @@ export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine |
         description: 'Recenter view (center=[0,0], zoom=1.5)',
         category: 'View',
         handler: () => {
-            const s = useEngineStore.getState() as any;
+            const s = useEngineStore.getState();
             s.setJulia({ center: { x: 0, y: 0 }, zoom: 1.5 });
         },
     });

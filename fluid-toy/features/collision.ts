@@ -20,6 +20,9 @@
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { GradientConfig } from '../../types';
+import type { FluidEngine } from '../fluid/FluidEngine';
+import type { CollisionSlice } from '../storeTypes';
+import { generateGradientTextureBuffer } from '../../utils/colorUtils';
 
 const DEFAULT_COLLISION_GRADIENT: GradientConfig = {
     colorSpace: 'srgb',
@@ -76,4 +79,22 @@ export const CollisionFeature: FeatureDefinition = {
             description: 'Overlays diagonal cyan hatching on solid cells so you can see the wall shape while tuning the gradient.',
         },
     },
+};
+
+/**
+ * Push the collision slice into FluidEngine. The mask pass only runs
+ * when `enabled`; repeat/phase remap t before the collision LUT lookup
+ * so walls tile independently of the dye palette.
+ */
+export const syncCollisionToEngine = (engine: FluidEngine, collision: CollisionSlice): void => {
+    engine.setParams({
+        collisionEnabled: collision.enabled,
+        collisionPreview: collision.preview,
+        collisionRepeat:  collision.repeat,
+        collisionPhase:   collision.phase,
+    });
+    if (collision.gradient) {
+        const lut = generateGradientTextureBuffer(collision.gradient);
+        engine.setCollisionGradientBuffer(lut);
+    }
 };

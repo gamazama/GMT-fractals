@@ -40,6 +40,7 @@
 import { useEngineStore } from '../store/engineStore';
 import type { ParamConfig } from './FeatureSystem';
 import type { GradientConfig } from '../types';
+import type { LfoTarget } from '../types/animation';
 
 /**
  * Infer a TypeScript shape from a DDFS `params` record. Maps each
@@ -110,6 +111,25 @@ export const setSlice = <K extends AppSliceId>(
         return;
     }
     setter(patch);
+};
+
+// Stable empty fallback for the liveModulations selector. Module-level
+// so it's the same reference across renders — using `?? {}` inline in a
+// selector would create a fresh object every eval and defeat zustand's
+// reference-equality re-render gate, forcing the consumer component to
+// re-render on every store update.
+const EMPTY_LIVE_MODS: Readonly<Partial<Record<LfoTarget, number>>> = Object.freeze({});
+
+/**
+ * Subscribe to the live-modulations map (base + LFO/audio/rule offsets
+ * the modulation tick writes each frame). Stable empty fallback baked in
+ * so consumers don't have to remember the `?? {}` footgun.
+ *
+ * Read pattern: `liveMod[target] ?? base` — the live value always wins
+ * when present, otherwise fall back to the slice's authored value.
+ */
+export const useLiveModulations = (): Partial<Record<LfoTarget, number>> => {
+    return useEngineStore((s) => s.liveModulations ?? EMPTY_LIVE_MODS);
 };
 
 /**

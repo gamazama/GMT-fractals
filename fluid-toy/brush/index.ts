@@ -44,3 +44,15 @@ export {
     emitPressSplat,
     beginStroke,
 } from './emitter';
+
+// IMPORTANT: do NOT re-export readBrushParams from the barrel — it
+// imports useEngineStore. Several feature files (palette, …) reach the
+// brush barrel via engineHandles for `brushHandles`, and DDFS feature
+// registration runs BEFORE the store is constructed (the registries
+// freeze on first store touch). Importing useEngineStore at that time
+// would block registerFeatures.ts from completing.
+//
+// Consumers that need `readBrushParams` import it directly from
+// '../brush/readParams' — the only callers are FluidPointerLayer's
+// pointer handlers and the brush RAF tick in useFluidEngine, both of
+// which run post-boot.

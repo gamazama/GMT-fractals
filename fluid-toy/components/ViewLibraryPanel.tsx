@@ -17,27 +17,24 @@ import { StateLibraryPanel, type StateLibraryPreset } from '../../components/Sta
 import { ActiveSnapshotFeatures } from '../../components/ActiveSnapshotFeatures';
 import { CompositionOverlayControls } from '../../components/CompositionOverlayControls';
 import { PlusIcon } from '../../components/Icons';
-import type { StateSnapshot } from '../../engine/store/createStateLibrarySlice';
-import type { JuliaViewState } from '../viewLibrary';
+import type { JuliaViewState, ViewSnapshot } from '../viewLibrary';
 import { KIND_MODES } from '../features/julia';
 
-type ViewSnapshot = StateSnapshot<JuliaViewState>;
-
 export const ViewLibraryPanel: React.FC = () => {
-    const savedViews = useEngineStore(s => (s as any).savedViews as ViewSnapshot[] ?? []);
-    const activeViewId = useEngineStore(s => (s as any).activeViewId as string | null);
+    const savedViews = useEngineStore(s => s.savedViews ?? []);
+    const activeViewId = useEngineStore(s => s.activeViewId);
 
-    const addView = useEngineStore(s => (s as any).addView) as ((label?: string) => Promise<string>) | undefined;
-    const updateView = useEngineStore(s => (s as any).updateView) as ((id: string, patch?: Partial<ViewSnapshot>) => void) | undefined;
-    const deleteView = useEngineStore(s => (s as any).deleteView) as ((id: string) => void) | undefined;
-    const duplicateView = useEngineStore(s => (s as any).duplicateView) as ((id: string) => void) | undefined;
-    const selectView = useEngineStore(s => (s as any).selectView) as ((id: string | null) => void) | undefined;
-    const reorderViews = useEngineStore(s => (s as any).reorderViews) as ((from: number, to: number) => void) | undefined;
-    const resetView = useEngineStore(s => (s as any).resetView) as (() => void) | undefined;
+    const addView = useEngineStore(s => s.addView);
+    const updateView = useEngineStore(s => s.updateView);
+    const deleteView = useEngineStore(s => s.deleteView);
+    const duplicateView = useEngineStore(s => s.duplicateView);
+    const selectView = useEngineStore(s => s.selectView);
+    const reorderViews = useEngineStore(s => s.reorderViews);
+    const resetView = useEngineStore(s => s.resetView);
 
     // Subscribe to the julia slice so the modified marker re-renders
     // when the user pans/zooms/edits without selecting a save.
-    useEngineStore(s => (s as any).julia);
+    useEngineStore(s => s.julia);
 
     const handleAdd = useCallback(async () => { await addView?.(); }, [addView]);
     const handleRename = useCallback((id: string, label: string) => updateView?.(id, { label }), [updateView]);
@@ -45,12 +42,10 @@ export const ViewLibraryPanel: React.FC = () => {
     const handleReset = useCallback(() => resetView?.(), [resetView]);
 
     const isModified = useCallback((snap: ViewSnapshot) => {
-        const fn = (useEngineStore.getState() as any)._viewIsModified as
-            | ((s: JuliaViewState) => boolean)
-            | undefined;
+        const fn = useEngineStore.getState()._viewIsModified;
         if (fn) return fn(snap.state);
         // Inline fallback: re-read live julia and diff.
-        const julia = (useEngineStore.getState() as any).julia;
+        const julia = useEngineStore.getState().julia;
         const ss = snap.state;
         if (julia.kind !== ss.kind) return true;
         if (julia.maxIter !== ss.maxIter) return true;
@@ -67,13 +62,13 @@ export const ViewLibraryPanel: React.FC = () => {
     // to the slice's resetView. Memoised so the array identity is
     // stable across renders.
     const presets: StateLibraryPreset[] = useMemo(() => {
-        const setJulia = (useEngineStore.getState() as any).setJulia;
+        const setJulia = useEngineStore.getState().setJulia;
         const setOrZoom = (zoom: number) => {
-            const c = (useEngineStore.getState() as any).julia?.center ?? { x: 0, y: 0 };
+            const c = useEngineStore.getState().julia.center ?? { x: 0, y: 0 };
             setJulia?.({ center: { x: c.x, y: c.y }, zoom });
         };
-        const mandIdx = KIND_MODES.indexOf('mandelbrot' as any);
-        const juliaIdx = KIND_MODES.indexOf('julia' as any);
+        const mandIdx = KIND_MODES.indexOf('mandelbrot');
+        const juliaIdx = KIND_MODES.indexOf('julia');
         return [
             { id: 'reset', label: 'RESET', onSelect: () => handleReset(), title: 'Reset view to defaults' },
             { id: 'home',  label: 'HOME',  onSelect: () => setJulia?.({ center: { x: 0, y: 0 } }),    title: 'Center to (0, 0); keep zoom' },

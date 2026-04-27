@@ -12,6 +12,8 @@
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import { defineEnumParam } from '../../engine/defineEnumParam';
+import type { FluidEngine } from '../fluid/FluidEngine';
+import type { CompositeSlice } from '../storeTypes';
 
 // 4 show modes, index-aligned with FluidEngine.showToIndex.
 const showParam = defineEnumParam(
@@ -63,4 +65,14 @@ export const CompositeFeature: FeatureDefinition = {
             description: 'Overlay velocity-hue on top of the composite. Diagnostic.',
         },
     },
+};
+
+/** Push the composite-mix slice (show mode + julia / dye / velocity balance). */
+export const syncCompositeToEngine = (engine: FluidEngine, composite: CompositeSlice): void => {
+    engine.setParams({
+        show:        showFromIndex(composite.show),
+        juliaMix:    composite.juliaMix,
+        dyeMix:      composite.dyeMix,
+        velocityViz: composite.velocityViz,
+    });
 };

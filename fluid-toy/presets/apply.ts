@@ -53,7 +53,7 @@ export const applyRefPreset = (preset: RefPreset) => {
 
     // ── Julia (Fractal tab) ─────────────────────────────────────────
     const julia: any = {};
-    const kindIdx = idx(KIND_MODES as any, p.kind);
+    const kindIdx = idx(KIND_MODES, p.kind);
     if (kindIdx !== undefined) julia.kind = kindIdx;
     if (p.juliaC) julia.juliaC = tupleToVec(p.juliaC);
     if (p.center) julia.center = tupleToVec(p.center);
@@ -64,7 +64,7 @@ export const applyRefPreset = (preset: RefPreset) => {
 
     // ── Coupling (force law + orbit) ────────────────────────────────
     const coupling: any = {};
-    const fmIdx = idx(FORCE_MODES as any, p.forceMode);
+    const fmIdx = idx(FORCE_MODES, p.forceMode);
     if (fmIdx !== undefined) coupling.forceMode = fmIdx;
     if (p.forceGain    !== undefined) coupling.forceGain    = p.forceGain;
     if (p.interiorDamp !== undefined) coupling.interiorDamp = p.interiorDamp;
@@ -93,13 +93,13 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.dyeDissipation    !== undefined) fs.dyeDissipation    = p.dyeDissipation;
     if (p.dyeChromaDecayHz  !== undefined) fs.dyeChromaDecayHz  = p.dyeChromaDecayHz;
     if (p.dyeSaturationBoost !== undefined) fs.dyeSaturationBoost = p.dyeSaturationBoost;
-    const decayIdx = idx(DYE_DECAY_MODES as any, p.dyeDecayMode);
+    const decayIdx = idx(DYE_DECAY_MODES, p.dyeDecayMode);
     if (decayIdx !== undefined) fs.dyeDecayMode = decayIdx;
     if (Object.keys(fs).length > 0) s.setFluidSim(fs);
 
     // ── Palette (colour mapping, gradient, trap, dye blend) ─────────
     const pa: any = {};
-    const cmIdx = idx(COLOR_MAPPINGS as any, p.colorMapping);
+    const cmIdx = idx(COLOR_MAPPINGS, p.colorMapping);
     if (cmIdx !== undefined) pa.colorMapping = cmIdx;
     if (p.colorIter       !== undefined) pa.colorIter     = p.colorIter;
     if (p.gradientRepeat  !== undefined) pa.gradientRepeat = p.gradientRepeat;
@@ -110,7 +110,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.trapOffset      !== undefined) pa.trapOffset     = p.trapOffset;
     if (p.stripeFreq      !== undefined) pa.stripeFreq     = p.stripeFreq;
     if (p.interiorColor)                 pa.interiorColor  = vec3FromTuple(p.interiorColor);
-    const blendIdx = idx(DYE_BLENDS as any, p.dyeBlend);
+    const blendIdx = idx(DYE_BLENDS, p.dyeBlend);
     if (blendIdx !== undefined) pa.dyeBlend = blendIdx;
     if (preset.gradient) pa.gradient = preset.gradient;
     if (Object.keys(pa).length > 0) s.setPalette(pa);
@@ -124,9 +124,9 @@ export const applyRefPreset = (preset: RefPreset) => {
 
     // ── Post-FX ─────────────────────────────────────────────────────
     const pfx: any = {};
-    const styleIdx = idx(FLUID_STYLES as any, p.fluidStyle);
+    const styleIdx = idx(FLUID_STYLES, p.fluidStyle);
     if (styleIdx !== undefined) pfx.fluidStyle = styleIdx;
-    const toneIdx = idx(TONE_MAPPINGS as any, p.toneMapping);
+    const toneIdx = idx(TONE_MAPPINGS, p.toneMapping);
     if (toneIdx !== undefined) pfx.toneMapping = toneIdx;
     if (p.exposure       !== undefined) pfx.exposure       = p.exposure;
     if (p.vibrance       !== undefined) pfx.vibrance       = p.vibrance;
@@ -140,7 +140,7 @@ export const applyRefPreset = (preset: RefPreset) => {
 
     // ── Composite ───────────────────────────────────────────────────
     const comp: any = {};
-    const showIdx = idx(SHOW_MODES as any, p.show);
+    const showIdx = idx(SHOW_MODES, p.show);
     if (showIdx !== undefined) comp.show = showIdx;
     if (p.juliaMix    !== undefined) comp.juliaMix    = p.juliaMix;
     if (p.dyeMix      !== undefined) comp.dyeMix      = p.dyeMix;
