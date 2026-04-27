@@ -117,9 +117,11 @@ installViewport({
     alwaysActive: false, // GMT-style — settle to full-res on idle
 });
 
-installTopBar();
-// installPauseControls is NOT called here — registerGmtTopbar re-registers
-// it in the LEFT slot to match gmt-0.8.5's RenderTools layout.
+// hideDefaults: registerGmtTopbar registers fps/adaptive/pause itself in
+// the LEFT slot to match gmt-0.8.5's RenderTools layout, and the project
+// name lives inside GmtLogo. installPauseControls is intentionally not
+// called for the same reason.
+installTopBar({ hideDefaults: true });
 
 installSceneIO({
     // The worker-owned canvas is the first <canvas> in the DOM — it's
@@ -340,20 +342,10 @@ if (!bootPreset) {
         : null;
 }
 if (bootPreset) {
+    // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener
+    // stashes it on proxy.pendingTeleport for GmtRendererTickDriver to
+    // replay once the worker is boot-ready.
     useEngineStore.getState().loadScene({ preset: bootPreset });
-
-    // Stash camera state for GmtRendererTickDriver to replay after boot-ready.
-    // loadPreset fires CAMERA_TELEPORT before Navigation mounts, so it's lost.
-    // GmtRendererTickDriver drains pendingTeleport once the worker is booted + compiled.
-    const s = useEngineStore.getState() as any;
-    if (s.sceneOffset || s.cameraRot) {
-        getProxy().pendingTeleport = {
-            position: { x: 0, y: 0, z: 0 },
-            rotation: s.cameraRot || { x: 0, y: 0, z: 0, w: 1 },
-            sceneOffset: s.sceneOffset,
-            targetDistance: s.targetDistance,
-        };
-    }
 } else {
     console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
 }

@@ -199,6 +199,15 @@ export const installGmtCameraSlice = (): void => {
     const set = useEngineStore.setState as (partial: any) => void;
     const get = useEngineStore.getState as () => any;
 
+    // Stash every CAMERA_TELEPORT into proxy.pendingTeleport so the
+    // GmtRendererTickDriver can replay the most recent one once the worker
+    // is boot-ready. Catches the early teleport from loadPreset (fires
+    // before Navigation mounts) and any later one fired before the worker
+    // finishes its first compile.
+    FractalEvents.on(FRACTAL_EVENTS.CAMERA_TELEPORT, (state) => {
+        engine.pendingTeleport = state as any;
+    });
+
     // Patch GMT-only helpers that the panel + camera-utils call
     // alongside the saved-cameras library actions.
     set({

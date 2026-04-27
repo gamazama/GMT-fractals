@@ -271,36 +271,21 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     } = options;
 
     // ── Left slot — mirrors gmt-0.8.5's RenderTools layout exactly ──────
-    // Order: Logo | Name | [divider] | FPS | Pause | [divider] | Quality | Adaptive | PT | (badge) | Region | Bucket
-
-    topbar.register({ id: 'gmt-logo', slot: 'left', order: -10, component: GmtLogo });
-
-    // Logo now shows the project name as a subtitle — suppress the standalone pill.
-    topbar.unregister('project-name');
-
-    // Divider between logo block and FPS/Pause group
-    topbar.register({ id: 'gmt-div-1', slot: 'left', order: 1, component: TopBarDivider });
-
-    // Move FPS + Pause from right slot (registered by installTopBar / installPauseControls)
-    // into the left slot to match gmt-0.8.5's RenderTools placement.
-    topbar.unregister('fps');
-    topbar.unregister('pause');
-    topbar.register({ id: 'fps',   slot: 'left', order: 2, component: FpsCounter });
-    topbar.register({ id: 'pause', slot: 'left', order: 3, component: PauseControls });
-
-    // Divider between FPS/Pause and Quality group
-    topbar.register({ id: 'gmt-div-2', slot: 'left', order: 4, component: TopBarDivider });
-
-    topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5, component: ViewportQuality });
-
-    // Move Adaptive badge from right slot into left slot alongside ViewportQuality
-    topbar.unregister('adaptive');
-    topbar.register({ id: 'adaptive', slot: 'left', order: 6, component: AdaptiveResolution });
-
-    topbar.register({ id: 'gmt-path-tracing',  slot: 'left', order: 10, component: PathTracingToggle });
-    topbar.register({ id: 'gmt-playing-badge', slot: 'left', order: 20, component: PlayingBadge });
-    topbar.register({ id: 'gmt-render-region', slot: 'left', order: 25, component: RenderRegionToggle });
-    topbar.register({ id: 'gmt-bucket-render', slot: 'left', order: 30, component: BucketRenderToggle });
+    // Order: Logo | [div] | FPS | Pause | [div] | Quality | Adaptive | PT | Badge | Region | Bucket
+    // (project name lives inside GmtLogo as a subtitle; engine-core defaults
+    //  for project-name / fps / adaptive / pause are skipped via
+    //  installTopBar({hideDefaults}) and we register our own here.)
+    topbar.register({ id: 'gmt-logo',             slot: 'left', order: -10, component: GmtLogo });
+    topbar.register({ id: 'gmt-div-1',            slot: 'left', order: 1,   component: TopBarDivider });
+    topbar.register({ id: 'fps',                  slot: 'left', order: 2,   component: FpsCounter });
+    topbar.register({ id: 'pause',                slot: 'left', order: 3,   component: PauseControls });
+    topbar.register({ id: 'gmt-div-2',            slot: 'left', order: 4,   component: TopBarDivider });
+    topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5,   component: ViewportQuality });
+    topbar.register({ id: 'adaptive',             slot: 'left', order: 6,   component: AdaptiveResolution });
+    topbar.register({ id: 'gmt-path-tracing',     slot: 'left', order: 10,  component: PathTracingToggle });
+    topbar.register({ id: 'gmt-playing-badge',    slot: 'left', order: 20,  component: PlayingBadge });
+    topbar.register({ id: 'gmt-render-region',    slot: 'left', order: 25,  component: RenderRegionToggle });
+    topbar.register({ id: 'gmt-bucket-render',    slot: 'left', order: 30,  component: BucketRenderToggle });
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
     // Vibration feedback callback — noop here; apps that want haptic
