@@ -80,6 +80,12 @@ export const PostFxFeature: FeatureDefinition = {
             condition: { param: 'refraction', gt: 0 },
             description: 'Stencil width (in dye texels) for the refraction gradient. Higher = smoother distortion, less pixel jitter; 1 = raw single-pixel gradient.',
         },
+        refractRoughness: {
+            type: 'float', default: 0, min: 0, max: 1, step: 0.01,
+            label: 'Refract roughness',
+            condition: { param: 'refraction', gt: 0 },
+            description: 'Frosted-glass scatter for the refracted fractal. 0 = crisp polished glass (single-tap). 1 = ~5px Vogel-disc blur — light scatters into a cone like real rough surfaces. Mask + walls blur in step so glass edges stay consistent.',
+        },
 
         caustics: {
             type: 'float', default: 1, min: 0, max: 25, step: 0.1,

@@ -48,7 +48,8 @@ function ToggleSwitch<T extends string | number | boolean>({
     variant = 'default',
     labelSuffix
 }: ToggleSwitchProps<T>) {
-    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
+    const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
     const handleContextMenu = useHelpContextMenu();
 
     const handleChange = (val: T) => {

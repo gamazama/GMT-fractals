@@ -165,7 +165,15 @@ export const RawKnob: React.FC<KnobProps> = ({
 
 // Connected Wrapper
 export const Knob: React.FC<KnobProps> = (props) => {
-    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
+    // Granular selectors — destructuring `useEngineStore()` would
+    // subscribe this Knob to the ENTIRE store, re-rendering on every
+    // setter. With many Knobs in a panel tree, that's the dominant
+    // contributor to the per-pointer-event subscriber cascade that
+    // trips React's max-depth guard during fluid-toy pan/zoom.
+    // These two refs are stable (created once at store init), so the
+    // selectors return the same value every time and never re-render.
+    const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
 
     return (
         <RawKnob

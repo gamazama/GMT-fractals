@@ -22,7 +22,7 @@ import {
 } from './shaders';
 import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH } from '../constants';
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
-import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
+// FractalEvents reset_accum subscription removed — see ctor comment.
 
 export type ForceMode = 'gradient' | 'curl' | 'iterate' | 'c-track' | 'hue';
 export type ShowMode = 'composite' | 'julia' | 'dye' | 'velocity';
@@ -226,6 +226,13 @@ export interface FluidParams {
   /** Stencil width (in dye-texels) for the refraction gradient. Higher = smoother distortion,
    *  less pixel jitter, at the cost of detail. 1 = raw single-pixel gradient. */
   refractSmooth: number;
+  /** Frosted-glass roughness for the refracted fractal sample. 0 = crisp single-tap
+   *  refraction (default). 1 = ~5px Vogel-disc blur radius — light scatters across an
+   *  8-tap kernel, matching how real rough surfaces refract into a cone of directions
+   *  rather than one ray. Each tap is gradient-mapped individually before averaging,
+   *  so boundary pixels stay coherent. The mask + wall edges blur in step with the
+   *  fractal so glass refractions look consistent. */
+  refractRoughness: number;
   /** Laplacian-of-dye caustic highlight scale (liquid look). */
   caustics: number;
   interiorColor: [number, number, number];
@@ -252,6 +259,30 @@ export interface FluidParams {
   /** Max accumulated samples before TSAA stops blending (saves GPU
    *  work once the image has converged). */
   tsaaSampleCap: number;
+  /** K-sampling: number of jittered Julia evaluations per frame, raw-
+   *  averaged before pushing to the TSAA accumulator. GLSL clamps
+   *  to [1, 16]. With grid mode + tsaaGridSize, the cells visited
+   *  cycle across frames so a full round of (gridSize / K) frames
+   *  covers every cell exactly once. K=4 + gridSize=16 → 4 frames
+   *  per round; after frame 4 the accumulator equals a single-frame
+   *  K=16 grid. */
+  tsaaPerFrameSamples?: number;
+  /** Sub-pixel jitter pattern.
+   *  - 'bluenoise': stochastic — fresh blue-noise tap per sub-sample,
+   *    decorrelated across frames. Converges in expectation; the TSAA
+   *    accumulator visibly shimmers en route.
+   *  - 'grid' (default): deterministic √gridSize × √gridSize lattice.
+   *    K cells visited per frame, cycled so a full round covers every
+   *    cell once. Round 0 is centre-of-cell (matches a single-frame
+   *    K=gridSize grid). Round 1+ pulls a deterministic blue-noise
+   *    sub-cell offset (one tap per round, walked through the texture
+   *    by R2 steps) — same offset for every pixel at a given round so
+   *    the image jitters in unison without per-pixel shimmer. */
+  tsaaJitterMode?: 'bluenoise' | 'grid';
+  /** Grid-mode lattice cell count. Should be a perfect square (4, 9,
+   *  16, 25). Default 16 = 4×4. Combined with tsaaPerFrameSamples
+   *  this defines the round length in frames. */
+  tsaaGridSize?: number;
 }
 
 interface FBO {
@@ -262,7 +293,15 @@ interface FBO {
   texel: [number, number];
 }
 
-/** Framebuffer with two RGBA16F color attachments (for the Julia MRT pass). */
+/** Framebuffer with two colour attachments for the Julia MRT pass.
+ *  texMain holds raw iteration data (z, smoothIter, escaped) and
+ *  texAux holds the colour-mapping accumulators (orbit-trap min,
+ *  stripe avg, log|dz|, trap-iter-norm). Both are raw-averaged
+ *  across the K sub-samples in the Julia shader's main(); the TSAA
+ *  blend pass progressively averages them across frames. Downstream
+ *  passes (display gradient, collision mask, dye inject) read either
+ *  the live frame (juliaCur) or the accumulator (juliaTsaa) and
+ *  apply their own gradient/mask logic. */
 interface MrtFbo {
   texMain: WebGLTexture;
   texAux: WebGLTexture;
@@ -332,6 +371,7 @@ export const DEFAULT_PARAMS: FluidParams = {
   aberration: 0.27,
   refraction: 0.037,
   refractSmooth: 3,
+  refractRoughness: 0.0,
   caustics: 1,
   interiorColor: [0.02, 0.02, 0.04],
   edgeMargin: 0.04,
@@ -346,6 +386,14 @@ export const DEFAULT_PARAMS: FluidParams = {
   tsaa: true,
   tsaaJitterAmount: 1.0,
   tsaaSampleCap: 64,
+  // K=4 per frame, gridSize=16 (4×4 lattice). One round = 4 frames →
+  // every lattice cell visited once → accumulator equals the single-
+  // frame K=16 result. Round 1+ progressively refines via deterministic
+  // blue-noise sub-cell offsets, so frames 5-16 add real detail beyond
+  // a static grid. Per-frame cost is 1/4 of K=16 single-frame.
+  tsaaPerFrameSamples: 4,
+  tsaaGridSize: 16,
+  tsaaJitterMode: 'grid',
 };
 
 export class FluidEngine {
@@ -390,8 +438,6 @@ export class FluidEngine {
   /** Frame counter — advances every step. Feeds shader uFrameCount for
    *  blue-noise temporal animation. */
   private frameCount = 0;
-  /** Unsubscribe handle for the FractalEvents reset_accum listener. */
-  private resetAccumUnsub: (() => void) | null = null;
 
   /** Bloom scratch textures. Allocated to the DISPLAY canvas size / 2, /4, /8. */
   private bloomA!: FBO;   // half-res — extraction target + final upsample target
@@ -477,12 +523,18 @@ export class FluidEngine {
     // Async, returns a 1×1 neutral fallback until PNG decodes.
     this.blueNoise = createBlueNoiseWebGL2(gl);
 
-    // Reset TSAA accumulation on the generic engine signal. renderControl-
-    // Slice emits reset_accum when AA / region / accumulation flip —
-    // listening here lets GMT-style "force a full reset" work for free.
-    this.resetAccumUnsub = FractalEvents.on(FRACTAL_EVENTS.RESET_ACCUM, () => {
-        this.tsaaSampleIndex = 0;
-    });
+    // Note: we deliberately DO NOT subscribe to the generic RESET_ACCUM
+    // event here. createFeatureSlice emits reset_accum on every param
+    // setter (brush, fluidSim, postFx, …) — but only Julia-affecting
+    // params should reset the Julia accumulator. The narrow check
+    // lives in updateTsaaHash() which inspects the actual fractal
+    // parameters; that's the sole authority for restarts here.
+    // resize() resets directly when the FBO is rebuilt.
+    // (renderControlSlice toggles like aaMode / accumulation that DO
+    // legitimately affect the accumulator are reflected through
+    // setParams({tsaa, tsaaSampleCap}) from FluidToyApp's render-
+    // control useEffect — a tsaa-flag flip flows naturally through
+    // the hash on the next frame.)
   }
 
   private detectFormat() {
@@ -550,7 +602,7 @@ export class FluidEngine {
     this.progJulia = this.linkProgram(VERT_FULLSCREEN, FRAG_JULIA,
       ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower',
        'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq',
-       'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount']);
+       'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount', 'uPerFrameSamples', 'uJitterMode', 'uGridSize', 'uTsaaSampleIndex']);
     this.progTsaaBlend = this.linkProgram(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
       ['uCurrentMain', 'uCurrentAux', 'uHistoryMain', 'uHistoryAux', 'uSampleIndex']);
     this.progMotion = this.linkProgram(VERT_FULLSCREEN, FRAG_MOTION,
@@ -582,7 +634,7 @@ export class FluidEngine {
       ['uTexel', 'uTexelDisplay', 'uTexelDye', 'uJulia', 'uJuliaAux', 'uDye', 'uVelocity', 'uGradient', 'uBloom', 'uMask',
        'uShowMode', 'uJuliaMix', 'uDyeMix', 'uVelocityViz',
        'uColorMapping', 'uGradientRepeat', 'uGradientPhase', 'uInteriorColor',
-       'uToneMapping', 'uExposure', 'uVibrance', 'uBloomAmount', 'uAberration', 'uRefraction', 'uRefractSmooth', 'uCaustics',
+       'uToneMapping', 'uExposure', 'uVibrance', 'uBloomAmount', 'uAberration', 'uRefraction', 'uRefractSmooth', 'uRefractRoughness', 'uCaustics',
        'uCollisionPreview']);
     this.progClear = this.linkProgram(VERT_FULLSCREEN, FRAG_CLEAR, ['uValue']);
     this.progReproject = this.linkProgram(VERT_FULLSCREEN, FRAG_REPROJECT,
@@ -1070,6 +1122,14 @@ export class FluidEngine {
     gl.uniform1f(this.progJulia.uniforms['uJitterScale'], jitterScale);
     gl.uniform2f(this.progJulia.uniforms['uResolution'], this.simW, this.simH);
     gl.uniform1i(this.progJulia.uniforms['uFrameCount'], this.frameCount);
+    gl.uniform1i(this.progJulia.uniforms['uPerFrameSamples'], this.params.tsaaPerFrameSamples ?? 1);
+    gl.uniform1i(this.progJulia.uniforms['uJitterMode'], this.params.tsaaJitterMode === 'grid' ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uGridSize'], this.params.tsaaGridSize ?? 16);
+    // tsaaSampleIndex is the count of accumulator blends so far —
+    // increments AFTER renderJulia in runTsaaBlend, so we send the
+    // current value as "how many frames have already been accumulated"
+    // = the new frame's index in the round (0-based).
+    gl.uniform1i(this.progJulia.uniforms['uTsaaSampleIndex'], this.tsaaSampleIndex);
     if (this.blueNoise) {
         this.bindTex(5, this.blueNoise.texture, this.progJulia.uniforms['uBlueNoiseTexture']);
         const [bnw, bnh] = this.blueNoise.getResolution();
@@ -1433,6 +1493,7 @@ export class FluidEngine {
       gl.uniform1f(this.progDisplay.uniforms['uAberration'], 0.0);
       gl.uniform1f(this.progDisplay.uniforms['uRefraction'], 0.0);
       gl.uniform1f(this.progDisplay.uniforms['uRefractSmooth'], 1.0);
+      gl.uniform1f(this.progDisplay.uniforms['uRefractRoughness'], 0.0);
       gl.uniform1f(this.progDisplay.uniforms['uCaustics'], 0.0);
       gl.uniform1i(this.progDisplay.uniforms['uCollisionPreview'], 0);
     } else {
@@ -1443,6 +1504,7 @@ export class FluidEngine {
       gl.uniform1f(this.progDisplay.uniforms['uAberration'], this.params.aberration);
       gl.uniform1f(this.progDisplay.uniforms['uRefraction'], this.params.refraction);
       gl.uniform1f(this.progDisplay.uniforms['uRefractSmooth'], this.params.refractSmooth);
+      gl.uniform1f(this.progDisplay.uniforms['uRefractRoughness'], this.params.refractRoughness);
       gl.uniform1f(this.progDisplay.uniforms['uCaustics'], this.params.caustics);
       gl.uniform1i(this.progDisplay.uniforms['uCollisionPreview'], this.params.collisionPreview ? 1 : 0);
     }
@@ -1535,7 +1597,6 @@ export class FluidEngine {
       if (p?.prog) gl.deleteProgram(p.prog);
     }
     if (this.blueNoise) { gl.deleteTexture(this.blueNoise.texture); this.blueNoise = null; }
-    if (this.resetAccumUnsub) { this.resetAccumUnsub(); this.resetAccumUnsub = null; }
   }
 
   /** Map canvas pixel coords to fractal coords (for c-picking). */

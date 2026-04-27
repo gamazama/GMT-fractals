@@ -29,7 +29,14 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
     onClose, disableClose, zIndex,
     initialPos, initialSize
 }) => {
-    const { panels, setFloatPosition, setFloatSize, togglePanel, startPanelDrag } = useEngineStore();
+    // Granular selectors — `useEngineStore()` no-selector subscribes
+    // to all state, re-rendering on every setter. See Dock.tsx for
+    // rationale.
+    const panels = useEngineStore((s) => s.panels);
+    const setFloatPosition = useEngineStore((s) => s.setFloatPosition);
+    const setFloatSize = useEngineStore((s) => s.setFloatSize);
+    const togglePanel = useEngineStore((s) => s.togglePanel);
+    const startPanelDrag = useEngineStore((s) => s.startPanelDrag);
     
     // Determine mode
     const isManaged = !!id;

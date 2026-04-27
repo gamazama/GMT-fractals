@@ -51,11 +51,15 @@ export const createBlueNoiseWebGL2 = (
 
     let resolution: [number, number] = [64, 64];
 
-    // Async load + upload. If the page is torn down mid-load the texture
-    // is already the fallback — no leak, no crash.
+    // Async load + upload. If the page is torn down mid-load (HMR or
+    // React StrictMode double-init) the texture may have been deleted
+    // by the time the image arrives. Guard with isTexture / context-lost
+    // so we silently no-op instead of logging
+    // `INVALID_OPERATION: bindTexture: attempt to use a deleted object`.
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+        if (gl.isContextLost() || !gl.isTexture(texture)) return;
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(
             gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img,

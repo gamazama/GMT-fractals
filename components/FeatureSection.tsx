@@ -25,33 +25,36 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
     label, featureId, toggleParam, children, description,
     statusContent, headerClassName = '', enabled, onToggle,
 }) => {
-    const store = useEngineStore();
+    // Granular per-feature subscription. `useEngineStore()` no-selector
+    // would re-render every FeatureSection on every store update —
+    // with N features in N panels, that's a major contributor to the
+    // per-pointer-event subscriber cascade in fluid-toy.
+    const sliceState = useEngineStore((s) => (s as any)[featureId]);
+    const setterName = `set${featureId.charAt(0).toUpperCase() + featureId.slice(1)}`;
+    const setter = useEngineStore((s) => (s as any)[setterName]);
+
     const feature = featureRegistry.get(featureId);
 
     // Determine the toggle parameter (The "Power Switch" for this feature)
     const effectiveToggleParam = toggleParam || feature?.engineConfig?.toggleParam;
 
     // Access state
-    const sliceState = (store as any)[featureId];
     const autoEnabled = effectiveToggleParam ? !!sliceState?.[effectiveToggleParam] : true;
     const isEnabled = enabled !== undefined ? enabled : autoEnabled;
 
     const handleToggle = (val: boolean) => {
         if (onToggle) { onToggle(val); return; }
 
-        const setterName = `set${featureId.charAt(0).toUpperCase() + featureId.slice(1)}`;
-        const action = (store as any)[setterName];
-
-        if (action && effectiveToggleParam) {
+        if (setter && effectiveToggleParam) {
             const isHeavy = feature?.engineConfig?.mode === 'compile';
 
             if (isHeavy) {
                 FractalEvents.emit('is_compiling', "Updating Engine...");
                 setTimeout(() => {
-                    action({ [effectiveToggleParam]: val });
+                    setter({ [effectiveToggleParam]: val });
                 }, 50);
             } else {
-                action({ [effectiveToggleParam]: val });
+                setter({ [effectiveToggleParam]: val });
             }
         }
     };

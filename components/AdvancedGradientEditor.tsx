@@ -92,13 +92,30 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     }, [value]);
 
     const [knots, setKnots] = useState<AdvancedGradientKnot[]>([]);
-    
+
     const onChangeRef = useRef(onChange);
     useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+    // Suppress the next prop-sync if we just emitted. Without this guard
+    // the path is: emitChange → setKnots(local) + onChange(parent) →
+    // parent commits → value prop changes → useMemo re-derives stops →
+    // useEffect[stops] fires → setKnots again. With strict-mode and any
+    // per-frame store updates (e.g. from animation/accumulation tick)
+    // batched into the same commit window, the back-and-forth can
+    // saturate React's update budget mid-drag and trip "Maximum update
+    // depth exceeded". The local state is already current; skipping the
+    // sync is safe — incoming==prev anyway. External value changes
+    // (preset load, undo, parent overrides) leave the flag unset and
+    // sync normally.
+    const justEmittedRef = useRef(false);
 
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
 
     useEffect(() => {
+        if (justEmittedRef.current) {
+            justEmittedRef.current = false;
+            return;
+        }
         setKnots(prev => {
             const incoming = stops.map(stop => ({
                 id: stop.id,
@@ -136,6 +153,10 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     // The Store handles saving it.
     const emitChange = useCallback((newKnots: AdvancedGradientKnot[], newColorSpace?: ColorSpaceMode, newBlendSpace?: BlendColorSpace) => {
         const sorted = [...newKnots].sort((a, b) => a.position - b.position);
+        // Mark BEFORE calling setKnots so the prop-sync useEffect skips
+        // the redundant sync that fires when the parent's onChange
+        // re-flows the value back to us. See justEmittedRef comment.
+        justEmittedRef.current = true;
         setKnots(sorted);
 
         const newStops = sorted.map(({ id, position, color, bias, interpolation }) => ({

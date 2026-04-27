@@ -164,6 +164,39 @@ uniform vec2  uResolution;
 uniform sampler2D uBlueNoiseTexture;
 uniform vec2  uBlueNoiseResolution;
 uniform int   uFrameCount;
+// K-sampling: number of jittered Julia evaluations per frame, raw-
+// averaged before pushed to the TSAA accumulator.
+uniform int   uPerFrameSamples;
+
+// Total grid cells covered across one full "round" of frames. Always
+// a perfect square (4, 9, 16, 25). Default 16 = 4×4 grid. Combined
+// with uPerFrameSamples (cells visited per frame) this gives:
+//   framesPerRound = uGridSize / uPerFrameSamples
+// e.g. K=4, gridSize=16 → 4 frames per round; after frame 4 the TSAA
+// accumulator has averaged all 16 cell centres → identical to a
+// single-frame K=16 grid. K=16, gridSize=16 → 1 frame per round.
+uniform int   uGridSize;
+
+// Current TSAA accumulator frame index (0 on first frame after a
+// reset). Drives the cell-cycling and the round-based progressive
+// sub-cell refinement in grid mode.
+uniform int   uTsaaSampleIndex;
+
+// Jitter mode:
+//   0 — blue noise: each sub-sample reads a different texel of the
+//       per-frame R2-animated blue-noise texture. Random within a
+//       frame, decorrelated across frames; converges in expectation
+//       but the accumulator shimmers as the running mean settles.
+//   1 — grid (default): each frame places K sub-samples at the
+//       centres of K cells in a √gridSize × √gridSize lattice. The
+//       cells visited cycle across frames so a full round of
+//       (gridSize/K) frames covers every cell exactly once. After
+//       round 0 the accumulator equals the centre-grid average.
+//       Round 1+ shifts samples to deterministic blue-noise-indexed
+//       sub-cell positions — same offset for every pixel at a given
+//       round (no shimmer), but consecutive rounds pull spatially
+//       decorrelated taps so progressive refinement looks organic.
+uniform int   uJitterMode;
 
 ${BLUE_NOISE}
 ${TSAA}
@@ -204,16 +237,11 @@ float trapDistance(vec2 q) {
   return length(d);
 }
 
-void main() {
-  // TSAA sub-pixel jitter — offset vUv by blue-noise-driven sub-pixel
-  // amount before mapping into fractal space. Over successive frames the
-  // accumulator in FluidEngine averages jittered samples, producing AA.
-  // When uJitterScale is 0, the offset is zero and we render un-jittered.
-  vec2 jitter = (uJitterScale > 0.0)
-      ? tsaaJitter(gl_FragCoord.xy) * uJitterScale
-      : vec2(0.0);
-  vec2 uvJ = vUv + jitter / max(uResolution, vec2(1.0));
-
+// One Julia evaluation at the given (jittered) UV. Out-params return
+// the (outMain, outAux) data. Extracted so K-sampling can call it K
+// times with different jitter offsets without inlining the iteration
+// loop K times in source.
+void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
   vec2 uv = uvJ * 2.0 - 1.0;
   uv.x *= uAspect;
   vec2 p = uCenter + uv * uScale;
@@ -225,32 +253,22 @@ void main() {
   float escaped = 0.0;
   float iters = float(uMaxIter);
 
-  // Accumulators for coloring modes
   float minT      = 1e9;
   float trapIter  = 0.0;
   float stripeSum = 0.0;
   int   stripeCount = 0;
-  // dz for derivative / DE (only correct for power 2; close enough for general use)
   vec2  dz = vec2(1.0, 0.0);
 
   for (int i = 0; i < 4096; ++i) {
     if (i >= uMaxIter) break;
-
-    // Derivative update: dz = p·z^(p-1)·dz + 1 (approximated for p=2 as 2·z·dz + 1).
-    // For other powers this slightly mis-estimates |dz| but keeps the feature alive.
     dz = cmul(2.0 * z, dz) + vec2(1.0, 0.0);
-
     z = cpow(z, uPower) + c;
-
-    // Coloring accumulators — capped at uColorIter so the user can tune how much
-    // of the orbit feeds colour vs escape testing.
     if (i < uColorIter) {
       float td = trapDistance(z);
       if (td < minT) { minT = td; trapIter = float(i); }
       stripeSum += 0.5 + 0.5 * sin(uStripeFreq * atan(z.y, z.x));
       stripeCount++;
     }
-
     float r2 = dot(z, z);
     if (r2 > uEscapeR2) {
       float smoothI = float(i) + 1.0 - log2(0.5 * log2(r2));
@@ -264,8 +282,83 @@ void main() {
   float logDz     = log(1.0 + length(dz));
   float trapIterN = float(uMaxIter) > 0.0 ? trapIter / float(uMaxIter) : 0.0;
 
-  outMain = vec4(z, iters, escaped);
-  outAux  = vec4(minT, stripeAvg, logDz, trapIterN);
+  outM = vec4(z, iters, escaped);
+  outA = vec4(minT, stripeAvg, logDz, trapIterN);
+}
+
+void main() {
+  // K-sampling: do K jittered Julia evaluations per frame, average
+  // the raw outputs, then push to the TSAA accumulator. Effective
+  // samples per blend = K × frames, so a fixed sample-cap is reached
+  // K× faster (at K× per-frame cost). When uJitterScale is 0 (TSAA
+  // disabled), K collapses to 1 — no extra cost.
+  const int K_MAX = 16;
+  int K = max(1, min(uPerFrameSamples, K_MAX));
+  if (uJitterScale <= 0.0) K = 1;
+
+  vec2 invRes = 1.0 / max(uResolution, vec2(1.0));
+  // Blue-noise mode helpers.
+  vec2 r2Step = vec2(R2_A1, R2_A2) * uBlueNoiseResolution.x;
+  // Grid mode geometry — the lattice size is gridSize = gridDim².
+  int gridSize = max(uGridSize, 1);
+  int gridDim = int(floor(sqrt(float(gridSize)) + 0.5));
+  if (gridDim < 1) gridDim = 1;
+  gridSize = gridDim * gridDim;
+  // Frames per round (one round = each lattice cell visited once).
+  int framesPerRound = max(gridSize / max(K, 1), 1);
+  int frameIdx = max(uTsaaSampleIndex, 0);
+  int round = frameIdx / framesPerRound;
+  int frameInRound = frameIdx - round * framesPerRound;
+  // Sub-cell offset progressive refinement. Round 0 = cell centre
+  // (matches a single-frame K=gridSize grid). Round 1+ pulls a
+  // deterministic blue-noise tap indexed by round number — same
+  // offset for every pixel at a given round (no shimmer; the whole
+  // image jitters as one), but consecutive rounds walk through the
+  // blue-noise texture via R2 so the offset sequence has good 2D
+  // coverage without low-discrepancy patterning.
+  vec2 subOffset = vec2(0.0);
+  if (round > 0) {
+    vec2 roundCoord = vec2(R2_A1, R2_A2) * float(round) * uBlueNoiseResolution.x;
+    vec4 bn = getStableBlueNoise4(roundCoord);
+    subOffset = (bn.xy - 0.5) / float(gridDim);
+  }
+  int cellOffset = frameInRound * K;
+
+  vec4 accM = vec4(0.0);
+  vec4 accA = vec4(0.0);
+
+  for (int s = 0; s < K_MAX; ++s) {
+    if (s >= K) break;
+
+    vec2 jitter01;
+    if (uJitterMode == 1) {
+      // Cycle through gridSize cells across (gridSize/K) frames.
+      int cellIdx = cellOffset + s;
+      cellIdx = cellIdx - (cellIdx / gridSize) * gridSize;  // % gridSize
+      int sx = cellIdx - (cellIdx / gridDim) * gridDim;
+      int sy = cellIdx / gridDim;
+      jitter01 = (vec2(float(sx), float(sy)) + 0.5) / float(gridDim) + subOffset;
+    } else {
+      // Blue-noise mode (unchanged): tsaaJitter returns offset in
+      // [-0.5, 0.5]; shift to [0, 1] cell coords for unified handling.
+      vec2 sampleCoord = gl_FragCoord.xy + r2Step * float(s);
+      jitter01 = tsaaJitter(sampleCoord) + 0.5;
+    }
+
+    vec2 jitter = (uJitterScale > 0.0)
+        ? (jitter01 - 0.5) * uJitterScale
+        : vec2(0.0);
+    vec2 uvJ = vUv + jitter * invRes;
+
+    vec4 sM, sA;
+    evalJulia(uvJ, sM, sA);
+    accM += sM;
+    accA += sA;
+  }
+
+  float invK = 1.0 / float(K);
+  outMain = accM * invK;
+  outAux  = accA * invK;
 }`;
 
 // -----------------------------------------------------------------------------
@@ -699,6 +792,9 @@ uniform float uBloomAmount;    // 0..3
 uniform float uAberration;     // 0..1 — velocity-keyed RGB shift
 uniform float uRefraction;     // 0..0.3 — dye-gradient UV offset for the fractal
 uniform float uRefractSmooth;  // stencil width (in dye texels) — smooths the gradient
+uniform float uRefractRoughness; // 0..1 — frosted-glass effect: scatters the
+                                 // refracted sample across a Vogel-disc kernel.
+                                 // 0 = single-tap (crisp). 1 = ~5px blur radius.
 uniform float uCaustics;       // 0..25 — laplacian-of-dye highlight
 uniform int   uCollisionPreview; // 1 = overlay the mask with diagonal hatching so walls are visible
 ${GRADIENT_SAMPLE_GLSL}
@@ -763,33 +859,91 @@ vec3 applyVibrance(vec3 c, float amount) {
 void main() {
   vec2 uv = vUv;
 
-  // ── Liquid-look refraction. The gradient of dye luminance acts as a fake
-  // height-field slope; we offset the fractal sample by that gradient. The
-  // stencil width (uRefractSmooth, in dye texels) controls smoothness:
-  // larger values sample further-apart neighbours → lower-frequency gradient
-  // → smoother refraction without the per-pixel jitter of a raw 1-texel diff.
+  // ── Liquid-look refraction. The gradient of dye luminance acts as a
+  // fake height-field slope; we offset the fractal sample by that
+  // gradient. Use a Sobel 3×3 — mathematically a Gaussian (1,2,1)
+  // blur composed with a central difference, so it actually SMOOTHS
+  // the gradient instead of just spreading two taps further apart.
+  // uRefractSmooth controls the stencil width (in dye texels);
+  // larger values give a lower-frequency, calmer slope.
   vec2 refractOffset = vec2(0.0);
   float caustic = 0.0;
   if (uRefraction > 0.0 || uCaustics > 0.0) {
     vec2 t = uTexelDye * max(uRefractSmooth, 1.0);
-    float lC = dot(texture(uDye, vUv).rgb,                  LUM_REC601);
-    float lL = dot(texture(uDye, vUv - vec2(t.x, 0.0)).rgb, LUM_REC601);
-    float lR = dot(texture(uDye, vUv + vec2(t.x, 0.0)).rgb, LUM_REC601);
-    float lD = dot(texture(uDye, vUv - vec2(0.0, t.y)).rgb, LUM_REC601);
-    float lU = dot(texture(uDye, vUv + vec2(0.0, t.y)).rgb, LUM_REC601);
-    refractOffset = vec2(lR - lL, lU - lD) * uRefraction;
-    // Laplacian for caustics. Dividing by the stencil scale keeps the
-    // caustic magnitude roughly invariant when the user tweaks smoothness.
-    caustic = max(0.0, (lL + lR + lU + lD - 4.0 * lC)) / max(uRefractSmooth, 1.0);
+    float lTL = dot(texture(uDye, vUv + vec2(-t.x, -t.y)).rgb, LUM_REC601);
+    float lT  = dot(texture(uDye, vUv + vec2( 0.0, -t.y)).rgb, LUM_REC601);
+    float lTR = dot(texture(uDye, vUv + vec2( t.x, -t.y)).rgb, LUM_REC601);
+    float lL  = dot(texture(uDye, vUv + vec2(-t.x,  0.0)).rgb, LUM_REC601);
+    float lC  = dot(texture(uDye, vUv                  ).rgb, LUM_REC601);
+    float lR  = dot(texture(uDye, vUv + vec2( t.x,  0.0)).rgb, LUM_REC601);
+    float lBL = dot(texture(uDye, vUv + vec2(-t.x,  t.y)).rgb, LUM_REC601);
+    float lB  = dot(texture(uDye, vUv + vec2( 0.0,  t.y)).rgb, LUM_REC601);
+    float lBR = dot(texture(uDye, vUv + vec2( t.x,  t.y)).rgb, LUM_REC601);
+    // Sobel — divide by 8 (sum of positive weights on one side) to
+    // normalise. y-axis: vUv.y grows downward in this texture, so
+    // "up" in screen space is -t.y; keep the original sign convention
+    // that bright dye refracts the fractal toward the light.
+    float gx = (lTR + 2.0 * lR + lBR) - (lTL + 2.0 * lL + lBL);
+    float gy = (lBL + 2.0 * lB + lBR) - (lTL + 2.0 * lT + lTR);
+    refractOffset = vec2(gx, gy) * (uRefraction * 0.125);
+    // 9-point Laplacian — better isotropy than the 5-point version
+    // (no preferential x/y axis bias). Divide by smoothness so the
+    // caustic magnitude stays roughly invariant as the stencil grows.
+    float neigh = lTL + lT + lTR + lL + lR + lBL + lB + lBR;
+    caustic = max(0.0, neigh - 8.0 * lC) / (8.0 * max(uRefractSmooth, 1.0));
   }
 
-  vec4 j = texture(uJulia, uv + refractOffset);
-  vec4 aux = texture(uJuliaAux, uv + refractOffset);
+  // ── Refracted fractal sample. With uRefractRoughness > 0 we
+  // scatter the sample across an 8-tap Vogel-disc kernel (golden-
+  // angle spiral — even disc coverage at small N, no clumping).
+  // Each tap is gradient-mapped INDIVIDUALLY before averaging,
+  // because averaging raw j/aux at the fractal boundary gives
+  // meaningless intermediate iterations (same reasoning as the
+  // K-sample loop in the Julia shader). Per-tap colours blend
+  // cleanly. The mask (wall solid) also reads the same kernel so
+  // walls get the same frosted-glass blur, keeping their edges
+  // consistent with the refracted fractal behind them. Dye and
+  // velocity stay sharp — they're "near-surface" and shouldn't
+  // pick up glass-roughness blur.
+  vec2 refractedBase = uv + refractOffset;
+  vec3 juliaColor;
+  vec3 wallColor;        // gradient colour at refracted UV — used for solid-wall override below
+  float solid;
+  {
+    vec4 j = texture(uJulia, refractedBase);
+    vec4 aux = texture(uJuliaAux, refractedBase);
+    vec3 grad = gradientForJulia(j, aux);
+    juliaColor = mix(uInteriorColor, grad * j.a, j.a);
+    wallColor = grad;
+    solid = texture(uMask, refractedBase).r;
+    if (uRefractRoughness > 0.0) {
+      const float GOLDEN_ANGLE = 2.39996323;
+      const int VOGEL_N = 8;
+      // 0..1 roughness → 0..5 px disc radius (in dye-grid texels).
+      vec2 radius = uTexelDye * (uRefractRoughness * 5.0);
+      vec3 cAcc = juliaColor;
+      vec3 wAcc = wallColor;
+      float sAcc = solid;
+      for (int i = 0; i < VOGEL_N; ++i) {
+        float r = sqrt((float(i) + 0.5) / float(VOGEL_N));
+        float theta = float(i) * GOLDEN_ANGLE;
+        vec2 ofs = r * vec2(cos(theta), sin(theta)) * radius;
+        vec4 j_t = texture(uJulia, refractedBase + ofs);
+        vec4 a_t = texture(uJuliaAux, refractedBase + ofs);
+        vec3 grad_t = gradientForJulia(j_t, a_t);
+        cAcc += mix(uInteriorColor, grad_t * j_t.a, j_t.a);
+        wAcc += grad_t;
+        sAcc += texture(uMask, refractedBase + ofs).r;
+      }
+      float invN = 1.0 / float(VOGEL_N + 1);  // +1 for the original centre tap
+      juliaColor = cAcc * invN;
+      wallColor = wAcc * invN;
+      solid = sAcc * invN;
+    }
+  }
+
   vec3 dye = texture(uDye, uv).rgb;
   vec2 v = texture(uVelocity, uv).rg;
-
-  vec3 juliaColor = gradientForJulia(j, aux) * j.a;
-  juliaColor = mix(uInteriorColor, juliaColor, j.a);
 
   // ── Chromatic aberration (electric look).
   // Applied to DYE ONLY — shifting the fractal itself caused distracting
@@ -819,11 +973,13 @@ void main() {
   // Caustics: additive highlight on focused-surface regions.
   col += vec3(caustic) * uCaustics;
 
-  // Solid obstacles: override the composite with the raw (untoned) gradient
-  // colour so walls read as crisp objects, not as "dyed fluid near a wall."
-  float solid = texture(uMask, uv + refractOffset).r;
+  // Solid obstacles: override the composite with the raw (untoned)
+  // gradient colour so walls read as crisp objects, not as "dyed
+  // fluid near a wall." solid and wallColor were sampled above
+  // through the same Vogel-disc kernel as the fractal so the wall
+  // edges blur in step with the refracted fractal behind them.
   if (solid > 0.01) {
-    col = mix(col, gradientForJulia(j, aux), solid);
+    col = mix(col, wallColor, solid);
   }
 
   // Collision preview: diagonal cyan hatching over solid cells. Uses screen

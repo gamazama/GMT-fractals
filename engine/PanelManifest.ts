@@ -20,7 +20,19 @@
  */
 
 import type { DockZone, EngineStoreState } from '../types/store';
-import { useEngineStore } from '../store/engineStore';
+// Type-only import. Importing the runtime binding here would evaluate
+// engineStore.ts during PanelManifest's module load, which freezes the
+// feature registry. PanelManifest is reachable from registry-touch
+// code (formulaRegistry → addPanel) that runs BEFORE the store exists,
+// so we lazy-resolve at call time via globalThis instead. engineStore.ts
+// publishes `(globalThis as any).__engineStore = useEngineStore` after
+// create() returns. See FeatureRegistry's frozen-error message — this
+// is exactly the workaround it suggests.
+import type { useEngineStore as _UseEngineStore } from '../store/engineStore';
+
+const getStore = (): typeof _UseEngineStore | null => {
+    return (globalThis as { __engineStore?: typeof _UseEngineStore }).__engineStore ?? null;
+};
 
 /** Predicate for conditional panel visibility.
  *  - String form reads a top-level boolean field on the store, e.g.
@@ -302,11 +314,24 @@ export const applyPanelManifest = (manifest: PanelManifest): void => {
         _byId.set(def.id, def);
     }
 
-    const store = useEngineStore.getState();
+    const useStore = getStore();
+    if (!useStore) {
+        // Pre-boot call. Should be rare — applyPanelManifest is meant
+        // to be called during app setup after the store exists. If it
+        // somehow fires earlier, the merge into _byId above is enough;
+        // a later applyPanelManifest will sweep _byId into the store.
+        return;
+    }
+    const store = useStore.getState();
     const existingPanels = store.panels ?? {};
     const panels: Record<string, unknown> = { ...existingPanels };
 
-    for (const def of manifest) {
+    // Iterate the FULL accumulated registry, not just `manifest`. This
+    // catches panels registered earlier via addPanel() before the
+    // store existed (e.g. fractal-toy's formula panels added during
+    // module-load registration of registerFormula).
+    const allDefs = Array.from(_byId.values());
+    for (const def of allDefs) {
         panels[def.id] = {
             id: def.id,
             location: def.dock,
@@ -319,9 +344,6 @@ export const applyPanelManifest = (manifest: PanelManifest): void => {
                 (existingPanels[def.id] as { isOpen?: boolean } | undefined)?.isOpen ?? false,
         };
     }
-
-    // Resolve active tab per dock from the merged set.
-    const allDefs = Array.from(_byId.values());
     const pickActive = (dock: DockZone, currentActive: string | null): string | null => {
         const inDock = allDefs.filter((d) => d.dock === dock).sort((a, b) => a.order - b.order);
         if (inDock.length === 0) return null;
@@ -344,7 +366,7 @@ export const applyPanelManifest = (manifest: PanelManifest): void => {
         }
     }
 
-    useEngineStore.setState({
+    useStore.setState({
         panels: panels as never,
         activeLeftTab: (activeLeft ?? null) as never,
         activeRightTab: (activeRight ?? null) as never,
@@ -365,11 +387,20 @@ export const addPanel = (def: PanelDefinition): void => {
     _manifest = [..._manifest, def];
     _byId.set(def.id, def);
 
-    const store = useEngineStore.getState();
+    const useStore = getStore();
+    if (!useStore) {
+        // Pre-boot registration (e.g. fractal-toy's formula registry
+        // calls addPanel during registerFeatures' module-load phase,
+        // before the engine store has been constructed). The panel is
+        // already in _byId; the next applyPanelManifest call (during
+        // app setup) will sweep _byId into the store.
+        return;
+    }
+    const store = useStore.getState();
     const currentActive = def.dock === 'left' ? store.activeLeftTab : store.activeRightTab;
     const shouldBecomeActive = def.active && !currentActive;
 
-    useEngineStore.setState((s) => ({
+    useStore.setState((s) => ({
         panels: {
             ...s.panels,
             [def.id]: {

@@ -3,10 +3,18 @@ import React, { useEffect } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 
 export const DropZones: React.FC = () => {
-    const { 
-        draggingPanelId, movePanel, endPanelDrag, cancelPanelDrag, panels,
-        leftDockSize, rightDockSize, isLeftDockCollapsed, isRightDockCollapsed
-    } = useEngineStore();
+    // Granular selectors — see Dock.tsx for the rationale. Avoiding
+    // `useEngineStore()` no-selector here cuts another two subscribers
+    // out of the per-pointer-event update cascade in fluid-toy.
+    const draggingPanelId = useEngineStore((s) => s.draggingPanelId);
+    const movePanel = useEngineStore((s) => s.movePanel);
+    const endPanelDrag = useEngineStore((s) => s.endPanelDrag);
+    const cancelPanelDrag = useEngineStore((s) => s.cancelPanelDrag);
+    const panels = useEngineStore((s) => s.panels);
+    const leftDockSize = useEngineStore((s) => s.leftDockSize);
+    const rightDockSize = useEngineStore((s) => s.rightDockSize);
+    const isLeftDockCollapsed = useEngineStore((s) => s.isLeftDockCollapsed);
+    const isRightDockCollapsed = useEngineStore((s) => s.isRightDockCollapsed);
 
     // Global Cancel Handler (catches drops outside the browser or valid zones)
     useEffect(() => {

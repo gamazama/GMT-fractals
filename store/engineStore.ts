@@ -357,6 +357,13 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
     },
 })));
 
+// Publish the store handle on globalThis so modules that can't safely
+// import it at module-load time (e.g. PanelManifest, which is reached
+// from registry-touch code that runs BEFORE this file evaluates) can
+// resolve it lazily at function-call time. See engine/PanelManifest.ts
+// for the consumer-side rationale.
+(globalThis as { __engineStore?: typeof useEngineStore }).__engineStore = useEngineStore;
+
 export const selectIsGlobalInteraction = (state: EngineStoreState) => {
     return state.isUserInteracting || state.interactionMode !== 'none';
 };

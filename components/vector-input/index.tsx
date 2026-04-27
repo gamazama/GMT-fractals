@@ -24,7 +24,8 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
     trackLabels,
     ...props
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
+    const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
     const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
     const lastValueRef = useRef(props.value);
 
@@ -161,7 +162,8 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
     trackLabels,
     ...props
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
+    const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
     const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
     const lastValueRef = useRef(props.value);
 
@@ -297,7 +299,8 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
     trackLabels,
     ...props
 }) => {
-    const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
+    const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
     const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
     const lastValueRef = useRef(props.value);
 

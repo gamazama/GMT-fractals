@@ -130,6 +130,14 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
     const openContextMenu = useEngineStore((s) => s.openContextMenu);
+    // Live-bypass view state for pan / middle-drag / wheel gestures.
+    // While a gesture is active we route center/zoom straight to
+    // FluidEngine.setParams and stash the pending value here. The
+    // store gets a single setJulia commit on gesture end (pointerup
+    // for drag, debounce timer for wheel). This mirrors engine-gmt's
+    // cursor-anchored navigation: gestures shouldn't cascade through
+    // every Zustand subscriber per pointermove.
+    const pendingViewRef = useRef<{ center: { x: number; y: number }; zoom: number } | null>(null);
 
     // B / C modifier key tracking. Listeners live on window so press
     // and release are captured regardless of canvas focus. Bail out of
@@ -371,6 +379,17 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 // Grab-and-drag: world-space point under cursor at start
                 // stays under cursor. center moves opposite to pixel delta,
                 // scaled by current zoom × aspect.
+                //
+                // BYPASS THE STORE during the gesture. Calling setJulia
+                // every pointermove triggers Zustand's full subscriber
+                // notification — with dozens of useEngineStore consumers
+                // in the panel tree, that's enough cascading re-renders
+                // per move to trip React 18's max-depth guard. Same
+                // pattern engine-gmt's cursor-anchor navigation uses for
+                // orbit/zoom (treadmill absorbs into engine.sceneOffset
+                // directly; store sees only the final commit on up).
+                // We push center/zoom straight to FluidEngine.setParams
+                // and commit the final value in onUp.
                 const s = useEngineStore.getState() as any;
                 const zoom = s.julia?.zoom ?? 1.5;
                 const aspect = rect.width / rect.height;
@@ -379,7 +398,10 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const dyPx = e.clientY - ps.startY;
                 const dcx = -(dxPx / rect.width) * 2 * aspect * zoom * mul;
                 const dcy = (dyPx / rect.height) * 2 * zoom * mul;
-                s.setJulia({ center: { x: ps.startCx + dcx, y: ps.startCy + dcy } });
+                const newCx = ps.startCx + dcx;
+                const newCy = ps.startCy + dcy;
+                pendingViewRef.current = { center: { x: newCx, y: newCy }, zoom };
+                engineRef.current?.setParams({ center: [newCx, newCy] });
                 ps.lastX = e.clientX; ps.lastY = e.clientY;
                 return;
             }
@@ -391,7 +413,7 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 // the world-space zoom value = zooms OUT; drag UP (dyPx
                 // negative) contracts zoom = zooms IN. zoomFactor uses
                 // exp(+dyPx) so those signs match.
-                const s = useEngineStore.getState() as any;
+                // Same store-bypass as pan — see comment above.
                 const mul = precisionMultiplier(e.shiftKey, e.altKey);
                 const dyPx = e.clientY - ps.startY;
                 const zoomFactor = Math.exp(dyPx * MIDDLE_DRAG_ZOOM_SENSITIVITY * mul);
@@ -399,7 +421,8 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 const aspect = rect.width / rect.height;
                 const newCx = ps.zoomAnchorX - (ps.zoomAnchorU * 2 - 1) * aspect * newZoom;
                 const newCy = ps.zoomAnchorY - (ps.zoomAnchorV * 2 - 1) * newZoom;
-                s.setJulia({ center: { x: newCx, y: newCy }, zoom: newZoom });
+                pendingViewRef.current = { center: { x: newCx, y: newCy }, zoom: newZoom };
+                engineRef.current?.setParams({ center: [newCx, newCy], zoom: newZoom });
                 ps.lastX = e.clientX; ps.lastY = e.clientY;
                 return;
             }
@@ -447,6 +470,20 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
                 try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
                 ps.pointerId = -1;
             }
+            // Commit the live-bypassed view to the store now that the
+            // gesture has ended. During pan/zoom we routed center/zoom
+            // straight to FluidEngine.setParams to avoid a per-pointer-
+            // event React subscriber cascade; the store catches up
+            // here with one setJulia. AutoFeaturePanel readouts and
+            // Animation key-cam now see the final value.
+            if (pendingViewRef.current) {
+                const pending = pendingViewRef.current;
+                pendingViewRef.current = null;
+                (useEngineStore.getState() as any).setJulia({
+                    center: pending.center,
+                    zoom: pending.zoom,
+                });
+            }
             // Clear mode AFTER releasing so a late contextmenu event (fires
             // between pointerup and its click-synthesis) sees rightDragged.
             ps.mode = 'idle';
@@ -458,13 +495,26 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
 
         // Wheel zoom, cursor-anchored. { passive: false } so we can
         // preventDefault — otherwise the browser scrolls the page.
+        // Same store-bypass pattern as pan/middle-drag: push direct to
+        // FluidEngine each tick, debounce-commit to the store. Wheel
+        // has no "up" event so we use a 100 ms idle timer.
+        let wheelCommitTimer: number | null = null;
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
             if (rect.width < 1 || rect.height < 1) return;
-            const s = useEngineStore.getState() as any;
-            const currCenter = s.julia?.center ?? { x: 0, y: 0 };
-            const currZoom = s.julia?.zoom ?? 1.5;
+            // First wheel tick of a burst seeds from the current store
+            // value; subsequent ticks compose on the in-flight pending
+            // value so multiple ticks accumulate cleanly.
+            const seed = pendingViewRef.current ?? (() => {
+                const s = useEngineStore.getState() as any;
+                return {
+                    center: s.julia?.center ?? { x: 0, y: 0 },
+                    zoom: s.julia?.zoom ?? 1.5,
+                };
+            })();
+            const currCenter = seed.center;
+            const currZoom = seed.zoom;
             const mul = precisionMultiplier(e.shiftKey, e.altKey);
             const zoomFactor = Math.pow(0.9, -e.deltaY * WHEEL_ZOOM_SENSITIVITY * mul);
             const u = (e.clientX - rect.left) / rect.width;
@@ -478,7 +528,19 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currZoom * zoomFactor));
             const newCx = fx - (u * 2 - 1) * aspect * newZoom;
             const newCy = fy - (v * 2 - 1) * newZoom;
-            s.setJulia({ center: { x: newCx, y: newCy }, zoom: newZoom });
+            pendingViewRef.current = { center: { x: newCx, y: newCy }, zoom: newZoom };
+            engineRef.current?.setParams({ center: [newCx, newCy], zoom: newZoom });
+            if (wheelCommitTimer !== null) window.clearTimeout(wheelCommitTimer);
+            wheelCommitTimer = window.setTimeout(() => {
+                wheelCommitTimer = null;
+                if (!pendingViewRef.current) return;
+                const pending = pendingViewRef.current;
+                pendingViewRef.current = null;
+                (useEngineStore.getState() as any).setJulia({
+                    center: pending.center,
+                    zoom: pending.zoom,
+                });
+            }, 100);
         };
 
         canvas.addEventListener('pointerdown', onDown);
@@ -495,6 +557,7 @@ export const FluidPointerLayer: React.FC<FluidPointerLayerProps> = ({ canvasRef,
             canvas.removeEventListener('pointercancel', onUp);
             canvas.removeEventListener('pointerleave', onUp);
             canvas.removeEventListener('wheel', onWheel);
+            if (wheelCommitTimer !== null) window.clearTimeout(wheelCommitTimer);
         };
     }, [canvasRef, engineRef, handleInteractionStart, handleInteractionEnd]);
 

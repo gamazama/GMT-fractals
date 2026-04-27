@@ -73,33 +73,73 @@ const readBrushParamsForFrame = (): BrushParams => {
 
 const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
-    const state = useEngineStore();
+    // Re-render when ANY slice referenced by an overlay changes —
+    // not the entire store. Using a single useEngineStore() with no
+    // selector here would re-render on every setJulia / animation
+    // tick, contributing to the per-pointer-event update cascade
+    // that trips React's max-depth guard during fluid drags. We
+    // subscribe per-overlay instead.
     return (
         <div className="absolute inset-0 pointer-events-none z-[20]">
             {overlays.map(cfg => {
                 const C = componentRegistry.get(cfg.componentId);
-                const slice = (state as any)[cfg.id];
-                if (C && slice) return <C key={cfg.id} featureId={cfg.id} sliceState={slice} actions={state} />;
-                return null;
+                if (!C) return null;
+                return <DomOverlayInstance key={cfg.id} cfg={cfg} Component={C} />;
             })}
         </div>
     );
 };
 
+// Per-overlay subscription so we re-render only when THIS overlay's
+// slice changes (not the whole store). Stable function refs from the
+// store are read once via getState() and passed as actions — they
+// don't change between renders so we don't subscribe to them.
+const DomOverlayInstance: React.FC<{
+    cfg: { id: string; componentId: string };
+    Component: React.FC<any>;
+}> = ({ cfg, Component }) => {
+    const slice = useEngineStore((s: any) => s[cfg.id]);
+    if (!slice) return null;
+    const actions = useEngineStore.getState();
+    return <Component featureId={cfg.id} sliceState={slice} actions={actions} />;
+};
+
+// Stable empty-fallback for the liveModulations selector. Module-level
+// so it's the same reference across renders — using `?? {}` inline
+// would create a fresh object every selector call and break Zustand's
+// shallow-equality re-render gate.
+const EMPTY_MODS: Record<string, number> = Object.freeze({}) as Record<string, number>;
+
 export const FluidToyApp: React.FC = () => {
-    const state = useEngineStore();
+    // Granular selectors — DO NOT use `useEngineStore()` with no
+    // selector here. That subscribes to the entire store, which means
+    // every setJulia/setBrush/setLiveModulations etc. re-renders the
+    // entire FluidToyApp tree. With React 18's stricter scheduling
+    // and rapid pointer-event setter bursts, the cascade of subscriber
+    // re-renders during a drag trips React's max-depth guard. Each
+    // value below is either a stable function ref (created once at
+    // store init) or a coarse panels object that changes rarely.
+    const panels = useEngineStore((s) => s.panels);
+    const contextMenu = useEngineStore((s) => s.contextMenu);
+    const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
+    const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
+    const openContextMenu = useEngineStore((s) => s.openContextMenu);
+    const closeContextMenu = useEngineStore((s) => s.closeContextMenu);
+    const togglePanel = useEngineStore((s) => s.togglePanel);
+    const openHelp = useEngineStore((s) => s.openHelp);
+
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<FluidEngine | null>(null);
     const rafRef = useRef<number | null>(null);
 
-    const floatingPanels = (Object.values(state.panels) as PanelState[])
+    const floatingPanels = (Object.values(panels) as PanelState[])
         .filter((p) => p.location === 'float' && p.isOpen);
 
     const storeCallbacks = useMemo<StoreCallbacks>(() => ({
-        handleInteractionStart: state.handleInteractionStart,
-        handleInteractionEnd: state.handleInteractionEnd,
-        openContextMenu: state.openContextMenu,
-    }), [state.handleInteractionStart, state.handleInteractionEnd, state.openContextMenu]);
+        handleInteractionStart,
+        handleInteractionEnd,
+        openContextMenu,
+    }), [handleInteractionStart, handleInteractionEnd, openContextMenu]);
 
     // Authoritative size (written by ViewportFrame's ResizeObserver) ×
     // adaptive quality fraction. FluidEngine.resize() takes CSS pixels
@@ -122,12 +162,16 @@ export const FluidToyApp: React.FC = () => {
     // background fractal, `sampleCap` bounds the accumulator. Both live
     // in engine-core renderControlSlice so any future app can reuse them.
     const accumulation = useEngineStore((s) => s.accumulation);
-    const sampleCap    = useEngineStore((s) => s.sampleCap);
+    // sampleCap is intentionally NOT subscribed — fluid-toy pins
+    // tsaaSampleCap at 64 below (see comment there).
     const isPaused     = useEngineStore((s) => s.isPaused);
     // Live-modulated values (base + LFO/audio/rule offsets). The
     // engine/animation/modulationTick writes this each frame.
     // Read-with-fallback pattern: liveMod[target] if present, else base.
-    const liveMod = useEngineStore((s: any) => s.liveModulations ?? {});
+    // Use a STABLE empty fallback — `?? {}` would return a new ref every
+    // selector eval, defeating Zustand's reference-equality re-render
+    // gate and forcing FluidToyApp to re-render on every store update.
+    const liveMod = useEngineStore((s: any) => s.liveModulations ?? EMPTY_MODS);
 
     // Boot the engine once.
     useEffect(() => {
@@ -319,9 +363,10 @@ export const FluidToyApp: React.FC = () => {
             bloomAmount:    postFx.bloomAmount ?? 0,
             bloomThreshold: postFx.bloomThreshold ?? 0.9,
             aberration:     postFx.aberration ?? 0,
-            refraction:     postFx.refraction ?? 0,
-            refractSmooth:  postFx.refractSmooth ?? 3,
-            caustics:       postFx.caustics ?? 0,
+            refraction:       postFx.refraction ?? 0,
+            refractSmooth:    postFx.refractSmooth ?? 3,
+            refractRoughness: postFx.refractRoughness ?? 0,
+            caustics:         postFx.caustics ?? 0,
         });
     }, [postFx]);
 
@@ -346,12 +391,18 @@ export const FluidToyApp: React.FC = () => {
         if (!engine) return;
         engine.setParams({
             tsaa:          accumulation ?? true,
-            tsaaSampleCap: Math.max(1, sampleCap ?? 64),
+            // 64 is plenty for fluid-toy's progressive grid TSAA: K=4
+            // per frame × 16 rounds = 256 unique sub-samples by frame
+            // 64. The engine-level `sampleCap` (default 256) is sized
+            // for GMT's path-traced renderer; we pin the fluid-toy
+            // ceiling lower so the GPU stops accumulating once the
+            // fractal background has visually settled.
+            tsaaSampleCap: 64,
             // Pause button (topbar) → fluid sim. When paused, dye + velocity
             // freeze; the fractal keeps rendering so TSAA can converge.
             paused:        !!isPaused,
         });
-    }, [accumulation, sampleCap, isPaused]);
+    }, [accumulation, isPaused]);
 
     // Resize whenever physical pixels or quality fraction change.
     useEffect(() => {
@@ -376,11 +427,16 @@ export const FluidToyApp: React.FC = () => {
 
             {floatingPanels.map((p) => (
                 <DraggableWindow key={p.id} id={p.id} title={p.id}>
+                    {/* PanelRouter expects whole-state for its evalShowIf predicates and
+                        legacy passthrough. We grab a current snapshot via getState()
+                        instead of subscribing — PanelRouter's children handle their own
+                        per-slice subscriptions, so a snapshot here is enough for the
+                        coarse top-level predicates. */}
                     <PanelRouter
                         activeTab={p.id as PanelId}
-                        state={state}
-                        actions={state}
-                        onSwitchTab={(t) => state.togglePanel(t, true)}
+                        state={useEngineStore.getState()}
+                        actions={useEngineStore.getState()}
+                        onSwitchTab={(t) => togglePanel(t, true)}
                     />
                 </DraggableWindow>
             ))}
@@ -407,14 +463,14 @@ export const FluidToyApp: React.FC = () => {
 
             <HelpOverlay />
 
-            {state.contextMenu.visible && (
+            {contextMenu.visible && (
                 <GlobalContextMenu
-                    x={state.contextMenu.x}
-                    y={state.contextMenu.y}
-                    items={state.contextMenu.items}
-                    targetHelpIds={state.contextMenu.targetHelpIds}
-                    onClose={state.closeContextMenu}
-                    onOpenHelp={state.openHelp}
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    items={contextMenu.items}
+                    targetHelpIds={contextMenu.targetHelpIds}
+                    onClose={closeContextMenu}
+                    onOpenHelp={openHelp}
                 />
             )}
         </div>

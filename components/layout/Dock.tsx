@@ -19,17 +19,30 @@ interface DockProps {
 }
 
 export const Dock: React.FC<DockProps> = ({ side }) => {
-    const state = useEngineStore();
-    const {
-        panels,
-        activeLeftTab, activeRightTab,
-        togglePanel, movePanel, reorderPanel,
-        startPanelDrag, endPanelDrag, draggingPanelId,
-        setDockSize,
-        isLeftDockCollapsed, isRightDockCollapsed, setDockCollapsed,
-        openContextMenu,
-        leftDockSize, rightDockSize,
-    } = state;
+    // Granular selectors — destructuring `useEngineStore()` would
+    // subscribe Dock to the ENTIRE store and re-render on every
+    // setter (setJulia, setBrush, …). Two Docks × every store update
+    // is a major contributor to the per-pointer-event subscriber
+    // cascade that trips React's max-depth guard. Each field below
+    // is either a stable ref (action functions are created once at
+    // store init) or a value that changes only on dock-relevant
+    // events (panel toggle, drag, resize).
+    const panels = useEngineStore((s) => s.panels);
+    const activeLeftTab = useEngineStore((s) => s.activeLeftTab);
+    const activeRightTab = useEngineStore((s) => s.activeRightTab);
+    const togglePanel = useEngineStore((s) => s.togglePanel);
+    const movePanel = useEngineStore((s) => s.movePanel);
+    const reorderPanel = useEngineStore((s) => s.reorderPanel);
+    const startPanelDrag = useEngineStore((s) => s.startPanelDrag);
+    const endPanelDrag = useEngineStore((s) => s.endPanelDrag);
+    const draggingPanelId = useEngineStore((s) => s.draggingPanelId);
+    const setDockSize = useEngineStore((s) => s.setDockSize);
+    const isLeftDockCollapsed = useEngineStore((s) => s.isLeftDockCollapsed);
+    const isRightDockCollapsed = useEngineStore((s) => s.isRightDockCollapsed);
+    const setDockCollapsed = useEngineStore((s) => s.setDockCollapsed);
+    const openContextMenu = useEngineStore((s) => s.openContextMenu);
+    const leftDockSize = useEngineStore((s) => s.leftDockSize);
+    const rightDockSize = useEngineStore((s) => s.rightDockSize);
 
     const isMobile = checkIsMobile();
 
@@ -51,7 +64,11 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             if (location !== side) return false;
 
             const def = getPanelDefinition(p.id);
-            if (def && !evalShowIf(def.showIf, state as never)) return false;
+            // evalShowIf needs a state snapshot for predicates that
+            // check coarse top-level fields (e.g. advancedMode). Read
+            // imperatively — subscribing to the full state would
+            // defeat the granular-selector point of this component.
+            if (def && !evalShowIf(def.showIf, useEngineStore.getState() as never)) return false;
 
             return true;
         })

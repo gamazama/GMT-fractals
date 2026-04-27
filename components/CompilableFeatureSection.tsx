@@ -56,15 +56,15 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     const compileMessage = props.compileMessage ?? pc?.compileMessage ?? 'Compiling Shader...';
     const helpId = props.helpId ?? pc?.helpId;
 
-    // Store state
-    const store = useEngineStore();
-    const sliceState = (store as any)[featureId];
+    // Granular per-feature subscription — see FeatureSection.tsx for
+    // the rationale. Avoids re-rendering every CompilableFeatureSection
+    // on every unrelated store update.
+    const sliceState = useEngineStore((s) => (s as any)[featureId]);
+    const setterName = `set${featureId.charAt(0).toUpperCase() + featureId.slice(1)}`;
+    const setter = useEngineStore((s) => (s as any)[setterName]) as ((updates: Record<string, any>) => void) | undefined;
+
     const isCompiled = !!sliceState?.[compileParam];
     const isOn = runtimeToggleParam ? !!sliceState?.[runtimeToggleParam] : isCompiled;
-
-    // Setter
-    const setterName = `set${featureId.charAt(0).toUpperCase() + featureId.slice(1)}`;
-    const setter = (store as any)[setterName] as ((updates: Record<string, any>) => void) | undefined;
 
     // Local pending state for compile-time param changes
     const [localPending, setLocalPending] = useState<Record<string, any>>({});

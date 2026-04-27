@@ -486,8 +486,28 @@ export const tick = (delta: number) => {
         emitResetAccum();
     }
 
-    // Sync to UI (Visual Feedback)
-    if (Object.keys(liveModulations).length > 0 || Object.keys(storeState.liveModulations).length > 0) {
+    // Sync to UI (Visual Feedback). Only write when values actually
+    // changed — without this, every frame replaced `liveModulations`
+    // with a fresh object reference, which triggered re-renders in
+    // every subscribing component each frame. Combined with the
+    // `?? {}` selector fallbacks (which already return a new ref per
+    // call when null), this caused enough cascading renders during
+    // rapid pointer events to trip React's "Maximum update depth"
+    // guard inside fluid-toy's pan handler.
+    const oldMods = storeState.liveModulations ?? {};
+    const newKeys = Object.keys(liveModulations);
+    const oldKeys = Object.keys(oldMods);
+    let changed = newKeys.length !== oldKeys.length;
+    if (!changed) {
+        for (let i = 0; i < newKeys.length; i++) {
+            const k = newKeys[i];
+            if (liveModulations[k] !== (oldMods as Record<string, number>)[k]) {
+                changed = true;
+                break;
+            }
+        }
+    }
+    if (changed) {
         useEngineStore.getState().setLiveModulations(liveModulations);
     }
     
