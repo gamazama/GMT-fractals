@@ -34,6 +34,7 @@ import { installUndo } from './engine/plugins/Undo';
 import { installHelp } from './engine/plugins/Help';
 import { installHud } from './engine/plugins/Hud';
 import { installModulation } from './engine/animation/modulationTick';
+import { installModulationUI, setLfoListConfig } from './engine/components/modulation';
 
 // Dev mode: unregister any stale service workers left behind by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -58,6 +59,13 @@ installUndo();
 installHelp();
 installHud();
 installModulation();
+installModulationUI();
+// Default a fresh LFO to demo.position_x — vec axis path that exercises
+// the seedBaseValue split, gives the user a visible wiggle right after
+// "Add LFO". Smoke harness for the lift: if the dropdown / target /
+// liveModulations chain has any GMT-coupling left, the square won't
+// wiggle here.
+setLfoListConfig({ defaultTarget: 'demo.position_x' });
 
 // Add-on: wire the demo panel into the right dock + register the
 // R-to-randomize shortcut + bottom-left hint pill. Requires the store

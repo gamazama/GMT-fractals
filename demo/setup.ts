@@ -18,9 +18,11 @@
  */
 
 import { useEngineStore } from '../store/engineStore';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { shortcuts } from '../engine/plugins/Shortcuts';
 import { help } from '../engine/plugins/Help';
+import { DemoOverlay } from './DemoOverlay';
 
 /** Pick a random RGB hex string. Demo-grade — no perceptual weighting. */
 const randomHex = (): string => {
@@ -29,6 +31,10 @@ const randomHex = (): string => {
 };
 
 export const wireDemoPanel = () => {
+    // Register the overlay component now (post-store-boot — see
+    // registerFeatures.ts for why this can't be at registration time).
+    componentRegistry.register('overlay-demo', DemoOverlay);
+
     applyPanelManifest([
         {
             id: 'Demo',
@@ -36,9 +42,21 @@ export const wireDemoPanel = () => {
             order: 0,
             features: ['demo'],
         },
+        {
+            // Demonstrates @engine/components/modulation. The widget
+            // reads animations off the engine store directly; the
+            // engine's installModulation tick processes them into
+            // liveModulations each frame. DemoOverlay then composes
+            // base + live mod — see DemoOverlay.tsx.
+            id: 'Animation',
+            dock: 'right',
+            order: 1,
+            items: [{ type: 'widget', id: 'lfo-list' }],
+        },
     ]);
     const store = useEngineStore.getState();
     store.movePanel('Demo', 'right', 0);
+    store.movePanel('Animation', 'right', 1);
     store.togglePanel('Demo', true);
 
     // R = randomize the demo's color. Goes through the typed setDemo

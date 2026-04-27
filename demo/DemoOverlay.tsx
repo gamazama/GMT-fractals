@@ -1,13 +1,20 @@
 /**
  * DemoOverlay — viewport overlay that visualises the demo feature's state.
  *
- * Rendered by ViewportArea via the feature's `viewportConfig`. Reads its
- * slice state from the store and renders a positioned, coloured square.
- * Any interaction (sliders, color picker, save/load) updates the state,
- * which triggers a re-render here.
+ * Reads each numeric param via `liveMod[target] ?? sliceState[param]` —
+ * same pattern fluid-toy's syncJuliaToEngine uses. That makes the
+ * square react to LFOs / audio rules / future modulation drivers
+ * without DemoOverlay knowing they exist.
+ *
+ * Without this composition, an LFO from the Animation panel would
+ * still be processed by the modulation tick (visible in the slider's
+ * live-value indicator), but the square wouldn't move — it would
+ * keep reading only the authored base values from the slice.
  */
 
 import React from 'react';
+import { useEngineStore } from '../store/engineStore';
+import { useLiveModulations } from '../engine/typedSlices';
 import type { FeatureComponentProps } from '../components/registry/ComponentRegistry';
 import type { DemoState } from './DemoFeature';
 
@@ -26,12 +33,27 @@ const toCssColor = (c: DemoState['color'] | any): string => {
 
 export const DemoOverlay: React.FC<FeatureComponentProps> = ({ sliceState }) => {
     const demo = sliceState as DemoState | undefined;
+    // Subscribe to liveModulations so the overlay re-renders each tick
+    // when a driver writes new values. The hook returns a stable empty
+    // map when no mods exist — see engine/typedSlices.ts EMPTY_LIVE_MODS.
+    const liveMod = useLiveModulations();
+    // The DDFS demo slice is animatable but only color is excluded
+    // (type: 'color' isn't in the modulatable set — see ParameterSelector
+    // isModulatable()). Position uses the vec-axis convention
+    // `demo.position_x` / `_y` that AnimationEngine's binders write.
+    const liveOrBase = (target: string, base: number): number => {
+        const v = liveMod[target];
+        return typeof v === 'number' ? v : base;
+    };
     if (!demo) return null;
 
-    const size = demo.size;
+    const size = liveOrBase('demo.size', demo.size);
+    const opacity = liveOrBase('demo.opacity', demo.opacity);
+    const posX = liveOrBase('demo.position_x', demo.position.x);
+    const posY = liveOrBase('demo.position_y', demo.position.y);
     // position.x/y in [-1, 1] → percent offset from center
-    const leftPct = 50 + demo.position.x * 40;
-    const topPct = 50 - demo.position.y * 40;
+    const leftPct = 50 + posX * 40;
+    const topPct = 50 - posY * 40;
 
     return (
         <div
@@ -43,7 +65,7 @@ export const DemoOverlay: React.FC<FeatureComponentProps> = ({ sliceState }) => 
                 height: size,
                 transform: 'translate(-50%, -50%)',
                 background: toCssColor(demo.color),
-                opacity: demo.opacity,
+                opacity,
                 transition: 'background 0.12s ease-out',
             }}
         />

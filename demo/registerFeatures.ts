@@ -15,9 +15,16 @@
  */
 
 import { featureRegistry } from '../engine/FeatureSystem';
-import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { DemoFeature } from './DemoFeature';
-import { DemoOverlay } from './DemoOverlay';
 
+// IMPORTANT: do NOT import DemoOverlay here. DemoOverlay reads the
+// engine store via useLiveModulations / useEngineStore — pulling those
+// into the import chain at registerFeatures time freezes the registry
+// BEFORE this very line runs (createFeatureSlice freezes on first
+// store touch). See `fluid-toy/README.md` § "deliberate weirdness" for
+// the canonical write-up of this trap.
+//
+// Component registration is deferred to demo/setup.ts, which runs
+// AFTER the store is created — by then the freeze has happened, but
+// componentRegistry doesn't freeze, so adding entries is safe.
 featureRegistry.register(DemoFeature);
-componentRegistry.register('overlay-demo', DemoOverlay);
