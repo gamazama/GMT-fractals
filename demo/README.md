@@ -25,17 +25,29 @@ The engine's verification / hello-world add-on. Demonstrates the pattern any oth
 
 ## The add-on contract
 
-Three steps. Every engine add-on looks like this:
+Four steps. Every engine add-on looks like this:
 
 ```typescript
-// 1. Register feature definitions
+// 1. Register feature definitions (BEFORE the store is constructed —
+//    the registry freezes on first store touch).
 featureRegistry.register(MyFeature);
 
-// 2. Register UI components referenced by tabConfig / viewportConfig
+// 2. Register UI components referenced by tabConfig / viewportConfig.
+//    The id MUST match the `componentId` your FeatureDefinition
+//    references — typos here render as a black viewport (no overlay
+//    resolves). Convention: 'overlay-<name>'. The dev-only
+//    `validateComponentRefs` (wired in index.tsx) catches mismatches
+//    at boot.
 componentRegistry.register('overlay-mything', MyOverlay);
-componentRegistry.register('auto-feature-panel', AutoFeaturePanel); // engine already does this
 
-// 3. Seed panel state so the tab shows up
+// 3. Declare the panel layout — PanelRouter needs a manifest entry
+//    to know HOW to render the panel. Without this, opening the panel
+//    produces an empty body.
+applyPanelManifest([
+    { id: 'MyPanel', dock: 'right', order: 0, features: ['mything'] },
+]);
+
+// 4. Open the panel (movePanel + togglePanel).
 store.movePanel('MyPanel', 'right', 0);
 store.togglePanel('MyPanel', true);
 ```

@@ -30,6 +30,16 @@ registerUI();
 // to exist, so it runs after App has been imported.
 wireDemoPanel();
 
+// Dev-only: surface componentId typos at boot instead of silently
+// rendering a black viewport. Lazy-imported so the validator code
+// doesn't ship in prod.
+if (import.meta.env.DEV) {
+  Promise.all([
+    import('./engine/FeatureSystem'),
+    import('./components/registry/ComponentRegistry'),
+  ]).then(([fs, cr]) => fs.validateComponentRefs(cr.componentRegistry));
+}
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

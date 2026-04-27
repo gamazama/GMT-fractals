@@ -33,8 +33,10 @@ export const DemoFeature: FeatureDefinition = {
 
     // viewportConfig renders a feature-scoped overlay inside the
     // ViewportArea. 'dom' means an HTML overlay (not an R3F scene node).
+    // Component id matches the `componentRegistry.register('overlay-demo', …)`
+    // call in `demo/registerFeatures.ts` (docs convention: `overlay-<name>`).
     viewportConfig: {
-        componentId: 'demo-overlay',
+        componentId: 'overlay-demo',
         type: 'dom',
     },
 
