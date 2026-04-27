@@ -1,6 +1,22 @@
-# GMT Development Changelog (v0.9.1 dev)
+# GMT Development Changelog (v0.9.3 dev)
 
-Chronological log of significant changes during the v0.9.1 development cycle (uncommitted on `dev` branch).
+Chronological log of significant changes during the v0.9.3 development cycle (engine-extraction trunk; merges to `main` once stable).
+
+## 2026-04-27
+
+### Camera shortcuts wired + saved-camera toast + fluid-toy smooth view tween
+
+**User-facing**
+- Camera Manager hotkeys finally work: **Ctrl+1..9** saves the current view to a slot, **1..9** recalls it. The Camera menu's Slot N entries now do the same and show a ✓ once a slot is filled.
+- Saving to a slot pops a small **"Camera N saved"** toast under the topbar (2s) and lights a notification dot on the **View Manager** menu item for 5s — so you know the save landed even with the Manager closed.
+- Pressing **Ctrl+5** when only 2 cameras are saved no longer silently appends as the 3rd entry mislabelled "5". Now warns: *"Slot 5 unavailable — only 2 slots are filled"*. Slots fill sequentially.
+- Fluid-toy "Views" gets the same toast + dot + ✓ for free, and **switching between saved views now smoothly animates** over 500ms (center, julia C, zoom in log-space, power) — was an instant jarring snap.
+
+**Mechanism**
+- `installGmtCameraSlice` was calling only the inner `installStateLibrarySlice` — not the outer `installStateLibrary` bundle that actually registers the keyboard slot shortcuts. Switched to the bundle. `installCamera({hideShortcuts: true})` in app-gmt suppresses the legacy `@engine/camera` shortcut bindings whose adapter was never registered (silent no-ops that won the tie-break).
+- Promoted the saved-toast pattern to the engine: `installStateLibrarySlice` now writes `${arrayKey}_savedToast` and `${arrayKey}_notifyDot` transient store fields with timer cleanup. New `<StateLibraryToast arrayKey={...}/>` component renders the pill with success/warning tones. Auto-mounted by `installStateLibrary` next to the menu when one is configured. Field names exported via `toastFieldKey()` / `dotFieldKey()` helpers.
+- `MenuButtonItem.label` and `MenuToggleItem.label` now accept `string | (() => string)` (matching the existing `disabled: boolean | (() => boolean)`). Drives the live ✓ on filled slots and the ● on the View Manager item.
+- `lerp` and `easeInOutQuad` lifted to `engine/math/Easing.ts` for fluid-toy's `tweenView` and any future ad-hoc tweens.
 
 ## 2026-04-26
 

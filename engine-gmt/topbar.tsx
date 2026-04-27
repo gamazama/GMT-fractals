@@ -19,7 +19,6 @@ import { topbar } from '../engine/plugins/TopBar';
 import { FpsCounter } from '../engine/plugins/topbar/FpsCounter';
 import { PauseControls } from '../engine/plugins/topbar/PauseControls';
 import { AdaptiveResolution } from './topbar/AdaptiveResolution';
-import { camera } from '../engine/plugins/Camera';
 import { GmtLogo } from './topbar/Logo';
 import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
@@ -29,6 +28,8 @@ import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { CenterHUD } from './topbar/CenterHUD';
 import { ShareLinkButton } from './topbar/ShareLinkButton';
+import { StateLibraryToast } from '../engine/components/StateLibraryToast';
+import { dotFieldKey } from '../engine/store/createStateLibrarySlice';
 import { ViewportQuality } from './topbar/ViewportQuality';
 import BucketRenderSettingsPopup from './topbar/BucketRenderControls';
 import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
@@ -317,6 +318,18 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     // ── Share link button (right slot, before Camera) ─────────────────
     topbar.register({ id: 'share-link', slot: 'right', order: 27, component: ShareLinkButton });
 
+    // Slot-saved toast — absolute-positioned floating pill that appears
+    // below the topbar when a camera slot is saved (or rejected as
+    // out-of-range). Placed at order 28.5 so it sits adjacent to the
+    // Camera menu (order 29), letting its absolute right-0 anchoring
+    // align under the menu button.
+    topbar.register({
+        id: 'gmt-camera-slot-toast',
+        slot: 'right',
+        order: 28.5,
+        component: () => <StateLibraryToast arrayKey="savedCameras" />,
+    });
+
     // ── Camera menu (right slot, before System) ────────────────────────
     menu.register({
         id: 'camera',
@@ -360,35 +373,38 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('camera', {
         id: 'camera-manager',
         type: 'button',
-        label: 'View Manager',
+        label: () => {
+            const dot = (useEngineStore.getState() as any)[dotFieldKey('savedCameras')];
+            return dot ? 'View Manager  ●' : 'View Manager';
+        },
         onSelect: openCameraManager,
     });
 
     menu.registerItem('camera', { id: 'camera-sep-slots', type: 'separator' });
     menu.registerItem('camera', { id: 'camera-slots-section', type: 'section', label: 'Camera Slots' });
 
-    // Slots 1..9 as individual items — GMT's pattern. Each is dynamic:
-    // label shows "Slot N" when empty, "Slot N ✓" when filled. Click
-    // recalls, Shift+click saves (matches the Ctrl+N / N hotkeys GMT
-    // wires via installCamera).
+    // Slots 1..9 as individual items, backed by the savedCameras state-
+    // library (engine-gmt/store/cameraSlice.ts → installStateLibrary).
+    // Click recalls when the slot is filled, otherwise saves. Matches
+    // the Mod+N / N hotkeys the library registers, so menu and keyboard
+    // agree. Label gains a ✓ when the slot has a saved camera.
     for (let n = 1; n <= 9; n++) {
+        const slotIndex = n - 1;
         menu.registerItem('camera', {
             id: `camera-slot-${n}`,
             type: 'button',
-            label: `Slot ${n}`,
-            shortcut: `${n}`,
-            title: `Click to recall • Shift+click to save • Ctrl+${n} also saves, ${n} also recalls`,
-            onSelect: () => {
-                // Standard click recalls.
-                if (!camera.recallSlot(n)) {
-                    // Empty slot — offer to save instead.
-                    camera.saveSlot(n);
-                }
+            label: () => {
+                const cameras = (useEngineStore.getState() as any).savedCameras as Array<unknown> | undefined;
+                return cameras?.[slotIndex] ? `Slot ${n} ✓` : `Slot ${n}`;
             },
-            disabled: () => {
-                // Always enabled for save; disabled-look only while empty
-                // is misleading since we fall back to save. Leave enabled.
-                return false;
+            shortcut: `${n}`,
+            title: `Click to recall • Ctrl+${n} saves • Empty slot saves on click`,
+            onSelect: () => {
+                const s = useEngineStore.getState() as any;
+                const cameras = s.savedCameras as Array<{ id: string }> | undefined;
+                const target = cameras?.[slotIndex];
+                if (target) s.selectCamera?.(target.id);
+                else s.saveToSlot?.(slotIndex);
             },
         });
     }

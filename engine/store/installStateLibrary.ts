@@ -18,11 +18,13 @@
  * when an app already has bespoke wiring for either.
  */
 
-import { installStateLibrarySlice, type StateLibraryOptions } from './createStateLibrarySlice';
+import React from 'react';
+import { installStateLibrarySlice, dotFieldKey, type StateLibraryOptions } from './createStateLibrarySlice';
 import { useEngineStore } from '../../store/engineStore';
 import { shortcuts } from '../plugins/Shortcuts';
 import { menu } from '../plugins/Menu';
-import type { TopBarSlot } from '../plugins/TopBar';
+import { topbar, type TopBarSlot } from '../plugins/TopBar';
+import { StateLibraryToast } from '../components/StateLibraryToast';
 import type { ComponentType } from 'react';
 
 export interface SlotShortcutOptions {
@@ -90,14 +92,37 @@ const defaultSlotOpts = (
     return o;
 };
 
-/** Bundles the slice install + shortcut registration + menu wiring. */
+/** Bundles the slice install + shortcut registration + menu wiring +
+ *  saved-toast topbar slot. Apps that supply `menu` get the toast for
+ *  free, anchored next to the menu button. Apps that opt out (menu:
+ *  null, e.g. GMT, which builds its Camera menu by hand) can still
+ *  mount <StateLibraryToast arrayKey={...} /> wherever they want. */
 export function installStateLibrary<T>(opts: InstallStateLibraryOptions<T>): void {
     installStateLibrarySlice<T>(opts);
 
     const slotOpts = defaultSlotOpts(opts.slotShortcuts);
     if (slotOpts) registerSlotShortcuts(opts, slotOpts);
 
-    if (opts.menu) registerLibraryMenu(opts, opts.menu);
+    if (opts.menu) {
+        registerLibraryMenu(opts, opts.menu);
+        registerLibraryToast(opts, opts.menu);
+    }
+}
+
+function registerLibraryToast<T>(
+    opts: InstallStateLibraryOptions<T>,
+    m: StateLibraryMenuOptions,
+): void {
+    // Drop the toast adjacent to the menu button. order + 0.5 keeps a
+    // stable z-order while sharing the same flex slot — the toast's
+    // absolute positioning aligns under the menu button automatically.
+    const arrayKey = opts.arrayKey;
+    topbar.register({
+        id: `${arrayKey}-saved-toast`,
+        slot: m.slot,
+        order: m.order + 0.5,
+        component: () => React.createElement(StateLibraryToast, { arrayKey }),
+    });
 }
 
 function registerSlotShortcuts<T>(
@@ -155,16 +180,23 @@ function registerLibraryMenu<T>(
         width: m.width,
     });
 
-    // Open Manager — togglePanel via the engine store.
+    // Open Manager — togglePanel via the engine store. Label adopts a
+    // ● suffix while the notify-dot is lit (5s after a slot save) so
+    // the user notices the new entry without opening the menu.
     if (m.openItem !== null) {
         const open = m.openItem ?? {
             id: `${m.menuId}-open`,
             label: `${opts.panelId}…`,
         };
+        const dotKey = dotFieldKey(opts.arrayKey);
+        const baseLabel = open.label;
         menu.registerItem(m.menuId, {
             id: open.id ?? `${m.menuId}-open`,
             type: 'button',
-            label: open.label,
+            label: () => {
+                const dot = (useEngineStore.getState() as any)[dotKey];
+                return dot ? `${baseLabel}  ●` : baseLabel;
+            },
             title: open.title,
             onSelect: () => {
                 (useEngineStore.getState() as any).togglePanel?.(opts.panelId, true);
@@ -199,7 +231,10 @@ function registerLibraryMenu<T>(
             menu.registerItem(m.menuId, {
                 id: `${m.menuId}-slot-${n}`,
                 type: 'button',
-                label: `${labelPrefix} ${n}`,
+                label: () => {
+                    const arr = (useEngineStore.getState() as any)[opts.arrayKey] as any[] | undefined;
+                    return arr?.[slotIndex] ? `${labelPrefix} ${n} ✓` : `${labelPrefix} ${n}`;
+                },
                 shortcut: `${n}`,
                 title: `Click to recall • Ctrl+${n} saves`,
                 onSelect: () => {

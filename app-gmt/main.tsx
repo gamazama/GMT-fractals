@@ -160,7 +160,12 @@ installSceneIO({
 installModulation();
 installShortcuts();
 installUndo();
-installCamera();
+// hideShortcuts: GMT's camera state lives in the savedCameras state-library
+// (installed by installGmtCameraSlice → installStateLibrary), which already
+// owns Mod+1..9 / 1..9. Letting @engine/camera also register them creates
+// a tie-break conflict that the dead-adapter handlers would silently win,
+// since this install runs after the state-library's bindings.
+installCamera({ hideShortcuts: true });
 installMenu();
 installHelp();
 installHud();

@@ -30,6 +30,33 @@
 import { useEngineStore } from '../../store/engineStore';
 import { nanoid } from 'nanoid';
 
+/** Suffix appended to the library's `arrayKey` to form the transient
+ *  saved-toast field on the engine store. Exported so consumers
+ *  (StateLibraryToast, dynamic menu labels) read the same field name
+ *  the slice writes. */
+export const TOAST_FIELD_SUFFIX = '_savedToast';
+
+/** Suffix for the notify-dot field. Lit on each successful slot save. */
+export const DOT_FIELD_SUFFIX = '_notifyDot';
+
+export const toastFieldKey = (arrayKey: string): string => `${arrayKey}${TOAST_FIELD_SUFFIX}`;
+export const dotFieldKey = (arrayKey: string): string => `${arrayKey}${DOT_FIELD_SUFFIX}`;
+
+/** Transient toast payload written to `toastFieldKey(arrayKey)` when a
+ *  slot save fires. The bundled <StateLibraryToast/> component renders
+ *  this with success / warning styling. Cleared 2s after creation. */
+export interface StateLibrarySavedToast {
+    /** 1-indexed user-facing slot number (matches the keyboard hint). */
+    slot: number;
+    /** User-facing label of the snapshot the toast describes. */
+    label: string;
+    /** Visual tone — `success` for an actual save, `warning` for a
+     *  rejected save (e.g. user pressed Mod+5 with only 2 slots). */
+    tone: 'success' | 'warning';
+    /** Free-form message rendered in the pill. */
+    message: string;
+}
+
 /** A single saved snapshot. The state payload `T` is opaque to the
  *  library — apps decide what to capture. */
 export interface StateSnapshot<T> {
@@ -100,6 +127,15 @@ export interface StateLibraryOptions<T> {
     /** Optional hook that fires after every apply() — lets apps tie
      *  into animation/undo without subclassing. */
     onApplied?: (state: T, prev: T | undefined, snapshot: StateSnapshot<T>) => void;
+    /** Optional hook that fires after `saveToSlot` writes to the store.
+     *  `slotIndex` is 0-indexed; `label` is the snapshot's label. Used
+     *  by apps that want to show a "saved!" toast or notification dot. */
+    onSavedToSlot?: (slotIndex: number, label: string) => void;
+    /** ms the saved-toast pill stays visible. Default 2000. */
+    toastDurationMs?: number;
+    /** ms the notify dot on the open-library menu item stays lit.
+     *  Default 5000. */
+    dotDurationMs?: number;
 }
 
 /** Patches a state-library slice onto the engineStore. Idempotent —
@@ -125,6 +161,27 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
     const writeActive = (id: string | null) =>
         set({ [activeIdKey]: id });
 
+    // Two transient store fields keyed off the array name so multiple
+    // libraries (cameras, views, palettes …) don't collide. Warning
+    // toasts skip the dot — nothing was saved to call attention to.
+    const toastKey = toastFieldKey(arrayKey);
+    const dotKey = dotFieldKey(arrayKey);
+    const toastDuration = opts.toastDurationMs ?? 2000;
+    const dotDuration = opts.dotDurationMs ?? 5000;
+    let toastTimer: ReturnType<typeof setTimeout> | null = null;
+    let dotTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const fireToast = (toast: StateLibrarySavedToast) => {
+        set({ [toastKey]: toast });
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => set({ [toastKey]: null }), toastDuration);
+        if (toast.tone === 'success') {
+            set({ [dotKey]: true });
+            if (dotTimer) clearTimeout(dotTimer);
+            dotTimer = setTimeout(() => set({ [dotKey]: false }), dotDuration);
+        }
+    };
+
     /** Internal: capture current state into a fresh snapshot. */
     const captureSnap = (label: string): StateSnapshot<T> => ({
         id: nanoid(),
@@ -143,6 +200,8 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
     set({
         [arrayKey]: [] as StateSnapshot<T>[],
         [activeIdKey]: null as string | null,
+        [toastKey]: null as StateLibrarySavedToast | null,
+        [dotKey]: false,
 
         [actions.add]: async (labelOverride?: string) => {
             const arr = readArray();
@@ -237,6 +296,23 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
 
         [actions.saveToSlot]: async (slotIndex: number) => {
             const arr = readArray();
+            // Slots fill sequentially. Pressing Mod+5 with only 2 saved
+            // entries would previously have appended as the 3rd entry
+            // and labelled it "Camera 5" — a silent lie that also breaks
+            // recall (key '5' would not bring it back). Reject the save
+            // with a warning toast so the user notices, instead of doing
+            // something surprising.
+            if (slotIndex > arr.length) {
+                fireToast({
+                    slot: slotIndex + 1,
+                    label: `${defaultLabelPrefix} ${slotIndex + 1}`,
+                    tone: 'warning',
+                    message: `Slot ${slotIndex + 1} unavailable — only ${arr.length} ${arr.length === 1 ? 'slot is' : 'slots are'} filled`,
+                });
+                return;
+            }
+
+            let savedLabel: string;
             if (slotIndex < arr.length) {
                 // Overwrite existing slot with current state.
                 const target = arr[slotIndex];
@@ -249,8 +325,9 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
                 next[slotIndex] = updated;
                 writeArray(next);
                 writeActive(updated.id);
+                savedLabel = updated.label;
             } else {
-                // Empty slot — fall through to add.
+                // Append next sequential slot (slotIndex === arr.length).
                 const label = opts.suggestLabel?.() ?? `${defaultLabelPrefix} ${slotIndex + 1}`;
                 const snap = captureSnap(label);
                 writeArray([...arr, snap]);
@@ -267,7 +344,15 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
                         }
                     }
                 }
+                savedLabel = label;
             }
+            fireToast({
+                slot: slotIndex + 1,
+                label: savedLabel,
+                tone: 'success',
+                message: `${savedLabel} saved`,
+            });
+            opts.onSavedToSlot?.(slotIndex, savedLabel);
         },
 
         [actions.reset]: () => {

@@ -67,7 +67,9 @@ interface MenuItemBase {
 
 export interface MenuButtonItem extends MenuItemBase {
     type: 'button';
-    label: string;
+    /** Static text or a getter re-evaluated each render for live labels
+     *  (e.g. `Slot 3 ✓` once the slot is filled). */
+    label: string | (() => string);
     icon?: IconRenderable;
     shortcut?: string;
     title?: string;
@@ -81,7 +83,8 @@ export interface MenuButtonItem extends MenuItemBase {
 
 export interface MenuToggleItem extends MenuItemBase {
     type: 'toggle';
-    label: string;
+    /** Static text or a getter re-evaluated each render for live labels. */
+    label: string | (() => string);
     icon?: IconRenderable;
     shortcut?: string;
     title?: string;
@@ -341,6 +344,7 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
         case 'button': {
             const b = item;
             const isDisabled = typeof b.disabled === 'function' ? b.disabled() : !!b.disabled;
+            const labelText = typeof b.label === 'function' ? b.label() : b.label;
             return (
                 <button
                     type="button"
@@ -356,7 +360,7 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
                 >
                     <span className="flex items-center gap-2 min-w-0">
                         {renderIcon(b.icon)}
-                        <span className="truncate">{b.label}</span>
+                        <span className="truncate">{labelText}</span>
                         {b.shortcut && (
                             <span className="text-[9px] text-gray-500 font-mono">[{b.shortcut}]</span>
                         )}
@@ -368,6 +372,7 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
             const t = item;
             const active = t.isActive();
             const isDisabled = typeof t.disabled === 'function' ? t.disabled() : !!t.disabled;
+            const labelText = typeof t.label === 'function' ? t.label() : t.label;
             return (
                 <button
                     type="button"
@@ -378,7 +383,7 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
                 >
                     <span className="flex items-center gap-2 min-w-0">
                         {renderIcon(t.icon)}
-                        <span className="truncate">{t.label}</span>
+                        <span className="truncate">{labelText}</span>
                         {t.shortcut && (
                             <span className="text-[9px] text-gray-500 font-mono">[{t.shortcut}]</span>
                         )}

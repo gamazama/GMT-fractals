@@ -1,7 +1,7 @@
 # gmt-engine — Claude Code Instructions
 
 ## Project Overview
-**gmt-engine** — a generic application engine extracted from GMT (at `h:/GMT/gmt-0.8.5/`). Provides DDFS (Data-Driven Feature System), animation, UI, save/load, shortcuts, undo, and plugin seams. Apps (GMT, toy-fluid, future prototypes) install features and core plugins on top of it.
+**gmt-engine** — a generic application engine extracted from GMT (stable at `h:/GMT/workspace-gmt/stable/`). Lives at `h:/GMT/workspace-gmt/dev/`. Provides DDFS (Data-Driven Feature System), animation, UI, save/load, shortcuts, undo, and plugin seams. Apps (GMT, toy-fluid, future prototypes) install features and core plugins on top of it.
 
 Stack: React 18 + TypeScript + Zustand + Vite + optional GLSL | Forked from GMT 0.9.2 | Status: pre-1.0 architecture stabilisation
 

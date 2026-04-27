@@ -28,10 +28,8 @@ import { registry } from '../engine/FractalRegistry';
 import { VirtualSpace } from '../engine/PrecisionMath';
 import { CameraUtils } from '../utils/CameraUtils';
 import { useEngineStore } from '../../store/engineStore';
-import {
-    installStateLibrarySlice,
-    type StateSnapshot,
-} from '../../engine/store/createStateLibrarySlice';
+import { type StateSnapshot } from '../../engine/store/createStateLibrarySlice';
+import { installStateLibrary } from '../../engine/store/installStateLibrary';
 import { getDirectionName } from '../features/camera_manager/logic';
 import type { PreciseVector3, CameraState } from '../../types';
 import type { OpticsState } from '../features/optics';
@@ -237,8 +235,15 @@ export const installGmtCameraSlice = (): void => {
         },
     });
 
-    // Install the generic state-library actions for saved cameras.
-    installStateLibrarySlice<SavedCameraPayload>({
+    // Install the generic state-library actions for saved cameras, plus
+    // the Mod+1..9 / 1..9 slot shortcuts. `menu: null` opts out of the
+    // bundle's auto-generated topbar menu — GMT's Camera menu is wired
+    // by hand in engine-gmt/topbar.tsx alongside Undo Move / Redo Move /
+    // Reset Position / View Manager. Slot items in that menu are wired
+    // to the same savedCameras library actions, so menu clicks and
+    // hotkeys agree.
+    installStateLibrary<SavedCameraPayload>({
+        panelId: 'Camera Manager',
         arrayKey: 'savedCameras',
         activeIdKey: 'activeCameraId',
         actions: {
@@ -258,6 +263,22 @@ export const installGmtCameraSlice = (): void => {
         suggestLabel: suggestCameraLabel,
         captureThumbnail: captureCameraThumbnail,
         onReset: resetToFormulaDefault,
+        slotShortcuts: {
+            category: 'Camera',
+            savePrefix: 'Save camera to slot',
+            recallPrefix: 'Recall camera slot',
+        },
+        menu: null,
+        // Saved-toast + notify-dot are managed by the bundle (writes to
+        // savedCameras_savedToast / savedCameras_notifyDot on the store).
+        // We additionally emit FRACTAL_EVENTS.CAMERA_SLOT_SAVED so any
+        // legacy listeners or animation hooks can react.
+        onSavedToSlot: (slotIndex, label) => {
+            FractalEvents.emit(FRACTAL_EVENTS.CAMERA_SLOT_SAVED, {
+                slot: slotIndex + 1,
+                label,
+            });
+        },
     });
 
     // Wrap engine-core's undoCamera / redoCamera so the R3F camera warps
@@ -276,4 +297,5 @@ export const installGmtCameraSlice = (): void => {
             (get() as any)._applyCameraTeleport?.();
         },
     });
+
 };

@@ -15,6 +15,7 @@
 
 import { useEngineStore } from '../store/engineStore';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
+import { lerp, easeInOutQuad } from '../engine/math/Easing';
 import { CameraIcon } from '../components/Icons';
 
 export interface JuliaViewState {
@@ -38,9 +39,67 @@ const captureView = (): JuliaViewState => {
     };
 };
 
-const applyView = (state: JuliaViewState) => {
+// ── Smooth view tween ──────────────────────────────────────────────────
+// `kind` (enum) and `maxIter` (integer) snap immediately at tween start.
+// `zoom` interpolates in log-space so the perceived zoom rate stays
+// uniform regardless of magnitude. Cancels any previous in-flight tween
+// before starting.
+
+const TWEEN_MS = 500;
+
+let _tweenCancel: number | null = null;
+
+const tweenView = (target: JuliaViewState) => {
     const setJulia = (useEngineStore.getState() as any).setJulia;
-    if (setJulia) setJulia(state);
+    if (!setJulia) return;
+
+    if (_tweenCancel !== null) {
+        cancelAnimationFrame(_tweenCancel);
+        _tweenCancel = null;
+    }
+
+    const start = captureView();
+
+    setJulia({ kind: target.kind, maxIter: target.maxIter });
+
+    const startLogZoom = Math.log(Math.max(start.zoom, 1e-12));
+    const endLogZoom = Math.log(Math.max(target.zoom, 1e-12));
+    const t0 = performance.now();
+
+    const step = () => {
+        const tRaw = (performance.now() - t0) / TWEEN_MS;
+        if (tRaw >= 1) {
+            // Exact-target write so we don't accumulate fp drift.
+            setJulia({
+                center: { x: target.center.x, y: target.center.y },
+                juliaC: { x: target.juliaC.x, y: target.juliaC.y },
+                zoom: target.zoom,
+                power: target.power,
+            });
+            _tweenCancel = null;
+            return;
+        }
+        const e = easeInOutQuad(tRaw);
+        setJulia({
+            center: {
+                x: lerp(start.center.x, target.center.x, e),
+                y: lerp(start.center.y, target.center.y, e),
+            },
+            juliaC: {
+                x: lerp(start.juliaC.x, target.juliaC.x, e),
+                y: lerp(start.juliaC.y, target.juliaC.y, e),
+            },
+            zoom: Math.exp(lerp(startLogZoom, endLogZoom, e)),
+            power: lerp(start.power, target.power, e),
+        });
+        _tweenCancel = requestAnimationFrame(step);
+    };
+
+    _tweenCancel = requestAnimationFrame(step);
+};
+
+const applyView = (state: JuliaViewState) => {
+    tweenView(state);
 };
 
 const isViewModified = (snap: JuliaViewState): boolean => {
