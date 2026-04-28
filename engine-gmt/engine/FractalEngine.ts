@@ -12,6 +12,7 @@ import { PickingController } from './controllers/PickingController';
 import { bucketRenderer, BucketRenderConfig } from './BucketRenderer';
 import { UniformManager } from './managers/UniformManager';
 import { ConfigManager } from './managers/ConfigManager';
+import { CompileScheduler } from './CompileScheduler';
 import { OpticsState } from '../features/optics';
 import { LightingState } from '../features/lighting';
 import { QualityState } from '../features/quality';
@@ -96,26 +97,15 @@ export class FractalEngine {
     public lastMeasuredDistance: number = 10.0;
     public dirty: boolean = true;
     
-    public lastCompileDuration: number = 0;
     public isBooted: boolean = false;
 
-    private _isCompiling: boolean = false;
+    /** Owns the off-thread shader compile pipeline + parallel-compile
+     *  detection + generation counter. External `engine.isCompiling` /
+     *  `hasCompiledShader` / `lastCompileDuration` getters delegate here. */
+    private compiler!: CompileScheduler;
+
     private _pendingTeleport: CameraState | null = null;
     private _totalFrames: number = 0;
-    public hasCompiledShader: boolean = false;
-
-    // Two-stage compile: generation counter to cancel stale async compiles
-    private _compileGeneration: number = 0;
-    // Dummy scene for async compilation of full shader (reused across compiles)
-    private _compileScene: THREE.Scene | null = null;
-    private _compileMesh: THREE.Mesh | null = null;
-    private _compileCamera: THREE.OrthographicCamera | null = null;
-    // Whether the GPU supports KHR_parallel_shader_compile (Chrome/ANGLE: yes, Firefox: no)
-    private _hasParallelCompile: boolean | null = null;
-    // Debounce timer for scheduleCompile — coalesces rapid config updates into one compile
-    private _compileTimer: ReturnType<typeof setTimeout> | null = null;
-    // Last compiled formula — used to detect formula changes vs engine setting changes
-    private _lastCompiledFormula: string | null = null;
 
     private lastRenderState = {
         pos: new THREE.Vector3(),
@@ -156,6 +146,17 @@ export class FractalEngine {
         this.pipeline.updateQuality(initialConfig.quality as QualityState);
 
         this.uniformManager = new UniformManager(this.materials.mainUniforms, this.virtualSpace, this.pipeline);
+
+        this.compiler = new CompileScheduler({
+            getRenderer:       () => this.renderer,
+            getMainUniforms:   () => this.materials.mainUniforms,
+            materials:         this.materials,
+            sceneCtrl:         this.sceneCtrl,
+            pipeline:          this.pipeline,
+            configManager:     this.configManager,
+            pipelineRender:    (r) => this.pipelineRender(r),
+            resetAccumulation: () => this.resetAccumulation(),
+        });
 
         this.materials.setGradient([
             { id: '1', position: 0.0, color: '#000000' },
@@ -209,7 +210,7 @@ export class FractalEngine {
         this.configManager.rebuildMap();
 
         this.isBooted = true;
-        this.scheduleCompile();
+        this.compiler.schedule();
     }
 
     public get mainMaterial() { return this.materials.mainMaterial; }
@@ -221,7 +222,10 @@ export class FractalEngine {
     public get mainMesh() { return this.sceneCtrl.mainMesh; }
     public get activeCamera() { return this.sceneCtrl.activeCamera; }
     public get lastGeneratedFrag() { return this.materials.getLastFrag(); }
-    public get isCompiling() { return this._isCompiling; }
+    public get isCompiling()         { return this.compiler.isCompiling; }
+    public get hasCompiledShader()   { return this.compiler.hasCompiledShader; }
+    public set hasCompiledShader(v: boolean) { this.compiler.hasCompiledShader = v; }
+    public get lastCompileDuration() { return this.compiler.lastDuration; }
 
     public get sceneOffset() { return this.virtualSpace.state; }
     public get isExporting() { return this.state.isExporting; }
@@ -314,23 +318,9 @@ export class FractalEngine {
      * and doesn't need this.
      */
     public awaitCompile(timeoutMs = 30000): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-                off();
-                reject(new Error(`compile timeout after ${timeoutMs}ms`));
-            }, timeoutMs);
-            const handler = (status: boolean | string) => {
-                if (status === false) {
-                    clearTimeout(timer);
-                    off();
-                    resolve();
-                }
-            };
-            const off = () => FractalEvents.off(FRACTAL_EVENTS.IS_COMPILING, handler);
-            FractalEvents.on(FRACTAL_EVENTS.IS_COMPILING, handler);
-        });
+        return this.compiler.awaitCompile(timeoutMs);
     }
-    
+
     public resolveLightPosition(currentPos: {x:number, y:number, z:number}, wasFixed: boolean): {x:number, y:number, z:number} {
         return this.virtualSpace.resolveRealWorldPosition(currentPos, wasFixed, this.sceneCtrl.getCamera());
     }
@@ -368,9 +358,9 @@ export class FractalEngine {
         }
 
         if (rebuildNeeded) {
-            this.scheduleCompile();
+            this.compiler.schedule();
         } else {
-            if (!this._isCompiling) {
+            if (!this.compiler.isCompiling) {
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
             }
 
@@ -391,222 +381,10 @@ export class FractalEngine {
         }
     }
     
-    private scheduleCompile() {
-        this._isCompiling = true;
-        this._compileGeneration++;
-        // Don't emit IS_COMPILING here — for gated compiles (formula switch, scene load),
-        // the main thread already showed the spinner via queueCompileAfterSpinner.
-        // For non-gated compiles (feature toggles), performCompilation emits the status
-        // when it actually starts. Emitting here caused a spinner flash on every
-        // compile-time parameter adjustment during the debounce window.
-        //
-        // Don't compile yet — wait for CONFIG_DONE from the main thread, which signals
-        // all CONFIGs have been sent. This is deterministic (no timer guessing).
-        // Fallback timer handles non-gated compiles (feature toggles, engine panel)
-        // that don't go through queueCompileAfterSpinner and never send CONFIG_DONE.
-        if (this._compileTimer !== null) {
-            clearTimeout(this._compileTimer);
-        }
-        this._compileTimer = setTimeout(() => {
-            this._compileTimer = null;
-            this.fireCompile();
-        }, 200);
-    }
 
     /** Called by CONFIG_DONE message or fallback timer. Fires the actual compile. */
-    public fireCompile() {
-        if (this._compileTimer !== null) {
-            clearTimeout(this._compileTimer);
-            this._compileTimer = null;
-        }
-        void (async () => {
-            while (!this.renderer) {
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-            try {
-                await this.performCompilation();
-            } catch (e) {
-                console.error('[FractalEngine] performCompilation failed:', e);
-                this._isCompiling = false;
-                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-            }
-        })();
-    }
+    public fireCompile() { this.compiler.fire(); }
 
-    private async performCompilation() {
-        if (!this.renderer) return;
-        const t0 = performance.now();
-        const generation = this._compileGeneration;
-
-        if (this.mainUniforms.uResolution.value.x === 0 || this.mainUniforms.uResolution.value.y === 0) {
-            this.mainUniforms.uResolution.value.set(1024, 768);
-        }
-        this.pipeline.resize(
-            Math.floor(this.mainUniforms.uResolution.value.x),
-            Math.floor(this.mainUniforms.uResolution.value.y)
-        );
-
-        const config = this.configManager.config;
-        // Derive mode from DDFS lighting state (same logic as MaterialController)
-        const lighting = config.lighting as any;
-        const mode: 'Direct' | 'PathTracing' = (lighting && lighting.renderMode === 1.0) ? 'PathTracing' : (config.renderMode || 'Direct');
-
-        // Lazy-detect KHR_parallel_shader_compile (Chrome/ANGLE: yes, Firefox: no).
-        // Without it, compileAsync degrades to synchronous — two-stage gives no benefit.
-        // Firefox also doesn't use fxc, so its shader compiler is fast enough for single-stage.
-        if (this._hasParallelCompile === null) {
-            const gl = this.renderer.getContext();
-            this._hasParallelCompile = !!gl.getExtension('KHR_parallel_shader_compile');
-        }
-
-        // Decide compile strategy:
-        // - keepCurrent: have a compiled shader, same formula → keep it on screen,
-        //   build full shader async, swap when done. No preview downgrade.
-        // - twoStage: first boot or formula change → show preview while full compiles
-        // - singleStage: no parallel compile or lighting already off → synchronous
-        const interlaceId = (config as any).interlace?.interlaceCompiled
-            ? ((config as any).interlace?.interlaceFormula ?? '')
-            : '';
-        const compiledFormulaKey = config.formula + (interlaceId ? '+' + interlaceId : '');
-        const formulaChanged = compiledFormulaKey !== this._lastCompiledFormula;
-        const keepCurrent = this.hasCompiledShader && this._hasParallelCompile && !formulaChanged;
-
-        if (!keepCurrent) {
-            // The main thread already showed the spinner before sending CONFIG.
-            // Update the status text and proceed — no gate needed.
-            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, "Loading Preview...");
-
-            // compilePreview returns false if lighting is already off (preview === full)
-            const useTwoStage = this._hasParallelCompile && this.materials.compilePreview(config);
-            if (!useTwoStage) {
-                // Single-stage synchronous: no parallel compile or lighting already off
-                this.materials.updateConfig(config);
-            }
-
-            const needsCompile = !this.hasCompiledShader || this.materials.shaderDirty;
-
-            // Sync uniforms so preview shader renders with correct parameters
-            // (fractal power, iterations, colors, etc.) instead of defaults.
-            this.materials.syncConfigUniforms(config);
-            const activeMat = this.materials.getMaterial(mode);
-            this.sceneCtrl.setMaterial(activeMat);
-            this.resetAccumulation();
-
-            if (needsCompile) {
-                this.pipelineRender(this.renderer);
-
-                // Mark compiled BEFORE yielding — a concurrent performCompilation
-                // can start during the yields below and must see the updated formula
-                // key, otherwise it thinks the formula changed and does a redundant preview.
-                this.hasCompiledShader = true;
-                this._lastCompiledFormula = compiledFormulaKey;
-                this.materials.shaderDirty = false;
-                this.lastCompileDuration = (performance.now() - t0) / 1000;
-
-                await new Promise(resolve => setTimeout(resolve, 20));
-                this.pipelineRender(this.renderer);
-                if (useTwoStage) await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            if (!useTwoStage) {
-                // Single-stage done
-                this.lastCompileDuration = (performance.now() - t0) / 1000;
-                // Permanent compile timing log — do not remove
-                console.log(`[Compile] Single-stage: ${(this.lastCompileDuration * 1000).toFixed(0)}ms (${config.formula})`);
-                this._isCompiling = false;
-                FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-                FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
-                if (this.lastCompileDuration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, this.lastCompileDuration);
-                return;
-            }
-            // Permanent compile timing log — do not remove
-            console.log(`[Compile] Preview: ${(performance.now() - t0).toFixed(0)}ms (${config.formula})`);
-        } else {
-            // keepCurrent: sync non-modular uniforms only.
-            // Do NOT sync uModularParams here — the old shader is still rendering and
-            // expects the old pipeline's param layout. syncModularUniforms zeros the
-            // array before refilling, which would corrupt the old shader's slot mapping.
-            // Modular params are synced after swapFullMaterial (new shader active).
-            this.materials.syncConfigUniforms(config, /* skipModularSync= */ true);
-            this.resetAccumulation();
-        }
-
-        // Current or preview shader is live. Proceed to async Stage 2.
-        // Keep _isCompiling = true so handleConfigChange doesn't emit IS_COMPILING false
-        // during the async compile, which would kill the spinner.
-        FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, keepCurrent ? "Compiling Shader..." : "Compiling Lighting...");
-
-        // Yield 3 animation frames — each lets handleRenderTick run (compute + blit + flush).
-        for (let i = 0; i < 3; i++) {
-            if (typeof requestAnimationFrame === 'function') {
-                await new Promise(resolve => requestAnimationFrame(resolve));
-            } else {
-                await new Promise(resolve => setTimeout(resolve, 16));
-            }
-        }
-
-        // Check if a newer compile was triggered while we were yielding.
-        // Don't emit IS_COMPILING false — the newer scheduleCompile already emitted
-        // its own status. Emitting false here would create a gap that kills the spinner.
-        if (generation !== this._compileGeneration) {
-            return;
-        }
-
-        // ── STAGE 2: Full shader (async compile on dummy scene) ──
-        const tGenStart = performance.now();
-        const fullMat = this.materials.buildFullMaterial(config);
-        const tGenEnd = performance.now();
-
-        // Lazy-init the dummy compile scene (reused across compiles)
-        if (!this._compileScene) {
-            const pass = createFullscreenPass();
-            this._compileScene = pass.scene;
-            this._compileMesh = pass.mesh;
-            this._compileCamera = pass.camera;
-        }
-        this._compileMesh!.material = fullMat;
-
-        const tGpuStart = performance.now();
-        try {
-            const compileTarget = this.pipeline.getCompileTarget();
-            if (compileTarget) this.renderer.setRenderTarget(compileTarget);
-            await this.renderer.compileAsync(this._compileScene!, this._compileCamera!);
-            if (compileTarget) this.renderer.setRenderTarget(null);
-        } catch (e) {
-            console.warn('[Compile] compileAsync failed, falling back to sync:', e);
-            this.renderer.setRenderTarget(null);
-            this.renderer.compile(this._compileScene!, this._compileCamera!);
-        }
-        const tGpuEnd = performance.now();
-
-        // Check if a newer compile was triggered while we were compiling.
-        // Don't emit IS_COMPILING false — the newer scheduleCompile handles state.
-        if (generation !== this._compileGeneration) {
-            fullMat.dispose();
-            return;
-        }
-
-        // Hot-swap: replace preview/current material with fully compiled material
-        this.materials.swapFullMaterial(fullMat);
-        this.sceneCtrl.setMaterial(this.materials.getMaterial(mode));
-        // Now the new shader is active — sync modular uniforms so the new pipeline's
-        // params are in place before the first render of the new shader.
-        if (config.pipeline) this.materials.syncModularUniforms(config.pipeline, config.graph?.edges ?? []);
-        this.resetAccumulation();
-        this.materials.shaderDirty = false;
-        this._lastCompiledFormula = compiledFormulaKey;
-        this.pipelineRender(this.renderer);
-
-        const totalElapsed = performance.now() - t0;
-        this.lastCompileDuration = totalElapsed / 1000;
-        // Permanent compile timing log — do not remove
-        console.log(`[Compile] Two-stage: ${totalElapsed.toFixed(0)}ms (${config.formula}, gen=${tGenEnd - tGenStart | 0}ms, gpu=${tGpuEnd - tGpuStart | 0}ms)`);
-        if (totalElapsed / 1000 > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, totalElapsed / 1000);
-
-        this._isCompiling = false;
-        FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
-        FractalEvents.emit(FRACTAL_EVENTS.SHADER_CODE, this.materials.getLastFrag());
-    }
 
     public setUniform(key: string, value: any, noReset: boolean = false) {
         this.materials.setUniform(key, value);
