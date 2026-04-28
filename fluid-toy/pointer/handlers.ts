@@ -19,16 +19,28 @@ import { useEngineStore } from '../../store/engineStore';
 import type { FluidEngine } from '../fluid/FluidEngine';
 import {
     MIN_ZOOM,
+    MIN_ZOOM_DEEP,
     MAX_ZOOM,
     PAN_DRAG_THRESHOLD_PX,
     WHEEL_ZOOM_SENSITIVITY,
     MIDDLE_DRAG_ZOOM_SENSITIVITY,
 } from '../constants';
+
+/** Effective minimum zoom — drops to MIN_ZOOM_DEEP (1e-300) when the
+ *  user has the deep-zoom feature enabled, otherwise the standard
+ *  f32-friendly bound. Read at gesture time, not subscribed (no
+ *  re-render cost). The slider's hardMin stays at MIN_ZOOM regardless;
+ *  past it the slider freezes and only mouse can drive deeper. */
+const effectiveMinZoom = (): number => {
+    const dz = useEngineStore.getState().deepZoom;
+    return (dz && dz.enabled) ? MIN_ZOOM_DEEP : MIN_ZOOM;
+};
 import { brushHandles, cursorHandles } from '../engineHandles';
 import { emitStrokeSplat, emitPressSplat, beginStroke } from '../brush';
 import { readBrushParams } from '../brush/readParams';
 import { mods, precisionMultiplier } from './modifiers';
 import type { PointerState, PendingView } from './types';
+import { ddAddF64 } from '../deepZoom/dd';
 
 export const useCanvasPointerHandlers = (
     canvasRef: React.RefObject<HTMLCanvasElement>,
@@ -54,10 +66,15 @@ export const useCanvasPointerHandlers = (
 
             if (e.button === 2) {
                 // Right-press — start a pan-pending; upgrade to pan on travel.
+                // Capture the centre as a double-double so pan deltas at
+                // deep zoom (where each pixel = sub-1e-16 of the centre)
+                // accumulate without f64 quantisation.
                 const s = useEngineStore.getState();
                 ps.mode = 'pan-pending';
                 ps.startCx = s.julia?.center?.x ?? 0;
                 ps.startCy = s.julia?.center?.y ?? 0;
+                ps.startCxLow = s.julia?.centerLow?.x ?? 0;
+                ps.startCyLow = s.julia?.centerLow?.y ?? 0;
                 ps.rightDragged = false;
                 canvas.setPointerCapture(e.pointerId);
                 handleInteractionStart('camera');
@@ -82,8 +99,23 @@ export const useCanvasPointerHandlers = (
                 ps.startZoom = currZoom;
                 ps.zoomAnchorU = u;
                 ps.zoomAnchorV = v;
-                ps.zoomAnchorX = currCenter.x + (u * 2 - 1) * aspect * currZoom;
-                ps.zoomAnchorY = currCenter.y + (v * 2 - 1) * currZoom;
+                // Anchor in world coords as a double-double — at deep
+                // zoom the (u*2-1)*aspect*currZoom term is small enough
+                // that f64 addition would lose its lo bits when summed
+                // with currCenter. Capture both halves of the centre
+                // and accumulate the offset cleanly.
+                const cxLow = s.julia?.centerLow?.x ?? 0;
+                const cyLow = s.julia?.centerLow?.y ?? 0;
+                {
+                    const dx = (u * 2 - 1) * aspect * currZoom;
+                    const dy = (v * 2 - 1) * currZoom;
+                    const ax = ddAddF64(currCenter.x, cxLow, dx);
+                    const ay = ddAddF64(currCenter.y, cyLow, dy);
+                    ps.zoomAnchorX = ax[0];
+                    ps.zoomAnchorXLow = ax[1];
+                    ps.zoomAnchorY = ay[0];
+                    ps.zoomAnchorYLow = ay[1];
+                }
                 canvas.setPointerCapture(e.pointerId);
                 handleInteractionStart('camera');
                 return;
@@ -199,10 +231,21 @@ export const useCanvasPointerHandlers = (
                 const dyPx = e.clientY - ps.startY;
                 const dcx = -(dxPx / rect.width) * 2 * aspect * zoom * mul;
                 const dcy = (dyPx / rect.height) * 2 * zoom * mul;
-                const newCx = ps.startCx + dcx;
-                const newCy = ps.startCy + dcy;
-                pendingViewRef.current = { center: { x: newCx, y: newCy }, zoom };
-                engineRef.current?.setParams({ center: [newCx, newCy] });
+                // DD-add the pan delta into the captured (hi, lo) start
+                // pair. Each delta might be smaller than f64 ulp at the
+                // start centre's magnitude — adding into both halves
+                // via two-sum captures the residual in the lo word.
+                const [newCx, newCxLow] = ddAddF64(ps.startCx, ps.startCxLow, dcx);
+                const [newCy, newCyLow] = ddAddF64(ps.startCy, ps.startCyLow, dcy);
+                pendingViewRef.current = {
+                    center: { x: newCx, y: newCy },
+                    centerLow: { x: newCxLow, y: newCyLow },
+                    zoom,
+                };
+                engineRef.current?.setParams({
+                    center: [newCx, newCy],
+                    centerLow: [newCxLow, newCyLow],
+                });
                 ps.lastX = e.clientX; ps.lastY = e.clientY;
                 return;
             }
@@ -216,12 +259,25 @@ export const useCanvasPointerHandlers = (
                 const mul = precisionMultiplier(e.shiftKey, e.altKey);
                 const dyPx = e.clientY - ps.startY;
                 const zoomFactor = Math.exp(dyPx * MIDDLE_DRAG_ZOOM_SENSITIVITY * mul);
-                const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ps.startZoom * zoomFactor));
+                const newZoom = Math.max(effectiveMinZoom(), Math.min(MAX_ZOOM, ps.startZoom * zoomFactor));
                 const aspect = rect.width / rect.height;
-                const newCx = ps.zoomAnchorX - (ps.zoomAnchorU * 2 - 1) * aspect * newZoom;
-                const newCy = ps.zoomAnchorY - (ps.zoomAnchorV * 2 - 1) * newZoom;
-                pendingViewRef.current = { center: { x: newCx, y: newCy }, zoom: newZoom };
-                engineRef.current?.setParams({ center: [newCx, newCy], zoom: newZoom });
+                // newCenter = anchor − (u*2-1)*aspect*newZoom, computed
+                // as DD so the small newZoom term (deep zoom) doesn't
+                // cancel against the anchor's f64 mantissa.
+                const dx = -(ps.zoomAnchorU * 2 - 1) * aspect * newZoom;
+                const dy = -(ps.zoomAnchorV * 2 - 1) * newZoom;
+                const [newCx, newCxLow] = ddAddF64(ps.zoomAnchorX, ps.zoomAnchorXLow, dx);
+                const [newCy, newCyLow] = ddAddF64(ps.zoomAnchorY, ps.zoomAnchorYLow, dy);
+                pendingViewRef.current = {
+                    center: { x: newCx, y: newCy },
+                    centerLow: { x: newCxLow, y: newCyLow },
+                    zoom: newZoom,
+                };
+                engineRef.current?.setParams({
+                    center: [newCx, newCy],
+                    centerLow: [newCxLow, newCyLow],
+                    zoom: newZoom,
+                });
                 ps.lastX = e.clientX; ps.lastY = e.clientY;
                 return;
             }
@@ -277,6 +333,7 @@ export const useCanvasPointerHandlers = (
                 pendingViewRef.current = null;
                 useEngineStore.getState().setJulia({
                     center: pending.center,
+                    centerLow: pending.centerLow,
                     zoom: pending.zoom,
                 });
             }
@@ -304,24 +361,38 @@ export const useCanvasPointerHandlers = (
                 const s = useEngineStore.getState();
                 return {
                     center: s.julia?.center ?? { x: 0, y: 0 },
+                    centerLow: s.julia?.centerLow ?? { x: 0, y: 0 },
                     zoom: s.julia?.zoom ?? 1.5,
                 };
             })();
             const currCenter = seed.center;
+            const currCenterLow = seed.centerLow;
             const currZoom = seed.zoom;
             const mul = precisionMultiplier(e.shiftKey, e.altKey);
             const zoomFactor = Math.pow(0.9, -e.deltaY * WHEEL_ZOOM_SENSITIVITY * mul);
             const u = (e.clientX - rect.left) / rect.width;
             const v = 1 - (e.clientY - rect.top) / rect.height;
             const aspect = rect.width / rect.height;
-            // World point under cursor BEFORE zoom — keep it fixed after.
-            const fx = currCenter.x + (u * 2 - 1) * aspect * currZoom;
-            const fy = currCenter.y + (v * 2 - 1) * currZoom;
-            const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, currZoom * zoomFactor));
-            const newCx = fx - (u * 2 - 1) * aspect * newZoom;
-            const newCy = fy - (v * 2 - 1) * newZoom;
-            pendingViewRef.current = { center: { x: newCx, y: newCy }, zoom: newZoom };
-            engineRef.current?.setParams({ center: [newCx, newCy], zoom: newZoom });
+            const newZoom = Math.max(effectiveMinZoom(), Math.min(MAX_ZOOM, currZoom * zoomFactor));
+            // World point under cursor stays fixed across the zoom step.
+            // Compute newCenter = currCenter + (u*2-1)*aspect*(currZoom - newZoom)
+            // as DD so the (currZoom - newZoom) term — tiny at deep zoom —
+            // doesn't get clobbered by f64 cancellation against currCenter.
+            const dzoom = currZoom - newZoom;
+            const dx = (u * 2 - 1) * aspect * dzoom;
+            const dy = (v * 2 - 1) * dzoom;
+            const [newCx, newCxLow] = ddAddF64(currCenter.x, currCenterLow.x, dx);
+            const [newCy, newCyLow] = ddAddF64(currCenter.y, currCenterLow.y, dy);
+            pendingViewRef.current = {
+                center: { x: newCx, y: newCy },
+                centerLow: { x: newCxLow, y: newCyLow },
+                zoom: newZoom,
+            };
+            engineRef.current?.setParams({
+                center: [newCx, newCy],
+                centerLow: [newCxLow, newCyLow],
+                zoom: newZoom,
+            });
             if (wheelCommitTimer !== null) window.clearTimeout(wheelCommitTimer);
             wheelCommitTimer = window.setTimeout(() => {
                 wheelCommitTimer = null;
@@ -330,6 +401,7 @@ export const useCanvasPointerHandlers = (
                 pendingViewRef.current = null;
                 useEngineStore.getState().setJulia({
                     center: pending.center,
+                    centerLow: pending.centerLow,
                     zoom: pending.zoom,
                 });
             }, 100);

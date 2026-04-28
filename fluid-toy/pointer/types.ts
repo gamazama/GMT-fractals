@@ -24,20 +24,29 @@ export interface PointerState {
     lastY: number;
     lastT: number;
 
-    // Pan start anchors — screen and world.
+    // Pan start anchors — screen and world. The (Cx, Cy) pair is a
+    // double-double accumulator: hi + lo recovers ~32-digit precision
+    // so pan deltas below f64's mantissa floor (~1e-16 near unit
+    // values) survive accumulation. Pan/zoom handlers update both
+    // halves via Dekker two-sum.
     startX: number;
     startY: number;
     startCx: number;
     startCy: number;
+    startCxLow: number;
+    startCyLow: number;
 
     // Zoom (middle-drag) anchors — captured once at pointerdown and held
     // for the whole drag so vertical motion pivots around one fixed
     // world-space point. startZoom is what we multiply the exp factor
     // against; zoomAnchor* describe the world-and-UV coords of the
-    // click-point.
+    // click-point. Anchor is double-double too so deep-zoom anchoring
+    // doesn't lose precision against the centre.
     startZoom: number;
     zoomAnchorX: number;
     zoomAnchorY: number;
+    zoomAnchorXLow: number;
+    zoomAnchorYLow: number;
     zoomAnchorU: number;
     zoomAnchorV: number;
 
@@ -55,13 +64,16 @@ export interface PointerState {
 export const createPointerState = (): PointerState => ({
     mode: 'idle', pointerId: -1,
     lastX: 0, lastY: 0, lastT: 0,
-    startX: 0, startY: 0, startCx: 0, startCy: 0,
-    startZoom: 1, zoomAnchorX: 0, zoomAnchorY: 0, zoomAnchorU: 0.5, zoomAnchorV: 0.5,
+    startX: 0, startY: 0, startCx: 0, startCy: 0, startCxLow: 0, startCyLow: 0,
+    startZoom: 1, zoomAnchorX: 0, zoomAnchorY: 0, zoomAnchorXLow: 0, zoomAnchorYLow: 0,
+    zoomAnchorU: 0.5, zoomAnchorV: 0.5,
     rightDragged: false,
     startBrushSize: 0.15,
 });
 
 export interface PendingView {
     center: { x: number; y: number };
+    /** Sub-f64 residual paired with `center` for deep-zoom panning. */
+    centerLow: { x: number; y: number };
     zoom: number;
 }

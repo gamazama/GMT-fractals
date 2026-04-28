@@ -24,6 +24,17 @@ import {
 } from './shaders';
 import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH } from '../constants';
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
+import { ddSub } from '../deepZoom/dd';
+
+/** Pack a JS f64 as `[mantissa, exp]` for the shader's HDR uniforms.
+ *  Mirrors `f64ToHDR` from `../deepZoom/HDRFloat.ts` but inlined as a
+ *  tuple-returning helper to avoid the cross-module import in the
+ *  engine layer. Zero maps to (0, 0). */
+const f64ToHDRTuple = (v: number): [number, number] => {
+    if (!Number.isFinite(v) || v === 0) return [0, 0];
+    const e = Math.floor(Math.log2(Math.abs(v)));
+    return [v / Math.pow(2, e), e];
+};
 // FractalEvents reset_accum subscription removed — see ctor comment.
 
 export type ForceMode = 'gradient' | 'curl' | 'iterate' | 'c-track' | 'hue';
@@ -147,6 +158,30 @@ export function colorMappingToIndex(m: ColorMapping): number {
   }
 }
 
+/** Whether this colorMapping needs the trap/stripe accumulator block in
+ *  the iteration loop. Modes that read aux.r (orbit traps), aux.g
+ *  (stripe), or aux.a (trap iter) need it; the rest don't and can skip
+ *  the per-iter atan + sin work. */
+export function colorMappingNeedsAccum(m: ColorMapping): boolean {
+  switch (m) {
+    case 'orbit-point':
+    case 'orbit-circle':
+    case 'orbit-cross':
+    case 'orbit-line':
+    case 'stripe':
+    case 'trap-iter':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Whether this colorMapping needs the per-iter dz/dc derivative tracker.
+ *  Distance estimate and derivative modes read aux.b (logDz). */
+export function colorMappingNeedsDeriv(m: ColorMapping): boolean {
+  return m === 'distance' || m === 'derivative';
+}
+
 /** Which orbit-trap shape the Julia shader should use (derived from colorMapping). */
 export function colorMappingTrapShape(m: ColorMapping): number {
   switch (m) {
@@ -162,6 +197,13 @@ export function colorMappingTrapShape(m: ColorMapping): number {
 export interface FluidParams {
   juliaC: [number, number];
   center: [number, number];
+  /** Sub-f64 residual paired with `center` for deep-zoom panning.
+   *  Auto-managed by gesture handlers via Dekker two-sum. The engine
+   *  packs (center + centerLow) − (refOrbitCenter + refOrbitCenterLow)
+   *  into uDeepCenterOffset, recovering pan increments below f64's
+   *  mantissa floor. Defaults to [0, 0] — old saves and standard
+   *  (non-deep) views work unchanged. */
+  centerLow: [number, number];
   zoom: number;               // world-units per screen-height / 2
   maxIter: number;
   escapeR: number;
@@ -284,6 +326,14 @@ export interface FluidParams {
    *  16, 25). Default 16 = 4×4. Combined with tsaaPerFrameSamples
    *  this defines the round length in frames. */
   tsaaGridSize?: number;
+
+  /** When true, the Julia kernel runs the perturbation path against the
+   *  uploaded reference orbit (see `setReferenceOrbit`) instead of the
+   *  standard f32 iteration. Mandelbrot kind + power 2 only — other
+   *  configs silently fall back to the standard path. Costs nothing
+   *  when off (the shader's deep branch is dead-stripped past its
+   *  guard). Driven by the DeepZoomFeature DDFS slice. */
+  deepZoomEnabled: boolean;
 }
 
 interface FBO {
@@ -331,6 +381,7 @@ interface Program {
 export const DEFAULT_PARAMS: FluidParams = {
   juliaC: [-0.36303304426511473, 0.16845183018751916],
   center: [-0.8139175130270945, -0.054649908357858296],
+  centerLow: [0, 0],
   zoom: 1.2904749020480561,
   maxIter: 310,
   escapeR: 32,
@@ -385,14 +436,19 @@ export const DEFAULT_PARAMS: FluidParams = {
   tsaa: true,
   tsaaJitterAmount: 1.0,
   tsaaSampleCap: 64,
-  // K=4 per frame, gridSize=16 (4×4 lattice). One round = 4 frames →
-  // every lattice cell visited once → accumulator equals the single-
-  // frame K=16 result. Round 1+ progressively refines via deterministic
-  // blue-noise sub-cell offsets, so frames 5-16 add real detail beyond
-  // a static grid. Per-frame cost is 1/4 of K=16 single-frame.
-  tsaaPerFrameSamples: 4,
+  // K=1 per frame: TSAA does ALL the convergence progressively across
+  // frames instead of bursting K samples into one frame. Each frame
+  // adds one jittered sample to the running average, so the image
+  // refines visibly over ~256 frames (≈4s at 60fps). Per-frame cost
+  // is 1/4 of K=4, which gives the user 4× the interactive frame rate
+  // and a smoother visual ramp on idle convergence. The 4×4 grid +
+  // blue-noise sub-offset jitter pattern still cycles through 16
+  // cells × N rounds, yielding the same quality at sampleCap as a
+  // K=N grid would.
+  tsaaPerFrameSamples: 1,
   tsaaGridSize: 16,
   tsaaJitterMode: 'grid',
+  deepZoomEnabled: false,
 };
 
 export class FluidEngine {
@@ -436,9 +492,77 @@ export class FluidEngine {
   private tsaaParamHash = '';
   /** Blue-noise texture for sub-pixel jitter. Shared generic loader. */
   private blueNoise: BlueNoiseTexture | null = null;
+
+  /** Reference-orbit texture for the deep-zoom path. Created lazily on
+   *  first `setReferenceOrbit` call; reused across uploads (re-allocates
+   *  only when the row count changes). RGBA32F, NEAREST filtering. */
+  private refOrbitTex: WebGLTexture | null = null;
+  private refOrbitTexW = 2048;
+  private refOrbitTexH = 0;
+  private refOrbitLen = 0;
+  /** Centre the orbit was BUILT for. The shader receives
+   *  `params.center − refOrbitCenter` so pan/zoom gestures that move
+   *  `params.center` between rebuilds stay aligned (within validity). */
+  private refOrbitCenter: [number, number] = [0, 0];
+  /** Sub-f64 residual paired with refOrbitCenter — captured at orbit
+   *  upload time. The shader's offset is computed as a double-double
+   *  subtraction (paramCenter+paramLow) − (refCenter+refLow) so pan
+   *  increments past f64's ~16-digit mantissa floor are preserved. */
+  private refOrbitCenterLow: [number, number] = [0, 0];
+  /** Bumped each upload — fed into the TSAA paramHash so an orbit swap
+   *  resets the accumulator (the underlying iteration just changed). */
+  private refOrbitVersion = 0;
+
+  /** LA table textures + metadata. Each LA node packs into 3 RGBA32F
+   *  texels (12 floats); see fluid/shaders.ts uLATable layout. */
+  private laTableTex: WebGLTexture | null = null;
+  private laTableTexW = 1024;  // multiple of 3 keeps node packing row-aligned... actually any width works
+  private laTableTexH = 0;
+  private laTotalCount = 0;
+  private laStages: Float32Array = new Float32Array(0);  // pairs of [laIndex, macroItCount]
+  private laStageCount = 0;
+  private laEnabled = false;
+  /** Forces all fluid sim passes (motion, advect, pressure, etc.) to
+   *  skip — independent of `params.paused`. Used by the deep-zoom
+   *  panel's "Disable fluid sim" toggle to A/B-test render perf with
+   *  the fluid pipeline out of the picture. The fractal pass still
+   *  runs so TSAA can converge. */
+  private forceFluidPaused = false;
+
+  /** AT (Approximation Terms) front-load — packed scalars + complex
+   *  coefficients. Null when no usable AT is available for the current
+   *  view (e.g. shallow zoom where dc exceeds every stage's threshold).
+   *  Phase 7 + the f32 deep path. */
+  private atPayload: {
+    stepLength: number;
+    thresholdC: number;
+    sqrEscapeRadius: number;
+    refC: [number, number];
+    ccoeff: [number, number];
+    invZCoeff: [number, number];
+  } | null = null;
   /** Frame counter — advances every step. Feeds shader uFrameCount for
    *  blue-noise temporal animation. */
   private frameCount = 0;
+
+  /** GPU timer-query state — measures actual Julia-pass GPU time.
+   *  EXT_disjoint_timer_query_webgl2 is available on most desktop
+   *  WebGL2 contexts; null when the extension isn't exposed (e.g.
+   *  some mobile drivers, or when the privacy-conscious extension
+   *  blocklist hides it). Async by design: a query issued this
+   *  frame becomes readable a few frames later. */
+  private timerExt: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null = null;
+  /** Ring buffer of in-flight queries — a length-3 ring is enough to
+   *  cover the typical 1-2 frame async result delay. */
+  private juliaTimerQueries: (WebGLQuery | null)[] = [null, null, null];
+  private juliaTimerInFlight: boolean[] = [false, false, false];
+  private juliaTimerCursor = 0;
+  /** Most recent completed measurement — milliseconds for one Julia
+   *  pass. EWMA-smoothed so the diagnostics readout doesn't flicker. */
+  private juliaMsEwma = 0;
+  /** Set true when a timer query is open between begin/end. Avoids
+   *  nested begins (which would trip a WebGL error). */
+  private juliaTimerOpen = false;
 
   /** Bloom scratch textures. Allocated to the DISPLAY canvas size / 2, /4, /8. */
   private bloomA!: FBO;   // half-res — extraction target + final upsample target
@@ -507,6 +631,19 @@ export class FluidEngine {
     const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL2 required — your browser does not support it.');
     this.gl = gl;
+
+    // GPU timer queries for the Julia pass. Optional — if the
+    // extension isn't available, getJuliaMs() returns 0 and the
+    // diagnostics overlay just hides the line.
+    const timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as
+      | { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
+      | null;
+    if (timerExt) {
+      this.timerExt = timerExt;
+      for (let i = 0; i < this.juliaTimerQueries.length; i++) {
+        this.juliaTimerQueries[i] = gl.createQuery();
+      }
+    }
 
     // Enable float render targets
     const colorBufExt = gl.getExtension('EXT_color_buffer_float');
@@ -613,7 +750,12 @@ export class FluidEngine {
     this.progJulia = this.linkProgram(VERT_FULLSCREEN, FRAG_JULIA,
       ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower',
        'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq',
-       'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount', 'uPerFrameSamples', 'uJitterMode', 'uGridSize', 'uTsaaSampleIndex']);
+       'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount', 'uPerFrameSamples', 'uJitterMode', 'uGridSize', 'uTsaaSampleIndex',
+       'uDeepZoomEnabled', 'uRefOrbit', 'uRefOrbitTexW', 'uRefOrbitLen', 'uDeepCenterOffset', 'uDeepScale',
+       'uLATable', 'uLATexW', 'uLATotalCount', 'uLAEnabled', 'uLAStages[0]', 'uLAStageCount',
+       'uATEnabled', 'uATStepLength', 'uATThresholdC', 'uATSqrEscapeRadius',
+       'uATRefC', 'uATCCoeff', 'uATInvZCoeff',
+       'uTrackAccum', 'uTrackDeriv']);
     this.progTsaaBlend = this.linkProgram(VERT_FULLSCREEN, FRAG_TSAA_BLEND,
       ['uCurrentMain', 'uCurrentAux', 'uHistoryMain', 'uHistoryAux', 'uSampleIndex']);
     this.progMotion = this.linkProgram(VERT_FULLSCREEN, FRAG_MOTION,
@@ -1207,10 +1349,49 @@ export class FluidEngine {
 
   private renderJulia() {
     const gl = this.gl;
+
+    // Short-circuit: when TSAA has converged AND no consumer needs a
+    // fresh juliaCur this frame (sim is paused), skip the entire
+    // Julia pass. The display reads juliaTsaa (already converged), so
+    // re-running the kernel produces identical output and burns GPU
+    // time for nothing. Active when the user has pause + accumulation
+    // enabled — typical "settled deep-zoom view" mode.
+    //
+    // Fluid sim consumes juliaCur via the motion shader, so we only
+    // skip when the sim isn't running (params.paused OR
+    // forceFluidPaused). updateTsaaHash() resets tsaaSampleIndex on
+    // any param change, which puts us back into "still rendering"
+    // mode automatically.
+    const tsaaCap = this.params.tsaaSampleCap;
+    const fluidActive = !this.params.paused && !this.forceFluidPaused;
+    if (
+      this.params.tsaa &&
+      tsaaCap > 0 &&
+      this.tsaaSampleIndex >= tsaaCap &&
+      !fluidActive
+    ) {
+      return;
+    }
+
     // Swap: current becomes previous
     const t = this.juliaCur;
     this.juliaCur = this.juliaPrev;
     this.juliaPrev = t;
+
+    // Begin a GPU timer query for this Julia pass. The query result
+    // becomes available a few frames later (async); we poll
+    // pollJuliaTimer() each frame to drain completed queries into
+    // juliaMsEwma. Skip when extension is missing or when the previous
+    // query at this slot hasn't completed yet (avoids overwriting
+    // pending results).
+    if (this.timerExt && !this.juliaTimerOpen) {
+      const slot = this.juliaTimerQueries[this.juliaTimerCursor];
+      if (slot && !this.juliaTimerInFlight[this.juliaTimerCursor]) {
+        gl.beginQuery(this.timerExt.TIME_ELAPSED_EXT, slot);
+        this.juliaTimerOpen = true;
+        this.juliaTimerInFlight[this.juliaTimerCursor] = true;
+      }
+    }
 
     // Bind MRT framebuffer (has both color attachments; drawBuffers set at creation)
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaCur.fbo);
@@ -1228,6 +1409,11 @@ export class FluidEngine {
     gl.uniform1f(this.progJulia.uniforms['uEscapeR2'], this.params.escapeR * this.params.escapeR);
     gl.uniform1f(this.progJulia.uniforms['uPower'], this.params.power);
     gl.uniform1i(this.progJulia.uniforms['uTrapMode'], colorMappingTrapShape(this.params.colorMapping));
+    // Gate the per-iter trap/stripe accumulator + dz/dc tracker on
+    // whether the active palette actually reads them. Saves ~35 ops
+    // per iter for the common smoothI / iter-based modes.
+    gl.uniform1i(this.progJulia.uniforms['uTrackAccum'], colorMappingNeedsAccum(this.params.colorMapping) ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uTrackDeriv'], colorMappingNeedsDeriv(this.params.colorMapping) ? 1 : 0);
     gl.uniform2f(this.progJulia.uniforms['uTrapCenter'], this.params.trapCenter[0], this.params.trapCenter[1]);
     gl.uniform1f(this.progJulia.uniforms['uTrapRadius'], this.params.trapRadius);
     gl.uniform2f(this.progJulia.uniforms['uTrapNormal'], this.params.trapNormal[0], this.params.trapNormal[1]);
@@ -1257,7 +1443,291 @@ export class FluidEngine {
         const [bnw, bnh] = this.blueNoise.getResolution();
         gl.uniform2f(this.progJulia.uniforms['uBlueNoiseResolution'], bnw, bnh);
     }
+
+    // Deep-zoom uniforms. Bind ANY valid texture to uRefOrbit even when
+    // disabled — leaving sampler2D unbound trips Chrome/Firefox driver
+    // warnings about incomplete textures. The shader gates on the
+    // enabled flag and never samples when off, so it's a unit-6 stub.
+    const deepActive = this.params.deepZoomEnabled && this.refOrbitTex !== null && this.refOrbitLen > 1;
+    gl.uniform1i(this.progJulia.uniforms['uDeepZoomEnabled'], deepActive ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uRefOrbitTexW'], this.refOrbitTexW);
+    gl.uniform1i(this.progJulia.uniforms['uRefOrbitLen'], this.refOrbitLen);
+    // HDR-pack the deep-zoom uniforms. Plain f32 uniforms underflow
+    // below ~1e-38; the shader's HDR path needs the exponent preserved.
+    // Performed every frame (cheap: a few log2 calls) so gesture
+    // updates to params.center / zoom are reflected without
+    // re-uploading the orbit.
+    //
+    // The centre offset is a double-double subtraction:
+    //   off = (paramCenter + paramLow) − (refCenter + refLow)
+    // so pan increments below f64's mantissa floor (~1e-16 near a
+    // value of magnitude ~1) survive the difference. Without this
+    // step, pans at zoom <1e-15 quantise: each pixel move becomes
+    // smaller than f64 can resolve relative to the centre value.
+    const ddOffX = ddSub(
+      this.params.center[0],    this.params.centerLow[0],
+      this.refOrbitCenter[0],   this.refOrbitCenterLow[0],
+    );
+    const ddOffY = ddSub(
+      this.params.center[1],    this.params.centerLow[1],
+      this.refOrbitCenter[1],   this.refOrbitCenterLow[1],
+    );
+    // Collapse the DD pair to a single f64 by summing — the lo bits
+    // only matter for the SUBTRACTION (cancellation removes hi bits,
+    // exposing lo). Once collapsed the result is a regular f64 small
+    // enough to fit, packed via HDR for shader use.
+    const offX = ddOffX[0] + ddOffX[1];
+    const offY = ddOffY[0] + ddOffY[1];
+    const offXHdr = f64ToHDRTuple(offX);
+    const offYHdr = f64ToHDRTuple(offY);
+    gl.uniform4f(this.progJulia.uniforms['uDeepCenterOffset'],
+        offXHdr[0], offXHdr[1], offYHdr[0], offYHdr[1]);
+    const zoomHdr = f64ToHDRTuple(this.params.zoom);
+    gl.uniform2f(this.progJulia.uniforms['uDeepScale'], zoomHdr[0], zoomHdr[1]);
+    if (this.refOrbitTex) {
+        this.bindTex(6, this.refOrbitTex, this.progJulia.uniforms['uRefOrbit']);
+    } else if (this.blueNoise) {
+        // Stub binding — shader never samples it (gate is off), but
+        // keeping the unit populated avoids "no texture bound to active
+        // sampler" warnings from the driver.
+        this.bindTex(6, this.blueNoise.texture, this.progJulia.uniforms['uRefOrbit']);
+    }
+
+    // LA table: bound on unit 7. Same fallback-to-blueNoise stub when
+    // unset to keep the sampler valid.
+    const laActive = deepActive && this.laEnabled && this.laTableTex !== null && this.laTotalCount > 1;
+    gl.uniform1i(this.progJulia.uniforms['uLAEnabled'], laActive ? 1 : 0);
+    gl.uniform1i(this.progJulia.uniforms['uLATexW'], this.laTableTexW);
+    gl.uniform1i(this.progJulia.uniforms['uLATotalCount'], this.laTotalCount);
+    gl.uniform1i(this.progJulia.uniforms['uLAStageCount'], this.laStageCount);
+    if (this.laStageCount > 0) {
+        // Pack stages as vec4(laIndex, macroItCount, 0, 0). Stage cap
+        // matches the shader's 64-slot uniform array.
+        const cap = Math.min(this.laStageCount, 64);
+        const stagePack = new Float32Array(cap * 4);
+        for (let i = 0; i < cap; i++) {
+            stagePack[i * 4 + 0] = this.laStages[i * 2 + 0];
+            stagePack[i * 4 + 1] = this.laStages[i * 2 + 1];
+        }
+        gl.uniform4fv(this.progJulia.uniforms['uLAStages[0]'], stagePack);
+    }
+    if (this.laTableTex) {
+        this.bindTex(7, this.laTableTex, this.progJulia.uniforms['uLATable']);
+    } else if (this.blueNoise) {
+        this.bindTex(7, this.blueNoise.texture, this.progJulia.uniforms['uLATable']);
+    }
+
+    // AT (Approximation Terms): plain-f32 fast-forward over the front
+    // of the iteration. Active only when the worker found a usable
+    // stage for the current view radius and deep zoom is on.
+    const atActive = deepActive && this.atPayload !== null;
+    gl.uniform1i(this.progJulia.uniforms['uATEnabled'], atActive ? 1 : 0);
+    if (this.atPayload) {
+        gl.uniform1i(this.progJulia.uniforms['uATStepLength'], this.atPayload.stepLength);
+        gl.uniform1f(this.progJulia.uniforms['uATThresholdC'], this.atPayload.thresholdC);
+        gl.uniform1f(this.progJulia.uniforms['uATSqrEscapeRadius'], this.atPayload.sqrEscapeRadius);
+        gl.uniform2f(this.progJulia.uniforms['uATRefC'], this.atPayload.refC[0], this.atPayload.refC[1]);
+        gl.uniform2f(this.progJulia.uniforms['uATCCoeff'], this.atPayload.ccoeff[0], this.atPayload.ccoeff[1]);
+        gl.uniform2f(this.progJulia.uniforms['uATInvZCoeff'], this.atPayload.invZCoeff[0], this.atPayload.invZCoeff[1]);
+    } else {
+        // Inert default values — shader gates on uATEnabled and never
+        // reads these, but keeping them stable avoids any chance of
+        // NaN propagation on a stale shader state.
+        gl.uniform1i(this.progJulia.uniforms['uATStepLength'], 1);
+        gl.uniform1f(this.progJulia.uniforms['uATThresholdC'], 0);
+        gl.uniform1f(this.progJulia.uniforms['uATSqrEscapeRadius'], 4);
+        gl.uniform2f(this.progJulia.uniforms['uATRefC'], 0, 0);
+        gl.uniform2f(this.progJulia.uniforms['uATCCoeff'], 1, 0);
+        gl.uniform2f(this.progJulia.uniforms['uATInvZCoeff'], 1, 0);
+    }
+
     this.drawQuad();
+
+    // Close the timer query if we opened one above. The result is
+    // polled separately via pollJuliaTimer() each frame.
+    if (this.timerExt && this.juliaTimerOpen) {
+      gl.endQuery(this.timerExt.TIME_ELAPSED_EXT);
+      this.juliaTimerCursor = (this.juliaTimerCursor + 1) % this.juliaTimerQueries.length;
+      this.juliaTimerOpen = false;
+    }
+  }
+
+  /** Drain any completed Julia timer queries. Call once per frame
+   *  (after rendering) to update juliaMsEwma. Cheap when no queries
+   *  are ready — just polls QUERY_RESULT_AVAILABLE. */
+  pollJuliaTimer(): void {
+    if (!this.timerExt) return;
+    const gl = this.gl;
+    // GPU_DISJOINT_EXT signals a timing-disjoint event (e.g. GPU
+    // throttled). Discard all in-flight queries when it fires.
+    const disjoint = gl.getParameter(this.timerExt.GPU_DISJOINT_EXT);
+    if (disjoint) {
+      for (let i = 0; i < this.juliaTimerInFlight.length; i++) {
+        this.juliaTimerInFlight[i] = false;
+      }
+      return;
+    }
+    for (let i = 0; i < this.juliaTimerQueries.length; i++) {
+      if (!this.juliaTimerInFlight[i]) continue;
+      const q = this.juliaTimerQueries[i];
+      if (!q) continue;
+      const ready = gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE) as boolean;
+      if (!ready) continue;
+      const ns = gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
+      const ms = ns / 1e6;
+      // EWMA with α = 0.2 — smooths but tracks a workload change in
+      // ~10 frames. Initialise on first sample.
+      this.juliaMsEwma = this.juliaMsEwma === 0 ? ms : (this.juliaMsEwma * 0.8 + ms * 0.2);
+      this.juliaTimerInFlight[i] = false;
+    }
+  }
+
+  /** Latest smoothed Julia-pass GPU time in ms (0 if timer extension
+   *  unavailable or no measurement yet). Surfaced in the deep-zoom
+   *  diagnostics overlay for A/B testing toggles. */
+  getJuliaMs(): number {
+    return this.juliaMsEwma;
+  }
+
+  /** True when the GPU timer extension is available. */
+  hasGpuTimer(): boolean {
+    return this.timerExt !== null;
+  }
+
+  setAT(payload: {
+    stepLength: number;
+    thresholdC: number;
+    sqrEscapeRadius: number;
+    refC: [number, number];
+    ccoeff: [number, number];
+    invZCoeff: [number, number];
+  }): void {
+    this.atPayload = payload;
+    this.refOrbitVersion++;
+  }
+
+  clearAT(): void {
+    if (this.atPayload !== null) {
+      this.atPayload = null;
+      this.refOrbitVersion++;
+    }
+  }
+
+  /** Upload a packed LA table (3 RGBA32F texels per node, layout from
+   *  packLATable in deepZoomWorker.ts) plus a stage-table buffer
+   *  (pairs of [laIndex, macroItCount] floats). The shader walks the
+   *  resulting texture during the deep-zoom inner loop to skip many
+   *  reference iterations at once. */
+  setLATable(laTable: Float32Array, totalCount: number, stages: Float32Array): void {
+    const gl = this.gl;
+    // Each node = 3 texels. Pad to full rows of `laTableTexW` texels.
+    const totalTexels = totalCount * 3;
+    const texW = this.laTableTexW;
+    const texH = Math.max(1, Math.ceil(totalTexels / texW));
+    const fullLen = texW * texH * 4;
+    let upload: Float32Array;
+    if (laTable.length >= fullLen) {
+      upload = laTable.subarray(0, fullLen);
+    } else {
+      upload = new Float32Array(fullLen);
+      upload.set(laTable);
+    }
+
+    if (!this.laTableTex) {
+      this.laTableTex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, this.laTableTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.laTableTexH = 0;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, this.laTableTex);
+    if (texH !== this.laTableTexH) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, texW, texH, 0, gl.RGBA, gl.FLOAT, upload);
+      this.laTableTexH = texH;
+    } else {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.RGBA, gl.FLOAT, upload);
+    }
+
+    this.laTotalCount = totalCount;
+    this.laStages = stages;
+    this.laStageCount = stages.length / 2;
+    this.refOrbitVersion++;  // bump so TSAA accumulator resets
+  }
+
+  setLAEnabled(on: boolean): void {
+    this.laEnabled = on;
+  }
+
+  setForceFluidPaused(on: boolean): void {
+    this.forceFluidPaused = on;
+  }
+
+  clearLATable(): void {
+    this.laTotalCount = 0;
+    this.laStages = new Float32Array(0);
+    this.laStageCount = 0;
+    this.refOrbitVersion++;
+  }
+
+  /** Upload a reference orbit for the deep-zoom path. The data layout
+   *  is RGBA32F texels packed as [Z.re, Z.im, |Z|², 0] per iteration —
+   *  matches the worker's output from `referenceOrbit.ts`. The texture
+   *  is sized as `texW × ceil(length / texW)` and zero-padded; only
+   *  the first `length` texels are read by the shader.
+   *
+   *  Re-allocates only when the row count changes; same-row uploads
+   *  reuse the existing texture via texSubImage2D for cheap swaps. */
+  setReferenceOrbit(
+    orbit: Float32Array,
+    length: number,
+    refCenter: [number, number],
+    refCenterLow: [number, number] = [0, 0],
+  ): void {
+    this.refOrbitCenter = [refCenter[0], refCenter[1]];
+    this.refOrbitCenterLow = [refCenterLow[0], refCenterLow[1]];
+    const gl = this.gl;
+    const texW = this.refOrbitTexW;
+    const texH = Math.max(1, Math.ceil(length / texW));
+
+    // Pad to full rows (texW * texH * 4 floats) so texImage/texSubImage
+    // doesn't read past `orbit`. Zero-pad with the escape sentinel; the
+    // shader bounds-clamps `ref` to `length-1` anyway.
+    const fullLen = texW * texH * 4;
+    let upload: Float32Array;
+    if (orbit.length >= fullLen) {
+      upload = orbit.subarray(0, fullLen);
+    } else {
+      upload = new Float32Array(fullLen);
+      upload.set(orbit);
+    }
+
+    if (!this.refOrbitTex) {
+      this.refOrbitTex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, this.refOrbitTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.refOrbitTexH = 0;  // force allocate below
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, this.refOrbitTex);
+    if (texH !== this.refOrbitTexH) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, texW, texH, 0, gl.RGBA, gl.FLOAT, upload);
+      this.refOrbitTexH = texH;
+    } else {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.RGBA, gl.FLOAT, upload);
+    }
+
+    this.refOrbitLen = length;
+    this.refOrbitVersion++;
+  }
+
+  clearReferenceOrbit(): void {
+    this.refOrbitLen = 0;
+    this.refOrbitVersion++;
   }
 
   /** TSAA blend pass. Reads juliaCur (current jittered frame) + juliaTsaa
@@ -1303,7 +1773,7 @@ export class FluidEngine {
    *  renderJulia. Hashes to stringified key for a cheap equality test. */
   private updateTsaaHash() {
     const p = this.params;
-    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}`;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.refOrbitVersion}`;
     if (hash !== this.tsaaParamHash) {
         this.tsaaParamHash = hash;
         this.tsaaSampleIndex = 0;
@@ -1668,7 +2138,7 @@ export class FluidEngine {
     // queries. Skips the actual GPU round-trip when collision is off.
     this.readMaskToCPU();
 
-    if (!this.params.paused) {
+    if (!this.params.paused && !this.forceFluidPaused) {
       // 1b. Camera-locked dye/velocity — if the user panned or zoomed since the last
       // frame, resample dye + velocity so they stay locked to world-space.
       this.maybeReprojectForCamera();
@@ -1699,6 +2169,10 @@ export class FluidEngine {
     // unbind
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // Drain GPU timer query results. Issued in renderJulia, drained
+    // here a few frames later (async by design).
+    this.pollJuliaTimer();
 
     if (this.onFrameEnd) this.onFrameEnd();
   }

@@ -10,14 +10,15 @@ import type { PanelManifest } from '../engine/PanelManifest';
 
 export const FluidToyPanels: PanelManifest = [
     { id: 'Fractal',   dock: 'right', order: 0, active: true, features: ['julia'] },
-    { id: 'Coupling',  dock: 'right', order: 1,               features: ['coupling'] },
-    { id: 'Fluid',     dock: 'right', order: 2,               features: ['fluidSim'] },
-    { id: 'Brush',     dock: 'right', order: 3,               features: ['brush'] },
-    { id: 'Palette',   dock: 'right', order: 4,               features: ['palette'] },
-    { id: 'Post-FX',   dock: 'right', order: 5,               features: ['postFx'] },
-    { id: 'Collision', dock: 'right', order: 6,               features: ['collision'] },
-    { id: 'Composite', dock: 'right', order: 7,               features: ['composite'] },
-    { id: 'Presets',   dock: 'right', order: 8,               features: ['presets'] },
+    { id: 'Deep Zoom', dock: 'right', order: 1,               features: ['deepZoom'] },
+    { id: 'Coupling',  dock: 'right', order: 2,               features: ['coupling'] },
+    { id: 'Fluid',     dock: 'right', order: 3,               features: ['fluidSim'] },
+    { id: 'Brush',     dock: 'right', order: 4,               features: ['brush'] },
+    { id: 'Palette',   dock: 'right', order: 5,               features: ['palette'] },
+    { id: 'Post-FX',   dock: 'right', order: 6,               features: ['postFx'] },
+    { id: 'Collision', dock: 'right', order: 7,               features: ['collision'] },
+    { id: 'Composite', dock: 'right', order: 8,               features: ['composite'] },
+    { id: 'Presets',   dock: 'right', order: 9,               features: ['presets'] },
 
     // View Manager — saved-view library + 2D view-shortcut toolbar +
     // composition guides. Docks left (hidden until the topbar Camera

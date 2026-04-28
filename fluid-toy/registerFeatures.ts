@@ -14,6 +14,7 @@
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { JuliaFeature } from './features/julia';
+import { DeepZoomFeature } from './features/deepZoom';
 import { CouplingFeature } from './features/coupling';
 import { PaletteFeature } from './features/palette';
 import { CollisionFeature } from './features/collision';
@@ -24,6 +25,10 @@ import { PostFxFeature } from './features/postFx';
 import { CompositeFeature } from './features/composite';
 import { BrushFeature } from './features/brush';
 import { JuliaCPicker } from './components/JuliaCPicker';
+// Note: DeepZoomStatus imports useEngineStore — registering it via
+// componentRegistry would freeze the registry pre-feature-registration
+// (see README "boot-order trap"). It's mounted directly in
+// FluidToyApp instead, where the store is already constructed.
 
 // Components used by feature customUI slots must be registered before
 // the registries freeze (i.e. before the store is constructed). Match
@@ -40,6 +45,10 @@ componentRegistry.register('preset-grid', PresetGrid);
 // Fractal tab — kind, c, zoom, center, iter, power, plus the
 // palette-bound params (hidden from this tab, surfaced in Palette).
 featureRegistry.register(JuliaFeature);
+
+// Deep Zoom tab — perturbation + LA scaffolding. Toggles only in
+// phase 1; engine wires later. See plans/fluid-toy-deep-zoom.md.
+featureRegistry.register(DeepZoomFeature);
 
 // Coupling tab — force mode + intensity knobs + auto-orbit subsection.
 // Absorbs the pre-refactor split across FluidSim (force*) and Orbit.

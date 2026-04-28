@@ -18,6 +18,7 @@
 
 import type { SliceFromParams } from '../engine/typedSlices';
 import type { JuliaFeature }      from './features/julia';
+import type { DeepZoomFeature }   from './features/deepZoom';
 import type { CouplingFeature }   from './features/coupling';
 import type { PaletteFeature }    from './features/palette';
 import type { CollisionFeature }  from './features/collision';
@@ -27,6 +28,7 @@ import type { CompositeFeature }  from './features/composite';
 import type { BrushFeature }      from './features/brush';
 
 export type JuliaSlice     = SliceFromParams<typeof JuliaFeature['params']>;
+export type DeepZoomSlice  = SliceFromParams<typeof DeepZoomFeature['params']>;
 export type CouplingSlice  = SliceFromParams<typeof CouplingFeature['params']>;
 export type PaletteSlice   = SliceFromParams<typeof PaletteFeature['params']>;
 export type CollisionSlice = SliceFromParams<typeof CollisionFeature['params']>;
@@ -40,6 +42,7 @@ export type BrushSlice     = SliceFromParams<typeof BrushFeature['params']>;
 declare module '../engine/typedSlices' {
     interface AppFeatureSlices {
         julia:     JuliaSlice;
+        deepZoom:  DeepZoomSlice;
         coupling:  CouplingSlice;
         palette:   PaletteSlice;
         collision: CollisionSlice;
@@ -57,6 +60,7 @@ declare module '../engine/typedSlices' {
 declare module '../engine/features/types' {
     interface FeatureStateMap {
         julia:     JuliaSlice;
+        deepZoom:  DeepZoomSlice;
         coupling:  CouplingSlice;
         palette:   PaletteSlice;
         collision: CollisionSlice;

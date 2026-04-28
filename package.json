@@ -14,6 +14,8 @@
     "smoke:fractal-toy": "tsx debug/smoke-fractal-toy.mts",
     "smoke:formula-switch": "tsx debug/smoke-formula-switch.mts",
     "smoke:fluid-toy": "tsx debug/smoke-fluid-toy.mts",
+    "smoke:deep-zoom-orbit": "tsx debug/smoke-deep-zoom-orbit.mts",
+    "smoke:deep-zoom-la": "tsx debug/smoke-deep-zoom-la.mts",
     "smoke:undo": "tsx debug/smoke-undo.mts",
     "smoke:camera": "tsx debug/smoke-camera.mts",
     "smoke:viewport": "tsx debug/smoke-viewport.mts",

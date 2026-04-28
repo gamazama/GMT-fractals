@@ -81,6 +81,21 @@ export const JuliaFeature: FeatureDefinition = {
             description: 'Pan the fractal window.',
         },
 
+        // Sub-f64 precision residual added to `center` for deep-zoom
+        // panning. Auto-managed by the gesture handlers via Dekker
+        // two-sum so pan increments below ~1e-16 (f64's mantissa
+        // floor) don't get rounded away. Combined with `center` at
+        // worker request time to give the orbit ~32 decimal digits
+        // of precision (zoom ~1e-30 ceiling). Hidden from the UI.
+        centerLow: {
+            type: 'vec2',
+            default: { x: 0, y: 0 },
+            min: -1, max: 1, step: 1e-12,
+            label: 'Center (low bits)',
+            description: 'Internal — sub-f64 pan accumulator.',
+            hidden: true,
+        },
+
         maxIter: {
             type: 'int',
             default: 310, min: 16, max: 512, step: 1,
@@ -116,6 +131,11 @@ export const syncJuliaToEngine = (
         maxIter: julia.maxIter,
         power: julia.power,
         center: [julia.center.x, julia.center.y],
+        // centerLow: sub-f64 residual paired with `center` for deep-
+        // zoom pan precision. Defaults to (0, 0) for first-time use
+        // and old saves. The engine packs both into uDeepCenterOffset
+        // via DD-subtraction against the orbit's stored hi+lo.
+        centerLow: [julia.centerLow?.x ?? 0, julia.centerLow?.y ?? 0],
         zoom: julia.zoom,
     });
 };

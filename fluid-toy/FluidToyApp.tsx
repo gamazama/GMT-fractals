@@ -31,6 +31,9 @@ import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
 // readBrushParams is not used here — useFluidEngine owns the RAF brush tick.
 import { syncJuliaToEngine } from './features/julia';
+import { syncDeepZoomToEngine } from './features/deepZoom';
+import { getDeepZoomRuntime } from './deepZoom/laRuntime';
+import { setDeepZoomDiag, clearDeepZoomDiag, setDeepZoomJuliaMs } from './deepZoom/diagnostics';
 import { syncPaletteToEngine } from './features/palette';
 import { syncCollisionToEngine } from './features/collision';
 import { syncFluidSimToEngine } from './features/fluidSim';
@@ -39,6 +42,8 @@ import { syncCompositeToEngine } from './features/composite';
 import { FluidPointerLayer } from './FluidPointerLayer';
 import { useSlice, useLiveModulations } from '../engine/typedSlices';
 import { DomOverlays } from './components/DomOverlays';
+import { DeepZoomStatus } from './components/DeepZoomStatus';
+import { DeepZoomBench } from './components/DeepZoomBench';
 import { useFluidEngine } from './useFluidEngine';
 
 export const FluidToyApp: React.FC = () => {
@@ -88,6 +93,7 @@ export const FluidToyApp: React.FC = () => {
     // DDFS feature slices — push into FluidEngine on change. Each
     // feature owns its sync function (features/<x>.ts).
     const julia     = useSlice('julia');
+    const deepZoom  = useSlice('deepZoom');
     const coupling  = useSlice('coupling');
     const palette   = useSlice('palette');
     const collision = useSlice('collision');
@@ -107,6 +113,147 @@ export const FluidToyApp: React.FC = () => {
     const liveMod = useLiveModulations();
 
     useEffect(() => { const e = engineRef.current; if (e) syncJuliaToEngine(e, julia, liveMod); },               [julia, liveMod]);
+    useEffect(() => { const e = engineRef.current; if (e) syncDeepZoomToEngine(e, deepZoom, julia); },           [deepZoom, julia]);
+
+    // When deep zoom is enabled, build the reference orbit on the
+    // worker and upload it to FluidEngine. Re-fires on view / maxIter
+    // change while enabled, mirroring the rebuild policy from §3.4 of
+    // the plan. The shader's gate condition (`uDeepZoomEnabled` AND
+    // `uRefOrbitLen > 1`) means the canvas keeps rendering the standard
+    // path while the orbit is being built — no flash, no stutter.
+    useEffect(() => {
+        if (!deepZoom.enabled) {
+            clearDeepZoomDiag();
+            return;
+        }
+        const engine = engineRef.current;
+        if (!engine) return;
+        const runtime = getDeepZoomRuntime();
+        let cancelled = false;
+        const t0 = performance.now();
+        const builtCenter: [number, number] = [julia.center.x, julia.center.y];
+        // The lo word of the user's DD-pan accumulator. Below ~1e-15
+        // zoom this carries the part of the centre that would otherwise
+        // be lost in f64 quantisation; above that depth it's typically
+        // 0 from a fresh save or 0-init.
+        const builtCenterLow: [number, number] = [
+            julia.centerLow?.x ?? 0,
+            julia.centerLow?.y ?? 0,
+        ];
+        // Screen-corner |dc|² for AT validity. Worst case is the
+        // diagonal: (aspect² + 1)·zoom². Aspect from canvas ratio.
+        const aspect = canvasPixelSize[0] / Math.max(1, canvasPixelSize[1]);
+        const screenSqrRadius = (aspect * aspect + 1) * julia.zoom * julia.zoom;
+        // Power and kind come from the Fractal panel. Power-2 unlocks
+        // LA / AT acceleration (their Step rules are hardcoded for
+        // d=2); higher powers fall back to PO-only via the buildLA
+        // gate. The worker still builds an orbit at any d, so the
+        // perturbation path renders.
+        const power = Math.max(2, Math.round(julia.power ?? 2));
+        const isPower2 = power === 2;
+        const kind: 'mandelbrot' | 'julia' = julia.kind === 0 ? 'julia' : 'mandelbrot';
+        const liveCx = liveMod['julia.juliaC_x'] ?? julia.juliaC.x;
+        const liveCy = liveMod['julia.juliaC_y'] ?? julia.juliaC.y;
+        runtime.computeReferenceOrbit({
+            centerX: builtCenter[0],
+            centerY: builtCenter[1],
+            centerLowX: builtCenterLow[0],
+            centerLowY: builtCenterLow[1],
+            zoom: julia.zoom,
+            maxIter: deepZoom.maxRefIter,
+            power,
+            kind,
+            juliaCx: liveCx,
+            juliaCy: liveCy,
+            // LA / AT for the deep-zoom path are presently
+            // Mandelbrot-only:
+            //   - AT's c' = dc·CCoeff + RefC transform collapses to a
+            //     constant when dc = 0 (Julia case) → every pixel gets
+            //     the same AT output → pixel detail wiped.
+            //   - LA's rebase formula assumes Z[0] = 0 (Mandelbrot
+            //     convention); Julia's Z[0] = R₀ produces wrong math
+            //     after rebase. Disabling LA also avoids ZCoeff
+            //     application bugs that show up in chaotic Julia
+            //     boundaries (under investigation).
+            // Both gates also require integer power 2 (their Step
+            // rules are d=2-specific). At higher powers PO carries
+            // the load.
+            buildLA: deepZoom.useLA && isPower2 && kind === 'mandelbrot',
+            screenSqrRadius: deepZoom.useAT && isPower2 && kind === 'mandelbrot' ? screenSqrRadius : 0,
+        }).then((res) => {
+            if (cancelled) return;
+            engine.setReferenceOrbit(res.orbit, res.length, builtCenter, builtCenterLow);
+            // LA table uploads only when worker actually built one
+            // (deepZoom.useLA && successful build). When useLA is off
+            // we still want LA cleared so the shader bypasses it.
+            if (res.laTable && res.laStages && res.laCount > 0) {
+                engine.setLATable(res.laTable, res.laCount, res.laStages);
+                engine.setLAEnabled(true);
+            } else {
+                engine.clearLATable();
+                engine.setLAEnabled(false);
+            }
+            // AT pipe: when worker found a usable stage for the
+            // current view, push it to the engine; otherwise clear.
+            if (res.at) {
+                engine.setAT({
+                    stepLength: res.at.stepLength,
+                    thresholdC: res.at.thresholdC,
+                    sqrEscapeRadius: res.at.sqrEscapeRadius,
+                    refC: [res.at.refCRe, res.at.refCIm],
+                    ccoeff: [res.at.ccoeffRe, res.at.ccoeffIm],
+                    invZCoeff: [res.at.invZCoeffRe, res.at.invZCoeffIm],
+                });
+            } else {
+                engine.clearAT();
+            }
+            engine.redraw();
+            // Surface build stats to the floating diagnostics overlay.
+            // laStagesPerLevel is reconstructed from the packed stages
+            // buffer (pairs of [laIndex, macroItCount] floats).
+            const stagesPerLevel: number[] = [];
+            if (res.laStages) {
+                for (let i = 0; i < res.laStages.length; i += 2) {
+                    stagesPerLevel.push(res.laStages[i + 1]);
+                }
+            }
+            setDeepZoomDiag({
+                orbitLength: res.length,
+                precisionBits: res.precisionBits,
+                orbitBuildMs: res.buildMs,
+                laStageCount: res.laStageCount,
+                laCount: res.laCount,
+                laBuildMs: res.laBuildMs,
+                laStagesPerLevel: stagesPerLevel,
+                juliaMs: 0,  // populated by the periodic poll below
+            });
+            if (deepZoom.showStats) {
+                const totalMs = performance.now() - t0;
+                console.log(
+                    `[deepZoom] orbit len=${res.length} prec=${res.precisionBits}b ` +
+                    `LA stages=${res.laStageCount} nodes=${res.laCount} ` +
+                    `(orbit=${res.buildMs.toFixed(1)}ms LA=${res.laBuildMs.toFixed(1)}ms total=${totalMs.toFixed(1)}ms)`
+                );
+            }
+        }).catch((err: Error) => {
+            if (!cancelled) console.error('[deepZoom] build failed:', err.message);
+        });
+        return () => { cancelled = true; };
+    }, [deepZoom.enabled, deepZoom.useLA, deepZoom.useAT, deepZoom.maxRefIter, deepZoom.showStats, julia.center.x, julia.center.y, julia.centerLow?.x, julia.centerLow?.y, julia.zoom, julia.power, julia.kind, julia.juliaC.x, julia.juliaC.y, canvasPixelSize, engineRef]);
+
+    // Poll the engine's GPU-timer reading 5×/sec for the diagnostics
+    // overlay. The engine's pollJuliaTimer drains queries each frame;
+    // this just snapshots the EWMA into the React-visible diag store.
+    // Cheap (one method call) — no need to throttle further.
+    useEffect(() => {
+        if (!deepZoom.enabled) return;
+        const tick = () => {
+            const e = engineRef.current;
+            if (e) setDeepZoomJuliaMs(e.getJuliaMs());
+        };
+        const id = window.setInterval(tick, 200);
+        return () => window.clearInterval(id);
+    }, [deepZoom.enabled, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncPaletteToEngine(e, palette); },                    [palette]);
     useEffect(() => { const e = engineRef.current; if (e) syncCollisionToEngine(e, collision); },                [collision]);
     useEffect(() => { const e = engineRef.current; if (e) syncFluidSimToEngine(e, fluidSim, coupling); },           [fluidSim, coupling]);
@@ -126,6 +273,13 @@ export const FluidToyApp: React.FC = () => {
             paused:        isPaused,
         });
     }, [accumulation, isPaused, sampleCap]);
+
+    // K-sampling is fixed at 1 (DEFAULT_PARAMS.tsaaPerFrameSamples).
+    // TSAA does all the convergence progressively across frames —
+    // smoother ramp than a K-sample burst, and frame cost is constant
+    // regardless of interaction state. The "ramp during pan/zoom is
+    // the rendered noise floor; over idle frames TSAA refines toward
+    // a many-sample-equivalent image.
 
     // Resolution change → bilinear-reproject sim + accumulator (in
     // setRenderSize), then redraw before compositor reads the freshly-
@@ -180,6 +334,19 @@ export const FluidToyApp: React.FC = () => {
                     <FluidPointerLayer canvasRef={canvasRef} engineRef={engineRef} />
                     <HudHost />
                     <DomOverlays />
+                    {deepZoom.enabled && (
+                        <div style={{
+                            position: 'absolute',
+                            left: 8,
+                            bottom: 8,
+                            pointerEvents: 'none',
+                            zIndex: 5,
+                            minWidth: 220,
+                        }}>
+                            <DeepZoomStatus />
+                            <DeepZoomBench engineRef={engineRef} />
+                        </div>
+                    )}
                 </ViewportFrame>
 
                 <Dock side="right" />

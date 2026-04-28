@@ -145,4 +145,16 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.dyeMix      !== undefined) comp.dyeMix      = p.dyeMix;
     if (p.velocityViz !== undefined) comp.velocityViz = p.velocityViz;
     if (Object.keys(comp).length > 0) s.setComposite(comp);
+
+    // ── Engine-level toggles (renderControlSlice) ───────────────────
+    // These aren't DDFS slices but live in the render-control top of
+    // the store. The benchmark / isolation preset uses them to freeze
+    // sim + disable TSAA so the kernel cost stands alone. Optional —
+    // most artistic presets won't set these.
+    if (p.paused !== undefined && typeof s.setIsPaused === 'function') {
+        s.setIsPaused(p.paused);
+    }
+    if (p.accumulation !== undefined && typeof s.setAccumulation === 'function') {
+        s.setAccumulation(p.accumulation);
+    }
 };

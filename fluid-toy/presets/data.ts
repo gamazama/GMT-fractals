@@ -46,6 +46,84 @@ const makeStops = (pairs: Array<[number, string]>): GradientStop[] =>
 
 export const PRESETS: Preset[] = [
     {
+        id: 'bench-julia-only',
+        name: 'Bench (Julia only)',
+        desc: 'Isolation preset for performance benchmarking. All post-FX, fluid coupling, dye, collision, and palette tricks are off — only the raw Julia/Mandelbrot fractal layer renders. Pair with the Disable-fluid-sim toggle on the Deep Zoom panel and accumulation off (topbar) for a clean GPU-time read.',
+        params: {
+            juliaC: [-0.36303304426511473, 0.16845183018751916],
+            center: [-0.8139175130270945, -0.054649908357858296],
+            zoom: 1.2904749020480561,
+            maxIter: 310,
+            power: 2,
+            kind: 'mandelbrot',
+            // Coupling: zero-impact settings. ForceMode doesn't matter
+            // when sim is paused, but set sane defaults so unpausing
+            // doesn't surprise.
+            forceMode: 'gradient',
+            forceGain: 0,                   // no force injection
+            interiorDamp: 1,                // full damp (sim quiet if it runs)
+            // Fluid sim — minimal everything. With sim paused (via the
+            // deep-zoom debug toggle) these don't run anyway, but keep
+            // them sane in case you unpause.
+            dissipation: 0,
+            dyeDissipation: 0,
+            dyeInject: 0,
+            vorticity: 0,
+            vorticityScale: 1,
+            pressureIters: 1,               // minimum if sim runs
+            // Display: pure fractal, no dye / velocity overlay.
+            show: 'julia',
+            juliaMix: 1,
+            dyeMix: 0,
+            velocityViz: 0,
+            // Palette: simple smoothI mapping → no per-iter trap or
+            // stripe accumulation in the shader.
+            gradientRepeat: 0.1,
+            gradientPhase: 0,
+            colorMapping: 'iterations',
+            colorIter: 310,
+            stripeFreq: 4,
+            // Dye blend: irrelevant (no dye) but set explicitly so the
+            // dye pass cost doesn't sneak in.
+            dyeBlend: 'max',
+            dyeDecayMode: 'linear',
+            dyeChromaDecayHz: 0,
+            dyeSaturationBoost: 1,
+            // Post-FX: every effect off so the display pass is just
+            // gradient lookup → output. No bloom / tone / aberration /
+            // refraction / caustics work.
+            toneMapping: 'none',
+            exposure: 1,
+            vibrance: 1,
+            bloomAmount: 0,
+            bloomThreshold: 1,
+            aberration: 0,
+            refraction: 0,
+            refractSmooth: 1,
+            refractRoughness: 0,
+            caustics: 0,
+            interiorColor: [0, 0, 0],
+            edgeMargin: 0,
+            forceCap: 1,
+            collisionEnabled: false,
+            // Pause the fluid sim so the only GPU work is the Julia
+            // pass + display. Accumulation stays ON (default) so TSAA
+            // progressively converges the fractal — that's the
+            // intended look for a deep-zoom preview. The benchmark
+            // harness disables TSAA itself when measuring, so the
+            // preset doesn't need to.
+            paused: true,
+        },
+        gradient: {
+            // Linear black→white. Simple smoothI mapping; max contrast
+            // for visually verifying iter counts at a glance.
+            stops: makeStops([[0, '#000000'], [1, '#FFFFFF']]),
+            colorSpace: 'linear',
+            blendSpace: 'rgb',
+        },
+    },
+
+    {
         id: 'coral-gyre',
         name: 'Coral Gyre',
         desc: 'Orbit-point colouring on a negative curl — teal interior feeds a coral halo, with filmic bloom + aberration.',

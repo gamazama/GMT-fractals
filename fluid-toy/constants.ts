@@ -5,9 +5,17 @@
  */
 
 // ── Viewport / camera ────────────────────────────────────────────────────────
-/** Deepest zoom reachable via scroll-wheel, middle-drag, and the Zoom slider. */
+/** Deepest zoom reachable via scroll-wheel, middle-drag, and the Zoom slider
+ *  when the deep-zoom feature is OFF. The slider's hardMin matches this. */
 export const MIN_ZOOM = 0.00001;
 export const MAX_ZOOM = 8;
+
+/** Deepest zoom reachable via scroll-wheel / middle-drag when the deep-zoom
+ *  feature is ON. The slider stays clamped to MIN_ZOOM (it'd be unusable as
+ *  a log slider down to 1e-300); the slider chip shows a saturated
+ *  "10⁻ⁿ"-style label past its bound so the user can read the depth.
+ *  Wired into the wheel/middle-drag clamps in phase 8. */
+export const MIN_ZOOM_DEEP = 1e-300;
 
 // ── Pointer interaction ──────────────────────────────────────────────────────
 /** Minimum cursor travel (in pixels) before a right-click press is treated as a
