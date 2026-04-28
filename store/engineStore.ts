@@ -15,7 +15,7 @@
  * is in progress.
  */
 
-import { create } from 'zustand';
+import { create, type StateCreator } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { EngineStoreState, EngineActions, Preset } from '../types';
 import { createUISlice } from './slices/uiSlice';
@@ -57,7 +57,20 @@ export const setFormulaPresetResolver = (fn: FormulaPresetResolver | null) => {
     _formulaPresetResolver = fn;
 };
 
-export const useEngineStore = create<EngineStoreState & EngineActions>()(subscribeWithSelector((set, get, api) => ({
+// Store factory — slice composition + scalar state + actions. Pulled
+// out of the eager `create()` call so the actual store construction
+// can be deferred until first use. See `ensureStore()` below for the
+// reason: production rollup chunking can evaluate this module before
+// app-side registerFeatures.ts runs, which would freeze the feature
+// registry too early. Lazy creation pushes the freeze to first store
+// access (React render, a `getState()` call, etc.) — by which time
+// every entry has finished its imperative registration phase.
+const storeFactory: StateCreator<
+    EngineStoreState & EngineActions,
+    [['zustand/subscribeWithSelector', never]],
+    [],
+    EngineStoreState & EngineActions
+> = (set, get, api) => ({
     ...createUISlice(set, get, api),
     ...createRenderControlSlice(set, get, api),
     ...createViewportSlice(set, get, api),
@@ -355,7 +368,33 @@ export const useEngineStore = create<EngineStoreState & EngineActions>()(subscri
         const advanced = get().advancedMode;
         return generateShareStringFromPreset(p, advanced, options);
     },
-})));
+});
+
+// Lazy store handle. The first call (selector hook OR static
+// getState/setState/subscribe) instantiates zustand. Until then the
+// feature registry stays unfrozen, so app-side registerFeatures.ts
+// can finish even when rollup hoists this module above it in the
+// production chunk graph.
+// `create<T>()(...)` is curried, so `ReturnType<typeof create<T>>` is the
+// inner builder, not the store. Derive the real store type from a thunk
+// so the hook keeps its proper selector + subscribe overloads.
+const _makeStore = () => create<EngineStoreState & EngineActions>()(subscribeWithSelector(storeFactory));
+type EngineStore = ReturnType<typeof _makeStore>;
+let _store: EngineStore | null = null;
+const ensureStore = (): EngineStore => {
+    if (!_store) _store = _makeStore();
+    return _store;
+};
+
+// Hook surface: callable as a selector hook, plus the static methods
+// zustand exposes (getState/setState/subscribe). Each method routes
+// through ensureStore() so consumers see the real store the moment
+// they actually use it.
+const _hook = (selector?: any, equalityFn?: any) => (ensureStore() as any)(selector, equalityFn);
+_hook.getState = () => ensureStore().getState();
+_hook.setState = (...args: any[]) => (ensureStore().setState as any)(...args);
+_hook.subscribe = (...args: any[]) => (ensureStore().subscribe as any)(...args);
+export const useEngineStore = _hook as unknown as EngineStore;
 
 // Publish the store handle on globalThis so modules that can't safely
 // import it at module-load time (e.g. PanelManifest, which is reached
