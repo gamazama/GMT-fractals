@@ -126,10 +126,10 @@ export const syncDeepZoomToEngine = (
             deepZoomEnabled: false,
             maxIter: julia.maxIter,
         });
-        engine.clearReferenceOrbit();
-        engine.clearLATable();
-        engine.setLAEnabled(false);
-        engine.clearAT();
+        engine.deepZoom.clearReferenceOrbit();
+        engine.deepZoom.clearLATable();
+        engine.deepZoom.setLAEnabled(false);
+        engine.deepZoom.clearAT();
         engine.setForceFluidPaused(false);
     }
 };

@@ -16,25 +16,14 @@ import {
   FRAG_COPY,
   FRAG_COPY_MRT,
   FRAG_REPROJECT,
-  FRAG_BLOOM_EXTRACT,
-  FRAG_BLOOM_DOWN,
-  FRAG_BLOOM_UP,
   FRAG_MASK,
   FRAG_TSAA_BLEND,
 } from './shaders';
-import { BLOOM_SOFT_KNEE, GRADIENT_LUT_WIDTH } from '../constants';
 import { createBlueNoiseWebGL2, type BlueNoiseTexture } from '../../engine/utils/createBlueNoiseWebGL2';
-import { ddSub } from '../deepZoom/dd';
-
-/** Pack a JS f64 as `[mantissa, exp]` for the shader's HDR uniforms.
- *  Mirrors `f64ToHDR` from `../deepZoom/HDRFloat.ts` but inlined as a
- *  tuple-returning helper to avoid the cross-module import in the
- *  engine layer. Zero maps to (0, 0). */
-const f64ToHDRTuple = (v: number): [number, number] => {
-    if (!Number.isFinite(v) || v === 0) return [0, 0];
-    const e = Math.floor(Math.log2(Math.abs(v)));
-    return [v / Math.pow(2, e), e];
-};
+import { DeepZoomController } from './DeepZoomController';
+import { GpuTimerManager } from './GpuTimerManager';
+import { GradientLutManager } from './GradientLutManager';
+import { BloomChain } from './BloomChain';
 // FractalEvents reset_accum subscription removed — see ctor comment.
 
 export type ForceMode = 'gradient' | 'curl' | 'iterate' | 'c-track' | 'hue';
@@ -336,7 +325,7 @@ export interface FluidParams {
   deepZoomEnabled: boolean;
 }
 
-interface FBO {
+export interface FBO {
   tex: WebGLTexture;
   fbo: WebGLFramebuffer;
   width: number;
@@ -371,7 +360,7 @@ interface DoubleFBO {
   texel: [number, number];
 }
 
-interface Program {
+export interface Program {
   prog: WebGLProgram;
   uniforms: Record<string, WebGLUniformLocation | null>;
 }
@@ -472,9 +461,6 @@ export class FluidEngine {
   private progCopy!: Program;
   private progCopyMrt!: Program;
   private progReproject!: Program;
-  private progBloomExtract!: Program;
-  private progBloomDown!: Program;
-  private progBloomUp!: Program;
   private progMask!: Program;
   private progTsaaBlend!: Program;
 
@@ -493,83 +479,29 @@ export class FluidEngine {
   /** Blue-noise texture for sub-pixel jitter. Shared generic loader. */
   private blueNoise: BlueNoiseTexture | null = null;
 
-  /** Reference-orbit texture for the deep-zoom path. Created lazily on
-   *  first `setReferenceOrbit` call; reused across uploads (re-allocates
-   *  only when the row count changes). RGBA32F, NEAREST filtering. */
-  private refOrbitTex: WebGLTexture | null = null;
-  private refOrbitTexW = 2048;
-  private refOrbitTexH = 0;
-  private refOrbitLen = 0;
-  /** Centre the orbit was BUILT for. The shader receives
-   *  `params.center − refOrbitCenter` so pan/zoom gestures that move
-   *  `params.center` between rebuilds stay aligned (within validity). */
-  private refOrbitCenter: [number, number] = [0, 0];
-  /** Sub-f64 residual paired with refOrbitCenter — captured at orbit
-   *  upload time. The shader's offset is computed as a double-double
-   *  subtraction (paramCenter+paramLow) − (refCenter+refLow) so pan
-   *  increments past f64's ~16-digit mantissa floor are preserved. */
-  private refOrbitCenterLow: [number, number] = [0, 0];
-  /** Bumped each upload — fed into the TSAA paramHash so an orbit swap
-   *  resets the accumulator (the underlying iteration just changed). */
-  private refOrbitVersion = 0;
+  /** Owns reference-orbit / LA / AT GPU state for the deep-zoom path.
+   *  App code drives it via `engine.deepZoom.setReferenceOrbit(...)` etc.
+   *  Engine folds `deepZoom.version` into the TSAA paramHash so an
+   *  orbit/LA/AT swap resets the accumulator. */
+  readonly deepZoom: DeepZoomController;
 
-  /** LA table textures + metadata. Each LA node packs into 3 RGBA32F
-   *  texels (12 floats); see fluid/shaders.ts uLATable layout. */
-  private laTableTex: WebGLTexture | null = null;
-  private laTableTexW = 1024;  // multiple of 3 keeps node packing row-aligned... actually any width works
-  private laTableTexH = 0;
-  private laTotalCount = 0;
-  private laStages: Float32Array = new Float32Array(0);  // pairs of [laIndex, macroItCount]
-  private laStageCount = 0;
-  private laEnabled = false;
   /** Forces all fluid sim passes (motion, advect, pressure, etc.) to
    *  skip — independent of `params.paused`. Used by the deep-zoom
    *  panel's "Disable fluid sim" toggle to A/B-test render perf with
    *  the fluid pipeline out of the picture. The fractal pass still
    *  runs so TSAA can converge. */
   private forceFluidPaused = false;
-
-  /** AT (Approximation Terms) front-load — packed scalars + complex
-   *  coefficients. Null when no usable AT is available for the current
-   *  view (e.g. shallow zoom where dc exceeds every stage's threshold).
-   *  Phase 7 + the f32 deep path. */
-  private atPayload: {
-    stepLength: number;
-    thresholdC: number;
-    sqrEscapeRadius: number;
-    refC: [number, number];
-    ccoeff: [number, number];
-    invZCoeff: [number, number];
-  } | null = null;
   /** Frame counter — advances every step. Feeds shader uFrameCount for
    *  blue-noise temporal animation. */
   private frameCount = 0;
 
-  /** GPU timer-query state — measures actual Julia-pass GPU time.
-   *  EXT_disjoint_timer_query_webgl2 is available on most desktop
-   *  WebGL2 contexts; null when the extension isn't exposed (e.g.
-   *  some mobile drivers, or when the privacy-conscious extension
-   *  blocklist hides it). Async by design: a query issued this
-   *  frame becomes readable a few frames later. */
-  private timerExt: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null = null;
-  /** Ring buffer of in-flight queries — a length-3 ring is enough to
-   *  cover the typical 1-2 frame async result delay. */
-  private juliaTimerQueries: (WebGLQuery | null)[] = [null, null, null];
-  private juliaTimerInFlight: boolean[] = [false, false, false];
-  private juliaTimerCursor = 0;
-  /** Most recent completed measurement — milliseconds for one Julia
-   *  pass. EWMA-smoothed so the diagnostics readout doesn't flicker. */
-  private juliaMsEwma = 0;
-  /** Set true when a timer query is open between begin/end. Avoids
-   *  nested begins (which would trip a WebGL error). */
-  private juliaTimerOpen = false;
+  /** Wraps the optional EXT_disjoint_timer_query_webgl2 query around the
+   *  Julia draw call. `getMs()` feeds the diagnostics overlay; returns 0
+   *  when the extension is unavailable. */
+  private juliaTimer: GpuTimerManager;
 
-  /** Bloom scratch textures. Allocated to the DISPLAY canvas size / 2, /4, /8. */
-  private bloomA!: FBO;   // half-res — extraction target + final upsample target
-  private bloomB!: FBO;   // quarter-res
-  private bloomC!: FBO;   // eighth-res
-  /** Set to true when the canvas size changes so bloom FBOs get reallocated. */
-  private bloomDirty = true;
+  /** Owns the bloom programs + scratch FBOs + chain pipeline. */
+  private bloom: BloomChain;
 
   /** Last camera we rendered with — used to detect pan/zoom between frames and reproject dye. */
   private lastCenter: [number, number] = [0, 0];
@@ -596,10 +528,10 @@ export class FluidEngine {
   /** Collision mask — r > 0.5 means that sim cell is a solid wall. Recomputed each frame. */
   private maskTex!: FBO;
 
-  /** 256x1 RGBA8 gradient LUT — the main colour gradient. */
-  private gradientTex: WebGLTexture | null = null;
-  /** 256x1 RGBA8 B&W LUT used by the collision-mask pass. */
-  private collisionGradientTex: WebGLTexture | null = null;
+  /** 1-D gradient LUTs — `main` for Julia/dye colour, `collision` for
+   *  the wall-mask pass. App code uploads via setGradientBuffer /
+   *  setCollisionGradientBuffer. */
+  private gradients: GradientLutManager;
 
   params: FluidParams = { ...DEFAULT_PARAMS };
 
@@ -631,19 +563,19 @@ export class FluidEngine {
     const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL2 required — your browser does not support it.');
     this.gl = gl;
-
-    // GPU timer queries for the Julia pass. Optional — if the
-    // extension isn't available, getJuliaMs() returns 0 and the
-    // diagnostics overlay just hides the line.
-    const timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2') as
-      | { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
-      | null;
-    if (timerExt) {
-      this.timerExt = timerExt;
-      for (let i = 0; i < this.juliaTimerQueries.length; i++) {
-        this.juliaTimerQueries[i] = gl.createQuery();
-      }
-    }
+    this.deepZoom = new DeepZoomController(gl);
+    this.juliaTimer = new GpuTimerManager(gl);
+    this.gradients = new GradientLutManager(gl);
+    this.bloom = new BloomChain({
+      gl,
+      linkProgram: (vs, fs, names) => this.linkProgram(vs, fs, names),
+      drawQuad:    () => this.drawQuad(),
+      bindFBO:     (fbo) => this.bindFBO(fbo),
+      useProgram:  (p) => this.useProgram(p),
+      bindTex:     (u, t, l) => this.bindTex(u, t, l),
+      createFBO:   (w, h) => this.createFBO(w, h),
+      deleteFBO:   (f) => this.deleteFBO(f),
+    });
 
     // Enable float render targets
     const colorBufExt = gl.getExtension('EXT_color_buffer_float');
@@ -794,12 +726,6 @@ export class FluidEngine {
     this.progCopyMrt = this.linkProgram(VERT_FULLSCREEN, FRAG_COPY_MRT, ['uSourceMain', 'uSourceAux']);
     this.progReproject = this.linkProgram(VERT_FULLSCREEN, FRAG_REPROJECT,
       ['uTexel', 'uSource', 'uNewCenter', 'uOldCenter', 'uNewZoom', 'uOldZoom', 'uAspect']);
-    this.progBloomExtract = this.linkProgram(VERT_FULLSCREEN, FRAG_BLOOM_EXTRACT,
-      ['uTexel', 'uSource', 'uThreshold', 'uSoftKnee']);
-    this.progBloomDown = this.linkProgram(VERT_FULLSCREEN, FRAG_BLOOM_DOWN,
-      ['uTexel', 'uSource']);
-    this.progBloomUp = this.linkProgram(VERT_FULLSCREEN, FRAG_BLOOM_UP,
-      ['uTexel', 'uSource', 'uPrev', 'uIntensity']);
     this.progMask = this.linkProgram(VERT_FULLSCREEN, FRAG_MASK,
       ['uTexel', 'uJulia', 'uJuliaAux', 'uGradient', 'uCollisionGradient',
        'uCollisionRepeat', 'uCollisionPhase',
@@ -1058,60 +984,11 @@ export class FluidEngine {
    * Shared helper: both the main colour gradient and the collision B&W gradient
    * use the same upload path, differing only in the sampling site.
    */
-  private uploadLut(slot: 'main' | 'collision', buf: Uint8Array) {
-    const gl = this.gl;
-    const expected = GRADIENT_LUT_WIDTH * 4;
-    if (buf.length !== expected) {
-      console.warn(`[FluidEngine] ${slot} gradient buffer unexpected length ${buf.length} (want ${expected})`);
-    }
-    let tex = slot === 'main' ? this.gradientTex : this.collisionGradientTex;
-    if (!tex) {
-      tex = gl.createTexture()!;
-      if (slot === 'main') this.gradientTex = tex;
-      else this.collisionGradientTex = tex;
-    }
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRADIENT_LUT_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-  }
-
   /** Upload the main colour gradient LUT. Call whenever the user edits the gradient. */
-  setGradientBuffer(buf: Uint8Array) { this.uploadLut('main', buf); }
+  setGradientBuffer(buf: Uint8Array) { this.gradients.setBuffer('main', buf); }
 
   /** Upload the collision gradient LUT (black = fluid, white = wall). */
-  setCollisionGradientBuffer(buf: Uint8Array) { this.uploadLut('collision', buf); }
-
-  private ensureGradient() {
-    if (this.gradientTex) return;
-    // Fallback grey ramp — used only until the app pushes a real gradient on boot.
-    const w = GRADIENT_LUT_WIDTH;
-    const buf = new Uint8Array(w * 4);
-    for (let i = 0; i < w; ++i) {
-      buf[i * 4 + 0] = i;
-      buf[i * 4 + 1] = i;
-      buf[i * 4 + 2] = i;
-      buf[i * 4 + 3] = 255;
-    }
-    this.setGradientBuffer(buf);
-  }
-
-  private ensureCollisionGradient() {
-    if (this.collisionGradientTex) return;
-    // Fallback = all black → no walls anywhere. Harmless until the app uploads one.
-    const w = GRADIENT_LUT_WIDTH;
-    const buf = new Uint8Array(w * 4);
-    for (let i = 0; i < w; ++i) {
-      buf[i * 4 + 0] = 0;
-      buf[i * 4 + 1] = 0;
-      buf[i * 4 + 2] = 0;
-      buf[i * 4 + 3] = 255;
-    }
-    this.setCollisionGradientBuffer(buf);
-  }
+  setCollisionGradientBuffer(buf: Uint8Array) { this.gradients.setBuffer('collision', buf); }
 
   /** Set the render dimensions — sim/fractal grid AND canvas drawing
    *  buffer at the same size, no DPR multiplication or aspect drift.
@@ -1131,7 +1008,7 @@ export class FluidEngine {
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
-      this.bloomDirty = true;
+      this.bloom.markResize();
     }
     this.reallocateAt(w, h);
   }
@@ -1146,25 +1023,6 @@ export class FluidEngine {
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, null);
-  }
-
-  /** (Re)allocate the half/quarter/eighth bloom FBOs at the current canvas size. */
-  private ensureBloomFbos() {
-    if (!this.bloomDirty && this.bloomA) return;
-    this.deleteFBO(this.bloomA);
-    this.deleteFBO(this.bloomB);
-    this.deleteFBO(this.bloomC);
-    const W = this.canvas.width, H = this.canvas.height;
-    const w2 = Math.max(4, (W >> 1) & ~1);
-    const h2 = Math.max(4, (H >> 1) & ~1);
-    const w4 = Math.max(2, (W >> 2) & ~1);
-    const h4 = Math.max(2, (H >> 2) & ~1);
-    const w8 = Math.max(2, (W >> 3) & ~1);
-    const h8 = Math.max(2, (H >> 3) & ~1);
-    this.bloomA = this.createFBO(w2, h2);
-    this.bloomB = this.createFBO(w4, h4);
-    this.bloomC = this.createFBO(w8, h8);
-    this.bloomDirty = false;
   }
 
   /** Clear dye and velocity back to zero. Also resets the camera-lock baseline. */
@@ -1378,20 +1236,9 @@ export class FluidEngine {
     this.juliaCur = this.juliaPrev;
     this.juliaPrev = t;
 
-    // Begin a GPU timer query for this Julia pass. The query result
-    // becomes available a few frames later (async); we poll
-    // pollJuliaTimer() each frame to drain completed queries into
-    // juliaMsEwma. Skip when extension is missing or when the previous
-    // query at this slot hasn't completed yet (avoids overwriting
-    // pending results).
-    if (this.timerExt && !this.juliaTimerOpen) {
-      const slot = this.juliaTimerQueries[this.juliaTimerCursor];
-      if (slot && !this.juliaTimerInFlight[this.juliaTimerCursor]) {
-        gl.beginQuery(this.timerExt.TIME_ELAPSED_EXT, slot);
-        this.juliaTimerOpen = true;
-        this.juliaTimerInFlight[this.juliaTimerCursor] = true;
-      }
-    }
+    // GPU timer query bracketed around the Julia pass. Results land
+    // a few frames later via this.juliaTimer.poll() once per frame.
+    this.juliaTimer.begin();
 
     // Bind MRT framebuffer (has both color attachments; drawBuffers set at creation)
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.juliaCur.fbo);
@@ -1444,290 +1291,27 @@ export class FluidEngine {
         gl.uniform2f(this.progJulia.uniforms['uBlueNoiseResolution'], bnw, bnh);
     }
 
-    // Deep-zoom uniforms. Bind ANY valid texture to uRefOrbit even when
-    // disabled — leaving sampler2D unbound trips Chrome/Firefox driver
-    // warnings about incomplete textures. The shader gates on the
-    // enabled flag and never samples when off, so it's a unit-6 stub.
-    const deepActive = this.params.deepZoomEnabled && this.refOrbitTex !== null && this.refOrbitLen > 1;
-    gl.uniform1i(this.progJulia.uniforms['uDeepZoomEnabled'], deepActive ? 1 : 0);
-    gl.uniform1i(this.progJulia.uniforms['uRefOrbitTexW'], this.refOrbitTexW);
-    gl.uniform1i(this.progJulia.uniforms['uRefOrbitLen'], this.refOrbitLen);
-    // HDR-pack the deep-zoom uniforms. Plain f32 uniforms underflow
-    // below ~1e-38; the shader's HDR path needs the exponent preserved.
-    // Performed every frame (cheap: a few log2 calls) so gesture
-    // updates to params.center / zoom are reflected without
-    // re-uploading the orbit.
-    //
-    // The centre offset is a double-double subtraction:
-    //   off = (paramCenter + paramLow) − (refCenter + refLow)
-    // so pan increments below f64's mantissa floor (~1e-16 near a
-    // value of magnitude ~1) survive the difference. Without this
-    // step, pans at zoom <1e-15 quantise: each pixel move becomes
-    // smaller than f64 can resolve relative to the centre value.
-    const ddOffX = ddSub(
-      this.params.center[0],    this.params.centerLow[0],
-      this.refOrbitCenter[0],   this.refOrbitCenterLow[0],
-    );
-    const ddOffY = ddSub(
-      this.params.center[1],    this.params.centerLow[1],
-      this.refOrbitCenter[1],   this.refOrbitCenterLow[1],
-    );
-    // Collapse the DD pair to a single f64 by summing — the lo bits
-    // only matter for the SUBTRACTION (cancellation removes hi bits,
-    // exposing lo). Once collapsed the result is a regular f64 small
-    // enough to fit, packed via HDR for shader use.
-    const offX = ddOffX[0] + ddOffX[1];
-    const offY = ddOffY[0] + ddOffY[1];
-    const offXHdr = f64ToHDRTuple(offX);
-    const offYHdr = f64ToHDRTuple(offY);
-    gl.uniform4f(this.progJulia.uniforms['uDeepCenterOffset'],
-        offXHdr[0], offXHdr[1], offYHdr[0], offYHdr[1]);
-    const zoomHdr = f64ToHDRTuple(this.params.zoom);
-    gl.uniform2f(this.progJulia.uniforms['uDeepScale'], zoomHdr[0], zoomHdr[1]);
-    if (this.refOrbitTex) {
-        this.bindTex(6, this.refOrbitTex, this.progJulia.uniforms['uRefOrbit']);
-    } else if (this.blueNoise) {
-        // Stub binding — shader never samples it (gate is off), but
-        // keeping the unit populated avoids "no texture bound to active
-        // sampler" warnings from the driver.
-        this.bindTex(6, this.blueNoise.texture, this.progJulia.uniforms['uRefOrbit']);
-    }
-
-    // LA table: bound on unit 7. Same fallback-to-blueNoise stub when
-    // unset to keep the sampler valid.
-    const laActive = deepActive && this.laEnabled && this.laTableTex !== null && this.laTotalCount > 1;
-    gl.uniform1i(this.progJulia.uniforms['uLAEnabled'], laActive ? 1 : 0);
-    gl.uniform1i(this.progJulia.uniforms['uLATexW'], this.laTableTexW);
-    gl.uniform1i(this.progJulia.uniforms['uLATotalCount'], this.laTotalCount);
-    gl.uniform1i(this.progJulia.uniforms['uLAStageCount'], this.laStageCount);
-    if (this.laStageCount > 0) {
-        // Pack stages as vec4(laIndex, macroItCount, 0, 0). Stage cap
-        // matches the shader's 64-slot uniform array.
-        const cap = Math.min(this.laStageCount, 64);
-        const stagePack = new Float32Array(cap * 4);
-        for (let i = 0; i < cap; i++) {
-            stagePack[i * 4 + 0] = this.laStages[i * 2 + 0];
-            stagePack[i * 4 + 1] = this.laStages[i * 2 + 1];
-        }
-        gl.uniform4fv(this.progJulia.uniforms['uLAStages[0]'], stagePack);
-    }
-    if (this.laTableTex) {
-        this.bindTex(7, this.laTableTex, this.progJulia.uniforms['uLATable']);
-    } else if (this.blueNoise) {
-        this.bindTex(7, this.blueNoise.texture, this.progJulia.uniforms['uLATable']);
-    }
-
-    // AT (Approximation Terms): plain-f32 fast-forward over the front
-    // of the iteration. Active only when the worker found a usable
-    // stage for the current view radius and deep zoom is on.
-    const atActive = deepActive && this.atPayload !== null;
-    gl.uniform1i(this.progJulia.uniforms['uATEnabled'], atActive ? 1 : 0);
-    if (this.atPayload) {
-        gl.uniform1i(this.progJulia.uniforms['uATStepLength'], this.atPayload.stepLength);
-        gl.uniform1f(this.progJulia.uniforms['uATThresholdC'], this.atPayload.thresholdC);
-        gl.uniform1f(this.progJulia.uniforms['uATSqrEscapeRadius'], this.atPayload.sqrEscapeRadius);
-        gl.uniform2f(this.progJulia.uniforms['uATRefC'], this.atPayload.refC[0], this.atPayload.refC[1]);
-        gl.uniform2f(this.progJulia.uniforms['uATCCoeff'], this.atPayload.ccoeff[0], this.atPayload.ccoeff[1]);
-        gl.uniform2f(this.progJulia.uniforms['uATInvZCoeff'], this.atPayload.invZCoeff[0], this.atPayload.invZCoeff[1]);
-    } else {
-        // Inert default values — shader gates on uATEnabled and never
-        // reads these, but keeping them stable avoids any chance of
-        // NaN propagation on a stale shader state.
-        gl.uniform1i(this.progJulia.uniforms['uATStepLength'], 1);
-        gl.uniform1f(this.progJulia.uniforms['uATThresholdC'], 0);
-        gl.uniform1f(this.progJulia.uniforms['uATSqrEscapeRadius'], 4);
-        gl.uniform2f(this.progJulia.uniforms['uATRefC'], 0, 0);
-        gl.uniform2f(this.progJulia.uniforms['uATCCoeff'], 1, 0);
-        gl.uniform2f(this.progJulia.uniforms['uATInvZCoeff'], 1, 0);
-    }
+    // Deep-zoom uniforms (orbit + LA + AT) — DeepZoomController owns the
+    // texture state and packs the uniforms onto the active program. Pass
+    // blueNoise as the fallback so its texture stub-binds units 6/7 when
+    // the orbit/LA texture is absent (avoids driver warnings).
+    this.deepZoom.bindUniforms(this.progJulia, this.params, this.blueNoise?.texture ?? null);
 
     this.drawQuad();
 
-    // Close the timer query if we opened one above. The result is
-    // polled separately via pollJuliaTimer() each frame.
-    if (this.timerExt && this.juliaTimerOpen) {
-      gl.endQuery(this.timerExt.TIME_ELAPSED_EXT);
-      this.juliaTimerCursor = (this.juliaTimerCursor + 1) % this.juliaTimerQueries.length;
-      this.juliaTimerOpen = false;
-    }
+    this.juliaTimer.end();
   }
 
-  /** Drain any completed Julia timer queries. Call once per frame
-   *  (after rendering) to update juliaMsEwma. Cheap when no queries
-   *  are ready — just polls QUERY_RESULT_AVAILABLE. */
-  pollJuliaTimer(): void {
-    if (!this.timerExt) return;
-    const gl = this.gl;
-    // GPU_DISJOINT_EXT signals a timing-disjoint event (e.g. GPU
-    // throttled). Discard all in-flight queries when it fires.
-    const disjoint = gl.getParameter(this.timerExt.GPU_DISJOINT_EXT);
-    if (disjoint) {
-      for (let i = 0; i < this.juliaTimerInFlight.length; i++) {
-        this.juliaTimerInFlight[i] = false;
-      }
-      return;
-    }
-    for (let i = 0; i < this.juliaTimerQueries.length; i++) {
-      if (!this.juliaTimerInFlight[i]) continue;
-      const q = this.juliaTimerQueries[i];
-      if (!q) continue;
-      const ready = gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE) as boolean;
-      if (!ready) continue;
-      const ns = gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
-      const ms = ns / 1e6;
-      // EWMA with α = 0.2 — smooths but tracks a workload change in
-      // ~10 frames. Initialise on first sample.
-      this.juliaMsEwma = this.juliaMsEwma === 0 ? ms : (this.juliaMsEwma * 0.8 + ms * 0.2);
-      this.juliaTimerInFlight[i] = false;
-    }
-  }
-
-  /** Latest smoothed Julia-pass GPU time in ms (0 if timer extension
-   *  unavailable or no measurement yet). Surfaced in the deep-zoom
-   *  diagnostics overlay for A/B testing toggles. */
-  getJuliaMs(): number {
-    return this.juliaMsEwma;
-  }
+  /** Latest smoothed Julia-pass GPU time in ms. 0 when the GPU timer
+   *  extension is unavailable. Surfaced in the deep-zoom diagnostics
+   *  overlay for A/B testing toggles. */
+  getJuliaMs(): number { return this.juliaTimer.getMs(); }
 
   /** True when the GPU timer extension is available. */
-  hasGpuTimer(): boolean {
-    return this.timerExt !== null;
-  }
-
-  setAT(payload: {
-    stepLength: number;
-    thresholdC: number;
-    sqrEscapeRadius: number;
-    refC: [number, number];
-    ccoeff: [number, number];
-    invZCoeff: [number, number];
-  }): void {
-    this.atPayload = payload;
-    this.refOrbitVersion++;
-  }
-
-  clearAT(): void {
-    if (this.atPayload !== null) {
-      this.atPayload = null;
-      this.refOrbitVersion++;
-    }
-  }
-
-  /** Upload a packed LA table (3 RGBA32F texels per node, layout from
-   *  packLATable in deepZoomWorker.ts) plus a stage-table buffer
-   *  (pairs of [laIndex, macroItCount] floats). The shader walks the
-   *  resulting texture during the deep-zoom inner loop to skip many
-   *  reference iterations at once. */
-  setLATable(laTable: Float32Array, totalCount: number, stages: Float32Array): void {
-    const gl = this.gl;
-    // Each node = 3 texels. Pad to full rows of `laTableTexW` texels.
-    const totalTexels = totalCount * 3;
-    const texW = this.laTableTexW;
-    const texH = Math.max(1, Math.ceil(totalTexels / texW));
-    const fullLen = texW * texH * 4;
-    let upload: Float32Array;
-    if (laTable.length >= fullLen) {
-      upload = laTable.subarray(0, fullLen);
-    } else {
-      upload = new Float32Array(fullLen);
-      upload.set(laTable);
-    }
-
-    if (!this.laTableTex) {
-      this.laTableTex = gl.createTexture()!;
-      gl.bindTexture(gl.TEXTURE_2D, this.laTableTex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      this.laTableTexH = 0;
-    }
-    gl.bindTexture(gl.TEXTURE_2D, this.laTableTex);
-    if (texH !== this.laTableTexH) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, texW, texH, 0, gl.RGBA, gl.FLOAT, upload);
-      this.laTableTexH = texH;
-    } else {
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.RGBA, gl.FLOAT, upload);
-    }
-
-    this.laTotalCount = totalCount;
-    this.laStages = stages;
-    this.laStageCount = stages.length / 2;
-    this.refOrbitVersion++;  // bump so TSAA accumulator resets
-  }
-
-  setLAEnabled(on: boolean): void {
-    this.laEnabled = on;
-  }
+  hasGpuTimer(): boolean { return this.juliaTimer.available(); }
 
   setForceFluidPaused(on: boolean): void {
     this.forceFluidPaused = on;
-  }
-
-  clearLATable(): void {
-    this.laTotalCount = 0;
-    this.laStages = new Float32Array(0);
-    this.laStageCount = 0;
-    this.refOrbitVersion++;
-  }
-
-  /** Upload a reference orbit for the deep-zoom path. The data layout
-   *  is RGBA32F texels packed as [Z.re, Z.im, |Z|², 0] per iteration —
-   *  matches the worker's output from `referenceOrbit.ts`. The texture
-   *  is sized as `texW × ceil(length / texW)` and zero-padded; only
-   *  the first `length` texels are read by the shader.
-   *
-   *  Re-allocates only when the row count changes; same-row uploads
-   *  reuse the existing texture via texSubImage2D for cheap swaps. */
-  setReferenceOrbit(
-    orbit: Float32Array,
-    length: number,
-    refCenter: [number, number],
-    refCenterLow: [number, number] = [0, 0],
-  ): void {
-    this.refOrbitCenter = [refCenter[0], refCenter[1]];
-    this.refOrbitCenterLow = [refCenterLow[0], refCenterLow[1]];
-    const gl = this.gl;
-    const texW = this.refOrbitTexW;
-    const texH = Math.max(1, Math.ceil(length / texW));
-
-    // Pad to full rows (texW * texH * 4 floats) so texImage/texSubImage
-    // doesn't read past `orbit`. Zero-pad with the escape sentinel; the
-    // shader bounds-clamps `ref` to `length-1` anyway.
-    const fullLen = texW * texH * 4;
-    let upload: Float32Array;
-    if (orbit.length >= fullLen) {
-      upload = orbit.subarray(0, fullLen);
-    } else {
-      upload = new Float32Array(fullLen);
-      upload.set(orbit);
-    }
-
-    if (!this.refOrbitTex) {
-      this.refOrbitTex = gl.createTexture()!;
-      gl.bindTexture(gl.TEXTURE_2D, this.refOrbitTex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      this.refOrbitTexH = 0;  // force allocate below
-    }
-
-    gl.bindTexture(gl.TEXTURE_2D, this.refOrbitTex);
-    if (texH !== this.refOrbitTexH) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, texW, texH, 0, gl.RGBA, gl.FLOAT, upload);
-      this.refOrbitTexH = texH;
-    } else {
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.RGBA, gl.FLOAT, upload);
-    }
-
-    this.refOrbitLen = length;
-    this.refOrbitVersion++;
-  }
-
-  clearReferenceOrbit(): void {
-    this.refOrbitLen = 0;
-    this.refOrbitVersion++;
   }
 
   /** TSAA blend pass. Reads juliaCur (current jittered frame) + juliaTsaa
@@ -1773,7 +1357,7 @@ export class FluidEngine {
    *  renderJulia. Hashes to stringified key for a cheap equality test. */
   private updateTsaaHash() {
     const p = this.params;
-    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.refOrbitVersion}`;
+    const hash = `${p.kind}|${p.juliaC[0]}|${p.juliaC[1]}|${p.center[0]}|${p.center[1]}|${p.zoom}|${p.power}|${p.maxIter}|${p.colorIter}|${p.escapeR}|${p.colorMapping}|${p.trapCenter[0]}|${p.trapCenter[1]}|${p.trapRadius}|${p.trapNormal[0]}|${p.trapNormal[1]}|${p.trapOffset}|${p.stripeFreq}|dz:${p.deepZoomEnabled ? 1 : 0}|dzV:${this.deepZoom.version}`;
     if (hash !== this.tsaaParamHash) {
         this.tsaaParamHash = hash;
         this.tsaaSampleIndex = 0;
@@ -1788,8 +1372,8 @@ export class FluidEngine {
    */
   private computeMask() {
     const gl = this.gl;
-    this.ensureGradient();
-    this.ensureCollisionGradient();
+    this.gradients.ensure('main');
+    this.gradients.ensure('collision');
     this.bindFBO(this.maskTex);
     if (!this.params.collisionEnabled) {
       gl.clearColor(0, 0, 0, 1);
@@ -1801,8 +1385,8 @@ export class FluidEngine {
     const juliaRead = this.juliaReadFbo();
     this.bindTex(0, juliaRead.texMain, this.progMask.uniforms['uJulia']);
     this.bindTex(1, juliaRead.texAux, this.progMask.uniforms['uJuliaAux']);
-    this.bindTex(2, this.gradientTex!, this.progMask.uniforms['uGradient']);
-    this.bindTex(3, this.collisionGradientTex!, this.progMask.uniforms['uCollisionGradient']);
+    this.bindTex(2, this.gradients.getTexture('main')!, this.progMask.uniforms['uGradient']);
+    this.bindTex(3, this.gradients.getTexture('collision')!, this.progMask.uniforms['uCollisionGradient']);
     gl.uniform1i(this.progMask.uniforms['uColorMapping'], colorMappingToIndex(this.params.colorMapping));
     // Main gradient repeat/phase — the GRADIENT_SAMPLE_GLSL helper references
     // these even though the mask pass doesn't actually read from the main
@@ -1817,14 +1401,14 @@ export class FluidEngine {
 
   private computeForce() {
     const gl = this.gl;
-    this.ensureGradient();
+    this.gradients.ensure('main');
     this.bindFBO(this.forceTex);
     this.useProgram(this.progMotion);
     this.setTexel(this.progMotion, this.simW, this.simH);
     this.bindTex(0, this.juliaCur.texMain, this.progMotion.uniforms['uJulia']);
     this.bindTex(1, this.juliaPrev.texMain, this.progMotion.uniforms['uJuliaPrev']);
     this.bindTex(4, this.juliaCur.texAux, this.progMotion.uniforms['uJuliaAux']);
-    this.bindTex(2, this.gradientTex!, this.progMotion.uniforms['uGradient']);
+    this.bindTex(2, this.gradients.getTexture('main')!, this.progMotion.uniforms['uGradient']);
     this.bindTex(5, this.maskTex.tex, this.progMotion.uniforms['uMask']);
     gl.uniform1i(this.progMotion.uniforms['uMode'], modeToIndex(this.params.forceMode));
     gl.uniform1f(this.progMotion.uniforms['uGain'], this.params.forceGain);
@@ -1854,14 +1438,14 @@ export class FluidEngine {
 
   private injectDye() {
     const gl = this.gl;
-    this.ensureGradient();
+    this.gradients.ensure('main');
     this.bindFBO(this.dye.write);
     this.useProgram(this.progInjectDye);
     this.setTexel(this.progInjectDye, this.simW, this.simH);
     const juliaReadInject = this.juliaReadFbo();
     this.bindTex(0, this.dye.read.tex, this.progInjectDye.uniforms['uDye']);
     this.bindTex(1, juliaReadInject.texMain, this.progInjectDye.uniforms['uJulia']);
-    this.bindTex(2, this.gradientTex!, this.progInjectDye.uniforms['uGradient']);
+    this.bindTex(2, this.gradients.getTexture('main')!, this.progInjectDye.uniforms['uGradient']);
     this.bindTex(4, juliaReadInject.texAux, this.progInjectDye.uniforms['uJuliaAux']);
     this.bindTex(5, this.maskTex.tex, this.progInjectDye.uniforms['uMask']);
     gl.uniform1f(this.progInjectDye.uniforms['uDyeGain'], this.params.dyeInject);
@@ -1999,55 +1583,24 @@ export class FluidEngine {
 
   private displayToScreen() {
     const gl = this.gl;
-    this.ensureGradient();
+    this.gradients.ensure('main');
 
-    // Bloom chain (Jimenez dual-filter style, 2-level).
-    //   composite → bloomA,  extract → bloomB,  downsample → bloomC,
-    //   copy bloomB → bloomA (so we can read it without a render-to-self),
-    //   upsample bloomC + bloomA → bloomB.  Final: bloomB is the glow layer.
+    // Bloom — controller does the dual-filter chain when bloomAmount
+    // is meaningful. We hand it a `renderSource` callback that does a
+    // clean (skipPost) display pass into its first FBO.
     const wantBloom = this.params.bloomAmount > 0.001;
-    if (wantBloom) {
-      this.ensureBloomFbos();
+    const bloomTex = wantBloom
+        ? this.bloom.process(this.canvas.width, this.canvas.height,
+            this.params.bloomThreshold, () => {
+                this.setDisplayUniforms(null, /*skipPost*/true);
+                this.drawQuad();
+            })
+        : null;
 
-      this.bindFBO(this.bloomA);
-      this.setDisplayUniforms(/*bloomTex*/null, /*skipPost*/true);
-      this.drawQuad();
-
-      this.bindFBO(this.bloomB);
-      this.useProgram(this.progBloomExtract);
-      gl.uniform2f(this.progBloomExtract.uniforms['uTexel'], this.bloomB.texel[0], this.bloomB.texel[1]);
-      this.bindTex(0, this.bloomA.tex, this.progBloomExtract.uniforms['uSource']);
-      gl.uniform1f(this.progBloomExtract.uniforms['uThreshold'], this.params.bloomThreshold);
-      gl.uniform1f(this.progBloomExtract.uniforms['uSoftKnee'], BLOOM_SOFT_KNEE);
-      this.drawQuad();
-
-      this.bindFBO(this.bloomC);
-      this.useProgram(this.progBloomDown);
-      gl.uniform2f(this.progBloomDown.uniforms['uTexel'], this.bloomB.texel[0], this.bloomB.texel[1]);
-      this.bindTex(0, this.bloomB.tex, this.progBloomDown.uniforms['uSource']);
-      this.drawQuad();
-
-      // Copy bloomB → bloomA as the stand-in "previous" for the final upsample
-      // (avoids reading bloomB while also writing to it).
-      this.bindFBO(this.bloomA);
-      this.useProgram(this.progBloomDown);
-      gl.uniform2f(this.progBloomDown.uniforms['uTexel'], this.bloomB.texel[0], this.bloomB.texel[1]);
-      this.bindTex(0, this.bloomB.tex, this.progBloomDown.uniforms['uSource']);
-      this.drawQuad();
-
-      this.bindFBO(this.bloomB);
-      this.useProgram(this.progBloomUp);
-      gl.uniform2f(this.progBloomUp.uniforms['uTexel'], this.bloomC.texel[0], this.bloomC.texel[1]);
-      this.bindTex(0, this.bloomC.tex, this.progBloomUp.uniforms['uSource']);
-      this.bindTex(1, this.bloomA.tex, this.progBloomUp.uniforms['uPrev']);
-      gl.uniform1f(this.progBloomUp.uniforms['uIntensity'], 1.0);
-      this.drawQuad();
-    }
-
-    // Final pass: to screen, with bloomB as the glow layer (or null if disabled).
+    // Final pass: to screen, with the glow texture (or null if disabled).
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    this.setDisplayUniforms(wantBloom ? this.bloomB : null, /*skipPost*/false);
+    this.setDisplayUniforms(bloomTex, /*skipPost*/false);
     this.drawQuad();
   }
 
@@ -2058,7 +1611,7 @@ export class FluidEngine {
    *                  post-processing so the bloom extract sees a CLEAN composite —
    *                  otherwise bloom would feed back on tone-mapped output.
    */
-  private setDisplayUniforms(bloomTex: FBO | null, skipPost: boolean = false) {
+  private setDisplayUniforms(bloomTex: WebGLTexture | null, skipPost: boolean = false) {
     const gl = this.gl;
     this.useProgram(this.progDisplay);
     gl.uniform2f(this.progDisplay.uniforms['uTexelDisplay'], 1 / this.canvas.width, 1 / this.canvas.height);
@@ -2068,8 +1621,8 @@ export class FluidEngine {
     this.bindTex(4, juliaReadDisplay.texAux, this.progDisplay.uniforms['uJuliaAux']);
     this.bindTex(1, this.dye.read.tex, this.progDisplay.uniforms['uDye']);
     this.bindTex(2, this.velocity.read.tex, this.progDisplay.uniforms['uVelocity']);
-    this.bindTex(3, this.gradientTex!, this.progDisplay.uniforms['uGradient']);
-    this.bindTex(5, bloomTex?.tex ?? this.gradientTex!, this.progDisplay.uniforms['uBloom']);
+    this.bindTex(3, this.gradients.getTexture('main')!, this.progDisplay.uniforms['uGradient']);
+    this.bindTex(5, bloomTex ?? this.gradients.getTexture('main')!, this.progDisplay.uniforms['uBloom']);
     this.bindTex(6, this.maskTex.tex, this.progDisplay.uniforms['uMask']);
     gl.uniform1i(this.progDisplay.uniforms['uShowMode'], showToIndex(this.params.show));
     gl.uniform1f(this.progDisplay.uniforms['uJuliaMix'], this.params.juliaMix);
@@ -2172,13 +1725,15 @@ export class FluidEngine {
 
     // Drain GPU timer query results. Issued in renderJulia, drained
     // here a few frames later (async by design).
-    this.pollJuliaTimer();
+    this.juliaTimer.poll();
 
     if (this.onFrameEnd) this.onFrameEnd();
   }
 
   dispose() {
     const gl = this.gl;
+    this.deepZoom.dispose();
+    this.juliaTimer.dispose();
     this.deleteMrtFbo(this.juliaCur);
     this.deleteMrtFbo(this.juliaPrev);
     this.deleteMrtFbo(this.juliaTsaa);
@@ -2191,16 +1746,14 @@ export class FluidEngine {
     this.deleteFBO(this.curl);
     this.deleteFBO(this.maskTex);
     if (this.maskReadFBO) { this.deleteFBO(this.maskReadFBO); this.maskReadFBO = null; }
-    if (this.gradientTex) { gl.deleteTexture(this.gradientTex); this.gradientTex = null; }
-    if (this.collisionGradientTex) { gl.deleteTexture(this.collisionGradientTex); this.collisionGradientTex = null; }
-    this.deleteFBO(this.bloomA); this.deleteFBO(this.bloomB); this.deleteFBO(this.bloomC);
+    this.gradients.dispose();
+    this.bloom.dispose();
     gl.deleteBuffer(this.quadVbo);
     for (const p of [
       this.progJulia, this.progMotion, this.progAddForce, this.progInjectDye,
       this.progAdvect, this.progDivergence, this.progCurl, this.progVorticity,
       this.progPressure, this.progGradSub, this.progSplat, this.progDisplay, this.progClear,
       this.progReproject, this.progMask, this.progTsaaBlend,
-      this.progBloomExtract, this.progBloomDown, this.progBloomUp,
     ]) {
       if (p?.prog) gl.deleteProgram(p.prog);
     }
