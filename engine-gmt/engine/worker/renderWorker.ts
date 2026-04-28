@@ -18,6 +18,7 @@ import { handleHistogramReadback } from './WorkerHistogram';
 import { WorkerDepthReadback } from './WorkerDepthReadback';
 import { BloomPass } from '../BloomPass';
 import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
+import { handleRenderTick as runRenderTick } from './handleRenderTick';
 
 let engine: FractalEngine | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -195,135 +196,16 @@ FractalEvents.on(FRACTAL_EVENTS.SHADER_CODE, (code) => {
 let _tickCount = 0;
 
 function handleRenderTick(msg: Extract<MainToWorkerMessage, { type: 'RENDER_TICK' }>) {
-    if (!engine || !renderer || !camera || !displayScene || !displayCamera) {
-        _tickCount++;
-        return;
-    }
-    if (!engine.isBooted) {
-        _tickCount++;
-        // Still send shadow state so main thread knows compilation status
-        postMsg({ type: 'FRAME_READY', bitmap: null, state: getShadowState() });
-        return;
-    }
-    // Skip normal rendering during export — WorkerExporter drives the GPU
-    if (exporter?.active) {
-        _tickCount++;
-        return;
-    }
-
-    // Update camera from main thread data
-    camera.position.set(msg.camera.position[0], msg.camera.position[1], msg.camera.position[2]);
-    camera.quaternion.set(msg.camera.quaternion[0], msg.camera.quaternion[1], msg.camera.quaternion[2], msg.camera.quaternion[3]);
-    camera.fov = msg.camera.fov;
-    camera.aspect = msg.camera.aspect;
-    camera.updateProjectionMatrix();
-    camera.updateMatrixWorld();
-
-    // Atomic offset sync: when the main thread absorbs orbit camera.position into offset,
-    // both arrive together in this RENDER_TICK — no 1-frame mismatch.
-    if (msg.syncOffset && engine) {
-        engine.virtualSpace.state = msg.offset;
-    }
-    // Otherwise: VirtualSpace offset is updated via OFFSET_SHIFT/OFFSET_SET messages only.
-    // Do NOT override from RENDER_TICK — the store's sceneOffset lags behind real-time
-    // offset_shift events from fly mode / orbit pivot, causing frame jumping.
-
-    // Apply render state updates
-    if (msg.renderState) {
-        engine.setRenderState(msg.renderState);
-    }
-
-    // Update engine (VirtualSpace smoothing, uniform sync). FractalEngine.update also
-    // releases the held final frame (if any) when the user has moved camera / changed
-    // params — so the held path below is only taken when no interaction has occurred.
-    engine.update(camera, msg.delta, {}, false);
-
-    // ── Held Final Frame Path ────────────────────────────────────
-    // After Refine View / Preview Region finishes, the BucketRenderer retains its final
-    // composite and re-blits it each tick. Skip compute + normal display entirely while
-    // holding — otherwise the normal display path would overwrite the final image with
-    // fresh (empty) pipeline output.
-    if (bucketRenderer.isHoldingFinalFrame()) {
-        bucketRenderer.blitHeldFinalFrame();
-        _tickCount++;
-        postMsg({ type: 'FRAME_READY', bitmap: null, state: getShadowState() });
-        return;
-    }
-
-    // Compute fractal (render to internal FBOs)
-    engine.compute(renderer);
-
-    // ── BLIT FIRST — submit display frame to GPU before any readback work ──
-    // This ensures consistent frame timing: the display render is always the
-    // first thing after compute, with no variable-cost operations in between.
-    const outputTex = engine.pipeline.getOutputTexture();
-    _tickCount++;
-    if (outputTex && canvas) {
-        // Assign display material on first frame after engine boot
-        if (displayMesh && displayMesh.material !== engine.materials.displayMaterial) {
-            displayMesh.material = engine.materials.displayMaterial;
-        }
-
-        // ── Multi-pass bloom (skipped when intensity = 0) ──
-        const bloomIntensity = engine.mainUniforms.uBloomIntensity?.value ?? 0;
-        if (bloomIntensity > 0.001 && bloomPass) {
-            const threshold = engine.mainUniforms.uBloomThreshold?.value ?? 0.5;
-            const radius = engine.mainUniforms.uBloomRadius?.value ?? 1.5;
-            bloomPass.render(outputTex, renderer, threshold, radius);
-            engine.materials.displayMaterial.uniforms.uBloomTexture.value = bloomPass.getOutput();
-        } else {
-            engine.materials.displayMaterial.uniforms.uBloomTexture.value = null;
-        }
-
-        engine.materials.displayMaterial.uniforms.map.value = outputTex;
-
-        renderer.setRenderTarget(null);
-        renderer.clear();
-
-        // During bucket render, each tile's output has pixel dimensions that may not match
-        // the canvas aspect (e.g. 2×1 tile grid on a square output produces 1:2 tiles on a
-        // 1:1 canvas). Stretching to fill the canvas makes the live preview look distorted
-        // during render; letterbox the tile into a centered rect matching its own aspect
-        // so what the user sees during rendering matches what gets saved.
-        const gl = renderer.getContext();
-        if (bucketRenderer.getIsRunning()) {
-            const [tileW, tileH] = bucketRenderer.getCurrentTilePixelSize();
-            const cW = canvas.width, cH = canvas.height;
-            if (tileW > 0 && tileH > 0) {
-                const tileAspect = tileW / tileH;
-                const canvasAspect = cW / Math.max(1, cH);
-                let vx = 0, vy = 0, vw = cW, vh = cH;
-                if (Math.abs(tileAspect - canvasAspect) > 0.002) {
-                    if (tileAspect > canvasAspect) {
-                        vh = Math.floor(cW / tileAspect);
-                        vy = Math.floor((cH - vh) / 2);
-                    } else {
-                        vw = Math.floor(cH * tileAspect);
-                        vx = Math.floor((cW - vw) / 2);
-                    }
-                }
-                renderer.setViewport(vx, vy, vw, vh);
-                renderer.render(displayScene, displayCamera);
-                renderer.setViewport(0, 0, cW, cH);
-            } else {
-                renderer.render(displayScene, displayCamera);
-            }
-        } else {
-            renderer.render(displayScene, displayCamera);
-        }
-
-        // Flush GPU command queue — starts executing the display frame immediately.
-        // Without this, the driver may batch commands and execute them later,
-        // causing variable presentation timing (stutter).
-        gl.flush();
-    }
-
-    // Send shadow state (no bitmap — canvas auto-presents via transferControlToOffscreen)
-    postMsg({ type: 'FRAME_READY', bitmap: null, state: getShadowState() });
-
-    // ── DEPTH READBACK + FOCUS PICK (after blit) — does not affect display timing ──
-    depthReadback.tick(engine, renderer, _tickCount, postMsg);
-
+    runRenderTick(
+        { engine, renderer, canvas, camera, displayScene, displayCamera, displayMesh,
+          bloomPass, depthReadback, exporter },
+        msg,
+        {
+            incTickCount: () => ++_tickCount,
+            postMsg,
+            getShadowState,
+        },
+    );
 }
 
 // ─── Message Handler ─────────────────────────────────────────────────────
