@@ -2,6 +2,53 @@
 
 Chronological log of significant changes during the v0.9.3 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-04-29
+
+### Fluid-toy: smooth-source TSAA bake — palette + collision + motion
+
+**User-facing**
+- The fractal palette and the collision walls now look genuinely smooth as TSAA accumulates, instead of speckling at low sample counts. The fluid no longer gets driven by sub-pixel jitter noise; flow settles cleanly within a few frames.
+- New "Coupling" tab layout: an **Operator** dropdown (Gradient / Curl / Direct / Temporal Δ / Hue) and a **Source** dropdown (Smooth potential / Distance estimate / Stripe average / Palette luminance / Collision mask). 5 × 5 = 25 motion configurations, with per-option hints that swap as you change the selection.
+- Coupling and Palette presets calibrated for the new pipeline; old presets keep working (legacy `iterate` enum value drives Direct, `c-track` drives Temporal Δ).
+
+**Mechanism**
+- The Julia render pass now writes **smooth, mean-poolable derived quantities** instead of raw evaluator state. `outFx.rgb` carries the pre-baked palette colour (per-eval gradient lookup + interior blend), `outFx.a` carries the collision-mask iso (collision LUT × exterior). σ/√N convergence under TSAA actually delivers a smooth image — averaging raw `z` / `iters` / `minT` was averaging meaningless intermediate values at the set boundary.
+- Standalone `FRAG_MASK` pass and its `progMask` / `maskTex` / `computeMask` / readback removed. Every shader that read `texture(uMask, vUv).r` now reads `.a` from the Julia outFx; the CPU mask readback blits attachment 1.
+- `outMain` repurposed for **four smooth motion sources**: distance estimate, smooth potential, stripe average, dye-injection gate. Palette luminance derived in the motion shader from `outFx.rgb`. The MRT dropped from 3 attachments back to 2 (~33% bandwidth cut on the Julia pass).
+- New (Operator × Source) factoring in `FRAG_MOTION`. Per-source magnitude compensation via `× 0.1 * uMaxIter` keeps legacy `forceGain` calibrations in the right ballpark.
+- TSAA boolean collapsed into `tsaaSampleCap`: `1` = OFF (no jitter, no blend, downstream reads `juliaCur`), `> 1` = active, `0` = infinite.
+
+### Fluid-toy: retire bespoke orbit, route modulation through liveMod merge
+
+**User-facing**
+- The legacy "Auto-orbit c" subsection on the Coupling tab is gone. Auto-orbit is now expressed as two normal LFO entries authored via the **Modulation panel** — full waveform / period / amplitude / phase / smoothing control per LFO, plus the ability to modulate any DDFS param (not just juliaC).
+- LFOs targeting any feature param now actually drive the engine. Previously the modulation indicator on a slider would light up but the renderer kept reading the raw slice value (e.g. brush size, dye inject didn't actually modulate).
+
+**Mechanism**
+- New `applyLiveMod(slice, featureId, liveMod)` helper in `engine/typedSlices.ts`: returns a slice copy with `liveModulations` overrides applied (scalars by `featureId.field`, vec axes by `featureId.field_x`). Returns the original reference unchanged when nothing's modulated to avoid spurious re-renders.
+- `useEngineSync` now wraps each slice in `useMemo(() => applyLiveMod(slice, id, liveMod))` and passes the modulated copy to the existing `sync<X>ToEngine` functions. Sync functions are unchanged from before — they just see slices that already include modulations.
+- `readBrushParams` (imperative path called from pointer/RAF) reads `state.liveModulations` directly via the same helper.
+- `syncJuliaToEngine` split into a slice-driven full sync + a liveMod-driven juliaC-only sync, so orbit modulation can't clobber gesture-set `engine.params.center/zoom` mid-pan.
+- `presets/data.ts` legacy `orbit: { enabled, radius, speed }` migrated to `animations: orbitPair(radius, speed)` — two Sine LFOs at 90° phase. `applyRefPreset` pushes `preset.animations ?? []` into `state.animations` on every load (replaces wholesale, so swapping presets cleans up prior LFOs).
+- `installModulationUI()` registers the engine's `lfo-list` widget; new "Modulation" panel in `panels.ts` hosts it via `items: [{ type: 'widget', id: 'lfo-list' }]`.
+- `orbitTick.ts` deleted; `installOrbitSync()` call removed from `main.tsx`. Coupling feature drops `orbitEnabled / orbitRadius / orbitSpeed` params.
+
+### Fluid-toy: panel restructure + dynamic dropdown hints
+
+**User-facing**
+- Panel layout split: **Left dock** = View, Fractal (hidden), Deep Zoom, Palette, Modulation, Presets. **Right dock** = Coupling, Fluid, Collision, Brush, Post-FX, Composite.
+- The View panel now hosts the saved-views library at the top (replaces the old separate "View Manager" tab). 5 default saved views seeded on first install (Mandelbrot Home, Julia Classic, Julia Dendrite, Julia San Marco, Mandelbrot Seahorse Valley) so the panel isn't empty on first launch. Pan / zoom / juliaC happen on the canvas; fine-grained adjustments live on the hidden Fractal tab.
+- Multi-section tabs (Coupling / Fluid / Brush / Palette / Post-FX / Composite) use section headers + filtered feature rows so related params group visually.
+- Dropdown hints are now **per-option** — the small italic caption beneath each enum dropdown swaps as you change the selection. forceMode / forceSource / colorMapping (14 modes) / dyeBlend / dyeDecayMode / kind / show / toneMapping all carry contextual one-line hints.
+- `julia.juliaC` is hidden when the fractal kind is Mandelbrot (Mandelbrot uses pixel coords as c — the slice value is ignored, so the slider was a no-op there).
+- Retired `fluidStyle` (plain / electric / liquid) — the variants didn't actually do anything in the current shader.
+
+**Mechanism**
+- `engine/PanelManifest.ts` already supported `items: [{ type: 'section' | 'feature' | 'widget', ... }]`. Used `whitelistParams` to slice each feature into multiple sections.
+- New optional `hint` field on `engine/FeatureSystem.ts:ParamOption` plus new `optionHints` parameter on `defineEnumParam`, threaded into the generated options list. `AutoFeaturePanel` finds the current option after every dropdown render and emits a small italic caption row (`text-[9px]`, gray, `break-words`).
+- `dyeBlend` moved Palette → Fluid (it's a dye-mixing knob, not a colour-mapping one). `fluidStyle` enum, `FluidStyle` type, `FLUID_STYLES` export, `fluidStyle` field on `FluidParams`, default value, and `apply.ts` mapping all dropped together.
+- `viewLibrary.ts` `seedDefaultViews()` runs once on install and writes hardcoded snapshots into `state.savedViews` only when the array is empty — never overwrites a user's library.
+
 ## 2026-04-28
 
 ### Fluid-toy: deep-zoom Mandelbrot/Julia, working past 1e-30

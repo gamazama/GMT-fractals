@@ -50,7 +50,7 @@ fluid-toy/
 │                               function.
 │   ├── julia.ts                Fractal kind / Julia c / iter / power / view
 │   ├── deepZoom.ts             BigInt orbit + LA + AT toggles
-│   ├── coupling.ts             Force-law + auto-orbit
+│   ├── coupling.ts             Force-law (operator + source + intensity)
 │   ├── palette.ts              Gradient + colour mapping + dye-blend
 │   ├── collision.ts            Wall masks
 │   ├── fluidSim.ts             Vorticity / dissipation / sim grid / dye decay

@@ -28,9 +28,13 @@ overview lives in [README.md](README.md); this doc is purely the index.
 - **[features/](features/)** — one file per DDFS feature. Each exports a
   `<X>Feature: FeatureDefinition` and a `sync<X>ToEngine(engine, slice)`
   function.
-- **[panels.ts](panels.ts)** — floating-panel definitions (Fractal,
-  Brush, Composite, Audio, …). Renders are auto-generated from feature
-  definitions via `AutoFeaturePanel`.
+- **[panels.ts](panels.ts)** — dock-panel layout. Left dock: View
+  (saved-views widget), Fractal (hidden), Deep Zoom, Palette,
+  Modulation (lfo-list widget), Presets. Right dock: Coupling, Fluid,
+  Collision, Brush, Post-FX, Composite. Multi-section tabs use
+  `items: [{ type: 'section', label }, { type: 'feature', whitelistParams }]`
+  to slice features into user-facing groups; renders auto-generated
+  via `AutoFeaturePanel`.
 - **[migrations.ts](migrations.ts)** — preset format migrations.
 - **[constants.ts](constants.ts)** — pixel thresholds, zoom bounds,
   drag sensitivities.

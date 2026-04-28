@@ -234,7 +234,7 @@ The `window.useAnimationStore` export stays in animationStore.ts as a dev-consol
 - `engine/animation/cameraKeyRegistry.ts`'s default `captureCameraKeyFrame` now recognizes `base_axis` on the last path segment, resolves the base to a vec, and picks the axis component. Also auto-calls `addTrack(tid, tid)` if the track doesn't exist yet — the upstream `addKeyframe` silently no-ops on missing tracks.
 - `fluid-toy/main.tsx` and `fractal-toy/main.tsx` flipped their `registerCameraKeyTracks` calls to UNDERSCORE form for vec components (`sceneCamera.center_x/y`, `camera.target_x/y/z`).
 
-**Not fixed (deferred to F13):** orbit LFO target in `fluid-toy/orbitTick.ts` uses `julia.juliaC.x/y` but those targets are hijacked by `AnimationSystem.tsx`'s GMT-specific `julia.*` handler before reaching any generic dispatch. Reformatting the LFO target wouldn't help until F13 lands.
+**Resolved (2026-04-29):** The bespoke `fluid-toy/orbitTick.ts` was retired entirely. Auto-orbit is now expressed as two normal LFO entries in the `animations` array (Sine on `julia.juliaC_x` and `_y` at 90° phase), authored via the engine's standard `lfo-list` widget mounted on the new "Modulation" panel. `AnimationSystem` section F (the generic vec-component handler) reads the slice's authored juliaC and adds the offset, so the modulation is relative — moving c manually moves the orbit's centre with it. Fluid-toy's per-feature `setParams` pipeline picks up the modulation through `useEngineSync.applyLiveMod`, which threads `liveModulations` into each slice copy before sync; `readBrushParams` does the same imperatively for the on-pointer-event path.
 
 **Docs:** [08_Animation.md § track-types](08_Animation.md#track-types)
 
