@@ -11,8 +11,12 @@ precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 
-uniform sampler2D uJulia;
-uniform sampler2D uJuliaAux;
+// Pre-baked palette + collision mask — the Julia pass writes outFx with
+// gradient-mapped colour (rgb) mean-pooled across jitter samples plus
+// the collision-mask iso (a). Display reads it directly so the boundary
+// blend and wall edges converge smoothly under TSAA instead of being
+// recomputed from raw evaluator state every frame.
+uniform sampler2D uJuliaFx;
 uniform sampler2D uDye;
 uniform sampler2D uVelocity;
 uniform sampler2D uGradient;
@@ -138,29 +142,34 @@ void main() {
     caustic = max(0.0, neigh - 8.0 * lC) / (8.0 * max(uRefractSmooth, 1.0));
   }
 
-  // ── Refracted fractal sample. With uRefractRoughness > 0 we
-  // scatter the sample across an 8-tap Vogel-disc kernel (golden-
-  // angle spiral — even disc coverage at small N, no clumping).
-  // Each tap is gradient-mapped INDIVIDUALLY before averaging,
-  // because averaging raw j/aux at the fractal boundary gives
-  // meaningless intermediate iterations (same reasoning as the
-  // K-sample loop in the Julia shader). Per-tap colours blend
-  // cleanly. The mask (wall solid) also reads the same kernel so
-  // walls get the same frosted-glass blur, keeping their edges
-  // consistent with the refracted fractal behind them. Dye and
-  // velocity stay sharp — they're "near-surface" and shouldn't
-  // pick up glass-roughness blur.
+  // ── Refracted fractal sample. uJuliaFx packs the per-evaluation-baked
+  // colour-mapping scalar (t0 in .r) and exterior membership (in .a),
+  // both mean-pooled across sub-pixel jitter under TSAA. We finish the
+  // composite here: apply the user's repeat/phase, sample the gradient
+  // LUT, blend with interior colour using exterior as alpha. Doing the
+  // LUT lookup at display time means changing repeat/phase/interior
+  // doesn't reset the accumulator. With uRefractRoughness > 0 we scatter
+  // the sample across an 8-tap Vogel-disc kernel (golden-angle spiral
+  // — even disc coverage at small N, no clumping); each tap is mapped
+  // INDIVIDUALLY before averaging colours, the same per-tap pattern as
+  // the K-sample loop in the Julia shader. Dye and velocity stay sharp.
+  // ── Refracted fractal sample. The Julia pass pre-bakes the palette
+  // colour into uJuliaFx (gradient-mapped per-evaluation, mean-pooled
+  // across sub-pixel jitter), so display just samples it — no per-tap
+  // gradient remapping needed. With uRefractRoughness > 0 we scatter
+  // the sample across an 8-tap Vogel-disc kernel (golden-angle spiral
+  // — even disc coverage at small N, no clumping); averaging the
+  // pre-baked colours is a clean blur. Dye and velocity stay sharp —
+  // they're "near-surface" and shouldn't pick up glass-roughness blur.
   vec2 refractedBase = uv + refractOffset;
   vec3 juliaColor;
-  vec3 wallColor;        // gradient colour at refracted UV — used for solid-wall override below
+  vec3 wallColor;        // colour shown where the mask says "solid wall"
   float solid;
   {
-    vec4 j = texture(uJulia, refractedBase);
-    vec4 aux = texture(uJuliaAux, refractedBase);
-    vec3 grad = gradientForJulia(j, aux);
-    juliaColor = mix(uInteriorColor, grad * j.a, j.a);
-    wallColor = grad;
-    solid = texture(uMask, refractedBase).r;
+    vec4 fx = texture(uJuliaFx, refractedBase);
+    juliaColor = fx.rgb;
+    wallColor  = fx.rgb;
+    solid = texture(uMask, refractedBase).a;
     if (uRefractRoughness > 0.0) {
       const float GOLDEN_ANGLE = 2.39996323;
       const int VOGEL_N = 8;
@@ -173,12 +182,10 @@ void main() {
         float r = sqrt((float(i) + 0.5) / float(VOGEL_N));
         float theta = float(i) * GOLDEN_ANGLE;
         vec2 ofs = r * vec2(cos(theta), sin(theta)) * radius;
-        vec4 j_t = texture(uJulia, refractedBase + ofs);
-        vec4 a_t = texture(uJuliaAux, refractedBase + ofs);
-        vec3 grad_t = gradientForJulia(j_t, a_t);
-        cAcc += mix(uInteriorColor, grad_t * j_t.a, j_t.a);
-        wAcc += grad_t;
-        sAcc += texture(uMask, refractedBase + ofs).r;
+        vec3 fx_t = texture(uJuliaFx, refractedBase + ofs).rgb;
+        cAcc += fx_t;
+        wAcc += fx_t;
+        sAcc += texture(uMask, refractedBase + ofs).a;
       }
       float invN = 1.0 / float(VOGEL_N + 1);  // +1 for the original centre tap
       juliaColor = cAcc * invN;
@@ -250,46 +257,11 @@ void main() {
 }`;
 
 // -----------------------------------------------------------------------------
-// Collision mask. For each sim cell, compute the color-mapping's t (same code
-// path used for rendering), sample the gradient, and decide: is this pixel
-// bright enough to be treated as a SOLID wall? Output 1.0 = solid, 0.0 = fluid.
-// Downstream advection, addForce, and grad-subtract passes zero their fields
-// inside solid cells, which causes fluid to bounce / divert around walls.
+// (FRAG_MASK is gone — the collision mask is now baked per-evaluation inside
+// FRAG_JULIA into outFx.a, mean-pooled across jitter alongside the palette
+// colour, and consumed by every fluid pass via texture(uMask, vUv).a where
+// uMask binds the Julia MRT's third attachment.)
 // -----------------------------------------------------------------------------
-export const FRAG_MASK = /* glsl */ `#version 300 es
-precision highp float;
-in vec2 vUv;
-out vec4 fragColor;
-uniform sampler2D uJulia;
-uniform sampler2D uJuliaAux;
-uniform sampler2D uGradient;            // main gradient (needed for helper symbol linkage)
-uniform sampler2D uCollisionGradient;   // user-authored B&W LUT: black = fluid, white = wall
-uniform int   uColorMapping;
-// Main-gradient repeat/phase are also uniforms of this program because
-// the shared GRADIENT_SAMPLE_GLSL helper references them — they're
-// kept in sync with the dye panel so colorMappingT() stays canonical.
-uniform float uGradientRepeat;
-uniform float uGradientPhase;
-// Collision-specific repeat/phase — independent of the dye gradient.
-// User can tile the wall pattern at a different density from the dye
-// palette, or phase-shift it to place walls where the dye doesn't go.
-uniform float uCollisionRepeat;
-uniform float uCollisionPhase;
-${GRADIENT_SAMPLE_GLSL}
-void main() {
-  vec4 j = texture(uJulia, vUv);
-  vec4 a = texture(uJuliaAux, vUv);
-  // Same mapping → t pipeline the main gradient uses, so walls track colour-mapping
-  // changes exactly (angle / orbit trap / stripe / bands / whatever). Then the
-  // collision knobs remap t before the LUT lookup so walls can have their own tiling.
-  float t0 = colorMappingT(j, a);
-  float t = fract(t0 * uCollisionRepeat + uCollisionPhase);
-  vec4 m = texture(uCollisionGradient, vec2(t, 0.5));
-  float mask = dot(m.rgb, vec3(0.299, 0.587, 0.114));  // b&w → luma; also works if user uses colour
-  // Interior points aren't walls (no escape → no fluid-side colour to collide with).
-  mask *= j.a;
-  fragColor = vec4(clamp(mask, 0.0, 1.0), 0.0, 0.0, 1.0);
-}`;
 
 // -----------------------------------------------------------------------------
 // Simple clear (for reset).
@@ -365,29 +337,29 @@ export const FRAG_TSAA_BLEND = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 layout(location=0) out vec4 outMain;
-layout(location=1) out vec4 outAux;
+layout(location=1) out vec4 outFx;
 
 uniform sampler2D uCurrentMain;
-uniform sampler2D uCurrentAux;
+uniform sampler2D uCurrentFx;
 uniform sampler2D uHistoryMain;
-uniform sampler2D uHistoryAux;
+uniform sampler2D uHistoryFx;
 uniform int uSampleIndex;
 
 void main() {
     vec4 curMain = texture(uCurrentMain, vUv);
-    vec4 curAux  = texture(uCurrentAux,  vUv);
+    vec4 curFx   = texture(uCurrentFx,   vUv);
     // Frame-1 safety: when uSampleIndex is 1 the history texture hasn't
     // been written yet (MRT FBOs allocate with undefined contents in
     // WebGL2 — some drivers return NaN for RGBA16F). Skip the history
     // read entirely and just pass the current sample through.
     if (uSampleIndex <= 1) {
         outMain = curMain;
-        outAux  = curAux;
+        outFx   = curFx;
         return;
     }
     vec4 histMain = texture(uHistoryMain, vUv);
-    vec4 histAux  = texture(uHistoryAux,  vUv);
+    vec4 histFx   = texture(uHistoryFx,   vUv);
     float w = 1.0 / float(uSampleIndex);
     outMain = mix(histMain, curMain, w);
-    outAux  = mix(histAux,  curAux,  w);
+    outFx   = mix(histFx,   curFx,   w);
 }`;

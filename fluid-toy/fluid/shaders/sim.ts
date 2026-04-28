@@ -5,90 +5,161 @@
  * (smaller than display res when render-scale < 1).
  */
 
-import { OKLAB_GLSL, GRADIENT_SAMPLE_GLSL } from './common';
+import { OKLAB_GLSL } from './common';
 
+// -----------------------------------------------------------------------------
+// Motion / coupling pass — turns the fractal field into a 2D force injected
+// into the velocity buffer, plus a dye-injection colour written into the
+// force texture's b/a channels.
+//
+// Source × Operator factoring: pick a smooth scalar source (DE, smooth
+// potential, stripe average, palette luminance, mask) and an operator
+// (gradient, curl, direct, temporal-delta, hue) and the shader produces
+// a 2D force from it. Sources live in pre-baked, mean-pooled channels
+// of the Julia MRT so the force is a smooth function of position even
+// during heavy TSAA convergence — the fluid stops being shaken by
+// jitter noise.
+//
+//   uSource:   0=DE  1=smoothPot  2=stripe  3=paletteLuma  4=mask
+//   uMode:     0=gradient (∇S)
+//              1=curl     (perp(∇S))   — divergence-free swirl
+//              2=direct   (normalize(∇S) × S)  — push proportional to S
+//              3=temporal-delta (∇(S_now − S_prev))  — replaces "c-track"
+//              4=hue      (palette RGB → angular direction; ignores uSource)
+// -----------------------------------------------------------------------------
 export const FRAG_MOTION = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 in vec2 vL, vR, vT, vB;
 out vec4 fragColor;
 
+// uJulia       = Julia MRT outMain (motion sources packed into rgba)
+//                r=DE, g=smoothPot, b=stripe, a=injection-gate (not a source)
+// uJuliaPrev   = previous frame's outMain (same packing) — for temporal-delta
+//                on sources 0/1/2.
+// uJuliaFx     = current outFx (rgb=palette, a=mask) — paletteLuma & mask
+//                sources, plus the hue operator.
+// uJuliaPrevFx = previous frame's outFx — for temporal-delta on source 3
+//                (paletteLuma) or 4 (mask).
 uniform sampler2D uJulia;
 uniform sampler2D uJuliaPrev;
-uniform sampler2D uJuliaAux;
-uniform sampler2D uGradient;
-uniform sampler2D uMask;
+uniform sampler2D uJuliaFx;
+uniform sampler2D uJuliaPrevFx;
+uniform sampler2D uMask;       // alias for uJuliaFx; bound separately so the
+                               // wall-zeroing below doesn't depend on the
+                               // motion's source-channel choice.
 uniform vec2  uTexel;
-uniform int   uMode;
+uniform int   uMode;           // operator
+uniform int   uSource;         // motion source channel (0..4)
 uniform float uGain;
 uniform float uDt;
-uniform float uInteriorDamp;  // 0..1 : how much to damp inside the set (escaped=0)
-uniform float uDyeGain;       // multiplier for dye injection from fractal color
-uniform int   uColorMapping;
-uniform float uGradientRepeat;
-uniform float uGradientPhase;
-uniform float uEdgeMargin;    // 0..0.25 : force fade-to-zero margin near sim boundaries
-uniform float uForceCap;      // absolute clamp on final force magnitude (per-pixel)
-${GRADIENT_SAMPLE_GLSL}
+uniform float uInteriorDamp;   // 0..1 : how much to damp inside the set
+uniform float uEdgeMargin;     // 0..0.25 : force fade-to-zero margin near sim boundaries
+uniform float uForceCap;       // absolute clamp on final force magnitude (per-pixel)
+uniform int   uMaxIter;        // for source-normalisation compensation (see below)
+
+// Pull the chosen scalar out of the packed motion-source MRTs. Using a
+// switch keeps this branch-free under uniform control-flow — the GPU
+// resolves to one texture sample + channel select per fragment.
+//   0=DE  1=smoothPot  2=stripe       (channels of uJulia / outMain)
+//   3=paletteLuma                     (REC601 luma of uJuliaFx.rgb)
+//   4=mask                            (.a of uJuliaFx)
+// outMain.a holds the dye injection gate, NOT a motion source — palette
+// luminance is derived from outFx.rgb instead.
+const vec3 LUMA_W = vec3(0.299, 0.587, 0.114);
+float pickSource(vec2 uv) {
+  if (uSource == 3) return dot(texture(uJuliaFx, uv).rgb, LUMA_W);
+  if (uSource == 4) return texture(uJuliaFx, uv).a;
+  vec4 m = texture(uJulia, uv);
+  if (uSource == 0) return m.r;
+  if (uSource == 1) return m.g;
+  return m.b;                    // stripe (uSource == 2)
+}
+float pickSourcePrev(vec2 uv) {
+  if (uSource == 3) return dot(texture(uJuliaPrevFx, uv).rgb, LUMA_W);
+  if (uSource == 4) return texture(uJuliaPrevFx, uv).a;
+  vec4 m = texture(uJuliaPrev, uv);
+  if (uSource == 0) return m.r;
+  if (uSource == 1) return m.g;
+  return m.b;
+}
 
 void main() {
-  vec4 c  = texture(uJulia, vUv);
-  vec4 l  = texture(uJulia, vL);
-  vec4 r  = texture(uJulia, vR);
-  vec4 t  = texture(uJulia, vT);
-  vec4 b  = texture(uJulia, vB);
-  vec4 cp = texture(uJuliaPrev, vUv);
+  // smoothPot is the canonical "interior vs exterior" indicator (1 inside, < 1
+  // outside). Read it once for damping + escape gating, regardless of which
+  // source the user picked for the operator.
+  float smoothPot = texture(uJulia, vUv).g;
+  float escaped = (smoothPot < 0.999) ? 1.0 : 0.0;
 
-  float smoothI = c.b;
-  float escaped = c.a;
+  // Sample the chosen source at centre + 4 cardinal neighbours.
+  float sC = pickSource(vUv);
+  float sL = pickSource(vL);
+  float sR = pickSource(vR);
+  float sT = pickSource(vT);
+  float sB = pickSource(vB);
 
-  // gradient of smooth iteration count (finite diff)
-  vec2 grad = vec2(r.b - l.b, t.b - b.b) * 0.5;
+  // Central-difference gradient of the source.
+  vec2 grad = vec2(sR - sL, sT - sB) * 0.5;
 
   vec2 force = vec2(0.0);
-  vec3 injectColor = vec3(0.0);
 
   if (uMode == 0) {
-    // Outward burst: normalize gradient; magnitude = min(|grad|, 1)
+    // Gradient: normalised ∇S, magnitude clamp on |∇S|.
     float g = length(grad);
-    force = (g > 1e-6) ? grad / g : vec2(0.0);
-    force *= clamp(g * 0.6, 0.0, 1.5);
+    vec2 dir = (g > 1e-6) ? grad / g : vec2(0.0);
+    force = dir * clamp(g * 0.6, 0.0, 1.5);
   } else if (uMode == 1) {
-    // Divergence-free: perp of gradient — swirls along level sets
+    // Curl: perpendicular of ∇S — swirls along level sets, divergence-free.
     vec2 perp = vec2(-grad.y, grad.x);
     float g = length(perp);
-    force = (g > 1e-6) ? perp / g : vec2(0.0);
-    force *= clamp(g * 0.8, 0.0, 1.8);
+    vec2 dir = (g > 1e-6) ? perp / g : vec2(0.0);
+    force = dir * clamp(g * 0.8, 0.0, 1.8);
   } else if (uMode == 2) {
-    // Final iterate direction (Böttcher flow): use z normalized, weighted by escape speed
-    vec2 z = c.rg;
-    float zm = length(z);
-    vec2 dir = (zm > 1e-6) ? z / zm : vec2(0.0);
-    // grow rate proxy: smoothI delta vs neighbor = "how fast are we escaping here"
+    // Direct: push along ∇S direction with magnitude proportional to S
+    // (rather than to |∇S|). Useful when the source has clean iso-bands
+    // — flow goes "along the bands" weighted by band brightness.
     float g = length(grad);
-    force = dir * clamp(g * 0.8, 0.0, 2.0);
+    vec2 dir = (g > 1e-6) ? grad / g : vec2(0.0);
+    force = dir * clamp(sC * 1.5, 0.0, 2.0);
   } else if (uMode == 3) {
-    // C-Track: temporal derivative — how did this pixel's fractal identity shift
-    // between the previous c and the current c? That delta direction IS a motion
-    // vector that follows the Julia deformation.
-    vec2 dz = c.rg - cp.rg;
-    float ds = c.b - cp.b;
-    // combine: direction from z-delta weighted by smooth-iter delta
-    float mm = length(dz);
-    vec2 dir = (mm > 1e-6) ? dz / mm : vec2(0.0);
-    force = dir * clamp(mm * 3.0 + abs(ds) * 0.2, 0.0, 3.0);
-    // Clamp 1/dt so tiny frames don't blow up the c-track magnitude.
+    // Temporal delta: gradient of (S_now − S_prev). Captures motion of
+    // the field — what was static last frame contributes nothing,
+    // changing regions get a directional kick. Replaces the legacy
+    // "C-Track" mode and works on any source.
+    float dC = sC - pickSourcePrev(vUv);
+    float dL = sL - pickSourcePrev(vL);
+    float dR = sR - pickSourcePrev(vR);
+    float dT = sT - pickSourcePrev(vT);
+    float dB = sB - pickSourcePrev(vB);
+    vec2 dGrad = vec2(dR - dL, dT - dB) * 0.5;
+    float g = length(dGrad);
+    vec2 dir = (g > 1e-6) ? dGrad / g : vec2(0.0);
+    // Magnitude includes a per-frame normalisation so tiny dt doesn't
+    // blow up. Mirrors the original c-track scaling.
+    force = dir * clamp(g * 3.0 + abs(dC) * 0.2, 0.0, 3.0);
     force *= clamp(1.0 / max(uDt, 0.016), 0.0, 40.0);
   } else if (uMode == 4) {
-    // Hue flow: treat rendered palette color as vector field
-    vec4 aux = texture(uJuliaAux, vUv);
-    vec3 col = gradientForJulia(c, aux);
+    // Hue: read the baked palette colour, derive a hue angle, output a
+    // unit vector in that direction scaled by colour magnitude. Ignores
+    // uSource — the operator IS the source here.
+    vec3 col = texture(uJuliaFx, vUv).rgb;
     float hueAngle = atan(col.g - col.b, col.r - 0.5);
     float val = length(col);
     force = vec2(cos(hueAngle), sin(hueAngle)) * val;
   }
 
-  // Optionally damp inside the set (escaped = 0) — the interior is a "still lake"
+  // Source-normalisation compensation. Every motion source is in roughly
+  // [0, 1] (smoothPot = smoothIter / maxIter; DE / stripe / mask / palette
+  // luma all in [0, 1]) so legacy forceGain values calibrated against the
+  // OLD motion shader (which read raw smoothIter, range [0, maxIter])
+  // would now be ~maxIter× too weak. Scaling here restores those gains.
+  // Empirically maxIter × 0.1 lands closest to the previous feel — the
+  // raw maxIter scaling was ~10× too strong because the old shader's
+  // gradient often clamped into the saturation regime, so its effective
+  // magnitude was below the full maxIter range.
+  force *= 0.1 * float(max(uMaxIter, 1));
+
+  // Optionally damp inside the set (escaped = 0) — the interior is a "still lake".
   float damp = mix(1.0 - uInteriorDamp, 1.0, escaped);
   force *= damp;
 
@@ -98,25 +169,20 @@ void main() {
   float edgeFade = (uEdgeMargin <= 0.0) ? 1.0 : smoothstep(0.0, uEdgeMargin, dEdge);
   force *= edgeFade;
 
-  // Per-pixel magnitude cap — stops fast c-moves from spawning impulses that dominate.
+  // Per-pixel magnitude cap.
   float fMag = length(force);
   if (fMag > uForceCap && fMag > 1e-6) {
     force *= uForceCap / fMag;
   }
 
-  // Dye injection: a bit of the Julia-escape color bleeds into the fluid dye.
-  // Edge-faded so the border doesn't paint itself in.
-  {
-    vec4 auxHere = texture(uJuliaAux, vUv);
-    injectColor = gradientForJulia(c, auxHere) * escaped * uDyeGain * edgeFade;
-  }
-
-  // Solid obstacles emit no force into the fluid (and carry no dye injection).
-  float solid = texture(uMask, vUv).r;
+  // Solid obstacles emit no force into the fluid.
+  float solid = texture(uMask, vUv).a;
   force *= (1.0 - solid);
-  injectColor *= (1.0 - solid);
 
-  fragColor = vec4(force * uGain, injectColor.r, injectColor.g + injectColor.b * 0.5);
+  // Injection colour is now produced by FRAG_INJECT_DYE directly off the
+  // baked palette + injection-gate channel, so the force texture's b/a
+  // are unused here. Kept zero for predictable downstream reads.
+  fragColor = vec4(force * uGain, 0.0, 0.0);
 }`;
 
 // -----------------------------------------------------------------------------
@@ -134,34 +200,32 @@ uniform float uDt;
 void main() {
   vec2 v = texture(uVelocity, vUv).rg;
   vec2 f = texture(uForce, vUv).rg;
-  float solid = texture(uMask, vUv).r;
+  float solid = texture(uMask, vUv).a;  // mask lives in .a of the Julia outFx (RGB = palette colour)
   fragColor = vec4((v + f * uDt) * (1.0 - solid), 0.0, 1.0);
 }`;
 
 // -----------------------------------------------------------------------------
-// Inject fractal color into dye texture (pulls from forceTex.ba + palette rebuild)
+// Inject fractal colour into dye texture. Reads the Julia MRT's pre-baked
+// palette colour (uJuliaFx.rgb), collision mask (uJuliaFx.a), and
+// injection-rate gate (uJulia.a — escape * main-gradient stop alpha).
+// Does its own dye-decay step in OKLab so fades stay perceptually clean.
 // -----------------------------------------------------------------------------
 export const FRAG_INJECT_DYE = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 fragColor;
 uniform sampler2D uDye;
-uniform sampler2D uJulia;
-uniform sampler2D uJuliaAux;
-uniform sampler2D uGradient;
-uniform sampler2D uMask;
+uniform sampler2D uJulia;       // motion-source MRT — .a is the dye injection gate
+uniform sampler2D uJuliaFx;     // pre-baked palette (rgb) + collision mask (a)
+uniform sampler2D uMask;        // alias for uJuliaFx — bound separately for clarity
 uniform float uDyeGain;
 uniform float uDyeFadeHz;
 uniform float uDt;
-uniform int   uColorMapping;
-uniform float uGradientRepeat;
-uniform float uGradientPhase;
 uniform float uEdgeMargin;
 uniform int   uDyeBlend;        // 0 add, 1 screen, 2 max, 3 over (alpha)
 uniform int   uDyeDecayMode;    // 0 linear, 1 perceptual (OKLab L-decay), 2 vivid (chroma-boost)
 uniform float uDyeChromaFadeHz; // per-second chroma decay rate (perceptual / vivid only)
 uniform float uDyeSatBoost;     // per-frame chroma multiplier applied after decay
-${GRADIENT_SAMPLE_GLSL}
 ${OKLAB_GLSL}
 
 /** Apply this frame's dissipation to existing dye. Lightness and chroma decay
@@ -182,18 +246,17 @@ vec3 decayDye(vec3 c) {
 }
 
 void main() {
-  vec4 d = texture(uDye, vUv);
-  vec4 j = texture(uJulia, vUv);
-  vec4 a = texture(uJuliaAux, vUv);
-  vec4 grad = gradientForJuliaRgba(j, a);        // RGBA — α is the per-stop alpha from the editor
-  float dEdge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
+  vec4  d        = texture(uDye, vUv);
+  vec3  palette  = texture(uJuliaFx, vUv).rgb;
+  float gate     = texture(uJulia,   vUv).a;      // escape * main-gradient stop alpha, mean-pooled
+  float dEdge    = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
   float edgeFade = (uEdgeMargin <= 0.0) ? 1.0 : smoothstep(0.0, uEdgeMargin, dEdge);
 
-  // Base amount of colour to introduce this frame at this pixel.
-  // j.a gates on "escaped", grad.a gates on gradient-stop alpha, edgeFade/etc on borders.
-  float rate = j.a * uDyeGain * uDt * edgeFade * grad.a;
-  vec3 injectAdd = grad.rgb * rate;
-  vec3 aged      = decayDye(d.rgb);           // dye after this frame's dissipation, in chosen colour space
+  // Per-pixel injection rate. Same factors as the legacy path:
+  // (escape * stop-alpha) folded into 'gate', uDyeGain, uDt, edgeFade.
+  float rate = gate * uDyeGain * uDt * edgeFade;
+  vec3 injectAdd = palette * rate;
+  vec3 aged      = decayDye(d.rgb);
   vec3 col;
 
   if (uDyeBlend == 0) {
@@ -207,13 +270,13 @@ void main() {
     // Max: hold the brightest. Good for preserving vivid strokes over faded ones.
     col = max(aged, injectAdd);
   } else {
-    // Over (alpha-compositing): uses grad.α + rate to mask the new colour onto old.
-    float a = clamp(rate * 8.0, 0.0, 1.0);   // scale so "rate" reads like a visible alpha
-    col = aged * (1.0 - a) + grad.rgb * a;
+    // Over (alpha-compositing): uses rate as a visible alpha scaling.
+    float a = clamp(rate * 8.0, 0.0, 1.0);
+    col = aged * (1.0 - a) + palette * a;
   }
 
   // Solid obstacles: no dye inside — they're walls, not flowing medium.
-  float solid = texture(uMask, vUv).r;
+  float solid = texture(uMask, vUv).a;
   col *= (1.0 - solid);
 
   fragColor = vec4(col, 1.0);
@@ -242,7 +305,7 @@ void main() {
   float dEdge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
   float edgeFade = (uEdgeMargin <= 0.0) ? 1.0 : smoothstep(0.0, uEdgeMargin * 0.5, dEdge);
   // Solid obstacles: fluid goes to zero inside them so nothing advects through.
-  float solid = texture(uMask, vUv).r;
+  float solid = texture(uMask, vUv).a;  // mask lives in .a of the Julia outFx (RGB = palette colour)
   fragColor = val * decay * edgeFade * (1.0 - solid);
 }`;
 
@@ -350,7 +413,7 @@ void main() {
   float B = texture(uPressure, vB).r;
   vec2 v = texture(uVelocity, vUv).rg;
   v -= vec2(R - L, T - B) * 0.5;
-  float solid = texture(uMask, vUv).r;
+  float solid = texture(uMask, vUv).a;  // mask lives in .a of the Julia outFx (RGB = palette colour)
   fragColor = vec4(v * (1.0 - solid), 0.0, 1.0);
 }`;
 

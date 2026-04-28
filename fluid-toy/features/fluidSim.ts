@@ -17,7 +17,7 @@ import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import { dyeDecayModeParam, dyeDecayModeFromIndex } from './palette';
 import type { FluidEngine } from '../fluid/FluidEngine';
 import type { FluidSimSlice, CouplingSlice } from '../storeTypes';
-import { forceModeFromIndex } from './coupling';
+import { forceModeFromIndex, forceSourceFromIndex } from './coupling';
 
 export const FluidSimFeature: FeatureDefinition = {
     id: 'fluidSim',
@@ -88,13 +88,14 @@ export const FluidSimFeature: FeatureDefinition = {
             description: 'Per-frame chroma gain. 1 = neutral, <1 washes out, >1 pushes toward max saturation. Gamut-mapped in OKLab so it pegs at the saturation ceiling rather than hue-shifting to white.',
         },
 
-        // Integration timestep. The RAF loop uses a fixed 16.67 ms
-        // wall-clock step; this scales the physical dt applied per
-        // sim frame. Lower = more stable but slower.
-        dt: {
-            type: 'float', default: 0.016, min: 0.001, max: 0.05, step: 0.0001,
-            label: 'Δt (advanced)',
-            description: 'Integration timestep. Lower = more stable.',
+        // Sim-time multiplier on the wall-clock dt. 1 = real time,
+        // 0.5 = half-speed slow-mo, 2 = double-speed. Decoupled from
+        // the timeline fps so the artist can change pace without
+        // re-keyframing camera moves.
+        timeScale: {
+            type: 'float', default: 1, min: 0, max: 4, step: 0.01,
+            label: 'Sim speed',
+            description: 'Wall-clock dt multiplier on the sim. 0.5 = slow-mo, 2 = double speed. 0 freezes the fluid (Pause is the cleaner way for hard-stop).',
         },
 
         paused: {
@@ -121,7 +122,7 @@ export const syncFluidSimToEngine = (
         pressureIters:  fluidSim.pressureIters,
         dissipation:    fluidSim.dissipation,
         paused:         fluidSim.paused,
-        dt:             fluidSim.dt,
+        timeScale:      fluidSim.timeScale,
         // Dye-inject + dye-decay subsection live on the Fluid tab.
         dyeInject:          fluidSim.dyeInject,
         dyeDecayMode:       dyeDecayModeFromIndex(fluidSim.dyeDecayMode),
@@ -130,6 +131,7 @@ export const syncFluidSimToEngine = (
         dyeSaturationBoost: fluidSim.dyeSaturationBoost,
         // Coupling-tab force law.
         forceMode:      forceModeFromIndex(coupling.forceMode),
+        forceSource:    forceSourceFromIndex(coupling.forceSource),
         forceGain:      coupling.forceGain,
         interiorDamp:   coupling.interiorDamp,
         forceCap:       coupling.forceCap,

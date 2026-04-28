@@ -14,13 +14,13 @@
 import { useEffect, type RefObject } from 'react';
 import { useSlice, useLiveModulations } from '../engine/typedSlices';
 import type { FluidEngine } from './fluid/FluidEngine';
-import { syncJuliaToEngine } from './features/julia';
 import { syncDeepZoomToEngine } from './features/deepZoom';
 import { syncPaletteToEngine } from './features/palette';
 import { syncCollisionToEngine } from './features/collision';
 import { syncFluidSimToEngine } from './features/fluidSim';
 import { syncPostFxToEngine } from './features/postFx';
 import { syncCompositeToEngine } from './features/composite';
+import { syncJuliaToEngine, syncJuliaCToEngine } from './features/julia';
 
 export const useEngineSync = (engineRef: RefObject<FluidEngine | null>): void => {
     const julia     = useSlice('julia');
@@ -33,7 +33,16 @@ export const useEngineSync = (engineRef: RefObject<FluidEngine | null>): void =>
     const composite = useSlice('composite');
     const liveMod   = useLiveModulations();
 
-    useEffect(() => { const e = engineRef.current; if (e) syncJuliaToEngine(e, julia, liveMod); },     [julia, liveMod, engineRef]);
+    // Slice-driven sync: pushes the WHOLE julia slice (incl. center / zoom)
+    // when the slice changes. Critically, this useEffect does NOT depend
+    // on liveMod — modulation ticks would otherwise refire it every frame
+    // and clobber gesture-set engine.params.center/zoom with stale store
+    // values during pan/zoom.
+    useEffect(() => { const e = engineRef.current; if (e) syncJuliaToEngine(e, julia, liveMod); },     [julia, engineRef]);  // eslint-disable-line react-hooks/exhaustive-deps
+    // Modulation-driven sync: rewrites only juliaC each time liveMod
+    // changes, so auto-orbit / audio-reactive modulation drives the
+    // fractal continuously without touching the gesture-owned view.
+    useEffect(() => { const e = engineRef.current; if (e) syncJuliaCToEngine(e, julia, liveMod); },    [julia, liveMod, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncDeepZoomToEngine(e, deepZoom, julia); }, [deepZoom, julia, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncPaletteToEngine(e, palette); },          [palette, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncCollisionToEngine(e, collision); },      [collision, engineRef]);

@@ -20,29 +20,60 @@
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import { defineEnumParam } from '../../engine/defineEnumParam';
 
-// 5 force modes, matching FluidEngine.forceModeToIndex order.
+// 5 force operators, matching FluidEngine.modeToIndex order.
+//   gradient  → ∇S
+//   curl      → perp(∇S)         (divergence-free swirl)
+//   iterate   → normalize(∇S)·S  (Direct — push proportional to S)
+//   c-track   → ∇(S_now − S_prev) (Temporal-delta — react to motion)
+//   hue       → palette-RGB hue → angular direction (ignores Source)
+//
+// "iterate" and "c-track" enum values are kept for preset compatibility;
+// labels below describe the new behaviour.
 const forceModeParam = defineEnumParam(
     ['gradient', 'curl', 'iterate', 'c-track', 'hue'] as const,
-    'Force Mode',
+    'Operator',
     {
         optionLabels: {
-            'c-track': 'C-Track',
+            'iterate':  'Direct',
+            'c-track':  'Temporal Δ',
+            'gradient': 'Gradient',
+            'curl':     'Curl',
+            'hue':      'Hue',
         },
     },
 );
 export const FORCE_MODES = forceModeParam.values;
 export const forceModeFromIndex = forceModeParam.fromIndex;
 
-// Per-mode hints, keyed by index. AutoFeaturePanel displays param
-// descriptions directly; the reference's dynamic chip-hint banner
-// is rendered by the single `forceMode.description` on the dropdown
-// (DDFS enums only carry one description — we use the tab-level hint
-// plus the per-option titles on the dropdown).
+// 5 source channels, matching FluidEngine.forceSourceToIndex order.
+const forceSourceParam = defineEnumParam(
+    ['smoothPot', 'de', 'stripe', 'paletteLuma', 'mask'] as const,
+    'Source',
+    {
+        optionLabels: {
+            'smoothPot':   'Smooth potential',
+            'de':          'Distance estimate',
+            'stripe':      'Stripe average',
+            'paletteLuma': 'Palette luminance',
+            'mask':        'Collision mask',
+        },
+    },
+);
+export const FORCE_SOURCES = forceSourceParam.values;
+export const forceSourceFromIndex = forceSourceParam.fromIndex;
+
 const FORCE_MODE_HINT =
-    'How fractal pixels become velocity at each cell. ' +
-    'Gradient pushes AWAY from the set. Curl swirls along level sets. ' +
-    'Iterate follows z\'s orbit grain. C-Track reacts to Δc in real time. ' +
-    'Hue makes the picture itself the velocity field.';
+    'How the source field becomes velocity. ' +
+    'Gradient pushes along ∇S. Curl swirls along level sets (divergence-free). ' +
+    'Direct pushes along ∇S with magnitude ∝ S. Temporal Δ reacts to frame-to-frame change. ' +
+    'Hue ignores the Source — it makes the painted palette colour the velocity field.';
+
+const FORCE_SOURCE_HINT =
+    'Which scalar field the operator reads. Smooth potential is the classic ' +
+    '"outside the set" gradient. Distance estimate is smooth across the boundary. ' +
+    'Stripe average gives aesthetic banded flow. Palette luminance follows whatever ' +
+    'colour-mapping mode you pick. Collision mask drives flow toward / away from walls. ' +
+    'Ignored when Operator = Hue.';
 
 export const CouplingFeature: FeatureDefinition = {
     id: 'coupling',
@@ -54,7 +85,8 @@ export const CouplingFeature: FeatureDefinition = {
     },
 
     params: {
-        forceMode: { ...forceModeParam.config, description: FORCE_MODE_HINT },
+        forceMode:   { ...forceModeParam.config,   description: FORCE_MODE_HINT },
+        forceSource: { ...forceSourceParam.config, description: FORCE_SOURCE_HINT },
 
         forceGain: {
             type: 'float',

@@ -21,11 +21,34 @@ import type { Preset as RefPreset } from './data';
 // complete — the registry freezes and every subsequent
 // featureRegistry.register() throws. We grab the store at call time
 // via the global __store handle the fractalStore sets up on boot.
+import { featureRegistry } from '../../engine/FeatureSystem';
 import { KIND_MODES } from '../features/julia';
-import { FORCE_MODES } from '../features/coupling';
+import { FORCE_MODES, FORCE_SOURCES } from '../features/coupling';
 import { COLOR_MAPPINGS, DYE_BLENDS, DYE_DECAY_MODES } from '../features/palette';
 import { FLUID_STYLES, TONE_MAPPINGS } from '../features/postFx';
 import { SHOW_MODES } from '../features/composite';
+
+// Build a fresh slice object from the registered feature's param defaults.
+// Merging this UNDER each preset's partial guarantees fields the preset
+// omits get reset to their DDFS-authored default — otherwise switching
+// preset A → B leaks any field B doesn't override. Enum defaults are
+// already stored as indices in the param config, so no remapping needed.
+const buildDefaultSlice = (featureId: string): Record<string, any> => {
+    const feat = featureRegistry.get(featureId);
+    if (!feat) return {};
+    const out: Record<string, any> = {};
+    for (const [key, param] of Object.entries(feat.params)) {
+        const def = (param as any).default;
+        if (def && typeof def === 'object' && !Array.isArray(def)) {
+            out[key] = { ...def };
+        } else if (Array.isArray(def)) {
+            out[key] = [...def];
+        } else {
+            out[key] = def;
+        }
+    }
+    return out;
+};
 
 // Look up a string value in an enum array; return undefined if absent
 // so callers can skip assigning rather than falling back to index 0.
@@ -67,12 +90,14 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.zoom !== undefined) julia.zoom = p.zoom;
     if (p.maxIter !== undefined) julia.maxIter = p.maxIter;
     if (p.power !== undefined) julia.power = p.power;
-    if (Object.keys(julia).length > 0) s.setJulia(julia);
+    s.setJulia({ ...buildDefaultSlice('julia'), ...julia });
 
     // ── Coupling (force law + orbit) ────────────────────────────────
     const coupling: any = {};
     const fmIdx = idx(FORCE_MODES, p.forceMode);
     if (fmIdx !== undefined) coupling.forceMode = fmIdx;
+    const fsIdx = idx(FORCE_SOURCES, p.forceSource);
+    if (fsIdx !== undefined) coupling.forceSource = fsIdx;
     if (p.forceGain    !== undefined) coupling.forceGain    = p.forceGain;
     if (p.interiorDamp !== undefined) coupling.interiorDamp = p.interiorDamp;
     if (p.forceCap     !== undefined) coupling.forceCap     = p.forceCap;
@@ -87,7 +112,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     } else {
         coupling.orbitEnabled = false;
     }
-    s.setCoupling(coupling);
+    s.setCoupling({ ...buildDefaultSlice('coupling'), ...coupling });
 
     // ── Fluid sim (dynamics + dye-decay) ────────────────────────────
     const fs: any = {};
@@ -101,7 +126,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.dyeSaturationBoost !== undefined) fs.dyeSaturationBoost = p.dyeSaturationBoost;
     const decayIdx = idx(DYE_DECAY_MODES, p.dyeDecayMode);
     if (decayIdx !== undefined) fs.dyeDecayMode = decayIdx;
-    if (Object.keys(fs).length > 0) s.setFluidSim(fs);
+    s.setFluidSim({ ...buildDefaultSlice('fluidSim'), ...fs });
 
     // ── Palette (colour mapping, gradient, trap, dye blend) ─────────
     const pa: any = {};
@@ -119,14 +144,14 @@ export const applyRefPreset = (preset: RefPreset) => {
     const blendIdx = idx(DYE_BLENDS, p.dyeBlend);
     if (blendIdx !== undefined) pa.dyeBlend = blendIdx;
     if (preset.gradient) pa.gradient = preset.gradient;
-    if (Object.keys(pa).length > 0) s.setPalette(pa);
+    s.setPalette({ ...buildDefaultSlice('palette'), ...pa });
 
     // ── Collision (walls) ───────────────────────────────────────────
     // Always dispatch (even to disable) so swapping presets clears
     // prior wall state cleanly.
     const col: any = { enabled: !!p.collisionEnabled };
     if (preset.collisionGradient) col.gradient = preset.collisionGradient;
-    s.setCollision(col);
+    s.setCollision({ ...buildDefaultSlice('collision'), ...col });
 
     // ── Post-FX ─────────────────────────────────────────────────────
     const pfx: any = {};
@@ -142,7 +167,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.refraction     !== undefined) pfx.refraction     = p.refraction;
     if (p.refractSmooth  !== undefined) pfx.refractSmooth  = p.refractSmooth;
     if (p.caustics       !== undefined) pfx.caustics       = p.caustics;
-    if (Object.keys(pfx).length > 0) s.setPostFx(pfx);
+    s.setPostFx({ ...buildDefaultSlice('postFx'), ...pfx });
 
     // ── Composite ───────────────────────────────────────────────────
     const comp: any = {};
@@ -151,17 +176,19 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.juliaMix    !== undefined) comp.juliaMix    = p.juliaMix;
     if (p.dyeMix      !== undefined) comp.dyeMix      = p.dyeMix;
     if (p.velocityViz !== undefined) comp.velocityViz = p.velocityViz;
-    if (Object.keys(comp).length > 0) s.setComposite(comp);
+    s.setComposite({ ...buildDefaultSlice('composite'), ...comp });
 
     // ── Engine-level toggles (renderControlSlice) ───────────────────
     // These aren't DDFS slices but live in the render-control top of
     // the store. The benchmark / isolation preset uses them to freeze
-    // sim + disable TSAA so the kernel cost stands alone. Optional —
-    // most artistic presets won't set these.
-    if (p.paused !== undefined && typeof s.setIsPaused === 'function') {
-        s.setIsPaused(p.paused);
+    // sim + disable TSAA so the kernel cost stands alone. We always
+    // re-establish the sane defaults (paused = false, accumulation =
+    // true) when applying a preset so a previously-loaded benchmark
+    // preset doesn't leak its frozen state into the next load.
+    if (typeof s.setIsPaused === 'function') {
+        s.setIsPaused(p.paused ?? false);
     }
-    if (p.accumulation !== undefined && typeof s.setAccumulation === 'function') {
-        s.setAccumulation(p.accumulation);
+    if (typeof s.setAccumulation === 'function') {
+        s.setAccumulation(p.accumulation ?? true);
     }
 };

@@ -18,6 +18,10 @@ export type GradientSlot = 'main' | 'collision';
 export class GradientLutManager {
     private mainTex: WebGLTexture | null = null;
     private collisionTex: WebGLTexture | null = null;
+    /** Bumped on every LUT upload so callers (e.g. FluidEngine's TSAA
+     *  param hash) can detect a gradient change and reset accumulators
+     *  that bake the LUT colour into their output. */
+    version = 0;
 
     constructor(private gl: WebGL2RenderingContext) {}
 
@@ -45,6 +49,7 @@ export class GradientLutManager {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRADIENT_LUT_WIDTH, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+        this.version++;
     }
 
     /** Allocate a fallback LUT if the slot hasn't been uploaded yet.

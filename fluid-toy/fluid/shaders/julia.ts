@@ -8,22 +8,40 @@
 
 import { BLUE_NOISE } from '../../../shaders/chunks/blue_noise';
 import { TSAA } from '../../../shaders/chunks/tsaa';
+import { GRADIENT_SAMPLE_GLSL } from './common';
 
 
 // -----------------------------------------------------------------------------
 // Julia / Mandelbrot field.
-// Writes TWO render targets via MRT:
-//   out0 (main): rg = final z, b = smooth iter count, a = escaped flag
-//   out1 (aux):  r = minT (orbit-trap min distance, shape picked by uTrapMode)
-//                g = stripe average (Härkönen)
-//                b = log(1 + |dz/dc|)  — derivative magnitude proxy
-//                a = trapIter (iteration at which minT occurred, normalised 0..1)
+// Writes TWO render targets via MRT, all containing per-evaluation derived
+// quantities mean-pooled across K sub-samples and across TSAA frames:
+//   out0 (main): r = distance estimate (DE, smooth across the set boundary)
+//                g = smooth potential (smoothIter / maxIter)
+//                b = stripe average (Härkönen, already mean within evalJulia)
+//                a = injection gate (escape × main-gradient stop alpha) —
+//                    drives per-pixel dye-injection rate, preserves the
+//                    gradient editor's per-stop alpha as a "where does
+//                    dye flow" control. Mean-pools cleanly.
+//   out1 (fx):   rgb = composited palette colour (gradient-mapped, interior-blended)
+//                a   = collision-mask membership (collision LUT × exterior gate)
+//
+// out0 holds three smooth motion sources (DE, smoothPot, stripe) plus the
+// dye-injection gate. The fourth motion-source channel users can pick —
+// "palette luminance" — is derived in the motion shader as luma(out1.rgb)
+// rather than baked, since out1 already carries the colour and the extra
+// channel is more useful for the gate. out1 is the final composite + walls.
+//
+// Linearly averaging derived quantities is mathematically clean — vs.
+// averaging raw evaluator state (z, minT, escaped) which mixes meaningless
+// "intermediate iteration" values at the set boundary. Trade-off: anything
+// that affects the bake (gradient/collision LUT/repeat/phase, interior
+// colour, colorMapping, trap shape, etc.) resets the TSAA accumulator.
 // -----------------------------------------------------------------------------
 export const FRAG_JULIA = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 layout(location=0) out vec4 outMain;
-layout(location=1) out vec4 outAux;
+layout(location=1) out vec4 outFx;
 
 uniform int   uKind;          // 0 julia, 1 mandelbrot
 uniform vec2  uJuliaC;
@@ -54,6 +72,27 @@ uniform float uStripeFreq;    // k in sin(k·arg z)
 // derivative → modes 10, 11. FluidEngine sets these.
 uniform int   uTrackAccum;    // 1 when trap/stripe accumulators feed the palette
 uniform int   uTrackDeriv;    // 1 when dz/dc derivative feeds the palette
+
+// ── Per-evaluation palette + mask baking ─────────────────────────────────────
+// The Julia pass bakes BOTH the palette gradient lookup AND the collision
+// mask LUT lookup INSIDE evalJulia (per-jitter). Mean-pooling colours and
+// mask scalars across jittered evaluations is mathematically clean (vs.
+// mean-pooling raw iter state, which mixes meaningless "intermediate
+// iteration" values at the set boundary). The mask uses its own LUT and
+// repeat/phase so users can tile walls independently of the dye palette.
+// Interior pixels never count as walls (mask = 0 there).
+uniform sampler2D uGradient;
+uniform int       uColorMapping;
+uniform float     uGradientRepeat;
+uniform float     uGradientPhase;
+uniform vec3      uInteriorColor;
+uniform sampler2D uCollisionGradient;
+uniform float     uCollisionRepeat;
+uniform float     uCollisionPhase;
+// Collision can be turned off entirely; when 0, mask stays at 0 and
+// the fluid pipeline reads a clean "no walls" channel without us
+// needing per-shader branches in the consumers.
+uniform int       uCollisionEnabled;
 
 // TSAA sub-pixel jitter — when > 0, primary sample position is jittered
 // by blue-noise to drive temporal anti-aliasing. Value is the jitter
@@ -163,6 +202,7 @@ uniform vec2  uATInvZCoeff;
 
 ${BLUE_NOISE}
 ${TSAA}
+${GRADIENT_SAMPLE_GLSL}
 
 // complex multiply
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
@@ -702,8 +742,19 @@ void main() {
   }
   int cellOffset = frameInRound * K;
 
-  vec4 accM = vec4(0.0);
-  vec4 accA = vec4(0.0);
+  // Per-evaluation baked outputs accumulate here. Each quantity is a
+  // smooth function of sub-pixel position, so the mean across jitter
+  // (and later across TSAA frames) converges cleanly.
+  //
+  //   accColor / accMask                  → outFx (palette + collision)
+  //   accDE / accSmoothPot / accStripe /
+  //   accInjectGate                        → outMain (motion + injection)
+  vec3  accColor      = vec3(0.0);
+  float accMask       = 0.0;
+  float accDE         = 0.0;
+  float accSmoothPot  = 0.0;
+  float accStripe     = 0.0;
+  float accInjectGate = 0.0;
 
   for (int s = 0; s < K_MAX; ++s) {
     if (s >= K) break;
@@ -730,13 +781,65 @@ void main() {
 
     vec4 sM, sA;
     evalJulia(uvJ, sM, sA);
-    accM += sM;
-    accA += sA;
+
+    // Per-evaluation palette bake. sM.w is 0 (interior) or 1 (escaped).
+    // For interior pixels, palette colour is undefined (smoothIter is
+    // clamped at uMaxIter, z is the orbit's last position) — feed the
+    // interior colour instead so the mean across jitter samples in a
+    // boundary pixel becomes a smooth interior↔palette blend.
+    bool  escaped = sM.w > 0.5;
+    vec4  sPalRgba = gradientForJuliaRgba(sM, sA);
+    vec3  sColor   = escaped ? sPalRgba.rgb : uInteriorColor;
+
+    // Per-evaluation mask bake. Same colour-mapping scalar the palette
+    // uses, but remapped through the collision LUT's own repeat/phase,
+    // and gated on escape (interior pixels never wall). Luminance-
+    // collapse the LUT colour so the user can author B&W or coloured
+    // collision LUTs interchangeably.
+    float sMask = 0.0;
+    if (uCollisionEnabled != 0 && escaped) {
+      float t0 = colorMappingT(sM, sA);
+      float tc = fract(t0 * uCollisionRepeat + uCollisionPhase);
+      vec4  cm = texture(uCollisionGradient, vec2(tc, 0.5));
+      sMask = clamp(dot(cm.rgb, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
+    }
+
+    // Motion sources — all C0/C1 in pixel space so they mean-pool well.
+    //   DE        = 0.5·|z|·log|z| / |dz| (Hubbard distance estimate),
+    //               smooth-mapped to [0, ~1]. Zero on interior pixels.
+    //   smoothPot = smoothIter / maxIter; flat 1.0 inside the set.
+    //   stripe    = sA.g (Härkönen stripe average, already a mean
+    //               inside evalJulia).
+    //
+    // The fourth motion-source option, "palette luminance", isn't
+    // baked here — the motion shader derives it cheaply from outFx.rgb
+    // (one extra texture sample + dot). Saves a channel for the gate.
+    float sDE = 0.0;
+    if (escaped) {
+      float absZ  = max(length(sM.xy), 1e-6);
+      float absDz = max(exp(sA.b) - 1.0, 1e-6);
+      float d     = 0.5 * absZ * log(absZ) / absDz;
+      sDE = 1.0 - exp(-d * 4.0);
+    }
+    float sSmoothPot = sM.z / max(float(uMaxIter), 1.0);
+    float sStripe    = sA.g;
+
+    // Injection-rate gate for dye inject — preserves the per-stop alpha
+    // of the main gradient as a "dye flows here" mask, with escape gate
+    // so interior pixels never inject.
+    float sInjectGate = escaped ? sPalRgba.a : 0.0;
+
+    accColor      += sColor;
+    accMask       += sMask;
+    accDE         += sDE;
+    accSmoothPot  += sSmoothPot;
+    accStripe     += sStripe;
+    accInjectGate += sInjectGate;
   }
 
   float invK = 1.0 / float(K);
-  outMain = accM * invK;
-  outAux  = accA * invK;
+  outMain = vec4(accDE * invK, accSmoothPot * invK, accStripe * invK, accInjectGate * invK);
+  outFx   = vec4(accColor * invK, accMask * invK);
 }`;
 
 // -----------------------------------------------------------------------------

@@ -25,7 +25,6 @@ export {
 } from './sim';
 export {
     FRAG_DISPLAY,
-    FRAG_MASK,
     FRAG_BLOOM_EXTRACT,
     FRAG_BLOOM_DOWN,
     FRAG_BLOOM_UP,

@@ -102,16 +102,17 @@ export const FluidToyApp: React.FC = () => {
     // overlay — read just `enabled` here, not the whole slice.
     const deepZoomEnabled = useSlice('deepZoom').enabled;
 
-    // Render-control → TSAA + sim pause. Toggling `accumulation` off
-    // drops jitter to 0 and stops the blend pass; the topbar pause
-    // button freezes dye + velocity (fractal keeps rendering so TSAA
-    // can converge).
+    // Render-control → TSAA + sim pause. The accumulation toggle and
+    // sampleCap collapse onto a single FluidEngine knob: tsaaSampleCap
+    // (where 1 = TSAA off, no jitter, no blend; > 1 = active with that
+    // convergence target; 0 = infinite). Topbar accumulation=off forces
+    // cap to 1; otherwise the user's cap setting flows through.
     useEffect(() => {
         const engine = engineRef.current;
         if (!engine) return;
+        const cap = (accumulation ?? true) ? sampleCap : 1;
         engine.setParams({
-            tsaa:          accumulation ?? true,
-            tsaaSampleCap: sampleCap,
+            tsaaSampleCap: cap,
             paused:        isPaused,
         });
     }, [accumulation, isPaused, sampleCap]);

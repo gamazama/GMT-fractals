@@ -169,7 +169,7 @@ export const runBenchmark = async (
 
     // Save current state so we can restore at the end.
     const engineWithSetParams = engine as unknown as {
-        setParams: (p: { tsaa?: boolean; tsaaPerFrameSamples?: number }) => void;
+        setParams: (p: { tsaaSampleCap?: number; tsaaPerFrameSamples?: number }) => void;
         setForceFluidPaused: (b: boolean) => void;
     };
     const stateRoot = store.getState() as unknown as {
@@ -183,7 +183,10 @@ export const runBenchmark = async (
     // is then unaffected by sim cost / accumulation blending / sub-
     // sample multiplier.
     engineWithSetParams.setForceFluidPaused(true);
-    engineWithSetParams.setParams({ tsaa: false, tsaaPerFrameSamples: 1 });
+    // sampleCap=1 disables TSAA (no jitter, no blend). K=1 keeps the per-
+    // frame sample count to a single Julia evaluation so the measurement
+    // is unaffected by TSAA blending or K-sub-sampling.
+    engineWithSetParams.setParams({ tsaaSampleCap: 1, tsaaPerFrameSamples: 1 });
     if (stateRoot.setAccumulation) stateRoot.setAccumulation(false);
 
     try {
@@ -220,7 +223,9 @@ export const runBenchmark = async (
         // intended default render path; leaving accumulation off
         // produces a noisy single-sample image.
         engineWithSetParams.setForceFluidPaused(false);
-        engineWithSetParams.setParams({ tsaa: true, tsaaPerFrameSamples: 1 });
+        // Restore the default sample cap so the engine resumes progressive
+        // TSAA convergence after the bench window.
+        engineWithSetParams.setParams({ tsaaSampleCap: 64, tsaaPerFrameSamples: 1 });
         if (stateRoot.setAccumulation) {
             stateRoot.setAccumulation(true);
         }

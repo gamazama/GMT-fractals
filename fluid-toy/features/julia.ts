@@ -112,9 +112,15 @@ export const JuliaFeature: FeatureDefinition = {
 };
 
 /**
- * Push the julia slice into FluidEngine. juliaC reads liveModulations
- * first (so orbit / audio-reactive / future modulation sources compose
- * automatically) and falls back to the slice's authored value.
+ * Push the julia slice into FluidEngine. Split into two functions so the
+ * per-frame modulation tick (orbit / audio-reactive / etc.) only rewrites
+ * juliaC and leaves the gesture-managed view (center / zoom / centerLow)
+ * untouched. Pan / zoom / wheel handlers bypass the store and write
+ * those view fields directly on engine.params during the gesture; the
+ * store catches up only on pointerup. Without this split, every orbit
+ * modulation frame would overwrite the gesture's fresh view values with
+ * the stale store ones — the fractal would freeze mid-pan and only
+ * update at gesture-end.
  */
 export const syncJuliaToEngine = (
     engine: FluidEngine,
@@ -138,4 +144,21 @@ export const syncJuliaToEngine = (
         centerLow: [julia.centerLow?.x ?? 0, julia.centerLow?.y ?? 0],
         zoom: julia.zoom,
     });
+};
+
+/**
+ * Lightweight juliaC-only sync. Called every frame the modulation tick
+ * touches julia.juliaC_x / julia.juliaC_y (i.e. while auto-orbit or any
+ * other LFO is driving c). Critically does NOT push center/zoom — those
+ * are gesture-owned during pan/zoom and would be clobbered every
+ * modulation frame otherwise.
+ */
+export const syncJuliaCToEngine = (
+    engine: FluidEngine,
+    julia: JuliaSlice,
+    liveMod: Partial<Record<LfoTarget, number>>,
+): void => {
+    const cx = liveMod['julia.juliaC_x'] ?? julia.juliaC.x;
+    const cy = liveMod['julia.juliaC_y'] ?? julia.juliaC.y;
+    engine.setParams({ juliaC: [cx, cy] });
 };

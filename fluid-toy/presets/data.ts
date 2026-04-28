@@ -60,6 +60,7 @@ export const PRESETS: Preset[] = [
             // when sim is paused, but set sane defaults so unpausing
             // doesn't surprise.
             forceMode: 'gradient',
+            forceSource: 'smoothPot',
             forceGain: 0,                   // no force injection
             interiorDamp: 1,                // full damp (sim quiet if it runs)
             // Fluid sim — minimal everything. With sim paused (via the
@@ -135,6 +136,9 @@ export const PRESETS: Preset[] = [
             power: 2,
             kind: 'julia',
             forceMode: 'curl',
+            // Orbit-point banding: paletteLuma drives the curl along the
+            // visible coral-halo bands so the gyre traces the colour stops.
+            forceSource: 'paletteLuma',
             forceGain: -760,
             interiorDamp: 0.9,
             dissipation: 0.1,
@@ -205,6 +209,9 @@ export const PRESETS: Preset[] = [
             power: 2,
             kind: 'julia',
             forceMode: 'curl',
+            // Classic curl-on-iterations: smoothPot drives flow along
+            // smooth-iter level sets between the two collision walls.
+            forceSource: 'smoothPot',
             forceGain: 1200,
             interiorDamp: 0.59,
             dissipation: 0.05,
@@ -259,6 +266,9 @@ export const PRESETS: Preset[] = [
             power: 1.5,
             kind: 'julia',
             forceMode: 'curl',
+            // High-repeat banded palette: paletteLuma so the curl threads
+            // the bright/dark transitions of the 7× repeated gradient.
+            forceSource: 'paletteLuma',
             forceGain: 1200,
             interiorDamp: 0.59,
             dissipation: 0.05,
@@ -324,6 +334,8 @@ export const PRESETS: Preset[] = [
             power: 2,
             kind: 'mandelbrot',
             forceMode: 'curl',
+            // Mandelbrot iso-flow: smoothPot for curl along the crater rims.
+            forceSource: 'smoothPot',
             forceGain: -535.6,
             interiorDamp: 0,
             dissipation: 0.16,
@@ -395,6 +407,9 @@ export const PRESETS: Preset[] = [
             power: 4,
             kind: 'julia',
             forceMode: 'c-track',
+            // Temporal-Δ on smoothPot: drift kicks in only when c
+            // actually moves, so the strata pulse with the orbit.
+            forceSource: 'smoothPot',
             forceGain: 1,
             interiorDamp: 0.59,
             dissipation: 0.05,
@@ -457,6 +472,10 @@ export const PRESETS: Preset[] = [
             power: 2,
             kind: 'julia',
             forceMode: 'gradient',
+            // Hard-band colour mapping: paletteLuma drives the gradient
+            // operator straight off the visible banding, so flow rises
+            // and falls with the strata themselves.
+            forceSource: 'paletteLuma',
             forceGain: 1500,
             interiorDamp: 5.8,
             dissipation: 0.22,
@@ -507,6 +526,10 @@ export const PRESETS: Preset[] = [
             power: 2,
             kind: 'julia',
             forceMode: 'c-track',
+            // Temporal-Δ on paletteLuma: as auto-orbit moves c, the
+            // breathing colour shift IS the velocity field — the set
+            // appears to inhale/exhale green and pink in step with c.
+            forceSource: 'paletteLuma',
             forceGain: 10,
             interiorDamp: 0.45,
             dissipation: 0.2,

@@ -23,18 +23,18 @@ out vec4 fragColor;
 uniform sampler2D uSource;
 void main() { fragColor = texture(uSource, vUv); }`;
 
-// MRT variant — copies juliaTsaa's two attachments (texMain + texAux)
+// MRT variant — copies juliaTsaa's two attachments (texMain + texFx)
 // in lockstep so accumulation can survive a resolution change.
 export const FRAG_COPY_MRT = /* glsl */ `#version 300 es
 precision highp float;
 in vec2 vUv;
 layout(location=0) out vec4 outMain;
-layout(location=1) out vec4 outAux;
+layout(location=1) out vec4 outFx;
 uniform sampler2D uSourceMain;
-uniform sampler2D uSourceAux;
+uniform sampler2D uSourceFx;
 void main() {
   outMain = texture(uSourceMain, vUv);
-  outAux  = texture(uSourceAux,  vUv);
+  outFx   = texture(uSourceFx,   vUv);
 }`;
 
 // -----------------------------------------------------------------------------
