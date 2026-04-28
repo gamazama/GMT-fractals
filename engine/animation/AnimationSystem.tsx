@@ -113,8 +113,18 @@ export const tick = (delta: number) => {
     engine.modulations = {}; // Reset engine buffer
 
     // 4. Update Oscillators
+    //    Deterministic playback phases the oscillators by `currentFrame /
+    //    fps` instead of `performance.now() / 1000`, so an LFO that's at
+    //    phase 0.5 in the export is at phase 0.5 in the live preview too.
     const animations = storeState.animations;
-    modulationEngine.updateOscillators(animations, performance.now() / 1000, delta);
+    const deterministic = (animStore as { deterministicPlayback?: boolean }).deterministicPlayback;
+    const oscTime = deterministic && animStore.isPlaying
+        ? animStore.currentFrame / Math.max(1, animStore.fps)
+        : performance.now() / 1000;
+    const oscDt = deterministic && animStore.isPlaying
+        ? 1 / Math.max(1, animStore.fps)
+        : delta;
+    modulationEngine.updateOscillators(animations, oscTime, oscDt);
 
     // 5. Process Modulation Rules
     if (modulationSlice && modulationSlice.rules) {

@@ -224,8 +224,15 @@ export class AnimationEngine {
         const currentFrame = store.currentFrame;
         const duration = store.durationFrames;
         const loopMode = store.loopMode;
-        
-        const deltaFrames = dt * fps;
+
+        // Deterministic playback: lock advance to exactly one timeline frame
+        // per tick, regardless of how long the wall RAF tick was. Pairs with
+        // useFluidEngine's controlled timestamp so a "play from start"
+        // session reproduces the same dt sequence the export sees. Display
+        // playback rate becomes (RAF rate) / fps — set fps = RAF for
+        // real-time preview.
+        const deterministic = (store as { deterministicPlayback?: boolean }).deterministicPlayback;
+        const deltaFrames = deterministic ? 1 : dt * fps;
         let nextFrame = currentFrame + deltaFrames;
         
         if (nextFrame >= duration) {

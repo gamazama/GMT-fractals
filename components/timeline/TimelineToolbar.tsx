@@ -151,9 +151,9 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 }) => {
     const {
         isPlaying, isRecording, currentFrame, fps, durationFrames: storeDuration, recordCamera, loopMode,
-        isArmingModulation, isRecordingModulation,
+        isArmingModulation, isRecordingModulation, deterministicPlayback,
         play, pause, stop, toggleRecording, setFps, setDuration, seek, deleteAllKeys, deleteAllTracks, snapshot, toggleRecordCamera,
-        setLoopMode, toggleArmModulation
+        setLoopMode, toggleArmModulation, setDeterministicPlayback,
     } = useAnimationStore();
 
     const handleContextMenu = useHelpContextMenu();
@@ -335,6 +335,15 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                         >
                             <span>Record Camera</span>
                             {recordCamera && <span className="text-cyan-400"><CheckIcon /></span>}
+                        </button>
+
+                        <button
+                            onClick={() => { setDeterministicPlayback(!deterministicPlayback); }}
+                            className="flex items-center justify-between px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
+                            title="Lock playback to one timeline frame per tick. Live preview reproduces the export, frame-for-frame; display rate becomes (RAF Hz) / fps."
+                        >
+                            <span>Deterministic Playback</span>
+                            {deterministicPlayback && <span className="text-cyan-400"><CheckIcon /></span>}
                         </button>
 
                         <div className="h-px bg-white/10 mx-1"/>

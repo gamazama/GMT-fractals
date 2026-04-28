@@ -15,6 +15,7 @@ export const createPlaybackSlice: StateCreator<AnimationStore, [["zustand/subscr
     isArmingModulation: false,
     isRecordingModulation: false,
     recordingSnapshot: null,
+    deterministicPlayback: false,
 
     play: () => {
         const s = get();
@@ -64,4 +65,5 @@ export const createPlaybackSlice: StateCreator<AnimationStore, [["zustand/subscr
     seek: (frame) => set({ currentFrame: Math.max(0, Math.min(get().durationFrames, frame)) }),
     setDuration: (frames) => { set({ durationFrames: frames }); },
     setFps: (fps) => { set({ fps }); },
+    setDeterministicPlayback: (v) => { set({ deterministicPlayback: v }); },
 });

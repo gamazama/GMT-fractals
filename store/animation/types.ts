@@ -28,6 +28,14 @@ export interface PlaybackSliceState {
     isArmingModulation: boolean;
     isRecordingModulation: boolean;
     recordingSnapshot: AnimationSequence | null; // Holds the clean sequence before baking
+    /** When true, playback drives `animationEngine.tick` with `dt = 1/fps`
+     *  (one timeline frame per animation tick) instead of wall-clock dt,
+     *  and modulation oscillators are phased by `currentFrame / fps` instead
+     *  of `performance.now()`. Apps that have a controlled engine clock
+     *  (e.g. fluid-toy's FluidEngine) should also feed it `currentFrame *
+     *  1000 / fps` while this is on so the live preview matches the export.
+     *  Off by default — preserves the historic wall-clock playback. */
+    deterministicPlayback: boolean;
 }
 
 export interface PlaybackSliceActions {
@@ -43,6 +51,7 @@ export interface PlaybackSliceActions {
     seek: (frame: number) => void;
     setDuration: (frames: number) => void;
     setFps: (fps: number) => void;
+    setDeterministicPlayback: (v: boolean) => void;
     stopModulationRecording: () => void; // Internal helper
 }
 

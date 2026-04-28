@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react';
 import { FluidEngine } from './fluid/FluidEngine';
 import { viewport } from '../engine/plugins/Viewport';
 import { useEngineStore } from '../store/engineStore';
+import { useAnimationStore } from '../store/animationStore';
 import { appEngine, brushHandles, cursorHandles } from './engineHandles';
 import { stepBrush } from './brush';
 import { readBrushParams } from './brush/readParams';
@@ -50,6 +51,12 @@ export const useFluidEngine = (
             // to ~10 Hz to avoid one store mutation per frame.
             let lastReportT = 0;
             let lastReportedCount = -1;
+            // Track isPlaying transitions so deterministic playback can wipe
+            // the dye + accumulator on the first frame of a play-from-start.
+            // Without this the preview opens on whatever crud the live sim
+            // had on the canvas; with it, "play" gives a clean baseline that
+            // matches a fresh export from frame 0.
+            let prevIsPlaying = false;
             const loop = (t: number) => {
                 const dtSec = prevT < 0 ? 0 : Math.min(0.1, (t - prevT) / 1000);
                 prevT = t;
@@ -64,7 +71,27 @@ export const useFluidEngine = (
                         params: readBrushParams(),
                         engine: engineRef.current,
                     });
-                    engineRef.current.frame(t);
+                    // Deterministic-playback path: when the user toggled
+                    // "Deterministic playback" in the timeline menu and the
+                    // timeline is playing, drive the engine clock from the
+                    // current timeline frame instead of wall-clock t. The
+                    // engine computes its own dt from successive timeMs, so
+                    // a steady `currentFrame * 1000/fps` makes sim dt =
+                    // exactly 1/fps — matches what the video exporter feeds
+                    // it. Live preview reproduces the export, frame-for-frame.
+                    const animSt = useAnimationStore.getState();
+                    const det = animSt.deterministicPlayback && animSt.isPlaying;
+                    // Play-from-start in deterministic mode → reset the fluid
+                    // so the preview rolls forward from a known clean state.
+                    // Threshold (< 1 frame) catches both Stop→Play and the
+                    // "near zero" case where playback wraps via loop.
+                    if (det && !prevIsPlaying && animSt.currentFrame < 1) {
+                        engineRef.current.resetFluid();
+                        engineRef.current.resetAccumulation();
+                    }
+                    prevIsPlaying = animSt.isPlaying;
+                    const engineT = det ? (animSt.currentFrame * 1000 / Math.max(1, animSt.fps)) : t;
+                    engineRef.current.frame(engineT);
                     if (t - lastReportT > 100) {
                         const count = engineRef.current.getAccumulationCount();
                         if (count !== lastReportedCount) {
