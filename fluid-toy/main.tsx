@@ -114,9 +114,14 @@ installSceneIO({
 // keyframes index into the same tracks. Pan/zoom live on the julia
 // slice (moved out of the retired SceneCamera feature to match the
 // reference toy-fluid's Fractal-tab layout).
+// `centerLow_*` carries the sub-f64 lo word of the DD pan accumulator.
+// Skipping it would lose deep-zoom keyframes to f64 ulp grid quantization
+// on every interpolated frame between two deep-zoom views (zoom <1e-15).
 registerCameraKeyTracks([
     'julia.center_x',
     'julia.center_y',
+    'julia.centerLow_x',
+    'julia.centerLow_y',
     'julia.zoom',
 ]);
 

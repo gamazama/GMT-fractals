@@ -9,6 +9,50 @@ Reference implementation: **FractalShark** (`H:/GMT/refSoftware/FractalShark`)
 `HDRFloat.h`. The math, table layout, and rebase rules below are taken
 from there and adapted for WebGL2.
 
+> ## Status — 2026-04-28
+>
+> **Shipped:**
+> - ✅ Phase 1 — DDFS scaffolding (`features/deepZoom.ts` + slice)
+> - ✅ Phase 2 — Worker + reference orbit (BigInt fixed-point, `HighPrecComplex.ts`)
+> - ✅ Phase 3 — Perturbation shader path (power-2 Mandelbrot, no LA)
+> - ✅ Phase 4 — HDR-packed shader uniforms (`HDRFloat.ts`)
+> - ✅ Phase 5 — LA construction (worker, `laBuilder.ts`)
+> - ✅ Phase 6 — LA runtime (shader walks the merge tree, multi-stage descent)
+> - ✅ Phase 7 — AT (Approximation Terms) front-loading (`atBuilder.ts`)
+> - ✅ Phase 8 — FluidEngine wire-up + coupling
+> - ✅ Phase 9 — Variable power (z² through z⁸, algebraic factorisation for d≥3)
+> - ✅ Phase 10 — Julia mode (PO-only; LA + AT gated off because rebase
+>   assumes Z[0]=0 and AT collapses when dc=0)
+>
+> **Bonus fixes shipped beyond the original plan:**
+> - **DD pan accumulator** (`deepZoom/dd.ts`) — Dekker two-sum for sub-f64
+>   pan deltas at zoom <1e-15. Practical depth now ~10⁻³⁰ before precision
+>   degrades, not just by uniform packing alone.
+> - **HPReal.fromNumber rewrite** — extracts IEEE-754 (mantissa, exp)
+>   directly so the lo word of a DD pair survives BigInt conversion.
+>   Earlier `fracPart × 2^53` form rounded sub-1.1e-16 inputs to zero,
+>   causing the visible "snap to grid on release" symptom.
+> - **Animation key-cam tracks include `centerLow_x/_y`** so deep-zoom
+>   keyframes don't quantize on interpolation.
+> - **Preset apply resets `centerLow` to (0, 0)** so loading a shallow
+>   preset over a deep-zoom view doesn't carry stale lo bits.
+>
+> **Deferred (Phase 11 + smaller):**
+> - 🔜 Multi-reference / minibrot tiling — Phase 11 below. At extreme depth
+>   into deep filaments the linearised perturbation breaks down and a new
+>   reference orbit is needed. Shader degrades gracefully today (rebase +
+>   direct-iteration fallback for Julia) but isn't pixel-perfect there.
+> - 🔜 Validity-radius tracking during gestures — at large drag distances
+>   *before* the orbit rebuilds on release, perturbation can produce
+>   visibly off pixels. The code currently trusts the user.
+> - 🔜 LA + AT for Julia / power 3+ — step rules are d=2-specific.
+>   Deriving them is non-trivial; PO carries the load otherwise.
+> - 🔜 Automated GPU-path regression test — `smoke:deep-zoom-orbit` covers
+>   orbit construction only. The shader's pixel output has no automated
+>   visual coverage.
+>
+> The phases below are preserved for reference / future work.
+
 ---
 
 ## 1. Background — what we're consuming

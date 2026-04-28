@@ -56,7 +56,14 @@ export const applyRefPreset = (preset: RefPreset) => {
     const kindIdx = idx(KIND_MODES, p.kind);
     if (kindIdx !== undefined) julia.kind = kindIdx;
     if (p.juliaC) julia.juliaC = tupleToVec(p.juliaC);
-    if (p.center) julia.center = tupleToVec(p.center);
+    if (p.center) {
+        julia.center = tupleToVec(p.center);
+        // Reset the DD pan-accumulator lo word — presets are authored
+        // at shallow zoom where it's always (0, 0). Without this, an
+        // applied preset would inherit any prior deep-zoom centerLow
+        // and sit at a sub-ulp offset from the authored centre.
+        julia.centerLow = { x: 0, y: 0 };
+    }
     if (p.zoom !== undefined) julia.zoom = p.zoom;
     if (p.maxIter !== undefined) julia.maxIter = p.maxIter;
     if (p.power !== undefined) julia.power = p.power;
