@@ -92,7 +92,7 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.power !== undefined) julia.power = p.power;
     s.setJulia({ ...buildDefaultSlice('julia'), ...julia });
 
-    // ── Coupling (force law + orbit) ────────────────────────────────
+    // ── Coupling (force law) ────────────────────────────────────────
     const coupling: any = {};
     const fmIdx = idx(FORCE_MODES, p.forceMode);
     if (fmIdx !== undefined) coupling.forceMode = fmIdx;
@@ -102,17 +102,16 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.interiorDamp !== undefined) coupling.interiorDamp = p.interiorDamp;
     if (p.forceCap     !== undefined) coupling.forceCap     = p.forceCap;
     if (p.edgeMargin   !== undefined) coupling.edgeMargin   = p.edgeMargin;
-    // Orbit block lives on the same slice as the coupling law. If the
-    // preset omits orbit we explicitly disable it so swapping presets
-    // doesn't leak prior orbit state.
-    if (preset.orbit) {
-        coupling.orbitEnabled = preset.orbit.enabled;
-        coupling.orbitRadius  = preset.orbit.radius;
-        coupling.orbitSpeed   = preset.orbit.speed;
-    } else {
-        coupling.orbitEnabled = false;
-    }
     s.setCoupling({ ...buildDefaultSlice('coupling'), ...coupling });
+
+    // ── LFO modulation rules ────────────────────────────────────────
+    // Replace any prior animations wholesale. Presets that wanted the
+    // legacy auto-orbit behaviour now ship two Sine LFOs at 90° phase
+    // on julia.juliaC_x / _y; AnimationSystem adds the offset to the
+    // authored juliaC, so the orbit is relative to the current c base.
+    if (typeof s.setAnimations === 'function') {
+        s.setAnimations(preset.animations ?? []);
+    }
 
     // ── Fluid sim (dynamics + dye-decay) ────────────────────────────
     const fs: any = {};

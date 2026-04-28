@@ -1,20 +1,18 @@
 /**
  * CouplingFeature — the force-law tab.
  *
- * Matches the reference toy-fluid "Coupling" tab exactly: the force-mode
- * dropdown (how fractal pixels become velocity), the four intensity
- * knobs (gain / interior damp / force cap / edge margin), plus the
- * Auto-orbit c subsection.
+ * Matches the reference toy-fluid "Coupling" tab: the force-mode dropdown
+ * (how fractal pixels become velocity), source picker, and the four
+ * intensity knobs (gain / interior damp / force cap / edge margin).
  *
- * Previously these params were split across FluidSimFeature (force*)
- * and OrbitFeature (auto-orbit). Reference layout groups them into a
- * single "coupling law" tab between Fractal and Fluid, so we collect
- * them here and delete the split.
- *
- * `enabled` + `radius` + `speed` drive the modulation system via
- * orbitTick.ts — two sine LFOs on julia.juliaC_x/_y compose circular
- * motion around the current c base. Moving c while orbit is on moves
- * the circle with it.
+ * Auto-orbit (the legacy "circle c around its base" feature) used to
+ * live here as orbitEnabled / orbitRadius / orbitSpeed plus a bespoke
+ * orbitTick.ts that wrote the store's `animations` array. That's gone —
+ * now any user-driven c modulation (auto-orbit, audio-reactive, custom
+ * LFO shapes) is set up via the standard "Modulation" tab's LFO list.
+ * AnimationSystem already does relative-add for vec2 component targets
+ * (julia.juliaC_x / _y), so two LFOs at 90° phase reproduces the orbit
+ * exactly with full per-LFO control.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
@@ -111,32 +109,6 @@ export const CouplingFeature: FeatureDefinition = {
             default: 0.04, min: 0, max: 0.25, step: 0.005,
             label: 'Edge margin',
             description: 'Fades force / dye injection near the canvas edges. Fixes "gushing from the borders" under fast c-changes.',
-        },
-
-        // ── Auto-orbit c ─────────────────────────────────────────────
-        // Reference puts these in the same tab under a "Auto-orbit c"
-        // group header. DDFS has no group headers yet in AutoFeaturePanel,
-        // so the label itself carries the intent. Conditional-on-enabled
-        // mimics the reference's collapse behaviour.
-        orbitEnabled: {
-            type: 'boolean',
-            default: false,
-            label: 'Auto-orbit c',
-            description: 'Circles c automatically around its current value. Pair with C-Track to watch the fluid breathe with the fractal\'s deformation.',
-        },
-        orbitRadius: {
-            type: 'float',
-            default: 0.08, min: 0, max: 0.5, step: 0.001,
-            label: 'Radius',
-            condition: { param: 'orbitEnabled', bool: true },
-            description: 'Distance c travels from its base position as the orbit circles.',
-        },
-        orbitSpeed: {
-            type: 'float',
-            default: 0.25, min: 0, max: 3, step: 0.01,
-            label: 'Speed',
-            condition: { param: 'orbitEnabled', bool: true },
-            description: 'Orbit rate in Hz. 1 = one full circle per second.',
         },
     },
 };

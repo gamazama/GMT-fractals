@@ -148,3 +148,55 @@ export const subscribeSlice = <K extends AppSliceId>(
         listener,
     );
 };
+
+/**
+ * Merge `liveModulations` overrides into a slice snapshot. Any scalar
+ * field on the slice whose `featureId.fieldName` is present in liveMod
+ * gets replaced with the modulated value. Vec fields (recognised by
+ * having .x / .y / .z / .w sub-keys) are merged per-axis using the
+ * `featureId.fieldName_x` etc. convention AnimationSystem writes.
+ *
+ * Pure: returns a new slice object only when modulations apply, with
+ * unchanged fields preserved by reference. Sync functions call this
+ * before pushing to the engine so any active LFO / audio-reactive /
+ * keyframe modulation actually drives the renderer (otherwise the
+ * indicator on the param row "shows modulation" but the consumer
+ * keeps reading the raw slice value — a recurring footgun).
+ */
+export const applyLiveMod = <T extends Record<string, any>>(
+    slice: T,
+    featureId: string,
+    liveMod: Partial<Record<LfoTarget, number>>,
+): T => {
+    if (!slice) return slice;
+    const out: any = { ...slice };
+    let touched = false;
+    for (const key of Object.keys(slice)) {
+        const v = (slice as any)[key];
+        if (typeof v === 'number') {
+            const live = liveMod[`${featureId}.${key}` as LfoTarget];
+            if (typeof live === 'number') {
+                out[key] = live;
+                touched = true;
+            }
+        } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+            // Vec-shaped fields: copy + override per axis.
+            let axisTouched = false;
+            const nv: any = { ...v };
+            for (const axis of ['x', 'y', 'z', 'w']) {
+                if (typeof nv[axis] === 'number') {
+                    const live = liveMod[`${featureId}.${key}_${axis}` as LfoTarget];
+                    if (typeof live === 'number') {
+                        nv[axis] = live;
+                        axisTouched = true;
+                    }
+                }
+            }
+            if (axisTouched) {
+                out[key] = nv;
+                touched = true;
+            }
+        }
+    }
+    return touched ? (out as T) : slice;
+};

@@ -11,8 +11,8 @@
  * orbit-rebuild / render-control / resize effects.
  */
 
-import { useEffect, type RefObject } from 'react';
-import { useSlice, useLiveModulations } from '../engine/typedSlices';
+import { useEffect, useMemo, type RefObject } from 'react';
+import { useSlice, useLiveModulations, applyLiveMod } from '../engine/typedSlices';
 import type { FluidEngine } from './fluid/FluidEngine';
 import { syncDeepZoomToEngine } from './features/deepZoom';
 import { syncPaletteToEngine } from './features/palette';
@@ -33,6 +33,23 @@ export const useEngineSync = (engineRef: RefObject<FluidEngine | null>): void =>
     const composite = useSlice('composite');
     const liveMod   = useLiveModulations();
 
+    // Modulation merge: AnimationSystem writes the resolved
+    // (slice-base + offset) value into liveModulations for every
+    // active LFO / audio / rule target. fluid-toy's setParams pipeline
+    // doesn't have GLSL-uniform-backed params (the way GMT does, where
+    // emitUniform pushes the modulated value straight to the shader),
+    // so the merge happens here: each slice gets a per-frame
+    // modulated copy that the sync functions push into engine.params.
+    // applyLiveMod returns the original slice reference unchanged when
+    // no modulation touches the slice, so syncs only re-fire when the
+    // user mutates the slice OR an active LFO drives one of its keys.
+    const couplingMod  = useMemo(() => applyLiveMod(coupling,  'coupling',  liveMod), [coupling,  liveMod]);
+    const paletteMod   = useMemo(() => applyLiveMod(palette,   'palette',   liveMod), [palette,   liveMod]);
+    const collisionMod = useMemo(() => applyLiveMod(collision, 'collision', liveMod), [collision, liveMod]);
+    const fluidSimMod  = useMemo(() => applyLiveMod(fluidSim,  'fluidSim',  liveMod), [fluidSim,  liveMod]);
+    const postFxMod    = useMemo(() => applyLiveMod(postFx,    'postFx',    liveMod), [postFx,    liveMod]);
+    const compositeMod = useMemo(() => applyLiveMod(composite, 'composite', liveMod), [composite, liveMod]);
+
     // Slice-driven sync: pushes the WHOLE julia slice (incl. center / zoom)
     // when the slice changes. Critically, this useEffect does NOT depend
     // on liveMod — modulation ticks would otherwise refire it every frame
@@ -44,9 +61,9 @@ export const useEngineSync = (engineRef: RefObject<FluidEngine | null>): void =>
     // fractal continuously without touching the gesture-owned view.
     useEffect(() => { const e = engineRef.current; if (e) syncJuliaCToEngine(e, julia, liveMod); },    [julia, liveMod, engineRef]);
     useEffect(() => { const e = engineRef.current; if (e) syncDeepZoomToEngine(e, deepZoom, julia); }, [deepZoom, julia, engineRef]);
-    useEffect(() => { const e = engineRef.current; if (e) syncPaletteToEngine(e, palette); },          [palette, engineRef]);
-    useEffect(() => { const e = engineRef.current; if (e) syncCollisionToEngine(e, collision); },      [collision, engineRef]);
-    useEffect(() => { const e = engineRef.current; if (e) syncFluidSimToEngine(e, fluidSim, coupling); }, [fluidSim, coupling, engineRef]);
-    useEffect(() => { const e = engineRef.current; if (e) syncPostFxToEngine(e, postFx); },            [postFx, engineRef]);
-    useEffect(() => { const e = engineRef.current; if (e) syncCompositeToEngine(e, composite); },      [composite, engineRef]);
+    useEffect(() => { const e = engineRef.current; if (e) syncPaletteToEngine(e, paletteMod); },          [paletteMod, engineRef]);
+    useEffect(() => { const e = engineRef.current; if (e) syncCollisionToEngine(e, collisionMod); },      [collisionMod, engineRef]);
+    useEffect(() => { const e = engineRef.current; if (e) syncFluidSimToEngine(e, fluidSimMod, couplingMod); }, [fluidSimMod, couplingMod, engineRef]);
+    useEffect(() => { const e = engineRef.current; if (e) syncPostFxToEngine(e, postFxMod); },            [postFxMod, engineRef]);
+    useEffect(() => { const e = engineRef.current; if (e) syncCompositeToEngine(e, compositeMod); },      [compositeMod, engineRef]);
 };

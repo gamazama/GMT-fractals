@@ -11,6 +11,7 @@
 import { useEngineStore } from '../../store/engineStore';
 import { brushModeFromIndex, brushColorModeFromIndex } from '../features/brush';
 import { brushHandles } from '../engineHandles';
+import { applyLiveMod } from '../../engine/typedSlices';
 import type { BrushParams } from './emitter';
 
 /**
@@ -23,7 +24,13 @@ import type { BrushParams } from './emitter';
  * appear under genuine runtime corruption.
  */
 export const readBrushParams = (): BrushParams => {
-    const b = useEngineStore.getState().brush;
+    const state = useEngineStore.getState();
+    // Brush params are read on the imperative path (per-pointer-event
+    // splat + RAF particle tick), so we apply liveModulations here the
+    // same way useEngineSync applies them for slice → engine.params.
+    // Without this, an LFO targeting brush.size shows its modulation
+    // indicator on the slider but the actual splat radius is unchanged.
+    const b = applyLiveMod(state.brush, 'brush', state.liveModulations ?? {});
     return {
         mode: brushModeFromIndex(b.mode),
         colorMode: brushColorModeFromIndex(b.colorMode),

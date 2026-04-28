@@ -12,13 +12,20 @@ export const FluidToyPanels: PanelManifest = [
     { id: 'Fractal',   dock: 'right', order: 0, active: true, features: ['julia'] },
     { id: 'Deep Zoom', dock: 'right', order: 1,               features: ['deepZoom'] },
     { id: 'Coupling',  dock: 'right', order: 2,               features: ['coupling'] },
-    { id: 'Fluid',     dock: 'right', order: 3,               features: ['fluidSim'] },
-    { id: 'Brush',     dock: 'right', order: 4,               features: ['brush'] },
-    { id: 'Palette',   dock: 'right', order: 5,               features: ['palette'] },
-    { id: 'Post-FX',   dock: 'right', order: 6,               features: ['postFx'] },
-    { id: 'Collision', dock: 'right', order: 7,               features: ['collision'] },
-    { id: 'Composite', dock: 'right', order: 8,               features: ['composite'] },
-    { id: 'Presets',   dock: 'right', order: 9,               features: ['presets'] },
+    // LFO + audio-reactive modulation — bespoke panel (no DDFS feature
+    // shape, just the lfo-list widget). Hosts the full LFO list with
+    // per-row target / shape / period / strength knobs. Used to replace
+    // the Coupling-tab "Auto-orbit c" subsection: two LFOs on
+    // julia.juliaC_x / _y (90° phase) reproduce the orbit relatively.
+    { id: 'Modulation', dock: 'right', order: 3,
+      items: [{ type: 'widget', id: 'lfo-list' }] },
+    { id: 'Fluid',     dock: 'right', order: 4,               features: ['fluidSim'] },
+    { id: 'Brush',     dock: 'right', order: 5,               features: ['brush'] },
+    { id: 'Palette',   dock: 'right', order: 6,               features: ['palette'] },
+    { id: 'Post-FX',   dock: 'right', order: 7,               features: ['postFx'] },
+    { id: 'Collision', dock: 'right', order: 8,               features: ['collision'] },
+    { id: 'Composite', dock: 'right', order: 9,               features: ['composite'] },
+    { id: 'Presets',   dock: 'right', order: 10,              features: ['presets'] },
 
     // View Manager — saved-view library + 2D view-shortcut toolbar +
     // composition guides. Docks left (hidden until the topbar Camera

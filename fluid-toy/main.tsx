@@ -36,6 +36,7 @@ import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { installModulation } from '../engine/animation/modulationTick';
+import { installModulationUI } from '../engine/components/modulation';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
 import { installCamera, camera } from '../engine/plugins/Camera';
@@ -45,7 +46,6 @@ import { installHud, hud } from '../engine/plugins/Hud';
 import { QualityBadge } from './components/QualityBadge';
 import { HotkeysCheatsheet } from './components/HotkeysCheatsheet';
 import { useEngineStore } from '../store/engineStore';
-import { installOrbitSync } from './orbitTick';
 import { installFluidToyViewLibrary } from './viewLibrary';
 import { ViewLibraryPanel } from './components/ViewLibraryPanel';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
@@ -131,6 +131,13 @@ registerCameraKeyTracks([
 // installs this once.
 installModulation();
 
+// Register the LFO list widget under id 'lfo-list' for the Modulation
+// panel to reference. The widget owns its own "Add LFO" / per-LFO knobs
+// UI — replaces the bespoke Auto-orbit-c block that used to live on the
+// Coupling tab. Targeting julia.juliaC_x / _y at 90° phase reproduces
+// the classic auto-orbit, with full waveform + smoothing control.
+installModulationUI();
+
 // @engine/shortcuts — window-level keyboard listener, scope-aware
 // dispatcher. Hotkey registrations happen inside FluidToyApp so they
 // can close over engineRef for FluidEngine.resetFluid().
@@ -205,11 +212,6 @@ hud.register({
     order: 10,  // below the cheatsheet
     component: QualityBadge,
 });
-
-// Orbit → animations array sync. When orbit DDFS params change, we
-// rewrite the two sine LFOs on julia.juliaC.x/.y that drive the orbit.
-// No per-frame work here; modulationTick does the oscillator math.
-installOrbitSync();
 
 // Saved-views library — one call wires everything: slice CRUD, slot
 // shortcuts (Ctrl+1..9 save, 1..9 recall), and topbar Camera menu.

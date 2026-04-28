@@ -18,8 +18,7 @@
  */
 
 import type { GradientConfig, GradientStop } from '../../types';
-
-export interface OrbitState { enabled: boolean; radius: number; speed: number; }
+import type { AnimationParams } from '../../types/animation';
 
 /** Structural type — we don't bind to a specific FluidParams interface
  *  so this file stays decoupled from the app's slice shape (which is
@@ -37,9 +36,26 @@ export interface Preset {
     gradient?: GradientConfig;
     /** B&W collision gradient. Omitted ⇒ fall back to DEFAULT_COLLISION_GRADIENT. */
     collisionGradient?: GradientConfig;
-    /** Optional orbit state — if omitted, auto-orbit is disabled for this preset. */
-    orbit?: OrbitState;
+    /** LFO modulation rules pushed into store.animations on apply. The
+     *  legacy "orbit" subsection in the Coupling tab is gone — presets
+     *  that used to orbit c now ship two LFOs at 90° phase on
+     *  julia.juliaC_x / _y. AnimationSystem adds the offset to the
+     *  authored juliaC, so the orbit is relative (moving c moves the
+     *  circle). Apply omits / clears the array if not provided. */
+    animations?: AnimationParams[];
 }
+
+const orbitLfo = (id: string, axis: 'x' | 'y', period: number, radius: number, phase: number): AnimationParams => ({
+    id, target: `julia.juliaC_${axis}`, shape: 'Sine', period, phase,
+    amplitude: radius, baseValue: 0, smoothing: 0, enabled: true,
+});
+const orbitPair = (radius: number, speed: number): AnimationParams[] => {
+    const period = 1 / Math.max(0.001, speed);
+    return [
+        orbitLfo('preset.orbit.juliaC.x', 'x', period, radius, 0),
+        orbitLfo('preset.orbit.juliaC.y', 'y', period, radius, 0.25),
+    ];
+};
 
 const makeStops = (pairs: Array<[number, string]>): GradientStop[] =>
     pairs.map(([pos, color], i) => ({ id: `s${i}`, position: pos, color, bias: 0.5, interpolation: 'linear' }));
@@ -392,7 +408,7 @@ export const PRESETS: Preset[] = [
             colorSpace: 'srgb',
             blendSpace: 'rgb',
         },
-        orbit: { enabled: true, radius: 0.01, speed: 0.05 },
+        animations: orbitPair(0.01, 0.05),
     },
 
     {
@@ -457,7 +473,7 @@ export const PRESETS: Preset[] = [
             colorSpace: 'srgb',
             blendSpace: 'rgb',
         },
-        orbit: { enabled: true, radius: 0.01, speed: 0.2 },
+        animations: orbitPair(0.01, 0.2),
     },
 
     {
@@ -583,6 +599,6 @@ export const PRESETS: Preset[] = [
             colorSpace: 'srgb',
             blendSpace: 'rgb',
         },
-        orbit: { enabled: true, radius: 0.035, speed: 0.02 },
+        animations: orbitPair(0.035, 0.02),
     },
 ];
