@@ -10,6 +10,8 @@ holds only fluid-toy's domain (FluidEngine, brush, gestures, presets).
 useState/RAF prototype, kept for sanity-checking visual parity. Don't port new
 work back to it.
 
+For a complete, line-by-line index of every file see [CODE_MAP.md](CODE_MAP.md).
+
 ---
 
 ## Where to find things
@@ -32,18 +34,22 @@ fluid-toy/
 ├── panels.ts                   PanelManifest (which panels appear in which
 │                               dock).
 │
-├── FluidToyApp.tsx             ~200 line shell. Wires store callbacks, mounts
-│                               viewport, fires sync<X>ToEngine effects.
+├── FluidToyApp.tsx             ~210 line shell. Wires store callbacks, mounts
+│                               viewport, calls useEngineSync + useDeepZoomOrbit.
 ├── FluidPointerLayer.tsx       46 lines. Mounts the pointer/ hooks.
 ├── useFluidEngine.ts           Boots FluidEngine, owns the RAF loop, ticks
 │                               the brush runtime.
+├── useEngineSync.ts            One hook that pushes every DDFS slice into
+│                               the engine via per-feature sync<X>ToEngine.
+│                               Adding a feature = one line here.
+├── useDeepZoomOrbit.ts         Worker-built reference orbit + LA + AT
+│                               rebuild loop. Only fires when deepZoom.enabled.
 │
 ├── features/                   one file per DDFS feature. Each exports a
 │                               FeatureDefinition AND a sync<X>ToEngine
-│                               function. Adding a new feature = one file
-│                               here + one register call + one type entry
-│                               + one effect line.
+│                               function.
 │   ├── julia.ts                Fractal kind / Julia c / iter / power / view
+│   ├── deepZoom.ts             BigInt orbit + LA + AT toggles
 │   ├── coupling.ts             Force-law + auto-orbit
 │   ├── palette.ts              Gradient + colour mapping + dye-blend
 │   ├── collision.ts            Wall masks
@@ -53,12 +59,21 @@ fluid-toy/
 │   ├── brush.ts                Mode / size / colour / particle emitter
 │   └── presets.ts              Preset chip grid (UI only — applier is presets/apply.ts)
 │
-├── pointer/                    canvas gesture handlers (split from
-│                               FluidPointerLayer). Each file is one concern.
+├── pointer/                    canvas pointer + wheel dispatcher.
 │   ├── types.ts                PointerMode + PointerState shape
 │   ├── modifiers.ts            useModifierKeys (B / C sticky modifiers)
 │   ├── contextMenu.ts          right-click menu
-│   └── handlers.ts             onDown / onMove / onUp / onWheel
+│   ├── handlers.ts             dispatcher — routes events to the right
+│   │                           gesture file based on button / modifiers / mode
+│   └── gestures/               one file per gesture
+│       ├── types.ts            GestureCtx (refs + callbacks bag)
+│       ├── zoomBounds.ts       effectiveMinZoom() shared by zoom + wheel
+│       ├── pan.ts              right-drag pan (DD-precision centre)
+│       ├── zoom.ts             middle-drag exponential zoom
+│       ├── wheel.ts            cursor-anchored wheel zoom (factory; commit timer)
+│       ├── splat.ts            left-drag brush emit
+│       ├── pickC.ts            C+drag drag-Julia-c
+│       └── resizeBrush.ts      B+drag log-scaled brush resize
 │
 ├── brush/                      brush + particle emitter (rendering only)
 │   ├── color.ts                rainbow / solid / gradient / velocity colour
@@ -69,7 +84,7 @@ fluid-toy/
 │   └── index.ts                barrel — read the comment at the bottom
 │
 ├── presets/
-│   ├── data.ts                 the 7 curated reference presets
+│   ├── data.ts                 the curated reference presets
 │   └── apply.ts                ref-preset → DDFS slice setters
 │
 ├── components/                 fluid-toy-only React components
@@ -79,7 +94,9 @@ fluid-toy/
 │   ├── MandelbrotPicker.tsx    full picker canvas
 │   ├── PresetGrid.tsx          preset chip row
 │   ├── QualityBadge.tsx        adaptive q% pill
-│   └── ViewLibraryPanel.tsx    saved-views panel (engine StateLibrary)
+│   ├── ViewLibraryPanel.tsx    saved-views panel (engine StateLibrary)
+│   ├── DeepZoomStatus.tsx      diag overlay (orbit length / LA stats / GPU ms)
+│   └── DeepZoomBench.tsx       A/B benchmark for deep-zoom perf knobs
 │
 ├── viewLibrary.ts              installStateLibrary call + JuliaViewState +
 │                               type augmentation (see Type Augmentation doc)
@@ -88,11 +105,38 @@ fluid-toy/
 ├── engineHandles.ts            cross-tree handles (engine ref, brush runtime,
 │                               cursor state) — typed, not globals
 │
+├── deepZoom/                   reference-orbit perturbation pipeline (worker-
+│                               built BigInt orbit + LA merge tree + AT)
+│   ├── HighPrecComplex.ts      fixed-point BigInt complex arithmetic
+│   ├── HDRFloat.ts             (mantissa, exp) packing for shader uniforms
+│   ├── dd.ts                   Dekker double-double primitives (sub-f64 pan)
+│   ├── referenceOrbit.ts       orbit builder (Mandelbrot + Julia, power 2..8)
+│   ├── laBuilder.ts            LA merge tree
+│   ├── LAInfoDeep.ts           LA node algebra
+│   ├── laParameters.ts         LA tuning
+│   ├── atBuilder.ts            AT (Approximation Terms) front-load
+│   ├── deepZoomWorker.ts       worker entry; transferable orbit + LA + AT
+│   ├── laRuntime.ts            main-thread proxy + singleton
+│   ├── diagnostics.ts          Zustand diag store consumed by DeepZoomStatus
+│   └── benchmark.ts            A/B perf bench for DeepZoomBench
+│
 └── fluid/
-    ├── FluidEngine.ts          ~1.6k lines. WebGL pipeline. Untouched by the
-    │                           refactor — split if/when there's a concrete
-    │                           reason.
-    └── shaders.ts              ~1.2k lines of GLSL strings.
+    ├── FluidEngine.ts          ~1.8k lines. WebGL pipeline orchestrator.
+    │                           Owns the per-concern controllers below.
+    ├── DeepZoomController.ts   refOrbit + LA + AT GPU state. App drives via
+    │                           engine.deepZoom.xxx. bindUniforms() per frame.
+    ├── BloomChain.ts           Jimenez 2-level dual-filter bloom. Owns its
+    │                           three programs + scratch FBOs.
+    ├── GpuTimerManager.ts      EXT_disjoint_timer_query wrapper. begin / end
+    │                           around the Julia draw, poll() drains EWMA.
+    ├── GradientLutManager.ts   1-D LUT slots (main colour + collision B&W).
+    └── shaders/                shader programs grouped by render stage
+        ├── common.ts           OKLab, gradient sampler, vertex
+        ├── julia.ts            fractal kernel (with deep-zoom path)
+        ├── sim.ts              fluid pipeline (motion, advect, pressure, ...)
+        ├── display.ts          composite + bloom + TSAA blend + interior mask
+        ├── utility.ts          clear / copy / reproject
+        └── index.ts            re-exports
 ```
 
 ---
@@ -112,8 +156,9 @@ fluid-toy/
    [docs/engine/16_Type_Augmentation.md](../docs/engine/16_Type_Augmentation.md)
    for why both.)
 
-4. **`FluidToyApp.tsx`** — one `useSlice('<name>')` call, one
-   `useEffect(() => { if (e) sync<Name>ToEngine(e, slice); }, [slice])` line.
+4. **`useEngineSync.ts`** — one `useSlice('<name>')` call + one
+   `useEffect(() => { ... sync<Name>ToEngine(e, slice); ... }, [slice, ...])`
+   line. Pattern matches every other slice in the file.
 
 5. **`panels.ts`** — add an entry if the feature gets its own panel tab.
    (Many tabs aggregate multiple slices — see Palette / Fluid for examples.)
@@ -144,10 +189,11 @@ Consumers (`useFluidEngine.ts`, `pointer/handlers.ts`) import directly from
 
 ### Pan / middle-drag / wheel bypass the store during the gesture
 
-[pointer/handlers.ts](pointer/handlers.ts) writes `engine.setParams({ center, zoom })`
-directly during the gesture and stashes the pending value in a ref;
-the store gets one `setJulia` commit on pointerup (drag) or after a 100ms
-idle timer (wheel).
+The gesture files in [pointer/gestures/](pointer/gestures/) write
+`engine.setParams({ center, zoom })` directly during the gesture and stash
+the pending value in `pendingViewRef`; the store gets one `setJulia` commit
+on pointerup (drag, in [handlers.ts](pointer/handlers.ts)'s `onUp`) or
+after a 100ms idle timer (wheel, in [wheel.ts](pointer/gestures/wheel.ts)).
 
 `setJulia` per pointermove triggers Zustand's full subscriber notification.
 With dozens of `useEngineStore` consumers in the panel tree, that's enough
@@ -205,8 +251,9 @@ It boots vite on a free port, sets `ENGINE_URL`, runs the smoke, kills vite.
 |---|---|
 | "X slice missing" / blank panel | [registerFeatures.ts](registerFeatures.ts) — likely freeze-before-register; check imports for transitive `useEngineStore` |
 | Type error on `setX` / `state.x` | [storeTypes.ts](storeTypes.ts) — slice missing from one of the two augmentation targets |
-| Brush colour wrong / no splats | [brush/](brush/) + [pointer/handlers.ts](pointer/handlers.ts) splat path |
-| Pan / zoom snaps back / jitters | [pointer/handlers.ts](pointer/handlers.ts) — pendingViewRef commit at onUp / wheel idle timer |
+| Brush colour wrong / no splats | [brush/](brush/) + [pointer/gestures/splat.ts](pointer/gestures/splat.ts) |
+| Pan / zoom snaps back / jitters | [pointer/handlers.ts](pointer/handlers.ts) dispatcher + the relevant gesture file ([pan.ts](pointer/gestures/pan.ts) / [zoom.ts](pointer/gestures/zoom.ts) / [wheel.ts](pointer/gestures/wheel.ts)) — pendingViewRef commit at onUp / wheel idle timer |
+| Deep-zoom quantizing past 1e-15 | [pointer/gestures/](pointer/gestures/) DD pan accumulator + [deepZoom/HighPrecComplex.ts](deepZoom/HighPrecComplex.ts) `fromNumber` extracts IEEE-754 mantissa/exp |
 | Auto-orbit not driving juliaC | [orbitTick.ts](orbitTick.ts) writes the `animations` array; check `liveModulations['julia.juliaC_x']` in devtools |
 | Preset load drops a field | Field is on a slice not in [presets/apply.ts](presets/apply.ts), or shape changed without a [migrations.ts](migrations.ts) entry |
 | Adaptive quality stuck low | engine — see [docs/engine/10_Viewport.md](../docs/engine/10_Viewport.md) and [docs/engine/11_TSAA.md](../docs/engine/11_TSAA.md) |

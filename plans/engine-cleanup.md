@@ -1,9 +1,28 @@
 # Engine cleanup plan
 
 Same shape as the fluid-toy refactor, applied to the wider workspace.
-This is a planning document — no code changes here. Each item lists the
-target, what's mixed, what extraction looks like, blast radius, and
-test surface.
+This started as a planning document; it's now also the **post-mortem** —
+each section is annotated with what was actually done.
+
+> ## Status as of 2026-04-28 — pass concluded
+>
+> **Done:**
+> - #1 RenderPopup.tsx — split into 4 focused files (1046 → 299)
+> - #3 FractalEngine.ts — `CompileScheduler` extracted (933 → 711)
+> - Bonus: `handleRenderTick` extracted from renderWorker (796 → 678)
+> - Navigation.tsx — architecture comment block in lieu of split (1261 lines)
+>
+> **Deferred / skipped after hands-on review:**
+> - #2 SDFShaderBuilder — file lives in `engine/`, only consumed by `mesh-export/`. Should move there as part of mesh-export's own porting pass, not here.
+> - #4 Worker stack rest (WorkerProxy, WorkerExporter, renderWorker dispatch) — large but cohesive; per-domain split would be plumbing without clarity gain.
+> - #5 Navigation per-mode split — modes share dense state; mechanical extraction would need a 30-field deps bundle. Documented instead.
+> - #6 AutoFeaturePanel — per-type renderer dispatch is already linear. Cross-app blast radius not worth it.
+> - #7 AdvancedGradientEditor — cosmetic.
+> - #8 BucketRenderer — algorithm-driven, no SoC violation.
+>
+> **Lesson:** the high-payoff refactors share a shape — *god class with several distinct responsibility clusters sharing one private state pool*. FluidEngine, RenderPopup, the FractalEngine compile cluster fit. Most of the wider workspace's big files don't — they're large because the algorithm is, not because concerns are tangled. The cleanup pass is essentially complete; remaining files are best left alone unless someone has a concrete reason to touch them.
+>
+> Below is the original plan, preserved for reference.
 
 ## Where we are now
 

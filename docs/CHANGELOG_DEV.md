@@ -2,6 +2,45 @@
 
 Chronological log of significant changes during the v0.9.3 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-04-28
+
+### Fluid-toy: deep-zoom Mandelbrot/Julia, working past 1e-30
+
+**User-facing**
+- Fluid-toy now zooms past the f32 wall (~1e-7) and the f64 pan wall (~1e-15), all the way to ~1e-30 cleanly. The fractal stays sharp and the fluid keeps flowing, no quantising, no jump-back on release. Verified with a single drag-zoom from 1e-15 down to 1e-20 — smooth the whole way.
+- A **Fractal panel** "Deep zoom" toggle drops the slider's hardMin from 1e-5 to 1e-300 and switches the kernel to the perturbation path. Mouse wheel + middle-drag drive deeper than the slider's range.
+- Variable power (z² through z⁸) and Julia mode both supported in deep zoom; the LA / AT acceleration is still Mandelbrot+power-2 only (their step rules are d=2-specific), but the orbit-only path renders any combination.
+- Pan and zoom feel right at every depth — the previous "snap to coarse grid on release" artifact is gone.
+
+**Mechanism**
+- **Reference-orbit perturbation kernel.** Worker (`fluid-toy/deepZoom/deepZoomWorker.ts`) builds a BigInt fixed-point reference orbit, packs it as RGBA32F texels, and ships it main-thread. The Julia shader runs `dz' = 2·Z·dz + dz² + dc` against the orbit instead of iterating directly — this is what unlocks zooms past f32. Adapted from FractalShark's algorithm.
+- **LA + AT acceleration.** A merge-tree of linear-approximation nodes (`fluid-toy/deepZoom/laBuilder.ts`) lets the shader skip ~99% of orbit iterations in a few hundred LA steps. AT (Approximation Terms, `fluid-toy/deepZoom/atBuilder.ts`) front-loads the iteration with a polynomial expansion when the per-pixel `|dc|` is small enough. Both gated to Mandelbrot kind + power 2.
+- **Double-double pan accumulator.** `fluid-toy/deepZoom/dd.ts` adds Dekker two-sum primitives. Pan / wheel / middle-zoom gestures track the centre as a `(hi, lo)` f64 pair so sub-ulp pan deltas (typical at zoom <1e-15) survive accumulation. The engine packs `(paramCenter+paramLow) − (refCenter+refLow)` into the shader uniform via DD-subtraction so the lo word reaches the GPU.
+- **HPReal.fromNumber rewrite.** Previously converted via `fracPart × 2^53`, which rounded sub-1.1e-16 inputs (the typical lo word at deep zoom) to zero. Now extracts the IEEE-754 (mantissa, exp) directly and shifts to fixed-point — preserves all 53 bits regardless of magnitude. The "snap to coarse grid on release" symptom was this rounding kicking in only on orbit rebuild.
+- **HDR-packed shader uniforms.** Plain f32 underflows past ~1e-38; `(mantissa, exp)` packing reaches zoom 1e-300+ at the JS→GLSL boundary.
+
+### Fluid-toy: refactor pass — split god class + sync hooks + per-gesture files
+
+**Mechanism (no user-facing change — pure organisation)**
+- `fluid/FluidEngine.ts` 2245 → 1798 by extracting four cohesive units:
+  - `DeepZoomController` — refOrbit + LA + AT GPU state, exposed as `engine.deepZoom`
+  - `BloomChain` — Jimenez 2-level dual-filter chain owning its programs + FBOs
+  - `GpuTimerManager` — Julia-pass GPU timer (begin/end around the draw, EWMA poll)
+  - `GradientLutManager` — main + collision LUT slots
+- `fluid/shaders.ts` (1706 lines) split into `fluid/shaders/{common,julia,sim,display,utility,index}.ts` grouped by render stage.
+- `FluidToyApp.tsx` 372 → 214 by lifting all DDFS slice → engine pushes into `useEngineSync.ts`, and the orbit/LA/AT rebuild loop into `useDeepZoomOrbit.ts`.
+- `pointer/handlers.ts` 427 → 133 dispatcher; six gestures (pan, zoom, wheel, splat, pickC, resizeBrush) in `pointer/gestures/`, sharing a tiny `GestureCtx` (refs + callbacks bag).
+- `fluid-toy/CODE_MAP.md` added as the navigation index.
+
+### engine-gmt: split RenderPopup + extract CompileScheduler + handleRenderTick
+
+**Mechanism**
+- `engine-gmt/components/timeline/RenderPopup.tsx` 1046 → 299 + 4 focused files (`types.ts`, `exportRunner.ts`, `ConfigView.tsx`, `RenderingView.tsx`). Behaviour preserved exactly — every closure dependency the runner needs is bundled into a deps object the parent constructs.
+- `engine-gmt/engine/FractalEngine.ts` 933 → 711. The off-thread shader compile pipeline (9 fields + 4 methods, ~225 lines) extracted into `engine-gmt/engine/CompileScheduler.ts`. External readers (`engine.isCompiling`, `engine.hasCompiledShader`, `engine.lastCompileDuration`) become getter delegates so call sites in WorkerProxy / renderWorker / FormulaParamsWidget don't change.
+- `engine-gmt/engine/worker/renderWorker.ts` 796 → 678. The 130-line per-frame tick body hoisted into `engine-gmt/engine/worker/handleRenderTick.ts` with two interfaces bundling the live refs (engine/renderer/camera/displayScene/...) and the tick hooks (incTickCount / postMsg / getShadowState).
+- Verified end-to-end with `smoke:engine-gmt` (boot), `smoke:formula-switch` (preview→full hot-swap), `smoke:anim-vec2` (binder writes), `smoke:bc-drag` (pointer interaction).
+- Engine cleanup plan written to `plans/engine-cleanup.md`. After hands-on review the remaining big files (rest of worker dispatch, WorkerProxy, WorkerExporter, AdvancedGradientEditor, BucketRenderer, AutoFeaturePanel) were judged not worth refactoring — they're large but cohesive, splitting would be ceremony without clarity gain. `Navigation.tsx` (1261) got an architecture comment block at the top instead of a split — same conclusion: complexity is intrinsic, comprehension help wins over mechanical extraction.
+
 ## 2026-04-27
 
 ### Fluid-toy: render-scale system replaces sim-resolution + Fixed mode + bilinear reprojection

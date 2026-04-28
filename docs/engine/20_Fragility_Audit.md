@@ -309,7 +309,7 @@ The `window.useAnimationStore` export stays in animationStore.ts as a dev-consol
 
 **Verification result (2026-04-25):** `engine-gmt/engine/AnimationEngine.ts` does not exist. Grep of all `engine-gmt/` imports for `AnimationEngine` shows only two files, both pointing at `'../../engine/AnimationEngine'` (engine-core):
 - `engine-gmt/animation/cameraBinders.ts:26`
-- `engine-gmt/components/timeline/RenderPopup.tsx:17`
+- `engine-gmt/components/timeline/RenderPopup/exportRunner.ts:21`
 
 There is exactly one singleton. No fix needed.
 

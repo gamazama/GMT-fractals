@@ -166,7 +166,7 @@ GMT registers its own (reset AA scale, enable Lite mode, etc.); toy-fluid regist
 | `features/quality.ts` `dynamicScaling` | feature param | **semi — policy is generic, some knobs fractal** | `viewport.adaptive.enabled` |
 | `features/quality.ts` `adaptiveTarget` | feature param | GENERIC | `viewport.adaptive.targetFps` |
 | `features/quality.ts` `interactionDownsample` | feature param | GENERIC | `viewport.adaptive.interactionDownsample` |
-| `FractalEngine.ts` `holdForAdaptive` grace | `engine/FractalEngine.ts:709-713` | SEMI-GENERIC | `viewport.holdAdaptive()` API; policy generic |
+| `FractalEngine.ts` `holdForAdaptive` grace | `engine-gmt/engine/FractalEngine.ts:494-496` | SEMI-GENERIC | `viewport.holdAdaptive()` API; policy generic |
 | `accumulationCount >= 8 → locked` | FractalEngine + AdaptiveResolution.tsx | **fractal-specific** | Apps call `viewport.holdAdaptive(…)` based on their own state |
 | `aaLevel`, `aaMode`, `msaaSamples` | `rendererSlice.ts:33-34,64-83` | **fractal-specific** | stay in GMT plugin |
 | `accumulation`, `previewMode`, `renderMode`, `sampleCap` | `rendererSlice.ts:37-44` | **fractal-specific** | stay in GMT plugin |

@@ -1,3 +1,100 @@
+/**
+ * Navigation — camera + input integration. Two modes (Orbit, Fly) drive
+ * camera.position / camera.quaternion every frame and push the resulting
+ * world pose into the engine via `RENDER_TICK`.
+ *
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ Why this file is large                                              │
+ * │                                                                     │
+ * │ Orbit and Fly aren't independent components — they share the same   │
+ * │ camera, the same VirtualSpace offset, the same gesture pivot, and   │
+ * │ the same per-frame integrator. They differ in which inputs drive    │
+ * │ the camera (drei's OrbitControls vs. WASD + mouse-look) and which   │
+ * │ events are subscribed. The shared state is dense (~20 refs); a      │
+ * │ per-mode split would mean either passing a 30-field deps bundle to  │
+ * │ every extracted piece or rebuilding what closures provide for free. │
+ * │                                                                     │
+ * │ The complexity is intrinsic, not accidental. This comment block is  │
+ * │ here to make the layout easy to follow without flattening it.       │
+ * └─────────────────────────────────────────────────────────────────────┘
+ *
+ * ## Coordinate system
+ *
+ * "Unified" world position = `sceneOffset + camera.position`. The shader
+ * always raymarches from the unified position; in steady state the
+ * camera sits at origin and `sceneOffset` carries the world coordinate.
+ * During gestures `camera.position` accumulates motion locally; on
+ * gesture end (or each render tick at the threshold) the local motion
+ * gets ABSORBED into `sceneOffset` and `camera.position` resets — this
+ * keeps f32 mantissa headroom at deep zoom.
+ *
+ * `absorbOrbitPosition` is the canonical absorb call. Each absorb bumps
+ * `absorbGenRef` so that async pick callbacks issued before the absorb
+ * can drop themselves on resolution (see "absorb-gen race guard"
+ * comment near absorbGenRef).
+ *
+ * ## Cursor-anchored gestures
+ *
+ * Orbit / wheel / middle-drag pivot around the cursor world position
+ * when `navigation.orbitCursorAnchor` is on (default). The pivot lives
+ * in two refs:
+ *   - `hoverPivotWorldRef`: cached WORLD-space hover hit. Stable across
+ *     gestures because sceneOffset shifts between gestures (treadmill
+ *     absorb on orbit-end, mode-switch teleport, …).
+ *   - `gestureActivePivotRef`: LOCAL-space snapshot captured at gesture
+ *     start. Held for the gesture so cursor drift mid-gesture doesn't
+ *     shift the pivot. sceneOffset is stable for one gesture's lifetime.
+ *
+ * `snapshotHoverPivotLocal()` does the world→local conversion using the
+ * CURRENT sceneOffset at gesture start.
+ *
+ * ## Effect roster (in source order)
+ *
+ *   1. mount init       — copy cameraRot from store; init orbit pivot if Orbit.
+ *   2. teleport listener — applies external camera state changes (URL, undo,
+ *                          preset). Resyncs orbit target + accumulation reset.
+ *   3. hover pre-pick   — Orbit only. Fires depth picks under the cursor at
+ *                          worker-throttled rate, caches `hoverPivotWorldRef`.
+ *   4. wheel zoom       — cursor-anchored dolly. Pivots around the cached
+ *                          hover pivot; debounced absorb on idle.
+ *   5. custom orbit drag — left-drag ROTATE around hover pivot. Replaces
+ *                          drei's native rotate when orbitCursorAnchor is on.
+ *   6. middle-drag dolly — cursor-anchored zoom on middle-button drag.
+ *   7. pivot reticle    — DOM marker projected from `hoverPivotWorldRef`,
+ *                          updated each frame.
+ *   8. camera-lock      — listens for engine-set lock state; locks input.
+ *   9. mode-switch       — sets up smooth lerp to new mode's pose.
+ *  10. fit on mount      — `useLayoutEffect`: position camera so the fractal
+ *                          fits the viewport at boot or formula switch.
+ *  11. useFrame          — the per-frame integrator. Does, in order:
+ *                          input-controller read → physics step → camera
+ *                          pose update → sceneOffset absorb → engine
+ *                          state push → reticle projection.
+ *
+ * ## useFrame shape
+ *
+ * Two top-level branches: `mode === 'Fly'` runs the WASD physics
+ * integrator; `mode === 'Orbit'` reads drei's OrbitControls + the
+ * custom-orbit handlers and integrates the pivot rotation. Both paths
+ * end in the same shared tail: detect movement, drive `lastInteraction`
+ * timer, project pivot reticle, push camera pose.
+ *
+ * ## Mounting
+ *
+ * The custom OrbitControls block (the JSX `return` near the end) only
+ * mounts when `mode === 'Orbit' && isOrbitReady && !isCameraLocked`.
+ * Outside Orbit mode the component returns null — Fly mode has no
+ * mounted children, only refs + useFrame.
+ *
+ * ## Where to look first
+ *
+ *   - new mode? Add to CameraMode enum, then a branch in useFrame +
+ *     each mode-gated useEffect.
+ *   - new gesture? Add a useEffect grouping its DOM listeners; mind
+ *     the absorbGenRef race guard if it issues async picks.
+ *   - precision math? VirtualSpace + the absorb logic. Read
+ *     `absorbOrbitPosition` and the absorb-gen comment first.
+ */
 
 import React, { useRef, useState, useLayoutEffect, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
