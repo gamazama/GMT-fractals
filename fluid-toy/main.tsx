@@ -49,6 +49,8 @@ import { installOrbitSync } from './orbitTick';
 import { installFluidToyViewLibrary } from './viewLibrary';
 import { ViewLibraryPanel } from './components/ViewLibraryPanel';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
+import { registerRenderPopup } from '../engine/animation/renderPopupRegistry';
+import { RenderDialog } from './components/RenderDialog';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -216,6 +218,10 @@ installFluidToyViewLibrary();
 // into the module graph, which would freeze the registry before
 // feature registrations complete.
 componentRegistry.register('panel-views', ViewLibraryPanel);
+
+// Register the video-export dialog so the shared TimelineToolbar's
+// "Render" button surfaces it. Without this the button stays hidden.
+registerRenderPopup(RenderDialog);
 
 setupFluidToy();
 

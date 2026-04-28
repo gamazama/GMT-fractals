@@ -979,6 +979,13 @@ export class FluidEngine {
    *  renderControlSlice (`reportAccumulation`) for the Pause popover readout. */
   getAccumulationCount(): number { return this.tsaaSampleIndex; }
 
+  /** Force the TSAA accumulator back to 0. Internal hash-checking
+   *  already resets on Julia-affecting param changes; this is the
+   *  explicit override the video exporter uses between output frames
+   *  to guarantee a fresh integration window even when nothing else
+   *  changed. */
+  resetAccumulation(): void { this.tsaaSampleIndex = 0; }
+
   /**
    * Upload a baked LUT (`GRADIENT_LUT_WIDTH × 1 RGBA`, length = 4×width).
    * Shared helper: both the main colour gradient and the collision B&W gradient
