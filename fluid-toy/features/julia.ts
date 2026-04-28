@@ -23,7 +23,13 @@ import type { JuliaSlice } from '../storeTypes';
 const kindParam = defineEnumParam(
     ['julia', 'mandelbrot'] as const,
     'Fractal Kind',
-    { defaultIndex: 1 },
+    {
+        defaultIndex: 1,
+        optionHints: {
+            julia:      'Iterate z² + c with fixed c. Pixels are starting z values.',
+            mandelbrot: 'Iterate z² + c with z₀=0. Pixels are c values.',
+        },
+    },
 );
 export const KIND_MODES = kindParam.values;
 export const kindFromIndex = kindParam.fromIndex;
@@ -58,6 +64,10 @@ export const JuliaFeature: FeatureDefinition = {
             min: -2, max: 2, step: 0.001,
             label: 'Julia c',
             description: 'Julia constant. Move me to reshape the entire fractal — and the forces it emits.',
+            // Mandelbrot uses pixel coords as c — the slice value is
+            // ignored. Hide the slider in mandelbrot mode so users
+            // aren't tempted to drag a no-op.
+            condition: { param: 'kind', eq: 0 },
         },
 
         // Camera zoom/center were a separate SceneCamera feature before the

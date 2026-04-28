@@ -82,15 +82,6 @@ export function toneMappingToIndex(m: ToneMapping): number {
   }
 }
 
-/** Visual style families — each pre-populates a handful of post-process knobs. */
-export type FluidStyle = 'plain' | 'electric' | 'liquid';
-
-export const FLUID_STYLES: Array<{ id: FluidStyle; label: string; hint: string }> = [
-  { id: 'plain',    label: 'Plain',    hint: 'No post-processing — pure fluid+fractal composite.' },
-  { id: 'electric', label: 'Electric', hint: 'Bloom + velocity-keyed chromatic aberration — plasma and lightning energy.' },
-  { id: 'liquid',   label: 'Liquid',   hint: 'Dye-gradient refraction + laplacian caustics — water over glass.' },
-];
-
 export const DYE_BLENDS: Array<{ id: DyeBlend; label: string; hint: string }> = [
   { id: 'add',    label: 'Add',    hint: 'Linear accumulate — bright strokes build up, classic fluid look.' },
   { id: 'screen', label: 'Screen', hint: '1−(1−d)(1−i) — overlapping dye glows brighter, never clips to full white.' },
@@ -264,8 +255,6 @@ export interface FluidParams {
   exposure: number;
   /** Post-tone-map vibrance boost (chroma-aware saturation, 0..1). */
   vibrance: number;
-  /** Style family bundle — the individual knobs below are independent too. */
-  fluidStyle: FluidStyle;
   /** Strength of bloom glow, 0..3. */
   bloomAmount: number;
   /** Luminance threshold before anything contributes to bloom. */
@@ -422,7 +411,6 @@ export const DEFAULT_PARAMS: FluidParams = {
   toneMapping: 'none',
   exposure: 1,
   vibrance: 1.645,
-  fluidStyle: 'plain',
   bloomAmount: 0,
   bloomThreshold: 1,
   aberration: 0.27,

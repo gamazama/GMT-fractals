@@ -14,7 +14,7 @@
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
-import { dyeDecayModeParam, dyeDecayModeFromIndex } from './palette';
+import { dyeDecayModeParam, dyeDecayModeFromIndex, dyeBlendParam, dyeBlendFromIndex } from './palette';
 import type { FluidEngine } from '../fluid/FluidEngine';
 import type { FluidSimSlice, CouplingSlice } from '../storeTypes';
 import { forceModeFromIndex, forceSourceFromIndex } from './coupling';
@@ -53,6 +53,10 @@ export const FluidSimFeature: FeatureDefinition = {
             type: 'float', default: 1.5, min: 0, max: 3, step: 0.01,
             label: 'Dye inject',
             description: 'How much of the fractal\'s color bleeds into the fluid each frame.',
+        },
+        dyeBlend: {
+            ...dyeBlendParam.config,
+            description: 'How new dye mixes with what the fluid already carries. Gradient stop alpha acts as a per-colour injection mask.',
         },
 
         pressureIters: {
@@ -125,6 +129,7 @@ export const syncFluidSimToEngine = (
         timeScale:      fluidSim.timeScale,
         // Dye-inject + dye-decay subsection live on the Fluid tab.
         dyeInject:          fluidSim.dyeInject,
+        dyeBlend:           dyeBlendFromIndex(fluidSim.dyeBlend),
         dyeDecayMode:       dyeDecayModeFromIndex(fluidSim.dyeDecayMode),
         dyeDissipation:     fluidSim.dyeDissipation,
         dyeChromaDecayHz:   fluidSim.dyeChromaDecayHz,

@@ -96,7 +96,7 @@ export const ViewLibraryPanel: React.FC = () => {
             onDelete={deleteView!}
             onReorder={reorderViews!}
             isModified={isModified}
-            emptyState="No saved views — pan, zoom, tweak, then click New View"
+            emptyState="No saved views yet."
             slotHintPrefix={null}
             presets={presets}
             presetGridCols={3}

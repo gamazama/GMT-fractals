@@ -50,10 +50,20 @@ const DEFAULT_DYE_GRADIENT: GradientConfig = {
 // How NEW dye combines with EXISTING dye when both occupy the same
 // texel. 'add' is the classic fluid-sim look; 'screen' keeps overlaps
 // glowing; 'max' preserves the brightest layer; 'over' uses alpha from
-// the gradient to blend. Indices match FluidEngine.dyeBlendToIndex.
-const dyeBlendParam = defineEnumParam(
+// Dye blend modes. Owned by the Fluid tab (FluidSimFeature) but the
+// enum lives here so apply.ts and other consumers can reach a single
+// canonical index ordering without cross-importing feature defs.
+export const dyeBlendParam = defineEnumParam(
     ['add', 'screen', 'max', 'over'] as const,
     'Dye blend',
+    {
+        optionHints: {
+            add:    'Linear accumulate — bright strokes build up, can clip.',
+            screen: '1−(1−d)(1−i). Glowy, never exceeds 1.',
+            max:    'Hold the brightest. Vivid strokes survive over faded.',
+            over:   'Alpha-composite: new dye stamps cleanly over old.',
+        },
+    },
 );
 export const DYE_BLENDS = dyeBlendParam.values;
 export const dyeBlendFromIndex = dyeBlendParam.fromIndex;
@@ -64,6 +74,13 @@ export const dyeBlendFromIndex = dyeBlendParam.fromIndex;
 export const dyeDecayModeParam = defineEnumParam(
     ['linear', 'perceptual', 'vivid'] as const,
     'Colour space',
+    {
+        optionHints: {
+            linear:     'RGB multiply — fades to black through grey.',
+            perceptual: 'OKLab L-decay — hue + chroma stable while dimming.',
+            vivid:      'OKLab + chroma boost — colours stay punchy near black.',
+        },
+    },
 );
 export const DYE_DECAY_MODES = dyeDecayModeParam.values;
 export const dyeDecayModeFromIndex = dyeDecayModeParam.fromIndex;
@@ -87,6 +104,22 @@ const colorMappingParam = defineEnumParam(
             distance: 'Distance Estimate',
             potential: 'Continuous Potential',
             derivative: 'Derivative (log|dz|)',
+        },
+        optionHints: {
+            iterations:     'Smooth escape iter — classic Mandelbrot/Julia colouring.',
+            angle:          'Argument of final z. Spirals + radial fans.',
+            magnitude:      'Distance from origin at escape. Radial intensity.',
+            decomposition:  'Sign of imag(z) — black/white binary split.',
+            bands:          'Hard step function on iter — sharp colour bands.',
+            'orbit-point':  'Closest approach to a point trap (use Trap shape).',
+            'orbit-circle': 'Closest approach to a circle trap.',
+            'orbit-cross':  'Closest approach to an axis-cross trap.',
+            'orbit-line':   'Signed distance to a line trap.',
+            stripe:         'Härkönen sin-stripe average. Smooth banded swirls.',
+            distance:       'Hubbard distance estimate. Crisp, edge-aware.',
+            derivative:     'log|dz| — highlights chaotic fast-stretching regions.',
+            potential:      'Böttcher potential. Like iter but C¹ smooth.',
+            'trap-iter':    'Iteration at which the trap minimum was reached.',
         },
     },
 );
@@ -193,14 +226,10 @@ export const PaletteFeature: FeatureDefinition = {
             hidden: true,
         },
 
-        // ── Dye subsection ─────────────────────────────────────────────
-        dyeBlend: {
-            ...dyeBlendParam.config,
-            description: 'How new dye mixes with what the fluid already carries. Gradient stop alpha acts as a per-colour injection mask.',
-        },
-
         // (Collision walls moved to CollisionFeature on Tab 7.)
         // (dyeMix moved to CompositeFeature on Tab 8.)
+        // (dyeBlend moved to FluidSimFeature — it's a dye-mixing knob,
+        // not a colour-mapping one.)
     },
 };
 
@@ -231,7 +260,6 @@ export const syncPaletteToEngine = (engine: FluidEngine, palette: PaletteSlice):
         trapNormal,
         trapOffset:          palette.trapOffset,
         stripeFreq:          palette.stripeFreq,
-        dyeBlend:            dyeBlendFromIndex(palette.dyeBlend),
         gradientRepeat:      palette.gradientRepeat,
         gradientPhase:       palette.gradientPhase,
     });

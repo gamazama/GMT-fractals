@@ -42,6 +42,11 @@ export interface DefineEnumParamOptions<Values extends readonly string[]> {
     /** Override the dropdown label for a specific value. Defaults to
      *  capitalize(value) — e.g. 'paint' → 'Paint'. */
     optionLabels?: Partial<Record<Values[number], string>>;
+    /** Per-option hint text. AutoFeaturePanel renders the current
+     *  option's hint as a caption beneath the dropdown so users get
+     *  contextual help that swaps with the selection — much shorter
+     *  and more readable than one all-encompassing param description. */
+    optionHints?: Partial<Record<Values[number], string>>;
     /** Any extra DDFS config fields to merge onto the generated param
      *  (e.g. `description`, `shortId`, `uniform`). */
     extra?: Partial<ParamConfig>;
@@ -80,6 +85,7 @@ export const defineEnumParam = <Values extends readonly string[]>(
     const configOptions = values.map((v, i) => ({
         label: options.optionLabels?.[v as Values[number]] ?? toTitle(v),
         value: i,
+        hint: options.optionHints?.[v as Values[number]],
     }));
     const config: ParamConfig = {
         type: 'float',

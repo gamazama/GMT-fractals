@@ -38,6 +38,13 @@ const forceModeParam = defineEnumParam(
             'curl':     'Curl',
             'hue':      'Hue',
         },
+        optionHints: {
+            'gradient': 'Push along ∇S — fluid flows from low to high source.',
+            'curl':     'Swirl along level sets. Divergence-free.',
+            'iterate':  'Push along ∇S with magnitude ∝ S itself.',
+            'c-track':  'React to frame-to-frame change in S.',
+            'hue':      'Palette colour IS the velocity field. Ignores Source.',
+        },
     },
 );
 export const FORCE_MODES = forceModeParam.values;
@@ -55,23 +62,17 @@ const forceSourceParam = defineEnumParam(
             'paletteLuma': 'Palette luminance',
             'mask':        'Collision mask',
         },
+        optionHints: {
+            'smoothPot':   'Classic outside-the-set gradient.',
+            'de':          'Smooth across the set boundary.',
+            'stripe':      'Aesthetic banded flow.',
+            'paletteLuma': 'Tracks whatever colour-mapping mode is active.',
+            'mask':        'Drive flow toward / away from collision walls.',
+        },
     },
 );
 export const FORCE_SOURCES = forceSourceParam.values;
 export const forceSourceFromIndex = forceSourceParam.fromIndex;
-
-const FORCE_MODE_HINT =
-    'How the source field becomes velocity. ' +
-    'Gradient pushes along ∇S. Curl swirls along level sets (divergence-free). ' +
-    'Direct pushes along ∇S with magnitude ∝ S. Temporal Δ reacts to frame-to-frame change. ' +
-    'Hue ignores the Source — it makes the painted palette colour the velocity field.';
-
-const FORCE_SOURCE_HINT =
-    'Which scalar field the operator reads. Smooth potential is the classic ' +
-    '"outside the set" gradient. Distance estimate is smooth across the boundary. ' +
-    'Stripe average gives aesthetic banded flow. Palette luminance follows whatever ' +
-    'colour-mapping mode you pick. Collision mask drives flow toward / away from walls. ' +
-    'Ignored when Operator = Hue.';
 
 export const CouplingFeature: FeatureDefinition = {
     id: 'coupling',
@@ -83,8 +84,8 @@ export const CouplingFeature: FeatureDefinition = {
     },
 
     params: {
-        forceMode:   { ...forceModeParam.config,   description: FORCE_MODE_HINT },
-        forceSource: { ...forceSourceParam.config, description: FORCE_SOURCE_HINT },
+        forceMode:   forceModeParam.config,
+        forceSource: forceSourceParam.config,
 
         forceGain: {
             type: 'float',

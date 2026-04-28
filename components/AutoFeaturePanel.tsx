@@ -175,7 +175,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             config = config === config_raw ? { ...config_raw, label: labelOverrides[key] } : { ...config, label: labelOverrides[key] };
         }
         // For composed vec3/vec2, always assemble from individual scalar fields
-        let val;
+        let val: any;
         if (config.composeFrom) {
             const c = config.composeFrom;
             if (c.length === 3) val = new THREE.Vector3(sliceState[c[0]] ?? 0, sliceState[c[1]] ?? 0, sliceState[c[2]] ?? 0);
@@ -276,18 +276,31 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 </span>
             ) : null;
             
-            if (config.options) return (
-                <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
-                    <Dropdown 
-                        label={config.label} 
-                        value={val} 
-                        onChange={(v) => handleUpdate(key, v)} 
-                        options={config.options} 
-                        fullWidth 
-                        labelSuffix={compileIndicator}
-                    />
-                </div>
-            );
+            if (config.options) {
+                // Find the current option to surface its per-option hint.
+                // Falls back to undefined when no hint authored on the
+                // current option — keeps the layout tight for compact
+                // enums (boolean toggles, etc).
+                const currentOpt = config.options.find((o) => o.value === (val as unknown));
+                const currentHint = (currentOpt as { hint?: string } | undefined)?.hint;
+                return (
+                    <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
+                        <Dropdown
+                            label={config.label}
+                            value={val}
+                            onChange={(v) => handleUpdate(key, v)}
+                            options={config.options}
+                            fullWidth
+                            labelSuffix={compileIndicator}
+                        />
+                        {currentHint && (
+                            <div className="px-2 py-1 text-[9px] leading-tight text-gray-500 italic break-words">
+                                {currentHint}
+                            </div>
+                        )}
+                    </div>
+                );
+            }
             
             if (config.ui === 'knob') return <div className={config.layout === 'half' ? "flex flex-col items-center justify-center py-2" : "flex justify-center p-2"}><Knob label={config.label} value={val} min={config.min ?? 0} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, v)} color={val > (config.min ?? 0) ? "#22d3ee" : "#444"} size={40} /></div>;
             

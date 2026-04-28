@@ -1,18 +1,13 @@
 /**
  * PostFxFeature — the Post-FX tab.
  *
- * Matches the reference toy-fluid "Post-FX" tab exactly: the fluid-style
- * chip row (Plain / Electric / Liquid), bloom + threshold, aberration,
- * refraction + smoothing, caustics, and the Tone-mapping subsection
- * (4 chips + exposure + vibrance). Ranges aligned 1:1 with the
- * reference ScalarInput bounds; defaults match FluidEngine.DEFAULT_PARAMS.
+ * Tone mapping, bloom + threshold, aberration, refraction + smoothing,
+ * caustics, exposure + vibrance. Ranges 1:1 with the reference
+ * ScalarInput bounds; defaults match FluidEngine.DEFAULT_PARAMS.
  *
- * The fluid-style preset behaviour (each chip also stamps bloom /
- * aberration / refraction / caustics values) is owned by FluidEngine
- * itself — the shader checks uFluidStyle alongside the individual
- * knobs, so setting style=electric gets the energy look even if each
- * slider reads 0. No preset-stamping lives here; we just expose the
- * chip.
+ * The legacy `fluidStyle` chip (plain / electric / liquid) was retired —
+ * the preset variants didn't actually do anything useful in the current
+ * shader. Each post-FX knob now lives on its own.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
@@ -24,19 +19,18 @@ import type { PostFxSlice } from '../storeTypes';
 const toneMappingParam = defineEnumParam(
     ['none', 'reinhard', 'agx', 'filmic'] as const,
     'Tone mapping',
-    { optionLabels: { agx: 'AgX' } },
+    {
+        optionLabels: { agx: 'AgX' },
+        optionHints: {
+            none:     'Linear — clamp at 1.0. Crushes highlights.',
+            reinhard: 'c/(1+c). Smooth but desaturates highlights.',
+            agx:      'Sobotka AgX. Hue-stable, vibrant.',
+            filmic:   'Hable Uncharted-2 filmic. Cinematic s-curve.',
+        },
+    },
 );
 export const TONE_MAPPINGS = toneMappingParam.values;
 export const toneMappingFromIndex = toneMappingParam.fromIndex;
-
-// 3 post-process style presets. Engine uses uFluidStyle to tint the
-// look independently of the individual knobs.
-const fluidStyleParam = defineEnumParam(
-    ['plain', 'electric', 'liquid'] as const,
-    'Style',
-);
-export const FLUID_STYLES = fluidStyleParam.values;
-export const fluidStyleFromIndex = fluidStyleParam.fromIndex;
 
 export const PostFxFeature: FeatureDefinition = {
     id: 'postFx',
@@ -48,11 +42,6 @@ export const PostFxFeature: FeatureDefinition = {
     },
 
     params: {
-        fluidStyle: {
-            ...fluidStyleParam.config,
-            description: 'Post-process pack. Pick a style to preset bloom / aberration / refraction, or mix them yourself below.',
-        },
-
         bloomAmount: {
             type: 'float', default: 0, min: 0, max: 3, step: 0.01,
             label: 'Bloom',
@@ -119,7 +108,6 @@ export const PostFxFeature: FeatureDefinition = {
  */
 export const syncPostFxToEngine = (engine: FluidEngine, postFx: PostFxSlice): void => {
     engine.setParams({
-        fluidStyle:       fluidStyleFromIndex(postFx.fluidStyle),
         toneMapping:      toneMappingFromIndex(postFx.toneMapping),
         exposure:         postFx.exposure,
         vibrance:         postFx.vibrance,

@@ -184,7 +184,7 @@ export function StateLibraryPanel<T>({
 
             <div className="p-2 space-y-1">
                 {snapshots.length === 0 && (
-                    <div className="text-center text-gray-600 text-[10px] italic py-4">
+                    <div className="text-center text-gray-600 text-[10px] italic py-4 px-2 break-words">
                         {emptyState}
                     </div>
                 )}

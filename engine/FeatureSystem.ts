@@ -22,6 +22,11 @@ export interface ParamOption {
     label: string;
     value: string | number | boolean;
     estCompileMs?: number; // Estimated compile time contribution when this option is selected
+    /** Per-option hint shown below the dropdown when this option is the
+     *  current selection. Lets dropdowns swap hint text contextually
+     *  rather than carrying one all-encompassing description on the
+     *  param. AutoFeaturePanel renders a small caption row off this. */
+    hint?: string;
 }
 
 export interface TextureConfig {

@@ -24,6 +24,12 @@ const showParam = defineEnumParam(
             composite: 'Mixed',
             julia: 'Fractal',
         },
+        optionHints: {
+            composite: 'Fractal + dye + velocity overlay (the full picture).',
+            julia:     'Just the fractal — no fluid layer.',
+            dye:       'Just the dye — no fractal underneath.',
+            velocity:  'Velocity field as colour. Diagnostic only.',
+        },
     },
 );
 export const SHOW_MODES = showParam.values;

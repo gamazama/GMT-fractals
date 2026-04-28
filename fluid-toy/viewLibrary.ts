@@ -18,6 +18,7 @@ import { installStateLibrary } from '../engine/store/installStateLibrary';
 import { lerp, easeInOutQuad } from '../engine/math/Easing';
 import { CameraIcon } from '../components/Icons';
 import type { StateSnapshot } from '../engine/store/createStateLibrarySlice';
+import { nanoid } from 'nanoid';
 
 export interface JuliaViewState {
     kind: number;
@@ -173,9 +174,50 @@ const resetView = () => {
     if (setJulia) setJulia({ center: { x: 0, y: 0 }, zoom: 1.5 });
 };
 
+// ── Seeded default views ────────────────────────────────────────────────
+// On first boot (or any time the saved-views array is empty), pre-populate
+// with a handful of curated starting points so the View panel isn't a
+// blank list. Users can keep them, rename, delete, or overwrite freely.
+// These are deliberately minimal (kind / juliaC / center / zoom / iter /
+// power) — captureView mirrors the same shape, so manually-added views
+// drop into the same array shape.
+//
+// KIND_MODES indices: 0 = julia, 1 = mandelbrot.
+const DEFAULT_VIEWS: Array<{ label: string; state: JuliaViewState }> = [
+    { label: 'Mandelbrot · Home',
+      state: { kind: 1, juliaC: { x: -0.7, y: 0.27015 }, center: { x: -0.5, y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
+    { label: 'Julia · Classic',
+      state: { kind: 0, juliaC: { x: -0.7, y: 0.27015 }, center: { x: 0,    y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
+    { label: 'Julia · Dendrite',
+      state: { kind: 0, juliaC: { x: 0,    y: 1 },       center: { x: 0,    y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
+    { label: 'Julia · San Marco',
+      state: { kind: 0, juliaC: { x: -0.75, y: 0 },      center: { x: 0,    y: 0 },     zoom: 1.5,  maxIter: 256, power: 2 } },
+    { label: 'Mandelbrot · Seahorse Valley',
+      state: { kind: 1, juliaC: { x: 0,    y: 0 },       center: { x: -0.75, y: 0.1 },  zoom: 0.15, maxIter: 384, power: 2 } },
+];
+
+const seedDefaultViews = (): void => {
+    const s = useEngineStore.getState();
+    const arr = s.savedViews ?? [];
+    if (arr.length > 0) return;  // user has views already; never overwrite
+    const seeds: ViewSnapshot[] = DEFAULT_VIEWS.map(({ label, state }) => ({
+        id: nanoid(),
+        label,
+        state,
+        createdAt: Date.now(),
+    }));
+    // Direct write — bypasses captureView() so we don't pollute the
+    // user's actual current fractal state with seed values.
+    (useEngineStore.setState as any)({ savedViews: seeds });
+};
+
 export const installFluidToyViewLibrary = (): void => {
     installStateLibrary<JuliaViewState>({
-        panelId: 'Views',
+        // The saved-view library now lives inside the unified "View"
+        // panel (along with camera / fractal / iteration controls)
+        // rather than its own "Views" tab. The topbar Camera menu's
+        // "Open" item jumps to this panel.
+        panelId: 'View',
         arrayKey: 'savedViews',
         activeIdKey: 'activeViewId',
         actions: {
@@ -210,9 +252,13 @@ export const installFluidToyViewLibrary = (): void => {
             title: 'Camera',
             align: 'end',
             width: 'w-48',
-            openItem: { label: 'View Manager…', title: 'Open the saved-views library' },
+            openItem: { label: 'View panel…', title: 'Open the View panel (camera + saved views)' },
             resetItem: { label: 'Reset View', title: 'Reset to default fractal view' },
             slotLabelPrefix: 'View',
         },
     });
+
+    // Seed defaults AFTER install so the slice exists. Idempotent —
+    // only writes when the array is empty.
+    seedDefaultViews();
 };

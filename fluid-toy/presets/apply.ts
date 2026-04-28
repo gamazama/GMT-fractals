@@ -25,7 +25,7 @@ import { featureRegistry } from '../../engine/FeatureSystem';
 import { KIND_MODES } from '../features/julia';
 import { FORCE_MODES, FORCE_SOURCES } from '../features/coupling';
 import { COLOR_MAPPINGS, DYE_BLENDS, DYE_DECAY_MODES } from '../features/palette';
-import { FLUID_STYLES, TONE_MAPPINGS } from '../features/postFx';
+import { TONE_MAPPINGS } from '../features/postFx';
 import { SHOW_MODES } from '../features/composite';
 
 // Build a fresh slice object from the registered feature's param defaults.
@@ -125,9 +125,14 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.dyeSaturationBoost !== undefined) fs.dyeSaturationBoost = p.dyeSaturationBoost;
     const decayIdx = idx(DYE_DECAY_MODES, p.dyeDecayMode);
     if (decayIdx !== undefined) fs.dyeDecayMode = decayIdx;
+    // dyeBlend now lives on FluidSimFeature (was Palette). Old presets
+    // ship it under p.dyeBlend regardless; the slice it lands on is
+    // what's changed.
+    const blendIdx = idx(DYE_BLENDS, p.dyeBlend);
+    if (blendIdx !== undefined) fs.dyeBlend = blendIdx;
     s.setFluidSim({ ...buildDefaultSlice('fluidSim'), ...fs });
 
-    // ── Palette (colour mapping, gradient, trap, dye blend) ─────────
+    // ── Palette (colour mapping, gradient, trap) ────────────────────
     const pa: any = {};
     const cmIdx = idx(COLOR_MAPPINGS, p.colorMapping);
     if (cmIdx !== undefined) pa.colorMapping = cmIdx;
@@ -140,8 +145,6 @@ export const applyRefPreset = (preset: RefPreset) => {
     if (p.trapOffset      !== undefined) pa.trapOffset     = p.trapOffset;
     if (p.stripeFreq      !== undefined) pa.stripeFreq     = p.stripeFreq;
     if (p.interiorColor)                 pa.interiorColor  = vec3FromTuple(p.interiorColor);
-    const blendIdx = idx(DYE_BLENDS, p.dyeBlend);
-    if (blendIdx !== undefined) pa.dyeBlend = blendIdx;
     if (preset.gradient) pa.gradient = preset.gradient;
     s.setPalette({ ...buildDefaultSlice('palette'), ...pa });
 
@@ -154,8 +157,6 @@ export const applyRefPreset = (preset: RefPreset) => {
 
     // ── Post-FX ─────────────────────────────────────────────────────
     const pfx: any = {};
-    const styleIdx = idx(FLUID_STYLES, p.fluidStyle);
-    if (styleIdx !== undefined) pfx.fluidStyle = styleIdx;
     const toneIdx = idx(TONE_MAPPINGS, p.toneMapping);
     if (toneIdx !== undefined) pfx.toneMapping = toneIdx;
     if (p.exposure       !== undefined) pfx.exposure       = p.exposure;

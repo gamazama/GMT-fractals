@@ -100,7 +100,6 @@ fluid-toy/
 │
 ├── viewLibrary.ts              installStateLibrary call + JuliaViewState +
 │                               type augmentation (see Type Augmentation doc)
-├── orbitTick.ts                Auto-orbit → animations array sync
 ├── hotkeys.ts                  Space / R / O / Home registrations
 ├── engineHandles.ts            cross-tree handles (engine ref, brush runtime,
 │                               cursor state) — typed, not globals
@@ -254,7 +253,7 @@ It boots vite on a free port, sets `ENGINE_URL`, runs the smoke, kills vite.
 | Brush colour wrong / no splats | [brush/](brush/) + [pointer/gestures/splat.ts](pointer/gestures/splat.ts) |
 | Pan / zoom snaps back / jitters | [pointer/handlers.ts](pointer/handlers.ts) dispatcher + the relevant gesture file ([pan.ts](pointer/gestures/pan.ts) / [zoom.ts](pointer/gestures/zoom.ts) / [wheel.ts](pointer/gestures/wheel.ts)) — pendingViewRef commit at onUp / wheel idle timer |
 | Deep-zoom quantizing past 1e-15 | [pointer/gestures/](pointer/gestures/) DD pan accumulator + [deepZoom/HighPrecComplex.ts](deepZoom/HighPrecComplex.ts) `fromNumber` extracts IEEE-754 mantissa/exp |
-| Auto-orbit not driving juliaC | [orbitTick.ts](orbitTick.ts) writes the `animations` array; check `liveModulations['julia.juliaC_x']` in devtools |
+| Modulation not driving a target | Check `state.animations` has the LFO entry; `state.liveModulations[target]` should update each frame; sync function for that feature must read liveMod via `applyLiveMod` (see useEngineSync.ts) |
 | Preset load drops a field | Field is on a slice not in [presets/apply.ts](presets/apply.ts), or shape changed without a [migrations.ts](migrations.ts) entry |
 | Adaptive quality stuck low | engine — see [docs/engine/10_Viewport.md](../docs/engine/10_Viewport.md) and [docs/engine/11_TSAA.md](../docs/engine/11_TSAA.md) |
 | Saved-views panel placeholder | [viewLibrary.ts](viewLibrary.ts) install ordering — must run AFTER installMenu/installShortcuts and BEFORE setupFluidToy |
