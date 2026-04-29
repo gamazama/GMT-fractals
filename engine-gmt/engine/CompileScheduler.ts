@@ -167,12 +167,14 @@ export class CompileScheduler {
             : (config.renderMode || 'Direct');
 
         // Lazy-detect KHR_parallel_shader_compile (Chrome/ANGLE: yes,
-        // Firefox: no). Without it, compileAsync degrades to synchronous
-        // — two-stage gives no benefit; Firefox's compiler is fast
-        // enough for single-stage.
+        // Firefox: exposes the extension but compiles synchronously on the
+        // GPU thread — preview-then-full just doubles the wait). Force
+        // single-stage on Firefox so the user sees one compile, not two.
         if (this.hasParallelCompile === null) {
             const gl = renderer.getContext();
-            this.hasParallelCompile = !!gl.getExtension('KHR_parallel_shader_compile');
+            const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+            const isFirefox = /Firefox\//i.test(ua);
+            this.hasParallelCompile = !isFirefox && !!gl.getExtension('KHR_parallel_shader_compile');
         }
 
         // Compile strategy:

@@ -673,6 +673,12 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 break;
         }
     } catch (err) {
-        postMsg({ type: 'ERROR', message: err instanceof Error ? err.message : String(err) });
+        // Include stack so the worker-side throw site is visible on the main
+        // thread (otherwise WorkerProxy's console.error only shows the proxy's
+        // own log call as the origin).
+        const message = err instanceof Error
+            ? `${err.message}\n${err.stack ?? ''}`
+            : String(err);
+        postMsg({ type: 'ERROR', message });
     }
 };
