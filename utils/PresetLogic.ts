@@ -223,6 +223,30 @@ export const applyPresetState = (p: Partial<Preset>, set: (partial: Record<strin
         }
     }
     
+    // ── Modular pipeline / graph restoration ──
+    // Without this, applyPresetState silently drops the saved pipeline +
+    // graph — the worker keeps the default JULIA_REPEATER pipeline and the
+    // loaded scene renders with default Modular params until the user hits
+    // recompile. Bumping pipelineRevision is what triggers ConfigManager to
+    // schedule a rebuild; the explicit CONFIG emit ensures the loaded pipeline
+    // reaches the worker before the compile fires (the formula-only CONFIG
+    // emitted by loadPreset above would otherwise schedule against defaults).
+    if (Array.isArray((p as any).pipeline)) {
+        const store = get();
+        const nextRev = ((store as any).pipelineRevision ?? 0) + 1;
+        const update: Record<string, unknown> = {
+            pipeline: (p as any).pipeline,
+            pipelineRevision: nextRev,
+        };
+        if ((p as any).graph) update.graph = (p as any).graph;
+        set(update);
+        FractalEvents.emit('config', {
+            pipeline: (p as any).pipeline,
+            graph: (p as any).graph,
+            pipelineRevision: nextRev,
+        } as any);
+    }
+
     // Animations & Timeline
     if (p.sequence) useAnimationStore.getState().setSequence(p.sequence);
     (actions as unknown as FractalActions).setAnimations(p.animations || []);
