@@ -85,7 +85,7 @@ export const JuliaFeature: FeatureDefinition = {
         },
         center: {
             type: 'vec2',
-            default: { x: -0.8139175130270945, y: -0.054649908357858296 },
+            default: { x: 0, y: 0 },
             min: -2, max: 2, step: 0.01,
             label: 'Center',
             description: 'Pan the fractal window.',
