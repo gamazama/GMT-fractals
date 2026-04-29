@@ -455,6 +455,15 @@ export const getShaderConfigFromState = (state: EngineStoreState): any => {
         }
     }
 
+    // GMT Modular fields — top-level state, not features. Carrying these in
+    // the config flush is what lets ConfigManager see a pipelineRevision bump
+    // on scene load and trigger a rebuild; without them the loaded pipeline
+    // never reaches the worker.
+    const s = state as any;
+    if (s.pipeline)                     config.pipeline         = s.pipeline;
+    if (s.graph)                        config.graph            = s.graph;
+    if (s.pipelineRevision !== undefined) config.pipelineRevision = s.pipelineRevision;
+
     return config;
 };
 

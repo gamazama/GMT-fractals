@@ -22,3 +22,23 @@ presetFieldRegistry.register({
         if (typeof setter === 'function') setter({ lights: p.lights });
     },
 });
+
+// Modular formula's node-graph pipeline. Without this, applyPresetState
+// silently drops pipeline + graph on load — the worker keeps the default
+// JULIA_REPEATER pipeline and the loaded scene renders blank (or the
+// wrong shape) until the user touches the graph editor. Bumping
+// pipelineRevision is what makes ConfigManager flag a rebuild on the
+// next CONFIG flush; without the bump the new pipeline arrives as a
+// uniform-only update and never recompiles.
+presetFieldRegistry.register({
+    key: 'pipeline',
+    serialize: () => undefined,
+    deserialize: (p: any, set: any, getStore: any) => {
+        if (!Array.isArray(p.pipeline)) return;
+        const store = getStore();
+        const nextRev = (store?.pipelineRevision ?? 0) + 1;
+        const update: any = { pipeline: p.pipeline, pipelineRevision: nextRev };
+        if (p.graph) update.graph = p.graph;
+        set(update);
+    },
+});
