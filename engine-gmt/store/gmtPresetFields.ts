@@ -12,6 +12,7 @@
  */
 
 import { presetFieldRegistry } from '../../utils/PresetFieldRegistry';
+import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 
 presetFieldRegistry.register({
     key: 'lights',
@@ -26,10 +27,15 @@ presetFieldRegistry.register({
 // Modular formula's node-graph pipeline. Without this, applyPresetState
 // silently drops pipeline + graph on load — the worker keeps the default
 // JULIA_REPEATER pipeline and the loaded scene renders blank (or the
-// wrong shape) until the user touches the graph editor. Bumping
-// pipelineRevision is what makes ConfigManager flag a rebuild on the
-// next CONFIG flush; without the bump the new pipeline arrives as a
-// uniform-only update and never recompiles.
+// wrong shape) until the user touches the graph editor.
+//
+// Emitting CONFIG explicitly (mirroring modularSlice.setPipeline) is what
+// guarantees the worker receives the loaded pipeline before the compile
+// fires. Relying on loadScene's later getShaderConfigFromState flush
+// alone races the formula-only CONFIG that loadPreset emits first —
+// the early CONFIG would schedule a compile against the still-default
+// pipeline, leaving the user with a fractal that renders default params
+// until they hit recompile.
 presetFieldRegistry.register({
     key: 'pipeline',
     serialize: () => undefined,
@@ -40,5 +46,10 @@ presetFieldRegistry.register({
         const update: any = { pipeline: p.pipeline, pipelineRevision: nextRev };
         if (p.graph) update.graph = p.graph;
         set(update);
+        FractalEvents.emit(FRACTAL_EVENTS.CONFIG, {
+            pipeline: p.pipeline,
+            graph: p.graph,
+            pipelineRevision: nextRev,
+        } as any);
     },
 });
