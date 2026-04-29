@@ -107,6 +107,7 @@ export default defineConfig({
         'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
         'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
         'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
+        'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
       },
       output: {
         manualChunks: {

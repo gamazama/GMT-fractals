@@ -508,7 +508,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
             } catch (err) {
                 console.warn('[app-gmt] Failed to save scene for Mesh Export:', err);
             }
-            window.open('mesh-export/index.html', '_blank', 'noopener');
+            window.open('mesh-export.html', '_blank', 'noopener');
         },
     });
 
