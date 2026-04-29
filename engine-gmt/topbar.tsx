@@ -6,7 +6,7 @@
  *
  * Mirrors gmt-0.8.5's RenderTools left-group layout:
  *   Left:  Logo | Name | [div] | FPS | Pause | [div] | Quality | Adaptive | PT | Region | Bucket
- *   Right: Undo | Redo | QuickPng | Save | Load | Share | Camera | System | Help
+ *   Right: Undo | Redo | Snapshot | File | Share | Camera | System | Help
  *
  * FPS, Pause, and Adaptive are installed by engine-core plugins into the
  * right slot — this file unregisters and re-registers them in the left slot.

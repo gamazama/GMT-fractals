@@ -129,8 +129,13 @@ installPwaUpdate();
 installSceneIO({
     // The worker-owned canvas is the first <canvas> in the DOM — it's
     // mounted by GmtRendererCanvas before the R3F Canvas sibling.
-    // QuickPngButton auto-registers in the topbar when getCanvas is set.
+    // SnapshotButton auto-registers in the topbar when getCanvas is set.
     getCanvas: () => document.querySelector('canvas'),
+
+    // GMT's primary save format is GMF (formula shader + scene preset).
+    // The "Save Scene" menu item downloads as <project>.gmf — matches
+    // the bytes the serializer below writes.
+    fileExtension: 'gmf',
 
     // GMT scene files are GMF: a wrapper carrying both the formula's
     // shader source AND the scene preset. The custom parser extracts

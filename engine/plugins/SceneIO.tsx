@@ -25,7 +25,6 @@ import {
     extractScenePng,
     snapshotSceneToPng,
     downloadBlob,
-    generateShareStringFromPreset,
     type SceneParser,
     type SceneSerializer,
 } from '../../utils/SceneFormat';
@@ -54,12 +53,18 @@ export interface InstallSceneIOOptions {
      *  load back even on a fresh runtime that doesn't have that formula
      *  in its registry. */
     serializeScene?: SceneSerializer;
+    /** File extension (no dot) used for the primary "Save Scene" menu
+     *  item. Default `'json'` — apps with a richer format set this to
+     *  match (e.g. GMT passes `'gmf'` so the download is named
+     *  `scene.gmf` matching the GMF bytes the serializer writes). */
+    fileExtension?: string;
 }
 
 let _installed = false;
 let _getCanvas: (() => HTMLCanvasElement | null) | undefined;
 let _parseScene: SceneParser | undefined;
 let _serializeScene: SceneSerializer | undefined;
+let _fileExtension: string = 'json';
 
 /** Pick the registered serializer, falling back to engine-core's plain
  *  JSON. Single source of truth — every save path routes through this. */
@@ -75,17 +80,23 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     if (options.getCanvas) _getCanvas = options.getCanvas;
     if (options.parseScene) _parseScene = options.parseScene;
     if (options.serializeScene) _serializeScene = options.serializeScene;
+    if (options.fileExtension) _fileExtension = options.fileExtension;
     if (_installed) return;
     _installed = true;
 
-    topbar.register({ id: 'scene-save', slot: 'right', order: 20, component: SaveMenu });
-    topbar.register({ id: 'scene-load', slot: 'right', order: 21, component: LoadButton });
-    // Standalone one-click PNG button — same operation as the dropdown's
-    // "Save PNG…" item, promoted to a quick-access camera affordance so
-    // users don't have to open the menu every time they want a
-    // screenshot. Hidden when the app didn't supply a canvas accessor.
+    // File menu groups Save Scene / Save PNG / Save JPG / Load behind a
+    // single dropdown so the topbar isn't crowded by individual buttons
+    // for each format. Snapshot is the only standalone save affordance
+    // — it's the most-used action so it's promoted out of the menu.
+    topbar.register({ id: 'scene-file', slot: 'right', order: 20, component: FileMenu });
+
+    // Standalone one-click snapshot button — the heavy-use PNG action
+    // promoted out of the File menu so users don't have to open it for
+    // every screenshot. Hidden when the app has no canvas. Uses an
+    // image icon (not a camera icon) to stay visually distinct from
+    // app-level camera-menu buttons that share the camera glyph.
     if (_getCanvas) {
-        topbar.register({ id: 'scene-quick-png', slot: 'right', order: 19, component: QuickPngButton });
+        topbar.register({ id: 'scene-snapshot', slot: 'right', order: 19, component: SnapshotButton });
     }
 
     // Alt+S — the conventional single-key screenshot shortcut in
@@ -101,13 +112,13 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
 };
 
 export const uninstallSceneIO = () => {
-    topbar.unregister('scene-save');
-    topbar.unregister('scene-load');
-    topbar.unregister('scene-quick-png');
+    topbar.unregister('scene-file');
+    topbar.unregister('scene-snapshot');
     shortcuts.unregister('scene-io.quick-png');
     _getCanvas = undefined;
     _parseScene = undefined;
     _serializeScene = undefined;
+    _fileExtension = 'json';
     _installed = false;
 };
 
@@ -137,18 +148,44 @@ export const loadSceneFile = async (file: File): Promise<Preset | null> => {
 };
 
 /**
- * Save the current scene as a JSON download. Routes through the
- * SceneIO-registered `serializeScene` (e.g. GMT's GMF writer that
- * embeds the active formula's shader) — no way to bypass.
+ * Save the current scene as a text-format download (JSON or whatever
+ * the registered serializer produces — GMT writes GMF). Routes through
+ * the SceneIO-registered `serializeScene` — no way to bypass.
  *
- * @param filename Override; defaults to `<project-name>.json`. Apps
- *   wanting a different extension (`.gmf`) pass it explicitly.
+ * @param filename Override; defaults to `<project-name>.<fileExtension>`
+ *   (extension defaults to 'json', GMT installs with 'gmf').
  */
-export const saveSceneJson = (filename?: string): void => {
+export const saveScene = (filename?: string): void => {
     const preset = useEngineStore.getState().getPreset({ includeScene: true });
     const text = activeSerializer()(preset);
     const blob = new Blob([text], { type: 'application/json' });
-    downloadBlob(blob, filename ?? `${defaultFileStem()}.json`);
+    downloadBlob(blob, filename ?? `${defaultFileStem()}.${_fileExtension}`);
+};
+
+/**
+ * Snapshot the registered canvas and save as a JPG. Web-friendly format
+ * for sharing the rendered image — does NOT embed scene metadata (JPG's
+ * EXIF is too awkward to write by hand and most receivers strip it
+ * anyway). Use PNG when you want a re-loadable file.
+ *
+ * @param filename Override; defaults to `<project-name>.jpg`.
+ * @param quality JPEG quality 0..1; defaults to 0.92 (visually lossless
+ *   for typical fractal renders, ~3x smaller than PNG).
+ */
+export const saveSceneJpg = async (filename?: string, quality: number = 0.92): Promise<void> => {
+    const canvas = _getCanvas?.();
+    if (!canvas) {
+        console.warn('[SceneIO] JPG save requested but no canvas accessor registered');
+        return;
+    }
+    const blob: Blob | null = await new Promise((resolve) => {
+        canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+    });
+    if (!blob) {
+        console.warn('[SceneIO] canvas.toBlob returned null for JPEG');
+        return;
+    }
+    downloadBlob(blob, filename ?? `${defaultFileStem()}.jpg`);
 };
 
 /**
@@ -172,13 +209,11 @@ export const saveScenePng = async (filename?: string): Promise<void> => {
     downloadBlob(blob, filename ?? `${defaultFileStem()}.png`);
 };
 
-// ── Save menu ────────────────────────────────────────────────────────────
+// ── Icons ───────────────────────────────────────────────────────────────
 
-const SaveIcon = () => (
+const FolderIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-        <polyline points="17 21 17 13 7 13 7 21" />
-        <polyline points="7 3 7 8 15 8" />
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
 );
 
@@ -188,91 +223,33 @@ const ChevronDownIcon = () => (
     </svg>
 );
 
-export const SaveMenu: React.FC = () => {
+// Image / picture glyph for the snapshot button. Visually distinct from
+// the camera glyph used by app-level camera-menu buttons (saved cameras
+// / nav modes), preventing the two from looking identical in the topbar.
+const ImageIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+    </svg>
+);
+
+// ── File menu (Save Scene / Save PNG / Save JPG / Load) ─────────────────
+
+export const FileMenu: React.FC = () => {
     const [open, setOpen] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const loadScene = useEngineStore((s) => s.loadScene);
     // Subscribe so the menu re-renders if the project name changes;
-    // saveSceneJson / saveScenePng read the current name internally.
+    // saveScene / saveScenePng read the current name internally.
     useEngineStore((s) => s.projectSettings.name);
 
     const close = useCallback(() => setOpen(false), []);
 
-    const handleSaveJson = () => { saveSceneJson(); close(); };
-    const handleSavePng  = async () => { await saveScenePng(); close(); };
-
-    const handleCopyShareLink = async () => {
-        const preset = useEngineStore.getState().getPreset({ includeScene: true });
-        const advanced = !!(useEngineStore.getState() as any).advancedMode;
-        const share = generateShareStringFromPreset(preset, advanced);
-        const url = `${location.origin}${location.pathname}?s=${share}`;
-        try {
-            await navigator.clipboard.writeText(url);
-            console.info('[SceneIO] Share link copied to clipboard');
-        } catch {
-            window.prompt('Copy share link:', url);
-        }
-        close();
-    };
-
-    return (
-        <div className="relative">
-            <button
-                type="button"
-                onClick={() => setOpen((o) => !o)}
-                className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
-                title="Save scene"
-            >
-                <SaveIcon />
-                <span>Save</span>
-                <ChevronDownIcon />
-            </button>
-            {open && (
-                <>
-                    <div className="fixed inset-0 z-40" onClick={close} />
-                    <div className="absolute top-full right-0 mt-1 w-44 bg-black/95 border border-white/10 rounded shadow-xl z-50 overflow-hidden">
-                        <button type="button" onClick={handleSaveJson}     className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Save JSON…</button>
-                        {_getCanvas && (
-                            <button type="button" onClick={handleSavePng} className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors border-t border-white/5">Save PNG… (Alt+S)</button>
-                        )}
-                        <button type="button" onClick={handleCopyShareLink} className="w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors border-t border-white/5">Copy Share Link</button>
-                    </div>
-                </>
-            )}
-        </div>
-    );
-};
-
-// ── Quick-PNG (camera) button ───────────────────────────────────────────
-
-const CameraIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-        <circle cx="12" cy="13" r="4" />
-    </svg>
-);
-
-export const QuickPngButton: React.FC = () => (
-    <button
-        type="button"
-        onClick={() => { void saveScenePng(); }}
-        className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
-        title="Save PNG (Alt+S)"
-        aria-label="Save PNG"
-    >
-        <CameraIcon />
-    </button>
-);
-
-// ── Load button ─────────────────────────────────────────────────────────
-
-const LoadIcon = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 3v5h5M21 21H3V3h11l7 7v11z" />
-    </svg>
-);
-
-export const LoadButton: React.FC = () => {
-    const inputRef = useRef<HTMLInputElement>(null);
-    const loadScene = useEngineStore((s) => s.loadScene);
+    const handleSaveScene = () => { saveScene(); close(); };
+    const handleSavePng   = async () => { await saveScenePng(); close(); };
+    const handleSaveJpg   = async () => { await saveSceneJpg(); close(); };
+    const handleLoad      = () => { inputRef.current?.click(); close(); };
 
     const handleFile = async (file: File) => {
         const preset = await loadSceneFile(file);
@@ -286,14 +263,15 @@ export const LoadButton: React.FC = () => {
         // debounce. Critical for GMF loads with a custom formula: the
         // app's parseScene has just registered the formula def + emitted
         // REGISTER_FORMULA; loadScene's CONFIG_DONE flushes the compile
-        // so the worker picks up the new shader. Without CONFIG_DONE the
-        // worker's debounce + REGISTER_FORMULA ordering is racy and the
-        // compile may target the wrong (or missing) formula.
+        // so the worker picks up the new shader.
         loadScene({ preset });
     };
 
+    const itemCls = 'w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors';
+    const sepCls  = 'border-t border-white/5';
+
     return (
-        <>
+        <div className="relative">
             <input
                 ref={inputRef}
                 type="file"
@@ -303,19 +281,48 @@ export const LoadButton: React.FC = () => {
                 onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFile(file);
-                    // Reset so the same filename can be re-loaded immediately.
                     if (inputRef.current) inputRef.current.value = '';
                 }}
             />
             <button
                 type="button"
-                onClick={() => inputRef.current?.click()}
+                onClick={() => setOpen((o) => !o)}
                 className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
-                title="Load scene (JSON or PNG)"
+                title="File"
             >
-                <LoadIcon />
-                <span>Load</span>
+                <FolderIcon />
+                <span>File</span>
+                <ChevronDownIcon />
             </button>
-        </>
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={close} />
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-black/95 border border-white/10 rounded shadow-xl z-50 overflow-hidden">
+                        <button type="button" onClick={handleSaveScene} className={itemCls}>Save Scene</button>
+                        {_getCanvas && (
+                            <>
+                                <button type="button" onClick={handleSavePng} className={`${itemCls} ${sepCls}`}>Save PNG <span className="text-gray-500">(Alt+S)</span></button>
+                                <button type="button" onClick={handleSaveJpg} className={`${itemCls} ${sepCls}`}>Save JPG <span className="text-gray-500">(image only)</span></button>
+                            </>
+                        )}
+                        <button type="button" onClick={handleLoad} className={`${itemCls} ${sepCls}`}>Load Scene…</button>
+                    </div>
+                </>
+            )}
+        </div>
     );
 };
+
+// ── Snapshot button (one-click PNG) ─────────────────────────────────────
+
+export const SnapshotButton: React.FC = () => (
+    <button
+        type="button"
+        onClick={() => { void saveScenePng(); }}
+        className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
+        title="Save PNG snapshot (Alt+S)"
+        aria-label="Save PNG snapshot"
+    >
+        <ImageIcon />
+    </button>
+);

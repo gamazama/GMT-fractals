@@ -13,8 +13,10 @@
  *
  * **Public app API lives in `engine/plugins/SceneIO`**, not here:
  *   - `loadSceneFile(file)` — file → preset via the registered parser
- *   - `saveSceneJson(filename?)` — current store → JSON download
+ *   - `saveScene(filename?)` — current store → text download (extension
+ *     follows installSceneIO's `fileExtension`, default 'json')
  *   - `saveScenePng(filename?)` — current store + canvas → PNG download
+ *   - `saveSceneJpg(filename?, quality?)` — canvas → JPG (image only)
  * Those route through the SceneIO-registered `parseScene` / `serializeScene`
  * (e.g. GMT injects GMF format awareness there) so a missing argument
  * cannot silently downgrade a custom-format load/save to plain JSON.
