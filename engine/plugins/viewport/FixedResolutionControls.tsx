@@ -158,14 +158,14 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
             {showResMenu && (
                 <div 
                     ref={presetMenuRef}
-                    className="absolute top-8 left-0 w-32 bg-black border border-white/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
+                    className="absolute top-8 left-0 w-48 bg-black border border-white/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
                 >
                     <div className="px-3 py-1 text-[8px] font-bold text-gray-500 border-b border-white/10 mb-1">Fit to Window</div>
                     {RATIO_PRESETS.map(p => (
                         <button 
                             key={p.label}
                             onClick={() => applyPreset(p.ratio)}
-                            className="text-left px-3 py-1.5 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors flex justify-between"
+                            className="text-left px-3 py-1.5 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors flex justify-between whitespace-nowrap"
                         >
                             <span>{p.label}</span>
                         </button>
