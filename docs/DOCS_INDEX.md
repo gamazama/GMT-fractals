@@ -102,17 +102,18 @@ about to work on this app":
 
 | App | README | What it covers |
 |---|---|---|
+| `app-gmt` | [app-gmt/README.md](../app-gmt/README.md) | File map, boot order, how to add a GMT feature/formula, key shortcuts, GMF format |
 | `fluid-toy` | [fluid-toy/README.md](../fluid-toy/README.md) | File map, "how to add a feature" recipe, deliberate-weirdness gotchas, smoke commands |
 | `demo` | [demo/README.md](../demo/README.md) | Minimal three-file plugin contract walkthrough |
-| `app-gmt` | (no dedicated README — GMT-on-engine port is documented in `HANDOFF.md` and the `gmt/` doc tree) | — |
 
 ## Reading paths
 
 ### New contributor
-1. [engine/01_Architecture.md](engine/01_Architecture.md) — three-tier model.
-2. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — the core primitive.
-3. [engine/03_Plugin_Contract.md](engine/03_Plugin_Contract.md) — how apps plug in.
-4. `demo/README.md` — a real three-file add-on walkthrough.
+1. [../CONTRIBUTING.md](../CONTRIBUTING.md) — setup, PR checklist, architecture rules summary.
+2. [engine/01_Architecture.md](engine/01_Architecture.md) — three-tier model.
+3. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — the core primitive.
+4. [engine/03_Plugin_Contract.md](engine/03_Plugin_Contract.md) — how apps plug in.
+5. [../demo/README.md](../demo/README.md) — a real three-file add-on walkthrough.
 
 ### Adding a feature
 1. [engine/02_Feature_Registry.md](engine/02_Feature_Registry.md) — `defineFeature` shape.
