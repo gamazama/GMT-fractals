@@ -171,13 +171,17 @@ export const parseGMF = (content: string): FractalDefinition => {
     const init = extract('Shader_Init');
     const dist = extract('Shader_Dist');
 
-    if (!func || !loop) {
+    // Modular builds its shader from the node-graph pipeline (stored in the
+    // preset), not from GLSL blocks — so empty Shader_Function / Shader_Loop
+    // is valid for Modular files. Imported / custom formulas still require
+    // both blocks.
+    if ((!func || !loop) && metadata.id !== 'Modular') {
          throw new Error("Invalid GMF: Missing essential shader blocks (<Shader_Function> or <Shader_Loop>)");
     }
 
     const shader: Record<string, any> = {
-        function: func,
-        loopBody: loop,
+        function: func ?? '',
+        loopBody: loop ?? '',
         preamble: preamble || undefined,
         loopInit: init || undefined,
         getDist: dist || undefined,
