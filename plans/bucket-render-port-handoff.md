@@ -44,41 +44,88 @@ Typecheck + build pass. Awaiting the user's manual test that app-gmt bucket rend
 
 ---
 
-### C. Phase 3 — Fluid-toy shader hooks
+### C. ✅ DONE — Phase 3 — Fluid-toy shader hooks
 
-**File**: `fluid-toy/fluid/shaders/julia.ts`
+`fluid-toy/fluid/shaders/julia.ts` — added the 4 uniforms with no-op defaults, plus a region-mask `discard` early-out at the top of `main()` and an image-tile UV remap on the per-K `uvJ`. Live viewport unchanged at defaults.
 
-**Add 4 uniforms** with no-op defaults so live viewport is unaffected:
+`fluid-toy/fluid/FluidEngine.ts` — added private state (`forceJuliaOnly`, `bucketTileOrigin/Size`, `bucketRegionMin/Max`), uploads the new uniforms each frame in `renderJulia()`, public setters `setForceJuliaOnly`, `isForceJuliaOnly`, `isForceFluidPaused`, `setBucketImageTile`, `setBucketRegion`. The display path now overrides show mode to `'julia'` when `forceJuliaOnly` is true, so during a bucket render the user sees the converged fractal alone (no dye/velocity blend).
 
-```glsl
-uniform vec2 uImageTileOrigin;   // default (0, 0)
-uniform vec2 uImageTileSize;     // default (1, 1)
-uniform vec2 uRegionMin;         // default (0, 0)
-uniform vec2 uRegionMax;         // default (1, 1)
+**Caveat (deep-zoom + bucket-render)**: the deep-zoom path uses `gl_FragCoord` for high-precision pixel offset from a reference orbit. Bucket render with deep-zoom enabled would need an additional `uTilePixelOrigin` offset in that math. For v1 we'll document "disable deep-zoom for export"; can be fixed later.
+
+---
+
+### D. ✅ DONE (awaiting validation) — Phase 4 — fluid-toy adapters + install
+
+`fluid-toy/bucket/FluidBucketController.ts` — implements `BucketRenderController`. Drives the image-tile loop directly against `FluidEngine` (no `BucketRunner`, see architectural finding below). Per tile: setBucketImageTile → setRenderSize → forceJuliaOnly+forceFluidPaused → resetAccumulation → await convergence (`getAccumulationCount() >= samplesPerBucket`) → if exporting, `canvas.toBlob` + download with `_rXcY` suffixed filename. Final block restores all saved state. Emits `FRACTAL_EVENTS.BUCKET_STATUS` for the panel's progress bar.
+
+`fluid-toy/main.tsx` — calls `installBucketRender({ controller: new FluidBucketController(() => appEngine.ref.current), slot: 'left', order: 30 })`. Lazy engine getter resolves at call time, so the install is safe to run before the engine boots.
+
+`fluid-toy/fluid/FluidEngine.ts` — added `getCanvas()` accessor (already had `setRenderSize`, `resetAccumulation`, `getAccumulationCount` from before).
+
+**Awaiting user validation in worktree** (`cd dev-bucket-render && npm run dev`):
+- Live fluid-toy viewport unchanged (uniform defaults are no-op).
+- Bucket-render button appears in fluid-toy's topbar at order 30.
+- Panel preview-region affordances are auto-hidden (controller doesn't implement them).
+- Refine View at viewport size: converges, no save.
+- Export at 4K, 1×1: one PNG saves, fractal-only (no dye/velocity blend).
+- Export at 8K, 2×2: four PNGs save with `_r0c0`/`_r0c1`/`_r1c0`/`_r1c1` suffixes; stitched externally should match a 1×1 8K render (no bloom/CA in fluid-toy = no seams).
+- After render finishes, viewport returns to normal (composite mode, sim resumes if it was running).
+
+**Trade-offs accepted in v1**:
+- Refine View doesn't keep the converged frame on screen (state restoration nukes it). User who wants the result should use Export Image. Could add held-final-frame later, mirroring GMT's pattern.
+- No GPU sub-bucketing within an image tile, so a single image tile must fit in VRAM. Fluid-toy has no multi-target ping-pong, so a 4K tile is ~50 MB — fine on any GPU. For larger single-tile renders, user picks a tile grid.
+- Deep-zoom + bucket-render: not supported. The deep-zoom path uses `gl_FragCoord` for high-precision pixel offset and would need an additional `uTilePixelOrigin` to be tile-aware. Disable deep-zoom for export in v1.
+
+**Architectural finding from this work**: `fluid-toy/fluid/FluidEngine.ts` uses raw WebGL2 (`gl: WebGL2RenderingContext`), not Three.js. The generic `BucketRunner` from phase 1 is hardcoded to `THREE.WebGLRenderer`/`WebGLRenderTarget`/`ShaderMaterial` for its composite buffer + scissor copy + readback machinery, and its `BucketRenderHost.getRenderer()` returns a `THREE.WebGLRenderer`. **Therefore fluid-toy cannot directly reuse `BucketRunner`** without a Three.js wrapper around its WebGL2 context.
+
+**Recommended path** (simplest): skip `BucketRunner` for fluid-toy v1 and run the tile loop directly inside `FluidBucketController`. Architecture:
+
+```
+fluid-toy/bucket/FluidBucketController.ts
+    implements BucketRenderController (engine/plugins/topbar/...)
+    constructor(fluidEngine: FluidEngine)
+    startBucketRender(exportImage, config) — drives the loop directly:
+        save state (renderSize, forceJuliaOnly, forceFluidPaused, show mode)
+        for each image tile (built same way as BucketRunner.start does):
+            engine.setRenderSize(tileW, tileH)
+            engine.setBucketImageTile(originUV, sizeUV)
+            engine.setBucketRegion([0,0], [1,1])  // single GPU bucket per tile in v1
+            engine.setForceJuliaOnly(true)
+            engine.setForceFluidPaused(true)
+            engine.resetAccumulation()
+            // wait until accumulationCount >= samplesPerBucket
+            // (poll in a setTimeout/RAF loop; the live render loop is still running
+            //  so frames accumulate naturally)
+            await convergence
+            if (exportImage) {
+                read pixels from canvas (gl.readPixels or canvas.toBlob)
+                save PNG with metadata (mirror BucketRunner.buildTileFilename)
+            }
+        endRender — restore state
+    stopBucketRender() — flag a cancellation
+    accumulationCount — proxy fluidEngine.getAccumulationCount()
 ```
 
-**In the shader's main()**:
-- Where the shader currently maps screen UV to fractal-space `c`, remap first:
-  ```glsl
-  vec2 uvFull = uImageTileOrigin + vUv * uImageTileSize;
-  // use uvFull instead of vUv for c-coord computation
-  ```
-- Add region mask early-out (before the iteration loop):
-  ```glsl
-  if (vUv.x < uRegionMin.x || vUv.x > uRegionMax.x ||
-      vUv.y < uRegionMin.y || vUv.y > uRegionMax.y) {
-      // preserve previous frame, or write transparent black
-      gl_FragColor = texture2D(uPrevAccum, vUv); // or whatever the existing accumulation source is
-      return;
-  }
-  ```
+**Skipped vs GMT**: no Float32 HDR composite, no GPU sub-buckets within a tile (so a single image tile must fit in VRAM — for fluid-toy this is fine since it has no multi-target ping-pong like GMT does), no bloom/CA post-pass on the composite. All acceptable for v1 ("converged fractal at print resolution"). Adding GPU sub-bucketing later would need a Three.js-context wrapper or a WebGL2-native composite implementation.
 
-**Wire uniforms through `FluidEngine`**:
-- Add the 4 uniforms to the julia material's uniform map.
-- Add public methods `setImageTileUv(origin, size)`, `setRegionUv(min, max)` that update them.
-- Defaults so live viewport renders unchanged.
+**File checklist**:
 
-**Verify**: `npm run smoke:fluid-toy` still passes; live fluid-toy in browser looks identical to before.
+1. `fluid-toy/bucket/FluidBucketController.ts` — implements `BucketRenderController`. Owns the tile loop. Reads `samplesPerBucket` from store / config, polls `engine.getAccumulationCount()` for convergence, calls into `engine.set*` methods built in phase 3.
+
+2. PNG save — fluid-toy is main-thread (no worker proxy), so save directly via `canvas.toBlob` + download link, similar to the DOM fallback in `BucketRunner.saveImage`. Filename: copy `buildTileFilename` from `BucketRunner` (single image vs `_rXcY` suffix for multi-tile).
+
+3. `fluid-toy/main.tsx` — after engine boot, call:
+   ```ts
+   import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
+   import { FluidBucketController } from './bucket/FluidBucketController';
+   installBucketRender({ controller: new FluidBucketController(fluidEngine) });
+   ```
+
+4. The fluid-toy panel doesn't have a `previewRegion` use case for v1. Omit `setPreviewRegion`/`clearPreviewRegion` from the controller — the panel auto-hides those affordances.
+
+**Test**: load fluid-toy, click bucket render button (now in topbar), pick 4K, click Refine. After convergence, a PNG saves. Then 8K with 2×2 grid → 4 PNGs. Stitch externally and check seams.
+
+**`FluidBucketHost` is no longer needed** for v1 (no `BucketRunner` to plug into). Skip that file. If GPU sub-bucketing is added later, build it then.
 
 ---
 

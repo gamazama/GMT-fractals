@@ -493,6 +493,20 @@ export class FluidEngine {
    *  the fluid pipeline out of the picture. The fractal pass still
    *  runs so TSAA can converge. */
   private forceFluidPaused = false;
+
+  /** Bucket-render: forces composite/display to render the converged julia
+   *  field only (no dye blend, no velocity). Set by FluidBucketHost during
+   *  a bucket-render session; restored on endRender. v1 tracks intent;
+   *  composite consumers may need to gate on it explicitly. */
+  private forceJuliaOnly = false;
+
+  /** Bucket-render uniforms — uploaded each renderJulia call. Defaults are
+   *  no-op (live viewport renders the full image, no region mask). */
+  private bucketTileOrigin: [number, number] = [0, 0];
+  private bucketTileSize:   [number, number] = [1, 1];
+  private bucketRegionMin:  [number, number] = [0, 0];
+  private bucketRegionMax:  [number, number] = [1, 1];
+
   /** Frame counter — advances every step. Feeds shader uFrameCount for
    *  blue-noise temporal animation. */
   private frameCount = 0;
@@ -684,6 +698,7 @@ export class FluidEngine {
       ['uTexel', 'uKind', 'uJuliaC', 'uCenter', 'uScale', 'uAspect', 'uMaxIter', 'uEscapeR2', 'uPower',
        'uColorIter', 'uTrapMode', 'uTrapCenter', 'uTrapRadius', 'uTrapNormal', 'uTrapOffset', 'uStripeFreq',
        'uJitterScale', 'uResolution', 'uBlueNoiseTexture', 'uBlueNoiseResolution', 'uFrameCount', 'uPerFrameSamples', 'uJitterMode', 'uGridSize', 'uTsaaSampleIndex',
+       'uImageTileOrigin', 'uImageTileSize', 'uRegionMin', 'uRegionMax',
        'uDeepZoomEnabled', 'uRefOrbit', 'uRefOrbitTexW', 'uRefOrbitLen', 'uDeepCenterOffset', 'uDeepScale',
        'uLATable', 'uLATexW', 'uLATotalCount', 'uLAEnabled', 'uLAStages[0]', 'uLAStageCount',
        'uATEnabled', 'uATStepLength', 'uATThresholdC', 'uATSqrEscapeRadius',
@@ -1298,6 +1313,11 @@ export class FluidEngine {
     // current value as "how many frames have already been accumulated"
     // = the new frame's index in the round (0-based).
     gl.uniform1i(this.progJulia.uniforms['uTsaaSampleIndex'], this.tsaaSampleIndex);
+    // Bucket-render uniforms (no-op defaults for live viewport).
+    gl.uniform2f(this.progJulia.uniforms['uImageTileOrigin'], this.bucketTileOrigin[0], this.bucketTileOrigin[1]);
+    gl.uniform2f(this.progJulia.uniforms['uImageTileSize'],   this.bucketTileSize[0],   this.bucketTileSize[1]);
+    gl.uniform2f(this.progJulia.uniforms['uRegionMin'],       this.bucketRegionMin[0],  this.bucketRegionMin[1]);
+    gl.uniform2f(this.progJulia.uniforms['uRegionMax'],       this.bucketRegionMax[0],  this.bucketRegionMax[1]);
     if (this.blueNoise) {
         this.bindTex(5, this.blueNoise.texture, this.progJulia.uniforms['uBlueNoiseTexture']);
         const [bnw, bnh] = this.blueNoise.getResolution();
@@ -1346,6 +1366,28 @@ export class FluidEngine {
 
   setForceFluidPaused(on: boolean): void {
     this.forceFluidPaused = on;
+  }
+
+  /** Bucket-render: render only the converged julia field, no dye/velocity blend. */
+  setForceJuliaOnly(on: boolean): void {
+    this.forceJuliaOnly = on;
+  }
+  /** Canvas accessor — used by the bucket-render controller for pixel readback. */
+  getCanvas(): HTMLCanvasElement { return this.canvas; }
+  isForceJuliaOnly(): boolean { return this.forceJuliaOnly; }
+  isForceFluidPaused(): boolean { return this.forceFluidPaused; }
+
+  /** Bucket-render: image-tile UV remap. Defaults (0,0)/(1,1) = full image. */
+  setBucketImageTile(originUV: [number, number], sizeUV: [number, number]): void {
+    this.bucketTileOrigin = [originUV[0], originUV[1]];
+    this.bucketTileSize   = [sizeUV[0],   sizeUV[1]];
+  }
+  /** Bucket-render: GPU sub-bucket region in tile-local UV. Outside this rect,
+   *  the julia shader discards the fragment so the accumulator preserves its
+   *  reset/cleared value. Defaults (0,0)/(1,1) = full tile. */
+  setBucketRegion(minUV: [number, number], maxUV: [number, number]): void {
+    this.bucketRegionMin = [minUV[0], minUV[1]];
+    this.bucketRegionMax = [maxUV[0], maxUV[1]];
   }
 
   /** TSAA blend pass. Reads juliaCur (current jittered frame) + juliaTsaa
@@ -1642,7 +1684,11 @@ export class FluidEngine {
     this.bindTex(3, this.gradients.getTexture('main')!, this.progDisplay.uniforms['uGradient']);
     this.bindTex(5, bloomTex ?? this.gradients.getTexture('main')!, this.progDisplay.uniforms['uBloom']);
     this.bindTex(6, juliaReadDisplay.texFx, this.progDisplay.uniforms['uMask']);
-    gl.uniform1i(this.progDisplay.uniforms['uShowMode'], showToIndex(this.params.show));
+    // forceJuliaOnly overrides show mode during bucket render — the export
+    // is the converged fractal alone, no dye/velocity blend. Restored on
+    // bucket-render endRender via setForceJuliaOnly(false).
+    const effectiveShow: ShowMode = this.forceJuliaOnly ? 'julia' : this.params.show;
+    gl.uniform1i(this.progDisplay.uniforms['uShowMode'], showToIndex(effectiveShow));
     gl.uniform1f(this.progDisplay.uniforms['uJuliaMix'], this.params.juliaMix);
     gl.uniform1f(this.progDisplay.uniforms['uDyeMix'], this.params.dyeMix);
     gl.uniform1f(this.progDisplay.uniforms['uVelocityViz'], this.params.velocityViz);

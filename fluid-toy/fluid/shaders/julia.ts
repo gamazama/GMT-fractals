@@ -136,6 +136,17 @@ uniform int   uTsaaSampleIndex;
 //       decorrelated taps so progressive refinement looks organic.
 uniform int   uJitterMode;
 
+// ── Bucket render (tiled high-resolution export) ─────────────────────────────
+// Defaults are no-ops for the live viewport. When BucketRunner drives a tiled
+// export, FluidEngine sets these so the fragment shader maps its UV into the
+// correct slice of the full output image, and skips writes outside the current
+// GPU bucket so the TSAA accumulator preserves its previous (or freshly reset)
+// value for those pixels. See plans/bucket-render-port-handoff.md.
+uniform vec2  uImageTileOrigin;   // UV origin of this image tile in full-output (default 0,0)
+uniform vec2  uImageTileSize;     // UV size of this image tile in full-output  (default 1,1)
+uniform vec2  uRegionMin;         // GPU bucket UV min in tile-local space      (default 0,0)
+uniform vec2  uRegionMax;         // GPU bucket UV max in tile-local space      (default 1,1)
+
 // ── Deep-zoom (perturbation) ─────────────────────────────────────────────────
 // Phase 3: per-pixel iteration runs against a CPU-built reference orbit
 // stored in uRefOrbit (RGBA32F, 2D). When uDeepZoomEnabled == 0 the
@@ -705,6 +716,15 @@ void evalJulia(vec2 uvJ, out vec4 outM, out vec4 outA) {
 }
 
 void main() {
+  // Region mask (bucket-render): outside the current GPU bucket we skip the
+  // whole fragment so the framebuffer keeps whatever was there before this
+  // bucket (typically a freshly reset accumulator). Defaults (0,0)-(1,1) make
+  // this a no-op for live viewport rendering.
+  if (vUv.x < uRegionMin.x || vUv.x > uRegionMax.x ||
+      vUv.y < uRegionMin.y || vUv.y > uRegionMax.y) {
+    discard;
+  }
+
   // K-sampling: do K jittered Julia evaluations per frame, average
   // the raw outputs, then push to the TSAA accumulator. Effective
   // samples per blend = K × frames, so a fixed sample-cap is reached
@@ -777,7 +797,9 @@ void main() {
     vec2 jitter = (uJitterScale > 0.0)
         ? (jitter01 - 0.5) * uJitterScale
         : vec2(0.0);
-    vec2 uvJ = vUv + jitter * invRes;
+    // Image-tile remap: map tile-local UV into full-output UV before sampling
+    // the fractal. Defaults make this an identity for live viewport.
+    vec2 uvJ = uImageTileOrigin + (vUv + jitter * invRes) * uImageTileSize;
 
     vec4 sM, sA;
     evalJulia(uvJ, sM, sA);

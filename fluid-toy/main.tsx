@@ -33,6 +33,9 @@ import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
+import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
+import { FluidBucketController } from './bucket/FluidBucketController';
+import { appEngine } from './engineHandles';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { installModulation } from '../engine/animation/modulationTick';
@@ -100,6 +103,16 @@ installTopBar();
 // which fluid-toy also consumes for TSAA gating, so one click toggles
 // both render-loop pause AND TSAA accumulation.
 installPauseControls();
+
+// @engine/topbar/BucketRender — high-quality tiled image export. Controller
+// drives FluidEngine directly; the panel auto-hides preview-region affordances
+// since fluid-toy v1 doesn't implement them.
+installBucketRender({
+    controller: new FluidBucketController(() => appEngine.ref.current),
+    slot: 'left',
+    order: 30,
+    id: 'fluid-toy-bucket-render',
+});
 
 // @engine/scene-io — Save + Load buttons into the topbar. PNG save
 // reads from the single canvas the app mounts (query by tag since
