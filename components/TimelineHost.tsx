@@ -12,6 +12,7 @@
 
 import React, { Suspense, useState, useCallback } from 'react';
 import { useEngineStore } from '../store/engineStore';
+import { useAnimationStore } from '../store/animationStore';
 import { TimelineOpenIcon } from './Icons';
 import { useShortcut } from '../engine/plugins/Shortcuts';
 
@@ -36,6 +37,38 @@ export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) =>
         description: 'Toggle timeline panel',
         category: 'Timeline',
         handler: toggleTimeline,
+    });
+
+    // Space → play/pause. Generic for any engine app: requires tracks
+    // to exist and skips when an app puts the camera in 'Fly' mode (so
+    // Space stays bound to fly-up). The 'timeline-hover' scope below
+    // shadows this with priority 10, so hovering the timeline always
+    // plays even in Fly mode.
+    const togglePlay = useCallback(() => {
+        const { isPlaying, play, pause, sequence } = useAnimationStore.getState();
+        if (Object.keys(sequence.tracks).length === 0) return;
+        if (isPlaying) pause();
+        else play();
+    }, []);
+    useShortcut({
+        id: 'engine.timeline.toggle-play',
+        key: 'Space',
+        description: 'Play / pause animation',
+        category: 'Timeline',
+        handler: togglePlay,
+        when: () => {
+            const s = useEngineStore.getState() as any;
+            return s.cameraMode !== 'Fly';
+        },
+    });
+    useShortcut({
+        id: 'engine.timeline.toggle-play-hovered',
+        key: 'Space',
+        scope: 'timeline-hover',
+        priority: 10,
+        description: 'Play / pause animation',
+        category: 'Timeline',
+        handler: togglePlay,
     });
 
     if (hidden) return null;

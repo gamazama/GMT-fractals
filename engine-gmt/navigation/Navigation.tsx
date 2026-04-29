@@ -843,8 +843,8 @@ const Navigation: React.FC<NavigationProps> = ({
           lastY = e.clientY;
           if (dy === 0) return;
           const dollySpeed = currentZoomSensitivity.current || 1.0;
-          // Drag down (positive dy) → zoom in (factor < 1)
-          const f = Math.exp(-dy * 0.005 * dollySpeed);
+          // Drag up (negative dy) → zoom in (factor < 1), matching scroll-wheel up.
+          const f = Math.exp(dy * 0.005 * dollySpeed);
           // Lazy-init gesture pivot with a fresh Vector3 (not a scratch
           // reused next call). On no-hover, fall back to forward.
           if (!gestureActivePivotRef.current) {

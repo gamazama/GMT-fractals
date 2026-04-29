@@ -31,6 +31,7 @@ import { installGmtModularSlice } from '../engine-gmt/store/modularSlice';
 import { installViewport, viewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
+import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installModulationUI, setLfoListConfig } from '../engine/components/modulation';
@@ -123,6 +124,7 @@ installViewport({
 // name lives inside GmtLogo. installPauseControls is intentionally not
 // called for the same reason.
 installTopBar({ hideDefaults: true });
+installPwaUpdate();
 
 installSceneIO({
     // The worker-owned canvas is the first <canvas> in the DOM — it's
