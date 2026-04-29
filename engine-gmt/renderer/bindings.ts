@@ -79,5 +79,20 @@ export const bindGmtRenderer = (): (() => void) => {
     // controller protocol plugs in here.
     unsubs.push(installAccumulationBindings(useEngineStore, getProxy()));
 
+    // BUCKET_STATUS event → store.isBucketRendering + store.isExporting.
+    // The bucket panel dims its controls and gates the progress bar on
+    // isBucketRendering; the broader UI (camera, panel resize, etc.)
+    // gates on isExporting. Stable used the same two-flip bridge —
+    // see stable/store/fractalStore.ts:507. Worker-side isExporting
+    // stays false so compute() keeps running during the bucket render.
+    unsubs.push(FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
+        const s = useEngineStore.getState() as {
+            setIsBucketRendering?: (v: boolean) => void;
+            setIsExporting?: (v: boolean) => void;
+        };
+        s.setIsBucketRendering?.(data.isRendering);
+        s.setIsExporting?.(data.isRendering);
+    }));
+
     return () => { unsubs.forEach((u) => u()); };
 };
