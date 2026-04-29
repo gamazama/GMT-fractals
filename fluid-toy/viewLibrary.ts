@@ -209,6 +209,13 @@ const seedDefaultViews = (): void => {
     // Direct write — bypasses captureView() so we don't pollute the
     // user's actual current fractal state with seed values.
     (useEngineStore.setState as any)({ savedViews: seeds });
+
+    // Auto-select the first seed (Mandelbrot · Home) so first-time visitors
+    // boot into a curated view rather than the slice's raw param defaults.
+    // selectView writes activeViewId AND applies the snap to julia.*.
+    // Returning users have arr.length > 0 above and skip this entirely.
+    const selectView = (useEngineStore.getState() as { selectView?: (id: string | null) => void }).selectView;
+    selectView?.(seeds[0].id);
 };
 
 export const installFluidToyViewLibrary = (): void => {
