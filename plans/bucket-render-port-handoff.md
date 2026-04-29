@@ -15,9 +15,16 @@ Make GMT's bucket render generic so both `app-gmt` and `fluid-toy` can use it.
 - `engine-gmt/engine/GmtBucketHost.ts` — GMT adapter. Wraps FractalEngine, BloomPass, MaterialController, RenderPipeline async-convergence.
 - `engine-gmt/engine/BucketRenderer.ts` — thin 85-line shim preserving the old `bucketRenderer` singleton API. Existing call sites (`FractalEngine.ts`, `renderWorker.ts`, `handleRenderTick.ts`) untouched.
 
-User confirmed: app-gmt bucket render + Refine View + tile grids 1×1 / 2×2 / various aspect ratios all work end-to-end with byte-identical output to pre-refactor.
-
 `npm run typecheck` passes. `npm run build` passes (~8s).
+
+**WARNING — phase 1 is NOT YET validated in a real run.** The user reported success but was likely running their dev server out of `h:/GMT/workspace-gmt/dev/` (branch `dev`, original 880-line `BucketRenderer.ts`), not this worktree. To actually validate phase 1:
+
+```bash
+cd h:/GMT/workspace-gmt/dev-bucket-render
+npm run dev
+```
+
+Then in app-gmt: trigger Refine View, then a real bucket render at e.g. 4K, then a 2×2 tile grid render. Confirm the output PNGs look identical to what `dev/` produces. Only then is phase 1 confirmed and the bindings.ts bridge (section A below) testable.
 
 ## Remaining work, in order
 
