@@ -29,23 +29,18 @@ The two-flip bridge (`setIsBucketRendering` + `setIsExporting` on receiving `FRA
 
 ---
 
-### B. Phase 2 — Generic topbar plugin (`installBucketRender`)
+### B. ✅ DONE — Phase 2 — Generic topbar plugin
 
-**Goal**: extract the topbar bucket button + panel popover from `engine-gmt/topbar/BucketRenderControls.tsx` into a generic `engine/plugins/topbar/BucketRenderPanel.tsx` that any app installs explicitly.
+The panel was extracted from `engine-gmt/topbar/BucketRenderControls.tsx` (now deleted) into `engine/plugins/topbar/BucketRenderPanel.tsx`, parameterized on a `BucketRenderController` interface. New files:
 
-**Steps**:
-1. Read `engine-gmt/topbar/BucketRenderControls.tsx` end-to-end (~616 LOC). Understand which pieces are GMT-specific (none of the rendering logic — that's already in `BucketRunner` + `GmtBucketHost`; what's specific is the *button caller* of `engine.startBucketRender()`).
-2. Move the panel component to `engine/plugins/topbar/BucketRenderPanel.tsx`. Replace `useEngineStore`/store types with what's already in engine-core. The panel only needs the renderControlSlice fields it already reads.
-3. Replace direct `getProxy()` calls with a parameter. The panel takes an `onStartRender(config)` and `onStartRefine()` callback prop — the app provides the renderer-specific entry points.
-4. Wrap with `installBucketRender({ host, presets? })` in `engine/plugins/topbar/installBucketRender.ts`. The install function:
-   - Registers a topbar button via the existing `@engine/topbar` slot system (see `docs/engine/04_Core_Plugins.md` § topbar for slot API).
-   - Wires onStartRender to call `host.start(...)` (or whatever entry the app passes).
-5. Update `app-gmt/main.tsx` to call `installBucketRender({ host: gmtHost, ... })` and remove the old direct topbar registration.
-6. Verify: `npm run typecheck` + `npm run build` pass; app-gmt bucket render still works identically.
+- `engine/plugins/topbar/BucketRenderController.ts` — the UI-side controller interface (start/stop/preview/accumulationCount). Distinct from `BucketRenderHost` (which is the runner-side adapter).
+- `engine/plugins/topbar/BucketRenderPanel.tsx` — the generic panel. Optional preview-region affordances hide automatically when the controller doesn't implement them (good for fluid-toy v1).
+- `engine/plugins/topbar/installBucketRender.tsx` — registers the topbar button + popover wrapper. Takes `{ controller, slot?, order?, id? }`.
+- `engine-gmt/topbar/GmtBucketController.ts` — wraps WorkerProxy and reads GMT preset state for export metadata. Replaces the inline GMT-specific code that used to live in the panel's `handleExport`.
 
-**Pitfall**: the panel currently calls `engine.startBucketRender(config, exportImage)` (where `engine = getProxy()`). For the generic version, route through `host` or pass an explicit callback. Don't import `getProxy` into the generic plugin file — that would re-couple it to the GMT worker proxy.
+`engine-gmt/topbar.tsx` now calls `installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render' })` instead of registering its old toggle component directly. The local `RenderGridIcon` and `BucketRenderToggle` definitions in that file were removed.
 
-**Reference for plugin pattern**: `engine/plugins/topbar/PauseControls.tsx` + how it's installed in app-gmt. Or `docs/engine/13_Extracting_From_GMT.md` for the worked TSAA + pause-button extraction (same playbook).
+Typecheck + build pass. Awaiting the user's manual test that app-gmt bucket render still works through the new path.
 
 ---
 
@@ -87,7 +82,24 @@ uniform vec2 uRegionMax;         // default (1, 1)
 
 ---
 
-### D. Phase 4 — `FluidBucketHost` + `setForceJuliaOnly` + install
+### D. Phase 4 — `FluidBucketHost` + `FluidBucketController` + `setForceJuliaOnly` + install
+
+**Two adapters needed**: `FluidBucketHost` (runner-side, drives BucketRunner) and `FluidBucketController` (UI-side, plugs the panel in via `installBucketRender`). Mirror `engine-gmt/engine/GmtBucketHost.ts` and `engine-gmt/topbar/GmtBucketController.ts` respectively.
+
+For fluid-toy v1, the controller can omit `setPreviewRegion` / `clearPreviewRegion` — the panel auto-hides those buttons. The controller's `startBucketRender` calls into a new entry point on `FluidEngine` that does:
+
+```ts
+fluidEngine.startBucketRender(exportImage: boolean, config: BucketRenderConfig) {
+    if (this.bucketRunner.getIsRunning()) return;
+    this.bucketRunner.start(this.bucketHost, config, exportImage);
+}
+fluidEngine.stopBucketRender() { this.bucketRunner.stop(); }
+get accumulationCount() { return this.tsaaSampleCount; } // or wherever fluid-toy tracks it
+```
+
+Where `this.bucketRunner` is a `BucketRunner` instance owned by FluidEngine, and `this.bucketHost` is a `FluidBucketHost` instance bound to it.
+
+Important: fluid-toy needs its own per-frame tick to call `this.bucketRunner.update()` after each render — same pattern as `engine-gmt/engine/FractalEngine.ts:422` (`bucketRenderer.update(this.renderer, this.state.bucketConfig)`).
 
 **1. `FluidEngine.setForceJuliaOnly(on: boolean)`**:
 Mirrors the existing `setForceFluidPaused` pattern. When on:

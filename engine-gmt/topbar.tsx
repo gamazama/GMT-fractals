@@ -31,7 +31,8 @@ import { ShareLinkButton } from './topbar/ShareLinkButton';
 import { StateLibraryToast } from '../engine/components/StateLibraryToast';
 import { dotFieldKey } from '../engine/store/createStateLibrarySlice';
 import { ViewportQuality } from './topbar/ViewportQuality';
-import BucketRenderSettingsPopup from './topbar/BucketRenderControls';
+import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
+import { GmtBucketController } from './topbar/GmtBucketController';
 import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
 
 const TopBarDivider: React.FC = () => (
@@ -69,62 +70,6 @@ const PathTracingToggle: React.FC = () => {
         >
             PT
         </button>
-    );
-};
-
-/**
- * Bucket Render button — opens the tiled-render settings popover.
- * The popover component itself (BucketRenderSettingsPopup) comes
- * verbatim from GMT; this wrapper owns the open-state + anchor.
- */
-const BucketRenderToggle: React.FC = () => {
-    const isBucketRendering = useEngineStore((s) => (s as any).isBucketRendering);
-    const rootRef = React.useRef<HTMLDivElement>(null);
-    const [open, setOpen] = React.useState(false);
-
-    React.useEffect(() => {
-        if (!open) return;
-        const onClick = (e: MouseEvent) => {
-            if (rootRef.current && rootRef.current.contains(e.target as Node)) return;
-            // Don't close during active bucket render, while a preview region is
-            // active (user needs the panel open to adjust params live), or while
-            // in preview-pick mode (the canvas click that picks shouldn't also
-            // dismiss the panel). Read fresh state to avoid stale closure.
-            const s = useEngineStore.getState() as any;
-            if (s.isBucketRendering) return;
-            if (s.previewRegion) return;
-            if (s.interactionMode === 'selecting_preview') return;
-            setOpen(false);
-        };
-        const id = setTimeout(() => document.addEventListener('mousedown', onClick), 0);
-        return () => { clearTimeout(id); document.removeEventListener('mousedown', onClick); };
-    }, [open]);
-
-    return (
-        <div className="relative" ref={rootRef}>
-            <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-                title="Render!"
-                className={`flex items-center justify-center p-1 rounded border transition-colors ${
-                    isBucketRendering
-                        ? 'text-cyan-300 bg-cyan-900/30 border-cyan-500/40 animate-pulse'
-                        : open
-                            ? 'text-cyan-300 border-cyan-500/40'
-                            : 'text-gray-500 border-white/10 hover:text-white hover:border-cyan-500/40'
-                }`}
-            >
-                <RenderGridIcon />
-            </button>
-            {open && (
-                <div
-                    className="absolute top-full left-0 mt-2 z-50"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <BucketRenderSettingsPopup />
-                </div>
-            )}
-        </div>
     );
 };
 
@@ -188,15 +133,6 @@ const PlayingBadge: React.FC = () => {
 };
 
 // ── Menu icons (minimal inline SVG — no external dep) ──────────────────
-
-const RenderGridIcon: React.FC = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" />
-        <rect x="14" y="3" width="7" height="7" />
-        <rect x="14" y="14" width="7" height="7" />
-        <path d="M3 14h7v7H3z" fill="currentColor" stroke="none" />
-    </svg>
-);
 
 const CropIcon: React.FC = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -285,7 +221,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     topbar.register({ id: 'gmt-path-tracing',     slot: 'left', order: 10,  component: PathTracingToggle });
     topbar.register({ id: 'gmt-playing-badge',    slot: 'left', order: 20,  component: PlayingBadge });
     topbar.register({ id: 'gmt-render-region',    slot: 'left', order: 25,  component: RenderRegionToggle });
-    topbar.register({ id: 'gmt-bucket-render',    slot: 'left', order: 30,  component: BucketRenderToggle });
+    installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render' });
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
     // Vibration feedback callback — noop here; apps that want haptic

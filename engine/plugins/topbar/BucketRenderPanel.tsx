@@ -1,16 +1,27 @@
+/**
+ * BucketRenderPanel — generic bucket-render settings popover.
+ *
+ * Ported from `engine-gmt/topbar/BucketRenderControls.tsx` and parameterized
+ * on a `BucketRenderController` so any app can install it. The panel reads
+ * generic store fields (renderControlSlice) and routes renderer-specific
+ * actions (start/stop, preview region, accumulation poll) through the
+ * controller. Apps provide a controller via `installBucketRender`.
+ *
+ * Optional features (preview region, picking mode) gracefully degrade when
+ * the controller doesn't implement them — fluid-toy v1, for example, omits
+ * the preview-region methods and the panel hides those affordances.
+ */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useEngineStore, getCanvasPhysicalPixelSize } from '../../store/engineStore';
-import Slider, { DraggableNumber } from '../../components/Slider';
-import ToggleSwitch from '../../components/ToggleSwitch';
-import Dropdown from '../../components/Dropdown';
-import { getProxy } from '../engine/worker/WorkerProxy';
-import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
-import { CheckIcon, DownloadIcon } from '../../components/Icons';
-import { Popover } from '../../components/Popover';
-import { SectionLabel } from '../../components/SectionLabel';
-
-const engine = getProxy();
+import { useEngineStore, getCanvasPhysicalPixelSize } from '../../../store/engineStore';
+import Slider, { DraggableNumber } from '../../../components/Slider';
+import ToggleSwitch from '../../../components/ToggleSwitch';
+import Dropdown from '../../../components/Dropdown';
+import { FractalEvents, FRACTAL_EVENTS } from '../../FractalEvents';
+import { CheckIcon, DownloadIcon } from '../../../components/Icons';
+import { Popover } from '../../../components/Popover';
+import { SectionLabel } from '../../../components/SectionLabel';
+import type { BucketRenderController } from './BucketRenderController';
 
 /** Estimate VRAM usage for a single image tile in MB. */
 function estimateTileVRAM(viewportW: number, viewportH: number, tileW: number, tileH: number): number {
@@ -50,13 +61,18 @@ const OUTPUT_PRESETS: Array<{ label: string; w: number; h: number }> = [
 /** Snap to multiples of 8 (GPU-friendly, matches QualityPanel convention). */
 const snap8 = (n: number) => Math.max(64, Math.round(n / 8) * 8);
 
-const BucketRenderSettingsPopup = () => {
+interface BucketRenderPanelProps {
+    controller: BucketRenderController;
+}
+
+const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => {
     const state = useEngineStore();
     const [progress, setProgress] = useState(0);
-    // Live sample-count readout for the in-panel preview status row. Polls the engine proxy
-    // every 100ms while a preview region is active. Previously this lived in a canvas-level
-    // HUD; moved into the panel so it doesn't clash with floating camera controls.
+    // Live sample-count readout for the in-panel preview status row. Polls the
+    // controller every 100ms while a preview region is active.
     const [previewSamples, setPreviewSamples] = useState(0);
+
+    const supportsPreview = !!controller.setPreviewRegion && !!controller.clearPreviewRegion;
 
     useEffect(() => {
         return FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
@@ -66,9 +82,9 @@ const BucketRenderSettingsPopup = () => {
 
     useEffect(() => {
         if (!state.previewRegion) return;
-        const id = setInterval(() => setPreviewSamples(engine.accumulationCount), 100);
+        const id = setInterval(() => setPreviewSamples(controller.accumulationCount), 100);
         return () => clearInterval(id);
-    }, [state.previewRegion]);
+    }, [state.previewRegion, controller]);
 
     // Escape exits preview region. Previously handled by the canvas HUD; that HUD is gone,
     // so this popover owns the shortcut while a preview is active.
@@ -76,7 +92,7 @@ const BucketRenderSettingsPopup = () => {
         if (!state.previewRegion) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                engine.clearPreviewRegion();
+                controller.clearPreviewRegion?.();
                 state.setPreviewRegion(null);
                 if (state.interactionMode === 'selecting_preview') {
                     state.setInteractionMode('none');
@@ -117,9 +133,9 @@ const BucketRenderSettingsPopup = () => {
             if (sNow.interactionMode === 'selecting_preview') sNow.setInteractionMode('none');
             if (sNow.previewRegion) {
                 sNow.setPreviewRegion(null);
-                engine.clearPreviewRegion();
+                controller.clearPreviewRegion?.();
             }
-            engine.stopBucketRender();
+            controller.stopBucketRender();
             // Restore the saved resolution mode from before the popover was opened.
             const saved = savedResolutionRef.current;
             if (saved) {
@@ -127,6 +143,7 @@ const BucketRenderSettingsPopup = () => {
                 sNow.setFixedResolution(saved.fixed[0], saved.fixed[1]);
             }
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // VRAM estimator uses the current canvas size (honors Fixed-mode without ResizeObserver lag).
@@ -141,7 +158,7 @@ const BucketRenderSettingsPopup = () => {
     // the configured export. See docs/44_Preview_Region_Plan.md decision #2.
     useEffect(() => {
         if (previewRegion) {
-            engine.clearPreviewRegion();
+            controller.clearPreviewRegion?.();
             state.setPreviewRegion(null);
             if (state.interactionMode === 'selecting_preview') {
                 state.setInteractionMode('none');
@@ -154,7 +171,7 @@ const BucketRenderSettingsPopup = () => {
     // while a preview is active, resend SET with the new cap.
     useEffect(() => {
         if (previewRegion) {
-            engine.setPreviewRegion(previewRegion, outputWidth, outputHeight, state.samplesPerBucket);
+            controller.setPreviewRegion?.(previewRegion, outputWidth, outputHeight, state.samplesPerBucket);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [state.samplesPerBucket]);
@@ -164,17 +181,11 @@ const BucketRenderSettingsPopup = () => {
     // locked to the viewport, output dims always track viewport aspect, so the viewport
     // already matches and no Fixed-mode swap is needed. In that case we also revert any
     // previously-applied swap so the user stays in their original resolution mode.
-    //
-    // The fit rect (when active) is the largest rectangle of output aspect that fits
-    // inside the available display area — captured ONCE at popover mount so subsequent
-    // output-dim changes always fit against the original viewport (not the progressively-
-    // shrinking Fixed-mode canvas from a previous iteration of this effect).
     useEffect(() => {
         const saved = savedResolutionRef.current;
-        if (!saved) return; // mount-effect hasn't set this yet
+        if (!saved) return;
 
         if (matchViewportAspect) {
-            // Aspect-lock ON → stay in (or revert to) the user's original resolution mode.
             if (state.resolutionMode !== saved.mode ||
                 state.fixedResolution[0] !== saved.fixed[0] ||
                 state.fixedResolution[1] !== saved.fixed[1]) {
@@ -191,7 +202,6 @@ const BucketRenderSettingsPopup = () => {
         const outAspect = outputWidth / Math.max(1, outputHeight);
         const availAspect = availW / availH;
 
-        // Largest rect of outAspect that fits inside (availW, availH)
         let fitW: number, fitH: number;
         if (outAspect > availAspect) {
             fitW = availW;
@@ -200,11 +210,9 @@ const BucketRenderSettingsPopup = () => {
             fitH = availH;
             fitW = Math.floor(availH * outAspect);
         }
-        // Safety cap so the canvas buffer stays sane on HiDPI (buffer = fit * dpr)
         const MAX_CSS = 3000;
         if (fitW > MAX_CSS) { fitW = MAX_CSS; fitH = Math.floor(fitW / outAspect); }
         if (fitH > MAX_CSS) { fitH = MAX_CSS; fitW = Math.floor(fitH * outAspect); }
-        // Snap to 8 for GPU friendliness
         fitW = Math.max(64, Math.round(fitW / 8) * 8);
         fitH = Math.max(64, Math.round(fitH / 8) * 8);
 
@@ -232,7 +240,6 @@ const BucketRenderSettingsPopup = () => {
 
     const fileCount = tileCols * tileRows;
 
-    // Preset match detection
     const currentPreset = useMemo(() => {
         const match = OUTPUT_PRESETS.find(p => p.w === outputWidth && p.h === outputHeight);
         return match ? match.label : 'Custom';
@@ -240,11 +247,7 @@ const BucketRenderSettingsPopup = () => {
 
     const viewportAspect = viewportPixels[1] > 0 ? viewportPixels[0] / viewportPixels[1] : 1;
 
-    // When "Lock to viewport aspect" is ON, only the ASPECT is locked — the user keeps
-    // their chosen output width (so high-res export is still meaningful). Height is
-    // derived from width / canvas_aspect each render, using a fresh read of the canonical
-    // canvas-size accessor (no memoization layer). 4px tolerance prevents snap8 rounding
-    // drift from triggering updates through the setWidth/setHeight handlers.
+    // When "Lock to viewport aspect" is ON, only the ASPECT is locked.
     useEffect(() => {
         if (!matchViewportAspect) return;
         const [cpxW, cpxH] = getCanvasPhysicalPixelSize(useEngineStore.getState());
@@ -282,16 +285,15 @@ const BucketRenderSettingsPopup = () => {
 
     const withRenderAction = (action: () => void) => {
         state.handleInteractionStart('param');
-        if (state.isBucketRendering) engine.stopBucketRender();
+        if (state.isBucketRendering) controller.stopBucketRender();
         else action();
         state.handleInteractionEnd();
     };
 
-    // Ensure no preview region is active before starting a bucket render. The preview
-    // uniforms would otherwise make the export cover only the previewed sub-rect.
+    // Ensure no preview region is active before starting a bucket render.
     const clearPreviewForRender = () => {
         if (state.previewRegion) {
-            engine.clearPreviewRegion();
+            controller.clearPreviewRegion?.();
             state.setPreviewRegion(null);
         }
         if (state.interactionMode === 'selecting_preview') {
@@ -302,7 +304,7 @@ const BucketRenderSettingsPopup = () => {
     const handleStartRefine = () => withRenderAction(() => {
         clearPreviewForRender();
         // Refine View is always a single-tile render at viewport resolution.
-        engine.startBucketRender(false, {
+        controller.startBucketRender(false, {
             bucketSize: state.bucketSize,
             outputWidth: viewportPixels[0],
             outputHeight: viewportPixels[1],
@@ -310,15 +312,13 @@ const BucketRenderSettingsPopup = () => {
             tileRows: 1,
             convergenceThreshold: state.convergenceThreshold,
             accumulation: state.accumulation,
-            samplesPerBucket: state.samplesPerBucket
+            samplesPerBucket: state.samplesPerBucket,
         });
     });
 
     const handleExport = () => withRenderAction(() => {
         clearPreviewForRender();
-        const preset = state.getPreset({ includeScene: true });
-        const currentVersion = state.prepareExport();
-        engine.startBucketRender(true, {
+        controller.startBucketRender(true, {
             bucketSize: state.bucketSize,
             outputWidth,
             outputHeight,
@@ -326,15 +326,11 @@ const BucketRenderSettingsPopup = () => {
             tileRows,
             convergenceThreshold: state.convergenceThreshold,
             accumulation: state.accumulation,
-            samplesPerBucket: state.samplesPerBucket
-        }, {
-            preset,
-            name: state.projectSettings.name,
-            version: currentVersion
+            samplesPerBucket: state.samplesPerBucket,
         });
     });
 
-    const showBloomSeamWarning = fileCount > 1; // Conservative: always warn when tiling.
+    const showBloomSeamWarning = fileCount > 1;
 
     return (
         <Popover width="w-80">
@@ -344,17 +340,17 @@ const BucketRenderSettingsPopup = () => {
                     {state.isBucketRendering && (
                         <button
                             type="button"
-                            onClick={() => engine.stopBucketRender()}
+                            onClick={() => controller.stopBucketRender()}
                             className="text-[9px] font-bold px-2 py-0.5 rounded border border-red-500/50 bg-red-500/20 text-red-300 animate-pulse"
                         >
                             Stop
                         </button>
                     )}
-                    {!state.isBucketRendering && state.previewRegion && (
+                    {!state.isBucketRendering && state.previewRegion && supportsPreview && (
                         <button
                             type="button"
                             onClick={() => {
-                                engine.clearPreviewRegion();
+                                controller.clearPreviewRegion?.();
                                 state.setPreviewRegion(null);
                                 if (state.interactionMode === 'selecting_preview') {
                                     state.setInteractionMode('none');
@@ -369,8 +365,7 @@ const BucketRenderSettingsPopup = () => {
                     )}
                 </div>
 
-                {/* Preview status row — shown only while a preview region is active. */}
-                {!state.isBucketRendering && state.previewRegion && (() => {
+                {!state.isBucketRendering && state.previewRegion && supportsPreview && (() => {
                     const r = state.previewRegion;
                     const rW = Math.round((r.maxX - r.minX) * outputWidth);
                     const rH = Math.round((r.maxY - r.minY) * outputHeight);
@@ -413,33 +408,31 @@ const BucketRenderSettingsPopup = () => {
                             <CheckIcon />
                             <span>Refine View</span>
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                // Three cases:
-                                //   1. A preview is currently showing → exit to full viewport.
-                                //   2. Picking mode is active (no preview yet) → cancel picking.
-                                //   3. Idle → enter picking mode.
-                                if (state.previewRegion) {
-                                    engine.clearPreviewRegion();
-                                    state.setPreviewRegion(null);
-                                    state.setInteractionMode('none');
-                                } else if (state.interactionMode === 'selecting_preview') {
-                                    state.setInteractionMode('none');
-                                } else {
-                                    state.setInteractionMode('selecting_preview');
-                                }
-                            }}
-                            className={`flex-1 py-2 rounded border text-[9px] font-bold transition-all flex flex-col items-center gap-1 ${
-                                state.interactionMode === 'selecting_preview' || state.previewRegion
-                                    ? 'bg-fuchsia-900/40 border-fuchsia-400/60 text-fuchsia-200'
-                                    : 'bg-gray-800 hover:bg-white/10 border-white/10 text-gray-300 hover:border-fuchsia-500/50 hover:text-fuchsia-300'
-                            }`}
-                            title="Preview a canvas section at export resolution (click canvas to pick)"
-                        >
-                            <span className="text-[11px]">⌖</span>
-                            <span>{state.previewRegion ? 'Previewing' : (state.interactionMode === 'selecting_preview' ? 'Pick on Canvas' : 'Preview Region')}</span>
-                        </button>
+                        {supportsPreview && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (state.previewRegion) {
+                                        controller.clearPreviewRegion?.();
+                                        state.setPreviewRegion(null);
+                                        state.setInteractionMode('none');
+                                    } else if (state.interactionMode === 'selecting_preview') {
+                                        state.setInteractionMode('none');
+                                    } else {
+                                        state.setInteractionMode('selecting_preview');
+                                    }
+                                }}
+                                className={`flex-1 py-2 rounded border text-[9px] font-bold transition-all flex flex-col items-center gap-1 ${
+                                    state.interactionMode === 'selecting_preview' || state.previewRegion
+                                        ? 'bg-fuchsia-900/40 border-fuchsia-400/60 text-fuchsia-200'
+                                        : 'bg-gray-800 hover:bg-white/10 border-white/10 text-gray-300 hover:border-fuchsia-500/50 hover:text-fuchsia-300'
+                                }`}
+                                title="Preview a canvas section at export resolution (click canvas to pick)"
+                            >
+                                <span className="text-[11px]">⌖</span>
+                                <span>{state.previewRegion ? 'Previewing' : (state.interactionMode === 'selecting_preview' ? 'Pick on Canvas' : 'Preview Region')}</span>
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={handleExport}
@@ -453,7 +446,6 @@ const BucketRenderSettingsPopup = () => {
                 )}
 
                 <div className={`space-y-2 transition-opacity ${state.isBucketRendering ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-                    {/* Quality controls */}
                     <Slider
                         label="Convergence Threshold"
                         value={state.convergenceThreshold}
@@ -478,7 +470,6 @@ const BucketRenderSettingsPopup = () => {
                     />
                     <p className="text-[8px] text-gray-500 -mt-1 px-1">Safety limit. Tiles stop early if converged.</p>
 
-                    {/* Output dimensions */}
                     <div className="pt-2 border-t border-white/5">
                         <SectionLabel className="block mb-1">Output Size</SectionLabel>
 
@@ -535,7 +526,6 @@ const BucketRenderSettingsPopup = () => {
                         </div>
                     </div>
 
-                    {/* Tile grid */}
                     <div className="pt-2 border-t border-white/5">
                         <div className="flex items-center justify-between mb-1">
                             <SectionLabel>Tile Grid</SectionLabel>
@@ -578,7 +568,6 @@ const BucketRenderSettingsPopup = () => {
                         )}
                     </div>
 
-                    {/* Resolution & VRAM summary */}
                     <div className="pt-2 border-t border-white/5 px-1">
                         <div className="text-[9px] text-gray-300">
                             {outputWidth}×{outputHeight}
@@ -592,7 +581,6 @@ const BucketRenderSettingsPopup = () => {
                         </div>
                     </div>
 
-                    {/* Bucket size (GPU tile, VRAM safety) */}
                     <div className="pt-2 border-t border-white/5">
                         <SectionLabel className="block mb-1">GPU Bucket Size</SectionLabel>
                         <ToggleSwitch
@@ -613,4 +601,4 @@ const BucketRenderSettingsPopup = () => {
     );
 };
 
-export default BucketRenderSettingsPopup;
+export default BucketRenderPanel;
