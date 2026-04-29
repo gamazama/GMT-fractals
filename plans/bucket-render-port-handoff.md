@@ -17,31 +17,15 @@ Make GMT's bucket render generic so both `app-gmt` and `fluid-toy` can use it.
 
 `npm run typecheck` passes. `npm run build` passes (~8s).
 
-**WARNING — phase 1 is NOT YET validated in a real run.** The user reported success but was likely running their dev server out of `h:/GMT/workspace-gmt/dev/` (branch `dev`, original 880-line `BucketRenderer.ts`), not this worktree. To actually validate phase 1:
+**Phase 1 validated in the worktree (`npm run dev` from `dev-bucket-render/`).** App-gmt: Refine View, 4K bucket render, 2×2 tile grids at multiple aspect ratios — all produce output identical to pre-refactor. The `bindings.ts` BUCKET_STATUS bridge is also confirmed working: panel controls dim during render, cyan progress bar fills.
 
-```bash
-cd h:/GMT/workspace-gmt/dev-bucket-render
-npm run dev
-```
-
-Then in app-gmt: trigger Refine View, then a real bucket render at e.g. 4K, then a 2×2 tile grid render. Confirm the output PNGs look identical to what `dev/` produces. Only then is phase 1 confirmed and the bindings.ts bridge (section A below) testable.
+**Resume from here**: skip section A (no longer needed — bridge works). Start at section B.
 
 ## Remaining work, in order
 
-### A. Fix dim/progress bar (small bug, do first)
+### A. ✅ DONE — `bindings.ts` BUCKET_STATUS bridge
 
-**Symptom**: during a bucket render, `useEngineStore.getState().isBucketRendering` reads `false`. The bucket panel only dims its controls + shows progress when this flag is `true`. Pre-existing wire-up gap from the engine extraction, **not** caused by phase 1.
-
-**What I tried**: added a listener in `engine-gmt/renderer/bindings.ts` (inside the exported `bindGmtRenderer()` function, lines ~82–95) that calls `setIsBucketRendering(data.isRendering)` and `setIsExporting(data.isRendering)` on receiving `FRACTAL_EVENTS.BUCKET_STATUS`. After hard-reload, the flag still reads `false`.
-
-**Why it's not firing — suspect, not confirmed**: `FractalEvents` import path drift between worker and main. The worker emits via `engine/FractalEvents.ts`; my main-thread listener imports from `../../engine/FractalEvents` which resolves to the same module. But re-check: the listener may be subscribed to a different singleton than `WorkerProxy.ts:295` re-emits to.
-
-**To debug**:
-1. Open devtools, set a breakpoint in `engine-gmt/engine/worker/WorkerProxy.ts:293` (`case 'BUCKET_STATUS'`). Trigger a render. If it hits, the worker→main bridge works.
-2. Set a breakpoint inside the listener I added at `engine-gmt/renderer/bindings.ts:88`. If it doesn't hit, the listener is wired to a different bus instance than `WorkerProxy` emits on. Fix: import `FractalEvents` directly in `WorkerProxy.ts` from the same path the bindings file uses, OR move the listener registration into `WorkerProxy._handleMessage` itself (set the store directly there).
-3. Reference: stable's bridge lives at `h:/GMT/workspace-gmt/stable/store/fractalStore.ts:507`. It does the same two flips — `setIsBucketRendering(isRendering)` + `setIsExporting(isRendering)`. The comment explains: "Piggyback on isExporting to lock UI (camera, panels, resize). The worker's own engine.state.isExporting stays false so compute() keeps running."
-
-**Acceptance**: during a bucket render in app-gmt, the panel's controls go opacity-50 + pointer-events-none, and the cyan progress bar fills left→right.
+The two-flip bridge (`setIsBucketRendering` + `setIsExporting` on receiving `FRACTAL_EVENTS.BUCKET_STATUS`) was added inside the exported `bindGmtRenderer()` in `engine-gmt/renderer/bindings.ts` (lines ~82–95). Confirmed firing — panel dims and progress bar shows during renders. Reference for what it mirrors: `h:/GMT/workspace-gmt/stable/store/fractalStore.ts:507`.
 
 ---
 
