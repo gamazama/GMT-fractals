@@ -171,97 +171,82 @@ export const AppGmt: React.FC = () => {
                         <Dock side="left" />
                     )}
 
-                    {/* Viewport area wrapper. Holds the ViewportFrame
-                        (which Fixed-mode-scales the canvas + canvas-glued
-                        overlays) AND a layer of viewport-area-relative
-                        HUD elements that should NOT shrink with the canvas
-                        in Fixed mode (navigation cluster, hint pop-ups,
-                        region-selection banner). The timeline already lives
-                        outside this and is window-relative — putting these
-                        at the same level keeps everything visually aligned. */}
-                    <div className="flex-1 relative overflow-hidden">
-                        <ViewportFrame className="absolute inset-0">
-                            {/* Wrapper div gives useInteractionManager a ref
-                                to measure pointer coords against. */}
-                            <div ref={viewportRef} className="absolute inset-0">
+                    <ViewportFrame className="flex-1">
+                        {/* Wrapper div gives useInteractionManager a ref
+                            to measure pointer coords against. */}
+                        <div ref={viewportRef} className="absolute inset-0">
 
-                            {/* Worker-rendered canvas (GMT's FractalEngine
-                                renders into OffscreenCanvas, auto-presents). */}
-                            <GmtRendererCanvas
-                                width={window.innerWidth}
-                                height={window.innerHeight}
+                        {/* Worker-rendered canvas (GMT's FractalEngine
+                            renders into OffscreenCanvas, auto-presents). */}
+                        <GmtRendererCanvas
+                            width={window.innerWidth}
+                            height={window.innerHeight}
+                        />
+
+                        {/* R3F scene — transparent overlay that hosts the
+                            tick driver (sendRenderTick each frame) + the
+                            navigation input handler. */}
+                        <Canvas
+                            style={{ position: 'absolute', inset: 0 }}
+                            camera={{ position: [0, 0, 3], fov: 60 }}
+                            gl={{ alpha: true, antialias: false, premultipliedAlpha: false }}
+                            onCreated={(s) => {
+                                s.gl.setClearColor(0x000000, 0);
+                                s.gl.setClearAlpha(0);
+                            }}
+                        >
+                            <GmtRendererTickDriver onLoaded={handleSceneReady} />
+                            <GmtNavigation
+                                mode={cameraMode}
+                                hudRefs={hudRefs}
+                                setSceneOffset={setSceneOffset}
+                                onStart={(s) => state.handleInteractionStart(s as any)}
+                                onEnd={() => state.handleInteractionEnd()}
                             />
+                        </Canvas>
 
-                            {/* R3F scene — transparent overlay that hosts the
-                                tick driver (sendRenderTick each frame) + the
-                                navigation input handler. */}
-                            <Canvas
-                                style={{ position: 'absolute', inset: 0 }}
-                                camera={{ position: [0, 0, 3], fov: 60 }}
-                                gl={{ alpha: true, antialias: false, premultipliedAlpha: false }}
-                                onCreated={(s) => {
-                                    s.gl.setClearColor(0x000000, 0);
-                                    s.gl.setClearAlpha(0);
-                                }}
-                            >
-                                <GmtRendererTickDriver onLoaded={handleSceneReady} />
-                                <GmtNavigation
-                                    mode={cameraMode}
-                                    hudRefs={hudRefs}
-                                    setSceneOffset={setSceneOffset}
-                                    onStart={(s) => state.handleInteractionStart(s as any)}
-                                    onEnd={() => state.handleInteractionEnd()}
-                                />
-                            </Canvas>
-
-                            {/* DOM viewport overlays — LightGizmo, DrawingOverlay, etc.
-                                Iterated from featureRegistry.getViewportOverlays().
-                                Stay inside ViewportFrame because they draw on / in the
-                                3D scene (gizmos / brush strokes use canvas-pixel coords). */}
-                            <DomOverlays />
-
-                            {/* Region-selection overlay — anchored to viewportRef so
-                                useRegionSelection's mouse listeners and the drawn
-                                rectangle share one coordinate space. Stays inside
-                                ViewportFrame for that reason. */}
-                            {activeRegion && (
-                                <RegionOverlay
-                                    region={activeRegion}
-                                    isGhostDragging={isGhostDragging}
-                                    isDrawing={!!drawPreview}
-                                    onClear={() => (state as any).setRenderRegion(null)}
-                                />
-                            )}
-
-                            {/* Preview Region ghost — follows the cursor while
-                                `interactionMode === 'selecting_preview'`. Clicking
-                                captures the rect and fires to the worker (handled
-                                by usePreviewTarget). */}
-                            {previewGhostRect && (
-                                <PreviewGhostOverlay region={previewGhostRect} />
-                            )}
-                            </div>
-                        </ViewportFrame>
-
-                        {/* ── Viewport-area-relative HUD layer ────────────
-                            Sits over ViewportFrame. Anchored to the
-                            viewport region (between docks), NOT the
-                            inner scaled canvas — so in Fixed mode these
-                            stay screen-anchored instead of shrinking
-                            inside a postage-stamp canvas. */}
+                        {/* DOM HUD overlay — DST/SPD readouts + reticle.
+                            Absolutely positioned inside ViewportFrame so
+                            it scales with the viewport, not the window. */}
                         <GmtNavigationHud
                             state={state as any}
                             actions={state as any}
                             isMobile={false}
                             hudRefs={hudRefs}
                         />
+
                         <HudHost />
+
+                        {/* DOM viewport overlays — LightGizmo, DrawingOverlay, etc.
+                            Iterated from featureRegistry.getViewportOverlays() */}
+                        <DomOverlays />
+
+                        {/* Region-selection overlay — mounted inside
+                            viewportRef so useRegionSelection's mouse
+                            listeners anchor to the same bounds. */}
+                        {activeRegion && (
+                            <RegionOverlay
+                                region={activeRegion}
+                                isGhostDragging={isGhostDragging}
+                                isDrawing={!!drawPreview}
+                                onClear={() => (state as any).setRenderRegion(null)}
+                            />
+                        )}
                         {isSelectingRegion && (
                             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-cyan-900/80 text-cyan-100 text-[10px] font-bold px-3 py-1 rounded-full border border-cyan-500/50 shadow-lg animate-pulse pointer-events-none z-[60]">
                                 Drag to select render region
                             </div>
                         )}
-                    </div>
+
+                        {/* Preview Region ghost — follows the cursor while
+                            `interactionMode === 'selecting_preview'`. Clicking
+                            captures the rect and fires to the worker (handled
+                            by usePreviewTarget). */}
+                        {previewGhostRect && (
+                            <PreviewGhostOverlay region={previewGhostRect} />
+                        )}
+                        </div>
+                    </ViewportFrame>
 
                     <Dock side="right" />
                 </div>
