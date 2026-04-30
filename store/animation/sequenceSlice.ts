@@ -6,6 +6,7 @@ import { Track, Keyframe, AnimationSequence } from '../../types';
 import { simplifyTrack } from '../../utils/CurveFitting';
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';
+import { splitCubicBezier, solveCubicBezierT } from '../../engine/BezierMath';
 
 const DEFAULT_SEQUENCE: AnimationSequence = {
     durationFrames: 300,
@@ -107,41 +108,84 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         set(state => {
             const track = state.sequence.tracks[trackId];
             if (!track) return state;
-            
+
             let interpolation: 'Linear' | 'Step' | 'Bezier' = explicitInterpolation || 'Bezier';
             if (!explicitInterpolation) {
-                // Determine best interpolation based on history
                 interpolation = TrackUtils.inferInterpolation(track.keyframes, frame);
             }
 
             const autoTangent = interpolation === 'Bezier';
-            
             const tempKey: Keyframe = { id: nanoid(), frame, value, interpolation, autoTangent, brokenTangents: false };
             const others = track.keyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
             const sorted = [...others, tempKey].sort((a,b) => a.frame - b.frame);
             const idx = sorted.findIndex(k => k.id === tempKey.id);
-            
+
             if (interpolation === 'Bezier') {
                 const prev = idx > 0 ? sorted[idx - 1] : undefined;
                 const next = idx < sorted.length - 1 ? sorted[idx + 1] : undefined;
-                const { l, r } = AnimationMath.calculateTangents(tempKey, prev, next, 'Auto');
-                tempKey.leftTangent = l; 
-                tempKey.rightTangent = r;
+
+                // De Casteljau split: when inserting between two Bezier keys, preserve
+                // the existing curve shape exactly. The new key adopts curve-derived
+                // tangents and the neighbours' adjacent handles are rewritten so the
+                // visual segment is unchanged. Falls back to Auto tangents at endpoints.
+                const canSplit = prev && next && prev.interpolation === 'Bezier' && next.interpolation === 'Bezier';
+                if (canSplit) {
+                    const k1HandleX = prev.rightTangent ? prev.rightTangent.x : (next.frame - prev.frame) / 3;
+                    const k1HandleY = prev.rightTangent ? prev.rightTangent.y : 0;
+                    const k2HandleX = next.leftTangent ? next.leftTangent.x : -(next.frame - prev.frame) / 3;
+                    const k2HandleY = next.leftTangent ? next.leftTangent.y : 0;
+
+                    const p0x = prev.frame,                p0y = prev.value;
+                    const p1x = prev.frame + k1HandleX,    p1y = prev.value + k1HandleY;
+                    const p2x = next.frame + k2HandleX,    p2y = next.value + k2HandleY;
+                    const p3x = next.frame,                p3y = next.value;
+
+                    const t = solveCubicBezierT(frame, p0x, p1x, p2x, p3x);
+                    const split = splitCubicBezier(t, p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);
+
+                    // Replace prev/next with curve-preserving handles. Mark all three
+                    // user-shaped so updateNeighbors won't clobber them downstream.
+                    const updatedPrev: Keyframe = {
+                        ...prev,
+                        autoTangent: false,
+                        rightTangent: { x: split.leftP1x - p0x, y: split.leftP1y - p0y },
+                    };
+                    const updatedNext: Keyframe = {
+                        ...next,
+                        autoTangent: false,
+                        leftTangent: { x: split.rightP2x - p3x, y: split.rightP2y - p3y },
+                    };
+                    tempKey.value = split.sy;
+                    tempKey.autoTangent = false;
+                    tempKey.leftTangent  = { x: split.leftP2x  - split.sx, y: split.leftP2y  - split.sy };
+                    tempKey.rightTangent = { x: split.rightP1x - split.sx, y: split.rightP1y - split.sy };
+
+                    sorted[idx - 1] = updatedPrev;
+                    sorted[idx + 1] = updatedNext;
+                } else {
+                    const { l, r } = AnimationMath.calculateTangents(tempKey, prev, next, 'Auto');
+                    tempKey.leftTangent = l;
+                    tempKey.rightTangent = r;
+                    TrackUtils.updateNeighbors(sorted, idx);
+                }
+            } else {
+                TrackUtils.updateNeighbors(sorted, idx);
             }
 
-            TrackUtils.updateNeighbors(sorted, idx);
-            
-            return { 
-                sequence: { 
-                    ...state.sequence, 
-                    tracks: { ...state.sequence.tracks, [trackId]: { ...track, keyframes: sorted } } 
-                } 
+            return {
+                sequence: {
+                    ...state.sequence,
+                    tracks: { ...state.sequence.tracks, [trackId]: { ...track, keyframes: sorted } }
+                }
             };
         });
     },
 
-    // Optimized batch operation for modulation recording to prevent UI jitter
-    // Uses O(1) append strategy for forward recording instead of O(N log N) sorting
+    // Optimized batch operation for modulation recording to prevent UI jitter.
+    // Uses O(1) append strategy for forward recording instead of O(N log N) sorting.
+    // Intentionally diverges from `addKeyframe`: defaults to Linear, skips tangent
+    // calculation and neighbour updates because dense recorded keys don't want smart
+    // Auto tangents. Don't merge these two without preserving both behaviours.
     batchAddKeyframes: (frame, updates, explicitInterpolation) => {
         set(state => {
             // Shallow clone tracks object
@@ -312,17 +356,42 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     const k = track.keyframes[idx];
                     
                     if (mode === 'Split') {
-                        track.keyframes[idx] = { ...k, brokenTangents: true, autoTangent: false };
-                    } else if (mode === 'Unified') {
-                        let rt = k.rightTangent!;
-                        let lt = k.leftTangent!;
+                        track.keyframes[idx] = { ...k, brokenTangents: true, autoTangent: false, tangentMode: undefined };
+                    } else if (mode === 'Unified' || mode === 'Aligned') {
+                        // Lock both handles to a shared through-direction (average of current
+                        // left/right) so the result is order-independent — neither side "wins".
+                        // Unified shares magnitude across both handles; Aligned keeps each side's
+                        // own length, only locking the angle.
+                        const rt = k.rightTangent;
+                        const lt = k.leftTangent;
+                        let newLt = lt;
+                        let newRt = rt;
                         if (rt && lt) {
-                            const len = Math.sqrt(rt.x*rt.x + rt.y*rt.y);
-                            const normL = Math.sqrt(lt.x*lt.x + lt.y*lt.y);
-                            // Project right to match left
-                            rt = { x: -lt.x * (len/Math.max(0.001, normL)), y: -lt.y * (len/Math.max(0.001, normL)) };
+                            // Through-vector points from left handle tip to right handle tip
+                            const tx = rt.x - lt.x;
+                            const ty = rt.y - lt.y;
+                            const tlen = Math.hypot(tx, ty);
+                            if (tlen > 1e-6) {
+                                const ux = tx / tlen;
+                                const uy = ty / tlen;
+                                const lLen = Math.hypot(lt.x, lt.y);
+                                const rLen = Math.hypot(rt.x, rt.y);
+                                const sharedLen = (lLen + rLen) * 0.5;
+                                const useL = mode === 'Unified' ? sharedLen : lLen;
+                                const useR = mode === 'Unified' ? sharedLen : rLen;
+                                newLt = { x: -ux * useL, y: -uy * useL };
+                                newRt = { x:  ux * useR, y:  uy * useR };
+                            }
                         }
-                        track.keyframes[idx] = { ...k, rightTangent: rt, brokenTangents: false, autoTangent: false };
+                        track.keyframes[idx] = {
+                            ...k,
+                            leftTangent: newLt,
+                            rightTangent: newRt,
+                            brokenTangents: false,
+                            autoTangent: false,
+                            // Aligned is the default; only flag explicit Unified.
+                            tangentMode: mode === 'Unified' ? 'Unified' : undefined,
+                        };
                     } else if (mode === 'Auto' || mode === 'Ease') {
                         const prev = track.keyframes[idx - 1];
                         const next = track.keyframes[idx + 1];

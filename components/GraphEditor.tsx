@@ -38,12 +38,16 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     // We use a Div to capture pointer events reliably even if canvas is re-rendering
     const interactionRef = useRef<HTMLDivElement>(null);
 
-    const { 
+    const {
         sequence, currentFrame, durationFrames,
-        selectedKeyframeIds, selectedTrackIds, selectKeyframe, selectTracks,
+        selectedKeyframeIds, selectedTrackIds, selectKeyframe, setTrackSelection, selectKeyframes, deselectAllKeys,
         softSelectionEnabled, softSelectionRadius, softSelectionType,
         copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes
     } = useAnimationStore();
+
+    // Selected-only filter: hides any track in the graph that has no selected key.
+    // Industry "key-only mode" — focuses the curve editor on what the user is editing.
+    const [selectedOnly, setSelectedOnly] = useState(false);
     
     const { openContextMenu: openGlobalContextMenu } = useEngineStore();
     
@@ -51,6 +55,17 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     const [normalized, setNormalized] = useState(propNormalized); 
     
     const canvasWidth = Math.max(10, width - sidebarWidth);
+
+    // Tracks actually drawn in the graph (filtered when selectedOnly is on).
+    const displayTrackIds = useMemo(() => {
+        if (!selectedOnly) return trackIds;
+        const tracksWithSelectedKeys = new Set<string>();
+        selectedKeyframeIds.forEach(cid => {
+            const tid = cid.split('::')[0];
+            tracksWithSelectedKeys.add(tid);
+        });
+        return trackIds.filter(id => tracksWithSelectedKeys.has(id) || selectedTrackIds.includes(id));
+    }, [selectedOnly, trackIds, selectedKeyframeIds, selectedTrackIds]);
     
     // --- VIEW CALCULATIONS ---
     const view: GraphViewTransform = useMemo(() => {
@@ -112,7 +127,7 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
         softInteraction,
         shouldSuppressContextMenu
     } = useGraphInteraction(
-        interactionRef, view, trackIds, normalized, trackRanges, v2p, onSetScroll, onSetFrameWidth, setViewY,
+        interactionRef, view, displayTrackIds, normalized, trackRanges, v2p, onSetScroll, onSetFrameWidth, setViewY,
         frameToCanvasPixel, canvasPixelToFrame, GRAPH_LEFT_GUTTER_WIDTH
     );
 
@@ -217,6 +232,19 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === 'c') { e.preventDefault(); copySelectedKeyframes(); }
                 else if (e.key === 'v') { e.preventDefault(); pasteKeyframes(); }
+            } else if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+                // Alt+A: deselect all keys (industry standard)
+                e.preventDefault();
+                deselectAllKeys();
+            } else if (e.key === 'a' || e.key === 'A') {
+                // A: select all keys on currently displayed tracks
+                e.preventDefault();
+                const all: string[] = [];
+                displayTrackIds.forEach(tid => {
+                    const t = sequence.tracks[tid];
+                    if (t) t.keyframes.forEach(k => all.push(`${tid}::${k.id}`));
+                });
+                selectKeyframes(all, false);
             } else {
                 if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelectedKeyframes(); }
                 if (e.key === 'f') { e.preventDefault(); fitSelection(); }
@@ -224,7 +252,7 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes, fitSelection]);
+    }, [copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes, fitSelection, displayTrackIds, sequence, selectKeyframes, deselectAllKeys]);
 
     // --- EVENT HANDLERS ---
     const handleCanvasMouseDown = (e: React.MouseEvent) => {
@@ -262,7 +290,7 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
             const composite = `${hit.trackId}::${hit.key.id}`;
             if (!selectedKeyframeIds.includes(composite)) {
                 selectKeyframe(hit.trackId, hit.key.id, false);
-                useAnimationStore.getState().selectTracks([hit.trackId], false);
+                setTrackSelection(hit.trackId);
             }
             onContextMenu(e, hit.trackId, hit.key.id, hit.key.interpolation);
         } else {
@@ -309,10 +337,10 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     const highlightedTracks = useMemo(() => {
         const s = new Set<string>();
         selectedTrackIds.forEach(id => {
-            if (trackIds.includes(id)) s.add(id);
+            if (displayTrackIds.includes(id)) s.add(id);
         });
         return s;
-    }, [selectedKeyframeIds, selectedTrackIds, trackIds]);
+    }, [selectedTrackIds, displayTrackIds]);
 
     return (
         <div className="flex w-full h-full bg-transparent select-none" data-help-id="anim.graph">
@@ -329,7 +357,7 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
                         height={height}
                         view={view}
                         sequence={sequence}
-                        trackIds={trackIds}
+                        trackIds={displayTrackIds}
                         currentFrame={currentFrame}
                         durationFrames={durationFrames}
                         selectedKeyframeIds={selectedKeyframeIds}
@@ -381,6 +409,8 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
                     onSmoothDown={tools.handleSmoothDown}
                     isSimplifying={tools.isSimplifying}
                     onSimplifyDown={tools.handleSimplifyDown}
+                    selectedOnly={selectedOnly}
+                    onToggleSelectedOnly={() => setSelectedOnly(s => !s)}
                 />
             </div>
         </div>

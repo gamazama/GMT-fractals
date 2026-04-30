@@ -1,6 +1,12 @@
 # 08 — Animation 🚧
 
-Timeline + keyframes + modulation.
+Timeline + keyframes + modulation, **from the engine-fork / plugin perspective**: contracts, decisions, what features have to do (and not do) to animate.
+
+> **Scope split**
+> - **This doc** — engine fork: plugin contract, binder resolution, decisions log, fragility audit. Read this if you are wiring a feature into the animation system or evaluating an architectural change.
+> - **[`gmt/04_Animation_Engine.md`](../gmt/04_Animation_Engine.md)** — GMT-app-specific implementation reference: data shapes, math (Bezier solver, tangent modes, de Casteljau split), camera unification, store slices, timeline UI components. Read this when touching the animation code itself.
+>
+> The engine fork **uses** GMT's production `AnimationSystem.tick` verbatim (see "Current implementation" below), so anything in the GMT doc that describes runtime behaviour applies here too.
 
 **Rule:** if you declare a param in a feature, it's animatable — the binder is derived at animate-time from feature id + track id.
 
@@ -275,6 +281,23 @@ Rarely needed — prefer `derive()` / `bridge()` in [09_Bridges_and_Derived.md](
 ### 2026-04-22 — Recording always uses captured snapshot
 **Decision:** recording snapshots the base at start, never uses live modulated value.
 **Rationale:** GMT's pain point; documented fix that we're preserving structurally.
+
+### 2026-04-30 — Scrub also reads from snapshot during modulation recording
+**Decision:** while `isRecordingModulation`, `AnimationEngine.scrub()` evaluates the `recordingSnapshot` rather than the live sequence.
+**Rationale:** the modulation overlay only fires when offset > ε. Brief returns to zero offset would let the freshly-mutated live curve show through, jittering the playhead. Reading the snapshot keeps the rendered value smooth across zero-offset moments. The modulation system already used the snapshot for `cleanBase` lookups; the `scrub()` path completes the symmetry.
+
+### 2026-04-30 — Tangent modes follow Maya/Blender conventions
+**Decision:** Bezier tangents have five modes (Auto / Ease / Aligned / Unified / Free). Aligned (direction-locked, per-side length preserved) is the default after a user touches a handle; Unified (direction + length locked) is opt-in via context menu.
+**Rationale:** GMT was a single Unified mode that lost the user's per-side length intent on every drag. Aligned matches industry expectation and stops the surprising symmetric snap-back.
+**Alternative considered:** full `tangentMode` enum migration replacing `autoTangent`/`brokenTangents` booleans. Deferred — the optional `tangentMode?: 'Aligned' | 'Unified'` field covers the new behaviour without forcing a GMF format / inspector rewrite.
+
+### 2026-04-30 — Curve-preserving insert (de Casteljau split)
+**Decision:** when `addKeyframe` inserts between two Bezier keys, perform a de Casteljau split at the insert frame. The new key adopts curve-derived tangents and the prev/next adjacent handles are rewritten so the visual segment is unchanged.
+**Rationale:** previous behaviour computed Auto tangents for the new key and silently rescaled neighbours, producing visible kinks when the surrounding curve had been hand-shaped. Subdivide is what every DCC tool does for "insert key on curve."
+
+### 2026-04-30 — Track-selection actions split by intent
+**Decision:** replaced `selectTrack(id, multi)` and `selectTracks(ids, select)` (boolean polymorphism) with four named actions: `setTrackSelection(id)`, `toggleTrackSelection(id)`, `addTracksToSelection(ids)`, `removeTracksFromSelection(ids)`.
+**Rationale:** old API conflated "replace" / "toggle" / "add" / "remove" behind two boolean flags whose meaning differed (`multi: boolean` vs `select: boolean`). Intent now reads at the call site.
 
 ## Known fragilities
 

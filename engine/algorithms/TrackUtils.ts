@@ -12,58 +12,34 @@ export const TrackUtils = {
      */
     updateNeighbors: (sortedKeys: Keyframe[], idx: number): void => {
         const newKey = sortedKeys[idx];
-        const isNewLastKey = idx === sortedKeys.length - 1;
 
-        // 1. Update Previous Key
+        // Only recompute neighbours whose tangents are auto-managed.
+        // User-shaped tangents (autoTangent === false) are sacred — don't silently rescale them.
+
         const prevIdx = idx - 1;
         if (prevIdx >= 0) {
-            const prev = { ...sortedKeys[prevIdx] };
-            sortedKeys[prevIdx] = prev; // Update reference in array
-
-            if (prev.interpolation === 'Bezier') {
-                const dist = newKey.frame - prev.frame;
-                
-                if (prev.autoTangent) {
-                    const prevPrev = sortedKeys[prevIdx - 1];
-                    const { l, r } = AnimationMath.calculateTangents(prev, prevPrev, newKey, 'Auto');
-                    prev.leftTangent = l; 
-                    prev.rightTangent = r;
-                } else {
-                     const constraint = AnimationMath.constrainHandles(prev, sortedKeys[prevIdx - 1], newKey);
-                     Object.assign(prev, constraint);
-                }
-
-                // If we added a key at the very end, ensure the previous key points towards it somewhat naturally
-                // This prevents "overshoot" when extending animations
-                if (isNewLastKey && dist > 0.0001) {
-                    const targetX = dist * 0.3; 
-                    const currentRt = prev.rightTangent || { x: 10, y: 0 };
-                    // If current tangent is extremely short, extend it
-                    if (currentRt.x < targetX) {
-                        const ratio = targetX / Math.max(0.0001, Math.abs(currentRt.x));
-                        prev.rightTangent = { x: targetX, y: currentRt.y * ratio };
-                    }
-                }
+            const prev = sortedKeys[prevIdx];
+            if (prev.interpolation === 'Bezier' && prev.autoTangent) {
+                const updated = { ...prev };
+                const prevPrev = sortedKeys[prevIdx - 1];
+                const { l, r } = AnimationMath.calculateTangents(updated, prevPrev, newKey, 'Auto');
+                updated.leftTangent = l;
+                updated.rightTangent = r;
+                sortedKeys[prevIdx] = updated;
             }
         }
 
-        // 2. Update Next Key
         const nextIdx = idx + 1;
         if (nextIdx < sortedKeys.length) {
-             const next = { ...sortedKeys[nextIdx] };
-             sortedKeys[nextIdx] = next;
-
-             if (next.interpolation === 'Bezier') {
-                 if (next.autoTangent) {
-                    const nextNext = sortedKeys[nextIdx + 1];
-                    const { l, r } = AnimationMath.calculateTangents(next, newKey, nextNext, 'Auto');
-                    next.leftTangent = l; 
-                    next.rightTangent = r;
-                 } else {
-                    const constraints = AnimationMath.constrainHandles(next, newKey, sortedKeys[nextIdx + 1]);
-                    Object.assign(next, constraints);
-                 }
-             }
+            const next = sortedKeys[nextIdx];
+            if (next.interpolation === 'Bezier' && next.autoTangent) {
+                const updated = { ...next };
+                const nextNext = sortedKeys[nextIdx + 1];
+                const { l, r } = AnimationMath.calculateTangents(updated, newKey, nextNext, 'Auto');
+                updated.leftTangent = l;
+                updated.rightTangent = r;
+                sortedKeys[nextIdx] = updated;
+            }
         }
     },
     

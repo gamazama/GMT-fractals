@@ -28,14 +28,22 @@ The central hub for creating motion. It allows you to animate almost any paramet
 6. Press **Space** to play.
 
 ## Selection & Editing
-- **Click**: Select single key.
+- **Click a key**: Select single key.
 - **Shift+Click**: Add to selection.
-- **Drag Box**: Select multiple keys.
+- **Drag empty space**: Marquee — selects every key inside the box. Hold Shift to add to the existing selection.
+- **Click a track header (Dope Sheet)**: selects the track only. It does NOT auto-select every key on that track — that way an accidental Delete won't wipe a whole track. To grab every key on a track, use the **select-all icon** that appears when you hover the row.
+- **Click a track row (Graph Sidebar)**: selects the track AND turns its eye on so you see the curve. The eye column is the only thing that *hides* a curve — selecting will never hide.
 - **Soft Selection**: A persistent toggle mode that can be enabled in the **Keyframe Inspector**. When active, moving a keyframe also influences nearby keys with a smooth falloff.
   - **Falloff Types**: Linear, Dome, S-Curve, Pinpoint.
   - **Radius**: Controls how far the influence extends. Adjust with **Ctrl+Drag**.
 - **Copy/Paste**: Use **Ctrl+C** and **Ctrl+V** to duplicate keys (works across different tracks!). You can also right-click for **Duplicate Here**, or **Duplicate & Loop** (x2, x3, x4, x8) to repeat a pattern.
 - **Delete**: Press Backspace/Delete.
+
+## Group Operations
+Once you have keys selected, an orange **transform bar** appears:
+- The bar shows up on the **Global Summary** row at the top, AND on each group row that contains selected keys.
+- **Drag the middle**: move all selected keys together in time.
+- **Drag the left/right edge**: scale the time range (squeeze or stretch). Bezier handles scale proportionally so the curve shape is preserved.
 `
     },
     'anim.transport': {
@@ -69,8 +77,9 @@ Controls for playback and recording.
 Each animated parameter has its own **Track**.
 
 - **Creation**: Tracks are created automatically when you add a keyframe to a parameter.
-- **Visibility**: Use the Eye icon in the Graph Editor sidebar to show/hide curves.
-- **Grouping**: Tracks are automatically grouped by category (Camera, Formula, Optics, Lighting, Shading) in the Dope Sheet.
+- **Visibility**: Each row has an **Eye icon** (in both the Graph Editor sidebar AND the Dope Sheet on hover) — this controls whether the curve is drawn in the Graph Editor. Selection and visibility are independent: clicking a track in the Graph Sidebar will turn its eye ON additively, but nothing except the eye itself can turn a track OFF.
+- **Select all keys on a track**: Hover a row and click the small **select-all icon** that appears next to the eye. Shift/Ctrl+click adds to the existing selection.
+- **Grouping**: Tracks are automatically grouped by category (Camera, Formula, Optics, Lighting, Shading) in the Dope Sheet AND the Graph Sidebar.
 
 ## Context Menu
 Right-click a track header to access:
@@ -100,11 +109,24 @@ Right-click a keyframe to change how the value moves *between* keys:
 - **Step**: Instant jump. The value holds constant until the next keyframe, then snaps instantly.
 
 ## Tangents (Graph Editor)
-When using Bezier interpolation, handles control the curve slope:
-- **Auto**: Automatically smooths the curve based on neighbors.
-- **Flat (Ease)**: Flattens the slope to 0. Great for "Slow In / Slow Out".
-- **Unified**: Both handles move together symmetrically, keeping a smooth curve while allowing manual adjustment.
-- **Broken**: Allows sharp corners (incoming slope != outgoing slope).
+When using Bezier interpolation, the handles control how the curve enters and leaves the key. Right-click a key to switch modes:
+
+- **Auto**: Smooth curve fitted automatically from neighbours. Recomputes whenever you add/move adjacent keys. Good first choice.
+- **Flat (Ease)**: Both handles flat (slope = 0). Classic "Slow In / Slow Out" — great for hold-then-move motion.
+- **Aligned** *(default once you drag a handle)*: Direction is locked across the key (no kink), but each side keeps its own length. Drag one handle and the other rotates to mirror the angle but keeps its existing magnitude. This is the Maya/Blender default and what you want most of the time.
+- **Unified**: Direction AND length locked. Dragging one handle mirrors the other to the same length. Use when you want symmetric easing on both sides.
+- **Free (Broken)**: Handles fully independent — sharp corners are allowed (incoming slope != outgoing slope).
+
+### Editing handles
+- **Drag the diamond on a handle** to reshape the curve. By default it stays Aligned (the other side rotates with it).
+- **Hold Ctrl while dragging** to break the link and move just that side (one-shot Free).
+- Handles can extend **past** the next/prev key (weighted Bezier) — they'll only stop at the key's own time. The 1/3-of-interval cap that older versions enforced is gone, so curve shapes hold their intent.
+
+### Inserting a key on an existing curve
+Ctrl+Click an empty spot on a Bezier curve (or double-click in the Dope Sheet at a frame) to insert a key. The new key sits **exactly on the existing curve** — no kink, no shape change. The neighbours' handles are silently rewritten to keep the segment visually identical (de Casteljau split).
+
+### Move a key in time
+Handles scale proportionally so the curve shape is preserved. User-shaped handles on **neighbour** keys are never silently rescaled — your hand-shaping survives every edit.
 `
     },
     'anim.graph': {
@@ -121,6 +143,7 @@ Switch to this mode using the **Curve Icon** in the timeline toolbar.
 - **Normalize**: Toggles "Normalized View".
   - **Off**: Shows raw values. Good for seeing true scale.
   - **On**: Scales all curves to fit 0-1 height. Essential for comparing timing between tracks with vastly different values (e.g. Rotation vs Scale).
+- **Show Selected Only**: Hides any track in the canvas that has no selected key. Lets you focus on whatever you're actively editing without clutter from the rest of the graph. The sidebar list is unaffected.
 - **Euler Filter**: Fixes "Gimbal Lock" or rotation flips where values jump 360 degrees. Unwinds the curves to be continuous.
 - **Simplify**: Drag to reduce the number of keyframes while preserving the curve shape.
 - **Bake**: Resamples the curve at fixed intervals.
@@ -130,10 +153,18 @@ Switch to this mode using the **Curve Icon** in the timeline toolbar.
   - Right-click for configurable physics settings: **Tension/Spring** and **Friction/Damping**.
 
 ## Curve Interaction
-- **Select**: Click curve keys or drag a selection box.
+- **Select**: Click curve keys or drag a selection box. Shift+click adds to selection.
 - **Move**: Drag keys. Hold **Shift** to lock movement to X (Time) or Y (Value) axis.
-- **Tangents**: Select a key to see its Bezier handles. Drag handles to adjust easing (Slow-in/Slow-out).
+- **Tangents**: Select a key to see its Bezier handles. Drag handles to adjust easing — by default the other side mirrors direction but keeps its own length (Aligned). Hold **Ctrl while dragging** to break the link.
+- **Insert key on curve**: **Ctrl+Click** an empty spot on the curve. The new key sits exactly on the existing curve and the surrounding shape is preserved.
 - **Extrapolation**: Dotted lines at the end of the curve visualize the Post Behavior (Loop, Ping-Pong, etc).
+
+## Keyboard
+- **A**: Select all keys on currently displayed tracks.
+- **Alt+A**: Deselect all keys.
+- **Delete / Backspace**: Delete selected keys.
+- **F**: Fit view to selection.
+- **Ctrl+C / Ctrl+V**: Copy / paste keys.
 
 ## Navigation
 - **Alt + Right Drag**: Zoom view (Scale Time/Value).

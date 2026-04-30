@@ -1,8 +1,9 @@
 
-import React, { memo, useRef, useEffect } from 'react';
+import React, { memo, useRef, useEffect, useMemo } from 'react';
 import { TrackRow, groupDiamondState } from './TrackRow';
 import { AnimationSequence } from '../../types';
 import { FolderIcon } from '../Icons';
+import { SelectionTransformBar } from './SelectionTransformBar';
 
 // Group diamond that registers with tick system for dirty-state coloring
 const GroupDiamond = ({ groupName, frame, frameWidth, tids, onMouseDown }: {
@@ -47,16 +48,21 @@ interface TrackGroupProps {
     onAddKey: (tid: string, frame: number) => void;
     onKeyMouseDown: (e: React.MouseEvent, tid: string, kid: string) => void;
     onGroupKeyMouseDown: (e: React.MouseEvent, tids: string[], frame: number) => void;
+    onStartTransform?: (e: React.MouseEvent, type: 'move' | 'scale_left' | 'scale_right', minFrame: number, maxFrame: number) => void;
+    visibleGraphTracks?: string[];
+    onToggleVisibility?: (tid: string) => void;
+    onSelectAllKeys?: (tid: string, multi: boolean) => void;
 }
 
 export const TrackGroup: React.FC<TrackGroupProps> = memo(({
     groupName, trackIds, collapsed, onToggle,
     sequence, frameWidth, selectedTrackIds, selectedKeyframeIds,
-    onTrackSelect, onRemoveTrack, onAddKey, onKeyMouseDown, onGroupKeyMouseDown
+    onTrackSelect, onRemoveTrack, onAddKey, onKeyMouseDown, onGroupKeyMouseDown,
+    onStartTransform, visibleGraphTracks, onToggleVisibility, onSelectAllKeys
 }) => {
-    
+
     // Calculate group summary keyframes
-    const groupKeyframes = React.useMemo(() => {
+    const groupKeyframes = useMemo(() => {
         const frameSet = new Set<number>();
         trackIds.forEach(tid => {
             const t = sequence.tracks[tid];
@@ -64,6 +70,27 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
         });
         return Array.from(frameSet).sort((a,b) => a-b);
     }, [trackIds, sequence]);
+
+    // Group-local selection range: only selected keys whose track is in this group.
+    // Reuses the global transform-bar mechanism (drags affect ALL selected keys, but the
+    // bar appears near the user's actual selection rather than only on the global summary).
+    const groupSelectionRange = useMemo(() => {
+        const trackSet = new Set(trackIds);
+        let min = Infinity;
+        let max = -Infinity;
+        let count = 0;
+        selectedKeyframeIds.forEach(cid => {
+            const [tid, kid] = cid.split('::');
+            if (!trackSet.has(tid)) return;
+            const k = sequence.tracks[tid]?.keyframes.find(kf => kf.id === kid);
+            if (k) {
+                if (k.frame < min) min = k.frame;
+                if (k.frame > max) max = k.frame;
+                count++;
+            }
+        });
+        return count >= 2 ? { min, max } : null;
+    }, [selectedKeyframeIds, trackIds, sequence]);
 
     return (
         <>
@@ -92,18 +119,29 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
                             onMouseDown={(e) => onGroupKeyMouseDown(e, trackIds, frame)}
                         />
                     ))}
+                    {groupSelectionRange && onStartTransform && (
+                        <SelectionTransformBar
+                            minFrame={groupSelectionRange.min}
+                            maxFrame={groupSelectionRange.max}
+                            frameWidth={frameWidth}
+                            onStart={onStartTransform}
+                        />
+                    )}
                 </div>
             </div>
             
             {!collapsed && trackIds.map(tid => (
-                <TrackRow 
-                    key={tid} 
-                    tid={tid} 
-                    sequence={sequence} 
-                    frameWidth={frameWidth} 
+                <TrackRow
+                    key={tid}
+                    tid={tid}
+                    sequence={sequence}
+                    frameWidth={frameWidth}
                     isSelected={selectedTrackIds.includes(tid)}
+                    isVisible={visibleGraphTracks?.includes(tid)}
                     selectedKeys={selectedKeyframeIds}
                     onSelect={onTrackSelect}
+                    onToggleVisibility={onToggleVisibility}
+                    onSelectAllKeys={onSelectAllKeys}
                     onRemove={() => onRemoveTrack(tid)}
                     onAddKey={(f) => onAddKey(tid, f)}
                     onKeyMouseDown={onKeyMouseDown}

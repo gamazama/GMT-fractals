@@ -53,14 +53,15 @@ export const useDopeSheetInteraction = ({
     sequence,
     selectedTrackIds
 }: DopeSheetInteractionProps) => {
-    const { 
-        updateKeyframes, 
-        selectKeyframes, 
-        selectTrack, 
-        deselectAllKeys, 
+    const {
+        updateKeyframes,
+        selectKeyframes,
+        setTrackSelection,
+        addTracksToSelection,
+        deselectAllKeys,
         setIsScrubbing,
         selectedKeyframeIds,
-        snapshot 
+        snapshot
     } = useAnimationStore();
 
     const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
@@ -74,10 +75,10 @@ export const useDopeSheetInteraction = ({
         neighbors: Map<string, NeighborKeyData> // Keyed by "trackId::keyId"
     } | null>(null);
 
-    const transformState = useRef<{ 
-        type: 'move' | 'scale_left' | 'scale_right', 
-        startX: number, 
-        initialKeys: { trackId: string, keyId: string, startFrame: number }[],
+    const transformState = useRef<{
+        type: 'move' | 'scale_left' | 'scale_right',
+        startX: number,
+        initialKeys: { trackId: string, keyId: string, startFrame: number, startLeftTan?: BezierHandle, startRightTan?: BezierHandle }[],
         minFrame: number,
         maxFrame: number
     } | null>(null);
@@ -164,13 +165,19 @@ export const useDopeSheetInteraction = ({
         snapshot();
         setIsScrubbing(true); 
 
-        const initialKeys: { trackId: string, keyId: string, startFrame: number }[] = [];
+        const initialKeys: { trackId: string, keyId: string, startFrame: number, startLeftTan?: BezierHandle, startRightTan?: BezierHandle }[] = [];
         selectedKeyframeIds.forEach(id => {
             const [tid, kid] = id.split('::');
             const t = sequence.tracks[tid];
             const k = t?.keyframes.find(kf => kf.id === kid);
             if (k) {
-                initialKeys.push({ trackId: tid, keyId: k.id, startFrame: k.frame });
+                initialKeys.push({
+                    trackId: tid,
+                    keyId: k.id,
+                    startFrame: k.frame,
+                    startLeftTan: k.leftTangent ? { ...k.leftTangent } : undefined,
+                    startRightTan: k.rightTangent ? { ...k.rightTangent } : undefined,
+                });
             }
         });
 
@@ -342,36 +349,33 @@ export const useDopeSheetInteraction = ({
                 else if (type === 'scale_left' || type === 'scale_right') {
                     const span = Math.max(1, maxFrame - minFrame);
                     let ratio = 1.0;
-                    
+                    const deltaFrames = diffPx / currentFrameWidth;
+
                     if (type === 'scale_right') {
-                         const deltaFrames = diffPx / currentFrameWidth;
-                         const newSpan = Math.max(1, span + deltaFrames);
-                         ratio = newSpan / span;
-                         
-                         initialKeys.forEach(k => {
-                             const localPos = k.startFrame - minFrame;
-                             const newFrame = minFrame + (localPos * ratio);
-                             updates.push({
-                                trackId: k.trackId,
-                                keyId: k.keyId,
-                                patch: { frame: Math.max(0, Math.round(newFrame)) }
-                             });
-                         });
-                    } else {
-                        const deltaFrames = diffPx / currentFrameWidth;
-                        const newSpan = Math.max(1, span - deltaFrames); 
+                        const newSpan = Math.max(1, span + deltaFrames);
                         ratio = newSpan / span;
-                        
-                        initialKeys.forEach(k => {
-                             const distFromMax = maxFrame - k.startFrame;
-                             const newFrame = maxFrame - (distFromMax * ratio);
-                             updates.push({
-                                trackId: k.trackId,
-                                keyId: k.keyId,
-                                patch: { frame: Math.max(0, Math.round(newFrame)) }
-                             });
-                        });
+                    } else {
+                        const newSpan = Math.max(1, span - deltaFrames);
+                        ratio = newSpan / span;
                     }
+
+                    // Scale tangent X with the frame interval so curve shape stays
+                    // proportional (Maya/Blender behaviour). Y is left alone — value range
+                    // isn't being scaled, only time.
+                    const scaleTangent = (t?: BezierHandle): BezierHandle | undefined =>
+                        t ? { x: t.x * ratio, y: t.y } : undefined;
+
+                    initialKeys.forEach(k => {
+                        const newFrame = type === 'scale_right'
+                            ? minFrame + (k.startFrame - minFrame) * ratio
+                            : maxFrame - (maxFrame - k.startFrame) * ratio;
+                        const patch: Partial<Keyframe> = { frame: Math.max(0, Math.round(newFrame)) };
+                        const lt = scaleTangent(k.startLeftTan);
+                        const rt = scaleTangent(k.startRightTan);
+                        if (lt) patch.leftTangent = lt;
+                        if (rt) patch.rightTangent = rt;
+                        updates.push({ trackId: k.trackId, keyId: k.keyId, patch });
+                    });
                 }
                 
                 if (updates.length > 0) {
@@ -486,15 +490,14 @@ export const useDopeSheetInteraction = ({
                     selectKeyframes(idsArray, isMulti);
                     
                     if (isMulti) {
-                        tracksInvolved.forEach(t => {
-                            if (!selectedTrackIds.includes(t)) selectTrack(t, true);
-                        });
+                        const toAdd = Array.from(tracksInvolved).filter(t => !selectedTrackIds.includes(t));
+                        if (toAdd.length > 0) addTracksToSelection(toAdd);
                     } else {
                         const tracksArray = Array.from(tracksInvolved);
                         if (tracksArray.length > 0) {
-                            selectTrack(tracksArray[0], false);
-                            for (let i = 1; i < tracksArray.length; i++) {
-                                selectTrack(tracksArray[i], true);
+                            setTrackSelection(tracksArray[0]);
+                            if (tracksArray.length > 1) {
+                                addTracksToSelection(tracksArray.slice(1));
                             }
                         }
                     }

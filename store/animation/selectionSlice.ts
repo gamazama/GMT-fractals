@@ -12,20 +12,23 @@ export const createSelectionSlice: StateCreator<AnimationStore, [["zustand/subsc
     bounceTension: 0.5,
     bounceFriction: 0.6,
 
-    selectTrack: (id, multi) => set(state => ({ 
-        selectedTrackIds: multi 
-            ? (state.selectedTrackIds.includes(id) ? state.selectedTrackIds.filter(tid => tid !== id) : [...state.selectedTrackIds, id]) 
-            : [id] 
+    setTrackSelection: (id) => set({ selectedTrackIds: [id] }),
+
+    toggleTrackSelection: (id) => set(state => ({
+        selectedTrackIds: state.selectedTrackIds.includes(id)
+            ? state.selectedTrackIds.filter(tid => tid !== id)
+            : [...state.selectedTrackIds, id],
     })),
-    
-    selectTracks: (ids, select) => set(state => {
+
+    addTracksToSelection: (ids) => set(state => {
         const current = new Set(state.selectedTrackIds);
-        if (select) {
-            ids.forEach(id => current.add(id));
-        } else {
-            ids.forEach(id => current.delete(id));
-        }
+        ids.forEach(id => current.add(id));
         return { selectedTrackIds: Array.from(current) };
+    }),
+
+    removeTracksFromSelection: (ids) => set(state => {
+        const remove = new Set(ids);
+        return { selectedTrackIds: state.selectedTrackIds.filter(id => !remove.has(id)) };
     }),
 
     selectKeyframe: (tid, kid, multi) => set(state => { 

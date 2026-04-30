@@ -22,6 +22,8 @@ interface GraphToolbarProps {
     onSmoothDown: (e: React.PointerEvent) => void;
     isSimplifying: boolean;
     onSimplifyDown: (e: React.PointerEvent) => void;
+    selectedOnly: boolean;
+    onToggleSelectedOnly: () => void;
 }
 
 const SimpleTooltip = ({ text }: { text: string }) => (
@@ -90,7 +92,8 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
     onApplyEuler, needsEulerFix,
     isBaking, onBakeDown,
     isSmoothing, onSmoothDown,
-    isSimplifying, onSimplifyDown
+    isSimplifying, onSimplifyDown,
+    selectedOnly, onToggleSelectedOnly
 }) => {
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
@@ -133,11 +136,17 @@ export const GraphToolbar: React.FC<GraphToolbarProps> = ({
                 icon={<FitSelectionIcon />}
                 tooltip="Fit Selection"
             />
-            <ToolButton 
+            <ToolButton
                 onClick={onToggleNormalize}
                 active={normalized}
                 icon={<NormIcon active={normalized} />}
                 tooltip="Normalize (0-1 Range)"
+            />
+            <ToolButton
+                onClick={onToggleSelectedOnly}
+                active={selectedOnly}
+                icon={<FilterIcon />}
+                tooltip="Show Selected Only"
             />
             <ToolButton 
                 onClick={onApplyEuler}

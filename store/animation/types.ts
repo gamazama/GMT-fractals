@@ -66,8 +66,14 @@ export interface SelectionSliceState {
 }
 
 export interface SelectionSliceActions {
-    selectTrack: (id: string, multi: boolean) => void;
-    selectTracks: (ids: string[], select: boolean) => void;
+    /** Replace track selection with a single id. */
+    setTrackSelection: (id: string) => void;
+    /** Toggle a single id in/out of the current track selection. */
+    toggleTrackSelection: (id: string) => void;
+    /** Add ids to the current track selection (idempotent). */
+    addTracksToSelection: (ids: string[]) => void;
+    /** Remove ids from the current track selection. */
+    removeTracksFromSelection: (ids: string[]) => void;
     selectKeyframe: (trackId: string, keyId: string, multi: boolean) => void;
     selectKeyframes: (ids: string[], multi: boolean) => void;
     deselectAll: () => void;
@@ -100,7 +106,7 @@ export interface SequenceSliceActions {
     deleteAllKeys: () => void;
     deleteAllTracks: () => void;
     
-    setTangents: (mode: 'Auto' | 'Split' | 'Unified' | 'Ease') => void;
+    setTangents: (mode: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') => void;
     setGlobalInterpolation: (type: 'Linear' | 'Step' | 'Bezier', tangentMode?: 'Auto' | 'Ease') => void;
     
     copySelectedKeyframes: () => void;

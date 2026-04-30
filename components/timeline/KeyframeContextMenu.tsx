@@ -3,7 +3,7 @@ import { ContextMenuItem } from '../../types/help';
 
 export interface KeyframeMenuActions {
     updateInterp: (i: 'Linear' | 'Step' | 'Bezier') => void;
-    setTangents: (m: 'Auto' | 'Split' | 'Unified' | 'Ease') => void;
+    setTangents: (m: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') => void;
     deleteKeys: () => void;
     // New Actions
     copyKeys: () => void;
@@ -51,15 +51,19 @@ export const getKeyframeMenuItems = (
                 label: 'Ease (Flat)', 
                 action: () => actions.setTangents('Ease') 
             },
-            { 
-                label: 'Unified', 
-                checked: !broken && !auto, 
-                action: () => actions.setTangents('Unified') 
+            {
+                label: 'Aligned (default — angle locked)',
+                checked: !broken && !auto,
+                action: () => actions.setTangents('Aligned')
             },
-            { 
-                label: 'Broken', 
-                checked: !!broken, 
-                action: () => actions.setTangents('Split') 
+            {
+                label: 'Unified (angle + length locked)',
+                action: () => actions.setTangents('Unified')
+            },
+            {
+                label: 'Free (broken)',
+                checked: !!broken,
+                action: () => actions.setTangents('Split')
             }
         );
     }

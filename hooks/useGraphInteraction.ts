@@ -52,7 +52,7 @@ export const useGraphInteraction = (
     const { 
         sequence, currentFrame, 
         updateKeyframe, updateKeyframes, 
-        selectKeyframe, selectKeyframes, deselectAllKeys, selectTracks, selectTrack,
+        selectKeyframe, selectKeyframes, deselectAllKeys, setTrackSelection, addTracksToSelection,
         selectedKeyframeIds, snapshot, setIsScrubbing, seek,
         softSelectionEnabled, softSelectionRadius, setSoftSelection, softSelectionType
     } = useAnimationStore();
@@ -165,10 +165,10 @@ export const useGraphInteraction = (
         
         const tracksArray = Array.from(uniqueTracks);
         if (tracksArray.length > 0) {
-             selectTrack(tracksArray[0], false); // Replace list with [first]
-             if (tracksArray.length > 1) {
-                 selectTracks(tracksArray.slice(1), true); // Add rest
-             }
+            setTrackSelection(tracksArray[0]);
+            if (tracksArray.length > 1) {
+                addTracksToSelection(tracksArray.slice(1));
+            }
         }
     };
 
@@ -443,15 +443,28 @@ export const useGraphInteraction = (
                 patch.brokenTangents = breakTangents;
             }
 
+            // Aligned (default): lock direction across the key, preserve each side's own length.
+            // Unified (opt-in via context menu): mirror direction AND length.
+            const unified = currentKey.tangentMode === 'Unified';
+            const mirror = (h: { x: number; y: number }, otherLen: number) => {
+                if (unified) return { x: -h.x, y: -h.y };
+                const len = Math.hypot(h.x, h.y);
+                if (len < 1e-6) return { x: -h.x, y: -h.y };
+                const s = otherLen / len;
+                return { x: -h.x * s, y: -h.y * s };
+            };
+
             if (side === 'left') {
                 patch.leftTangent = newHandle;
                 if (!breakTangents && currentKey.rightTangent) {
-                    patch.rightTangent = { x: -newHandle.x, y: -newHandle.y };
+                    const rLen = Math.hypot(currentKey.rightTangent.x, currentKey.rightTangent.y);
+                    patch.rightTangent = mirror(newHandle, rLen);
                 }
             } else {
                 patch.rightTangent = newHandle;
                 if (!breakTangents && currentKey.leftTangent) {
-                    patch.leftTangent = { x: -newHandle.x, y: -newHandle.y };
+                    const lLen = Math.hypot(currentKey.leftTangent.x, currentKey.leftTangent.y);
+                    patch.leftTangent = mirror(newHandle, lLen);
                 }
             }
             patch.autoTangent = false;

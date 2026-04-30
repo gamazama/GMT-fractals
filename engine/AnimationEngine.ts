@@ -255,7 +255,14 @@ export class AnimationEngine {
 
     public scrub(frame: number) {
         if (!this.animStore) return;
-        const { sequence, isPlaying, isRecording, recordCamera } = this.animStore.getState();
+        const state = this.animStore.getState();
+        const { isPlaying, isRecording, recordCamera, isRecordingModulation, recordingSnapshot } = state;
+        // During modulation recording, evaluate the SNAPSHOT taken at recording start
+        // rather than the live sequence. The live sequence is being mutated each tick
+        // (batchAddKeyframes) and the modulation overlay only fires when offset != 0;
+        // reading the live sequence makes the rendered value jitter at the playhead
+        // whenever the user briefly returns to zero offset.
+        const sequence = isRecordingModulation && recordingSnapshot ? recordingSnapshot : state.sequence;
         const tracks = Object.values(sequence.tracks) as Track[];
 
         const ignoreCamera = isPlaying && isRecording && recordCamera;

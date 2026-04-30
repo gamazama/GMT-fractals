@@ -29,6 +29,13 @@ export const AnimationMath = {
         }
 
         if (k1.interpolation === 'Bezier') {
+            // Tangents are expected to be set at write-time (addKeyframe / setTangents /
+            // user drag). The 1/3-interval fallback below covers legacy keys loaded from
+            // older saves and silently faked Bezier shape; flag it in dev so we can find
+            // the offending writer rather than masking the missing data.
+            if (import.meta.env?.DEV && (!k1.rightTangent || !k2.leftTangent)) {
+                console.warn('[AnimationMath] Bezier key missing tangents; using auto-fallback', { k1, k2 });
+            }
             const h1x = k1.rightTangent ? k1.rightTangent.x : (k2.frame - k1.frame) * TANGENT_WEIGHT;
             const h1y = k1.rightTangent ? k1.rightTangent.y : 0;
             const h2x = k2.leftTangent ? k2.leftTangent.x : -(k2.frame - k1.frame) * TANGENT_WEIGHT;
@@ -151,48 +158,56 @@ export const AnimationMath = {
     },
 
     /**
-     * Enforces handle constraints (e.g., handles shouldn't cross neighbors).
+     * Sign-only handle constraint: prevents the left handle from extending into the future
+     * and the right handle from extending into the past. Magnitude is preserved (weighted
+     * Bezier — handles may extend past the next/prev key, matching Maya/Blender behaviour).
+     *
+     * Pass `clampToOneThird: true` to also cap |x| at 1/3 of the interval to a neighbour.
+     * Auto-tangent code uses the cap; user-shaped handles do not.
      */
-    constrainHandles: (key: Keyframe, prev: Keyframe | undefined, next: Keyframe | undefined): Partial<Keyframe> => {
+    constrainHandles: (
+        key: Keyframe,
+        prev: Keyframe | undefined,
+        next: Keyframe | undefined,
+        opts: { clampToOneThird?: boolean } = {}
+    ): Partial<Keyframe> => {
         const updates: Partial<Keyframe> = {};
-        
-        if (key.leftTangent && prev) {
-            const dist = key.frame - prev.frame;
-            if (dist > 0.001) {
-                 const maxLen = dist * TANGENT_WEIGHT;
-                 // Constraint: Time (X) shouldn't exceed 1/3 of the interval
-                 if (Math.abs(key.leftTangent.x) > maxLen) {
-                     const scale = maxLen / Math.abs(key.leftTangent.x);
-                     updates.leftTangent = {
-                         x: key.leftTangent.x * scale,
-                         y: key.leftTangent.y * scale
-                     };
-                 }
-                 // Prevent handle crossing to future
-                 if (key.leftTangent.x > 0) {
-                     updates.leftTangent = { x: 0, y: updates.leftTangent?.y ?? key.leftTangent.y };
-                 }
-            }
-        }
-        
-        if (key.rightTangent && next) {
-            const dist = next.frame - key.frame;
-            if (dist > 0.001) {
-                const maxLen = dist * TANGENT_WEIGHT;
-                if (Math.abs(key.rightTangent.x) > maxLen) {
-                    const scale = maxLen / Math.abs(key.rightTangent.x);
-                    updates.rightTangent = {
-                        x: key.rightTangent.x * scale,
-                        y: key.rightTangent.y * scale
-                    };
+        const cap = opts.clampToOneThird === true;
+
+        if (key.leftTangent) {
+            let lt = key.leftTangent;
+            // Prevent crossing to future
+            if (lt.x > 0) lt = { x: 0, y: lt.y };
+            if (cap && prev) {
+                const dist = key.frame - prev.frame;
+                if (dist > 0.001) {
+                    const maxLen = dist * TANGENT_WEIGHT;
+                    if (Math.abs(lt.x) > maxLen) {
+                        const scale = maxLen / Math.abs(lt.x);
+                        lt = { x: lt.x * scale, y: lt.y * scale };
+                    }
                 }
-                 // Prevent handle crossing to past
-                 if (key.rightTangent.x < 0) {
-                     updates.rightTangent = { x: 0, y: updates.rightTangent?.y ?? key.rightTangent.y };
-                 }
             }
+            if (lt !== key.leftTangent) updates.leftTangent = lt;
         }
-        
+
+        if (key.rightTangent) {
+            let rt = key.rightTangent;
+            // Prevent crossing to past
+            if (rt.x < 0) rt = { x: 0, y: rt.y };
+            if (cap && next) {
+                const dist = next.frame - key.frame;
+                if (dist > 0.001) {
+                    const maxLen = dist * TANGENT_WEIGHT;
+                    if (Math.abs(rt.x) > maxLen) {
+                        const scale = maxLen / Math.abs(rt.x);
+                        rt = { x: rt.x * scale, y: rt.y * scale };
+                    }
+                }
+            }
+            if (rt !== key.rightTangent) updates.rightTangent = rt;
+        }
+
         return updates;
     },
     

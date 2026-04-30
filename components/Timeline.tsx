@@ -156,7 +156,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                 });
                 updateKeyframes(updates);
             },
-            setTangents: (mode: 'Auto' | 'Split' | 'Unified' | 'Ease') => setTangents(mode),
+            setTangents: (mode: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') => setTangents(mode),
             deleteKeys: deleteSelectedKeyframes,
             copyKeys: copySelectedKeyframes,
             pasteKeys: () => pasteKeyframes(currentFrame), // Paste at current playhead position
@@ -286,7 +286,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                                 onScroll={handleScroll}
                                 className="flex-1 overflow-auto bg-transparent no-scrollbar relative"
                             >
-                                <DopeSheet 
+                                <DopeSheet
                                     frameWidth={frameWidth}
                                     totalContentWidth={totalContentWidth}
                                     scrollContainerRef={scrollContainerRef}
@@ -294,6 +294,8 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                                     onCanvasContextMenu={handleDopeSheetCanvasMenu}
                                     scrollLeft={scrollLeft}
                                     visibleWidth={viewportWidth}
+                                    visibleGraphTracks={visibleGraphTracks}
+                                    setVisibleGraphTracks={setVisibleGraphTracks}
                                 />
                             </div>
                         ) : (

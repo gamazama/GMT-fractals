@@ -3,7 +3,7 @@ import React, { memo, useRef, useEffect, useCallback } from 'react';
 import { AnimationSequence } from '../../types';
 import { useAnimationStore } from '../../store/animationStore';
 import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
-import { TrashIcon } from '../Icons';
+import { TrashIcon, EyeIcon, SelectAllIcon } from '../Icons';
 import { getLiveValue } from '../../utils/timelineUtils';
 
 // Global refs to track LiveValueDisplay components across ticks
@@ -159,15 +159,19 @@ interface TrackRowProps {
     sequence: AnimationSequence;
     frameWidth: number;
     isSelected: boolean;
+    isVisible?: boolean;
     selectedKeys: string[];
     onSelect: (e: React.MouseEvent, tid: string) => void;
+    onToggleVisibility?: (tid: string) => void;
+    onSelectAllKeys?: (tid: string, multi: boolean) => void;
     onRemove: () => void;
     onAddKey: (f: number) => void;
     onKeyMouseDown: (e: React.MouseEvent, tid: string, kid: string) => void;
 }
 
 export const TrackRow: React.FC<TrackRowProps> = memo(({
-    tid, sequence, frameWidth, isSelected, selectedKeys, onSelect, onRemove, onAddKey, onKeyMouseDown
+    tid, sequence, frameWidth, isSelected, isVisible, selectedKeys,
+    onSelect, onToggleVisibility, onSelectAllKeys, onRemove, onAddKey, onKeyMouseDown
 }) => {
     const handleContextMenu = useHelpContextMenu();
 
@@ -187,8 +191,26 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                 <div className="truncate text-[10px] font-bold text-gray-400 group-hover:text-cyan-400 pl-4" title={sequence.tracks[tid].label}>
                     {sequence.tracks[tid].label}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                    {onSelectAllKeys && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onSelectAllKeys(tid, e.shiftKey || e.ctrlKey || e.metaKey); }}
+                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-500 hover:text-cyan-400 hover:bg-white/10"
+                            title="Select all keys on this track"
+                        >
+                            <SelectAllIcon />
+                        </button>
+                    )}
                     <LiveValueDisplay tid={tid} />
+                    {onToggleVisibility && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onToggleVisibility(tid); }}
+                            className="p-0.5 rounded text-gray-500 hover:text-white hover:bg-white/10"
+                            title={isVisible ? 'Hide in graph' : 'Show in graph'}
+                        >
+                            <EyeIcon active={!!isVisible} />
+                        </button>
+                    )}
                     <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400"><TrashIcon /></button>
                 </div>
             </div>

@@ -5,19 +5,23 @@ import { TimelineRuler } from './TimelineRuler';
 import { Track } from '../../types';
 import { TrackRow } from './TrackRow';
 import { TrackGroup } from './TrackGroup';
+import { SelectionTransformBar } from './SelectionTransformBar';
 import { useDopeSheetInteraction } from '../../hooks/useDopeSheetInteraction';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { TIMELINE_SIDEBAR_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_GROUP_HEIGHT, TIMELINE_TRACK_HEIGHT } from '../../data/constants';
 import { getLiveValue } from '../../utils/timelineUtils';
+import { groupTracks, classifyTrackId } from '../../utils/groupTracks';
 
 interface DopeSheetProps {
     frameWidth: number;
     totalContentWidth: number;
     onContextMenu: (e: React.MouseEvent, tid: string, kid: string, interp: string, broken: boolean, auto: boolean) => void;
-    onCanvasContextMenu: (e: React.MouseEvent, frame: number) => void; // New Prop
+    onCanvasContextMenu: (e: React.MouseEvent, frame: number) => void;
     scrollContainerRef: React.RefObject<HTMLDivElement>;
     scrollLeft: number;
     visibleWidth: number;
+    visibleGraphTracks: string[];
+    setVisibleGraphTracks: (ids: string[]) => void;
 }
 
 const PlayheadCursor = ({ frameWidth }: { frameWidth: number }) => {
@@ -30,18 +34,37 @@ const PlayheadCursor = ({ frameWidth }: { frameWidth: number }) => {
     );
 };
 
-export const DopeSheet: React.FC<DopeSheetProps> = ({ 
-    frameWidth, totalContentWidth, onContextMenu, onCanvasContextMenu, scrollContainerRef, scrollLeft, visibleWidth 
+export const DopeSheet: React.FC<DopeSheetProps> = ({
+    frameWidth, totalContentWidth, onContextMenu, onCanvasContextMenu, scrollContainerRef, scrollLeft, visibleWidth,
+    visibleGraphTracks, setVisibleGraphTracks
 }) => {
+    const toggleVisibility = (tid: string) => {
+        if (visibleGraphTracks.includes(tid)) {
+            setVisibleGraphTracks(visibleGraphTracks.filter(id => id !== tid));
+        } else {
+            setVisibleGraphTracks([...visibleGraphTracks, tid]);
+        }
+    };
+
+    const selectAllKeysOnTrack = (tid: string, multi: boolean) => {
+        const t = useAnimationStore.getState().sequence.tracks[tid];
+        if (!t) return;
+        const ids = t.keyframes.map(k => `${tid}::${k.id}`);
+        useAnimationStore.getState().selectKeyframes(ids, multi);
+    };
+
     const sequence = useAnimationStore(s => s.sequence);
     const selectedTrackIds = useAnimationStore(s => s.selectedTrackIds);
     const selectedKeyframeIds = useAnimationStore(s => s.selectedKeyframeIds);
     const durationFrames = useAnimationStore(s => s.durationFrames);
     
-    const { 
-        selectTrack, selectKeyframe, selectKeyframes,
+    const {
+        setTrackSelection, toggleTrackSelection, addTracksToSelection,
+        selectKeyframe, selectKeyframes,
         removeTrack, addKeyframe, snapshot, deleteSelectedKeyframes
     } = useAnimationStore();
+    const selectTrackBy = (id: string, multi: boolean) =>
+        multi ? toggleTrackSelection(id) : setTrackSelection(id);
 
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['Formula', 'Optics', 'Lighting', 'Shading']));
     const contentRef = useRef<HTMLDivElement>(null);
@@ -56,11 +79,26 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
-            
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 deleteSelectedKeyframes();
+            } else if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+                // Alt+A: deselect all keys (mirrors Graph Editor)
+                e.preventDefault();
+                useAnimationStore.getState().deselectAllKeys();
+            } else if (e.key === 'a' || e.key === 'A') {
+                // A: select every key on every visible (non-hidden) track
+                e.preventDefault();
+                const seq = useAnimationStore.getState().sequence;
+                const all: string[] = [];
+                Object.values(seq.tracks).forEach(t => {
+                    if (t.hidden) return;
+                    t.keyframes.forEach(k => all.push(`${t.id}::${k.id}`));
+                });
+                useAnimationStore.getState().selectKeyframes(all, false);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -70,20 +108,8 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
     useEffect(() => {
         const handleFocus = (trackId: string) => {
             if (!trackId) return;
-            const tid = String(trackId);
-            let targetGroup = 'Shading';
-            
-            if (tid.startsWith('camera.')) {
-                targetGroup = 'Camera';
-            } else if (tid.startsWith('lights.') || tid.startsWith('lighting.')) {
-                targetGroup = 'Lighting';
-            } else if (tid.startsWith('coreMath.') || tid.startsWith('geometry.') || tid.startsWith('julia.') || tid.startsWith('hybridParams.') || tid === 'iterations' || tid.startsWith('param')) {
-                targetGroup = 'Formula';
-            } else if (tid === 'camFov' || tid.startsWith('optics.') || tid.startsWith('dof') || tid.startsWith('fog')) {
-                targetGroup = 'Optics';
-            }
-
-            setCollapsedGroups(prev => {
+            const targetGroup = classifyTrackId(String(trackId));
+            setCollapsedGroups(() => {
                 const allGroups = new Set<string>(['Camera', 'Formula', 'Optics', 'Lighting', 'Shading']);
                 allGroups.delete(targetGroup);
                 return allGroups;
@@ -111,39 +137,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
         });
     };
 
-    const organizedTracks = useMemo<{ groups: Record<string, string[]>, standalone: string[] }>(() => {
-        const groups: Record<string, string[]> = {};
-        const standalone: string[] = [];
-        
-        groups['Camera'] = [];
-        groups['Formula'] = [];
-        groups['Optics'] = [];
-        groups['Lighting'] = [];
-        groups['Shading'] = [];
-
-        (Object.values(sequence.tracks) as Track[]).forEach(t => {
-            if (t.hidden) return;
-            
-            if (t.id.startsWith('camera.')) {
-                groups['Camera'].push(t.id);
-            } else if (t.id.startsWith('lights.') || t.id.startsWith('lighting.')) {
-                groups['Lighting'].push(t.id);
-            } else if (t.id.startsWith('coreMath.') || t.id.startsWith('geometry.') || t.id.startsWith('param') || t.id.startsWith('julia.') || t.id.startsWith('hybridParams.') || t.id === 'iterations') {
-                groups['Formula'].push(t.id);
-            } else if (t.id === 'camFov' || t.id.startsWith('optics.') || t.id.startsWith('dof') || t.id.startsWith('fog') || t.id.startsWith('atmosphere.')) {
-                if (t.id.startsWith('fog') || t.id.startsWith('atmosphere.')) groups['Shading'].push(t.id);
-                else groups['Optics'].push(t.id);
-            } else {
-                groups['Shading'].push(t.id);
-            }
-        });
-        
-        Object.keys(groups).forEach(k => {
-            if (groups[k].length === 0) delete groups[k];
-        });
-
-        return { groups, standalone };
-    }, [sequence.tracks]);
+    const organizedTracks = useMemo(() => groupTracks(sequence.tracks), [sequence.tracks]);
 
     const visibleTrackOrder = useMemo(() => {
         let order: string[] = [];
@@ -223,26 +217,13 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
                 const minIdx = Math.min(startIdx, endIdx);
                 const maxIdx = Math.max(startIdx, endIdx);
                 const rangeTracks = visibleTrackOrder.slice(minIdx, maxIdx + 1);
-                
-                rangeTracks.forEach(t => selectTrack(t, true)); 
-                
-                const keysToSelect: string[] = [];
-                rangeTracks.forEach(t => {
-                    const track = sequence.tracks[t];
-                    if (track) {
-                        track.keyframes.forEach(k => keysToSelect.push(`${t}::${k.id}`));
-                    }
-                });
-                selectKeyframes(keysToSelect, true);
+                rangeTracks.forEach(t => selectTrackBy(t, true));
             }
         } else {
-            selectTrack(tid, multi);
-            
-            const track = sequence.tracks[tid];
-            if (track) {
-                const keys = track.keyframes.map(k => `${tid}::${k.id}`);
-                selectKeyframes(keys, multi); 
-            }
+            // Track-header click selects the track only — keys are picked via marquee,
+            // per-key click, or the row's "select all keys" affordance. This stops a
+            // casual click from arming Delete to wipe the whole track.
+            selectTrackBy(tid, multi);
         }
         
         lastSelectedTrackId.current = tid;
@@ -256,7 +237,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
             const composite = `${tid}::${kid}`;
             if (!selectedKeyframeIds.includes(composite)) {
                 selectKeyframe(tid, kid, false);
-                selectTrack(tid, false);
+                selectTrackBy(tid, false);
             }
             const track = sequence.tracks[tid];
             const k = track?.keyframes.find(kf => kf.id === kid);
@@ -272,7 +253,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
 
         if (isMulti) {
             selectKeyframe(tid, kid, true);
-            if (!selectedTrackIds.includes(tid)) selectTrack(tid, true);
+            if (!selectedTrackIds.includes(tid)) selectTrackBy(tid, true);
             snapshot();
             const keysToDrag = isSelected 
                 ? selectedKeyframeIds 
@@ -281,7 +262,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
         }
         else if (!isSelected) {
             selectKeyframe(tid, kid, false);
-            selectTrack(tid, false);
+            selectTrackBy(tid, false);
             snapshot();
             startDragKeys(e.clientX, [composite]);
         } else {
@@ -323,7 +304,7 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
         if (isMulti) {
             selectKeyframes(keysInGroup, true);
             groupTrackIds.forEach(tid => {
-                if(!selectedTrackIds.includes(tid)) selectTrack(tid, true);
+                if(!selectedTrackIds.includes(tid)) selectTrackBy(tid, true);
             });
             // Merge existing and new
             const allKeys = Array.from(new Set([...selectedKeyframeIds, ...keysInGroup]));
@@ -331,8 +312,8 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
         } else {
             selectKeyframes(keysInGroup, false);
             groupTrackIds.forEach((tid, idx) => {
-                if (idx === 0) selectTrack(tid, false);
-                else selectTrack(tid, true);
+                if (idx === 0) selectTrackBy(tid, false);
+                else selectTrackBy(tid, true);
             });
             startDragKeys(e.clientX, keysInGroup);
         }
@@ -435,32 +416,12 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
 
                     {/* SELECTION TRANSFORM BAR */}
                     {selectionRange && (
-                        <div 
-                            className="absolute top-0 bottom-0 z-30 transform-handle group/transform"
-                            style={{ 
-                                left: `${selectionRange.min * frameWidth - 12}px`, 
-                                width: `${(selectionRange.max - selectionRange.min) * frameWidth + 24}px` 
-                            }}
-                        >
-                            <div 
-                                className="absolute top-1 bottom-1 left-0 right-0 bg-orange-500/20 border border-orange-500/50 rounded-md cursor-grab active:cursor-grabbing hover:bg-orange-500/30 transition-colors"
-                                onMouseDown={(e) => startTransformSelection(e, 'move', selectionRange.min, selectionRange.max)}
-                            />
-                            
-                            <div 
-                                className="absolute top-0 bottom-0 left-0 w-3 cursor-ew-resize flex items-center justify-center group/l"
-                                onMouseDown={(e) => startTransformSelection(e, 'scale_left', selectionRange.min, selectionRange.max)}
-                            >
-                                <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/l:bg-white" />
-                            </div>
-                            
-                            <div 
-                                className="absolute top-0 bottom-0 right-0 w-3 cursor-ew-resize flex items-center justify-center group/r"
-                                onMouseDown={(e) => startTransformSelection(e, 'scale_right', selectionRange.min, selectionRange.max)}
-                            >
-                                <div className="w-1 h-3 bg-orange-400 rounded-full shadow-sm group-hover/r:bg-white" />
-                            </div>
-                        </div>
+                        <SelectionTransformBar
+                            minFrame={selectionRange.min}
+                            maxFrame={selectionRange.max}
+                            frameWidth={frameWidth}
+                            onStart={startTransformSelection}
+                        />
                     )}
                 </div>
             </div>
@@ -481,16 +442,23 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
                     onAddKey={wrapAddKey}
                     onKeyMouseDown={handleKeyMouseDown}
                     onGroupKeyMouseDown={handleGroupKeyMouseDown}
+                    onStartTransform={startTransformSelection}
+                    visibleGraphTracks={visibleGraphTracks}
+                    onToggleVisibility={toggleVisibility}
+                    onSelectAllKeys={selectAllKeysOnTrack}
                 />
             ))}
             
             {organizedTracks.standalone.map(tid => (
-                <TrackRow 
-                    key={tid} tid={tid} sequence={sequence} 
-                    frameWidth={frameWidth} 
+                <TrackRow
+                    key={tid} tid={tid} sequence={sequence}
+                    frameWidth={frameWidth}
                     isSelected={selectedTrackIds.includes(tid)}
+                    isVisible={visibleGraphTracks.includes(tid)}
                     selectedKeys={selectedKeyframeIds}
                     onSelect={handleTrackSelect}
+                    onToggleVisibility={toggleVisibility}
+                    onSelectAllKeys={selectAllKeysOnTrack}
                     onRemove={() => removeTrack(tid)}
                     onAddKey={(f) => wrapAddKey(tid, f)}
                     onKeyMouseDown={handleKeyMouseDown}

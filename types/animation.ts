@@ -48,6 +48,14 @@ export interface Keyframe {
     rightTangent?: BezierHandle;
     brokenTangents?: boolean;
     autoTangent?: boolean;
+    /**
+     * Optional Maya/Blender-style tangent constraint:
+     *   - undefined / 'Aligned' (default): direction locked across the key, each handle
+     *     keeps its own length. Drag-mirror preserves the other side's magnitude.
+     *   - 'Unified': direction AND length locked. Dragging one handle mirrors length too.
+     *   - (broken keys use the brokenTangents flag instead.)
+     */
+    tangentMode?: 'Aligned' | 'Unified';
 }
 
 export interface Track {
