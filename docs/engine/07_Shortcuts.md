@@ -115,12 +115,12 @@ When multiple plugins are installed, they register their default bindings. Apps 
 ### `@engine/undo`
 | Key | Scope | Action |
 |---|---|---|
-| `Mod+Z` | global | `undo.undo()` |
-| `Mod+Y` / `Mod+Shift+Z` | global | `undo.redo()` |
-| `Mod+Z` | timeline-hover | `undo.undo('animation')` — priority 10 |
-| `Mod+Y` | timeline-hover | `undo.redo('animation')` — priority 10 |
-| `Mod+Shift+Z` | global | `undo.undo('camera')` |
-| `Mod+Shift+Y` | global | `undo.redo('camera')` |
+| `Mod+Z` | global | `undo('param')` |
+| `Mod+Y` / `Mod+Shift+Z` | global | `redo('param')` |
+| `Mod+Z` | timeline-hover | `animationStore.undo()` — priority 10 |
+| `Mod+Y` | timeline-hover | `animationStore.redo()` — priority 10 |
+
+Apps that want camera-scoped Ctrl+Shift+Z install it themselves at priority 10 (so it wins over the engine's Mac-redo alias on Win/Linux). app-gmt registers `gmt.undoCameraMove` / `gmt.redoCameraMove` via `shortcuts.register` in `app-gmt/main.tsx`. See [06_Undo_Transactions.md § Hotkey routing](06_Undo_Transactions.md#hotkey-routing).
 
 ### `@engine/animation`
 | Key | Scope | Action |

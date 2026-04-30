@@ -269,7 +269,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         shortcut: 'Ctrl+Shift+Z',
         title: 'Revert the last camera movement',
         onSelect: () => { (useEngineStore.getState() as any).undoCamera?.(); },
-        disabled: () => ((useEngineStore.getState() as any).undoStack?.length ?? 0) === 0,
+        disabled: () => !((useEngineStore.getState() as any).canUndo?.('camera') ?? false),
     });
 
     menu.registerItem('camera', {
@@ -279,7 +279,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         shortcut: 'Ctrl+Shift+Y',
         title: 'Re-apply a reverted camera movement',
         onSelect: () => { (useEngineStore.getState() as any).redoCamera?.(); },
-        disabled: () => ((useEngineStore.getState() as any).redoStack?.length ?? 0) === 0,
+        disabled: () => !((useEngineStore.getState() as any).canRedo?.('camera') ?? false),
     });
 
     menu.registerItem('camera', { id: 'camera-sep-reset', type: 'separator' });

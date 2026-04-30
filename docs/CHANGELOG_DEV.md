@@ -2,6 +2,24 @@
 
 Chronological log of significant changes during the v0.9.3 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-04-30
+
+### Undo: per-scope stacks (camera/param no longer conflate)
+
+**User-facing**
+- Pressing Ctrl+Z to undo a parameter change reliably undoes a parameter change. Previously, if a camera gesture had landed on top of the shared undo stack (easy to trigger when reaching for a slider right after orbiting), Ctrl+Z would roll back the camera move instead. Ctrl+Shift+Z still owns camera undo; Ctrl+Z over the timeline still owns animation undo.
+- The Camera menu's "Undo Move" / "Redo Move" items now enable/disable based on whether a camera move actually exists to undo, rather than lighting up whenever any parameter edit happens to be in history.
+
+**Mechanism**
+- `historySlice` split from one unified stack with scope tags into four typed stacks: `paramUndoStack` / `paramRedoStack` / `cameraUndoStack` / `cameraRedoStack`. `MAX_STACK = 50` per lane independently.
+- `scope` is now required on `undo` / `redo` / `canUndo` / `canRedo` / `peekUndo` / `peekRedo` — the unscoped form is gone. Type signature forces every call site to declare which lane.
+- New typed entry points: `beginParamTransaction()`, `endParamTransaction()`, `pushCameraTransaction(state: CameraState)`. Replaces the runtime-overloaded `handleInteractionStart(mode | CameraState)`. Old name kept as a back-compat shim.
+- `engine/plugins/Undo.tsx`: global Ctrl+Z / Ctrl+Y / Mod+Shift+Z hotkeys and the topbar UndoButton/RedoButton all pass `'param'`. Camera Ctrl+Shift+Z handled by app-gmt's priority-10 `gmt.undoCameraMove` registration as before.
+- `engine-gmt/topbar.tsx`: Camera menu's "Undo Move" / "Redo Move" disabled-checks now use `canUndo('camera')` / `canRedo('camera')` (were reading the unified stack length — same bug class).
+- `app-gmt/AppGmt.tsx`: `GmtNavigation.onStart` calls `pushCameraTransaction(s)` directly. The `as any` cast is gone; the entry point is properly typed `(state: CameraState) => void`.
+
+Docs: [06_Undo_Transactions.md](engine/06_Undo_Transactions.md) rewritten; [20_Fragility_Audit.md § F2b](engine/20_Fragility_Audit.md#f2b--undo-lane-conflation) updated with the regression-then-fix history; [07_Shortcuts.md](engine/07_Shortcuts.md) keybinding table updated.
+
 ## 2026-04-29
 
 ### Fluid-toy: smooth-source TSAA bake — palette + collision + motion

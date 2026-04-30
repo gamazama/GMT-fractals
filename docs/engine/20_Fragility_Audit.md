@@ -44,19 +44,23 @@ Known issues found in the 2026-04-22 engine audit, with remediation status. This
 
 ---
 
-## F2b — Three undo stacks, routed by hover state
-**Status:** 🟢 Fixed (commit b294a5d, part of `@engine/undo` phase 4c)
+## F2b — Undo lane conflation
+**Status:** 🟢 Fixed (2026-04-30 — second pass)
 **Severity:** High — UX confusion.
 
-**Symptom:** Ctrl+Z undoes different things depending on where the mouse is. Users can't predict what will undo. The routing logic is spread across `useKeyboardShortcuts.ts`, `Timeline.tsx`, `timeline/shortcuts.ts`, and reads `isTimelineHovered` from the fractal store.
+**Symptom (original, GMT):** Ctrl+Z undoes different things depending on where the mouse is. Three independent stacks (`historySlice`, `cameraSlice`, `sequenceSlice`) routed by an `isTimelineHovered` flag spread across `useKeyboardShortcuts.ts`, `Timeline.tsx`, `timeline/shortcuts.ts`.
 
-**Root cause:** three independent stacks (`historySlice`, `cameraSlice`, `sequenceSlice`), ad-hoc router based on UI hover.
+**First fix (2026-04-23, phase 4c):** unified the three stacks behind one `historySlice.undoStack` with scope labels (`'param'` / `'camera'` / `'animation'`). `@engine/undo` bound `Mod+Z` to `undo()` (no scope = newest regardless), and `'timeline-hover'`-scoped `Mod+Z` to `undo('animation')` at priority 10. Animation actually stayed in `animationStore`, so only param + camera shared the engine-core stack.
 
-**Fix landed:** `historySlice` now owns a single unified transaction stack with scope labels (`'param'` / `'camera'` / `'animation'` / `'ui'`). `@engine/undo` registers two shortcut bindings:
-- `Mod+Z` global → `undo()` (pops most recent regardless of scope)
-- `Mod+Z` under `'timeline-hover'` scope with priority 10 → `undo('animation')` (pops most recent animation-scoped entry only)
+**Regression discovered (2026-04-29):** parameter Ctrl+Z occasionally rolled back a camera move instead of a slider tweak. Cause: any consumer that called `undo()` without a scope (the global Mod+Z handler, the topbar UndoButton) popped the newest entry of any kind. When a camera gesture sat on top of the unified stack — easy to provoke given the 100ms post-orbit settle window in `GmtNavigation.onStart` and the 1500ms camera debounce — the param-undo keystroke would fire camera-undo. Same bug class affected the camera menu's "Undo Move" disabled-check, which read `undoStack.length` (any entry) instead of `canUndo('camera')`.
 
-The `'timeline-hover'` scope is pushed by the Timeline component on mouseenter; `@engine/shortcuts` priority resolution does the dispatch. No more `isTimelineHovered` flag in the store.
+**Re-fix (2026-04-30):** split the unified stack into per-scope stacks (`paramUndoStack`/`paramRedoStack`/`cameraUndoStack`/`cameraRedoStack`). `scope` is now required on `undo`/`redo`/`canUndo`/`canRedo`/`peekUndo`/`peekRedo` — the unscoped form is gone, the bug class is unrepresentable. The overloaded `handleInteractionStart(mode | CameraState)` was retired in favour of typed entry points (`beginParamTransaction` / `endParamTransaction` / `pushCameraTransaction(state)`); the old name remains as a back-compat shim. Topbar UndoButton/RedoButton call `undo('param')` explicitly.
+
+**Files:**
+- [`store/slices/historySlice.ts`](../../store/slices/historySlice.ts) — per-scope state shape + typed entry points
+- [`engine/plugins/Undo.tsx`](../../engine/plugins/Undo.tsx) — global hotkeys + topbar buttons pass `'param'`
+- [`engine-gmt/topbar.tsx`](../../engine-gmt/topbar.tsx) — Camera menu disabled-checks use `canUndo('camera')` / `canRedo('camera')`
+- [`app-gmt/AppGmt.tsx`](../../app-gmt/AppGmt.tsx) — `GmtNavigation.onStart` calls `pushCameraTransaction(s)` directly
 
 **Docs:** [06_Undo_Transactions.md](06_Undo_Transactions.md)
 
@@ -324,7 +328,7 @@ Blocking toy-fluid port (done):
 2. ~~**F2** — duplicate ID detection~~ 🟢 Fixed (96a4b5f)
 3. ~~**F3** — preset field registry~~ 🟢 Fixed (a4e7d6b)
 4. ~~**F4** — render-loop plugin + dev warning~~ 🟢 Fixed (c6ee640)
-5. ~~**F2b** — unified undo stack~~ 🟢 Fixed (b294a5d)
+5. ~~**F2b** — undo lane conflation~~ 🟢 Fixed (b294a5d, then re-fixed 2026-04-30 with per-scope stacks after the unified-stack iteration regressed)
 6. ~~**F12** — vec track ID format~~ 🟢 Fixed (2026-04-23)
 7. ~~**F13** — generic modulation dispatch~~ 🟢 Fixed (2026-04-23)
 

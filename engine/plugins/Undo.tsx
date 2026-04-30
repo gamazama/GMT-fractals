@@ -39,14 +39,14 @@ const RedoIcon = () => (
 );
 
 export const UndoButton: React.FC = () => {
-    const canUndo = useEngineStore((s) => s.canUndo());
-    const peek = useEngineStore((s) => s.peekUndo());
+    const canUndo = useEngineStore((s) => s.canUndo('param'));
+    const peek = useEngineStore((s) => s.peekUndo('param'));
     const undo = useEngineStore((s) => s.undo);
 
     const label = peek ? `Undo: ${peek.label ?? peek.scope}` : 'Nothing to undo';
     return (
         <button
-            onClick={() => undo()}
+            onClick={() => undo('param')}
             disabled={!canUndo}
             className={`p-1.5 rounded transition-colors ${canUndo ? 'text-gray-300 hover:text-white hover:bg-white/10' : 'text-gray-700 cursor-not-allowed'}`}
             title={label}
@@ -57,14 +57,14 @@ export const UndoButton: React.FC = () => {
 };
 
 export const RedoButton: React.FC = () => {
-    const canRedo = useEngineStore((s) => s.canRedo());
-    const peek = useEngineStore((s) => s.peekRedo());
+    const canRedo = useEngineStore((s) => s.canRedo('param'));
+    const peek = useEngineStore((s) => s.peekRedo('param'));
     const redo = useEngineStore((s) => s.redo);
 
     const label = peek ? `Redo: ${peek.label ?? peek.scope}` : 'Nothing to redo';
     return (
         <button
-            onClick={() => redo()}
+            onClick={() => redo('param')}
             disabled={!canRedo}
             className={`p-1.5 rounded transition-colors ${canRedo ? 'text-gray-300 hover:text-white hover:bg-white/10' : 'text-gray-700 cursor-not-allowed'}`}
             title={label}
@@ -91,26 +91,30 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
 
     if (!options.hideShortcuts) {
         // Global Ctrl+Z / Ctrl+Y. 'Mod' = Ctrl on Win/Linux, Meta on Mac.
+        // Scoped to 'param' so a camera gesture sitting on top of the
+        // unified stack doesn't get popped by a parameter-undo keystroke.
+        // Camera has its own Ctrl+Shift+Z binding; timeline has its own
+        // 'timeline-hover' scope below.
         shortcuts.register({
             id: 'undo.global',
             key: 'Mod+Z',
             description: 'Undo',
             category: 'Edit',
-            handler: () => { useEngineStore.getState().undo(); },
+            handler: () => { useEngineStore.getState().undo('param'); },
         });
         shortcuts.register({
             id: 'redo.global',
             key: 'Mod+Y',
             description: 'Redo',
             category: 'Edit',
-            handler: () => { useEngineStore.getState().redo(); },
+            handler: () => { useEngineStore.getState().redo('param'); },
         });
         shortcuts.register({
             id: 'redo.global.shift',
             key: 'Mod+Shift+Z',
             description: 'Redo (Mac)',
             category: 'Edit',
-            handler: () => { useEngineStore.getState().redo(); },
+            handler: () => { useEngineStore.getState().redo('param'); },
         });
 
         // Timeline-hover scope: Ctrl+Z / Ctrl+Y route to the animation

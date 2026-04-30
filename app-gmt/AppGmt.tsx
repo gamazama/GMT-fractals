@@ -215,7 +215,7 @@ export const AppGmt: React.FC = () => {
                                 mode={cameraMode}
                                 hudRefs={hudRefs}
                                 setSceneOffset={setSceneOffset}
-                                onStart={(s) => state.handleInteractionStart(s as any)}
+                                onStart={(s) => (state as any).pushCameraTransaction(s)}
                                 onEnd={() => state.handleInteractionEnd()}
                             />
                         </Canvas>

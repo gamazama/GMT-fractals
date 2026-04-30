@@ -4,6 +4,21 @@
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
 **Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors.
 
+**📋 2026-04-30 — Undo system: per-scope stacks (refactor of the 2026-04-26 fix):**
+
+User report: Ctrl+Z occasionally undid a camera move when intending to undo a parameter edit. The 2026-04-26 audit (logged below) had concluded the unified-stack-with-scope-tags design was clean; this turned out to be wrong in one specific way — any consumer that called `undo()` without a scope (the global hotkey, the topbar UndoButton) popped the newest entry of any kind, so a camera gesture sitting on top of the unified stack would get rolled back by a parameter-undo keystroke. Same bug class affected `engine-gmt/topbar.tsx`'s Camera menu disabled-checks, which read `undoStack.length` rather than `canUndo('camera')`.
+
+**Refactor:**
+- `store/slices/historySlice.ts`: state shape split from `undoStack` / `redoStack` (with `scope` tags) into four independent stacks — `paramUndoStack` / `paramRedoStack` / `cameraUndoStack` / `cameraRedoStack`. Each lane caps independently at `MAX_STACK = 50`.
+- API surface: `scope` is now required on every history method (`undo` / `redo` / `canUndo` / `canRedo` / `peekUndo` / `peekRedo`). The unscoped fallback is gone — the type signature makes the bug class unrepresentable.
+- New typed entry points: `beginParamTransaction()`, `endParamTransaction()`, `pushCameraTransaction(state: CameraState)`. Replaces the runtime-overloaded `handleInteractionStart(mode | CameraState)` that conflated the two paths via `typeof mode === 'object' && mode.position`. Old name kept as a back-compat shim that routes by argument shape so the ~30 widget call sites stay unchanged.
+- `engine/plugins/Undo.tsx`: global Ctrl+Z / Mod+Y / Mod+Shift+Z hotkeys plus topbar UndoButton/RedoButton all pass `'param'` explicitly. Camera Ctrl+Shift+Z still owned by app-gmt's priority-10 `gmt.undoCameraMove`.
+- `engine-gmt/topbar.tsx`: camera menu Undo/Redo disabled-checks now use `canUndo('camera')` / `canRedo('camera')`.
+- `app-gmt/AppGmt.tsx`: `GmtNavigation.onStart` calls `pushCameraTransaction(s)` directly. The `as any` cast on the camera-state argument is gone — the entry point is properly typed.
+- `types/store.ts` + `engine-gmt/types/store.ts`: declarations updated to per-scope stacks + required scope on the methods.
+
+`npx tsc --noEmit` → 0 errors. Documented in [docs/engine/06_Undo_Transactions.md](docs/engine/06_Undo_Transactions.md) (rewritten), [F2b](docs/engine/20_Fragility_Audit.md#f2b--undo-lane-conflation) (updated with the regression-then-fix history), and [07_Shortcuts.md](docs/engine/07_Shortcuts.md) (keybinding table).
+
 **📋 2026-04-27 — Workspace tidy + camera-manager shortcut wiring + state-library notification system:**
 
 - **Workspace reorg.** Moved all four GMT repos under `h:/GMT/workspace-gmt/`: `stable/` (was `gmt-0.8.5/`, 0.9.2), `dev/` (was `gmt-engine/`, bumped to 0.9.3), `landing/`, `backend/`. Folder names are now role-based; folder ↔ repo ↔ deploy map at `h:/GMT/workspace-gmt/README.md`. Renamed Claude Code memory dir to follow. Updated `dev/.git/config` upstream URL, fixed 4 stable test-frag ROOT paths, refreshed HANDOFF/CLAUDE location headers. Stable's repo + Cloudflare Pages + GitHub Pages deploys unaffected (folder names don't reach git).

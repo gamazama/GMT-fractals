@@ -195,15 +195,15 @@ export interface EngineStoreState extends FeatureStateMap {
   sceneHistogramTrigger: number;
   sceneHistogramActiveCount: number; // Ref count
   
-  // Unified transaction stack (see store/slices/historySlice.ts). Each
-  // entry is a Transaction { scope, label?, diff, timestamp }. The scope
-  // tag replaces the previous three-stack design (F2b). Kept typed as
-  // any[] at the root to avoid a circular import with historySlice's
-  // Transaction type declaration; historySlice re-narrows internally.
-  undoStack: any[];
-  redoStack: any[];
+  // Per-scope transaction stacks (see store/slices/historySlice.ts).
+  // Each entry is a Transaction { scope, label?, diff, timestamp }.
+  // Kept typed as any[] at the root to avoid a circular import with
+  // historySlice's Transaction type; historySlice re-narrows internally.
+  paramUndoStack: any[];
+  paramRedoStack: any[];
+  cameraUndoStack: any[];
+  cameraRedoStack: any[];
   interactionSnapshot: Partial<EngineStoreState> | null;
-  interactionScope: string | null;
 
   // NOTE: Modular builder state (graph/pipeline/pipelineRevision/autoCompile)
   // was removed with the modular graph system. A future plugin that wants a
@@ -378,19 +378,24 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     duplicateCamera: (id: string) => void;
     saveToSlot: (slotIndex: number) => void;
 
-    handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
-    handleInteractionEnd: () => void;
+    // Canonical history entry points (see historySlice).
+    beginParamTransaction: () => void;
+    endParamTransaction: () => void;
+    pushCameraTransaction: (state: any) => void;
 
-    // Unified undo API (see historySlice).
-    undo: (scope?: string) => boolean;
-    redo: (scope?: string) => boolean;
-    canUndo: (scope?: string) => boolean;
-    canRedo: (scope?: string) => boolean;
-    peekUndo: (scope?: string) => any | null;
-    peekRedo: (scope?: string) => any | null;
+    // Scoped undo / redo. `scope` is required — there is no unscoped
+    // fallback (the previous unscoped form conflated camera and param).
+    undo: (scope: 'param' | 'camera') => boolean;
+    redo: (scope: 'param' | 'camera') => boolean;
+    canUndo: (scope: 'param' | 'camera') => boolean;
+    canRedo: (scope: 'param' | 'camera') => boolean;
+    peekUndo: (scope: 'param' | 'camera') => any | null;
+    peekRedo: (scope: 'param' | 'camera') => any | null;
     clearHistory: () => void;
 
-    // Backward-compat shims — delegate to undo(scope)/redo(scope).
+    // Backward-compat shims.
+    handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
+    handleInteractionEnd: () => void;
     undoCamera: () => void;
     redoCamera: () => void;
     undoParam: () => void;

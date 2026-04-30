@@ -1,199 +1,183 @@
-# 06 — Undo & Transactions 🚧
+# 06 — Undo & Transactions
 
-Unified transaction stack with scoped groups. Replaces GMT's three independent undo stacks (param, camera, animation) that were stitched together by UI hover state.
+Per-scope transaction stacks. Each scope (`'param'` / `'camera'`) owns its own undo + redo stack; scope is a required argument on every public history call.
 
-**Rule:** every undoable change goes through a transaction. The stack is single; scopes are labels, not separate stacks.
+**Rule:** every undoable change goes through a transaction. `undo` / `redo` always carry a scope; there is no unscoped fallback.
 
-## Why one stack
+> **Migration note (2026-04-30).** An earlier iteration unified all scopes onto one stack with scope tags, treating scope as a filter. That collapsed under bugs of the form "Ctrl+Z popped a camera move when the user meant to undo a slider tweak" — any consumer that called `undo()` without a scope would happen to pop whatever was newest on the unified stack. The unscoped form is gone; the type signature now forces every call site to declare which lane it operates on.
 
-GMT's audit found:
-- `paramUndo` (in `historySlice.ts`), `cameraUndo` (in `cameraSlice.ts`), `sequenceUndo` (in `sequenceSlice.ts`) — three stacks.
-- Ctrl+Z routed between them using `isTimelineHovered` as the selector.
-- Undo behavior felt non-deterministic to users ("why did that undo a parameter when I'm editing keyframes?").
+## Why per-scope stacks (not one stack with scope tags)
 
-A single stack with scope labels fixes both:
-- **Determinism:** most recent transaction wins, regardless of scope.
-- **Scope-specific undo:** the timeline panel's dedicated undo button can call `undo.undo('animation')` to skip param/camera entries and pop only animation ones.
+A unified stack with scope filters works for the explicitly-scoped consumers (timeline-hover routing to `'animation'`, the camera-only Ctrl+Shift+Z), but has two structural failure modes:
 
-## API
+1. **Implicit-scope conflation.** Generic UI like the topbar Undo button or a global Ctrl+Z handler doesn't know which lane it represents — it tends to call `undo()` with no scope. With a unified stack, that means "newest entry of any kind". Camera gestures and parameter edits then race on top of the stack and the wrong lane gets popped.
+2. **Untyped overload at the entry point.** GMT's `handleInteractionStart(mode)` accepted either a string (`'param'`) or a CameraState object, dispatching at runtime via `typeof mode === 'object' && mode.position`. The two recording paths shared a function but not a contract.
+
+Per-scope stacks fix both: the lanes don't share storage, and each lane has a typed entry point.
+
+## State shape
+
+Defined in [`store/slices/historySlice.ts`](../../store/slices/historySlice.ts):
 
 ```ts
-interface UndoAPI {
-  // Begin a transaction. Returns a handle. Must be committed or cancelled.
-  begin(scope: UndoScope, label?: string): TransactionHandle;
-
-  // Convenience wrapper — auto-commits on synchronous return, auto-cancels on throw.
-  group<T>(scope: UndoScope, label: string, fn: () => T): T;
-
-  // Stack operations. No-op when stack is empty for the scope.
-  undo(scope?: UndoScope): boolean;   // returns true if popped
-  redo(scope?: UndoScope): boolean;
-
-  canUndo(scope?: UndoScope): boolean;
-  canRedo(scope?: UndoScope): boolean;
-
-  // Inspection (for timeline UI, debug panel)
-  peekUndo(scope?: UndoScope): TransactionSummary | null;
-  peekRedo(scope?: UndoScope): TransactionSummary | null;
+interface HistorySliceState {
+  paramUndoStack:  Transaction[];
+  paramRedoStack:  Transaction[];
+  cameraUndoStack: Transaction[];
+  cameraRedoStack: Transaction[];
+  interactionSnapshot: Partial<EngineStoreState> | null;
 }
 
-interface TransactionHandle {
-  commit(): void;    // pushes to stack
-  cancel(): void;    // discards; nothing pushed
-  label(next: string): void;
+type UndoScope = 'param' | 'camera';
+
+interface Transaction {
+  scope: UndoScope;
+  label?: string;
+  diff: Partial<EngineStoreState>;  // minimal — only keys that changed
+  timestamp: number;
 }
-
-type UndoScope = 'param' | 'camera' | 'animation' | 'ui' | string;
 ```
 
-**Rule:** scopes are open strings, but the canonical four (`param`, `camera`, `animation`, `ui`) should cover most needs. New scopes are a signal to reconsider; add one only when there's a real UI need to scope a button/hotkey to it.
+`MAX_STACK = 50` per stack. Each lane independently caps; eviction in one lane never touches the other.
 
-## Usage patterns
+Animation history is intentionally separate (lives in `animationStore.undoStack` — see [Animation scope](#animation-scope) below). The F2b unification of animation into the engine-core slice never landed and isn't on the current critical path.
 
-### Auto-bracketed setters (the common case)
-
-Feature setters are auto-wrapped. Calling `setDye({ dissipation: 0.95 })` is implicitly:
+## Public API
 
 ```ts
-undo.group('param', 'Adjust dye.dissipation', () => {
-  // the actual set
-});
+// Canonical entry points — typed, lane-specific.
+beginParamTransaction(): void
+endParamTransaction(): void
+pushCameraTransaction(state: CameraState): void
+
+// Scoped undo / redo. `scope` is required.
+undo(scope: 'param' | 'camera'): boolean
+redo(scope: 'param' | 'camera'): boolean
+canUndo(scope: 'param' | 'camera'): boolean
+canRedo(scope: 'param' | 'camera'): boolean
+peekUndo(scope: 'param' | 'camera'): Transaction | null
+peekRedo(scope: 'param' | 'camera'): Transaction | null
+
+clearHistory(): void   // resets all four stacks
 ```
 
-Interaction-end debounce (for sliders) groups continuous drags into one transaction. Default 300ms of silence after last change → commit.
+### Backward-compat shims
 
-### Explicit transactions
-
-For multi-step operations that should undo as one:
+For existing call sites (~30 widgets that already use the right names):
 
 ```ts
-undo.group('animation', 'Insert keyframes across selection', () => {
-  for (const track of selection) {
-    animation.addKeyframe(track, time, value);
-  }
-});
+handleInteractionStart(mode?: 'param' | 'camera' | CameraState): void
+handleInteractionEnd(): void
+undoParam():  void  // → undo('param')
+redoParam():  void
+undoCamera(): void
+redoCamera(): void
+resetParamHistory(): void  // → clearHistory()
 ```
 
-### Debounced groups (camera gestures, continuous mutations)
+`handleInteractionStart` still accepts a `CameraState` object and routes to `pushCameraTransaction` so legacy camera-record sites don't break, but new callers should use the typed entry point directly.
+
+## Recording
+
+### Parameter transactions (the common case)
+
+Bracket a user gesture with `beginParamTransaction()` / `endParamTransaction()`:
 
 ```ts
-installUndo({
-  scopes: {
-    camera: { debounceMs: 1500 },   // continuous orbit drags collapse into one entry
-    animation: { debounceMs: 0 },   // every keyframe edit is its own entry
-  },
-});
+const onPointerDown = () => store.beginParamTransaction();
+const onPointerUp   = () => store.endParamTransaction();
 ```
 
-## Scope-routed shortcuts
+`beginParamTransaction` snapshots every registered feature's slice state (via `featureRegistry.getAll()`) plus a few preset-round-trippable scene fields. `endParamTransaction` diffs against that snapshot — only keys that actually changed get written into the transaction. If nothing changed, the snapshot is dropped and no entry is pushed.
 
-With `@engine/shortcuts` installed, default bindings are:
+This means a slider-drag that ends back at its start value records nothing, and a five-knob multi-touch gesture records exactly one transaction with five-key diff.
 
-```ts
-// Global — most recent across all scopes
-'Ctrl+Z'       → undo.undo()
-'Ctrl+Y'       → undo.redo()
+### Camera transactions
 
-// Timeline-hover scope (when mouse is over timeline UI)
-'Ctrl+Z'       → undo.undo('animation')     // higher priority
-'Ctrl+Y'       → undo.redo('animation')
+Camera gestures call `pushCameraTransaction(state)` at the start of the gesture (when the camera state is still the pre-gesture pose). The transaction stores `cameraRot` + `sceneOffset` + `targetDistance` from the supplied state.
 
-// Camera-dedicated (always routes to camera scope)
-'Ctrl+Shift+Z' → undo.undo('camera')
-'Ctrl+Shift+Y' → undo.redo('camera')
-```
+Continuous orbit drags collapse via a 1500 ms debounce (`CAMERA_UNDO_DEBOUNCE_MS`): subsequent calls within the window are suppressed if the camera stack is non-empty. So a single orbit drag → one transaction; a quick second gesture → no new transaction; a gesture after the user pauses → new transaction.
 
-**Rule:** scope-routing via shortcut scope replaces GMT's `isTimelineHovered`-threaded-through-multiple-files pattern. The hover state affects which *shortcut* fires, not which *stack* is popped.
+`pushCameraTransaction` also sets `isUserInteracting: true` so the engine drops quality during the gesture. The flag is cleared by `endParamTransaction` (the gesture-end callback regardless of which lane the gesture targeted).
+
+## Hotkey routing
+
+The three lanes have distinct keybindings. Routing is the shortcut layer's job, not the history slice's.
+
+| Key | Source | Routes to |
+|---|---|---|
+| `Mod+Z` | `@engine/undo` global | `undo('param')` |
+| `Mod+Y` / `Mod+Shift+Z` (Mac) | `@engine/undo` global | `redo('param')` |
+| `Mod+Z` over timeline | `@engine/undo` `'timeline-hover'` scope, priority 10 | `animationStore.undo()` |
+| `Mod+Y` over timeline | `@engine/undo` `'timeline-hover'` scope, priority 10 | `animationStore.redo()` |
+| `Ctrl+Shift+Z` | app-gmt `'global'` scope, priority 10 | `undo('camera')` |
+| `Ctrl+Shift+Y` | app-gmt `'global'` scope, priority 10 | `redo('camera')` |
+
+The priority-10 override on `Ctrl+Shift+Z` exists because `Mod+Shift+Z` also expands to `Ctrl+Shift+Z` on Win/Linux (engine-core registers it as the Mac-redo alias). Both bind at scope `'global'` priority 0, so the resolver tie-breaks on insertion order; `installUndo()` registers first, which would steal the binding without the override.
+
+## Topbar buttons
+
+`UndoButton` / `RedoButton` (in `engine/plugins/Undo.tsx`) are the engine-core topbar items. Both call `undo('param')` / `redo('param')` — they intentionally never operate on the camera stack. Camera undo is dedicated to its hotkey + the Camera menu items in `engine-gmt/topbar.tsx` (which use `canUndo('camera')` / `canRedo('camera')` for their disabled-checks).
+
+This isn't a limitation; it's the model. Generic chrome doesn't speculate about which lane the user means. If you want a camera-undo button, install one with an explicit scope.
+
+## Animation scope
+
+Animation edits live in `animationStore` with their own `undoStack` / `redoStack`. The engine-core history slice does not see them.
+
+`@engine/undo` registers `Mod+Z` and `Mod+Y` under the `'timeline-hover'` shortcut scope at priority 10. The timeline component pushes `'timeline-hover'` on mouse-enter and pops on leave, so cursor-over-timeline routes Ctrl+Z to the animation store, otherwise the global parameter binding wins.
+
+Unifying animation history into the engine-core slice (the F2b plan) would deduplicate the stack-management code but require careful patch translation for every keyframe edit. It's deferred until there's a real cross-scope undo flow that needs it.
 
 ## Transaction storage
 
-Each transaction is stored as:
-- Forward patch (what changed)
-- Backward patch (how to reverse)
-- Scope + label + timestamp
-- Feature-registry generation (for stale-reference detection; see below)
+Each entry is a minimal diff, not a full snapshot:
 
-**Rule:** patches are minimal diffs, not full state snapshots.
-**Why:** storing full snapshots (GMT's old approach) bloats memory and masks bugs where a later change should have blocked undoing an earlier one. Patches fail cleanly when intermediate state changed unexpectedly.
+- Parameter transactions store only the keys whose JSON-stringification changed during the gesture.
+- Camera transactions store at most three fields (`cameraRot`, `sceneOffset` if present, `targetDistance` if present).
 
-## Stale transactions
-
-If a feature is unregistered (rare, but possible in hot-reload scenarios), transactions referencing its state are marked stale and skipped on undo/redo. User sees "1 step skipped (stale)" in dev.
-
-## History limits
-
-Default `maxEntries: 50` per scope. Configurable:
-
-```ts
-installUndo({
-  maxEntries: 100,
-  scopes: {
-    animation: { maxEntries: 200 },
-  },
-});
-```
-
-Hitting the limit drops the oldest entry of that scope.
+`undo(scope)` pops the newest entry, captures the **current** state of those same keys into a redo entry (so redo replays the post-undo state), then applies the diff via the standard setter path (`setX(...)` if it exists, otherwise direct `set()`). `applyStateRestore` calls `engine.resetAccumulation()` to invalidate any in-flight accumulated frames.
 
 ## Undo and preset load
 
-**Rule:** loading a preset clears the undo stack for all scopes.
-**Why:** preserving undo across a full state swap leads to paradoxes (undoing past a load would produce a state that never existed on disk and never was on screen in that order). A clear clean-slate is simpler and matches user expectation.
-
-An explicit "Undo load" entry is pushed instead, so the user can revert the load itself.
+Loading a preset clears all stacks. Preserving undo across a full state swap creates paradoxes (undoing past a load produces a state that never existed in that order). `engineStore.setFormula` and `loadPreset` both call `clearHistory()`.
 
 ## Non-undoable state
 
 Some state changes must not go onto the stack:
-- Viewport size changes (window resize)
-- Mouse cursor position, hover states
-- Framerate counters, debug overlays
-- UI-only state that's not user-meaningful
 
-**Rule:** don't wrap these in a transaction. If the change path goes through a feature setter, and you don't want it undoable, mark the param `undoable: false` in the feature def.
+- Viewport size / dpr / msaa changes that the slice itself adjusts during `endParamTransaction` (excluded by the snapshot's key list — only feature-slice keys are tracked).
+- Hover, focus, scroll, FPS counters — these aren't in any feature slice and aren't snapshotted.
 
-```ts
-params: {
-  dissipation: { type: 'float', default: 0.98, undoable: true },   // default
-  currentFps:  { type: 'float', default: 60,   undoable: false },  // transient
-}
-```
+There's no per-param `undoable: false` flag yet. If a feature wants a sub-key excluded, the path forward is to put it in a non-snapshotted scope (e.g. a dedicated `ui` slice that the snapshotter skips).
 
-## UI integration
+## Known limitations
 
-Timeline panel shows:
-- Undo stack depth per scope (small pips to the right of the track header).
-- Next undo label on the undo button hover (`Undo: Adjust dye.dissipation`).
-
-TopBar (when @engine/topbar installed):
-- Undo/Redo buttons in the right slot.
-- Clicking executes global undo; right-click shows a dropdown of recent transactions.
+- **No `'ui'` scope.** Panel collapse, timeline scroll, dock layout don't undo. F8 in the fragility audit. Low-impact.
+- **No grouped-multi-step `group(scope, label, fn)` API.** Not currently needed — multi-step writes happen through DDFS setters bracketed by a single `begin/end` pair, which already collapses to one transaction.
+- **`UndoScope` is a closed union (`'param' | 'camera'`).** Adding a third scope requires a state-shape change. Keep it that way until a real third lane shows up.
 
 ## Decisions
 
-### 2026-04-22 — Single stack with scope labels (not three stacks)
-**Decision:** one transaction stack, scopes are filter labels.
-**Alternative:** keep three stacks, formalize the hover-based routing. Rejected — the confusion was endemic, not a fix-in-place opportunity.
+### 2026-04-30 — Per-scope stacks (revert from unified-with-tags)
+**Decision:** split `paramUndoStack`/`paramRedoStack`/`cameraUndoStack`/`cameraRedoStack`. Make `scope` required on `undo`/`redo`/`canUndo`/`canRedo`/`peekUndo`/`peekRedo`.
+**Driver:** the unscoped `undo()` form caused intermittent "Ctrl+Z undid a camera move" reports when a camera gesture sat on top of a unified stack and the global hotkey didn't carry scope.
+**Alternative considered:** keep one stack, default unscoped to skip `'camera'`. Rejected — would have fixed the immediate symptom but kept the structurally-conflated model. Per-scope stacks make the bug class unrepresentable.
+
+### 2026-04-30 — Typed `pushCameraTransaction`, retire the overloaded `handleInteractionStart`
+**Decision:** new entry point `pushCameraTransaction(state: CameraState)` for the camera path; `handleInteractionStart` keeps the `CameraState` overload only as a back-compat shim that routes to it.
+**Why:** the runtime overload (`typeof mode === 'object' && mode.position`) was the smell that allowed param and camera recording paths to share a function but not a contract.
 
 ### 2026-04-22 — Patches (forward + backward), not full snapshots
-**Decision:** diffs, with stale-detection via registry generation.
-**Alternative:** GMT's full-state snapshots. Rejected — bloated memory, slow, masks bugs.
+**Decision:** diff-based. Param transactions snapshot pre-state, diff at commit; camera transactions store only the camera fields.
+**Why:** full snapshots bloat memory and mask bugs where intermediate state should have invalidated the undo.
 
 ### 2026-04-22 — Preset load clears undo
-**Decision:** loading a preset clears all scopes; pushes one "Undo load" entry.
-**Rationale:** predictable; avoids paradoxical states.
-
-### 2026-04-22 — `undoable: false` per-param opt-out
-**Decision:** transient params (FPS counter, hover state) opt out at feature-def time.
-**Alternative:** heuristic classification. Rejected — explicit is better than clever.
-
-## Known fragilities
-
-See [20_Fragility_Audit.md](20_Fragility_Audit.md):
-- **F2b** (formerly F2, now split) — three-stack confusion. Fixed by this design, but the migration from GMT's existing stacks will require careful patch translation for any existing saved sessions.
+**Decision:** loading a preset clears all stacks.
+**Why:** predictable; avoids paradoxical states.
 
 ## Cross-refs
 
-- Shortcut routing to scopes: [07_Shortcuts.md](07_Shortcuts.md)
-- Feature-setter auto-wrapping: [02_Feature_Registry.md § auto-derivation](02_Feature_Registry.md#what-gets-auto-derived)
-- Animation-specific scope interactions: [08_Animation.md](08_Animation.md)
+- Shortcut scope routing: [07_Shortcuts.md](07_Shortcuts.md)
+- Camera plugin (slot saves, not undo): [04_Core_Plugins.md § camera](04_Core_Plugins.md#enginecamera)
+- Fragility audit history: [20_Fragility_Audit.md § F2b](20_Fragility_Audit.md#f2b--three-undo-stacks-routed-by-hover-state)

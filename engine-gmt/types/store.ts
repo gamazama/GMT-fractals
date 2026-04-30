@@ -166,12 +166,12 @@ export interface EngineStoreState extends FeatureStateMap {
   sceneHistogramTrigger: number;
   sceneHistogramActiveCount: number; // Ref count
   
-  undoStack: CameraState[];
-  redoStack: CameraState[];
+  // Per-scope history stacks (see store/slices/historySlice.ts).
+  paramUndoStack: any[];
+  paramRedoStack: any[];
+  cameraUndoStack: any[];
+  cameraRedoStack: any[];
   interactionSnapshot: Partial<EngineStoreState> | null;
-  
-  paramUndoStack: Partial<EngineStoreState>[];
-  paramRedoStack: Partial<EngineStoreState>[];
 
   // --- MODULAR BUILDER STATE (managed by modularSlice + uiSlice) ---
   graph: FractalGraph;
@@ -341,6 +341,16 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     duplicateCamera: (id: string) => void;
     saveToSlot: (slotIndex: number) => void;
 
+    beginParamTransaction: () => void;
+    endParamTransaction: () => void;
+    pushCameraTransaction: (state: CameraState) => void;
+
+    undo: (scope: 'param' | 'camera') => boolean;
+    redo: (scope: 'param' | 'camera') => boolean;
+    canUndo: (scope: 'param' | 'camera') => boolean;
+    canRedo: (scope: 'param' | 'camera') => boolean;
+
+    // Backward-compat shims.
     handleInteractionStart: (mode?: 'camera' | 'param' | any) => void;
     handleInteractionEnd: () => void;
     undoCamera: () => void;
