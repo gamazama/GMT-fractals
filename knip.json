@@ -24,7 +24,10 @@
     "engine-gmt/types/**",
     "types/**",
     "shaders/**",
-    "public/**"
+    "public/**",
+    "engine-gmt/features/fragmentarium_import/**",
+    "fluid-toy/deepZoom/HDRFloat.ts",
+    "mesh-export/algorithms/sdf-eval.ts"
   ],
   "ignoreBinaries": [],
   "ignoreDependencies": [],
