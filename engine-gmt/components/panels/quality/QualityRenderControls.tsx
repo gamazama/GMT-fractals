@@ -22,7 +22,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useEngineStore } from '../../../../store/engineStore';
-import Slider, { DraggableNumber } from '../../../../components/Slider';
+import Slider from '../../../../components/Slider';
 import ToggleSwitch from '../../../../components/ToggleSwitch';
 import Dropdown from '../../../../components/Dropdown';
 import { AutoFeaturePanel } from '../../../../components/AutoFeaturePanel';
@@ -30,6 +30,13 @@ import { ParentSection } from '../../../../components/ParentSection';
 import { FractalEvents } from '../../../../engine/FractalEvents';
 import type { LightingState } from '../../../features/lighting';
 import { SectionLabel } from '../../../../components/SectionLabel';
+import { NumberInput } from '../../../../components/NumberInput';
+import { snap8 } from '../../../../utils/resolutionUtils';
+import {
+    RESOLUTION_PRESETS,
+    ASPECT_LOCK_OPTIONS,
+    type AspectRatioValue,
+} from '../../../../data/resolutionPresets';
 
 const AA_LEVELS = [
     { label: '0.25', value: 0.25 },
@@ -39,29 +46,14 @@ const AA_LEVELS = [
     { label: '2.0',  value: 2.0  },
 ];
 
-const RESOLUTION_PRESETS = [
-    { label: 'SVGA (800 x 600)',         value: '800x600'   },
-    { label: 'HD (1280 x 720)',          value: '1280x720'  },
-    { label: 'FHD (1920 x 1080)',        value: '1920x1080' },
-    { label: 'QHD (2560 x 1440)',        value: '2560x1440' },
-    { label: '4K (3840 x 2160)',         value: '3840x2160' },
-    { label: 'Square 1:1 (1080p)',       value: '1080x1080' },
-    { label: 'Portrait 4:5 (1080p)',     value: '1080x1350' },
-    { label: 'Vertical 9:16 (1080p)',    value: '1080x1920' },
-    { label: 'Skybox Low (2048 x 1024)', value: '2048x1024' },
-    { label: 'Skybox High (4096 x 2048)', value: '4096x2048' },
-    { label: 'Custom',                   value: 'Custom'    },
+/** Dropdown options keyed on `WxH` strings, plus a 'Custom' sentinel. */
+const RESOLUTION_DROPDOWN_OPTIONS = [
+    ...RESOLUTION_PRESETS.map(p => ({ label: p.label, value: `${p.w}x${p.h}` })),
+    { label: 'Custom', value: 'Custom' },
 ];
 
-const ASPECT_OPTIONS: { label: string; value: number | 'Free' }[] = [
-    { label: 'Free',             value: 'Free'   },
-    { label: '16:9',             value: 1.7777   },
-    { label: '4:3',              value: 1.3333   },
-    { label: '1:1',              value: 1.0      },
-    { label: '4:5 (Portrait)',   value: 0.8      },
-    { label: '9:16 (Vertical)',  value: 0.5625   },
-    { label: '2:1 (Sky)',        value: 2.0      },
-];
+/** Aspect-lock dropdown options — value carries the numeric ratio or 'Free'. */
+const ASPECT_OPTIONS = ASPECT_LOCK_OPTIONS.map(a => ({ label: a.label, value: a.ratio }));
 
 export const QualityRenderControls: React.FC = () => {
     const state = useEngineStore() as any;
@@ -69,14 +61,14 @@ export const QualityRenderControls: React.FC = () => {
     const lighting = state.lighting as LightingState | undefined;
 
     const [w, h] = state.fixedResolution;
-    const [aspectLock, setAspectLock] = useState<number | 'Free'>('Free');
+    const [aspectLock, setAspectLock] = useState<AspectRatioValue>('Free');
 
     const ptEnabled = lighting?.ptEnabled !== false;
     const setLighting = actions.setLighting;
 
     const currentPreset = useMemo(() => {
         const s = `${w}x${h}`;
-        const known = RESOLUTION_PRESETS.find((p) => p.value === s);
+        const known = RESOLUTION_DROPDOWN_OPTIONS.find((p) => p.value === s);
         return known ? s : 'Custom';
     }, [w, h]);
 
@@ -89,9 +81,7 @@ export const QualityRenderControls: React.FC = () => {
     };
 
     const setRes = (newW: number, newH: number) => {
-        const snapW = Math.max(64, Math.round(newW / 8) * 8);
-        const snapH = Math.max(64, Math.round(newH / 8) * 8);
-        actions.setFixedResolution(snapW, snapH);
+        actions.setFixedResolution(snap8(newW), snap8(newH));
     };
 
     const handleDimensionChange = (axis: 'w' | 'h', val: number) => {
@@ -171,7 +161,7 @@ export const QualityRenderControls: React.FC = () => {
                         <Dropdown
                             label="Preset"
                             value={currentPreset}
-                            options={RESOLUTION_PRESETS}
+                            options={RESOLUTION_DROPDOWN_OPTIONS}
                             onChange={(val: any) => {
                                 if (val !== 'Custom') {
                                     const [nW, nH] = (val as string).split('x').map(Number);
@@ -181,32 +171,18 @@ export const QualityRenderControls: React.FC = () => {
                             fullWidth
                         />
                         <div className="flex gap-2">
-                            <div className="flex-1">
-                                <SectionLabel variant="secondary" className="block mb-0.5">Width</SectionLabel>
-                                <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber
-                                        value={w}
-                                        onChange={(v: number) => handleDimensionChange('w', v)}
-                                        step={8}
-                                        min={64}
-                                        max={8192}
-                                        overrideText={`${w}`}
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex-1">
-                                <SectionLabel variant="secondary" className="block mb-0.5">Height</SectionLabel>
-                                <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber
-                                        value={h}
-                                        onChange={(v: number) => handleDimensionChange('h', v)}
-                                        step={8}
-                                        min={64}
-                                        max={8192}
-                                        overrideText={`${h}`}
-                                    />
-                                </div>
-                            </div>
+                            <NumberInput
+                                label="Width"
+                                value={w}
+                                onChange={(v: number) => handleDimensionChange('w', v)}
+                                step={8} min={64} max={8192}
+                            />
+                            <NumberInput
+                                label="Height"
+                                value={h}
+                                onChange={(v: number) => handleDimensionChange('h', v)}
+                                step={8} min={64} max={8192}
+                            />
                             <div className="w-[35%]">
                                 <SectionLabel variant="secondary" className="block mb-0.5">Ratio</SectionLabel>
                                 <div className="h-6">

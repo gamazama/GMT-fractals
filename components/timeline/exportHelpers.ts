@@ -1,5 +1,13 @@
 
 /** Format seconds into human-readable time with units (e.g. "5s", "2m 30s", "1h 15m") */
+/** Estimate remaining time as a ±10% range. Returns 0..0 when there's not
+ *  enough signal yet (no progress or no elapsed time). */
+export const calcEtaRange = (elapsedSec: number, done: number, total: number): { min: number; max: number } => {
+    if (done <= 0 || total <= 0 || elapsedSec <= 0) return { min: 0, max: 0 };
+    const eta = (total - done) * (elapsedSec / done);
+    return { min: eta * 0.9, max: eta * 1.1 };
+};
+
 export const formatTimeWithUnits = (secs: number) => {
     if (!isFinite(secs) || secs < 0) return "--";
 

@@ -12,6 +12,7 @@ UI primitives are engine-level, pure, and shared across apps. A primitive takes 
 |---|---|---|
 | `<Slider>` | float/int scalar input with drag-to-scrub | `AnimationContext`, `UndoContext` |
 | `<Knob>` | rotary alternative to slider | same as Slider |
+| `<NumberInput>` | labeled `DraggableNumber` with the standard `h-6` panel chrome — use wherever a panel pairs Width/Height/Cols/Rows controls | — |
 | `<ToggleSwitch>` | boolean | `UndoContext` |
 | `<Dropdown>` | enum selection | `UndoContext` |
 | `<TabBar>` | panel-level tab switcher | — |
@@ -20,6 +21,7 @@ UI primitives are engine-level, pure, and shared across apps. A primitive takes 
 | `<AdvancedGradientEditor>` | full gradient editor with stops, color space, blend | `AnimationContext`, `UndoContext`, `ContextMenuContext` |
 | `<CollapsibleSection>` | labeled collapsible wrapper | — |
 | `<Popover>` | anchored floating panel | — |
+| `<Hint>` | inline help-text row under a control; renders nothing when `showHints` is off (global toggle hotkey hides every Hint uniformly) | reads `showHints` + `openHelp` from store |
 | `<CompilableFeatureSection>` | compile-vs-runtime param split UI | `FeatureCompileContext` |
 | `<DraggableWindow>` | floating window frame | — |
 | `<Histogram>` | read-only histogram display | — |

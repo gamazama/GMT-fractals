@@ -13,6 +13,7 @@ import { Knob } from './Knob';
 import { collectHelpIds } from '../utils/helpUtils';
 import { componentRegistry } from './registry/ComponentRegistry';
 import { AlertIcon, CloseIcon } from './Icons';
+import { Hint } from './Hint';
 
 // Code-split: gradient editor only renders for gradient params
 const AdvancedGradientEditor = React.lazy(() => import('./AdvancedGradientEditor'));
@@ -82,7 +83,6 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     const advancedMode = useEngineStore(s => s.advancedMode);
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const showHints = useEngineStore(s => s.showHints);
-    const openHelp = useEngineStore(s => s.openHelp);
     
     const [confirming, setConfirming] = useState<{key: string, value: any, message: string} | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -410,30 +410,6 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         return null;
     };
 
-    /** Hint row rendered under a param when showHints is on. The
-     *  `?` button on the right opens the help topic when `helpId` is
-     *  set; without a helpId it's just static hint copy. */
-    const renderHint = (text: string, helpId: string | undefined, key: string) => (
-        <div
-            key={key}
-            className="flex items-center gap-1 px-3 py-1.5 bg-white/[0.06] group/hint"
-        >
-            <p className="flex-1 text-[9px] text-gray-600 leading-tight group-hover/hint:text-gray-300 transition-colors cursor-default">
-                {text}
-            </p>
-            {helpId && openHelp && (
-                <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); openHelp(helpId); }}
-                    title={`Help: ${helpId}`}
-                    className="shrink-0 w-3.5 h-3.5 flex items-center justify-center text-[8px] font-bold rounded-sm bg-white/5 text-gray-500 hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors"
-                >
-                    ?
-                </button>
-            )}
-        </div>
-    );
-
     const renderNode = (id: string, isHalfWidth: boolean = false) => {
         const config = feature.params[id];
         // EXCLUSION CHECK
@@ -461,7 +437,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const showDescription = showHints && config.description && !isDisabled && variant !== 'dense'
             && (config.type !== 'boolean' || sliceState?.[id]);
         if (showDescription && isParentSlider) {
-            renderedChildren.unshift(renderHint(config.description!, config.helpId, `desc-${id}`));
+            renderedChildren.unshift(<Hint key={`desc-${id}`} text={config.description!} helpId={config.helpId} />);
         }
 
         const hasChildren = renderedChildren.length > 0;
@@ -474,7 +450,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             >
                 {isParentSlider && <div className={`absolute inset-0 bg-white/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
-                {showDescription && !isParentSlider && renderHint(config.description!, config.helpId, `leaf-desc-${id}`)}
+                {showDescription && !isParentSlider && <Hint key={`leaf-desc-${id}`} text={config.description!} helpId={config.helpId} />}
                 {renderedChildren.length > 0 && (
                     <>
                         {/* Bracketed-children layout: same primitive
@@ -602,7 +578,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                         >
                             <div className="flex flex-col">
                                 {showHints && gc.description &&
-                                    renderHint(gc.description, gc.helpId, `group-desc-${groupId}`)}
+                                    <Hint key={`group-desc-${groupId}`} text={gc.description} helpId={gc.helpId} />}
                                 {filtered.map((item, idx) => (
                                     <div key={idx}>{item}</div>
                                 ))}
@@ -615,7 +591,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 renderItems.push(
                     <div key={`group-${groupId}`} data-help-id={gc.helpId} className="flex flex-col">
                         {showHints && gc.description &&
-                            renderHint(gc.description, gc.helpId, `group-desc-${groupId}`)}
+                            <Hint key={`group-desc-${groupId}`} text={gc.description} helpId={gc.helpId} />}
                         {visibleItems}
                     </div>
                 );
@@ -641,12 +617,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     // menus and a header-level hint can pick it up.
     const filteredGroupConfig = groupFilter ? groupConfigs?.[groupFilter] : undefined;
     const outerHelpId = filteredGroupConfig?.helpId;
-    const outerHint =
-        showHints && filteredGroupConfig?.description && renderHint(
-            filteredGroupConfig.description,
-            filteredGroupConfig.helpId,
-            `group-desc-${groupFilter}`,
-        );
+    const outerHint = showHints && filteredGroupConfig?.description &&
+        <Hint key={`group-desc-${groupFilter}`} text={filteredGroupConfig.description} helpId={filteredGroupConfig.helpId} />;
 
     return (
         <div

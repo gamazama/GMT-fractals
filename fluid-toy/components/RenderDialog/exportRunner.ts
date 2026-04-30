@@ -29,12 +29,7 @@ import { MainThreadEncoder } from '../../../engine/export/videoEncoder';
 import { VIDEO_FORMATS } from '../../../data/constants';
 import { getExportFileName } from '../../../utils/fileUtils';
 import type { RenderRunDeps } from './types';
-
-const calcEtaRange = (elapsedSec: number, framesDone: number, totalFrames: number) => {
-    if (framesDone <= 0) return { min: 0, max: 0 };
-    const eta = (totalFrames - framesDone) * (elapsedSec / framesDone);
-    return { min: eta * 0.9, max: eta * 1.1 };
-};
+import { calcEtaRange } from '../../../components/timeline/exportHelpers';
 
 /** Apply oscillator/rule modulation offsets for the controlled `time` /`dt`,
  *  publish them into `liveModulations`. Fluid-toy slices read `liveModulations`

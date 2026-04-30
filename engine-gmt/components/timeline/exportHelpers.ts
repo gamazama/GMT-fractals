@@ -1,3 +1,4 @@
+export { calcEtaRange } from '../../../components/timeline/exportHelpers';
 
 /** Format seconds into human-readable time with units (e.g. "5s", "2m 30s", "1h 15m") */
 export const formatTimeWithUnits = (secs: number) => {

@@ -27,15 +27,9 @@ import type { SerializedCamera, SerializedOffset } from '../../../engine/worker/
 import type { EngineRenderState } from '../../../engine/FractalEngine';
 import type { ExportPass, VideoExportConfig } from '../../../../engine/codec/VideoExportTypes';
 import type { ExportRunDeps } from './types';
+import { calcEtaRange } from '../exportHelpers';
 
 const engine = getProxy();
-
-/** Calculate ETA range from elapsed time and frames completed. */
-const calcEtaRange = (elapsedSec: number, framesDone: number, totalFrames: number) => {
-    if (framesDone <= 0) return { min: 0, max: 0 };
-    const eta = (totalFrames - framesDone) * (elapsedSec / framesDone);
-    return { min: eta * 0.9, max: eta * 1.1 };
-};
 
 /**
  * Per-frame export pump — shared by the video multi-pass path and the image-sequence path.

@@ -2,18 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from '../../../components/Icons';
 import { useHelpContextMenu } from '../../../hooks/useHelpContextMenu';
-
-const RATIO_PRESETS: { label: string; ratio: number | 'Max' }[] = [
-    { label: 'Maximum', ratio: 'Max' },
-    { label: 'Square (1:1)', ratio: 1.0 },
-    { label: 'Landscape (16:9)', ratio: 1.7777 },
-    { label: 'Ultrawide (21:9)', ratio: 2.3333 },
-    { label: 'Portrait (4:5)', ratio: 0.8 },
-    { label: 'Social (9:16)', ratio: 0.5625 },
-    { label: 'Cinematic (2.35:1)', ratio: 2.35 },
-    { label: 'Classic (4:3)', ratio: 1.3333 },
-    { label: 'Skybox (2:1)', ratio: 2.0 },
-];
+import { ASPECT_RATIOS, type AspectRatioValue } from '../../../data/resolutionPresets';
+import { snap8 } from '../../../utils/resolutionUtils';
 
 interface FixedResolutionControlsProps {
     width: number;
@@ -83,15 +73,8 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
         if (delta !== 0) {
             const ratio = dragResRef.current.startW / dragResRef.current.startH;
             
-            // Scale based on Width change, maintaining Aspect Ratio
-            const newW = Math.max(64, dragResRef.current.startW + delta);
-            // Snap width to 8
-            const snappedW = Math.round(newW / 8) * 8;
-            
-            // Calculate height via aspect ratio, then snap to 8
-            const rawH = snappedW / ratio;
-            const snappedH = Math.max(64, Math.round(rawH / 8) * 8);
-            
+            const snappedW = snap8(dragResRef.current.startW + delta);
+            const snappedH = snap8(snappedW / ratio);
             onSetResolution(snappedW, snappedH);
         }
     };
@@ -106,7 +89,8 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
     };
     
     // Fit Logic: Finds the largest WxH that fits in the window with padding
-    const applyPreset = (targetRatio: number | 'Max') => {
+    const applyPreset = (targetRatio: AspectRatioValue) => {
+        if (targetRatio === 'Free') return;
         const padding = 40;
         const availW = Math.max(100, maxAvailableWidth - padding);
         const availH = Math.max(100, maxAvailableHeight - padding);
@@ -130,11 +114,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
             }
         }
         
-        // Snap to GPU-friendly multiples of 8
-        const snappedW = Math.round(newW / 8) * 8;
-        const snappedH = Math.round(newH / 8) * 8;
-        
-        onSetResolution(snappedW, snappedH);
+        onSetResolution(snap8(newW), snap8(newH));
         setShowResMenu(false);
     };
 
@@ -162,7 +142,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
                     className="absolute top-8 left-0 w-48 bg-black border border-white/20 rounded shadow-xl z-50 overflow-hidden flex flex-col py-1 animate-fade-in"
                 >
                     <div className="px-3 py-1 text-[8px] font-bold text-gray-500 border-b border-white/10 mb-1">Fit to Window</div>
-                    {RATIO_PRESETS.map(p => (
+                    {ASPECT_RATIOS.map(p => (
                         <button 
                             key={p.label}
                             onClick={() => applyPreset(p.ratio)}

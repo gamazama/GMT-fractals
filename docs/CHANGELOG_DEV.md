@@ -4,6 +4,27 @@ Chronological log of significant changes during the v0.9.3 development cycle (en
 
 ## 2026-04-30
 
+### Bucket render: redesigned panel + UI primitives
+
+**User-facing**
+- The High Quality Render popover no longer covers the canvas while a render is in flight. When you hit Export the panel collapses to a compact pill — same anchor under the topbar icon — that just shows the progress bar plus a tile counter, elapsed time, and an **ETA range** (±10%, computed locally). Stop button stays one click away. Setup-side controls, which used to dim out behind the rendering view, are simply gone until the render finishes.
+- Action buttons (Refine / Preview / Export / Stop / Match Viewport) now use the standard GMT button style, matching the rest of the topbar and AutoFeaturePanel chrome.
+- New **Ratio** dropdown beside Width/Height. Pick *Free*, or any of the standard aspect ratios (1:1, 16:9, 21:9, 4:3, 4:5, 9:16, 2.35:1, 2:1) — editing one dimension recomputes the other. The same ratio list now drives the viewport "fit to window" dropdown, the Quality > Resolution Ratio dropdown, and this one — they're all sourced from a single module.
+- Output Size **Preset** list expanded: SVGA, Skybox sizes, three 21:9 sizes (Ultrawide 2560×1080, UWQHD 3440×1440, 5K2K 5120×2160), and additional square presets are now available everywhere the resolution dropdown appears (Quality > Resolution and bucket render share the list).
+- Tile Grid laid out as a single row (`Columns [N] × Rows [M]`); panel itself is 32 px narrower.
+- Slider helper text in the bucket panel now uses the same `<Hint>` component as the rest of the app, so the global hint-toggle hotkey hides them along with everything else.
+
+**Mechanism**
+- New `dev/data/resolutionPresets.ts` — single source for `ASPECT_RATIOS` (viewport fit-to-window), `ASPECT_LOCK_OPTIONS` (W/H ratio-lock dropdowns; Free + 8 ratios), and `RESOLUTION_PRESETS` (18 pixel sizes, union of what bucket and Quality previously had separately). Three call sites now import from one module: `engine/plugins/viewport/FixedResolutionControls.tsx`, `engine-gmt/components/panels/quality/QualityRenderControls.tsx`, `engine/plugins/topbar/BucketRenderPanel.tsx`.
+- New `dev/components/Hint.tsx` — extracted from `AutoFeaturePanel`'s local `renderHint` helper. Reads `showHints` itself, so callers don't need to gate the render. AutoFeaturePanel's 5 `renderHint(...)` call sites now use `<Hint>` directly; the wrapper helper was deleted.
+- New `dev/components/NumberInput.tsx` — labeled `DraggableNumber` with the standard `h-6 bg-black/40 rounded border` chrome that was inlined 6× across BucketRenderPanel and QualityRenderControls. Both files now use the shared component.
+- New `dev/utils/resolutionUtils.ts` exports `snap8(n, min=64)` — the GPU-friendly multiple-of-8 rounder that previously appeared inline in three files (BucketRenderPanel, QualityRenderControls, FixedResolutionControls).
+- `calcEtaRange(elapsedSec, done, total)` consolidated in `dev/components/timeline/exportHelpers.ts` (alongside `formatTimeWithUnits`). Was triplicated in `engine-gmt/.../exportRunner.ts`, `fluid-toy/.../exportRunner.ts`, and inline in BucketRenderPanel; all four sites now import the same function.
+- `BucketRenderPanel`'s `BUCKET_STATUS` event handler now performs change-detection before calling `setProgress` / `setTileInfo`, so engine-rate status events don't trigger a React re-render every tick when nothing has actually moved.
+- `BucketRenderPanel`'s match-viewport-aspect `useEffect` had no dependency array and was running every render. Now declares `[matchViewportAspect, outputWidth, outputHeight, viewportPixels]` and reads `viewportPixels` from the existing memo instead of re-grabbing store state inside the effect body.
+
+Docs: [docs/engine/05_Shared_UI.md](engine/05_Shared_UI.md) catalog updated with `<Hint>` and `<NumberInput>`; help topic `bucket.render` updated to describe the rendering view's tile/elapsed/ETA stat strip and the new Ratio dropdown.
+
 ### Undo: per-scope stacks (camera/param no longer conflate)
 
 **User-facing**

@@ -69,22 +69,25 @@ Settings specific to the Path Tracing engine.
 Render images at arbitrary resolutions — far beyond what the GPU can draw in a single frame — by rendering in small internal tiles (GPU buckets) and accumulating samples per tile until noise-free. Optionally split the output into a grid of separate PNG files for massive prints.
 
 ## Actions
-- **Refine View**: renders the current viewport at viewport resolution until converged, then holds the cleaned-up frame on screen until you move the camera or change a parameter. Use when you want a clean still of what you're currently looking at.
-- **Preview Region**: click a spot on the canvas to zoom into that area at export pixel density. You stay fully interactive — move sliders, adjust lights, change colors — and the preview re-renders live. See the *Preview Region* section below.
-- **Export Image**: renders at the configured Output Size and saves PNG(s) to disk. With a tile grid > 1×1, each tile saves as its own file.
+- **Refine**: renders the current viewport at viewport resolution until converged, then holds the cleaned-up frame on screen until you move the camera or change a parameter. Use when you want a clean still of what you're currently looking at.
+- **Preview**: click a spot on the canvas to zoom into that area at export pixel density. You stay fully interactive — move sliders, adjust lights, change colors — and the preview re-renders live. See the *Preview Region* section below.
+- **Export**: renders at the configured Output Size and saves PNG(s) to disk. With a tile grid > 1×1, each tile saves as its own file. The button shows the file count when tiling is active (e.g. *Export 4×*).
 
 ## Quality Settings
 - **Convergence Threshold** (default 0.25%): how similar consecutive frames must be before a tile is considered "done". Lower = more samples, higher quality. 0.1% = production, 1% = fast preview.
-- **Max Samples Per Bucket** (default 64): safety cap so difficult tiles don't accumulate forever. Also caps Preview Region accumulation.
+- **Max Samples / Bucket** (default 64): safety cap so difficult tiles don't accumulate forever. Also caps Preview Region accumulation.
 
 ## Output Size
-- **Preset**: HD / FHD / QHD / 4K / 5K / 8K, squares, portraits, and A0–A3 print sizes at 300 DPI.
+- **Preset**: HD / FHD / QHD / 4K / 5K / 8K UHD, ultrawide (UWQHD, 5K2K), squares, portrait/vertical, skybox, and A0–A3 print sizes at 300 DPI. The list is shared with the Quality > Resolution dropdown.
 - **Width / Height**: type any values; snaps to multiples of 8 for GPU alignment.
-- **Lock to viewport aspect** (default on): the output automatically tracks the current canvas aspect ratio — open a sidebar, change the window size, and the output height adjusts so what you export matches what you see. Turn off to pick an arbitrary aspect ratio; when off, the viewport temporarily switches to a fitted Fixed-mode canvas that matches the output aspect (so the live render doesn't stretch).
-- **Match viewport**: one-click button to set output size to the current canvas dimensions.
+- **Ratio**: aspect-ratio lock for the W/H pair — *Free* (independent), or one of the standard ratios (1:1, 16:9, 21:9, 4:3, 4:5, 9:16, 2.35:1, 2:1). When set, editing Width recomputes Height (and vice versa). The same ratio list is used by the viewport "fit to window" dropdown.
+- **Lock to viewport aspect** (default on): the output automatically tracks the current canvas aspect ratio — open a sidebar, change the window size, and the output height adjusts so what you export matches what you see. Turn off (or pick a static Ratio above) to render an arbitrary aspect; when unlocked, the viewport temporarily switches to a fitted Fixed-mode canvas that matches the output aspect (so the live render doesn't stretch).
+- **Match Viewport**: one-click button to set output size to the current canvas dimensions.
+
+The VRAM estimate next to the *Output Size* heading shows the memory cost of a single tile.
 
 ## Tile Grid
-Columns × Rows splits the output into separate PNG files — useful for prints too large for GPU memory in one render (e.g. 20K × 20K split 5×5 = 25 files at 4K each). The per-tile VRAM estimate below the dimensions shows the memory cost of a single tile. **1 × 1 = single file** (default).
+*Columns × Rows* splits the output into separate PNG files — useful for prints too large for GPU memory in one render (e.g. 20K × 20K split 5×5 = 25 files at 4K each). The header next to *Tile Grid* shows the file count and per-tile pixel size. **1 × 1 = single file** (default).
 
 When tiling is active with bloom or chromatic aberration enabled, visible seams may appear at tile boundaries (spatial effects run per-tile). Disable those effects for seamless stitching.
 
@@ -95,7 +98,7 @@ Internal tile size for VRAM safety — distinct from the output tile grid above.
 Bloom, Chromatic Aberration, Color Grading, and Tone Mapping are applied to each image tile's complete composite after its GPU buckets finish. For single-image renders the result matches the live viewport; for tiled renders see the seam note above.
 
 ## During Export
-The viewport is locked — camera movement, parameter changes, and resizing are blocked to preserve tiled-render integrity. The panel stays open with a progress bar and Stop button.
+The viewport is locked — camera movement, parameter changes, and resizing are blocked to preserve tiled-render integrity. The panel collapses to a compact rendering view that stays out of the canvas: a progress bar plus a stat strip with **Tile** (X / Y), **Elapsed**, and **ETA** (a ±10% range), and a Stop button.
 
 ## Preview Region
 A live, export-density preview of any canvas section. Unlike Export, this does **not** lock the viewport — you keep full interactivity so you can iterate on the look at final resolution.
@@ -104,7 +107,7 @@ A live, export-density preview of any canvas section. Unlike Export, this does *
 2. Hover over the canvas — a dashed fuchsia rectangle follows the cursor, showing which slice of the export will fill the canvas at 1 output-pixel per 1 physical canvas-pixel.
 3. Click to start. The viewport now shows the selected region rendered at export density, converging up to **Max Samples Per Bucket**.
 4. Adjust anything — sliders, lighting, colors, formula params, camera. The preview re-renders live with the new values, still at export density.
-5. Exit via the header **Exit Preview ✕** chip, pressing **Esc**, or closing the panel.
+5. Exit via the header **Exit Preview** chip, pressing **Esc**, or closing the panel.
 
 The panel stays open during preview so all your controls remain reachable. Changing Output Width/Height auto-exits the preview (the rendered pixels no longer represent the configured export).
 `

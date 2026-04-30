@@ -14,13 +14,23 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useEngineStore, getCanvasPhysicalPixelSize } from '../../../store/engineStore';
-import Slider, { DraggableNumber } from '../../../components/Slider';
+import Slider from '../../../components/Slider';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import Dropdown from '../../../components/Dropdown';
 import { FractalEvents, FRACTAL_EVENTS } from '../../FractalEvents';
 import { CheckIcon, DownloadIcon } from '../../../components/Icons';
 import { Popover } from '../../../components/Popover';
 import { SectionLabel } from '../../../components/SectionLabel';
+import { Button } from '../../../components/Button';
+import { Hint } from '../../../components/Hint';
+import { NumberInput } from '../../../components/NumberInput';
+import { formatTimeWithUnits, calcEtaRange } from '../../../components/timeline/exportHelpers';
+import { snap8 } from '../../../utils/resolutionUtils';
+import {
+    RESOLUTION_PRESETS,
+    ASPECT_LOCK_OPTIONS,
+    type AspectRatioValue,
+} from '../../../data/resolutionPresets';
 import type { BucketRenderController } from './BucketRenderController';
 
 /** Estimate VRAM usage for a single image tile in MB. */
@@ -39,27 +49,14 @@ function estimateTileVRAM(viewportW: number, viewportH: number, tileW: number, t
     return (composite + pipeline + bloom + exportBuf) / (1024 * 1024);
 }
 
-// Common output presets (label, width, height)
-const OUTPUT_PRESETS: Array<{ label: string; w: number; h: number }> = [
-    { label: 'HD (1280 × 720)',         w: 1280,  h: 720 },
-    { label: 'FHD (1920 × 1080)',       w: 1920,  h: 1080 },
-    { label: 'QHD (2560 × 1440)',       w: 2560,  h: 1440 },
-    { label: '4K UHD (3840 × 2160)',    w: 3840,  h: 2160 },
-    { label: '5K (5120 × 2880)',        w: 5120,  h: 2880 },
-    { label: '8K UHD (7680 × 4320)',    w: 7680,  h: 4320 },
-    { label: 'Square 1:1 (2048)',       w: 2048,  h: 2048 },
-    { label: 'Square 1:1 (4096)',       w: 4096,  h: 4096 },
-    { label: 'Portrait 4:5 (1080p)',    w: 1080,  h: 1350 },
-    { label: 'Vertical 9:16 (1080p)',   w: 1080,  h: 1920 },
-    { label: 'A3 Print @ 300dpi',       w: 3508,  h: 4961 },
-    { label: 'A2 Print @ 300dpi',       w: 4961,  h: 7016 },
-    { label: 'A1 Print @ 300dpi',       w: 7016,  h: 9933 },
-    { label: 'A0 Print @ 300dpi',       w: 9933,  h: 14043 },
-    { label: 'Custom',                  w: 0,     h: 0 },
+// Resolution + aspect-ratio dropdowns sourced from `data/resolutionPresets` so
+// the bucket-render panel, the Quality > Resolution panel, and the viewport
+// "fit to window" dropdown all stay in sync.
+const PRESET_DROPDOWN_OPTIONS = [
+    ...RESOLUTION_PRESETS.map(p => ({ label: p.label, value: p.label })),
+    { label: 'Custom', value: 'Custom' },
 ];
-
-/** Snap to multiples of 8 (GPU-friendly, matches QualityPanel convention). */
-const snap8 = (n: number) => Math.max(64, Math.round(n / 8) * 8);
+const ASPECT_DROPDOWN_OPTIONS = ASPECT_LOCK_OPTIONS.map(a => ({ label: a.label, value: a.ratio }));
 
 interface BucketRenderPanelProps {
     controller: BucketRenderController;
@@ -68,6 +65,9 @@ interface BucketRenderPanelProps {
 const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => {
     const state = useEngineStore();
     const [progress, setProgress] = useState(0);
+    const [tileInfo, setTileInfo] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+    const [elapsed, setElapsed] = useState(0);
+    const renderStartRef = useRef<number>(0);
     // Live sample-count readout for the in-panel preview status row. Polls the
     // controller every 100ms while a preview region is active.
     const [previewSamples, setPreviewSamples] = useState(0);
@@ -76,9 +76,34 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
 
     useEffect(() => {
         return FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
-            setProgress(data.progress);
+            // BUCKET_STATUS fires per render frame; skip setState when nothing
+            // changed so React doesn't re-render at engine framerate.
+            setProgress(prev => Math.abs(prev - data.progress) < 0.05 ? prev : data.progress);
+            if (typeof data.currentBucket === 'number' && typeof data.totalBuckets === 'number') {
+                const next = { done: data.currentBucket, total: data.totalBuckets };
+                setTileInfo(prev => prev.done === next.done && prev.total === next.total ? prev : next);
+            }
         });
     }, []);
+
+    useEffect(() => {
+        if (!state.isBucketRendering) {
+            renderStartRef.current = 0;
+            setElapsed(0);
+            return;
+        }
+        renderStartRef.current = performance.now();
+        setElapsed(0);
+        const id = setInterval(() => {
+            setElapsed((performance.now() - renderStartRef.current) / 1000);
+        }, 250);
+        return () => clearInterval(id);
+    }, [state.isBucketRendering]);
+
+    const etaRange = useMemo(
+        () => calcEtaRange(elapsed, progress, 100),
+        [progress, elapsed],
+    );
 
     useEffect(() => {
         if (!state.previewRegion) return;
@@ -241,28 +266,32 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
     const fileCount = tileCols * tileRows;
 
     const currentPreset = useMemo(() => {
-        const match = OUTPUT_PRESETS.find(p => p.w === outputWidth && p.h === outputHeight);
+        const match = RESOLUTION_PRESETS.find(p => p.w === outputWidth && p.h === outputHeight);
         return match ? match.label : 'Custom';
     }, [outputWidth, outputHeight]);
 
     const viewportAspect = viewportPixels[1] > 0 ? viewportPixels[0] / viewportPixels[1] : 1;
 
-    // When "Lock to viewport aspect" is ON, only the ASPECT is locked.
+    // When "Lock to viewport aspect" is ON, only the ASPECT is locked — H follows
+    // viewport aspect whenever the viewport itself resizes or W changes.
     useEffect(() => {
         if (!matchViewportAspect) return;
-        const [cpxW, cpxH] = getCanvasPhysicalPixelSize(useEngineStore.getState());
+        const [cpxW, cpxH] = viewportPixels;
         if (cpxW < 64 || cpxH < 64) return;
         const aspect = cpxW / cpxH;
         if (!Number.isFinite(aspect) || aspect <= 0) return;
         const desiredH = snap8(outputWidth / aspect);
         if (Math.abs(outputHeight - desiredH) >= 4) state.setOutputHeight(desiredH);
-    });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [matchViewportAspect, outputWidth, outputHeight, viewportPixels]);
 
     const setWidth = (w: number) => {
         const newW = snap8(w);
         state.setOutputWidth(newW);
         if (matchViewportAspect) {
             state.setOutputHeight(snap8(newW / viewportAspect));
+        } else if (typeof aspectLockValue === 'number') {
+            state.setOutputHeight(snap8(newW / aspectLockValue));
         }
     };
     const setHeight = (h: number) => {
@@ -270,17 +299,31 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
         state.setOutputHeight(newH);
         if (matchViewportAspect) {
             state.setOutputWidth(snap8(newH * viewportAspect));
+        } else if (typeof aspectLockValue === 'number') {
+            state.setOutputWidth(snap8(newH * aspectLockValue));
         }
     };
     const applyPreset = (label: string) => {
-        const p = OUTPUT_PRESETS.find(x => x.label === label);
-        if (!p || p.w === 0) return;
+        const p = RESOLUTION_PRESETS.find(x => x.label === label);
+        if (!p) return;
         state.setOutputWidth(snap8(p.w));
         state.setOutputHeight(snap8(p.h));
     };
     const matchViewport = () => {
         state.setOutputWidth(viewportPixels[0]);
         state.setOutputHeight(viewportPixels[1]);
+    };
+
+    // Static aspect-lock — mirrors the Quality > Resolution panel's Ratio
+    // dropdown. 'Free' = no lock; numeric = H is recomputed from W on every
+    // change. Turning on the static lock implicitly turns off the
+    // viewport-aspect lock (the two are mutually exclusive).
+    const [aspectLockValue, setAspectLockValue] = useState<AspectRatioValue>('Free');
+    const applyAspectLock = (value: AspectRatioValue) => {
+        setAspectLockValue(value);
+        if (value === 'Free' || value === 'Max') return;
+        if (matchViewportAspect) state.setMatchViewportAspect(false);
+        state.setOutputHeight(snap8(outputWidth / (value as number)));
     };
 
     const withRenderAction = (action: () => void) => {
@@ -332,21 +375,71 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
 
     const showBloomSeamWarning = fileCount > 1;
 
+    // ─── Rendering view ────────────────────────────────────────────────
+    // While a bucket render is in flight, collapse to a compact pill so the
+    // canvas stays visible. Anchor stays under the bucket-render topbar icon.
+    if (state.isBucketRendering) {
+        const tileLabel = tileInfo.total > 0
+            ? `${Math.min(tileInfo.done + 1, tileInfo.total)} / ${tileInfo.total}`
+            : '—';
+        const etaLabel = etaRange.max > 0
+            ? `${formatTimeWithUnits(etaRange.min)} – ${formatTimeWithUnits(etaRange.max)}`
+            : '—';
+        return (
+            <Popover width="w-64">
+                <div className="space-y-2" data-help-id="bucket.render">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                            <span className="text-[10px] font-bold text-gray-300">Rendering</span>
+                        </div>
+                        <span className="font-mono tabular-nums text-[10px] text-cyan-300">
+                            {progress.toFixed(1)}%
+                        </span>
+                    </div>
+
+                    <div className="w-full h-1.5 bg-black rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-cyan-500 transition-all duration-300 ease-linear"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                        <div>
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500">Tile</div>
+                            <div className="font-mono tabular-nums text-[10px] text-gray-200">{tileLabel}</div>
+                        </div>
+                        <div>
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500">Elapsed</div>
+                            <div className="font-mono tabular-nums text-[10px] text-gray-200">{formatTimeWithUnits(elapsed)}</div>
+                        </div>
+                        <div>
+                            <div className="text-[8px] uppercase tracking-wider text-gray-500">ETA</div>
+                            <div className="font-mono tabular-nums text-[10px] text-gray-200">{etaLabel}</div>
+                        </div>
+                    </div>
+
+                    <Button
+                        variant="danger"
+                        active
+                        fullWidth
+                        size="small"
+                        label="Stop Render"
+                        onClick={() => controller.stopBucketRender()}
+                    />
+                </div>
+            </Popover>
+        );
+    }
+
+    // ─── Setup view ────────────────────────────────────────────────────
     return (
-        <Popover width="w-80">
-            <div className="relative space-y-3" data-help-id="bucket.render">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                    <span className="text-[10px] font-bold text-gray-400">High Quality Render</span>
-                    {state.isBucketRendering && (
-                        <button
-                            type="button"
-                            onClick={() => controller.stopBucketRender()}
-                            className="text-[9px] font-bold px-2 py-0.5 rounded border border-red-500/50 bg-red-500/20 text-red-300 animate-pulse"
-                        >
-                            Stop
-                        </button>
-                    )}
-                    {!state.isBucketRendering && state.previewRegion && supportsPreview && (
+        <Popover width="w-72">
+            <div className="relative space-y-2.5" data-help-id="bucket.render">
+                <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High Quality Render</span>
+                    {state.previewRegion && supportsPreview && (
                         <button
                             type="button"
                             onClick={() => {
@@ -356,16 +449,16 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
                                     state.setInteractionMode('none');
                                 }
                             }}
-                            className="text-[9px] font-bold px-2 py-0.5 rounded border border-fuchsia-400/60 bg-fuchsia-900/40 text-fuchsia-200 hover:bg-fuchsia-800/50 transition-colors flex items-center gap-1"
+                            className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-fuchsia-400/60 bg-fuchsia-900/40 text-fuchsia-200 hover:bg-fuchsia-800/50 transition-colors flex items-center gap-1"
                             title="Exit Preview Region (Esc)"
                         >
                             <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
-                            Exit Preview ✕
+                            Exit Preview
                         </button>
                     )}
                 </div>
 
-                {!state.isBucketRendering && state.previewRegion && supportsPreview && (() => {
+                {state.previewRegion && supportsPreview && (() => {
                     const r = state.previewRegion;
                     const rW = Math.round((r.maxX - r.minX) * outputWidth);
                     const rH = Math.round((r.maxY - r.minY) * outputHeight);
@@ -373,140 +466,124 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
                     const cappedSamples = Math.min(previewSamples, cap);
                     const atCap = previewSamples >= cap;
                     return (
-                        <div className="flex items-center justify-between text-[9px] bg-fuchsia-900/20 border border-fuchsia-400/20 rounded px-2 py-1 -mt-1">
+                        <div className="flex items-center justify-between text-[9px] bg-fuchsia-900/20 border border-fuchsia-400/20 rounded px-2 py-1">
                             <span className="text-fuchsia-300 font-bold">Preview</span>
-                            <span className="text-gray-400">
+                            <span className="text-gray-400 font-mono tabular-nums">
                                 {outputWidth}×{outputHeight}
                                 <span className="text-gray-600 mx-1">·</span>
-                                region {rW}×{rH}
+                                {rW}×{rH}
                             </span>
-                            <span className={atCap ? 'text-green-400' : 'text-cyan-300'} title={atCap ? 'Sample cap reached — will restart on any change' : `Accumulating (cap ${cap})`}>
+                            <span className={`font-mono tabular-nums ${atCap ? 'text-green-400' : 'text-cyan-300'}`} title={atCap ? 'Sample cap reached' : `Accumulating (cap ${cap})`}>
                                 {cappedSamples}/{cap}
                             </span>
                         </div>
                     );
                 })()}
 
-                {state.isBucketRendering ? (
-                    <div className="bg-white/5 rounded p-2 mb-2">
-                        <div className="flex justify-between text-[9px] text-gray-400 mb-1">
-                            <span>Progress</span>
-                            <span>{progress.toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-black rounded-full overflow-hidden">
-                            <div className="h-full bg-cyan-500 transition-all duration-300 ease-linear" style={{ width: `${progress}%` }} />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex gap-2 mb-2">
-                        <button
-                            type="button"
-                            onClick={handleStartRefine}
-                            className="flex-1 py-2 rounded bg-gray-800 hover:bg-white/10 border border-white/10 text-[9px] font-bold text-gray-300 transition-all hover:border-cyan-500/50 hover:text-cyan-400 flex flex-col items-center gap-1"
-                            title="Refine Viewport (single image, viewport size)"
-                        >
-                            <CheckIcon />
-                            <span>Refine View</span>
-                        </button>
-                        {supportsPreview && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (state.previewRegion) {
-                                        controller.clearPreviewRegion?.();
-                                        state.setPreviewRegion(null);
-                                        state.setInteractionMode('none');
-                                    } else if (state.interactionMode === 'selecting_preview') {
-                                        state.setInteractionMode('none');
-                                    } else {
-                                        state.setInteractionMode('selecting_preview');
-                                    }
-                                }}
-                                className={`flex-1 py-2 rounded border text-[9px] font-bold transition-all flex flex-col items-center gap-1 ${
-                                    state.interactionMode === 'selecting_preview' || state.previewRegion
-                                        ? 'bg-fuchsia-900/40 border-fuchsia-400/60 text-fuchsia-200'
-                                        : 'bg-gray-800 hover:bg-white/10 border-white/10 text-gray-300 hover:border-fuchsia-500/50 hover:text-fuchsia-300'
-                                }`}
-                                title="Preview a canvas section at export resolution (click canvas to pick)"
-                            >
-                                <span className="text-[11px]">⌖</span>
-                                <span>{state.previewRegion ? 'Previewing' : (state.interactionMode === 'selecting_preview' ? 'Pick on Canvas' : 'Preview Region')}</span>
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={handleExport}
-                            className="flex-1 py-2 rounded bg-cyan-900/30 hover:bg-cyan-800/50 border border-cyan-500/30 text-[9px] font-bold text-cyan-300 transition-all hover:border-cyan-400 flex flex-col items-center gap-1"
-                            title={`Render ${fileCount > 1 ? `${fileCount} tile files` : 'and save image'}`}
-                        >
-                            <DownloadIcon />
-                            <span>{fileCount > 1 ? `Export ${fileCount} Tiles` : 'Export Image'}</span>
-                        </button>
-                    </div>
-                )}
-
-                <div className={`space-y-2 transition-opacity ${state.isBucketRendering ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-                    <Slider
-                        label="Convergence Threshold"
-                        value={state.convergenceThreshold}
-                        min={0.01} max={1.0} step={0.01}
-                        onChange={state.setConvergenceThreshold}
-                        customMapping={{
-                            min: 0, max: 100,
-                            toSlider: (val) => ((Math.log10(val) + 2) / 2) * 100,
-                            fromSlider: (val) => Math.pow(10, (val / 100 * 2) - 2)
-                        }}
-                        overrideInputText={`${state.convergenceThreshold.toFixed(2)}%`}
+                <div className="flex gap-1.5">
+                    <Button
+                        size="small"
+                        label="Refine"
+                        icon={<CheckIcon />}
+                        onClick={handleStartRefine}
+                        title="Refine viewport (single image, viewport size)"
                     />
-                    <p className="text-[8px] text-gray-500 -mt-1 px-1">Lower = more samples, higher quality. 0.1%=production, 1%=fast</p>
-
-                    <Slider
-                        label="Max Samples Per Bucket"
-                        value={state.samplesPerBucket}
-                        min={16} max={1024} step={16}
-                        onChange={state.setSamplesPerBucket}
-                        overrideInputText={`${state.samplesPerBucket} max`}
-                        highlight={state.samplesPerBucket >= 256}
+                    {supportsPreview && (
+                        <Button
+                            size="small"
+                            active={state.interactionMode === 'selecting_preview' || !!state.previewRegion}
+                            label={state.previewRegion
+                                ? 'Previewing'
+                                : (state.interactionMode === 'selecting_preview' ? 'Pick…' : 'Preview')}
+                            icon={<span className="text-[11px] leading-none">⌖</span>}
+                            onClick={() => {
+                                if (state.previewRegion) {
+                                    controller.clearPreviewRegion?.();
+                                    state.setPreviewRegion(null);
+                                    state.setInteractionMode('none');
+                                } else if (state.interactionMode === 'selecting_preview') {
+                                    state.setInteractionMode('none');
+                                } else {
+                                    state.setInteractionMode('selecting_preview');
+                                }
+                            }}
+                            title="Preview a canvas section at export resolution (click canvas to pick)"
+                        />
+                    )}
+                    <Button
+                        size="small"
+                        variant="primary"
+                        active
+                        label={fileCount > 1 ? `Export ${fileCount}×` : 'Export'}
+                        icon={<DownloadIcon />}
+                        onClick={handleExport}
+                        title={`Render ${fileCount > 1 ? `${fileCount} tile files` : 'and save image'}`}
                     />
-                    <p className="text-[8px] text-gray-500 -mt-1 px-1">Safety limit. Tiles stop early if converged.</p>
+                </div>
 
-                    <div className="pt-2 border-t border-white/5">
-                        <SectionLabel className="block mb-1">Output Size</SectionLabel>
+                <div className="space-y-2.5">
+                    <div>
+                        <Slider
+                            label="Convergence Threshold"
+                            value={state.convergenceThreshold}
+                            min={0.01} max={1.0} step={0.01}
+                            onChange={state.setConvergenceThreshold}
+                            customMapping={{
+                                min: 0, max: 100,
+                                toSlider: (val) => ((Math.log10(val) + 2) / 2) * 100,
+                                fromSlider: (val) => Math.pow(10, (val / 100 * 2) - 2)
+                            }}
+                            overrideInputText={`${state.convergenceThreshold.toFixed(2)}%`}
+                        />
+                        <Hint text="Lower = higher quality. 0.1% production, 1% fast." />
+                    </div>
+
+                    <div>
+                        <Slider
+                            label="Max Samples / Bucket"
+                            value={state.samplesPerBucket}
+                            min={16} max={1024} step={16}
+                            onChange={state.setSamplesPerBucket}
+                            overrideInputText={`${state.samplesPerBucket}`}
+                            highlight={state.samplesPerBucket >= 256}
+                        />
+                        <Hint text="Safety cap. Tiles stop early when converged." />
+                    </div>
+
+                    <div className="pt-1">
+                        <div className="flex items-center justify-between mb-1">
+                            <SectionLabel>Output Size</SectionLabel>
+                            <span className={`font-mono tabular-nums text-[9px] ${vram > 1500 ? 'text-red-400' : vram > 500 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                                ~{vram < 1024 ? `${Math.round(vram)} MB` : `${(vram / 1024).toFixed(1)} GB`} / tile
+                            </span>
+                        </div>
 
                         <Dropdown
                             label="Preset"
                             value={currentPreset}
-                            options={OUTPUT_PRESETS.map(p => ({ label: p.label, value: p.label }))}
+                            options={PRESET_DROPDOWN_OPTIONS}
                             onChange={(v) => applyPreset(v as string)}
                             fullWidth
                         />
 
                         <div className="flex gap-2 mt-2">
-                            <div className="flex-1">
-                                <SectionLabel variant="secondary" className="block mb-0.5">Width</SectionLabel>
-                                <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber
-                                        value={outputWidth}
-                                        onChange={setWidth}
-                                        step={8} min={64} max={32768}
-                                        overrideText={`${outputWidth}`}
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex-1">
-                                <SectionLabel variant="secondary" className="block mb-0.5">Height</SectionLabel>
-                                <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber
-                                        value={outputHeight}
-                                        onChange={setHeight}
-                                        step={8} min={64} max={32768}
-                                        overrideText={`${outputHeight}`}
+                            <NumberInput label="Width"  value={outputWidth}  onChange={setWidth}  step={8} min={64} max={32768} />
+                            <NumberInput label="Height" value={outputHeight} onChange={setHeight} step={8} min={64} max={32768} />
+                            <div className="w-[35%]">
+                                <SectionLabel variant="secondary" className="block mb-0.5">Ratio</SectionLabel>
+                                <div className="h-6">
+                                    <Dropdown
+                                        value={aspectLockValue}
+                                        options={ASPECT_DROPDOWN_OPTIONS as any}
+                                        onChange={(v) => applyAspectLock(v as AspectRatioValue)}
+                                        fullWidth
+                                        className="!px-1"
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between mt-2 px-1">
+                        <div className="flex items-center justify-between mt-1.5 px-1 gap-2">
                             <label className="flex items-center gap-1.5 text-[9px] text-gray-400 cursor-pointer">
                                 <input
                                     type="checkbox"
@@ -516,72 +593,38 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
                                 />
                                 Lock to viewport aspect
                             </label>
-                            <button
+                            <Button
+                                size="small"
+                                label="Match Viewport"
                                 onClick={matchViewport}
-                                className="text-[9px] text-cyan-400 hover:text-cyan-300 underline"
                                 title="Set output size to viewport dimensions"
-                            >
-                                Match viewport
-                            </button>
+                                className="!flex-none !px-2"
+                            />
                         </div>
                     </div>
 
-                    <div className="pt-2 border-t border-white/5">
+                    <div className="pt-1">
                         <div className="flex items-center justify-between mb-1">
                             <SectionLabel>Tile Grid</SectionLabel>
-                            {fileCount > 1 && (
-                                <span className="text-[9px] text-cyan-400">{fileCount} files</span>
-                            )}
+                            <span className="font-mono tabular-nums text-[9px] text-gray-500">
+                                {fileCount > 1 ? `${fileCount} files · ${tilePixels[0]}×${tilePixels[1]}` : '1 file'}
+                            </span>
                         </div>
-                        <div className="flex gap-2 items-end">
-                            <div className="flex-1">
-                                <SectionLabel variant="secondary" className="block mb-0.5">Columns</SectionLabel>
-                                <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber
-                                        value={tileCols}
-                                        onChange={state.setTileCols}
-                                        step={1} min={1} max={32}
-                                        overrideText={`${tileCols}`}
-                                    />
-                                </div>
-                            </div>
-                            <span className="text-[10px] text-gray-500 pb-1">×</span>
-                            <div className="flex-1">
-                                <SectionLabel variant="secondary" className="block mb-0.5">Rows</SectionLabel>
-                                <div className="h-6 bg-black/40 rounded border border-white/10 relative">
-                                    <DraggableNumber
-                                        value={tileRows}
-                                        onChange={state.setTileRows}
-                                        step={1} min={1} max={32}
-                                        overrideText={`${tileRows}`}
-                                    />
-                                </div>
-                            </div>
+                        <div className="flex items-center gap-2">
+                            <SectionLabel variant="secondary" className="shrink-0">Columns</SectionLabel>
+                            <NumberInput value={tileCols} onChange={state.setTileCols} step={1} min={1} max={32} />
+                            <span className="text-[10px] text-gray-500">×</span>
+                            <SectionLabel variant="secondary" className="shrink-0">Rows</SectionLabel>
+                            <NumberInput value={tileRows} onChange={state.setTileRows} step={1} min={1} max={32} />
                         </div>
-                        <p className="text-[8px] text-gray-500 mt-1 px-1">
-                            Split the image into separate files for massive renders. 1×1 = single image.
-                        </p>
                         {showBloomSeamWarning && (
-                            <p className="text-[8px] text-amber-400/80 mt-1 px-1">
-                                ⚠ Bloom and chromatic aberration may produce visible seams at tile boundaries. Disable these in the Lighting / Post panels for seamless stitching.
+                            <p className="text-[8px] text-amber-400/80 mt-1.5 px-1">
+                                ⚠ Bloom and chromatic aberration may seam at tile boundaries — disable in Lighting / Post for seamless stitching.
                             </p>
                         )}
                     </div>
 
-                    <div className="pt-2 border-t border-white/5 px-1">
-                        <div className="text-[9px] text-gray-300">
-                            {outputWidth}×{outputHeight}
-                            {fileCount > 1 && (
-                                <span className="text-gray-500"> → {fileCount} × {tilePixels[0]}×{tilePixels[1]}</span>
-                            )}
-                        </div>
-                        <div className={`text-[9px] ${vram > 1500 ? 'text-red-400' : vram > 500 ? 'text-yellow-400' : 'text-gray-500'}`}>
-                            ~{vram < 1024 ? `${Math.round(vram)} MB` : `${(vram / 1024).toFixed(1)} GB`} VRAM per tile
-                            {vram > 1500 && ' — may exceed GPU memory'}
-                        </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-white/5">
+                    <div className="pt-1">
                         <SectionLabel className="block mb-1">GPU Bucket Size</SectionLabel>
                         <ToggleSwitch
                             value={state.bucketSize}
@@ -593,7 +636,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
                                 { label: '512', value: 512 },
                             ]}
                         />
-                        <p className="text-[8px] text-gray-500 mt-1 px-1">Smaller = less memory, larger = faster per-bucket cost</p>
+                        <Hint text="Smaller = less memory, larger = faster per-bucket cost." />
                     </div>
                 </div>
             </div>
