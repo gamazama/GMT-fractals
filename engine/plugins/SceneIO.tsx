@@ -301,15 +301,15 @@ export const FileMenu: React.FC = () => {
             {open && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={close} />
-                    <div className="absolute top-full right-0 mt-1 w-48 bg-black/95 border border-white/10 rounded shadow-xl z-50 overflow-hidden">
-                        <button type="button" onClick={handleSaveScene} className={itemCls}>Save Scene</button>
+                    <div className="absolute top-full right-0 mt-1 w-56 bg-black/95 border border-white/10 rounded shadow-xl z-50 overflow-hidden">
+                        <button type="button" onClick={handleLoad} className={itemCls}>Load Scene <span className="text-gray-500">(PNG/GMF)</span></button>
+                        <button type="button" onClick={handleSaveScene} className={`${itemCls} ${sepCls}`}>Save Scene <span className="text-gray-500">(GMF)</span></button>
                         {_getCanvas && (
                             <>
-                                <button type="button" onClick={handleSavePng} className={`${itemCls} ${sepCls}`}>Save PNG <span className="text-gray-500">(Alt+S)</span></button>
-                                <button type="button" onClick={handleSaveJpg} className={`${itemCls} ${sepCls}`}>Save JPG <span className="text-gray-500">(image only)</span></button>
+                                <button type="button" onClick={handleSavePng} className={`${itemCls} ${sepCls}`}>Save Scene <span className="text-gray-500">(PNG) (Alt+S)</span></button>
+                                <button type="button" onClick={handleSaveJpg} className={`${itemCls} ${sepCls}`}>Save Image only <span className="text-gray-500">(JPG)</span></button>
                             </>
                         )}
-                        <button type="button" onClick={handleLoad} className={`${itemCls} ${sepCls}`}>Load Scene…</button>
                     </div>
                 </>
             )}

@@ -78,8 +78,9 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     if (mode === 'Fixed') {
         const [w, h] = fixedResolution;
         return (
-            <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
-                <div className="relative">
+            <>
+                {/* Top-left: resolution drag-pill + Fill button */}
+                <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
                     <FixedResolutionControls
                         width={w}
                         height={h}
@@ -91,15 +92,23 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
                         onSetMode={setMode}
                     />
                 </div>
-                {/* Spacer accounts for FixedResolutionControls' three children
-                    (drag pill + chevron menu + Fill button) which render
-                    absolutely-positioned within their own box; the RenderScale
-                    pill goes after them in flow order via inline-block. */}
-                <div className="ml-[170px]"><RenderScaleControl /></div>
-            </div>
+                {/* Top-center: render-scale (DPR multiplier) — only shown
+                    in Fixed mode. Centred on the viewport via 50% + a
+                    translateX(-50%) to keep it visually balanced no
+                    matter how wide the canvas is. */}
+                <div
+                    className="absolute z-50 -translate-x-1/2"
+                    style={{ top, left: '50%' }}
+                >
+                    <RenderScaleControl />
+                </div>
+            </>
         );
     }
 
+    // Full mode: just the "Fixed" mode-switch button. The RenderScale
+    // multiplier is intentionally hidden here — it's only meaningful when
+    // the user is composing for a target output size (Fixed mode).
     return (
         <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
             <button
@@ -110,7 +119,6 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
                 <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform" />
                 Fixed
             </button>
-            <RenderScaleControl />
         </div>
     );
 };
