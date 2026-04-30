@@ -20,7 +20,6 @@ import React, { useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useEngineStore } from '../store/engineStore';
 import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
-import { useViewportFps, useQualityFraction } from '../engine/plugins/Viewport';
 import { TopBarHost } from '../engine/plugins/TopBar';
 import { HudHost } from '../engine/plugins/Hud';
 import { Dock } from '../components/layout/Dock';
@@ -78,8 +77,6 @@ const DomOverlays: React.FC = () => {
 
 export const AppGmt: React.FC = () => {
     const state     = useEngineStore();
-    const quality   = useQualityFraction();
-    const { fpsSmoothed } = useViewportFps();
 
     const [isSceneReady, setIsSceneReady] = useState(false);
     const [loadingVisible, setLoadingVisible] = useState(true);
@@ -312,13 +309,6 @@ export const AppGmt: React.FC = () => {
                     />
                 )}
 
-                {/* Stats corner — matches fluid-toy/fractal-toy. */}
-                <div className="absolute bottom-3 left-3 text-[10px] text-white/40 font-mono pointer-events-none">
-                    {fpsSmoothed.toFixed(0)} fps · q{(quality * 100).toFixed(0)}%
-                </div>
-                <div className="absolute top-3 left-3 text-[10px] text-white/60 font-mono pointer-events-none">
-                    GMT · {state.formula || '…'}
-                </div>
             </div>
         </StoreCallbacksProvider>
     );
