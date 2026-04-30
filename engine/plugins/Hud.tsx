@@ -95,6 +95,11 @@ interface HudHostProps {
     hidden?: boolean;
     /** Extra classes on the outer absolute container. */
     className?: string;
+    /** Limit which slot rows render. 'top' = top-* + center, 'bottom' =
+     *  bottom-*, 'all' = every slot. Useful when an app mounts two HudHosts
+     *  in different containers (one canvas-relative for top slots, one
+     *  viewport-area-relative for bottom slots). Default: 'all'. */
+    region?: 'top' | 'bottom' | 'all';
 }
 
 // Bottom-left reserves ~52px for `<TimelineHost>`'s timeline-toggle
@@ -120,7 +125,7 @@ const SLOT_ORDER: HudSlot[] = [
     'bottom-left', 'bottom-center', 'bottom-right',
 ];
 
-export const HudHost: React.FC<HudHostProps> = ({ hidden = false, className = '' }) => {
+export const HudHost: React.FC<HudHostProps> = ({ hidden = false, className = '', region = 'all' }) => {
     useSyncExternalStore(subscribe, () => _rev, () => _rev);
 
     if (hidden) return null;
@@ -139,9 +144,15 @@ export const HudHost: React.FC<HudHostProps> = ({ hidden = false, className = ''
         bySlot[slot].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     }
 
+    const slotsToRender: HudSlot[] = region === 'top'
+        ? ['top-left', 'top-center', 'top-right', 'center']
+        : region === 'bottom'
+            ? ['bottom-left', 'bottom-center', 'bottom-right']
+            : SLOT_ORDER;
+
     return (
         <div className={`absolute inset-0 pointer-events-none z-10 ${className}`}>
-            {SLOT_ORDER.map((slot) => {
+            {slotsToRender.map((slot) => {
                 const items = bySlot[slot];
                 if (items.length === 0) return null;
                 return (

@@ -22,10 +22,16 @@ interface HudOverlayProps {
         reset: React.RefObject<HTMLButtonElement>;
         reticle: React.RefObject<HTMLDivElement>;
     };
+    /** Which slice of the HUD to render. 'top' = crosshair + reticle
+     *  (canvas-relative, tied to view direction). 'bottom' = nav pill
+     *  cluster + tab hint (viewport-area-relative — anchor outside the
+     *  scaled canvas in Fixed mode). 'all' = both, default. App splits
+     *  the two so the bottom cluster doesn't shrink with the canvas. */
+    region?: 'top' | 'bottom' | 'all';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activeHint: _activeHint, onDismissHint: _onDismissHint, hudRefs }) => {
+const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activeHint: _activeHint, onDismissHint: _onDismissHint, hudRefs, region = 'all' }) => {
     const hudSpeedSliderRef = useRef<HTMLDivElement>(null);
     const crosshairFadeTimeout = useRef<number | null>(null);
     const bottomFadeTimeout = useRef<number | null>(null);
@@ -111,9 +117,13 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
     // Convert current speed to visual progress (0-1) for the background slider
     const speedProgress = (Math.log10(flySpeed) + 3) / 3;
 
+    const showTop = region === 'top' || region === 'all';
+    const showBottom = region === 'bottom' || region === 'all';
+
     return (
         <div className="absolute inset-0 pointer-events-none z-10">
             {/* Crosshair layer — fades quickly (2s) */}
+            {showTop && (
             <div
                 ref={hudRefs.container}
                 className="absolute inset-0 pointer-events-none transition-opacity duration-500 opacity-30"
@@ -147,8 +157,10 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Bottom cluster — fades slowly (10s) */}
+            {showBottom && (
             <div
                 ref={bottomClusterRef}
                 className="absolute inset-0 pointer-events-none transition-opacity duration-1000"
@@ -243,6 +255,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                     </div>
                 </div>
             </div>
+            )}
         </div>
     );
 };

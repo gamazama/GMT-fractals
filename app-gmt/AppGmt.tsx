@@ -171,7 +171,25 @@ export const AppGmt: React.FC = () => {
                         <Dock side="left" />
                     )}
 
-                    <ViewportFrame className="flex-1">
+                    <ViewportFrame
+                        className="flex-1"
+                        outerOverlay={
+                            <>
+                                {/* Bottom HUD region — viewport-area-relative,
+                                    doesn't shrink with the canvas in Fixed mode.
+                                    Top region (crosshair / reticle) stays inside
+                                    children where it follows the canvas. */}
+                                <GmtNavigationHud
+                                    state={state as any}
+                                    actions={state as any}
+                                    isMobile={false}
+                                    hudRefs={hudRefs}
+                                    region="bottom"
+                                />
+                                <HudHost region="bottom" />
+                            </>
+                        }
+                    >
                         {/* Wrapper div gives useInteractionManager a ref
                             to measure pointer coords against. */}
                         <div ref={viewportRef} className="absolute inset-0">
@@ -205,17 +223,18 @@ export const AppGmt: React.FC = () => {
                             />
                         </Canvas>
 
-                        {/* DOM HUD overlay — DST/SPD readouts + reticle.
-                            Absolutely positioned inside ViewportFrame so
-                            it scales with the viewport, not the window. */}
+                        {/* Top HUD region — crosshair + reticle. Lives inside
+                            children so it stays canvas-relative (centred on the
+                            rendered fractal in Fixed mode). */}
                         <GmtNavigationHud
                             state={state as any}
                             actions={state as any}
                             isMobile={false}
                             hudRefs={hudRefs}
+                            region="top"
                         />
 
-                        <HudHost />
+                        <HudHost region="top" />
 
                         {/* DOM viewport overlays — LightGizmo, DrawingOverlay, etc.
                             Iterated from featureRegistry.getViewportOverlays() */}

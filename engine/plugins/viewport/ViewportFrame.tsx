@@ -70,6 +70,15 @@ export interface ViewportFrameProps {
      *  Default: 40. Controls breathing room between the canvas and
      *  the viewport edge in Fixed mode. */
     fixedPadding?: number;
+
+    /** Optional overlay rendered as a sibling of the inner sized
+     *  container, NOT inside it — so it stays full viewport-area sized
+     *  in Fixed mode instead of shrinking with the scaled canvas. Use
+     *  for HUD elements that should anchor to the viewport edges
+     *  (navigation pills, hint pop-ups, region-selection banners)
+     *  rather than the canvas. ViewportModeControls already uses this
+     *  level for the mode-switch button. */
+    outerOverlay?: React.ReactNode;
 }
 
 const CONTROLS_OFFSET_Y = 40;
@@ -82,6 +91,7 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
     className = '',
     innerClassName = '',
     fixedPadding = 40,
+    outerOverlay,
 }) => {
     const outerRef = useRef<HTMLDivElement>(null);
     const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
@@ -199,6 +209,10 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
                     availableHeight={viewportSize.h}
                 />
             )}
+
+            {/* Sibling of the inner sized container — viewport-area
+                relative, doesn't shrink in Fixed mode. */}
+            {outerOverlay}
         </div>
     );
 };
