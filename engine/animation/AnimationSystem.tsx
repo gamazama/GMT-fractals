@@ -93,7 +93,18 @@ export const tick = (delta: number) => {
     const hasModulationRules = (storeState as any).modulation?.rules?.length > 0;
     const isAudioEnabled = (storeState as any).audio?.isEnabled ?? false;
 
-    if (!hasAnimations && !hasOscillators && !hasModulationRules && !isAudioEnabled) {
+    // The cleanup branch below relies on `activeTargetsRef.current` to know
+    // which targets were modulated last frame so it can emit a baseline
+    // uniform write + clear liveModulations on removal. When the user
+    // deletes the last LFO, hasOscillators flips to false and an early
+    // return here would skip that flush — leaving the uniform stuck at
+    // its final modulated value and liveModulations stale forever. Stay
+    // through one more pass when prev-frame targets remain, then on the
+    // tick after that everything legitimately is empty and we early-out.
+    if (
+        !hasAnimations && !hasOscillators && !hasModulationRules && !isAudioEnabled
+        && activeTargetsRef.current.size === 0
+    ) {
         return; // Skip all animation processing
     }
     
