@@ -7,6 +7,7 @@ const RATIO_PRESETS: { label: string; ratio: number | 'Max' }[] = [
     { label: 'Maximum', ratio: 'Max' },
     { label: 'Square (1:1)', ratio: 1.0 },
     { label: 'Landscape (16:9)', ratio: 1.7777 },
+    { label: 'Ultrawide (21:9)', ratio: 2.3333 },
     { label: 'Portrait (4:5)', ratio: 0.8 },
     { label: 'Social (9:16)', ratio: 0.5625 },
     { label: 'Cinematic (2.35:1)', ratio: 2.35 },
