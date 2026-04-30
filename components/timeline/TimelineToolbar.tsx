@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { TimeNavigator } from './TimeNavigator';
 import { useAnimationStore } from '../../store/animationStore';
 import { useEngineStore } from '../../store/engineStore';
@@ -159,7 +160,23 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     const handleContextMenu = useHelpContextMenu();
     const [showRender, setShowRender] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    // 'keep' = key at frame 30 stays at frame 30 (visual time shifts).
+    // 'match' = key at 1.0s stays at 1.0s (frame index is remapped).
+    // UI-only preference, applied on the next FPS edit. 'keep' matches the
+    // historic behaviour, so default there.
+    const [fpsMode, setFpsMode] = useState<'keep' | 'match'>('keep');
     const menuRef = useRef<HTMLDivElement>(null);
+    const menuButtonRef = useRef<HTMLButtonElement>(null);
+    // Separate ref for the portaled menu panel — once portaled to body it
+    // is no longer a descendant of menuRef, so click-outside has to check
+    // both refs explicitly.
+    const menuPanelRef = useRef<HTMLDivElement>(null);
+    // Position the menu in viewport coordinates — the toolbar is nested
+    // inside an `overflow-hidden` flex wrapper (Timeline.tsx), so an
+    // absolute-positioned menu that flips upward gets clipped against
+    // the toolbar's top edge. `position: fixed` escapes the clip.
+    // null means "menu is closed" or "haven't measured yet".
+    const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
     // Apps register a render-dialog component via renderPopupRegistry;
     // when nothing is registered we hide the Render button entirely.
@@ -169,10 +186,32 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
         getRenderPopup
     );
 
+    // Position the menu (in viewport coords) when opening — flip above the
+    // trigger if there isn't room below. The menu is ~220px tall in its
+    // current shape; if the actual content grows we'd want to measure
+    // post-mount, but a fixed estimate is fine for now.
+    const MENU_W = 192; // matches w-48
+    const MENU_H_EST = 220;
+    const toggleMenu = () => {
+        if (showMenu) { setShowMenu(false); return; }
+        const btn = menuButtonRef.current;
+        if (!btn) { setShowMenu(true); return; }
+        const rect = btn.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const flipUp = spaceBelow < MENU_H_EST && rect.top > spaceBelow;
+        const top = flipUp ? Math.max(4, rect.top - MENU_H_EST - 8) : rect.bottom + 8;
+        const right = Math.max(4, window.innerWidth - rect.right);
+        setMenuPos({ top, right });
+        setShowMenu(true);
+    };
+
     // Click outside to close menu
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+            const target = e.target as Node;
+            const insideTrigger = menuRef.current?.contains(target);
+            const insidePanel = menuPanelRef.current?.contains(target);
+            if (!insideTrigger && !insidePanel) {
                 setShowMenu(false);
             }
         };
@@ -309,23 +348,48 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
             <div className="relative" ref={menuRef}>
                 <button
-                    onClick={() => setShowMenu(!showMenu)}
+                    ref={menuButtonRef}
+                    onClick={toggleMenu}
                     className={`ml-1 icon-btn ${showMenu ? 'bg-white/20 text-white' : ''}`}
                 >
                     <MenuIcon />
                 </button>
-                {showMenu && (
-                    <div className="absolute top-full right-0 mt-2 w-48 bg-[#1a1f3a] border border-white/20 rounded shadow-xl z-50 p-1 flex flex-col gap-1">
+                {showMenu && menuPos && createPortal((
+                    <div
+                        ref={menuPanelRef}
+                        className="fixed w-48 bg-[#1a1f3a] border border-white/20 rounded shadow-xl z-[100] p-1 flex flex-col gap-1"
+                        style={{ top: menuPos.top, right: menuPos.right }}
+                    >
+
                         <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-300">
                             <span className="font-bold">FPS</span>
                             <div className="w-12 h-5 bg-black/40 rounded border border-white/10 relative">
                                 <DraggableNumber
                                     value={fps}
-                                    onChange={setFps}
+                                    onChange={(v) => setFps(v, fpsMode)}
                                     step={1} min={1} max={120}
                                     overrideText={fps.toFixed(0)}
-                                    onDragStart={snapshot}
                                 />
+                            </div>
+                        </div>
+                        <div
+                            className="flex items-center justify-between px-3 pb-2 -mt-1 text-[10px] text-gray-400"
+                            title={
+                                fpsMode === 'keep'
+                                    ? "Keep frames: keys stay at the same frame index (visual time shifts)."
+                                    : "Match time: keys are remapped so wall-clock time is preserved (frame * new/old). Adjacent frames may merge at large ratios."
+                            }
+                        >
+                            <span>On FPS change</span>
+                            <div className="flex bg-black/40 border border-white/10 rounded overflow-hidden">
+                                <button
+                                    className={`px-2 py-0.5 ${fpsMode === 'keep' ? 'bg-cyan-700 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                                    onClick={() => setFpsMode('keep')}
+                                >Keep frames</button>
+                                <button
+                                    className={`px-2 py-0.5 ${fpsMode === 'match' ? 'bg-cyan-700 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                                    onClick={() => setFpsMode('match')}
+                                >Match time</button>
                             </div>
                         </div>
 
@@ -340,7 +404,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                         <button
                             onClick={() => { setDeterministicPlayback(!deterministicPlayback); }}
                             className="flex items-center justify-between px-3 py-2 text-xs text-gray-300 hover:bg-white/10 rounded transition-colors"
-                            title="Lock playback to one timeline frame per tick. Live preview reproduces the export, frame-for-frame; display rate becomes (RAF Hz) / fps."
+                            title="Throttle live playback to the project FPS so the preview matches the exported video frame-for-frame, regardless of monitor refresh."
                         >
                             <span>Deterministic Playback</span>
                             {deterministicPlayback && <span className="text-cyan-400"><CheckIcon /></span>}
@@ -360,7 +424,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                             Delete All Tracks
                         </button>
                     </div>
-                )}
+                ), document.body)}
             </div>
 
             <button onClick={onClose} className="ml-1 icon-btn" title="Close Timeline">

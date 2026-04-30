@@ -71,6 +71,5 @@ export interface Track {
 
 export interface AnimationSequence {
     durationFrames: number;
-    fps: number;
     tracks: Record<string, Track>;
 }

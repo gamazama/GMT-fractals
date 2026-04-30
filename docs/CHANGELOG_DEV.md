@@ -4,6 +4,26 @@ Chronological log of significant changes during the v0.9.3 development cycle (en
 
 ## 2026-04-30
 
+### Timeline: FPS change has Keep / Match modes; deterministic playback throttles to project FPS
+
+**User-facing**
+- Changing the project FPS (kebab menu in the timeline toolbar) used to silently keep keyframes at their existing frame indices, which secretly changed the speed of every existing animation — a key at frame 30 played twice as fast after switching 30→60. There's now a small **Keep frames / Match time** toggle directly under the FPS field:
+  - **Keep frames** (default, matches old behaviour) — keys stay at the same frame index. Wall-clock time of every key shifts.
+  - **Match time** — keys, the timeline length, the playhead, and Bezier handles are all rescaled by the FPS ratio so the animation looks identical at the new framerate. Use this when you change FPS to match a target export and don't want to retime everything by hand.
+- FPS changes are now properly undoable as a single step (one drag = one undo entry, even though dragging fires hundreds of intermediate values).
+- **Deterministic Playback** (also in the kebab menu) used to advance one timeline frame per render tick — meaning at 60Hz monitor refresh + project FPS=30, the live preview ran at 2× speed compared to the exported video. It now actually plays back at project FPS so the preview matches the export frame-for-frame on any monitor refresh rate. Useful for syncing motion to music or matching action to a specific frame count.
+- Kebab menu now flips upward when the timeline is docked at the bottom of the viewport so it stays on-screen instead of being clipped against the toolbar's edge.
+
+**Mechanism**
+- `setFps(newFps, mode = 'keep')` rewritten in `dev/store/animation/playbackSlice.ts`. `'match'` mode rescales every keyframe's `frame`, Bezier handle x-deltas, `durationFrames`, `sequence.durationFrames`, and `currentFrame` by `newFps / oldFps`. Collisions (when two source frames round to the same target at large ratios) resolve last-writer-wins.
+- New `FPS` history variant in `dev/store/animation/types.ts` carrying the four-field tuple (sequence + fps + duration + currentFrame). `undo` / `redo` in `sequenceSlice.ts` route by item type via two small helpers (`captureInverse`, `applyHistory`); the previous duplicated branches collapsed to 5-line bodies.
+- 400ms coalesce window on FPS history pushes — a continuous drag pushes one entry (the pre-drag state); discrete edits more than 400ms apart push separate entries.
+- Orphan `AnimationSequence.fps` field deleted from `dev/types/animation.ts` and `dev/engine-gmt/types/animation.ts`. Nothing read it; the playback slice's `fps` was the only live copy. Old `.gmf` payloads still load — JS ignores extra keys.
+- `AnimationEngine.tick` now accumulates wall-clock dt under deterministic playback and emits integer frames once `accum ≥ 1/fps`. Accumulator resets on pause and discards backlogs `> 250ms` (tab hidden, debugger pause).
+- `TimelineToolbar` kebab menu portals to `document.body` and uses `position: fixed` with measured viewport coords. The previous `top-full` / `bottom-full` approach was clipped by the timeline panel's `overflow-hidden` ancestor; portaling escapes both the overflow clip and the `backdrop-blur` containing-block trap.
+
+Docs: [docs/engine/08_Animation.md](engine/08_Animation.md) decisions log + Sequence shape, [docs/gmt/04_Animation_Engine.md](gmt/04_Animation_Engine.md) §6.1 / §7.1, help topic `ui.timeline` / `anim.transport` updated.
+
 ### Bucket render: redesigned panel + UI primitives
 
 **User-facing**

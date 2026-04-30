@@ -10,8 +10,38 @@ import { splitCubicBezier, solveCubicBezierT } from '../../engine/BezierMath';
 
 const DEFAULT_SEQUENCE: AnimationSequence = {
     durationFrames: 300,
-    fps: 30,
     tracks: {}
+};
+
+// Build a HistoryItem of the same shape as `item` from the current store —
+// used by undo/redo to capture the state we're about to overwrite so it
+// can be pushed onto the opposite stack.
+const captureInverse = (state: AnimationStore, item: HistoryItem): HistoryItem => {
+    if (item.type === 'FPS') {
+        return {
+            type: 'FPS',
+            data: {
+                sequence: JSON.parse(JSON.stringify(state.sequence)),
+                fps: state.fps,
+                durationFrames: state.durationFrames,
+                currentFrame: state.currentFrame,
+            },
+        };
+    }
+    return { type: 'SEQUENCE', data: JSON.parse(JSON.stringify(state.sequence)) };
+};
+
+const applyHistory = (set: (partial: Partial<AnimationStore>) => void, item: HistoryItem) => {
+    if (item.type === 'FPS') {
+        set({
+            sequence: item.data.sequence,
+            fps: item.data.fps,
+            durationFrames: item.data.durationFrames,
+            currentFrame: item.data.currentFrame,
+        });
+    } else {
+        set({ sequence: item.data });
+    }
 };
 
 export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscribeWithSelector", never]], [], SequenceSliceState & SequenceSliceActions> = (set, get) => ({
@@ -32,30 +62,22 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     },
 
     undo: () => {
-        const { undoStack, redoStack, sequence } = get();
+        const { undoStack, redoStack } = get();
         if (undoStack.length === 0) return false;
-
         const item = undoStack[undoStack.length - 1];
-        const newUndo = undoStack.slice(0, -1);
-        
-        const currentClone = JSON.parse(JSON.stringify(sequence));
-        const redoItem: HistoryItem = { type: 'SEQUENCE', data: currentClone };
-        
-        set({ sequence: item.data, undoStack: newUndo, redoStack: [...redoStack, redoItem] });
+        const inverse = captureInverse(get(), item);
+        applyHistory(set, item);
+        set({ undoStack: undoStack.slice(0, -1), redoStack: [...redoStack, inverse] });
         return true;
     },
 
     redo: () => {
-        const { undoStack, redoStack, sequence } = get();
+        const { undoStack, redoStack } = get();
         if (redoStack.length === 0) return false;
-
         const item = redoStack[redoStack.length - 1];
-        const newRedo = redoStack.slice(0, -1);
-        
-        const currentClone = JSON.parse(JSON.stringify(sequence));
-        const undoItem: HistoryItem = { type: 'SEQUENCE', data: currentClone };
-        
-        set({ sequence: item.data, undoStack: [...undoStack, undoItem], redoStack: newRedo });
+        const inverse = captureInverse(get(), item);
+        applyHistory(set, item);
+        set({ undoStack: [...undoStack, inverse], redoStack: redoStack.slice(0, -1) });
         return true;
     },
 

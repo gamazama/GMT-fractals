@@ -65,7 +65,17 @@ Controls for playback and recording.
 - **FRM**: Draggable frame counter for precise playhead positioning.
 - **LEN**: Draggable duration control for setting the animation length.
 - **Render**: Opens the Render/Export popup for video output.
-- **Menu**: Access FPS setting, Record Camera toggle, Delete All Keys, and Delete All Tracks.
+- **Menu**: Access FPS setting, Record Camera toggle, Deterministic Playback, Delete All Keys, and Delete All Tracks.
+
+## FPS & Frame Remapping
+The kebab menu's **FPS** field changes the project framerate. The toggle below it controls what happens to your existing keyframes:
+- **Keep frames**: Keys stay at the same frame index — a key at frame 30 stays at frame 30. The wall-clock time of every key shifts (at 30→60 fps, frame 30 moves from 1.0s to 0.5s). Use this when you want to retime in frame units.
+- **Match time**: Keys are remapped so their wall-clock time is preserved — a key at 1.0s stays at 1.0s. Frame indices are scaled by \`new / old\`, and Bezier handles, the timeline length, and the playhead all scale together. Use this when you want to change framerate without altering the look of the animation.
+
+Both modes are undoable as a single step. At large ratios (e.g. 60→24), keys at adjacent frames in Match-time mode may collide and merge.
+
+## Deterministic Playback
+Toggle in the kebab menu. When on, the live preview is throttled to the project FPS so it plays back at the same speed the exported video will run at, regardless of monitor refresh rate. At fps=30 you see exactly 30 timeline frames per real second on a 60Hz, 144Hz, or any other display. Useful when timing motion to music or matching action to a known frame count. When off, playback runs at full RAF speed (smoother but timing is wall-clock based).
 `
     },
     'anim.tracks': {

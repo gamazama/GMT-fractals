@@ -36,6 +36,10 @@ export class AnimationEngine {
     private preScrubHooks: ScrubHook[] = [];
     private postScrubHooks: ScrubHook[] = [];
 
+    /** Accumulated wall-clock time since the last frame advance, used by
+     *  deterministic playback to throttle the timeline to project fps. */
+    private detAccum = 0;
+
     // Injected store accessors — set via connect() from bridge layer
     private animStore: StoreAccessor | null = null;
     private fractalStore: StoreAccessor | null = null;
@@ -218,21 +222,38 @@ export class AnimationEngine {
     public tick(dt: number) {
         if (!this.animStore) return;
         const store = this.animStore.getState();
-        if (!store.isPlaying) return;
+        if (!store.isPlaying) {
+            this.detAccum = 0;
+            return;
+        }
 
         const fps = store.fps;
         const currentFrame = store.currentFrame;
         const duration = store.durationFrames;
         const loopMode = store.loopMode;
 
-        // Deterministic playback: lock advance to exactly one timeline frame
-        // per tick, regardless of how long the wall RAF tick was. Pairs with
-        // useFluidEngine's controlled timestamp so a "play from start"
-        // session reproduces the same dt sequence the export sees. Display
-        // playback rate becomes (RAF rate) / fps — set fps = RAF for
-        // real-time preview.
+        // Deterministic playback: throttle wall-clock advancement to project
+        // fps so the live preview plays at the same speed as the exported
+        // video — at fps=30 the timeline advances 30 frames per real second
+        // regardless of RAF rate (60Hz, 144Hz, etc). Each tick we accumulate
+        // wall dt and emit integer frames once enough time has passed; if
+        // RAF stalls, we catch up by emitting multiple frames in one tick.
         const deterministic = (store as { deterministicPlayback?: boolean }).deterministicPlayback;
-        const deltaFrames = deterministic ? 1 : dt * fps;
+        let deltaFrames: number;
+        if (deterministic) {
+            // Discard backlog from large gaps (tab hidden, debugger pause,
+            // long render frame) — without this the timeline lurches forward
+            // when focus returns.
+            if (dt > 0.25) this.detAccum = 0;
+            this.detAccum += dt;
+            const frameDur = 1 / Math.max(1, fps);
+            const steps = Math.floor(this.detAccum / frameDur);
+            if (steps <= 0) return; // not enough wall time for a frame yet
+            this.detAccum -= steps * frameDur;
+            deltaFrames = steps;
+        } else {
+            deltaFrames = dt * fps;
+        }
         let nextFrame = currentFrame + deltaFrames;
         
         if (nextFrame >= duration) {

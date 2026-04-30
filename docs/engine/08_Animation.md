@@ -159,9 +159,10 @@ interface Sequence {
   name: string;
   duration: number;
   tracks: Record<string, Track>;
-  fps: number;
 }
 ```
+
+`fps` lives on the playback slice (`useAnimationStore.fps`), not on the sequence itself. Frames inside a sequence are unitless integer indices — multiplying by the project fps gives wall-clock time. An older `AnimationSequence.fps` field existed in the type but was never read by anything and was dropped 2026-04-30.
 
 ## Modulation
 
@@ -294,6 +295,15 @@ Rarely needed — prefer `derive()` / `bridge()` in [09_Bridges_and_Derived.md](
 ### 2026-04-30 — Curve-preserving insert (de Casteljau split)
 **Decision:** when `addKeyframe` inserts between two Bezier keys, perform a de Casteljau split at the insert frame. The new key adopts curve-derived tangents and the prev/next adjacent handles are rewritten so the visual segment is unchanged.
 **Rationale:** previous behaviour computed Auto tangents for the new key and silently rescaled neighbours, producing visible kinks when the surrounding curve had been hand-shaped. Subdivide is what every DCC tool does for "insert key on curve."
+
+### 2026-04-30 — FPS change has explicit Keep / Match modes
+**Decision:** `setFps(newFps, mode)` takes a mode flag. `'keep'` (historic behaviour, default) leaves keyframe `frame` indices alone — wall-clock time of every key shifts. `'match'` rescales every keyframe's `frame` and Bezier handle x by `newFps / oldFps`, plus `durationFrames`, `sequence.durationFrames`, and `currentFrame`, preserving wall-clock time. UI exposes the toggle next to the FPS field in the timeline kebab menu.
+**Rationale:** the old `setFps` only updated the playback fps and silently broke the timing of every existing key (key at frame 30 played 2× faster after 30→60). Two modes is what every DCC tool offers. Tangent x-deltas are also frame-unit-scaled to keep curve shapes intact.
+**Edge cases:** at large ratios (e.g. 60→24), keys at adjacent source frames may collide on remap — last-writer-wins, matching `addKeyframe`'s same-frame semantics. FPS changes push a single combined `FPS` history entry (sequence + fps + duration + currentFrame) so undo restores everything atomically; rapid drags coalesce within a 400ms window so one drag = one undo entry.
+
+### 2026-04-30 — Deterministic playback throttles to project fps
+**Decision:** when `deterministicPlayback` is on, `AnimationEngine.tick` accumulates wall-clock dt and emits integer frames once `accum ≥ 1/fps`, rather than advancing one timeline frame per RAF tick.
+**Rationale:** the previous behaviour (1 frame per tick) made the live preview run at `RAF Hz / fps` speed — at 60Hz RAF + fps=30, playback was 2× real-time. The new gate keeps the timeline at exactly project fps regardless of monitor refresh, so the preview matches the export frame-for-frame. If RAF stalls (`dt > 250ms`) the accumulator resets to avoid lurching forward; the accumulator also clears on pause.
 
 ### 2026-04-30 — Track-selection actions split by intent
 **Decision:** replaced `selectTrack(id, multi)` and `selectTracks(ids, select)` (boolean polymorphism) with four named actions: `setTrackSelection(id)`, `toggleTrackSelection(id)`, `addTracksToSelection(ids)`, `removeTracksFromSelection(ids)`.

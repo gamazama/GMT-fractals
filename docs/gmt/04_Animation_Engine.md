@@ -246,7 +246,14 @@ Called every frame by `AnimationSystem.tsx` via the TickRegistry (ANIMATE phase)
 
 ```
 tick(deltaTime):
-    nextFrame = currentFrame + (dt * fps)
+    if deterministicPlayback:
+        accum += dt
+        steps = floor(accum / (1/fps))
+        if steps == 0: return
+        accum -= steps * (1/fps)
+        nextFrame = currentFrame + steps
+    else:
+        nextFrame = currentFrame + (dt * fps)
     if nextFrame >= duration:
         if loopMode == 'Once': stop
         if loopMode == 'Loop': nextFrame = 0
@@ -254,7 +261,9 @@ tick(deltaTime):
     scrub(nextFrame)
 ```
 
-Frame advances are based on wall-clock delta, so animation stays in sync with real time even if rendering is slow (frames are skipped, not delayed).
+In the default mode, frame advances are based on wall-clock delta, so animation stays in sync with real time even if rendering is slow (frames are skipped, not delayed).
+
+When `deterministicPlayback` is on, the timeline advances at exactly project fps regardless of monitor refresh — the live preview matches the export frame-for-frame. The accumulator resets on pause and discards backlogs `> 250ms` (e.g. tab hidden, debugger pause) so playback doesn't lurch forward when focus returns.
 
 ### 6.2 Offline / Video Export (`scrub`)
 
@@ -296,9 +305,15 @@ The store is split into three Zustand slices:
 
 State: `isPlaying`, `isRecording`, `currentFrame`, `fps` (default 30), `durationFrames` (default 300 = 10s), `loopMode`, `zoomLevel`, modulation recording state.
 
-Actions: `play()`, `pause()`, `stop()`, `seek(frame)`, `setDuration()`, `setFps()`.
+Actions: `play()`, `pause()`, `stop()`, `seek(frame)`, `setDuration()`, `setFps(newFps, mode)`.
 
 Auto-reset: If at end of timeline when play is pressed, jumps to frame 0.
+
+**`setFps` modes** (timeline kebab menu exposes a Keep / Match toggle):
+- `'keep'` (default, historic): only `fps` changes. Keyframe `frame` indices are untouched, so wall-clock time of every key shifts.
+- `'match'`: every keyframe's `frame` and Bezier handle `x` is rescaled by `newFps / oldFps`, plus `durationFrames`, `sequence.durationFrames`, and `currentFrame`. Wall-clock time is preserved. Collisions (when two source frames round to the same target) resolve last-writer-wins.
+
+Both push a single combined `FPS` history entry (sequence + fps + duration + currentFrame) so undo restores the project framerate atomically. Rapid drags coalesce within 400ms to keep one drag = one undo entry.
 
 ### 7.2 SelectionSlice (`store/animation/selectionSlice.ts`)
 

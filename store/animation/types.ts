@@ -10,8 +10,11 @@ export interface CopiedKeyframe {
     originalTrackId: string;
 }
 
-export type HistoryItem = 
-    | { type: 'SEQUENCE', data: AnimationSequence };
+export type HistoryItem =
+    | { type: 'SEQUENCE', data: AnimationSequence }
+    | { type: 'FPS', data: { sequence: AnimationSequence; fps: number; durationFrames: number; currentFrame: number } };
+
+export type FpsChangeMode = 'keep' | 'match';
 
 // --- SLICE INTERFACES ---
 
@@ -28,13 +31,14 @@ export interface PlaybackSliceState {
     isArmingModulation: boolean;
     isRecordingModulation: boolean;
     recordingSnapshot: AnimationSequence | null; // Holds the clean sequence before baking
-    /** When true, playback drives `animationEngine.tick` with `dt = 1/fps`
-     *  (one timeline frame per animation tick) instead of wall-clock dt,
-     *  and modulation oscillators are phased by `currentFrame / fps` instead
-     *  of `performance.now()`. Apps that have a controlled engine clock
-     *  (e.g. fluid-toy's FluidEngine) should also feed it `currentFrame *
-     *  1000 / fps` while this is on so the live preview matches the export.
-     *  Off by default — preserves the historic wall-clock playback. */
+    /** When true, the timeline advances at exactly project fps (regardless
+     *  of RAF rate) by accumulating wall-clock dt and stepping integer
+     *  frames — so the live preview plays at the same speed as the export
+     *  and reproduces the same per-frame state. Modulation oscillators are
+     *  phased by `currentFrame / fps` instead of `performance.now()`. Apps
+     *  with a controlled engine clock (e.g. fluid-toy's FluidEngine) should
+     *  also feed it `currentFrame * 1000 / fps` while this is on. Off by
+     *  default — preserves the historic wall-clock playback. */
     deterministicPlayback: boolean;
 }
 
@@ -50,7 +54,13 @@ export interface PlaybackSliceActions {
     setIsCameraInteracting: (v: boolean) => void;
     seek: (frame: number) => void;
     setDuration: (frames: number) => void;
-    setFps: (fps: number) => void;
+    /** Change the project framerate.
+     *  - mode 'keep' (default): keyframes stay at their frame index, so wall-clock
+     *    time of each key shifts. Equivalent to historic behaviour.
+     *  - mode 'match': keyframes are remapped so their wall-clock time is
+     *    preserved (frame * newFps / oldFps). Also rescales durationFrames,
+     *    currentFrame, and Bezier handle x-deltas. Pushes an FPS undo entry. */
+    setFps: (fps: number, mode?: FpsChangeMode) => void;
     setDeterministicPlayback: (v: boolean) => void;
     stopModulationRecording: () => void; // Internal helper
 }
