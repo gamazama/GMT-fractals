@@ -88,13 +88,7 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
 
     const mode = useEngineStore((s) => s.resolutionMode);
     const fixedResolution = useEngineStore((s) => s.fixedResolution);
-    const renderScale = useEngineStore((s) => s.renderScale);
     const setCanvasPixelSize = useEngineStore((s) => s.setCanvasPixelSize);
-
-    // Latest CSS-pixel size kept in a ref so the renderScale effect below
-    // can re-push the canvas size when the user changes the multiplier
-    // without waiting for a ResizeObserver tick.
-    const lastCssSize = useRef({ w: 0, h: 0 });
 
     useLayoutEffect(() => {
         const el = outerRef.current;
@@ -102,14 +96,8 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
 
         const pushSize = (w: number, h: number) => {
             setViewportSize({ w, h });
-            lastCssSize.current = { w, h };
             if (shouldResize && !shouldResize()) return;
-            // renderScale is the user's pixel multiplier on top of native DPR.
-            // 1.0 = match the device's actual DPR; 0.5 = half-res for perf;
-            // 2.0 = supersample. Fluid-toy / GMT both consume the resulting
-            // canvasPixelSize via the same store field, so wiring it here
-            // makes the multiplier work uniformly across apps.
-            const dpr = (window.devicePixelRatio || 1) * renderScale;
+            const dpr = window.devicePixelRatio || 1;
             setCanvasPixelSize(
                 Math.max(1, Math.floor(w * dpr)),
                 Math.max(1, Math.floor(h * dpr)),
@@ -133,28 +121,9 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
         return () => observer.disconnect();
         // shouldResize predicate ref-reads current state; we don't want
         // a new observer on every render just because the predicate
-        // identity changed. renderScale is intentionally omitted because
-        // the dedicated effect below handles it without recreating the
-        // observer.
+        // identity changed. Intentionally omitted from deps.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [setCanvasPixelSize]);
-
-    // Re-push canvas size when the render-scale multiplier changes, so the
-    // renderer resizes immediately instead of waiting for the next layout
-    // tick. Reads the cached CSS size — no DOM measurement required.
-    useLayoutEffect(() => {
-        const { w, h } = lastCssSize.current;
-        if (w === 0 || h === 0) return;
-        if (shouldResize && !shouldResize()) return;
-        const dpr = (window.devicePixelRatio || 1) * renderScale;
-        setCanvasPixelSize(
-            Math.max(1, Math.floor(w * dpr)),
-            Math.max(1, Math.floor(h * dpr)),
-        );
-        // shouldResize predicate is a ref-read; only renderScale should
-        // re-fire this effect.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [renderScale, setCanvasPixelSize]);
 
     const isFixed = mode === 'Fixed';
     const [fw, fh] = fixedResolution;
