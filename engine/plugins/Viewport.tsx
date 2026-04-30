@@ -31,6 +31,37 @@ import type { ViewportAdaptiveConfig } from '../../types/viewport';
 let _installed = false;
 let _interactionUnsub: (() => void) | null = null;
 
+// ── Render-scale source registration ──────────────────────────────────
+//
+// The in-canvas render-scale pill (top-centre of the viewport in Fixed
+// mode) reads/writes `viewportSlice.renderScale` by default — fluid-toy
+// consumes that field directly. GMT's actual internal-pixel multiplier
+// lives at `quality.aaLevel` instead, so the app injects a custom source
+// pointing at that field. Without an injected source, the default kicks
+// in and the pill is a no-op for apps that don't read renderScale.
+
+export interface RenderScaleSource {
+    /** React hook returning [value, setValue]. Must follow the Rules of
+     *  Hooks (called unconditionally from a function component). */
+    use: () => [number, (v: number) => void];
+    /** Allowed values for the segmented picker. */
+    steps: readonly number[];
+    /** Optional label formatter; default `${v}x`. */
+    formatLabel?: (v: number) => string;
+}
+
+let _renderScaleSource: RenderScaleSource | null = null;
+
+/** Register the source the in-canvas render-scale pill reads/writes.
+ *  Apps call this once at boot when the default `renderScale` field
+ *  isn't the right knob (e.g. GMT points at `quality.aaLevel`). */
+export const setRenderScaleSource = (source: RenderScaleSource | null): void => {
+    _renderScaleSource = source;
+};
+
+/** Internal accessor used by ViewportModeControls' RenderScaleControl. */
+export const getRenderScaleSource = (): RenderScaleSource | null => _renderScaleSource;
+
 /** Install the viewport plugin. Apps call this once at boot. Passing
  *  adaptive-config overrides lets apps retune for their workload.
  *

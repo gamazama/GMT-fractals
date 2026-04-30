@@ -28,7 +28,7 @@ import { registerUI } from '../engine/features/ui';
 import { registerGmtUi } from '../engine-gmt/features/ui';
 import { installGmtCameraSlice } from '../engine-gmt/store/cameraSlice';
 import { installGmtModularSlice } from '../engine-gmt/store/modularSlice';
-import { installViewport, viewport } from '../engine/plugins/Viewport';
+import { installViewport, viewport, setRenderScaleSource } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
@@ -117,6 +117,21 @@ installViewport({
     interactionDownsample: 0.55,
     activityGraceMs: 100,
     alwaysActive: false, // GMT-style — settle to full-res on idle
+});
+
+// Point the in-canvas render-scale pill at GMT's actual internal-pixel
+// multiplier (Quality panel's "Internal Scale" slider). The default
+// source — viewportSlice.renderScale — is consumed only by fluid-toy;
+// in GMT the equivalent knob is quality.aaLevel and changing it goes
+// through the standard DDFS setter so the worker / shader see it via
+// the same path as the panel slider.
+setRenderScaleSource({
+    use: () => {
+        const value = useEngineStore((s: any) => s.quality?.aaLevel ?? 1.0);
+        const setQuality = useEngineStore((s: any) => s.setQuality);
+        return [value, (v: number) => setQuality({ aaLevel: v })];
+    },
+    steps: [0.25, 0.5, 1.0, 1.5, 2.0],
 });
 
 // hideDefaults: registerGmtTopbar registers fps/adaptive/pause itself in

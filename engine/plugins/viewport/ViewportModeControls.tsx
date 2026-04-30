@@ -19,6 +19,7 @@ import React from 'react';
 import { useEngineStore } from '../../../store/engineStore';
 import { FixedResolutionControls } from './FixedResolutionControls';
 import { RENDER_SCALE_STEPS } from '../../../store/slices/viewportSlice';
+import { getRenderScaleSource } from '../Viewport';
 
 export interface ViewportModeControlsProps {
     /** Position of the controls container (absolute px from the
@@ -33,30 +34,58 @@ export interface ViewportModeControlsProps {
     availableHeight?: number;
 }
 
-/** Compact segmented picker for the user's renderScale multiplier.
- *  Sits next to the Fill/Fixed control. Reads/writes viewportSlice.
- *  Renderers that consume `renderScale` (currently fluid-toy) will
- *  resize on the next frame; renderers that don't are unaffected. */
+/** Compact segmented picker for the user's render-scale multiplier.
+ *  Reads/writes viewportSlice.renderScale by default; apps can register
+ *  a custom source via setRenderScaleSource (e.g. GMT points at
+ *  quality.aaLevel). The pill is rendered as one of two components so
+ *  conditional hook calls are avoided. */
 const RenderScaleControl: React.FC = () => {
+    const source = getRenderScaleSource();
+    return source ? <CustomScalePill source={source} /> : <DefaultScalePill />;
+};
+
+const PILL_OUTER = 'flex flex-nowrap items-center gap-0.5 bg-black/80 px-1 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md whitespace-nowrap';
+const PILL_BTN = (active: boolean) =>
+    `text-[9px] font-mono px-1.5 py-0.5 rounded transition-colors ${active
+        ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/40'
+        : 'text-gray-500 hover:text-gray-200 border border-transparent'}`;
+const PILL_TITLE = 'Render scale — pixel multiplier on top of the viewport size. 1.0 = match CSS pixels (cheap); 2.0 = supersampled (4× cost).';
+
+const DefaultScalePill: React.FC = () => {
     const renderScale = useEngineStore((s) => s.renderScale);
     const setRenderScale = useEngineStore((s) => s.setRenderScale);
     return (
-        <div
-            className="flex flex-nowrap items-center gap-0.5 bg-black/80 px-1 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md whitespace-nowrap"
-            title="Render scale — pixel multiplier on top of the viewport size. 1.0 = match CSS pixels (cheap); 2.0 = Retina-sharp (4× cost)."
-        >
+        <div className={PILL_OUTER} title={PILL_TITLE}>
             {RENDER_SCALE_STEPS.map((s) => {
                 const active = Math.abs(s - renderScale) < 1e-3;
                 return (
                     <button
                         key={s}
                         onClick={(e) => { e.stopPropagation(); setRenderScale(s); }}
-                        className={`text-[9px] font-mono px-1.5 py-0.5 rounded transition-colors ${active
-                            ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/40'
-                            : 'text-gray-500 hover:text-gray-200 border border-transparent'
-                        }`}
+                        className={PILL_BTN(active)}
                     >
                         {s}×
+                    </button>
+                );
+            })}
+        </div>
+    );
+};
+
+const CustomScalePill: React.FC<{ source: NonNullable<ReturnType<typeof getRenderScaleSource>> }> = ({ source }) => {
+    const [value, setValue] = source.use();
+    const fmt = source.formatLabel ?? ((v: number) => `${v}×`);
+    return (
+        <div className={PILL_OUTER} title={PILL_TITLE}>
+            {source.steps.map((s) => {
+                const active = Math.abs(s - value) < 1e-3;
+                return (
+                    <button
+                        key={s}
+                        onClick={(e) => { e.stopPropagation(); setValue(s); }}
+                        className={PILL_BTN(active)}
+                    >
+                        {fmt(s)}
                     </button>
                 );
             })}
