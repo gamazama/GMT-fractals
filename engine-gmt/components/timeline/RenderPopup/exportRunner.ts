@@ -25,7 +25,7 @@ import { getExportFileName } from '../../../../utils/fileUtils';
 import { applyExportModulations } from '../exportModulations';
 import type { SerializedCamera, SerializedOffset } from '../../../engine/worker/WorkerProtocol';
 import type { EngineRenderState } from '../../../engine/FractalEngine';
-import type { ExportPass, VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
+import type { ExportPass, VideoExportConfig } from '../../../../engine/codec/VideoExportTypes';
 import type { ExportRunDeps } from './types';
 
 const engine = getProxy();

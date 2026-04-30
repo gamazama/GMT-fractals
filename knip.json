@@ -27,7 +27,11 @@
     "public/**",
     "engine-gmt/features/fragmentarium_import/**",
     "fluid-toy/deepZoom/HDRFloat.ts",
-    "mesh-export/algorithms/sdf-eval.ts"
+    "mesh-export/algorithms/sdf-eval.ts",
+    "components/timeline/exportHelpers.ts",
+    "components/timeline/exportModulations.ts",
+    "engine/ConfigDefaults.ts",
+    "engine/managers/ConfigManager.ts"
   ],
   "ignoreBinaries": [],
   "ignoreDependencies": [],

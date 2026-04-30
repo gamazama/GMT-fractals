@@ -7,11 +7,11 @@
 
 import * as THREE from 'three';
 import type { FractalEngine } from '../FractalEngine';
-import type { VideoExportConfig, ExportPass } from '../codec/VideoExportTypes';
+import type { VideoExportConfig, ExportPass } from '../../../engine/codec/VideoExportTypes';
 import type { EngineRenderState } from '../FractalEngine';
 import { VIDEO_CONFIG, VIDEO_FORMATS, MAX_SKY_DISTANCE } from '../../../data/constants';
 import * as Mediabunny from 'mediabunny';
-import { halton } from '../codec/halton';
+import { halton } from '../../../engine/codec/halton';
 import { BloomPass } from '../BloomPass';
 import { createFullscreenPass } from '../utils/FullscreenQuad';
 

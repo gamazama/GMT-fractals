@@ -270,6 +270,15 @@ The `window.useAnimationStore` export stays in animationStore.ts as a dev-consol
 
 **Suspect modules still to audit:** the 28 large duplicates (`WorkerProxy.ts`, `FractalEngine.ts`, `renderWorker.ts`, `MaterialController.ts`, `UniformManager.ts`, `ShaderBuilder.ts`, `CompileScheduler.ts`, etc.). These are genuinely live in their forked form — `engine-gmt/`'s internal subtree resolves `../engine/X` to the gmt copies, while top-level components resolve `engine/X` to the engine-core stubs. Each pair needs the per-file decision above. Knip's current report (from `npm run orphans`) is the canonical "what's actually dead" list.
 
+**Lesson — direction matters when consolidating identical pairs.** If `engine/X.ts` and `engine-gmt/engine/X.ts` are byte-equivalent, knip will flag whichever side has no importers as "unused." That's a static fact, **not** a directive on which side to delete. The right move is almost always to **keep the engine/ generic copy and retarget the engine-gmt importers**, then delete the engine-gmt copy — because the engine extraction's whole point is to keep generic code at the generic location. A 2026-04-30 triage pass deleted four engine/ files (`ConfigDefaults.ts`, `codec/halton.ts`, `codec/VideoExportTypes.ts`, `managers/ConfigManager.ts`) before catching this; halton + VideoExportTypes were then restored and consolidated correctly (engine/ canonical, engine-gmt importers retargeted, engine-gmt copies deleted), while ConfigDefaults + ConfigManager were restored side-by-side because the engine-gmt versions are GMT-specialized variants of a generic surface (their docstrings explicitly framed it that way).
+
+**Intentional-orphan registry (`knip.json` ignore list):** entries fall into three buckets:
+- **Parked WIP** — `engine-gmt/features/fragmentarium_import/**` (Formula Workshop pipeline, parked per commit `022a539`); `fluid-toy/deepZoom/HDRFloat.ts` (deep-zoom phase 4); `mesh-export/algorithms/sdf-eval.ts` (active mesh-export development).
+- **Engine-fork generic surface awaiting consumer** — `components/timeline/exportHelpers.ts`, `components/timeline/exportModulations.ts` (export-handler code; engine-fork has only an inert WorkerProxy stub, so no real worker to export through, but the surface stays so a future engine-fork app with a real renderer can wire export without recreating).
+- **Engine-generic awaiting retarget** — `engine/ConfigDefaults.ts`, `engine/managers/ConfigManager.ts` (the GMT-specialized variants in `engine-gmt/engine/` are larger; refactoring them to "engine/X + engine-gmt-extension" is real per-file work, not done yet).
+
+When adding a new ignore entry to `knip.json`, classify it into one of these three buckets so the next person can tell whether to delete it, finish the migration, or wire the consumer.
+
 ---
 
 ## F15 — Worker `_localOffset` may zero out under FRAME_READY guard timeout

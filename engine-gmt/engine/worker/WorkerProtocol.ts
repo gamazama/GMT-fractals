@@ -7,7 +7,7 @@
 
 import type { ShaderConfig } from '../ShaderFactory';
 import type { EngineRenderState } from '../FractalEngine';
-import type { VideoExportConfig } from '../codec/VideoExportTypes';
+import type { VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
 
 // ─── Serializable camera/offset data ─────────────────────────────────────

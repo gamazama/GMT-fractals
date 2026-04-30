@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { EngineRenderState } from '../FractalEngine';
 import type { ShaderConfig } from '../ShaderFactory';
 import type { CameraState } from '../../types/common';
-import type { VideoExportConfig } from '../codec/VideoExportTypes';
+import type { VideoExportConfig } from '../../../engine/codec/VideoExportTypes';
 import type { BucketRenderConfig } from '../BucketRenderer';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, SerializedCamera, SerializedOffset } from './WorkerProtocol';
 import { injectMetadata } from '../../../utils/pngMetadata';
