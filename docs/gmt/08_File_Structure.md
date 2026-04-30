@@ -38,7 +38,7 @@ The imperative WebGL system.
 *   `BezierMath.ts`: Cubic Bezier curve solving for animation.
 *   **`worker/`**: Web Worker rendering subsystem.
     *   `renderWorker.ts`: Worker entry point — boots FractalEngine on OffscreenCanvas.
-    *   `WorkerProxy.ts`: Main-thread proxy for posting messages to the worker.
+    *   `WorkerProxy.ts`: No-op fallback proxy + registry. `setProxy(realProxy)` is called by `engine-gmt/renderer/install.ts` so generic dev/ code (engineStore, components, hooks) and engine-gmt code share the SAME singleton. Apps that don't install (test harnesses, fluid-toy) get the no-op fallback. The real GMT proxy with its Worker / OffscreenCanvas / WebGL renderer lives at `engine-gmt/engine/worker/WorkerProxy.ts`.
     *   `WorkerProtocol.ts`: Message type definitions and protocol constants.
     *   `WorkerExporter.ts`: Worker-side video export coordination.
     *   `ViewportRefs.ts`: Shared viewport dimension/canvas references.

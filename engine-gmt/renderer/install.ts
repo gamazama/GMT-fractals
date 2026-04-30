@@ -27,6 +27,7 @@
 
 import type { ShaderConfig } from '../engine/ShaderFactory';
 import { getProxy } from '../engine/worker/WorkerProxy';
+import { setProxy as setEngineProxy } from '../../engine/worker/WorkerProxy';
 import { bindGmtRenderer } from './bindings';
 import { useEngineStore } from '../../store/engineStore';
 
@@ -51,6 +52,13 @@ export const installGmtRenderer = (options: InstallGmtRendererOptions = {}): voi
     _installed = true;
 
     const proxy = getProxy();
+
+    // Register the GMT proxy as the engine-shared singleton so generic
+    // dev/ code (engineStore, components, hooks) sees the same booted
+    // state as engine-gmt code. Without this, the engine/ stub and
+    // engine-gmt's real proxy were two different singletons — generic
+    // code saw `isBooted = false` forever while the GMT worker was live.
+    setEngineProxy(proxy as any);
 
     // Wrap the app's onBooted with a re-push of accumulation state.
     // The store's initial sampleCap / isPaused values are pushed via

@@ -269,36 +269,49 @@ Formula changes trigger a full shader rebuild. On Windows/Chrome, the `fxc` comp
 
 ### Compile Spinner Gate (Main Thread → Worker Handshake)
 
-The preview shader compile is GPU-blocking — the worker thread stalls for 1-4s. To ensure the compile spinner is visible before this stall, the main thread and worker use an event-driven handshake:
+The preview shader compile is GPU-blocking — the worker thread stalls for 1-23s (Firefox single-stage compiles can take 20+s). To ensure the compile spinner is visible before this stall, the main thread and worker use an event-driven handshake plus a unified state machine:
 
 ```
-Main Thread                              Worker Thread
-┌─────────────────────────────┐          ┌─────────────────────────┐
-│ setFormula / loadScene       │          │                         │
-│  → compileGate.queue()       │          │                         │
-│    stores work, emits        │          │                         │
-│    IS_COMPILING              │          │                         │
-│                              │          │                         │
-│ React renders spinner        │          │                         │
-│ pingRef fires (DOM committed)│          │                         │
-│ rAF → setTimeout(0)         │          │                         │
-│ Browser PAINTS spinner       │          │                         │
-│                              │          │                         │
-│ compileGate.flush()          │          │                         │
-│  → CONFIG #1..#N ──────────────────────▶│ handleConfigChange ×N   │
-│  → CONFIG_DONE  ──────────────────────▶│ fireCompile()           │
-│                              │          │  → performCompilation() │
-│                              │          │    (GPU blocks — but    │
-│                              │          │     spinner is painted) │
-└─────────────────────────────┘          └─────────────────────────┘
+Main Thread                                   Worker Thread
+┌─────────────────────────────────┐           ┌─────────────────────────┐
+│ setFormula / loadScene / boot    │           │                         │
+│  → compileGate.queue(msg, work)  │           │                         │
+│    • CompileProgressStore.start()│           │                         │
+│    • emit IS_COMPILING (legacy)  │           │                         │
+│    • stash work                  │           │                         │
+│    • start 500ms safety timer    │           │                         │
+│                                  │           │                         │
+│ CompilingIndicator + LoadingScreen│          │                         │
+│  subscribe to store, animate bar │           │                         │
+│ pingRef fires (DOM committed)    │           │                         │
+│ rAF → setTimeout(0)              │           │                         │
+│ Browser PAINTS spinner            │          │                         │
+│                                  │           │                         │
+│ compileGate.flush()              │           │                         │
+│  → CONFIG #1..#N ───────────────────────────▶│ handleConfigChange ×N   │
+│  → CONFIG_DONE  ────────────────────────────▶│ fireCompile()           │
+│                                  │           │  → performCompilation() │
+│                                  │           │    emits IS_COMPILING(s)│
+│ WorkerProxy COMPILING handler   │◀───────────│ via postMessage         │
+│  • string while idle  → start()  │           │                         │
+│  • string while compiling →      │           │                         │
+│    setMessage()                  │           │                         │
+│  • false → finish()              │◀───────────│ IS_COMPILING(false)    │
+│                                  │           │                         │
+│ Bar snaps to 100, 800ms fade     │           │                         │
+└─────────────────────────────────┘           └─────────────────────────┘
 ```
 
 **Key design decisions:**
-- `compileGate.queue(message, work)` (`store/CompileGate.ts`) stores the compile work and emits `IS_COMPILING`. The work is NOT executed yet.
-- `CompilingIndicator.tsx` uses a **ref callback** (`pingRef`) that fires when the spinner DOM is committed. After `rAF → setTimeout(0)` (guarantees browser has painted), it calls `compileGate.flush()` which sends all CONFIGs + `CONFIG_DONE` to the worker.
-- The worker's `scheduleCompile()` does NOT emit `IS_COMPILING` — the main thread handles spinner visibility. `scheduleCompile` sets a 200ms fallback timer for non-gated compiles (feature toggles) that don't go through `compileGate.queue`.
-- `CONFIG_DONE` message tells the worker all CONFIGs have arrived — `fireCompile()` cancels the fallback timer and starts immediately. This is deterministic, not timer-based.
-- `compileGate.consumeNewCycle()` flag distinguishes user-initiated cycles (formula switch) from worker status updates ("Compiling Shader..." → "Compiling Lighting..."). Only new cycles reset the progress bar.
+
+- **`CompileProgressStore`** (`store/CompileProgressStore.ts`) is the single source of truth: `{ phase: 'idle' | 'compiling' | 'done', message, startedAt, estimateMs, doneAt, cycleId }`. Both `LoadingScreen` and `CompilingIndicator` are pure views over it. Progress is computed on demand by `selectProgress(state, performance.now())` — exponential approach to 95 % over `estimateMs`, snaps to 100 on `finish()`.
+- **Bar fill uses `transform: scaleX`** rather than `width: %`. Transforms run on the compositor thread so the bar keeps animating even when the worker's synchronous WebGL compile starves main-thread paint (notably Firefox).
+- **`compileGate.queue(message, work)`** opens a cycle on the store, emits IS_COMPILING (legacy bus consumers), and stashes `work`. Returns a `Promise<void>` resolved on flush (rejects with `'superseded'` if another `queue()` arrives first). A 500 ms safety timer flushes the work even if the indicator's `pingRef` never paints (e.g. unmounted).
+- **`pingRef`** in `CompilingIndicator` fires when the spinner DOM commits. After `rAF → setTimeout(0)` (guarantees browser has painted), it calls `compileGate.flush()` which runs the queued work (sending CONFIGs + `CONFIG_DONE` to the worker).
+- **`CONFIG_DONE`** tells the worker all CONFIGs have arrived; `fireCompile()` cancels its 200 ms debounce and starts immediately.
+- **Worker `IS_COMPILING` events** are bridged into the store by `WorkerProxy._handleWorkerMessage('COMPILING')`: string → `setMessage()` (or `start()` if store is idle, defensive); `false` → `finish()`.
+- **Per-cycle estimate refresh.** `engineStore.setCompileEstimator(fn)` registers an app-specific estimator (engine-gmt's `estimateCompileTime`). `setFormula` and `loadScene` call it before `compileGate.queue`. `useAppStartup.bootEngine` does the same via its `estimateBootCompileMs` option. The store applies estimate updates via the `compile_estimate` event listener in `CompileProgressStore.ts`.
+- **Initial message is context-aware.** `CompileScheduler.perform()` emits `'Loading Preview...'` only on genuine two-stage path (parallel-compile-capable browser + new formula). Otherwise emits `'Compiling Shader...'`. This avoids the "Loading Preview" misnomer on Firefox single-stage compiles and quality-preset switches.
 
 ### Stale Compile Cancellation
 
@@ -306,28 +319,36 @@ A generation counter (`_compileGeneration`) increments on each `scheduleCompile`
 
 ### UI Feedback
 
-`CompilingIndicator.tsx` shows status centered under the top bar:
-- "Loading Preview..." — preview shader compiling (GPU blocks)
-- "Compiling Lighting..." — two-stage, full shader compiling async
-- "Compiling Shader..." — keepCurrent path, full shader compiling async
+Two views render off the same `CompileProgressStore`:
+
+- **`LoadingScreen`** (boot screen, top-of-app cover) — visible until `isReady && phase === 'done'`. Bar fill from `selectProgress`. CPU Julia spinner in front of the bar. Uses `transform: scaleX` for the bar fill.
+- **`CompilingIndicator`** (post-boot toast at top-center) — visible while `phase === 'compiling' || 'done'`. Same selector, same `scaleX` fill. Holds 800 ms after `done` then fades, then calls `reset()` to return the store to `idle`.
+
+Status messages:
+- `'Loading Preview...'` — only when genuinely doing two-stage with a new formula on a parallel-compile-capable browser (Chrome). Mid-flight phase change to `'Compiling Lighting...'` for Stage 2.
+- `'Compiling Shader...'` — single-stage compiles (Firefox; same-formula recompiles like quality preset switching) and `keepCurrent` recompiles.
 
 ### Permanent Compile Timing Logs
 
 Always-on `console.log` entries (not DEV-gated — do not remove):
-- `[Compile] Preview: Xms (Formula)` — preview shader ready
-- `[Compile] Single-stage: Xms (Formula)` — single-stage done
-- `[Compile] Two-stage: Xms (Formula, gen=Xms, gpu=Xms)` — full shader done with breakdown
+- `[Compile] Single-stage: Xms (Formula)` — single-stage done (final time)
+- `[Compile] Two-stage: Xms (Formula, gen=Xms, gpu=Xms)` — two-stage done (final time, with breakdown)
 
 ### Key Files
 
 | File | Role |
 |------|------|
-| `store/CompileGate.ts` | `compileGate.queue()`, `compileGate.flush()`, `compileGate.consumeNewCycle()` — spinner gate singleton |
+| `store/CompileProgressStore.ts` | Unified state machine: phase / message / startedAt / estimateMs / cycleId. `selectProgress(s, now)` selector. Both views read from this. |
+| `store/CompileGate.ts` | `compileGate.queue(msg, work)` opens a store cycle + stashes work; `flush()` runs the work after spinner paints. 500 ms safety net. |
+| `hooks/useAppStartup.ts` | Generic boot hook: hardware detect, hydration flag, `bootEngine` that routes through `compileGate.queue`. Takes `bootRenderer` / `pushOffset` / `estimateBootCompileMs` callbacks via options so it stays decoupled from any specific renderer. |
 | `engine/FractalEngine.ts` | `scheduleCompile()`, `fireCompile()`, `performCompilation()` — three-path dispatch |
+| `engine/CompileScheduler.ts` | `perform()` chooses `'Loading Preview...'` vs `'Compiling Shader...'` based on `hasParallelCompile && formulaChanged`. |
 | `engine/MaterialController.ts` | `compilePreview()`, `buildFullMaterial()`, `swapFullMaterial()` |
 | `engine/worker/renderWorker.ts` | `CONFIG_DONE` handler calls `fireCompile()` |
+| `engine/worker/WorkerProxy.ts` (engine-gmt) | `_handleWorkerMessage('COMPILING')` bridges worker IS_COMPILING events into the store via `start()` / `setMessage()` / `finish()`. |
 | `features/lighting/index.ts` | Preview shader stub (colored N·L) |
-| `components/CompilingIndicator.tsx` | Compile status UI + spinner gate (pingRef, cycle state machine) |
+| `components/CompilingIndicator.tsx` | Compile status toast — store-driven, scaleX bar, owns flush via pingRef. |
+| `app-gmt/LoadingScreen.tsx` | Boot screen — store-driven, scaleX bar wrapping the CPU Julia spinner. |
 
 ## 2.8 TickRegistry — Frame Orchestration
 

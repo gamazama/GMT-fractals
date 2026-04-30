@@ -18,6 +18,7 @@ import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState, Seria
 import { injectMetadata } from '../../../utils/pngMetadata';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 import type { AccumulationController } from '../../../engine/AccumulationController';
+import { useCompileProgress } from '../../../store/CompileProgressStore';
 
 export class WorkerProxy implements AccumulationController {
     // ─── Stub properties ─────────────────────────────────────────────
@@ -220,12 +221,31 @@ export class WorkerProxy implements AccumulationController {
                 // Count every worker frame for FPS display
                 if (this._onWorkerFrame) this._onWorkerFrame();
                 break;
-            case 'COMPILING':
+            case 'COMPILING': {
                 this._shadow.isCompiling = !!msg.status;
                 this._shadow.hasCompiledShader = !msg.status || this._shadow.hasCompiledShader;
                 if (this._onCompiling) this._onCompiling(msg.status);
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, msg.status);
+
+                // Drive the unified progress store. String → phase change
+                // (text update). False → cycle finished.
+                //
+                // Defensive: if the worker fires a string while the store
+                // is still idle (e.g. boot path that didn't go through
+                // compileGate.queue), open a cycle so the bar animates
+                // instead of sitting at 0.
+                const cp = useCompileProgress.getState();
+                if (msg.status === false) {
+                    cp.finish();
+                } else if (typeof msg.status === 'string') {
+                    if (cp.phase !== 'compiling') {
+                        cp.start(msg.status, cp.estimateMs);
+                    } else {
+                        cp.setMessage(msg.status);
+                    }
+                }
                 break;
+            }
             case 'COMPILE_TIME':
                 if (msg.duration) this._shadow.lastCompileDuration = msg.duration;
                 if (this._onCompileTime) this._onCompileTime(msg.duration);

@@ -279,8 +279,23 @@ export class WorkerProxy implements AccumulationController {
     clearPreviewRegion() {}
 }
 
-// Singleton accessor (preserves GMT's get-proxy pattern)
+// Singleton accessor with a registry override.
+//
+// The engine extraction left this stub in place so generic dev/ code
+// (engineStore, components, hooks) compiles without a runtime engine.
+// Apps that have a real Worker-backed engine (engine-gmt) install over
+// the stub at boot via `setProxy()`, so all `getProxy()` calls — both
+// from generic dev/ code and from engine-gmt code — return the SAME
+// instance. Without this, the two singletons diverged: dev/ saw a
+// perpetually-unbooted stub while engine-gmt operated the real worker.
+//
+// Apps that don't install (fluid-toy, fractal-toy, test harnesses) get
+// the no-op fallback — same behavior as before the registry.
 let _proxy: WorkerProxy | null = null;
+
+export function setProxy(proxy: WorkerProxy): void {
+    _proxy = proxy;
+}
 
 export function getProxy(): WorkerProxy {
     if (!_proxy) _proxy = new WorkerProxy();

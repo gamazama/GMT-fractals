@@ -43,12 +43,14 @@ import { usePreviewTarget } from '../engine-gmt/hooks/usePreviewTarget';
 import { RegionOverlay } from '../engine-gmt/components/viewport/RegionOverlay';
 import { PreviewGhostOverlay } from '../engine-gmt/components/viewport/PreviewGhostOverlay';
 
-import { GmtRendererCanvas, GmtRendererTickDriver } from '../engine-gmt';
+import { GmtRendererCanvas, GmtRendererTickDriver, gmtRenderer, getProxy } from '../engine-gmt';
+import { estimateCompileTime } from '../engine-gmt/features/engine/profiles';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
 import { featureRegistry } from '../engine/FeatureSystem';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LoadingScreen } from './LoadingScreen';
 import { FormulaWorkshop } from '../engine-gmt/features/fragmentarium_import/FormulaWorkshop';
+import { useAppStartup } from '../hooks/useAppStartup';
 
 const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
@@ -80,7 +82,28 @@ export const AppGmt: React.FC = () => {
 
     const [isSceneReady, setIsSceneReady] = useState(false);
     const [loadingVisible, setLoadingVisible] = useState(true);
-    const startupMode = typeof window !== 'undefined' && window.location.hash.startsWith('#s=') ? 'url' : 'default';
+    const bootRenderer = useCallback(
+        (config: any, camera: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number }) => {
+            // Cast: generic engine ShaderConfig is structurally compatible with
+            // engine-gmt's narrower ShaderConfig (formula optional vs required).
+            gmtRenderer.boot(config, camera);
+        }, [],
+    );
+    const pushOffset = useCallback(
+        (offset: { x: number; y: number; z: number; xL: number; yL: number; zL: number }) => {
+            const proxy = getProxy();
+            proxy.setShadowOffset(offset);
+            proxy.post({ type: 'OFFSET_SET', offset });
+        }, [],
+    );
+    const isBootedOrRequested = useCallback(() => getProxy().isBooted, []);
+    const estimateBootCompileMs = useCallback(
+        (state: any) => estimateCompileTime(state),
+        [],
+    );
+    const { startupMode, bootEngine, isHydrated } = useAppStartup(isSceneReady, {
+        bootRenderer, pushOffset, isBootedOrRequested, estimateBootCompileMs,
+    });
     const handleSceneReady = useCallback(() => setIsSceneReady(true), []);
     const handleLoadingFinished = useCallback(() => setLoadingVisible(false), []);
 
@@ -135,8 +158,8 @@ export const AppGmt: React.FC = () => {
                         isReady={isSceneReady}
                         onFinished={handleLoadingFinished}
                         startupMode={startupMode}
-                        bootEngine={() => {}}
-                        isHydrated={true}
+                        bootEngine={bootEngine}
+                        isHydrated={isHydrated}
                     />
                 )}
                 <EngineBridge />

@@ -61,7 +61,8 @@ import {
 } from '../engine-gmt';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { registerGmtTopbar } from '../engine-gmt/topbar';
-import { useEngineStore, getShaderConfigFromState, setFormulaPresetResolver } from '../store/engineStore';
+import { useEngineStore, getShaderConfigFromState, setFormulaPresetResolver, setCompileEstimator } from '../store/engineStore';
+import { estimateCompileTime } from '../engine-gmt/features/engine/profiles';
 import { parseShareString } from '../utils/Sharing';
 import { setFormulaParamResolver } from '../components/ParameterSelector';
 
@@ -99,6 +100,12 @@ installGmtModularSlice();
 // Decoupled via setFormulaPresetResolver — the engine core has no
 // direct coupling to engine-gmt's FractalRegistry.
 setFormulaPresetResolver((f) => registry.get(f)?.defaultPreset as any ?? null);
+
+// Same pattern for the compile-time estimator. engineStore actions
+// (setFormula, loadScene) call this before each compileGate.queue so
+// the unified CompileProgressStore projects the bar over a realistic
+// duration instead of the 15s default.
+setCompileEstimator((state) => estimateCompileTime(state));
 
 // Same pattern for the ParameterSelector dropdown: the stub registry
 // in components/ParameterSelector.tsx hands back per-formula param
@@ -385,35 +392,11 @@ if (bootPreset) {
 
 applyPanelManifest(GmtPanels);
 
-// Boot the renderer after React has a chance to mount GmtRendererCanvas
-// (which calls proxy.initWorkerMode). The 100ms delay mirrors GMT's
-// useAppStartup.
-setTimeout(() => {
-    const state = useEngineStore.getState();
-    const config = getShaderConfigFromState(state);
-    const camRot = (state as any).cameraRot || { x: 0, y: 0, z: 0, w: 1 };
-    const camFov = (state as any).optics?.camFov ?? 60;
-    gmtRenderer.boot(config, {
-        position: [0, 0, 0],
-        quaternion: [camRot.x, camRot.y, camRot.z, camRot.w],
-        fov: camFov,
-    });
-
-    // Push scene offset to the worker immediately after BOOT — treadmill
-    // keeps camera at origin and uses sceneOffset for world position.
-    // Without this, the first frame renders from the wrong viewpoint
-    // until Navigation fires its own teleport. Mirrors GMT's useAppStartup.
-    const proxy = getProxy();
-    const offset = (state as any).sceneOffset;
-    if (offset) {
-        const precise = {
-            x: offset.x, y: offset.y, z: offset.z,
-            xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0,
-        };
-        proxy.setShadowOffset(precise);
-        proxy.post({ type: 'OFFSET_SET', offset: precise });
-    }
-}, 100);
+// Boot is now driven by LoadingScreen → useAppStartup.bootEngine, which
+// fires after the LoadingScreen's progress reaches 100% (gives
+// GmtRendererCanvas time to mount + call initWorkerMode). bootEngine
+// routes through compileGate.queue so the CompilingIndicator animates,
+// and pre-emits compile_estimate.
 
 // Expose for dev-tools probing.
 if (typeof window !== 'undefined') {

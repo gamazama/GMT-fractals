@@ -2,6 +2,29 @@
 
 Chronological log of significant changes during the v0.9.3 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-05-01
+
+### Compile progress UI unification
+
+**User-facing**
+- The "Loading Preview… 0 %" toast that used to sit frozen for the entire boot compile (and the entire 12-23 s Firefox compile) now actually animates a progress bar over the estimated compile time, snapping to 100 % when the worker finishes.
+- The boot screen's progress bar tracks the real compile estimate too (Fastest preset ~3-4 s, Lite ~5-6 s, Balanced ~7-8 s, Ultra ~17 s+) instead of the previous arbitrary 2.5 s timer that hit 100 % then idled until the worker caught up.
+- The progress message now matches what's actually happening: "Compiling Shader…" for single-stage compiles (Firefox, or same-formula recompiles like quality-preset switching) and "Loading Preview…" only when there's a genuine two-stage preview-then-full happening (Chrome with parallel compile + new formula).
+
+**Implementation**
+- New `store/CompileProgressStore.ts` (Zustand) is the single source of truth: `phase | message | startedAt | estimateMs | doneAt | cycleId`. `selectProgress(state, now)` is an exponential approach to 95 % over the estimate, snapping to 100 on `finish()`. `LoadingScreen` and `CompilingIndicator` are pure views over it.
+- `CompileGate.queue()` now opens a cycle on the store, returns a `Promise<void>`, and arms a 500 ms safety timer that fires the queued work even if `pingRef` never paints (defensive against unmount races).
+- `WorkerProxy._handleWorkerMessage('COMPILING')` bridges worker IS_COMPILING events into the store: string-while-idle → `start()`; string-while-compiling → `setMessage()`; `false` → `finish()`.
+- Bar fill switched to `transform: scaleX` (compositor thread) instead of `width: %` (main render thread). Fix for Firefox where heavy worker compiles starve main-thread paint and `width` transitions stall visually.
+- `useAppStartup` rewritten to be renderer-agnostic — takes `bootRenderer / pushOffset / isBootedOrRequested / estimateBootCompileMs` callbacks via options. AppGmt wires these to `gmtRenderer.boot` and engine-gmt's `getProxy()`.
+- `engineStore.setCompileEstimator(fn)` registers an app-specific estimator. `setFormula` and `loadScene` call it before `compileGate.queue` so the next cycle uses a fresh estimate.
+
+### Stub WorkerProxy → registry (footgun fix)
+
+- `engine/worker/WorkerProxy.ts` was a no-op stub left from the engine extraction. Pre-existing dev/ code (engineStore, components, hooks) imported the stub; engine-gmt code imported its own real worker-backed proxy. They were two different singletons — generic dev/ code saw `isBooted = false` forever while the engine-gmt worker was actually live.
+- The stub is now a registry: `setProxy(realProxy)` is called from `installGmtRenderer` so `getProxy()` from both `engine/` and `engine-gmt/` returns the same instance in the GMT app. fluid-toy / fractal-toy / test harnesses that don't install get the no-op fallback (same behavior as before the fix).
+- This fix surfaced because Phase 2 of the spinner unification accidentally exercised the stub's `bootWithConfig` for the first time — useAppStartup's bootEngine was posting BOOT to the no-op stub while the real worker waited. Worker timed out at 30 s.
+
 ## 2026-04-30
 
 ### Timeline: FPS change has Keep / Match modes; deterministic playback throttles to project FPS

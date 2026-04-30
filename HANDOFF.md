@@ -245,8 +245,9 @@ Where a future fractal plugin (or any other app) re-installs its capabilities:
 | Named shader pipeline stages (post-map, miss-handler, integrator, …) | `ShaderBuilder.addSection(name, code)` + `getSections(name)` — plugin registers its pipeline DSL, its own assembler reads sections back |
 | Feature state (any shape) | `FeatureRegistry.register(def)` + generic `createFeatureSlice` auto-generates Zustand slice + `AutoFeaturePanel` auto-generates UI |
 | Render engine / render loop | Not supplied by engine. App instantiates its own, consuming the store + the shader built by ShaderFactory |
-| Worker offload | `WorkerProxy` is an in-memory stub. Apps subclass or replace the singleton with a Worker-backed implementation |
-| Compile scheduling | `CompileGate.queue(msg, fn)` — generic two-phase trigger with spinner |
+| Worker offload | `WorkerProxy` is an in-memory stub + registry. Apps install a real Worker-backed proxy via `setProxy(realProxy)` so generic dev/ code and the renderer share one singleton (engine-gmt does this in `installGmtRenderer`). |
+| Compile scheduling | `CompileGate.queue(msg, fn)` returns `Promise<void>`; opens a cycle on `CompileProgressStore` (single source of truth for spinner state); 500 ms safety net flushes if `pingRef` never paints. |
+| Compile progress UI | `store/CompileProgressStore.ts` — both `LoadingScreen` and `CompilingIndicator` subscribe; rAF loops poll `selectProgress(state, now)`. Bar fill via `transform: scaleX` (compositor thread) survives Firefox's main-thread paint stalls. |
 | Config diffing | `ConfigManager.update(newConfig, runtimeState)` → `{rebuildNeeded, uniformUpdate, modeChanged, needsAccumReset}` |
 | Preset save/load | `PresetLogic.applyPresetState` iterates feature registry + invokes feature setters. `utils/pngMetadata` for PNG embed. `utils/Sharing` + `UrlStateEncoder` for URL state |
 | Undo/redo | `historySlice` — snapshots ALL feature state via registry iteration, automatic for any future plugin |

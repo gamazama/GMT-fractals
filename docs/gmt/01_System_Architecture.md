@@ -191,7 +191,14 @@ Main Thread                          Worker Thread
 
 ### 4.3 Boot Hydration Gate
 
-Formulas are loaded via dynamic `import('../formulas')` (separate chunk). URL-shared scenes are parsed in the `.then()` callback. `useAppStartup` exposes an `isHydrated` flag that is set after formula import + URL parsing + `loadScene()` completes. `LoadingScreen` gates `bootEngine()` on this flag — without it, `bootEngine`'s 50ms `setTimeout` could read the store while it still has default Mandelbulb state, causing the wrong formula to compile on boot.
+In the dev/ engine extraction, the GMT app hydrates the store synchronously at module load (`app-gmt/main.tsx` parses `#s=…` URL fragments or pulls Mandelbulb's `defaultPreset` from the registry, then calls `loadScene` before `ReactDOM.render`). This guarantees `<GmtRendererCanvas />`'s `initWorkerMode` reads a fully-populated config when posting INIT.
+
+`useAppStartup` (`hooks/useAppStartup.ts`) is a generic hook that:
+- runs hardware detection on mount
+- exposes `isHydrated` (true after the hook's effect fires — by then the synchronous main.tsx hydration has long since completed)
+- exposes `bootEngine` which, when called, routes through `compileGate.queue('Compiling Shader...', work)` so the unified compile spinner animates during boot. The hook is renderer-agnostic — apps pass `bootRenderer`, `pushOffset`, `isBootedOrRequested`, and `estimateBootCompileMs` callbacks via options. AppGmt wires these to `gmtRenderer.boot` and `getProxy()` from `engine-gmt/`.
+
+`LoadingScreen` calls `bootEngine` from its `[isHydrated]` effect (single trigger point). The 50 ms `setTimeout` inside `bootEngine` yields to React's commit phase before reading the store.
 
 ### 4.4 Worker-Mode Gotchas
 

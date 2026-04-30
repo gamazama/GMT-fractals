@@ -57,6 +57,23 @@ export const setFormulaPresetResolver = (fn: FormulaPresetResolver | null) => {
     _formulaPresetResolver = fn;
 };
 
+// App-registered estimator that returns ms for compiling the shader
+// implied by the given store state. Called before each `compileGate.queue`
+// call inside store actions so the unified `CompileProgressStore` can
+// project the bar over a realistic duration. The estimator lives in
+// app-specific code (engine-gmt's `estimateCompileTime`) rather than
+// engine core. Returns 0 when no estimator is installed; the gate then
+// uses the last-known estimate (or its default).
+type CompileEstimator = (state: any) => number;
+let _compileEstimator: CompileEstimator | null = null;
+export const setCompileEstimator = (fn: CompileEstimator | null) => {
+    _compileEstimator = fn;
+};
+const refreshCompileEstimate = (state: any) => {
+    if (!_compileEstimator) return;
+    FractalEvents.emit(FRACTAL_EVENTS.COMPILE_ESTIMATE, _compileEstimator(state));
+};
+
 // Store factory — slice composition + scalar state + actions. Pulled
 // out of the eager `create()` call so the actual store construction
 // can be deferred until first use. See `ensureStore()` below for the
@@ -107,7 +124,8 @@ const storeFactory: StateCreator<
 
         set({ formula: f, projectSettings: { ...s.projectSettings, name: newName } });
 
-        compileGate.queue("Loading Preview...", () => {
+        refreshCompileEstimate(get());
+        compileGate.queue("Compiling Shader...", () => {
             // Forward formula + optional Modular graph/pipeline to the worker.
             // `pipeline` and `graph` are GMT Modular-formula fields kept as
             // optional via `as any` — they don't exist on the root store type.
@@ -287,7 +305,12 @@ const storeFactory: StateCreator<
         // Post-boot: show spinner immediately, defer compile-triggering work
         // until after the browser paints so the spinner is visible before
         // the GPU-blocking preview compile starts on the worker.
-        compileGate.queue("Loading Preview...", () => {
+        // Estimate is computed from the about-to-be-loaded preset, not the
+        // current state — apply preset to a temp clone or simply estimate
+        // post-load. Cheaper to just refresh after loadPreset runs inside
+        // the work closure; for now we approximate from current state.
+        refreshCompileEstimate(get());
+        compileGate.queue("Compiling Shader...", () => {
             // 1. Hydrate store. loadPreset emits CONFIG({formula}) and
             //    drives feature setters that may emit their own CONFIGs.
             get().loadPreset(preset);

@@ -190,7 +190,16 @@ export class CompileScheduler {
         const keepCurrent = this.hasCompiledShader && this.hasParallelCompile && !formulaChanged;
 
         if (!keepCurrent) {
-            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, 'Loading Preview...');
+            // Pick a message that matches what's actually about to happen.
+            // Two-stage (parallel compile + new formula) genuinely loads a
+            // lighting-off preview first while the full shader builds in
+            // the background — "Loading Preview…" reads correctly there.
+            // Single-stage (Firefox, or same-formula recompile) is one
+            // synchronous compile of the full shader — "Loading Preview…"
+            // misleads the user (no preview stage exists).
+            const willTwoStage = this.hasParallelCompile && formulaChanged;
+            const initialMessage = willTwoStage ? 'Loading Preview...' : 'Compiling Shader...';
+            FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, initialMessage);
 
             // compilePreview returns false when lighting is already off (preview === full).
             const useTwoStage = this.hasParallelCompile && this.deps.materials.compilePreview(config);
@@ -234,8 +243,8 @@ export class CompileScheduler {
                 if (this.lastDuration > 0.1) FractalEvents.emit(FRACTAL_EVENTS.COMPILE_TIME, this.lastDuration);
                 return;
             }
-            // Permanent compile timing log — do not remove
-            console.log(`[Compile] Preview: ${(performance.now() - t0).toFixed(0)}ms (${config.formula})`);
+            // Preview stage complete — Stage 2 (full shader) starts below.
+            // Final compile time is logged at the end of Stage 2.
         } else {
             // keepCurrent: sync non-modular uniforms only.
             // Do NOT sync uModularParams here — the old shader is still

@@ -16,6 +16,7 @@ import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { ChevronDown, UploadIcon, CubeIcon, NetworkIcon } from '../components/Icons';
 import { loadSceneFile } from '../engine/plugins/SceneIO';
 import type { Preset } from '../types';
+import { useCompileProgress, selectProgress } from '../store/CompileProgressStore';
 
 const GMT_NAMES = [
     'Generative Math Tracer', 'GPU Manifold Tracer', 'GPU Mandelorus Tracer',
@@ -50,11 +51,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     const isReadyRef = useRef(isReady);
     const bootEngineRef = useRef(bootEngine);
     const hasBootedRef = useRef(false);
-    const isHydratedRef = useRef(isHydrated);
 
     useEffect(() => { isReadyRef.current = isReady; }, [isReady]);
     useEffect(() => { bootEngineRef.current = bootEngine; }, [bootEngine]);
-    useEffect(() => { isHydratedRef.current = isHydrated; }, [isHydrated]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,35 +120,27 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
         if (!fgCanvasRef.current) return;
         rendererRef.current = new LoadingRendererCPU(fgCanvasRef.current);
 
+        // rAF loop is purely a view — drives the bar from
+        // CompileProgressStore and the CPU Julia spinner from elapsed
+        // time. Boot is triggered separately by the `[isHydrated]`
+        // effect. Fade-out gates on `isReady && phase === 'done'`.
         let frameId = 0;
-        let currentProgress = 0;
-        let lastFrameTime = performance.now();
-        const TARGET_DURATION = 2500;
-
         const loop = (time: number) => {
-            const now = performance.now();
-            const dt = Math.min(now - lastFrameTime, 60);
-            lastFrameTime = now;
             const menuOpen = isMenuOpenRef.current;
+            const cp = useCompileProgress.getState();
+            const p = selectProgress(cp, performance.now());
 
-            if (currentProgress < 100) currentProgress += dt * (100 / TARGET_DURATION);
-            if (currentProgress > 100) currentProgress = 100;
-
-            if (Math.floor(currentProgress) > Math.floor(progressRef.current)) {
-                progressRef.current = currentProgress;
-                setProgress(currentProgress);
+            if (Math.floor(p) > Math.floor(progressRef.current) ||
+                (cp.phase === 'done' && progressRef.current < 100)) {
+                progressRef.current = p;
+                setProgress(p);
             }
-            if (rendererRef.current) rendererRef.current.render(time, currentProgress / 100.0);
+            if (rendererRef.current) rendererRef.current.render(time, p / 100.0);
 
-            if (currentProgress >= 100 && !menuOpen && isHydratedRef.current) {
-                triggerBoot();
-                if (isReadyRef.current) {
-                    if (rendererRef.current) { rendererRef.current.dispose(); rendererRef.current = null; }
-                    setOpacity(0);
-                    setTimeout(() => { setIsVisible(false); onFinished(); }, 800);
-                } else {
-                    frameId = requestAnimationFrame(loop);
-                }
+            if (isReadyRef.current && cp.phase === 'done' && !menuOpen) {
+                if (rendererRef.current) { rendererRef.current.dispose(); rendererRef.current = null; }
+                setOpacity(0);
+                setTimeout(() => { setIsVisible(false); onFinished(); }, 800);
             } else {
                 frameId = requestAnimationFrame(loop);
             }
@@ -175,7 +166,15 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
             </div>
 
             <div className="relative z-10 w-[500px] h-16 bg-gray-900/80 rounded-full border border-gray-700/50 overflow-hidden shadow-[0_0_50px_rgba(0,255,255,0.1)] backdrop-blur-sm">
-                <div className="absolute top-0 left-0 h-full overflow-hidden will-change-[width] transition-[width] duration-75 ease-linear" style={{ width: `${progress}%` }}>
+                {/* Inner clip uses transform: scaleX so the fill animates on
+                    the compositor thread — keeps moving even when the worker's
+                    synchronous WebGL compile starves main-thread paint on
+                    Firefox. The Julia canvas inside is rendered at full width
+                    and revealed by the clip. */}
+                <div
+                    className="absolute top-0 left-0 w-[500px] h-full origin-left overflow-hidden transition-transform duration-75 ease-linear"
+                    style={{ transform: `scaleX(${Math.max(0, Math.min(1, progress / 100))})`, willChange: 'transform' }}
+                >
                     <canvas ref={fgCanvasRef} className="absolute top-0 left-0 w-[500px] h-16" />
                 </div>
                 <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
