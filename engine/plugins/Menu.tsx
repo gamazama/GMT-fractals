@@ -288,6 +288,12 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
             >
                 {renderIcon(def.icon)}
                 {def.label && <span>{def.label}</span>}
+                {/* Chevron signals dropdown affordance — every menu is a
+                    dropdown so this is unconditional for consistency
+                    across Camera / System / File / Help / etc. */}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-60">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
             </button>
             {open && (
                 <div

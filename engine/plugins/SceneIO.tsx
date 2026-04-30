@@ -88,7 +88,11 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     // single dropdown so the topbar isn't crowded by individual buttons
     // for each format. Snapshot is the only standalone save affordance
     // — it's the most-used action so it's promoted out of the menu.
-    topbar.register({ id: 'scene-file', slot: 'right', order: 20, component: FileMenu });
+    //
+    // order 29.5 places it right after the GMT Camera menu (29) and
+    // before System (30) — apps without a Camera menu will see it sit
+    // before System anyway, which still reads as menu-cluster-on-the-right.
+    topbar.register({ id: 'scene-file', slot: 'right', order: 29.5, component: FileMenu });
 
     // Standalone one-click snapshot button — the heavy-use PNG action
     // promoted out of the File menu so users don't have to open it for

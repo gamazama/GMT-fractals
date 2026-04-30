@@ -42,7 +42,7 @@ const RenderScaleControl: React.FC = () => {
     const setRenderScale = useEngineStore((s) => s.setRenderScale);
     return (
         <div
-            className="flex items-center gap-0.5 bg-black/80 px-1 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md"
+            className="flex flex-nowrap items-center gap-0.5 bg-black/80 px-1 py-1 rounded border border-white/10 shadow-sm backdrop-blur-md whitespace-nowrap"
             title="Render scale — pixel multiplier on top of the viewport size. 1.0 = match CSS pixels (cheap); 2.0 = Retina-sharp (4× cost)."
         >
             {RENDER_SCALE_STEPS.map((s) => {
@@ -78,7 +78,7 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     if (mode === 'Fixed') {
         const [w, h] = fixedResolution;
         return (
-            <div className="absolute z-50 flex items-center gap-2" style={{ top, left }}>
+            <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
                 <div className="relative">
                     <FixedResolutionControls
                         width={w}
@@ -101,7 +101,7 @@ export const ViewportModeControls: React.FC<ViewportModeControlsProps> = ({
     }
 
     return (
-        <div className="absolute z-50 flex items-center gap-2" style={{ top, left }}>
+        <div className="absolute z-50 flex flex-nowrap items-center gap-2 whitespace-nowrap" style={{ top, left }}>
             <button
                 onClick={(e) => { e.stopPropagation(); setMode('Fixed'); }}
                 className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"

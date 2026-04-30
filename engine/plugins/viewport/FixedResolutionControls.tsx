@@ -138,8 +138,8 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
     };
 
     return (
-        <div 
-            className="absolute flex items-center gap-2 z-50 transition-all duration-100 ease-out"
+        <div
+            className="absolute flex flex-nowrap items-center gap-2 z-50 whitespace-nowrap transition-all duration-100 ease-out"
             style={{ top, left }}
             data-help-id="ui.resolution"
             onContextMenu={handleContextMenu}
