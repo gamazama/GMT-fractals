@@ -78,38 +78,59 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
         }
     };
 
-    const handleDollyStart = () => {
+    // Capture the camera's current pose + measured surface distance, keyed
+    // off the *current* FOV. Used both by the slider's drag-start hook
+    // (stable reference for the duration of a drag) and inline at the top
+    // of handleFovChange when no drag is in progress (typed input, keyboard,
+    // animation scrub) — without the inline path, a stale ref from the last
+    // drag would teleport the camera back to where that drag started.
+    const captureDollyStart = (fovAtMoment: number) => {
         const cam = getViewportCamera();
-        if (!cam) return;
+        if (!cam) return null;
 
         const state = useEngineStore.getState();
 
-        // Use center-screen surface distance (measured by worker every 3 frames)
-        // This is correct for both Orbit and Fly mode — it's the actual distance
-        // to the visible surface, not the orbit radius from origin.
+        // Use center-screen surface distance (measured by worker every 3 frames).
+        // Correct for both Orbit and Fly mode — actual distance to the
+        // visible surface, not the orbit radius from origin.
         const probeDist = engine.lastMeasuredDistance;
         let dist = (probeDist > 0.0001 && probeDist < 900.0)
             ? probeDist
             : (state.targetDistance || 3.5);
-
         dist = Math.max(0.001, dist);
 
-        // Use standard utility for Unified State reading
         const unifiedPos = CameraUtils.getUnifiedFromEngine();
-
         const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
 
-        dollyStartRef.current = {
-            fov: camFov,
-            dist: dist,
+        return {
+            fov: fovAtMoment,
+            dist,
             unifiedPos: { x: unifiedPos.x, y: unifiedPos.y, z: unifiedPos.z },
-            forward: forward,
-            quat: cam.quaternion.clone()
+            forward,
+            quat: cam.quaternion.clone(),
         };
+    };
+
+    const handleDollyStart = () => {
+        dollyStartRef.current = captureDollyStart(camFov ?? 60);
+    };
+
+    const handleDollyEnd = () => {
+        // Clear so the next non-drag FOV change captures a fresh reference
+        // instead of dollying from this drag's start position.
+        dollyStartRef.current = null;
     };
 
     const handleFovChange = (newFov: number) => {
         const updates: any = { camFov: newFov };
+
+        // Lazily capture if no drag is in progress — covers typed input,
+        // keyboard increments, animation scrub. Uses the CURRENT FOV
+        // (camFov) as the start so the dolly delta is computed against
+        // the camera's current pose, not a stale earlier one.
+        if (dollyLocked && !dollyStartRef.current) {
+            dollyStartRef.current = captureDollyStart(camFov ?? 60);
+        }
 
         if (dollyLocked && dollyStartRef.current) {
             const { fov: startFov, dist: startDist, unifiedPos: startUnified, forward, quat } = dollyStartRef.current;
@@ -197,6 +218,7 @@ export const OpticsControls: React.FC<FeatureComponentProps> = ({ sliceState, ac
                          min={10} max={150} step={1}
                          onChange={handleFovChange}
                          onDragStart={handleDollyStart}
+                         onDragEnd={handleDollyEnd}
                          overrideInputText={`${Math.round(camFov ?? 60)}°`}
                          trackId="optics.camFov"
                          onKeyToggle={handleFovKeyToggle}
