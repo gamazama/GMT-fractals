@@ -257,11 +257,18 @@ The `window.useAnimationStore` export stays in animationStore.ts as a dev-consol
 **Why it may bite the engine work going forward:** the extraction will keep duplicating files. Anywhere a file holds module-level state — registries, ref containers, event-bus singletons, lazy proxies — duplication splits the state in two without warning.
 
 **Audit checklist:**
+- Run `npm run orphans` (knip) to get an authoritative unimported-files list. **Do not use grep for this** — the engine-core / engine-gmt trees both expose siblings with the same name, and a string search for `'engine-gmt/engine/X'` misses the relative-path imports (`../engine/X`) that `engine-gmt/`'s own subtree uses to reach its in-tree copies. A 2026-04-30 attempt at a grep-based bulk delete had to be fully reverted because of exactly this — knip caught the same situation in seconds.
 - Diff every file in `engine-gmt/engine/**` against its `engine/**` counterpart. If they're ~identical, replace the gmt copy with `export { … } from '../../../engine/path'`.
 - Grep for module-level `let _foo` / `const _foo = new Foo()` / `let _registry = new Map()` patterns in both trees and check whether the same name exists in the parallel tree.
 - When extracting new code, default to **re-export shims, not copies**. Only copy when the gmt-side genuinely needs different runtime behaviour, and even then keep state in engine-core if at all possible.
 
-**Suspect modules to audit (not yet checked):** anything in `engine-gmt/engine/worker/` that has a sibling in `engine/worker/`; FractalRegistry / featureRegistry / binderRegistry duplicates if any; FractalEvents emitter copies. Quick way: `diff -q -r engine engine-gmt/engine 2>&1 | grep -v "Only in"`.
+**Per-file remediation pattern (the 11 already-shimmed files prove this works):**
+1. `diff engine/X.ts engine-gmt/engine/X.ts` — confirm content equivalence.
+2. Replace `engine-gmt/engine/X.ts` with `export * from '../../engine/X';` plus a one-line comment naming the migration.
+3. `npm run typecheck && npm run smoke:boot` — both must pass.
+4. Knip will then report the gmt copy as either dead (delete) or live as a shim (leave).
+
+**Suspect modules still to audit:** the 28 large duplicates (`WorkerProxy.ts`, `FractalEngine.ts`, `renderWorker.ts`, `MaterialController.ts`, `UniformManager.ts`, `ShaderBuilder.ts`, `CompileScheduler.ts`, etc.). These are genuinely live in their forked form — `engine-gmt/`'s internal subtree resolves `../engine/X` to the gmt copies, while top-level components resolve `engine/X` to the engine-core stubs. Each pair needs the per-file decision above. Knip's current report (from `npm run orphans`) is the canonical "what's actually dead" list.
 
 ---
 

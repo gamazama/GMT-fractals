@@ -104,6 +104,7 @@ After making changes, update the affected doc. If you discover undocumented beha
 
 ### Automated Checks
 - `npm run typecheck` — tsc, should exit 0.
+- `npm run orphans` — knip; lists unused files (real import-graph walk, not grep). Run before deleting "looks unused" code — grep gives false positives because the engine-core / engine-gmt trees both expose siblings with the same name. Config: [knip.json](knip.json).
 - `npm run smoke:boot` — headless Chromium boot, fails on pageerrors.
 - `npm run smoke:interact` — state-flow + preset round-trip (demo feature).
 - `npm run smoke:screenshot` — visual baseline → `debug/scratch/engine-boot.png`.
