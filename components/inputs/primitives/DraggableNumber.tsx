@@ -140,6 +140,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
             <input
                 ref={inputRef}
                 type="text"
+                inputMode="decimal"
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onBlur={handleBlur}

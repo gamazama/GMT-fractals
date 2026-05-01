@@ -308,10 +308,15 @@ export const AppGmt: React.FC = () => {
                         </div>
                     </ViewportFrame>
 
-                    {/* On mobile, an open menu replaces the right dock so
-                        items get their own scrollable panel. Right dock
-                        also hides in Fly mode for joystick reach. */}
-                    {isMobileMenuOpen && <MobileMenuHost />}
+                    {/* MobileMenuHost is mounted unconditionally — it
+                        self-renders nothing when no menu is active, and
+                        its mount-effect tells MenuAnchor a host exists
+                        (so taps route to the side panel rather than the
+                        popover fallback). When active, it takes the
+                        right-dock slot; the dock is unmounted to avoid
+                        layout doubling. Right dock also hides in Fly
+                        mode on mobile for joystick reach. */}
+                    <MobileMenuHost />
                     {!isMobileMenuOpen && !(isMobile && cameraMode === 'Fly') && <Dock side="right" />}
                 </div>
 

@@ -79,7 +79,11 @@ export const Popover: React.FC<PopoverProps> = ({
     return (
         <div
             ref={tutAnchor ? mergeRefs(ref, anchorRef) : ref}
-            className={`absolute top-full mt-3 ${a.container} ${width} bg-black border border-white/20 rounded-xl p-3 shadow-2xl z-[70] animate-fade-in ${className}`}
+            // max-h:80dvh + overflow scroll prevents popover content
+            // from exceeding the visible viewport on mobile (the Light
+            // Studio popup in particular has unbounded internal layout).
+            // mobile-scroll gives a thicker scroll surface for touch.
+            className={`absolute top-full mt-3 ${a.container} ${width} max-h-[80dvh] overflow-y-auto mobile-scroll bg-black border border-white/20 rounded-xl p-3 shadow-2xl z-[70] animate-fade-in ${className}`}
             onClick={e => e.stopPropagation()}
         >
             {arrow && (
