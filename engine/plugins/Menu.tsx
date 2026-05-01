@@ -153,10 +153,26 @@ const subscribe = (fn: () => void) => {
 // ── Mobile menu state ──────────────────────────────────────────────────
 //
 // On mobile, menus replace the right dock instead of overflowing as a
-// popover. The active-menu id lives on the engine store as
-// `mobileActiveMenu` so existing Zustand subscriber machinery handles
-// updates — no parallel pubsub. The `mobileMenu` API is a thin façade
-// for callers (MenuAnchor, MobileMenuHost) and a few app shells.
+// popover *when an app mounts <MobileMenuHost />*. Apps that don't
+// (the engine's generic <App />, fluid-toy, fractal-toy) fall back to
+// the desktop popover so menus still work.
+//
+// The active-menu id lives on the engine store as `mobileActiveMenu`
+// so existing Zustand subscriber machinery handles updates. The
+// host-mount counter is module-local — it tracks render-tree presence,
+// which is a Menu plugin implementation detail, not user state.
+
+let _hostMounts = 0;
+const _hostListeners = new Set<() => void>();
+const _bumpHostMount = (delta: 1 | -1) => {
+    _hostMounts = Math.max(0, _hostMounts + delta);
+    _hostListeners.forEach((fn) => fn());
+};
+const _subscribeHostMount = (cb: () => void) => {
+    _hostListeners.add(cb);
+    return () => { _hostListeners.delete(cb); };
+};
+const _hasMobileMenuHost = () => _hostMounts > 0;
 
 export const mobileMenu = {
     open(id: string) { useEngineStore.getState().setMobileActiveMenu(id); },
@@ -282,41 +298,45 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
     // separate pubsub needed.
     const mobileActive = useEngineStore((s) => s.mobileActiveMenu);
     const { isMobile } = useMobileLayout();
+    // Only route to the mobile side-panel path when an app has actually
+    // mounted <MobileMenuHost />. Apps that haven't (generic <App />,
+    // fluid-toy, fractal-toy) get the desktop popover even on mobile —
+    // a working fallback rather than a silent dead-tap.
+    const hasMobileHost = useSyncExternalStore(_subscribeHostMount, _hasMobileMenuHost, _hasMobileMenuHost);
+    const useSidePanel = isMobile && hasMobileHost;
 
     const def = _menus.get(menuId);
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
     const close = useCallback(() => setOpen(false), []);
 
-    // Outside-click dismissal — desktop popover only. The mobile path
-    // currently dismisses only via the X button in MobileMenuHost's
-    // header; tap-outside dismissal is a follow-up.
+    // Outside-click dismissal — popover path only (desktop, or mobile
+    // when no MobileMenuHost is mounted to handle dismissal). The
+    // side-panel path dismisses via its X button.
     useEffect(() => {
-        if (!open || isMobile) return;
+        if (!open || useSidePanel) return;
         const handler = (e: MouseEvent) => {
             if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
         };
         const id = setTimeout(() => document.addEventListener('mousedown', handler), 0);
         return () => { clearTimeout(id); document.removeEventListener('mousedown', handler); };
-    }, [open, close, isMobile]);
+    }, [open, close, useSidePanel]);
 
-    // If the user toggles into mobile mode while a desktop popover is
-    // open, close the local state so re-toggling back to desktop
-    // doesn't resurface a popover the user can't recall opening.
-    useEffect(() => { if (isMobile && open) close(); }, [isMobile, open, close]);
+    // If a side panel takes over while a popover was open, close the
+    // local state so re-toggling back doesn't resurface a stale popover.
+    useEffect(() => { if (useSidePanel && open) close(); }, [useSidePanel, open, close]);
 
     if (!def) return null;
 
     const items = menu.listItems(menuId).filter((i) => !i.when || i.when());
 
-    // Mobile: button toggles the global mobile-menu state. Local `open`
-    // stays false so no popover renders. Visual "open" indicator reads
-    // from mobileActive instead.
-    const isOpenForVisual = isMobile ? mobileActive === menuId : open;
+    // Side-panel route: button toggles the global state, no popover.
+    // Popover route (desktop, or mobile without a host): local state.
+    const isOpenForVisual = useSidePanel ? mobileActive === menuId : open;
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (isMobile) {
+        if (useSidePanel) {
             mobileMenu.toggle(menuId);
         } else {
             setOpen((o) => !o);
@@ -341,8 +361,8 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
                     <polyline points="6 9 12 15 18 9" />
                 </svg>
             </button>
-            {/* Desktop popover — never renders on mobile (open stays false there). */}
-            {open && !isMobile && (
+            {/* Popover path — desktop, or mobile when no MobileMenuHost. */}
+            {open && !useSidePanel && (
                 <div
                     className={`absolute top-full ${def.align === 'end' ? 'right-0' : def.align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'} mt-2 ${def.width || 'w-56'} bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1`}
                     onClick={(e) => e.stopPropagation()}
@@ -475,6 +495,14 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
     // predicates pick up state mutations while the panel is open.
     useSyncExternalStore(subscribe, () => _notifyRev, () => _notifyRev);
 
+    // Tell MenuAnchor a host exists so it routes to the side panel
+    // instead of falling back to the popover. Counter (not bool) so
+    // StrictMode's double-mount in dev doesn't false-clear it.
+    useEffect(() => {
+        _bumpHostMount(1);
+        return () => _bumpHostMount(-1);
+    }, []);
+
     if (!activeId) return null;
     const def = _menus.get(activeId);
     if (!def) return null;
@@ -503,7 +531,7 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
                     <CloseIcon />
                 </button>
             </header>
-            <div className="flex-1 overflow-y-auto p-1">
+            <div className="flex-1 overflow-y-auto mobile-scroll p-1">
                 {items.map((item) => (
                     <MenuItemView key={item.id} item={item} close={close} />
                 ))}

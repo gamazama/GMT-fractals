@@ -55,6 +55,7 @@ import { useAppStartup } from '../hooks/useAppStartup';
 import { useMobileLayout } from '../hooks/useMobileLayout';
 import { LandscapeGate } from '../engine/components/LandscapeGate';
 import { MobileViewportShell } from '../engine/components/MobileViewportShell';
+import { MobileScrollIntro } from '../engine/components/MobileScrollIntro';
 import MobileControls from '../components/MobileControls';
 import { MobileMenuHost } from '../engine/plugins/Menu';
 
@@ -163,6 +164,9 @@ export const AppGmt: React.FC = () => {
 
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
+            {/* Pre-shell banner adds scroll capacity so the address bar can
+                collapse on first swipe. Renders nothing on desktop. */}
+            {!loadingVisible && <MobileScrollIntro title="GMT" subtitle="Swipe up to enter" />}
             <MobileViewportShell className="bg-black text-white select-none overflow-hidden flex flex-col">
                 {loadingVisible && (
                     <LoadingScreen

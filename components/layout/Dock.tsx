@@ -173,7 +173,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                 padding is owned by each panel's internal rows (AutoFeaturePanel
                 already applies px-3 on every param row), so compound padding
                 was wasting ~32px of dock width. */}
-            <div className="flex-1 overflow-y-auto custom-scroll py-2 relative">
+            <div className={`flex-1 overflow-y-auto py-2 relative ${isMobile ? 'mobile-scroll' : 'custom-scroll'}`}>
                 {activeTabId ? (
                      <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />
                 ) : (

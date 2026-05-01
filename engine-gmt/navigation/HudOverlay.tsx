@@ -212,7 +212,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                                 <span ref={hudRefs.dist} className="text-cyan-500/80 font-mono text-[10px]">
                                     Dst ---
                                 </span>
-                                {state.cameraMode === 'Orbit' && (() => {
+                                {state.cameraMode === 'Orbit' && !isMobile && (() => {
                                     const on = state.navigation?.orbitCursorAnchor ?? true;
                                     return (
                                         <button

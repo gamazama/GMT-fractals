@@ -112,6 +112,7 @@ import { usePhysicsProbe } from './usePhysicsProbe';
 import { useAnimationStore } from '../../store/animationStore';
 import { captureCameraKeyFrame } from '../../engine/animation/cameraKeyRegistry';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
+import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { CameraController } from '../engine/controllers/CameraController';
 import { VirtualSpace } from '../engine/PrecisionMath';
 
@@ -151,6 +152,13 @@ const Navigation: React.FC<NavigationProps> = ({
   const isOrtho = optics && Math.abs(optics.camType - 1.0) < 0.1;
   const navSettings = useFractalStore(s => s.navigation);
   const setNavigation = useFractalStore(s => s.setNavigation);
+  const { isMobile } = useMobileLayout();
+  // Cursor-anchored orbit (rotate/zoom around the picked surface point)
+  // doesn't translate to multi-touch and the resource cost — per-event
+  // hover-pivot snapshots, custom wheel handler, accumulation guards —
+  // is wasted on mobile since drei's native path handles touch fully.
+  // Force-disable on mobile regardless of the saved setting.
+  const cursorAnchorEffective = !isMobile && (navSettings?.orbitCursorAnchor ?? true);
   const setIsCameraInteracting = useAnimationStore(s => s.setIsCameraInteracting);
   
   const [isOrbitReady, setIsOrbitReady] = useState(mode === 'Orbit');
@@ -1324,8 +1332,8 @@ const Navigation: React.FC<NavigationProps> = ({
             //         the pre-toggle path. The custom handlers
             //         self-gate (see early return on settings check)
             //         so they don't interfere.
-            enableZoom={!(navSettings?.orbitCursorAnchor ?? true)}
-            mouseButtons={(navSettings?.orbitCursorAnchor ?? true)
+            enableZoom={!cursorAnchorEffective}
+            mouseButtons={cursorAnchorEffective
                 ? { LEFT: -1 as any, MIDDLE: -1 as any, RIGHT: THREE.MOUSE.PAN }
                 : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
             touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
