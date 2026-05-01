@@ -2,29 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>GMT — Fluid Toy</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; }
-      body { margin: 0; padding: 0; width: 100%; height: 100vh; background-color: #000; overflow: hidden; }
+      html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; min-height: 100%; }
+      body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overscroll-behavior-y: none; }
+      @media (hover: hover) and (pointer: fine) {
+        html, body { height: 100vh; overflow: hidden; }
+      }
       ::-webkit-scrollbar { width: 3px; height: 3px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+      .mobile-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+      .mobile-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.25); border-radius: 6px; }
     </style>
     <link rel="icon" type="image/x-icon" href="./favicon.ico" />
-    <script type="module" crossorigin src="./assets/fluid-toy-Dwo1jAfU.js"></script>
+    <script type="module" crossorigin src="./assets/fluid-toy-tdP-9qbV.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/three-DQWx7qFd.js">
     <link rel="modulepreload" crossorigin href="./assets/three-fiber-GKfjny8F.js">
     <link rel="modulepreload" crossorigin href="./assets/three-drei-2g7QvUdQ.js">
     <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
     <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-DrZDtHQ-.js">
-    <link rel="modulepreload" crossorigin href="./assets/Undo-B0_gYdxL.js">
-    <link rel="modulepreload" crossorigin href="./assets/Camera-a5f_XNB-.js">
+    <link rel="modulepreload" crossorigin href="./assets/Undo-BbI01P3D.js">
+    <link rel="modulepreload" crossorigin href="./assets/Camera-XwcyoAJt.js">
     <link rel="modulepreload" crossorigin href="./assets/ModulationEngine-BYzw2xBo.js">
-    <link rel="modulepreload" crossorigin href="./assets/index-jg0X7PPs.js">
+    <link rel="modulepreload" crossorigin href="./assets/index--z3wtZba.js">
     <link rel="modulepreload" crossorigin href="./assets/typedSlices-DgHDEl0P.js">
-    <link rel="modulepreload" crossorigin href="./assets/encode-Ca7GQKG4.js">
+    <link rel="modulepreload" crossorigin href="./assets/encode-BwAnLChO.js">
     <link rel="modulepreload" crossorigin href="./assets/cameraKeyRegistry-S2N1Mm9x.js">
     <link rel="modulepreload" crossorigin href="./assets/renderPopupRegistry-DFd-6fyz.js">
   <link rel="manifest" href="./manifest.webmanifest"></head>
