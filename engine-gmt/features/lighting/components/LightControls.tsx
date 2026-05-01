@@ -18,6 +18,7 @@ import { LightDirectionControl } from './LightDirectionControl';
 import { kelvinToHex, COLOR_TEMPERATURE_PRESETS } from '../../../../utils/colorUtils';
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { Popover } from '../../../../components/Popover';
+import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
 export const LightOrb = ({ index, color, active, type, rotation, onClick, onDragStart }: { index: number, color: string, active: boolean, type?: LightType, rotation?: {x:number, y:number, z:number}, onClick: () => void, onDragStart: () => void }) => {
     
@@ -136,7 +137,9 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
     const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
 
     const menuBtnRef = useRef<HTMLButtonElement>(null);
-    
+    const lightAnchorRef = useTutorAnchor('light-anchor');
+    const lightMenuAnchorRef = useTutorAnchor('light-popup-menu');
+
     // Animation Store for Keyframing
     const { addTrack, addKeyframe, currentFrame, sequence, isPlaying } = useAnimationStore();
     
@@ -281,16 +284,15 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                                 handleToggleFixed();
                                 handleInteractionEnd();
                             }}
-                            data-tut="light-anchor"
+                            ref={lightAnchorRef}
                             className={`p-1 rounded transition-colors ${light.fixed ? 'text-orange-300 hover:text-orange-200 hover:bg-orange-900/20' : 'text-cyan-400 hover:text-cyan-200 hover:bg-cyan-900/20'}`}
                             title={light.fixed ? 'Attached to Camera (click to unanchor)' : 'World Anchored (click to attach to camera)'}
                         >
                             {light.fixed ? <UnanchoredIcon /> : <AnchorIcon />}
                         </button>
                         <button
-                            ref={menuBtnRef}
+                            ref={mergeRefs(menuBtnRef, lightMenuAnchorRef)}
                             onClick={handleMenuClick}
-                            data-tut="light-popup-menu"
                             className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
                             title="Light options"
                         >

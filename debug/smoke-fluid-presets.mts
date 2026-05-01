@@ -27,7 +27,7 @@ async function main() {
     // panel. togglePanel via the store set isOpen but the tab bar itself
     // is the authoritative interaction — the component only mounts once
     // the dock believes that tab is active.
-    await page.locator('button[data-tut="tab-Presets"]').click({ force: true });
+    await page.locator('button', { hasText: 'Presets' }).first().click({ force: true });
     await page.waitForTimeout(500);
 
     // Click "Coral Gyre" — first chip in the grid.

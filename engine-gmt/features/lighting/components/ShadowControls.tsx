@@ -4,6 +4,7 @@ import { useEngineStore } from '../../../../store/engineStore';
 import { AutoFeaturePanel } from '../../../../components/AutoFeaturePanel';
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { Popover } from '../../../../components/Popover';
+import { useTutorAnchor } from '../../../../engine/plugins/Tutorial';
 
 const ShadowSettingsPopup = () => {
     const shadows = useEngineStore(s => s.lighting?.shadows);
@@ -12,16 +13,17 @@ const ShadowSettingsPopup = () => {
     const setLighting = useEngineStore(s => s.setLighting);
     const handleInteractionStart = useEngineStore(s => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore(s => s.handleInteractionEnd);
+    const areaAnchor = useTutorAnchor('shadow-area-btn');
 
     return (
-        <Popover width="w-52" dataTut="shadow-panel">
+        <Popover width="w-52" tutAnchor="shadow-panel">
             <div className="relative space-y-2">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2 px-1">
                     <SectionLabel>Shadows</SectionLabel>
                     <div className="flex items-center gap-1.5">
                         {areaLightsCompiled && (
                             <button
-                                data-tut="shadow-area-btn"
+                                ref={areaAnchor}
                                 onClick={() => {
                                     handleInteractionStart('param');
                                     setLighting({ areaLights: !areaLights });

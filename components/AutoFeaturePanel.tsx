@@ -18,6 +18,7 @@ import { Hint } from './Hint';
 // Code-split: gradient editor only renders for gradient params
 const AdvancedGradientEditor = React.lazy(() => import('./AdvancedGradientEditor'));
 import { FractalEvents } from '../engine/FractalEvents';
+import { tutorAnchors } from '../engine/plugins/Tutorial';
 import { SectionLabel, SectionDivider } from './SectionLabel';
 import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
@@ -444,7 +445,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         return (
             <div
                 key={id}
-                data-tut={id}
+                ref={(el) => { if (el) tutorAnchors.register(`param:${id}`, el); }}
                 data-help-id={config.helpId}
                 className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}
             >

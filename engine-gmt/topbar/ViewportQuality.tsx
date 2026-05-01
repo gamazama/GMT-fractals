@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { Popover } from '../../components/Popover';
 import { FractalEvents } from '../engine/FractalEvents';
+import { useTutorAnchor, tutorAnchors } from '../../engine/plugins/Tutorial';
 import {
     ALL_SUBSYSTEMS,
     SCALABILITY_PRESETS,
@@ -26,6 +27,7 @@ export const ViewportQuality: React.FC = () => {
     const setLighting = useEngineStore(s => (s as any).setLighting);
     const advancedMode = useEngineStore(s => s.advancedMode);
     const setVpQualityOpen = useEngineStore(s => s.setVpQualityOpen);
+    const tutAnchor = useTutorAnchor('viewport-quality-btn');
 
     // PT state — determines which subsystems are visually active
     const ptEnabled = useEngineStore(s => (s as any).lighting?.ptEnabled ?? false);
@@ -151,7 +153,7 @@ export const ViewportQuality: React.FC = () => {
         <div className="relative" ref={containerRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                data-tut="viewport-quality-btn"
+                ref={tutAnchor}
                 className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
                     hasPending
                         ? 'text-amber-300 bg-amber-900/30 border border-amber-500/30'
@@ -208,7 +210,11 @@ export const ViewportQuality: React.FC = () => {
                                     const currentTier = effectiveSubsystems[sub.id] ?? 0;
                                     const isDimmed = isPT && sub.renderContext === 'direct';
                                     return (
-                                        <div key={sub.id} className={`flex items-center justify-between px-2 transition-opacity ${isDimmed ? 'opacity-35' : ''}`}>
+                                        <div
+                                            key={sub.id}
+                                            ref={(el) => { if (el) tutorAnchors.register(`vp-quality-row-${sub.id}`, el); }}
+                                            className={`flex items-center justify-between px-2 transition-opacity ${isDimmed ? 'opacity-35' : ''}`}
+                                        >
                                             <span className={`text-[10px] ${isDimmed ? 'text-gray-600' : 'text-gray-400'}`}>
                                                 {sub.label}
                                             </span>

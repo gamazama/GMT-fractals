@@ -34,6 +34,7 @@ import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
+import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
 import { HardwarePrefsHost } from '../engine-gmt/components/HardwarePrefsHost';
@@ -293,6 +294,9 @@ export const AppGmt: React.FC = () => {
                 <TimelineHost />
 
                 <HelpOverlay />
+
+                <TutorialRunner />
+                <TutorialOverlay />
 
                 <CompilingIndicator />
 

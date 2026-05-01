@@ -9,6 +9,7 @@ import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon } from '../../../../compo
 import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
 import { PortalDropdown } from './FormulaGallery';
+import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
 export { buildFormulaContextMenu } from './FormulaContextMenu';
 
@@ -17,6 +18,7 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
     const openWorkshop = useEngineStore(s => s.openWorkshop);
     const btnRef = useRef<HTMLButtonElement>(null);
     const menuBtnRef = useRef<HTMLButtonElement>(null);
+    const hamburgerAnchorRef = useTutorAnchor('formula-hamburger');
     const fileRef = useRef<HTMLInputElement>(null);
     const [rect, setRect] = useState<DOMRect | null>(null);
 
@@ -174,9 +176,8 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             </button>
 
             <button
-                ref={menuBtnRef}
+                ref={mergeRefs(menuBtnRef, hamburgerAnchorRef)}
                 onClick={handleMenuButtonClick}
-                data-tut="formula-hamburger"
                 className="w-4 flex items-center justify-center bg-white/[0.04] border border-white/10 hover:border-white/20 hover:bg-white/[0.08] text-gray-400 hover:text-white rounded-lg transition-colors"
                 title="Formula options"
             >

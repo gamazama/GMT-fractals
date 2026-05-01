@@ -23,6 +23,7 @@ import { useEngineStore } from '../../../../store/engineStore';
 import { registry } from '../../../engine/FractalRegistry';
 import { nodeRegistry } from '../../../engine/NodeRegistry';
 import { FractalEvents } from '../../../engine/FractalEvents';
+import { tutorAnchors } from '../../../../engine/plugins/Tutorial';
 import { getProxy } from '../../../engine/worker/WorkerProxy';
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { text as themeText, border as themeBorder, surface } from '../../../../data/theme';
@@ -168,7 +169,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
                 axes: trackLabels,
             };
             return (
-                <div key={p.id} className="mb-px" data-tut={p.id}>
+                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector3Input label={p.label} value={new THREE.Vector3(v3.x, v3.y, v3.z)}
                         min={isAngleMode ? -Math.PI * 2 : p.min} max={isAngleMode ? Math.PI * 2 : p.max}
                         step={p.step} onChange={p.set} trackKeys={trackKeys}
@@ -185,7 +186,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`, `${p.trackId}_z`, `${p.trackId}_w`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`, `${p.label} Z`, `${p.label} W`];
             return (
-                <div key={p.id} className="mb-px" data-tut={p.id}>
+                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector4Input label={p.label} value={new THREE.Vector4(v4.x, v4.y, v4.z, v4.w)}
                         min={p.min} max={p.max} step={p.step} onChange={p.set}
                         trackKeys={trackKeys} trackLabels={trackLabels}
@@ -200,7 +201,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             const trackKeys = [`${p.trackId}_x`, `${p.trackId}_y`];
             const trackLabels = [`${p.label} X`, `${p.label} Y`];
             return (
-                <div key={p.id} className="mb-px" data-tut={p.id}>
+                <div key={p.id} className="mb-px" ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Vector2Input label={p.label} value={new THREE.Vector2(v2.x, v2.y)}
                         min={p.min} max={p.max} step={p.step}
                         onChange={(v) => p.set({ x: v.x, y: v.y })}
@@ -226,7 +227,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
 
         if (p.scale === 'pi') {
             return (
-                <div key={p.id} data-tut={p.id}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Slider label={p.label} value={val} min={p.min} max={p.max} step={0.01}
                         onChange={p.set} defaultValue={p.def as number}
                         highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
@@ -239,7 +240,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
         if (p.scale === 'degrees') {
             const D2PI = 1 / 180;
             return (
-                <div key={p.id} data-tut={p.id}>
+                <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                     <Slider label={p.label} value={val} min={p.min} max={p.max} step={p.step}
                         onChange={p.set} defaultValue={p.def as number}
                         highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
@@ -251,7 +252,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
         }
 
         return (
-            <div key={p.id} data-tut={p.id}>
+            <div key={p.id} ref={(el) => { if (el) tutorAnchors.register(`param:${p.id}`, el); }}>
                 <Slider label={p.label} value={val} min={p.min} max={p.max} step={p.step}
                     onChange={p.set} defaultValue={p.def as number}
                     highlight={hasLfo || (p.id === 'paramA' && !hasLfo)}
@@ -273,7 +274,7 @@ export const FormulaParamsWidget: React.FC<FeatureComponentProps> = () => {
             </div>
 
             <div className="flex flex-col" data-help-id={`panel.formula formula.${state.formula?.toLowerCase() || 'mandelbulb'}`}>
-                <div data-tut="iterations">
+                <div ref={(el) => { if (el) tutorAnchors.register('param:iterations', el); }}>
                     <Slider label="Iterations" value={coreMath.iterations} min={1} max={500} step={1}
                         onChange={(v) => actions.setCoreMath({ iterations: Math.round(v) })}
                         highlight defaultValue={32}

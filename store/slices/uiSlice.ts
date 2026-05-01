@@ -5,6 +5,27 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
+// Tutorial completion persistence — namespaced per app via
+// `setTutorialStorageKey(key)` (called by installTutorial). Default
+// 'gmt-tutorials' so existing GMT installs keep their completion state.
+let _tutorialStorageKey = 'gmt-tutorials';
+function readTutorialCompleted(): number[] {
+    try {
+        const stored = localStorage.getItem(_tutorialStorageKey);
+        return stored ? JSON.parse(stored).completed || [] : [];
+    } catch { return []; }
+}
+function writeTutorialCompleted(completed: number[]): void {
+    try { localStorage.setItem(_tutorialStorageKey, JSON.stringify({ completed })); } catch { /* quota */ }
+}
+/** Set the localStorage key used to persist tutorial completion. Re-reads
+ *  the completion list under the new key so a freshly-namespaced app
+ *  picks up its own history. Apps call this through `installTutorial`. */
+export function setTutorialStorageKey(key: string, applyToStore: (completed: number[]) => void): void {
+    _tutorialStorageKey = key;
+    applyToStore(readTutorialCompleted());
+}
+
 export type UISlice = Pick<EngineStoreState,
     'showLightGizmo' | 'isGizmoDragging' |
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
@@ -137,12 +158,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     tutorialActive: false,
     tutorialLessonId: null,
     tutorialStepIndex: 0,
-    tutorialCompleted: (() => {
-        try {
-            const stored = localStorage.getItem('gmt-tutorials');
-            return stored ? JSON.parse(stored).completed || [] : [];
-        } catch { return []; }
-    })(),
+    tutorialCompleted: readTutorialCompleted(),
 
     // --- ACTIONS ---
 
@@ -368,7 +384,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
         const completed = state.tutorialLessonId !== null && !state.tutorialCompleted.includes(state.tutorialLessonId)
             ? [...state.tutorialCompleted, state.tutorialLessonId]
             : state.tutorialCompleted;
-        try { localStorage.setItem('gmt-tutorials', JSON.stringify({ completed })); } catch {}
+        writeTutorialCompleted(completed);
         return {
             tutorialActive: false,
             tutorialLessonId: null,

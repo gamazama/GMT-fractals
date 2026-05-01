@@ -7,6 +7,7 @@ import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons'
 import { collectHelpIds } from '../../utils/helpUtils';
 import { getPanelDefinition, evalShowIf } from '../../engine/PanelManifest';
 import { accent, surface, text, border, tabActive, tabInactive, collapsedIconActive, collapsedIconInactive, dragHandleActive, dragHandleInactive } from '../../data/theme';
+import { useTutorAnchor } from '../../engine/plugins/Tutorial';
 
 // Mobile detection helper
 const checkIsMobile = () => {
@@ -45,6 +46,9 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
     const rightDockSize = useEngineStore((s) => s.rightDockSize);
 
     const isMobile = checkIsMobile();
+
+    // Tutorial anchor — only the right-dock root is targeted by lessons.
+    const rightDockAnchorRef = useTutorAnchor(side === 'right' ? 'right-dock' : null);
 
     const activeTabId = side === 'left' ? activeLeftTab : activeRightTab;
     const isCollapsed = side === 'left' ? isLeftDockCollapsed : isRightDockCollapsed;
@@ -136,57 +140,26 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
         <div
             className={`flex flex-col ${surface.dock} border-${side === 'left' ? 'r' : 'l'} ${border.standard} z-40 shrink-0 transition-all duration-75 relative`}
             style={{ width }}
-            data-tut={side === 'right' ? 'right-dock' : undefined}
+            ref={rightDockAnchorRef}
         >
             {/* Header Tabs - Tighter Layout with reduced gap */}
             <div className={`flex flex-wrap gap-0.5 px-0.5 pt-1 ${surface.tabBar} border-b ${border.standard} shrink-0 relative items-end`}>
-                {dockPanels.map(p => {
-                    const isActive = p.id === activeTabId;
-                    return (
-                        <button
-                            key={p.id}
-                            data-tut={`tab-${p.id}`}
-                            onClick={() => togglePanel(p.id, true)}
-                            onContextMenu={(e) => handleContextMenu(e, p.id)}
-                            onMouseEnter={() => {
-                                // LIVE PREVIEW: Update order while dragging over target
-                                if (draggingPanelId && draggingPanelId !== p.id) {
-                                    // Check if dragging source is in this same dock to allow reordering
-                                    const sourcePanel = panels[draggingPanelId];
-                                    if (sourcePanel && sourcePanel.location === side) {
-                                        reorderPanel(draggingPanelId, p.id);
-                                    }
-                                }
-                            }}
-                            onMouseUp={(e) => {
-                                // COMMIT: Just end the drag, the state is already updated live
-                                if (draggingPanelId) {
-                                    e.stopPropagation();
-                                    endPanelDrag();
-                                }
-                            }}
-                            className={`flex items-center gap-0.5 px-1 py-1 text-[9px] font-bold transition-colors group relative rounded-t-sm
-                                ${isActive ? tabActive : tabInactive}`
-                            }
-                        >
-                            {/* Drag Handle - Hidden on mobile */}
-                            {!isMobile && (
-                                <div 
-                                    className={`cursor-move ${isActive ? `${dragHandleActive} group-hover:text-cyan-600` : `${dragHandleInactive} group-hover:text-white`} transition-colors`}
-                                    onMouseDown={(e) => {
-                                        e.stopPropagation();
-                                        startPanelDrag(p.id);
-                                    }}
-                                >
-                                    <div className="transform scale-75 origin-center">
-                                        <DragHandleIcon />
-                                    </div>
-                                </div>
-                            )}
-                            <span className="truncate max-w-[140px]">{p.id}</span>
-                        </button>
-                    );
-                })}
+                {dockPanels.map(p => (
+                    <DockTab
+                        key={p.id}
+                        panel={p}
+                        isActive={p.id === activeTabId}
+                        isMobile={isMobile}
+                        side={side}
+                        draggingPanelId={draggingPanelId}
+                        panels={panels}
+                        togglePanel={togglePanel}
+                        handleContextMenu={handleContextMenu}
+                        reorderPanel={reorderPanel}
+                        endPanelDrag={endPanelDrag}
+                        startPanelDrag={startPanelDrag}
+                    />
+                ))}
             </div>
 
             <button 
@@ -215,5 +188,64 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                 onMouseDown={handleResizeStart}
             />
         </div>
+    );
+};
+
+interface DockTabProps {
+    panel: PanelState;
+    isActive: boolean;
+    isMobile: boolean;
+    side: 'left' | 'right';
+    draggingPanelId: PanelId | null;
+    panels: Record<string, PanelState>;
+    togglePanel: (id: PanelId, focus?: boolean) => void;
+    handleContextMenu: (e: React.MouseEvent, id: PanelId) => void;
+    reorderPanel: (sourceId: PanelId, targetId: PanelId) => void;
+    endPanelDrag: () => void;
+    startPanelDrag: (id: PanelId) => void;
+}
+
+const DockTab: React.FC<DockTabProps> = ({
+    panel: p, isActive, isMobile, side, draggingPanelId, panels,
+    togglePanel, handleContextMenu, reorderPanel, endPanelDrag, startPanelDrag,
+}) => {
+    const tabAnchorRef = useTutorAnchor(`tab-${p.id}`);
+    return (
+        <button
+            ref={tabAnchorRef}
+            onClick={() => togglePanel(p.id, true)}
+            onContextMenu={(e) => handleContextMenu(e, p.id)}
+            onMouseEnter={() => {
+                if (draggingPanelId && draggingPanelId !== p.id) {
+                    const sourcePanel = panels[draggingPanelId];
+                    if (sourcePanel && sourcePanel.location === side) {
+                        reorderPanel(draggingPanelId, p.id);
+                    }
+                }
+            }}
+            onMouseUp={(e) => {
+                if (draggingPanelId) {
+                    e.stopPropagation();
+                    endPanelDrag();
+                }
+            }}
+            className={`flex items-center gap-0.5 px-1 py-1 text-[9px] font-bold transition-colors group relative rounded-t-sm
+                ${isActive ? tabActive : tabInactive}`}
+        >
+            {!isMobile && (
+                <div
+                    className={`cursor-move ${isActive ? `${dragHandleActive} group-hover:text-cyan-600` : `${dragHandleInactive} group-hover:text-white`} transition-colors`}
+                    onMouseDown={(e) => {
+                        e.stopPropagation();
+                        startPanelDrag(p.id);
+                    }}
+                >
+                    <div className="transform scale-75 origin-center">
+                        <DragHandleIcon />
+                    </div>
+                </div>
+            )}
+            <span className="truncate max-w-[140px]">{p.id}</span>
+        </button>
     );
 };

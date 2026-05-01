@@ -221,7 +221,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     topbar.register({ id: 'gmt-path-tracing',     slot: 'left', order: 10,  component: PathTracingToggle });
     topbar.register({ id: 'gmt-playing-badge',    slot: 'left', order: 20,  component: PlayingBadge });
     topbar.register({ id: 'gmt-render-region',    slot: 'left', order: 25,  component: RenderRegionToggle });
-    installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render' });
+    installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render', anchor: 'bucket-btn' });
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
     // Vibration feedback callback — noop here; apps that want haptic

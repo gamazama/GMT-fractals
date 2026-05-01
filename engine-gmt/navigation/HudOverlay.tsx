@@ -3,6 +3,7 @@ import React, { useRef, useEffect } from 'react';
 import { FractalState, FractalActions } from '../types';
 import { useAnimationStore } from '../../store/animationStore';
 import { useEngineStore as useFractalStore } from '../../store/engineStore';
+import { useTutorAnchor, mergeRefs, actionBus } from '../../engine/plugins/Tutorial';
 // Tutorial hint system isn't ported — the HUD renders without the
 // <HintDisplay> overlay. Keep the optional `activeHint` / `onDismissHint`
 // props in the type so apps that later bring their own hint widget can
@@ -33,6 +34,8 @@ interface HudOverlayProps {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activeHint: _activeHint, onDismissHint: _onDismissHint, hudRefs, region = 'all' }) => {
     const hudSpeedSliderRef = useRef<HTMLDivElement>(null);
+    const speedSliderAnchorRef = useTutorAnchor('speed-slider');
+    const resetCameraAnchorRef = useTutorAnchor('reset-camera');
     const crosshairFadeTimeout = useRef<number | null>(null);
     const bottomFadeTimeout = useRef<number | null>(null);
     const bottomClusterRef = useRef<HTMLDivElement>(null);
@@ -172,9 +175,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                     >
                         {/* Reset Button (Appears based on distance threshold set by physics hook) */}
                         <button
-                            ref={hudRefs.reset}
-                            data-tut="reset-camera"
-                            onClick={() => { actions.resetCamera(); if (navigator.vibrate) navigator.vibrate(30); }}
+                            ref={mergeRefs(hudRefs.reset, resetCameraAnchorRef)}
+                            onClick={() => { actions.resetCamera(); actionBus.fire('camera.reset'); if (navigator.vibrate) navigator.vibrate(30); }}
                             className="pointer-events-auto px-4 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-t-lg border-x border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl mb-[-1px]"
                         >
                             Reset Camera
@@ -185,8 +187,7 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
                             {state.cameraMode === 'Fly' && (
                                 <>
                                     <div
-                                        ref={hudSpeedSliderRef}
-                                        data-tut="speed-slider"
+                                        ref={mergeRefs(hudSpeedSliderRef, speedSliderAnchorRef)}
                                         onPointerDown={handleHudSpeedInteraction}
                                         className="relative flex items-center px-6 py-3 cursor-ew-resize group min-w-[120px]"
                                     >

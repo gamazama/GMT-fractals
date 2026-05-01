@@ -20,11 +20,13 @@
  * buttons, toggles, and full custom components.
  */
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { useEngineStore } from '../../store/engineStore';
 import { menu, MenuItem } from './Menu';
 import { shortcuts } from './Shortcuts';
 import { hud, type HudSlot } from './Hud';
+import { listLessons, subscribeLessons, type TutorialLesson } from './Tutorial';
 
 // Lazy-load the HelpBrowser so the ~3400-line topic bundle doesn't land
 // in the main chunk. Matches App.tsx's existing pattern.
@@ -54,6 +56,153 @@ const KeyIcon: React.FC = () => (
     </svg>
 );
 
+const HeartIcon: React.FC = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="opacity-70">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+    </svg>
+);
+
+const SmileyIcon: React.FC = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+        <line x1="9" y1="9" x2="9.01" y2="9" />
+        <line x1="15" y1="9" x2="15.01" y2="9" />
+    </svg>
+);
+
+// ── Support / About item bodies ────────────────────────────────────────
+
+const renderBody = (body: React.ReactNode | React.FC): React.ReactNode => {
+    if (typeof body === 'function') {
+        const Body = body as React.FC;
+        return <Body />;
+    }
+    return body;
+};
+
+const ACCENT_TEXT: Record<'pink' | 'cyan' | 'purple', string> = {
+    pink: 'text-pink-300',
+    cyan: 'text-cyan-300',
+    purple: 'text-purple-300',
+};
+const ACCENT_HOVER: Record<'pink' | 'cyan' | 'purple', string> = {
+    pink: 'hover:bg-pink-500/10 text-pink-300/80 group-hover:text-pink-200',
+    cyan: 'hover:bg-cyan-500/10 text-cyan-300/80 group-hover:text-cyan-200',
+    purple: 'hover:bg-purple-500/10 text-purple-300/80 group-hover:text-purple-200',
+};
+
+interface SupportItemProps {
+    label: string;
+    modalTitle: string;
+    intro?: string;
+    body: React.ReactNode | React.FC;
+    accent: 'pink' | 'cyan' | 'purple';
+    onAfterOpen: () => void;
+}
+
+const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, body, accent, onAfterOpen }) => {
+    const [showModal, setShowModal] = useState(false);
+    const open = () => { setShowModal(true); onAfterOpen(); };
+    const close = () => setShowModal(false);
+
+    return (
+        <>
+            <button
+                onClick={(e) => { e.stopPropagation(); open(); }}
+                className={`group w-full flex items-center justify-between p-2 rounded transition-colors ${ACCENT_HOVER[accent]}`}
+            >
+                <span className="text-xs font-bold">{label}</span>
+                <HeartIcon />
+            </button>
+            {showModal && createPortal(
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={close}>
+                    <div className="bg-gray-900 border border-white/10 rounded-lg p-5 w-80 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-3">
+                            <div className={`text-xs font-bold ${ACCENT_TEXT[accent]}`}>{modalTitle}</div>
+                            <button onClick={close} className="text-gray-500 hover:text-white transition-colors text-sm leading-none">&times;</button>
+                        </div>
+                        {intro && (
+                            <p className="text-[10px] text-gray-400 leading-relaxed mb-4">{intro}</p>
+                        )}
+                        {renderBody(body)}
+                    </div>
+                </div>,
+                document.body,
+            )}
+        </>
+    );
+};
+
+interface AboutItemProps {
+    label: string;
+    body: React.ReactNode | React.FC;
+}
+
+const AboutItem: React.FC<AboutItemProps> = ({ label, body }) => {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button
+                onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+                className={`w-full flex items-center justify-between p-2 rounded transition-colors ${open ? 'bg-white/10 text-cyan-400' : 'hover:bg-white/5 text-gray-300'}`}
+            >
+                <span className="text-xs font-bold">{label}</span>
+                <SmileyIcon />
+            </button>
+            {open && (
+                <div className="p-3 bg-white/5 rounded-lg border border-white/5 mt-1">
+                    {renderBody(body)}
+                </div>
+            )}
+        </>
+    );
+};
+
+// ── Tutorials list ─────────────────────────────────────────────────────
+
+const CheckIcon: React.FC = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-400">
+        <polyline points="20 6 9 17 4 12" />
+    </svg>
+);
+
+const TutorialsList: React.FC<{ close: () => void; lessonIds?: number[] }> = ({ close, lessonIds }) => {
+    // Re-render when lessons change.
+    useSyncExternalStore(subscribeLessons, () => listLessons().length, () => 0);
+    const completed = useEngineStore((s: any) => s.tutorialCompleted) as number[] | undefined;
+    const startTutorial = useEngineStore((s: any) => s.startTutorial);
+
+    const all = listLessons();
+    const filtered: TutorialLesson[] = lessonIds
+        ? lessonIds.map((id) => all.find((l) => l.id === id)).filter(Boolean) as TutorialLesson[]
+        : all;
+
+    if (filtered.length === 0) {
+        return <div className="px-2 py-1 text-[10px] text-gray-600 italic">(no tutorials registered)</div>;
+    }
+
+    return (
+        <>
+            {filtered.map((lesson) => {
+                const done = (completed ?? []).includes(lesson.id);
+                return (
+                    <button
+                        key={lesson.id}
+                        onClick={(e) => { e.stopPropagation(); startTutorial(lesson.id); close(); }}
+                        className="w-full flex items-center justify-between p-2 rounded hover:bg-white/5 text-gray-300 transition-colors group"
+                    >
+                        <span className="text-xs font-bold group-hover:text-cyan-400">
+                            Lesson {lesson.id}: {lesson.title}
+                        </span>
+                        {done && <CheckIcon />}
+                    </button>
+                );
+            })}
+        </>
+    );
+};
+
 // ── Install ────────────────────────────────────────────────────────────
 
 export interface InstallHelpOptions {
@@ -70,6 +219,47 @@ export interface InstallHelpOptions {
     shortcutsTopicId?: string;
     /** Override the topic ID opened by "Getting Started". */
     gettingStartedTopicId?: string | null;
+    /** Adds a Tutorials section with one button per registered lesson and
+     *  a live completion checkmark from `tutorialCompleted` in the store.
+     *  Lessons must be registered separately via `registerLessons(...)` from
+     *  the Tutorial plugin — this option only controls menu surfacing. */
+    tutorials?: TutorialsConfig;
+    /** Adds a "Support" entry that opens a modal with app-supplied body
+     *  (e.g. donate buttons). The plugin owns the menu item, heart icon,
+     *  and modal scaffold; the app owns the body content. */
+    support?: SupportConfig;
+    /** Adds an "About" entry that expands inline within the menu popover
+     *  to show app-supplied content (version, credits, links, …). */
+    about?: AboutConfig;
+}
+
+export interface TutorialsConfig {
+    /** Section header label. Default 'Tutorials'. */
+    label?: string;
+    /** Optionally restrict to a subset / specific order. Defaults to all
+     *  registered lessons sorted by id. */
+    lessonIds?: number[];
+}
+
+export interface SupportConfig {
+    /** Menu item label. Default 'Support'. */
+    label?: string;
+    /** Modal header title. Default mirrors `label`. */
+    modalTitle?: string;
+    /** Optional intro paragraph rendered above the body. */
+    intro?: string;
+    /** Body content — typically donate buttons. FC or node. */
+    body: React.ReactNode | React.FC;
+    /** Accent color for label + modal title. Default 'pink'. */
+    accent?: 'pink' | 'cyan' | 'purple';
+}
+
+export interface AboutConfig {
+    /** Menu item label. Default 'About'. */
+    label?: string;
+    /** Body content — version, credits, links, tech stack, etc.
+     *  Rendered inline (collapsible) inside the menu popover. */
+    body: React.ReactNode | React.FC;
 }
 
 let _installed = false;
@@ -128,6 +318,54 @@ export const installHelp = (options: InstallHelpOptions = {}) => {
     });
 
     (options.extraItems || []).forEach((item) => menu.registerItem('help', item));
+
+    if (options.tutorials) {
+        const cfg = options.tutorials;
+        const sectionLabel = cfg.label ?? 'Tutorials';
+
+        // Register a single 'custom' item that renders the live lesson list.
+        // Using one custom slot avoids re-registering N items every time
+        // lessons mutate or completion state changes.
+        menu.registerItem('help', { id: 'sep-tutorials', type: 'separator' });
+        menu.registerItem('help', { id: 'tutorials-section', type: 'section', label: sectionLabel });
+        menu.registerItem('help', {
+            id: 'tutorials-list',
+            type: 'custom',
+            component: ({ close }) => <TutorialsList close={close} lessonIds={cfg.lessonIds} />,
+        });
+    }
+
+    if (options.support || options.about) {
+        menu.registerItem('help', { id: 'sep-app', type: 'separator' });
+    }
+
+    if (options.support) {
+        const cfg = options.support;
+        const accent = cfg.accent ?? 'pink';
+        menu.registerItem('help', {
+            id: 'support',
+            type: 'custom',
+            component: ({ close }) => (
+                <SupportItem
+                    label={cfg.label ?? 'Support'}
+                    modalTitle={cfg.modalTitle ?? cfg.label ?? 'Support'}
+                    intro={cfg.intro}
+                    body={cfg.body}
+                    accent={accent}
+                    onAfterOpen={close}
+                />
+            ),
+        });
+    }
+
+    if (options.about) {
+        const cfg = options.about;
+        menu.registerItem('help', {
+            id: 'about',
+            type: 'custom',
+            component: () => <AboutItem label={cfg.label ?? 'About'} body={cfg.body} />,
+        });
+    }
 
     shortcuts.register({
         id: 'help.toggle-hints',

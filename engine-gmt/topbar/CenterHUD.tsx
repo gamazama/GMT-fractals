@@ -25,9 +25,14 @@ import { getLightFromSlice } from '../features/lighting';
 import { activeLightPopup } from '../features/lighting/utils/GizmoMath';
 import { buildCoreLightMenuItems } from '../features/lighting/utils/lightMenuUtils';
 import { MAX_LIGHTS } from '../../data/constants';
+import { useTutorAnchor } from '../../engine/plugins/Tutorial';
 
 export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number | number[]) => void }> = ({ isMobileMode, vibrate }) => {
     const state = useEngineStore() as any;
+    const orbsAnchor = useTutorAnchor('light-orbs');
+    const expandAnchor = useTutorAnchor('lights-expand');
+    const shadowAnchor = useTutorAnchor('shadow-btn');
+    const gizmoAnchor = useTutorAnchor('light-gizmo-btn');
     const lighting = state.lighting;
     const { openContextMenu, handleInteractionStart, handleInteractionEnd, setOpenLightPopupIndex, setShadowPanelOpen } = useEngineStore() as any;
     const showShadowMenu = useEngineStore((s: any) => s.shadowPanelOpen);
@@ -267,14 +272,14 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
 
             <div className="relative">
                 {/* COLLAPSED VIEW */}
-                <div data-tut="light-orbs" className={`flex items-center gap-6 transition-opacity duration-200 ${isExpanded ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                <div ref={orbsAnchor} className={`flex items-center gap-6 transition-opacity duration-200 ${isExpanded ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                     {/* Always render 3 slots to maintain layout consistency */}
                     {[0, 1, 2].map(i => renderSlot(i))}
 
                     {/* Expand Trigger - positioned to not shift layout when expanded */}
                     <button
                         onClick={() => { vibrate(5); setIsExpanded(true); }}
-                        data-tut="lights-expand"
+                        ref={expandAnchor}
                         className="expand-trigger w-5 h-5 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors ml-[-8px]"
                         title="Expand Light Studio"
                     >
@@ -316,7 +321,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                         // UPDATED: Simply toggle menu, do not toggle state directly
                         onClick={(e) => { e.stopPropagation(); vibrate(5); setShadowPanelOpen(!showShadowMenu); }}
                         onContextMenu={(e) => handleContextMenu(e, ['shadows'])}
-                        data-tut="shadow-btn"
+                        ref={shadowAnchor}
                         className={`shadow-toggle-btn p-2 rounded-full border transition-all duration-300 ${lighting?.shadows ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.1)]' : 'bg-transparent border-transparent text-gray-600 hover:text-gray-300 hover:bg-white/5'}`}
                         title="Shadow Settings"
                     >
@@ -332,7 +337,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                         handleInteractionEnd();
                     }}
                     onContextMenu={(e) => handleContextMenu(e, ['ui.viewport'])}
-                    data-tut="light-gizmo-btn"
+                    ref={gizmoAnchor}
                     className={`p-2 rounded-full border transition-all duration-300 ${state.showLightGizmo ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.2)]' : 'bg-transparent border-transparent text-gray-600 hover:text-gray-300 hover:bg-white/5'}`}
                 >
                     <GizmoIcon />

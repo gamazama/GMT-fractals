@@ -18,6 +18,7 @@
 
 import React, { useRef, useState, useCallback } from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { useTutorAnchor } from './Tutorial';
 import type { Preset } from '../../types';
 import {
     serializeScene,
@@ -58,6 +59,10 @@ export interface InstallSceneIOOptions {
      *  match (e.g. GMT passes `'gmf'` so the download is named
      *  `scene.gmf` matching the GMF bytes the serializer writes). */
     fileExtension?: string;
+    /** Optional tutorial anchor id to register on the snapshot button.
+     *  Apps with tutorials that need to highlight the snapshot affordance
+     *  pass an id (e.g. GMT uses 'snapshot-btn'). Default: no anchor. */
+    snapshotAnchor?: string;
 }
 
 let _installed = false;
@@ -65,6 +70,7 @@ let _getCanvas: (() => HTMLCanvasElement | null) | undefined;
 let _parseScene: SceneParser | undefined;
 let _serializeScene: SceneSerializer | undefined;
 let _fileExtension: string = 'json';
+let _snapshotAnchor: string | undefined;
 
 /** Pick the registered serializer, falling back to engine-core's plain
  *  JSON. Single source of truth — every save path routes through this. */
@@ -81,6 +87,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     if (options.parseScene) _parseScene = options.parseScene;
     if (options.serializeScene) _serializeScene = options.serializeScene;
     if (options.fileExtension) _fileExtension = options.fileExtension;
+    if (options.snapshotAnchor) _snapshotAnchor = options.snapshotAnchor;
     if (_installed) return;
     _installed = true;
 
@@ -123,6 +130,7 @@ export const uninstallSceneIO = () => {
     _parseScene = undefined;
     _serializeScene = undefined;
     _fileExtension = 'json';
+    _snapshotAnchor = undefined;
     _installed = false;
 };
 
@@ -319,14 +327,18 @@ export const FileMenu: React.FC = () => {
 
 // ── Snapshot button (one-click PNG) ─────────────────────────────────────
 
-export const SnapshotButton: React.FC = () => (
-    <button
-        type="button"
-        onClick={() => { void saveScenePng(); }}
-        className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
-        title="Save PNG snapshot (Alt+S)"
-        aria-label="Save PNG snapshot"
-    >
-        <ImageIcon />
-    </button>
-);
+export const SnapshotButton: React.FC = () => {
+    const tutAnchor = useTutorAnchor(_snapshotAnchor);
+    return (
+        <button
+            ref={tutAnchor}
+            type="button"
+            onClick={() => { void saveScenePng(); }}
+            className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
+            title="Save PNG snapshot (Alt+S)"
+            aria-label="Save PNG snapshot"
+        >
+            <ImageIcon />
+        </button>
+    );
+};

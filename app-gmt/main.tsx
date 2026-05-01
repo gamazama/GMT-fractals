@@ -45,6 +45,11 @@ import { registerRenderPopup } from '../engine/animation/renderPopupRegistry';
 import { RenderPopup } from '../engine-gmt/components/timeline/RenderPopup';
 import { installMenu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
+import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
+import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
+import { GMT_LESSONS } from './tutorial/lessons';
+import { registerGmtTriggers } from './tutorial/triggers';
+import { registerGmtStepKinds } from './tutorial/stepKinds';
 import { prefetchHelpTopics } from '../data/help/registry';
 import { installHud } from '../engine/plugins/Hud';
 import { applyPanelManifest } from '../engine/PanelManifest';
@@ -159,6 +164,9 @@ installSceneIO({
     // the bytes the serializer below writes.
     fileExtension: 'gmf',
 
+    // Tutorial anchor — Lesson 2 + 4 next-steps highlight the snapshot button.
+    snapshotAnchor: 'snapshot-btn',
+
     // GMT scene files are GMF: a wrapper carrying both the formula's
     // shader source AND the scene preset. The custom parser extracts
     // both, registers the embedded formula def if it isn't already in
@@ -209,7 +217,25 @@ installUndo();
 // since this install runs after the state-library's bindings.
 installCamera({ hideShortcuts: true });
 installMenu();
-installHelp();
+installTutorial();
+registerGmtTriggers();
+registerGmtStepKinds();
+registerLessons(GMT_LESSONS);
+
+installHelp({
+    tutorials: { label: 'Tutorials' },
+    support: {
+        label: 'Support GMT',
+        modalTitle: 'Support GMT',
+        intro: 'GMT is free & open source. With your support I could spend more time developing it!',
+        body: SupportGmtBody,
+        accent: 'pink',
+    },
+    about: {
+        label: 'About GMT',
+        body: AboutGmtBody,
+    },
+});
 installHud();
 
 // GMT camera animation binders — registers split-precision sceneOffset

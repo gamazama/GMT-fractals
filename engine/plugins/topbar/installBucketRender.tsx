@@ -16,6 +16,7 @@ import { RenderGridIcon } from '../../../components/Icons';
 import { topbar, type TopBarSlot } from '../TopBar';
 import BucketRenderPanel from './BucketRenderPanel';
 import type { BucketRenderController } from './BucketRenderController';
+import { useTutorAnchor } from '../Tutorial';
 
 export interface InstallBucketRenderOptions {
     controller: BucketRenderController;
@@ -25,6 +26,8 @@ export interface InstallBucketRenderOptions {
     order?: number;
     /** Item id (override only if multiple bucket buttons coexist). */
     id?: string;
+    /** Optional tutorial anchor id to register on the toggle button. */
+    anchor?: string;
 }
 
 let _installed = false;
@@ -33,11 +36,12 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
     if (_installed) return;
     _installed = true;
 
-    const { controller, slot = 'left', order = 30, id = 'bucket-render' } = options;
+    const { controller, slot = 'left', order = 30, id = 'bucket-render', anchor } = options;
 
     const BucketRenderToggle: React.FC = () => {
         const isBucketRendering = useEngineStore((s) => (s as { isBucketRendering?: boolean }).isBucketRendering);
         const rootRef = React.useRef<HTMLDivElement>(null);
+        const tutAnchor = useTutorAnchor(anchor);
         const [open, setOpen] = React.useState(false);
 
         React.useEffect(() => {
@@ -65,6 +69,7 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
         return (
             <div className="relative" ref={rootRef}>
                 <button
+                    ref={tutAnchor}
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
                     title="Render!"
