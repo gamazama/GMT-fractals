@@ -56,7 +56,7 @@ import { useMobileLayout } from '../hooks/useMobileLayout';
 import { LandscapeGate } from '../engine/components/LandscapeGate';
 import { MobileViewportShell } from '../engine/components/MobileViewportShell';
 import MobileControls from '../components/MobileControls';
-import { MobileMenuHost, mobileMenu } from '../engine/plugins/Menu';
+import { MobileMenuHost } from '../engine/plugins/Menu';
 
 const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
@@ -89,8 +89,7 @@ export const AppGmt: React.FC = () => {
     // Mobile-menu state is only ever set when on mobile (MenuAnchor
     // gates `mobileMenu.toggle` on isMobile), so the active id alone
     // tells us whether the right-dock should swap to MobileMenuHost.
-    const mobileActiveMenu = React.useSyncExternalStore(mobileMenu.subscribe, mobileMenu.getActive, mobileMenu.getActive);
-    const isMobileMenuOpen = mobileActiveMenu !== null;
+    const isMobileMenuOpen = useEngineStore((s) => s.mobileActiveMenu !== null);
 
     const [isSceneReady, setIsSceneReady] = useState(false);
     const [loadingVisible, setLoadingVisible] = useState(true);

@@ -140,6 +140,18 @@ export interface EngineStoreState extends FeatureStateMap {
    * Read indirectly via `useMobileLayout()` — don't bind UI to this field
    * directly. Persisted to localStorage by uiSlice. */
   uiModePreference: UiModePreference;
+  /** Live device-mobile flag (matchMedia + viewport width). A single
+   *  global resize listener in hooks/useMobileLayout.ts writes here.
+   *  Components read via `useMobileLayout()`; predicates via
+   *  `isMobileSnapshot()`. */
+  isDeviceMobile: boolean;
+  /** Live portrait-orientation flag. Same listener writes both. */
+  isPortrait: boolean;
+  /** Currently-open mobile menu id; null when no menu is replacing the
+   *  right dock. MenuAnchor on touch writes via setMobileActiveMenu;
+   *  MobileMenuHost reads this. Lives here (not in a private pubsub)
+   *  so the existing Zustand subscriber machinery handles updates. */
+  mobileActiveMenu: string | null;
   // Deprecated UI Flags (Handled by PanelState now)
   // isControlsMinimized: boolean; 
   // isControlsDocked: boolean;
@@ -294,6 +306,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
     setUiModePreference: (v: UiModePreference) => void;
+    setMobileActiveMenu: (v: string | null) => void;
     // setIsControlsMinimized: (v: boolean) => void; // Deprecated
     setInvertY: (v: boolean) => void;
     

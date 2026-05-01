@@ -45,7 +45,7 @@ export type UISlice = Pick<EngineStoreState,
     'showLightGizmo' | 'isGizmoDragging' |
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
-    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'uiModePreference' | 'invertY' |
+    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'uiModePreference' | 'isDeviceMobile' | 'isPortrait' | 'mobileActiveMenu' | 'invertY' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
     'isTimelineHovered' | 
@@ -65,7 +65,7 @@ export type UISlice = Pick<EngineStoreState,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
-    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setUiModePreference' | 'setInvertY' |
+    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setUiModePreference' | 'setMobileActiveMenu' | 'setInvertY' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
     'setInteractionMode' | 'setFocusLock' |
@@ -118,6 +118,13 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     advancedMode: false,
     showHints: true,
     uiModePreference: readUiModePreference(),
+    // Initialized from window at slice creation; a single global
+    // resize listener in hooks/useMobileLayout.ts keeps these in sync.
+    isDeviceMobile: typeof window !== 'undefined'
+        && (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768),
+    isPortrait: typeof window !== 'undefined'
+        && window.innerHeight > window.innerWidth,
+    mobileActiveMenu: null,
     invertY: false,
 
     // resolutionMode + fixedResolution migrated to viewportSlice (Phase 2a).
@@ -209,6 +216,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     setAdvancedMode: (v) => set({ advancedMode: v }),
     setShowHints: (v) => set({ showHints: v }),
     setUiModePreference: (v) => { writeUiModePreference(v); set({ uiModePreference: v }); },
+    setMobileActiveMenu: (v) => set((s) => s.mobileActiveMenu === v ? s : { mobileActiveMenu: v }),
     setInvertY: (v) => set({ invertY: v }),
 
     // setResolutionMode / setFixedResolution migrated to viewportSlice (Phase 2a).

@@ -1,5 +1,4 @@
 
-import { useState, useEffect } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import type { UiModePreference } from '../types';
 
@@ -16,42 +15,50 @@ const resolveIsMobile = (pref: UiModePreference, isDeviceMobile: boolean): boole
     return isDeviceMobile;
 };
 
+// Module-level singleton listener. Runs once on first import (ES module
+// caching guarantees no duplicates). Writes window-derived state into
+// the engine store; consumers read via useMobileLayout / isMobileSnapshot.
+//
+// Change-detection guard prevents Zustand from notifying subscribers
+// when neither flag actually changed — a resize that doesn't cross the
+// 768px breakpoint or flip orientation is a no-op.
+if (typeof window !== 'undefined') {
+    const sync = () => {
+        const isDeviceMobile = detectIsMobileDevice();
+        const isPortrait = detectIsPortrait();
+        const s = useEngineStore.getState();
+        if (s.isDeviceMobile !== isDeviceMobile || s.isPortrait !== isPortrait) {
+            useEngineStore.setState({ isDeviceMobile, isPortrait });
+        }
+    };
+    window.addEventListener('resize', sync);
+    // No removeEventListener — module-level singleton, lives for the
+    // lifetime of the app. The store outlives any component.
+}
+
 /**
  * Non-reactive snapshot of the current mobile-layout flag, for use in
  * predicates (e.g. menu/topbar `when:` callbacks) where hooks aren't
- * available. Re-evaluated each call. Backed by `uiModePreference` from
- * the store + matchMedia. Will not auto-refresh on viewport resize on
- * its own — the caller's render cycle must be triggered by something
- * else (which it usually is, since topbar items subscribe to state).
+ * available. Reads from the store, which is kept in sync by the
+ * module-level resize listener above.
  */
 export const isMobileSnapshot = (): boolean => {
-    const pref = useEngineStore.getState().uiModePreference;
-    return resolveIsMobile(pref, detectIsMobileDevice());
+    const { uiModePreference, isDeviceMobile } = useEngineStore.getState();
+    return resolveIsMobile(uiModePreference, isDeviceMobile);
 };
 
 /**
  * Returns the effective mobile-layout flags, factoring in the user's
- * `uiModePreference` setting. `auto` resolves via `pointer: coarse`
- * media query and viewport width; `mobile` / `desktop` overrides force
- * the layout regardless of device.
+ * `uiModePreference`. `auto` resolves via `pointer: coarse` / viewport
+ * width; `mobile` / `desktop` overrides force the layout regardless
+ * of device.
  *
  * `isPortrait` always reflects actual orientation (the rotate-prompt
  * gate uses it directly).
  */
 export const useMobileLayout = () => {
     const pref = useEngineStore((s) => s.uiModePreference);
-    const [isPortrait, setIsPortrait] = useState(detectIsPortrait);
-    const [isDeviceMobile, setIsDeviceMobile] = useState(detectIsMobileDevice);
-
-    useEffect(() => {
-        const check = () => {
-            setIsPortrait(detectIsPortrait());
-            setIsDeviceMobile(detectIsMobileDevice());
-        };
-        window.addEventListener('resize', check);
-        check();
-        return () => window.removeEventListener('resize', check);
-    }, []);
-
+    const isDeviceMobile = useEngineStore((s) => s.isDeviceMobile);
+    const isPortrait = useEngineStore((s) => s.isPortrait);
     return { isPortrait, isMobile: resolveIsMobile(pref, isDeviceMobile) };
 };

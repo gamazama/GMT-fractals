@@ -32,6 +32,7 @@ import React, { useSyncExternalStore } from 'react';
 import { ProjectName } from './topbar/ProjectName';
 import { FpsCounter } from './topbar/FpsCounter';
 import { AdaptiveResolutionBadge } from './viewport/AdaptiveResolutionBadge';
+import { useEngineStore } from '../../store/engineStore';
 
 export type TopBarSlot = 'left' | 'center' | 'right';
 
@@ -111,6 +112,11 @@ export const TopBarHost: React.FC<TopBarHostProps> = ({ hidden = false, classNam
     );
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     void rev; // consumed only for re-render trigger
+    // Subscribe to mobile-state flags so `when:` predicates that read
+    // `isMobileSnapshot()` re-evaluate when the user toggles Force
+    // Mobile / Force Desktop or rotates / resizes across the breakpoint.
+    useEngineStore((s) => s.uiModePreference);
+    useEngineStore((s) => s.isDeviceMobile);
     const items = _items;
 
     if (hidden) return null;

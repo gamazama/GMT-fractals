@@ -8,11 +8,11 @@ The plumbing is engine-level so any sibling app (`app-gmt`, `fluid-toy`, `fracta
 
 | Layer | What | File |
 |---|---|---|
-| Detection | `useMobileLayout()` hook + `isMobileSnapshot()` non-React helper | [hooks/useMobileLayout.ts](../../hooks/useMobileLayout.ts) |
+| Detection | `useMobileLayout()` hook + `isMobileSnapshot()` non-React helper. Both derive from store-backed `isDeviceMobile` / `isPortrait` flags maintained by a single global resize listener. | [hooks/useMobileLayout.ts](../../hooks/useMobileLayout.ts) |
 | Preference | `uiModePreference: 'auto' \| 'mobile' \| 'desktop'` on the engine store, persisted to localStorage | [store/slices/uiSlice.ts](../../store/slices/uiSlice.ts) |
 | Hardware tier | `HardwareProfile` from `detectHardwareProfile()` — drives auto-preset selection at boot | [engine/HardwareDetection.ts](../../engine/HardwareDetection.ts) |
 | Layout | `<MobileViewportShell>` (root), `<LandscapeGate>` (rotate prompt) | [engine/components/MobileViewportShell.tsx](../../engine/components/MobileViewportShell.tsx), [engine/components/LandscapeGate.tsx](../../engine/components/LandscapeGate.tsx) |
-| Menu rendering | `mobileMenu` API + `<MobileMenuHost>` — menus replace the right dock instead of overflowing as popovers | [engine/plugins/Menu.tsx](../../engine/plugins/Menu.tsx) |
+| Menu rendering | `mobileMenu` façade + `<MobileMenuHost>` — menus replace the right dock instead of overflowing as popovers. Active-menu id lives on the store as `mobileActiveMenu`. | [engine/plugins/Menu.tsx](../../engine/plugins/Menu.tsx) |
 
 ## Detection
 
@@ -124,16 +124,17 @@ GMT-specific touches:
 
 ## Topbar item culling
 
-Engine-gmt provides a thin `mobileHidden(Component)` HOC for items that shouldn't show on mobile. Use it on the component passed to `topbar.register({ component, … })`:
+Items that should hide on mobile pass a `when:` predicate to `topbar.register`:
 
 ```tsx
-import { mobileHidden } from './topbar';
-topbar.register({ id: 'adaptive', slot: 'left', order: 6, component: mobileHidden(AdaptiveResolution) });
+import { isMobileSnapshot } from '../../hooks/useMobileLayout';
+const desktopOnly = () => !isMobileSnapshot();
+topbar.register({ id: 'adaptive', slot: 'left', order: 6, component: AdaptiveResolution, when: desktopOnly });
 ```
 
-The wrapper subscribes to `useMobileLayout` so the cull is reactive — toggling Force Mobile in the System menu hides items live.
+`TopBarHost` subscribes to `uiModePreference` and `isDeviceMobile`, so toggling Force Mobile in the System menu (or crossing the 768 px viewport breakpoint, or rotating across portrait/landscape on a hybrid) re-evaluates predicates live.
 
-For installers that don't accept a component (e.g. `installBucketRender`), guard the install call with `isMobileSnapshot()`. This is non-reactive (boot-time only); reload is required to re-evaluate. Acceptable for installers that wouldn't make sense on mobile anyway.
+Installers that wrap a `topbar.register` call internally (e.g. `installBucketRender`) accept a `when?: () => boolean` option that's forwarded to the registration.
 
 ## Touch input
 
@@ -154,11 +155,9 @@ To bring mobile support to another app on the engine:
 ## Known limitations
 
 - **Mobile menu outside-tap dismissal not implemented** — only the X button in `<MobileMenuHost>`'s header dismisses. Tapping the canvas / topbar leaves the menu open.
-- **`installBucketRender` is install-time gated** — toggling Force Mobile after boot won't dynamically remove already-installed items registered via installers that lack a `component` indirection.
-- **Resize listener fanout** — every consumer of `useMobileLayout()` registers its own resize listener (currently ~15 across an active session). Acceptable but worth hoisting `isDeviceMobile`/`isPortrait` into the store via a single global listener if it ever shows up in profiles.
 
 ## Future work
 
-The placeholder `@engine/environment` plugin row in [04_Core_Plugins.md](04_Core_Plugins.md) is a candidate to absorb `useMobileLayout` + the resize-listener hoist + theme + DPR into a single install-once primitive. Not built yet.
+The placeholder `@engine/environment` plugin row in [04_Core_Plugins.md](04_Core_Plugins.md) is a candidate to absorb `useMobileLayout` + theme + DPR into a single install-once primitive. The mobile detection layer is already store-backed and ready to fold in.
 
 Animation on mobile is researched in [plans/mobile-animation-research.md](../../plans/mobile-animation-research.md) (deferred — too much scope for the initial mobile pass).

@@ -28,6 +28,9 @@ export interface InstallBucketRenderOptions {
     id?: string;
     /** Optional tutorial anchor id to register on the toggle button. */
     anchor?: string;
+    /** Optional visibility predicate forwarded to topbar.register's
+     *  `when:` field. Use to hide the item on mobile etc. */
+    when?: () => boolean;
 }
 
 let _installed = false;
@@ -36,7 +39,7 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
     if (_installed) return;
     _installed = true;
 
-    const { controller, slot = 'left', order = 30, id = 'bucket-render', anchor } = options;
+    const { controller, slot = 'left', order = 30, id = 'bucket-render', anchor, when } = options;
 
     const BucketRenderToggle: React.FC = () => {
         const isBucketRendering = useEngineStore((s) => (s as { isBucketRendering?: boolean }).isBucketRendering);
@@ -95,5 +98,5 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
         );
     };
 
-    topbar.register({ id, slot, order, component: BucketRenderToggle });
+    topbar.register({ id, slot, order, when, component: BucketRenderToggle });
 };

@@ -118,6 +118,9 @@ export interface EngineStoreState extends FeatureStateMap {
   advancedMode: boolean;
   showHints: boolean;
   uiModePreference: UiModePreference;
+  isDeviceMobile: boolean;
+  isPortrait: boolean;
+  mobileActiveMenu: string | null;
   // Deprecated UI Flags (Handled by PanelState now)
   // isControlsMinimized: boolean; 
   // isControlsDocked: boolean;
@@ -254,6 +257,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
     setUiModePreference: (v: UiModePreference) => void;
+    setMobileActiveMenu: (v: string | null) => void;
     // setIsControlsMinimized: (v: boolean) => void; // Deprecated
     setInvertY: (v: boolean) => void;
     

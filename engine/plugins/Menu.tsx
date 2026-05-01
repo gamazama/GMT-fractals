@@ -153,21 +153,19 @@ const subscribe = (fn: () => void) => {
 // ── Mobile menu state ──────────────────────────────────────────────────
 //
 // On mobile, menus replace the right dock instead of overflowing as a
-// popover. A single global "active mobile menu" id holds the open
-// menu, or null when nothing is open. The MenuAnchor diverts its open
-// click to this when running on mobile; <MobileMenuHost /> reads it
-// and renders the items in a scrollable side panel.
-
-let _mobileActiveMenu: string | null = null;
-const _mobileSubscribers = new Set<() => void>();
-const _mobileNotify = () => _mobileSubscribers.forEach((fn) => fn());
+// popover. The active-menu id lives on the engine store as
+// `mobileActiveMenu` so existing Zustand subscriber machinery handles
+// updates — no parallel pubsub. The `mobileMenu` API is a thin façade
+// for callers (MenuAnchor, MobileMenuHost) and a few app shells.
 
 export const mobileMenu = {
-    open(id: string) { if (_mobileActiveMenu !== id) { _mobileActiveMenu = id; _mobileNotify(); } },
-    close() { if (_mobileActiveMenu !== null) { _mobileActiveMenu = null; _mobileNotify(); } },
-    toggle(id: string) { _mobileActiveMenu = _mobileActiveMenu === id ? null : id; _mobileNotify(); },
-    getActive(): string | null { return _mobileActiveMenu; },
-    subscribe(fn: () => void) { _mobileSubscribers.add(fn); return () => { _mobileSubscribers.delete(fn); }; },
+    open(id: string) { useEngineStore.getState().setMobileActiveMenu(id); },
+    close() { useEngineStore.getState().setMobileActiveMenu(null); },
+    toggle(id: string) {
+        const cur = useEngineStore.getState().mobileActiveMenu;
+        useEngineStore.getState().setMobileActiveMenu(cur === id ? null : id);
+    },
+    getActive(): string | null { return useEngineStore.getState().mobileActiveMenu; },
 };
 
 export const menu = {
@@ -279,9 +277,10 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
         // registry is mutated in place, so we just count changes.
         return _notifyRev;
     }, () => _notifyRev);
-    // Mobile-mode tracking — subscribe so the anchor's "open" highlight
-    // updates when the active menu changes (any menu opening another).
-    const mobileActive = useSyncExternalStore(mobileMenu.subscribe, mobileMenu.getActive, mobileMenu.getActive);
+    // Subscribe to the active mobile menu so the button's highlight
+    // updates when one menu opens another. Direct store selector — no
+    // separate pubsub needed.
+    const mobileActive = useEngineStore((s) => s.mobileActiveMenu);
     const { isMobile } = useMobileLayout();
 
     const def = _menus.get(menuId);
@@ -471,7 +470,7 @@ interface MobileMenuHostProps {
 }
 
 export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', className = '' }) => {
-    const activeId = useSyncExternalStore(mobileMenu.subscribe, mobileMenu.getActive, mobileMenu.getActive);
+    const activeId = useEngineStore((s) => s.mobileActiveMenu);
     // Re-render when item registrations change so live labels / when()
     // predicates pick up state mutations while the panel is open.
     useSyncExternalStore(subscribe, () => _notifyRev, () => _notifyRev);

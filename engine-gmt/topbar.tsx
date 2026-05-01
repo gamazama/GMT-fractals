@@ -41,20 +41,10 @@ const TopBarDivider: React.FC = () => (
     <div className="h-6 w-px bg-white/10 mx-1" />
 );
 
-/**
- * Wrap a topbar component so it renders nothing when the layout is
- * mobile. Reactive — the wrapped component re-evaluates on
- * `uiModePreference` changes and on viewport resize (via the hook).
- */
-const mobileHidden = (Component: React.FC): React.FC => {
-    const Wrapped: React.FC = () => {
-        const { isMobile } = useMobileLayout();
-        if (isMobile) return null;
-        return <Component />;
-    };
-    Wrapped.displayName = `mobileHidden(${Component.displayName || Component.name || 'Component'})`;
-    return Wrapped;
-};
+// `when:` predicate for topbar items that should hide on mobile.
+// Reactive: TopBarHost subscribes to the relevant store fields and
+// re-evaluates predicates on every store update that affects them.
+const desktopOnly = () => !isMobileSnapshot();
 
 // Shared pill-button styling for option-grid menu items (UI Layout,
 // Quality preset). Kept here rather than in theme.ts because it's
@@ -238,23 +228,16 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     //  for project-name / fps / adaptive / pause are skipped via
     //  installTopBar({hideDefaults}) and we register our own here.)
     topbar.register({ id: 'gmt-logo',             slot: 'left', order: -10, component: GmtLogo });
-    topbar.register({ id: 'gmt-div-1',            slot: 'left', order: 1,   component: mobileHidden(TopBarDivider) });
+    topbar.register({ id: 'gmt-div-1',            slot: 'left', order: 1,   component: TopBarDivider, when: desktopOnly });
     topbar.register({ id: 'fps',                  slot: 'left', order: 2,   component: FpsCounter });
     topbar.register({ id: 'pause',                slot: 'left', order: 3,   component: PauseControls });
-    topbar.register({ id: 'gmt-div-2',            slot: 'left', order: 4,   component: mobileHidden(TopBarDivider) });
-    topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5,   component: mobileHidden(ViewportQuality) });
-    topbar.register({ id: 'adaptive',             slot: 'left', order: 6,   component: mobileHidden(AdaptiveResolution) });
+    topbar.register({ id: 'gmt-div-2',            slot: 'left', order: 4,   component: TopBarDivider, when: desktopOnly });
+    topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5,   component: ViewportQuality, when: desktopOnly });
+    topbar.register({ id: 'adaptive',             slot: 'left', order: 6,   component: AdaptiveResolution, when: desktopOnly });
     topbar.register({ id: 'gmt-path-tracing',     slot: 'left', order: 10,  component: PathTracingToggle });
     topbar.register({ id: 'gmt-playing-badge',    slot: 'left', order: 20,  component: PlayingBadge });
-    topbar.register({ id: 'gmt-render-region',    slot: 'left', order: 25,  component: mobileHidden(RenderRegionToggle) });
-    // Bucket-render install runs once at boot. Skip on mobile so it
-    // doesn't register at all. Toggling Force Mobile after boot won't
-    // dynamically remove the already-installed item; reload required.
-    // Acceptable for first-pass cull — most desktop users start in
-    // desktop, most mobile users on mobile.
-    if (!isMobileSnapshot()) {
-        installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render', anchor: 'bucket-btn' });
-    }
+    topbar.register({ id: 'gmt-render-region',    slot: 'left', order: 25,  component: RenderRegionToggle, when: desktopOnly });
+    installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render', anchor: 'bucket-btn', when: desktopOnly });
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
     // Vibration feedback callback — noop here; apps that want haptic
@@ -271,7 +254,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     });
 
     // ── Share link button (right slot, before Camera) ─────────────────
-    topbar.register({ id: 'share-link', slot: 'right', order: 27, component: mobileHidden(ShareLinkButton) });
+    topbar.register({ id: 'share-link', slot: 'right', order: 27, component: ShareLinkButton, when: desktopOnly });
 
     // Slot-saved toast — absolute-positioned floating pill that appears
     // below the topbar when a camera slot is saved (or rejected as
