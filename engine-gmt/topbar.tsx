@@ -403,20 +403,22 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('system', {
         id: 'mobile-adaptive',
         type: 'toggle',
-        label: 'Adaptive Resolution',
-        title: 'Auto-scale resolution to maintain framerate during interaction.',
+        label: 'Reduce Quality on Touch',
+        title: 'Drop render resolution while you drag the camera or sliders, restore on idle. Mobile uses interaction-only mode (no FPS-driven scaling) since mobile compute fluctuates too much for stable FPS targeting.',
         when: () => isMobileSnapshot(),
         isActive: () => {
             const q = (useEngineStore.getState() as any).quality;
             const sup = (useEngineStore.getState() as any).adaptiveSuppressed;
-            return !!(q?.dynamicScaling && (q.adaptiveTarget ?? 0) > 0 && !sup);
+            return !!(q?.dynamicScaling && !sup);
         },
         onToggle: () => {
             const s = useEngineStore.getState() as any;
             const q = s.quality;
-            const sup = s.adaptiveSuppressed;
-            const isOn = !!(q?.dynamicScaling && (q.adaptiveTarget ?? 0) > 0 && !sup);
-            s.setQuality?.(isOn ? { dynamicScaling: false } : { dynamicScaling: true, adaptiveTarget: 30 });
+            const isOn = !!q?.dynamicScaling;
+            // Manual mode: targetFps=0 means "drop on interaction, lift
+            // on idle" — no FPS-driven scaling. interactionDownsample
+            // stays whatever boot-time set it to (1.5 for mid mobile).
+            s.setQuality?.(isOn ? { dynamicScaling: false } : { dynamicScaling: true, adaptiveTarget: 0 });
         },
     });
     menu.registerItem('system', {

@@ -135,6 +135,25 @@ export const useAppStartup = (_isSceneReady: boolean, options?: UseAppStartupOpt
             }
         }
 
+        // Mobile mid- and low-tier devices: switch adaptive resolution
+        // to manual mode. FPS-targeted scaling (smart mode) oscillates
+        // on mobile because compute fluctuates with thermal / OS load,
+        // and the user always lands in "Always" since hover-detection
+        // is meaningless on touch. Manual mode keeps a static idle
+        // resolution and only downsamples during touch interaction —
+        // responsiveness where it matters, no shimmer where it doesn't.
+        // High-tier mobile (e.g. iPad Pro) keeps full adaptive.
+        if (hwProfile.isMobile && hwProfile.tier !== 'high') {
+            const setQuality = (state as any).setQuality;
+            if (setQuality) {
+                setQuality({
+                    dynamicScaling: true,
+                    adaptiveTarget: 0,           // manual mode (no FPS targeting)
+                    interactionDownsample: 1.5,  // 1/1.5 ≈ 67%, milder than the 2.0 default
+                });
+            }
+        }
+
         // Caller (e.g. app-gmt/main.tsx) hydrates the store synchronously
         // at module load before React renders. By the time this effect
         // runs we are already hydrated.
