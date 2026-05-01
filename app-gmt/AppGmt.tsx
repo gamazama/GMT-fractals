@@ -59,27 +59,33 @@ import { MobileScrollIntro } from '../engine/components/MobileScrollIntro';
 import MobileControls from '../components/MobileControls';
 import { MobileMenuHost } from '../engine/plugins/Menu';
 
+// Renders DOM-type viewport overlays (LightGizmo, DrawingOverlay, WebcamOverlay,
+// …) with per-overlay store subscriptions. Each `<OverlayHost>` subscribes
+// only to its own feature slice, so unrelated parameter changes don't
+// re-render every overlay. Previously DomOverlays did one `useEngineStore()`
+// (full-state) at the parent and re-rendered every overlay on every store
+// mutation anywhere in the app.
+//
+// `actions` is read from `useEngineStore.getState()` at render time rather
+// than subscribed to: Zustand action functions have stable references
+// across setState calls, so consumers like `actions.setWebcam(...)` work
+// without forcing this component to re-render on every store change.
+const OverlayHost: React.FC<{ config: ReturnType<typeof featureRegistry.getViewportOverlays>[number] }> = ({ config }) => {
+    const Component = componentRegistry.get(config.componentId);
+    const sliceState = useEngineStore((s) => (s as any)[config.id]);
+    if (!Component || !sliceState) return null;
+    const actions = useEngineStore.getState();
+    return <Component featureId={config.id} sliceState={sliceState} actions={actions} />;
+};
+
 const DomOverlays: React.FC = () => {
-    const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
-    const state = useEngineStore();
+    const overlays = useMemo(
+        () => featureRegistry.getViewportOverlays().filter(o => o.type === 'dom'),
+        [],
+    );
     return (
         <div className="absolute inset-0 pointer-events-none z-[20]">
-            {overlays.map(config => {
-                const Component = componentRegistry.get(config.componentId);
-                const featureId = config.id;
-                const sliceState = (state as any)[featureId];
-                if (Component && sliceState) {
-                    return (
-                        <Component
-                            key={config.id}
-                            featureId={featureId}
-                            sliceState={sliceState}
-                            actions={state}
-                        />
-                    );
-                }
-                return null;
-            })}
+            {overlays.map(config => <OverlayHost key={config.id} config={config} />)}
         </div>
     );
 };
