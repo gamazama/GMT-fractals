@@ -227,8 +227,6 @@ export const AppGmt: React.FC = () => {
                                     Top region (crosshair / reticle) stays inside
                                     children where it follows the canvas. */}
                                 <GmtNavigationHud
-                                    state={state as any}
-                                    actions={state as any}
                                     isMobile={isMobile}
                                     hudRefs={hudRefs}
                                     region="bottom"
@@ -274,8 +272,6 @@ export const AppGmt: React.FC = () => {
                             children so it stays canvas-relative (centred on the
                             rendered fractal in Fixed mode). */}
                         <GmtNavigationHud
-                            state={state as any}
-                            actions={state as any}
                             isMobile={isMobile}
                             hudRefs={hudRefs}
                             region="top"

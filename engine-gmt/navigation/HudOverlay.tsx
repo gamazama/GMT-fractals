@@ -11,8 +11,6 @@ import { useTutorAnchor, mergeRefs, actionBus } from '../../engine/plugins/Tutor
 type ActiveHint = unknown;
 
 interface HudOverlayProps {
-    state: FractalState;
-    actions: FractalActions;
     isMobile: boolean;
     activeHint?: ActiveHint | null;
     onDismissHint?: () => void;
@@ -31,8 +29,25 @@ interface HudOverlayProps {
     region?: 'top' | 'bottom' | 'all';
 }
 
+// Self-subscribed to the store: previously took `state` / `actions` props
+// from a full-state subscription in AppGmt, which forced the parent to
+// re-render on every store change. By selecting only the fields used here
+// we limit re-renders to actual visible changes (camera mode, tab count,
+// fly speed, etc.) and leave the parent free to narrow its own subscription.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activeHint: _activeHint, onDismissHint: _onDismissHint, hudRefs, region = 'all' }) => {
+const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHint, onDismissHint: _onDismissHint, hudRefs, region = 'all' }) => {
+    // Individual selectors — Zustand returns the same primitive/reference
+    // on subsequent reads when unchanged, so re-renders only fire on
+    // actual changes to these specific fields.
+    const tabSwitchCount = useFractalStore((s) => (s as any).tabSwitchCount);
+    const cameraMode = useFractalStore((s) => (s as any).cameraMode);
+    const navigation = useFractalStore((s) => (s as any).navigation);
+    const showHints = useFractalStore((s) => (s as any).showHints);
+    const incrementTabSwitchCount = useFractalStore((s) => (s as any).incrementTabSwitchCount);
+    const setNavigation = useFractalStore((s) => (s as any).setNavigation);
+    const resetCamera = useFractalStore((s) => (s as any).resetCamera);
+    const state = { tabSwitchCount, cameraMode, navigation, showHints } as unknown as FractalState;
+    const actions = { incrementTabSwitchCount, setNavigation, resetCamera } as unknown as FractalActions;
     const hudSpeedSliderRef = useRef<HTMLDivElement>(null);
     const speedSliderAnchorRef = useTutorAnchor('speed-slider');
     const resetCameraAnchorRef = useTutorAnchor('reset-camera');
@@ -40,8 +55,6 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ state, actions, isMobile, activ
     const bottomFadeTimeout = useRef<number | null>(null);
     const bottomClusterRef = useRef<HTMLDivElement>(null);
 
-    const tabSwitchCount = state.tabSwitchCount;
-    const incrementTabSwitchCount = actions.incrementTabSwitchCount;
 
     // --- VISIBILITY LOGIC ---
     // Crosshair fades quickly (2s), bottom pill cluster stays longer (10s).
