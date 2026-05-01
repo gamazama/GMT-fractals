@@ -92,6 +92,27 @@ const ACCENT_HOVER: Record<'pink' | 'cyan' | 'purple', string> = {
     purple: 'hover:bg-purple-500/10 text-purple-300/80 group-hover:text-purple-200',
 };
 
+// ── Support modal — module singleton ───────────────────────────────────
+//
+// The modal can't live inside the menu popover: the popover unmounts as
+// soon as a menu item is clicked, which also unmounts the item's React
+// state. So we lift the modal state to a module singleton and render it
+// from <HelpOverlay /> (mounted at the app root) where lifecycle is
+// independent of the menu.
+
+interface SupportModalState {
+    modalTitle: string;
+    intro?: string;
+    body: React.ReactNode | React.FC;
+    accent: 'pink' | 'cyan' | 'purple';
+}
+
+let _supportModal: SupportModalState | null = null;
+const _supportSubs = new Set<() => void>();
+const _supportSnapshot = () => _supportModal;
+const _supportSubscribe = (fn: () => void) => { _supportSubs.add(fn); return () => { _supportSubs.delete(fn); }; };
+const _setSupportModal = (m: SupportModalState | null) => { _supportModal = m; _supportSubs.forEach((fn) => fn()); };
+
 interface SupportItemProps {
     label: string;
     modalTitle: string;
@@ -101,36 +122,38 @@ interface SupportItemProps {
     onAfterOpen: () => void;
 }
 
-const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, body, accent, onAfterOpen }) => {
-    const [showModal, setShowModal] = useState(false);
-    const open = () => { setShowModal(true); onAfterOpen(); };
-    const close = () => setShowModal(false);
+const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, body, accent, onAfterOpen }) => (
+    <button
+        onClick={(e) => {
+            e.stopPropagation();
+            _setSupportModal({ modalTitle, intro, body, accent });
+            onAfterOpen();
+        }}
+        className={`group w-full flex items-center justify-between p-2 rounded transition-colors ${ACCENT_HOVER[accent]}`}
+    >
+        <span className="text-xs font-bold">{label}</span>
+        <HeartIcon />
+    </button>
+);
 
-    return (
-        <>
-            <button
-                onClick={(e) => { e.stopPropagation(); open(); }}
-                className={`group w-full flex items-center justify-between p-2 rounded transition-colors ${ACCENT_HOVER[accent]}`}
-            >
-                <span className="text-xs font-bold">{label}</span>
-                <HeartIcon />
-            </button>
-            {showModal && createPortal(
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={close}>
-                    <div className="bg-gray-900 border border-white/10 rounded-lg p-5 w-80 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between mb-3">
-                            <div className={`text-xs font-bold ${ACCENT_TEXT[accent]}`}>{modalTitle}</div>
-                            <button onClick={close} className="text-gray-500 hover:text-white transition-colors text-sm leading-none">&times;</button>
-                        </div>
-                        {intro && (
-                            <p className="text-[10px] text-gray-400 leading-relaxed mb-4">{intro}</p>
-                        )}
-                        {renderBody(body)}
-                    </div>
-                </div>,
-                document.body,
-            )}
-        </>
+const SupportModalHost: React.FC = () => {
+    const m = React.useSyncExternalStore(_supportSubscribe, _supportSnapshot, _supportSnapshot);
+    if (!m) return null;
+    const close = () => _setSupportModal(null);
+    return createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={close}>
+            <div className="bg-gray-900 border border-white/10 rounded-lg p-5 w-80 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-3">
+                    <div className={`text-xs font-bold ${ACCENT_TEXT[m.accent]}`}>{m.modalTitle}</div>
+                    <button onClick={close} className="text-gray-500 hover:text-white transition-colors text-sm leading-none">&times;</button>
+                </div>
+                {m.intro && (
+                    <p className="text-[10px] text-gray-400 leading-relaxed mb-4">{m.intro}</p>
+                )}
+                {renderBody(m.body)}
+            </div>
+        </div>,
+        document.body,
     );
 };
 
@@ -480,9 +503,10 @@ export { help };
 // ── Overlay ────────────────────────────────────────────────────────────
 
 /**
- * Renders the HelpBrowser when `helpWindow.visible` is true. Mount this
- * once near the root of the app — typical spot is next to GlobalContextMenu.
- * Returns null when closed; the lazy chunk is only fetched on first open.
+ * Renders the HelpBrowser when `helpWindow.visible` is true, plus the
+ * Support modal host (lifecycle-independent of the menu popover so the
+ * modal survives the menu closing on item-click). Mount this once near
+ * the root of the app — typical spot is next to GlobalContextMenu.
  */
 export const HelpOverlay: React.FC = () => {
     const visible       = useEngineStore((s: any) => s.helpWindow?.visible);
@@ -490,14 +514,18 @@ export const HelpOverlay: React.FC = () => {
     const openHelp      = useEngineStore((s: any) => s.openHelp);
     const closeHelp     = useEngineStore((s: any) => s.closeHelp);
 
-    if (!visible) return null;
     return (
-        <Suspense fallback={null}>
-            <HelpBrowser
-                activeTopicId={activeTopicId ?? null}
-                onClose={closeHelp}
-                onNavigate={openHelp}
-            />
-        </Suspense>
+        <>
+            {visible && (
+                <Suspense fallback={null}>
+                    <HelpBrowser
+                        activeTopicId={activeTopicId ?? null}
+                        onClose={closeHelp}
+                        onNavigate={openHelp}
+                    />
+                </Suspense>
+            )}
+            <SupportModalHost />
+        </>
     );
 };
