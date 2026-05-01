@@ -14,7 +14,7 @@ Overview of the plugins that ship with the engine. Each is opt-in: apps call `in
 | `@engine/undo` | `installUndo()` | `engine/plugins/Undo.tsx` | ✅ Shipped (phase 4c) | [06_Undo_Transactions.md](06_Undo_Transactions.md) |
 | `@engine/camera` | `installCamera()` | `engine/plugins/Camera.ts` | ✅ Shipped (phase 4d) | § camera |
 | `@engine/animation` | `installModulation()` | `engine/animation/modulationTick.ts` | ✅ Shipped (phase 5) | [08_Animation.md](08_Animation.md) |
-| `@engine/environment` | `installEnvironment()` | — | 🔴 Not built | Theme, DPR, mobile-detect (placeholder) |
+| `@engine/environment` | `installEnvironment()` | — | 🔴 Not built | Theme, DPR, mobile-detect (placeholder) — partially absorbed today by `useMobileLayout` + the mobile layout primitives in [17_Mobile_Layout.md](17_Mobile_Layout.md) |
 
 **Eight shipped plugins as of 2026-04-23.** Screenshot folded into `@engine/scene-io` (2026-04-23) — standalone camera button + `Alt+S` hotkey; identical code path as the "Save PNG…" dropdown item, which matched its output byte-for-byte anyway. The animation plugin is named `installModulation()` for historical reasons (it registers the modulation/animation tick into `TickRegistry.ANIMATE`); `installAnimation()` is an alias candidate for the rename pass.
 

@@ -8,6 +8,7 @@ import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule 
 import { LightParams } from './graphics';
 import { OpticsState } from '../features/optics';
 import type { ScalabilityState, HardwareProfile } from './viewport';
+import type { UiModePreference } from '../../types';
 
 export type PanelId = 'Formula' | 'Graph' | 'Scene' | 'Light' | 'Shader' | 'Gradient' | 'Quality' | 'Audio' | 'Drawing' | 'Engine' | 'Camera Manager';
 
@@ -116,7 +117,7 @@ export interface EngineStoreState extends FeatureStateMap {
 
   advancedMode: boolean;
   showHints: boolean;
-  debugMobileLayout: boolean; // New: Forces Mobile UI Layout
+  uiModePreference: UiModePreference;
   // Deprecated UI Flags (Handled by PanelState now)
   // isControlsMinimized: boolean; 
   // isControlsDocked: boolean;
@@ -252,7 +253,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
 
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
-    setDebugMobileLayout: (v: boolean) => void;
+    setUiModePreference: (v: UiModePreference) => void;
     // setIsControlsMinimized: (v: boolean) => void; // Deprecated
     setInvertY: (v: boolean) => void;
     

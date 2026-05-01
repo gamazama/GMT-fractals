@@ -16,7 +16,7 @@
  * reverses it. Zero app-specific save/load code per app.
  */
 
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { useTutorAnchor } from './Tutorial';
 import type { Preset } from '../../types';
@@ -30,6 +30,7 @@ import {
     type SceneSerializer,
 } from '../../utils/SceneFormat';
 import { topbar } from './TopBar';
+import { menu } from './Menu';
 import { shortcuts } from './Shortcuts';
 
 // ── Install ─────────────────────────────────────────────────────────────
@@ -92,14 +93,50 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     _installed = true;
 
     // File menu groups Save Scene / Save PNG / Save JPG / Load behind a
-    // single dropdown so the topbar isn't crowded by individual buttons
-    // for each format. Snapshot is the only standalone save affordance
-    // — it's the most-used action so it's promoted out of the menu.
+    // single dropdown so the topbar isn't crowded by individual buttons.
+    // Snapshot is promoted out of the menu (most-used action).
     //
-    // order 29.5 places it right after the GMT Camera menu (29) and
-    // before System (30) — apps without a Camera menu will see it sit
-    // before System anyway, which still reads as menu-cluster-on-the-right.
-    topbar.register({ id: 'scene-file', slot: 'right', order: 29.5, component: FileMenu });
+    // order 29.5: between the GMT Camera menu (29) and System (30).
+    // Registered via the menu plugin so it inherits both desktop
+    // popover and mobile MobileMenuHost rendering.
+    menu.register({
+        id: 'file',
+        slot: 'right',
+        order: 29.5,
+        icon: FolderIcon,
+        title: 'File',
+        align: 'end',
+        width: 'w-56',
+    });
+    menu.registerItem('file', {
+        id: 'load',
+        type: 'custom',
+        component: LoadSceneMenuItem,
+    });
+    menu.registerItem('file', {
+        id: 'save-scene',
+        type: 'button',
+        label: 'Save Scene (GMF)',
+        onSelect: () => { saveScene(); },
+    });
+    if (_getCanvas) {
+        menu.registerItem('file', {
+            id: 'save-png',
+            type: 'button',
+            label: 'Save Scene (PNG)',
+            shortcut: 'Alt+S',
+            onSelect: () => { void saveScenePng(); },
+        });
+        menu.registerItem('file', {
+            id: 'save-jpg',
+            type: 'button',
+            label: 'Save Image (JPG)',
+            onSelect: () => { void saveSceneJpg(); },
+        });
+    }
+    // Apps that want extra items in the File menu — e.g. GMT's "Copy
+    // Share Link" — register them via menu.registerItem('file', …)
+    // directly after installSceneIO() returns. No bespoke API here.
 
     // Standalone one-click snapshot button — the heavy-use PNG action
     // promoted out of the File menu so users don't have to open it for
@@ -123,7 +160,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
 };
 
 export const uninstallSceneIO = () => {
-    topbar.unregister('scene-file');
+    menu.unregister('file');
     topbar.unregister('scene-snapshot');
     shortcuts.unregister('scene-io.quick-png');
     _getCanvas = undefined;
@@ -229,12 +266,6 @@ const FolderIcon = () => (
     </svg>
 );
 
-const ChevronDownIcon = () => (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="6 9 12 15 18 9" />
-    </svg>
-);
-
 // Image / picture glyph for the snapshot button. Visually distinct from
 // the camera glyph used by app-level camera-menu buttons (saved cameras
 // / nav modes), preventing the two from looking identical in the topbar.
@@ -246,22 +277,17 @@ const ImageIcon = () => (
     </svg>
 );
 
-// ── File menu (Save Scene / Save PNG / Save JPG / Load) ─────────────────
+// ── Load scene menu item ────────────────────────────────────────────────
+//
+// The Load entry has to own a hidden <input type="file"> alongside the
+// click target — the file picker can only be summoned by `.click()` on
+// an <input> already in the DOM. A 'button' menu item can't carry the
+// input, so Load is a 'custom' item that styles itself to match the
+// 'button' renderer in MenuItemView.
 
-export const FileMenu: React.FC = () => {
-    const [open, setOpen] = useState(false);
+const LoadSceneMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const loadScene = useEngineStore((s) => s.loadScene);
-    // Subscribe so the menu re-renders if the project name changes;
-    // saveScene / saveScenePng read the current name internally.
-    useEngineStore((s) => s.projectSettings.name);
-
-    const close = useCallback(() => setOpen(false), []);
-
-    const handleSaveScene = () => { saveScene(); close(); };
-    const handleSavePng   = async () => { await saveScenePng(); close(); };
-    const handleSaveJpg   = async () => { await saveSceneJpg(); close(); };
-    const handleLoad      = () => { inputRef.current?.click(); close(); };
 
     const handleFile = async (file: File) => {
         const preset = await loadSceneFile(file);
@@ -279,11 +305,8 @@ export const FileMenu: React.FC = () => {
         loadScene({ preset });
     };
 
-    const itemCls = 'w-full text-left px-3 py-2 text-[10px] text-gray-300 hover:bg-white/10 hover:text-white transition-colors';
-    const sepCls  = 'border-t border-white/5';
-
     return (
-        <div className="relative">
+        <>
             <input
                 ref={inputRef}
                 type="file"
@@ -294,34 +317,19 @@ export const FileMenu: React.FC = () => {
                     const file = e.target.files?.[0];
                     if (file) handleFile(file);
                     if (inputRef.current) inputRef.current.value = '';
+                    close();
                 }}
             />
             <button
                 type="button"
-                onClick={() => setOpen((o) => !o)}
-                className="flex items-center gap-1 text-[10px] font-medium text-gray-300 hover:text-white bg-black/40 hover:bg-white/5 border border-white/10 hover:border-cyan-500/40 rounded px-2 py-1 transition-colors"
-                title="File"
+                onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
+                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
             >
-                <FolderIcon />
-                <span>File</span>
-                <ChevronDownIcon />
+                <span className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">Load Scene (PNG/GMF)</span>
+                </span>
             </button>
-            {open && (
-                <>
-                    <div className="fixed inset-0 z-40" onClick={close} />
-                    <div className="absolute top-full right-0 mt-1 w-56 bg-black/95 border border-white/10 rounded shadow-xl z-50 overflow-hidden">
-                        <button type="button" onClick={handleLoad} className={itemCls}>Load Scene <span className="text-gray-500">(PNG/GMF)</span></button>
-                        <button type="button" onClick={handleSaveScene} className={`${itemCls} ${sepCls}`}>Save Scene <span className="text-gray-500">(GMF)</span></button>
-                        {_getCanvas && (
-                            <>
-                                <button type="button" onClick={handleSavePng} className={`${itemCls} ${sepCls}`}>Save Scene <span className="text-gray-500">(PNG) (Alt+S)</span></button>
-                                <button type="button" onClick={handleSaveJpg} className={`${itemCls} ${sepCls}`}>Save Image only <span className="text-gray-500">(JPG)</span></button>
-                            </>
-                        )}
-                    </div>
-                </>
-            )}
-        </div>
+        </>
     );
 };
 

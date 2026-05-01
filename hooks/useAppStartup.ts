@@ -120,6 +120,21 @@ export const useAppStartup = (_isSceneReady: boolean, options?: UseAppStartupOpt
             (state as any).setHardwareProfile(hwProfile);
         }
 
+        // Mobile auto-pick: downgrade scalability preset for first
+        // paint. Compile times on mobile GPUs are 2–3× longer than
+        // desktop, and `balanced` (the engine default) typically takes
+        // ~10s. `fastest` lands at ~5s with path tracing still on.
+        //
+        // Only override the *default*: if the user previously chose a
+        // different preset (preview/lite/full/ultra), we respect it.
+        // Persisted-preset hydration runs before this hook.
+        if (hwProfile.isMobile) {
+            const current = (state as any).scalability?.activePreset;
+            if (current === 'balanced' && (state as any).applyScalabilityPreset) {
+                (state as any).applyScalabilityPreset('fastest');
+            }
+        }
+
         // Caller (e.g. app-gmt/main.tsx) hydrates the store synchronously
         // at module load before React renders. By the time this effect
         // runs we are already hydrated.

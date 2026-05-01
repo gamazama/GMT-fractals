@@ -10,7 +10,39 @@ import React, { useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { registry } from '../engine/FractalRegistry';
 
-type Status = 'idle' | 'copied' | 'long' | 'na';
+export type ShareLinkStatus = 'idle' | 'copied' | 'long' | 'na';
+type Status = ShareLinkStatus;
+
+/**
+ * Copy the current scene's share URL to the clipboard. Returns the
+ * resulting status so callers can render feedback (or ignore it).
+ *
+ *   'copied' — full URL ≤ 4096 chars copied
+ *   'long'   — animations stripped to fit; truncated URL still copied
+ *   'na'     — formula isn't in the built-in registry (Workshop / import)
+ *              or clipboard write failed
+ */
+export const copyShareLink = async (): Promise<Status> => {
+    const formula = (useEngineStore.getState() as any).formula;
+    const getShareString = (useEngineStore.getState() as any).getShareString;
+    const def = registry.get(formula);
+    if (!def) return 'na';
+
+    try {
+        let shareStr = getShareString({ includeAnimations: true });
+        const url = `${window.location.origin}${window.location.pathname}#s=${shareStr}`;
+        if (url.length > 4096) {
+            shareStr = getShareString({ includeAnimations: false });
+            const shortUrl = `${window.location.origin}${window.location.pathname}#s=${shareStr}`;
+            await navigator.clipboard.writeText(shortUrl);
+            return 'long';
+        }
+        await navigator.clipboard.writeText(url);
+        return 'copied';
+    } catch {
+        return 'na';
+    }
+};
 
 const LinkIcon: React.FC<{ active?: boolean }> = ({ active }) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -23,44 +55,16 @@ const LinkIcon: React.FC<{ active?: boolean }> = ({ active }) => (
 
 export const ShareLinkButton: React.FC = () => {
     const [status, setStatus] = useState<Status>('idle');
+    // Subscribe so the disabled-title updates when the formula changes
+    // (Workshop/imported formulas show "Share unavailable").
     const formula = useEngineStore((s: any) => s.formula);
-    const getShareString = useEngineStore((s: any) => s.getShareString);
 
     const flash = (s: Status) => {
         setStatus(s);
         setTimeout(() => setStatus('idle'), 2500);
     };
 
-    const handleClick = async () => {
-        // Workshop / imported formulas can't be encoded in a URL (shader
-        // code not in the built-in registry).
-        const def = registry.get(formula as any);
-        if (!def) { flash('na'); return; }
-
-        try {
-            let shareStr = getShareString({ includeAnimations: true });
-            const url = `${window.location.origin}${window.location.pathname}#s=${shareStr}`;
-            let tooLong = false;
-
-            if (url.length > 4096) {
-                shareStr = getShareString({ includeAnimations: false });
-                const shortUrl = `${window.location.origin}${window.location.pathname}#s=${shareStr}`;
-                if (shortUrl.length <= 4096) {
-                    await navigator.clipboard.writeText(shortUrl);
-                    tooLong = true;
-                } else {
-                    await navigator.clipboard.writeText(shortUrl);
-                    tooLong = true;
-                }
-            } else {
-                await navigator.clipboard.writeText(url);
-            }
-
-            flash(tooLong ? 'long' : 'copied');
-        } catch {
-            flash('na');
-        }
-    };
+    const handleClick = async () => { flash(await copyShareLink()); };
 
     const label: Record<Status, string> = {
         idle:   '',

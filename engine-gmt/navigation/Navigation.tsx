@@ -665,6 +665,11 @@ const Navigation: React.FC<NavigationProps> = ({
 
       const onDown = (e: PointerEvent) => {
           if (e.button !== 0) return; // left only
+          // Touch → drei's native THREE.TOUCH.ROTATE handles one-finger
+          // rotate around target. Cursor-anchor (rotate-around-pick-point)
+          // doesn't translate to multi-touch, so we cleanly cede to drei
+          // here. Mouse path below is unchanged.
+          if (e.pointerType === 'touch') return;
           if ((e.target as HTMLElement).closest('.pointer-events-auto')) return;
           // Toggle off → drei owns ROTATE natively.
           if (!useFractalStore.getState().navigation?.orbitCursorAnchor) return;

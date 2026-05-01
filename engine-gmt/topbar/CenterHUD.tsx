@@ -276,15 +276,19 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     {/* Always render 3 slots to maintain layout consistency */}
                     {[0, 1, 2].map(i => renderSlot(i))}
 
-                    {/* Expand Trigger - positioned to not shift layout when expanded */}
-                    <button
-                        onClick={() => { vibrate(5); setIsExpanded(true); }}
-                        ref={expandAnchor}
-                        className="expand-trigger w-5 h-5 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors ml-[-8px]"
-                        title="Expand Light Studio"
-                    >
-                        <ChevronDown />
-                    </button>
+                    {/* Expand Trigger — desktop only. The 3x3 grid (lights 4-8)
+                        doesn't fit comfortably on a phone topbar, and the
+                        first 3 lights cover the common case. */}
+                    {!isMobileMode && (
+                        <button
+                            onClick={() => { vibrate(5); setIsExpanded(true); }}
+                            ref={expandAnchor}
+                            className="expand-trigger w-5 h-5 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors ml-[-8px]"
+                            title="Expand Light Studio"
+                        >
+                            <ChevronDown />
+                        </button>
+                    )}
                 </div>
 
                 {/* EXPANDED VIEW (3x3 Grid) */}

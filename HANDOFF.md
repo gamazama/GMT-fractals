@@ -2,7 +2,54 @@
 
 **Location:** `h:/GMT/workspace-gmt/dev/` (was `h:/GMT/gmt-engine/`)
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
-**Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors.
+**Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01** — see entry below.
+
+**📋 2026-05-01 — Mobile mode for app-gmt (Phase A–C iter, D6, E1, F1):**
+
+Plan: [plans/mobile-mode-app-gmt.md](plans/mobile-mode-app-gmt.md). Reference doc: [docs/engine/17_Mobile_Layout.md](docs/engine/17_Mobile_Layout.md).
+
+User report: stable's mobile rendering path works but its UI is "not mobile-friendly"; same true of app-gmt after the port. Goal: make app-gmt usable on phone + tablet (landscape-only) without resorting to desktop tooling, with primitives reusable by sibling apps (`fluid-toy`, `fractal-toy`, `demo`).
+
+**Layering (load-bearing).** Stable's mobile bits live inline in `App.tsx`. The engine fork doesn't have one app — it has four. Mobile primitives must land at the layer where they're reusable:
+
+- `engine/` — `useMobileLayout` (hook + non-React `isMobileSnapshot`), `uiModePreference` slice, `<LandscapeGate>`, `<MobileViewportShell>`, `mobileMenu` API + `<MobileMenuHost>`. New components live in `engine/components/`.
+- `engine-gmt/` — drei touch orbit gate (`Navigation.tsx:666`, one-line `pointerType === 'touch'` early-return), `mobileHidden` HOC, `pillClass` helper, mobile-only System menu surrogates.
+- `app-gmt/` — composition only: mount the engine primitives, gate `<Dock side="left">`, `<TimelineHost>`, the right Dock-vs-MobileMenuHost swap, and Fly-mode right-dock hide.
+
+**Phase A — foundation.**
+- New engine components: `engine/components/LandscapeGate.tsx`, `engine/components/MobileViewportShell.tsx`. Address-bar collapse trick (`sticky top-0 h-[100vh] overflow-hidden`) ported from stable; on desktop it's `fixed inset-0 w-full h-full`. Safe-area insets applied in same component (D6).
+- `<GmtNavigationHud isMobile={false}>` hardcodes in `AppGmt.tsx:206, 253` replaced with real `useMobileLayout()` flow.
+- Touch orbit fix: drei's native `THREE.TOUCH.ROTATE / DOLLY_PAN` was already declared in `Navigation.tsx:1326` but was being intercepted by the custom cursor-anchored orbit handler at line 666. The handler's only gate was `e.button !== 0`, which passes for touch pointerdown (button is always 0 on touch). One-line fix: `if (e.pointerType === 'touch') return;` early-return — cursor-anchor doesn't translate to multi-touch, so ceding to drei is correct. Mouse path untouched.
+- `<MobileControls />` mounted in `AppGmt.tsx` — was missing entirely from app-gmt (legacy `App.tsx` had it, port didn't carry it over).
+
+**Phase B — UI mode preference.**
+- `debugMobileLayout: boolean` (debug toggle) graduated to `uiModePreference: 'auto' | 'mobile' | 'desktop'`. Type added to `types/store.ts` and `engine-gmt/types/store.ts`. Slice rewrite in `store/slices/uiSlice.ts` with localStorage read/write helpers under key `gmt.uiModePreference`.
+- `useMobileLayout()` rewritten to resolve `auto` via media query / viewport, return forced value otherwise. Keeps `isPortrait` (always actual orientation, used by `<LandscapeGate>`).
+- All `debugMobileLayout` call sites migrated: `App.tsx:59`, `components/MobileControls.tsx`, `engine-gmt/topbar.tsx`, `engine-gmt/navigation/useInputController.ts:15, 199, 239`.
+- System menu's binary `Force Mobile UI` toggle replaced with a custom 'custom'-type menu item: `UiModePreferenceMenuItem`, a 3-button pill row (Auto / Force Mobile / Force Desktop). Removed `when: advancedMode` gate — this is now a real user setting, visible to everyone.
+
+**Phase C — topbar cull and mobile menu architecture.** Iterative with the user; final state:
+- New `mobileHidden(Component): React.FC` HOC in `engine-gmt/topbar.tsx` — wraps a component to return null on mobile, reactive via `useMobileLayout`. Used for: `AdaptiveResolution`, `RenderRegionToggle`, `ShareLinkButton`, `ViewportQuality`, `gmt-div-1`, `gmt-div-2`. Bucket-render install gated by `isMobileSnapshot()` at boot (the installer doesn't accept a component handle — non-reactive limitation acknowledged).
+- `CenterHUD` (Light Studio): `isMobileMode={false}` hardcode in the topbar wrapper replaced with real `useMobileLayout` flow + real `navigator.vibrate` callback (was a noop). Tap-to-enable / tap-to-open-menu / tap-to-disable mobile interaction logic in `CenterHUD.tsx:135-162` was already there but had been dormant. Expand-to-8-lights chevron hidden on mobile (the 3x3 grid doesn't fit and the first 3 lights cover the common case).
+- New System menu surrogates for mobile-hidden topbar items: `MobileQualityMenuItem` (3x2 grid of all 6 SCALABILITY_PRESETS), `Adaptive Resolution` toggle. Both gated by `when: () => isMobileSnapshot()`. Section header "Quality" + separator scoped the same way.
+- **Mobile menu replaces right dock (architectural change in `engine/plugins/Menu.tsx`).** New `mobileMenu` API: module-level `_mobileActiveMenu: string | null` + `open / close / toggle / getActive / subscribe`. `MenuAnchor` branches on `useMobileLayout().isMobile`: desktop path unchanged (local state + popover); mobile path writes to `mobileMenu` global state, no popover. New `<MobileMenuHost>` renders the active menu's items in a scrollable side panel sized like the right dock; the host is mounted by the app shell, which gates the right-Dock vs MobileMenuHost swap. `MenuItemView` is reused identically for both rendering paths so toggles, custom items, separators all match.
+- File menu (`engine/plugins/SceneIO.tsx`) migrated from a bespoke 90-line `FileMenu` component to `menu.register('file', …)` + `menu.registerItem('file', …)` calls. Inherits desktop popover + mobile MobileMenuHost rendering for free. Icon-only (no "File" label) — matches Camera/System icon-only pattern. `LoadSceneMenuItem` is the only `'custom'` item — the hidden `<input type="file">` has to live with its trigger button to be `.click()`-able. `extraItems` API added then dropped during cleanup; apps register file-menu items directly.
+- `copyShareLink()` extracted from `ShareLinkButton.tsx` as a callable helper. Original button uses it internally; app-gmt registers a "Copy Share Link (URL)" entry in the File menu via `menu.registerItem('file', …)` from `main.tsx`. Desktop also has the topbar share-link icon (mobileHidden); mobile users only see the menu entry.
+
+**Phase D6 — safe-area insets.** `<MobileViewportShell>` applies `padding: env(safe-area-inset-*)` on all four edges when mobile. Hoisted as module-level `MOBILE_STYLE` / `DESKTOP_STYLE` consts to avoid per-render allocation.
+
+**Phase E1 — auto-pick scalability preset on mobile boot.** `hooks/useAppStartup.ts`: after `detectHardwareProfileMainThread()`, if `hwProfile.isMobile && scalability.activePreset === 'balanced'` (engine default, untouched), calls `applyScalabilityPreset('fastest')`. Compile time drops from ~10 s to ~5 s with PT still on. User-chosen presets respected.
+
+**Phase F1 — timeline hidden on mobile.** `<TimelineHost>` wrapped in `{!isMobile && …}` in `AppGmt.tsx`. Animation editing is desktop-only — see `plans/mobile-animation-research.md` for the deferred design (option B + C-lite, ~64px scrubber strip + half-sheet, deferred for scope).
+
+**Cleanup pass (multi-agent code review).** Three review agents (reuse / quality / efficiency) in parallel; their findings triaged. Taken: drop `extraItems` API from SceneIO (redundant once File is a real menu), replace inline X SVG with `CloseIcon`, drop redundant `useState`/`useEffect` mirror in `MobileControls`, convert inline `import('...')` types to top-level `import type`, hoist `MobileViewportShell` style consts, extract `pillClass(active, extra)` helper for the cyan active-button pattern, flatten right-dock conditional in `AppGmt.tsx`, drop redundant `isMobile &&` from `isMobileMenuOpen` derivation, combine consecutive `!loadingVisible &&` guards, defensive `useEffect` to close stale `MenuAnchor` `open` state when toggling into Force Mobile, trim narration / "ported from stable" comments. Skipped: hoisting mobile-detection helper across pre-existing files (out of scope), replacing `mobileHidden` HOC with `when:` predicate (HOC reactivity is by design), folding `mobileMenu` pubsub into engine store (works correctly, bigger refactor), `localStoragePersist` factory (needs a third use site).
+
+**Known limitations (documented in 17_Mobile_Layout.md):**
+- Mobile menu outside-tap dismissal not implemented — only the X button in `MobileMenuHost`'s header dismisses.
+- `installBucketRender` install-time gate is non-reactive — toggling Force Mobile after boot won't dynamically remove the installed item; reload required.
+- ~15 resize listeners across an active session (every `useMobileLayout` consumer registers its own). Works fine, but a single global listener writing to the store would be cleaner.
+
+**Files touched.** New: `engine/components/LandscapeGate.tsx`, `engine/components/MobileViewportShell.tsx`, `docs/engine/17_Mobile_Layout.md`. Modified: `App.tsx`, `app-gmt/AppGmt.tsx`, `app-gmt/main.tsx`, `components/MobileControls.tsx`, `engine-gmt/navigation/Navigation.tsx`, `engine-gmt/navigation/useInputController.ts`, `engine-gmt/topbar.tsx`, `engine-gmt/topbar/CenterHUD.tsx`, `engine-gmt/topbar/ShareLinkButton.tsx`, `engine-gmt/types/store.ts`, `engine/plugins/Menu.tsx`, `engine/plugins/SceneIO.tsx`, `hooks/useAppStartup.ts`, `hooks/useMobileLayout.ts`, `store/slices/uiSlice.ts`, `types/store.ts`, `CLAUDE.md`, `docs/DOCS_INDEX.md`, `docs/engine/04_Core_Plugins.md`. `npx tsc --noEmit` → 0 errors. Pending real-device validation by user.
 
 **📋 2026-04-30 — Undo system: per-scope stacks (refactor of the 2026-04-26 fix):**
 

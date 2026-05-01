@@ -20,6 +20,11 @@ export type PanelId = string;
  *  sub-state in their own feature slice. */
 export type InteractionMode = 'none' | 'picking_focus' | 'picking_julia' | 'selecting_region' | 'selecting_preview';
 
+/** UI mode preference. `auto` resolves via matchMedia / viewport width; the
+ *  `mobile` / `desktop` overrides force a specific layout regardless of
+ *  device. Resolved into a boolean by `useMobileLayout()`. */
+export type UiModePreference = 'auto' | 'mobile' | 'desktop';
+
 export type CompositionOverlayType = 'none' | 'grid' | 'thirds' | 'golden' | 'spiral' | 'center' | 'diagonal' | 'safearea';
 
 // Composition overlay settings (inspired by Blender/C4D)
@@ -128,7 +133,13 @@ export interface EngineStoreState extends FeatureStateMap {
 
   advancedMode: boolean;
   showHints: boolean;
-  debugMobileLayout: boolean; // New: Forces Mobile UI Layout
+  /** User preference for mobile vs desktop UI.
+   *   'auto'    — detect via matchMedia('pointer: coarse') / viewport width
+   *   'mobile'  — force mobile layout regardless of device
+   *   'desktop' — force desktop layout regardless of device
+   * Read indirectly via `useMobileLayout()` — don't bind UI to this field
+   * directly. Persisted to localStorage by uiSlice. */
+  uiModePreference: UiModePreference;
   // Deprecated UI Flags (Handled by PanelState now)
   // isControlsMinimized: boolean; 
   // isControlsDocked: boolean;
@@ -282,7 +293,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
 
     setAdvancedMode: (v: boolean) => void;
     setShowHints: (v: boolean) => void;
-    setDebugMobileLayout: (v: boolean) => void;
+    setUiModePreference: (v: UiModePreference) => void;
     // setIsControlsMinimized: (v: boolean) => void; // Deprecated
     setInvertY: (v: boolean) => void;
     

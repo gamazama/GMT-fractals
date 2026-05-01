@@ -56,7 +56,8 @@ const App: React.FC = () => {
 
   useEffect(() => { prefetchHelpTopics(); }, []);
 
-  const isCurrentlyMobile = isMobile || state.debugMobileLayout;
+  // `isMobile` already factors in uiModePreference (auto/mobile/desktop).
+  const isCurrentlyMobile = isMobile;
   const isBroadcast = state.isBroadcastMode;
   const showCrosshair = state.interactionMode !== 'none';
 

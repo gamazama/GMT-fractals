@@ -4,6 +4,32 @@ Chronological log of significant changes during the v0.9.3 development cycle (en
 
 ## 2026-05-01
 
+### Mobile mode for app-gmt
+
+**User-facing**
+- Open app-gmt on a phone or tablet in landscape and the UI is finally usable. Hold it in portrait and you get a "Landscape Recommended" prompt with a rotate-device icon — rotate and the prompt dismisses. The address bar collapses on first touch so the canvas fills the screen.
+- One-finger drag in Orbit mode rotates the camera around its target; pinch zooms; two-finger drag pans. (Drei's native touch path; the desktop "rotate around the cursor" trick is mouse-only — it doesn't translate to multi-touch.)
+- Switch into Fly mode and the right-side panel hides so the joysticks (left = move, right = look) and the Orbit/Fly toggle pill have viewport reach. Mode switch is on-screen now (no Tab key needed).
+- The topbar is much tighter on mobile — quality preset chip, adaptive-resolution badge, render-region toggle, bucket render, and the share-link icon are all hidden. The dividers around the quality chip are gone too. Light Studio still shows the first 3 lights; the expand-to-8-lights chevron is desktop-only (the 3×3 grid doesn't fit comfortably).
+- Tap a topbar menu (System / Camera / File / Help) on mobile and it replaces the right dock with a scrollable side panel instead of overflowing as a popover. Tap the X in the panel header to dismiss, or tap a different menu to swap.
+- The System menu has a new "UI Layout" tri-state (Auto / Force Mobile / Force Desktop) — Auto detects by device, the others override. The setting persists across reloads.
+- Mobile-only items in the System menu: 6-button Quality preset grid (Preview / Fastest / Lite / Balanced / Full / Ultra) and an Adaptive Resolution toggle, replacing the topbar controls hidden above. Share Link is in the File menu (always — desktop and mobile) so mobile users can still share their scene.
+- Boot compile is roughly half the time on phones (~5 s vs ~10 s) — when the device is mobile and you haven't picked a preset yet, the app starts on Fastest instead of Balanced. Pick anything else once and it remembers.
+- Timeline / animation editing is desktop-only for now. (Mobile animation UI is researched in `plans/mobile-animation-research.md`; deferred for scope.)
+- iOS notch / Dynamic Island / Android gesture bars don't overlap UI any more — safe-area insets applied on all four edges.
+
+**Implementation**
+- New engine primitives in `engine/components/`: `LandscapeGate` (the rotate-prompt overlay) and `MobileViewportShell` (root wrapper that swaps `fixed inset-0` ↔ `sticky top-0 h-[100vh] overflow-hidden` for the iOS Safari address-bar collapse). Both consume `useMobileLayout()` so they self-gate.
+- `useMobileLayout()` rewritten to resolve a new `uiModePreference: 'auto' | 'mobile' | 'desktop'` field on the engine store (replacing the old `debugMobileLayout: boolean` debug toggle). Persists to `localStorage` under `gmt.uiModePreference`. `isMobileSnapshot()` exported for non-React contexts (menu `when:` predicates, install-time gates).
+- `engine/plugins/Menu.tsx` gained a `mobileMenu` API (open / close / toggle / getActive / subscribe) and a `<MobileMenuHost>` component. On mobile, `MenuAnchor` writes the active menu id to global state instead of opening a local popover; `<MobileMenuHost>` renders the items in a scrollable side panel where the right dock would go. Apps subscribe and gate their right-dock rendering on `mobileMenu.getActive() !== null`.
+- `engine/plugins/SceneIO.tsx` File menu retired its bespoke 90-line component and now uses `menu.register('file', …)` + `menu.registerItem('file', …)`. Icon-only (FolderIcon + chevron), matches Camera/System pattern, inherits MobileMenuHost rendering. Load is the only `'custom'` item — the hidden `<input type="file">` has to live with its trigger button to be `.click()`-able.
+- `engine-gmt/topbar.tsx` got a `mobileHidden(Component)` HOC and `pillClass(active, extra)` helper. Used to wrap topbar items that should hide on mobile (AdaptiveResolution, RenderRegionToggle, ShareLinkButton, ViewportQuality, both dividers) and to share the cyan active-button styling between the new `UiModePreferenceMenuItem` and `MobileQualityMenuItem` pill rows.
+- `engine-gmt/navigation/Navigation.tsx`: one-line touch gate `if (e.pointerType === 'touch') return;` added to the custom cursor-anchored orbit `pointerdown` handler at line 666. Restores drei's native `THREE.TOUCH.ROTATE` / `DOLLY_PAN` on touch (which was already declared at line 1326 but was being shadowed because the handler's only gate was `e.button !== 0`, which passes for touch).
+- `hooks/useAppStartup.ts`: after `detectHardwareProfileMainThread()`, if mobile and the active scalability preset is the engine default `'balanced'`, calls `applyScalabilityPreset('fastest')`. User-chosen presets are respected.
+- `app-gmt/AppGmt.tsx`: hardcoded `isMobile={false}` props on `<GmtNavigationHud>` mounts (lines 206, 253) replaced with the real flag. Right-dock JSX now `{isMobileMenuOpen ? <MobileMenuHost /> : !(isMobile && cameraMode === 'Fly') && <Dock side="right" />}`. `<MobileControls />` mounted (was missing entirely from the port). `<TimelineHost>` and `<Dock side="left">` gated on `!isMobile`.
+- Plan: `plans/mobile-mode-app-gmt.md`. Reference doc: `docs/engine/17_Mobile_Layout.md` (covers detection, preference, layout primitives, mobile-menu architecture, sibling-app adoption checklist, known limitations).
+- Pending: real-device validation by user. Known limitations: mobile menu outside-tap dismissal not implemented (X button only); `installBucketRender` install-time gate is non-reactive (reload required to dynamically remove); ~15 redundant resize listeners across an active session (single global listener would be cleaner — works fine for now).
+
 ### Compile progress UI unification
 
 **User-facing**

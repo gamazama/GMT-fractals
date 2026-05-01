@@ -49,6 +49,8 @@
 import React, { useSyncExternalStore, useCallback, useState, useRef, useEffect } from 'react';
 import { topbar, TopBarSlot } from './TopBar';
 import { useEngineStore } from '../../store/engineStore';
+import { useMobileLayout } from '../../hooks/useMobileLayout';
+import { CloseIcon } from '../../components/Icons';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -146,6 +148,26 @@ const _notify = () => _subscribers.forEach((fn) => fn());
 const subscribe = (fn: () => void) => {
     _subscribers.add(fn);
     return () => { _subscribers.delete(fn); };
+};
+
+// ── Mobile menu state ──────────────────────────────────────────────────
+//
+// On mobile, menus replace the right dock instead of overflowing as a
+// popover. A single global "active mobile menu" id holds the open
+// menu, or null when nothing is open. The MenuAnchor diverts its open
+// click to this when running on mobile; <MobileMenuHost /> reads it
+// and renders the items in a scrollable side panel.
+
+let _mobileActiveMenu: string | null = null;
+const _mobileSubscribers = new Set<() => void>();
+const _mobileNotify = () => _mobileSubscribers.forEach((fn) => fn());
+
+export const mobileMenu = {
+    open(id: string) { if (_mobileActiveMenu !== id) { _mobileActiveMenu = id; _mobileNotify(); } },
+    close() { if (_mobileActiveMenu !== null) { _mobileActiveMenu = null; _mobileNotify(); } },
+    toggle(id: string) { _mobileActiveMenu = _mobileActiveMenu === id ? null : id; _mobileNotify(); },
+    getActive(): string | null { return _mobileActiveMenu; },
+    subscribe(fn: () => void) { _mobileSubscribers.add(fn); return () => { _mobileSubscribers.delete(fn); }; },
 };
 
 export const menu = {
@@ -257,32 +279,57 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
         // registry is mutated in place, so we just count changes.
         return _notifyRev;
     }, () => _notifyRev);
+    // Mobile-mode tracking — subscribe so the anchor's "open" highlight
+    // updates when the active menu changes (any menu opening another).
+    const mobileActive = useSyncExternalStore(mobileMenu.subscribe, mobileMenu.getActive, mobileMenu.getActive);
+    const { isMobile } = useMobileLayout();
 
     const def = _menus.get(menuId);
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
     const close = useCallback(() => setOpen(false), []);
 
-    // Outside-click dismissal. Skip the click that opened us.
+    // Outside-click dismissal — desktop popover only. The mobile path
+    // currently dismisses only via the X button in MobileMenuHost's
+    // header; tap-outside dismissal is a follow-up.
     useEffect(() => {
-        if (!open) return;
+        if (!open || isMobile) return;
         const handler = (e: MouseEvent) => {
             if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
         };
         const id = setTimeout(() => document.addEventListener('mousedown', handler), 0);
         return () => { clearTimeout(id); document.removeEventListener('mousedown', handler); };
-    }, [open, close]);
+    }, [open, close, isMobile]);
+
+    // If the user toggles into mobile mode while a desktop popover is
+    // open, close the local state so re-toggling back to desktop
+    // doesn't resurface a popover the user can't recall opening.
+    useEffect(() => { if (isMobile && open) close(); }, [isMobile, open, close]);
 
     if (!def) return null;
 
     const items = menu.listItems(menuId).filter((i) => !i.when || i.when());
 
+    // Mobile: button toggles the global mobile-menu state. Local `open`
+    // stays false so no popover renders. Visual "open" indicator reads
+    // from mobileActive instead.
+    const isOpenForVisual = isMobile ? mobileActive === menuId : open;
+
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (isMobile) {
+            mobileMenu.toggle(menuId);
+        } else {
+            setOpen((o) => !o);
+        }
+    };
+
     return (
         <div className="relative" ref={rootRef}>
             <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
-                className={`flex items-center gap-1 text-[10px] font-medium ${open ? 'text-cyan-300 border-cyan-500/40' : 'text-gray-300 hover:text-white border-white/10 hover:border-cyan-500/40'} bg-black/40 hover:bg-white/5 border rounded px-2 py-1 transition-colors`}
+                onClick={handleClick}
+                className={`flex items-center gap-1 text-[10px] font-medium ${isOpenForVisual ? 'text-cyan-300 border-cyan-500/40' : 'text-gray-300 hover:text-white border-white/10 hover:border-cyan-500/40'} bg-black/40 hover:bg-white/5 border rounded px-2 py-1 transition-colors`}
                 title={def.title}
                 aria-label={def.title || def.label || def.id}
             >
@@ -295,7 +342,8 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
                     <polyline points="6 9 12 15 18 9" />
                 </svg>
             </button>
-            {open && (
+            {/* Desktop popover — never renders on mobile (open stays false there). */}
+            {open && !isMobile && (
                 <div
                     className={`absolute top-full ${def.align === 'end' ? 'right-0' : def.align === 'center' ? 'left-1/2 -translate-x-1/2' : 'left-0'} mt-2 ${def.width || 'w-56'} bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1`}
                     onClick={(e) => e.stopPropagation()}
@@ -403,4 +451,67 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
             return <C close={close} />;
         }
     }
+};
+
+// ── Mobile menu host ──────────────────────────────────────────────────
+//
+// On mobile, menus replace the right dock instead of overflowing as a
+// popover. Apps mount <MobileMenuHost /> in the right-dock slot (or
+// wherever they want the menu panel to land) and gate their own dock
+// rendering on `mobileMenu.getActive()` being null.
+//
+// The host renders nothing when no menu is active. When active, it
+// renders the items in a scrollable panel sized like the right dock.
+
+interface MobileMenuHostProps {
+    /** Width class for the panel. Defaults to `w-72` (288px). */
+    width?: string;
+    /** Extra classes on the panel wrapper. */
+    className?: string;
+}
+
+export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', className = '' }) => {
+    const activeId = useSyncExternalStore(mobileMenu.subscribe, mobileMenu.getActive, mobileMenu.getActive);
+    // Re-render when item registrations change so live labels / when()
+    // predicates pick up state mutations while the panel is open.
+    useSyncExternalStore(subscribe, () => _notifyRev, () => _notifyRev);
+
+    if (!activeId) return null;
+    const def = _menus.get(activeId);
+    if (!def) return null;
+    const items = menu.listItems(activeId).filter((i) => !i.when || i.when());
+    const close = () => mobileMenu.close();
+
+    return (
+        <aside
+            className={`${width} h-full flex flex-col bg-black/95 border-l border-white/10 ${className}`}
+            // Touch panning inside the scroll region; prevents the page
+            // from absorbing vertical-scroll gestures meant for the menu.
+            style={{ touchAction: 'pan-y' }}
+        >
+            <header className="flex items-center justify-between px-3 py-2 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-2 text-xs text-gray-200 font-medium">
+                    {renderIcon(def.icon)}
+                    <span>{def.label || def.title || activeId}</span>
+                </div>
+                <button
+                    type="button"
+                    onClick={close}
+                    className="text-gray-400 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition-colors"
+                    aria-label="Close menu"
+                    title="Close"
+                >
+                    <CloseIcon />
+                </button>
+            </header>
+            <div className="flex-1 overflow-y-auto p-1">
+                {items.map((item) => (
+                    <MenuItemView key={item.id} item={item} close={close} />
+                ))}
+                {items.length === 0 && (
+                    <div className="px-3 py-2 text-[10px] text-gray-600 italic">(empty)</div>
+                )}
+            </div>
+        </aside>
+    );
 };

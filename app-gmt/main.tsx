@@ -33,6 +33,7 @@ import { installTopBar } from '../engine/plugins/TopBar';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installSceneIO } from '../engine/plugins/SceneIO';
+import { copyShareLink } from '../engine-gmt/topbar/ShareLinkButton';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installModulationUI, setLfoListConfig } from '../engine/components/modulation';
 import { installShortcuts, shortcuts } from '../engine/plugins/Shortcuts';
@@ -43,7 +44,7 @@ import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { useAnimationStore } from '../store/animationStore';
 import { registerRenderPopup } from '../engine/animation/renderPopupRegistry';
 import { RenderPopup } from '../engine-gmt/components/timeline/RenderPopup';
-import { installMenu } from '../engine/plugins/Menu';
+import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
 import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
@@ -195,6 +196,16 @@ installSceneIO({
     // shapes are identical — saveGMFScene only reads `formula` to look
     // up the registry, which accepts any string.
     serializeScene: (preset: Preset) => saveGMFScene(preset as any),
+});
+
+// Mobile users get Share Link only via this menu entry; desktop also
+// has the topbar icon (registered separately in registerGmtTopbar).
+menu.registerItem('file', { id: 'share-sep', type: 'separator' });
+menu.registerItem('file', {
+    id: 'share-link',
+    type: 'button',
+    label: 'Copy Share Link (URL)',
+    onSelect: () => { void copyShareLink(); },
 });
 
 installModulation();

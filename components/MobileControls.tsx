@@ -113,13 +113,8 @@ const Joystick = ({ onMove, label, active }: { onMove: (x: number, y: number) =>
 };
 
 const MobileControls: React.FC = () => {
-    const { cameraMode, setCameraMode, debugMobileLayout } = useEngineStore();
-    const { isMobile: isDeviceMobile } = useMobileLayout();
-    const [visible, setVisible] = useState(false);
-
-    useEffect(() => {
-        setVisible(isDeviceMobile || debugMobileLayout);
-    }, [debugMobileLayout, isDeviceMobile]);
+    const { cameraMode, setCameraMode } = useEngineStore();
+    const { isMobile } = useMobileLayout();
 
     const handleJoyMove = useCallback((x: number, y: number) => {
         window.dispatchEvent(new CustomEvent('joyMove', { detail: { x, y } }));
@@ -129,7 +124,7 @@ const MobileControls: React.FC = () => {
         window.dispatchEvent(new CustomEvent('joyLook', { detail: { x, y } }));
     }, []);
 
-    if (!visible) return null;
+    if (!isMobile) return null;
 
     const isFly = cameraMode === 'Fly';
 

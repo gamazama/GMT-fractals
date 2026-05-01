@@ -34,10 +34,36 @@ import { ViewportQuality } from './topbar/ViewportQuality';
 import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
 import { GmtBucketController } from './topbar/GmtBucketController';
 import { toggleHardwarePrefs } from './components/HardwarePrefsHost';
+import { useMobileLayout, isMobileSnapshot } from '../hooks/useMobileLayout';
+import { SCALABILITY_PRESETS, getScalabilityLabel } from '../types/viewport';
 
 const TopBarDivider: React.FC = () => (
     <div className="h-6 w-px bg-white/10 mx-1" />
 );
+
+/**
+ * Wrap a topbar component so it renders nothing when the layout is
+ * mobile. Reactive — the wrapped component re-evaluates on
+ * `uiModePreference` changes and on viewport resize (via the hook).
+ */
+const mobileHidden = (Component: React.FC): React.FC => {
+    const Wrapped: React.FC = () => {
+        const { isMobile } = useMobileLayout();
+        if (isMobile) return null;
+        return <Component />;
+    };
+    Wrapped.displayName = `mobileHidden(${Component.displayName || Component.name || 'Component'})`;
+    return Wrapped;
+};
+
+// Shared pill-button styling for option-grid menu items (UI Layout,
+// Quality preset). Kept here rather than in theme.ts because it's
+// specific to the menu-embedded pill row pattern.
+const PILL_BASE = 'text-[11px] px-2 py-1 rounded border transition-colors';
+const PILL_ACTIVE = 'bg-cyan-500/20 text-cyan-200 border-cyan-500/40';
+const PILL_INACTIVE = 'bg-black/40 text-gray-400 border-white/10 hover:text-white hover:border-white/30';
+const pillClass = (active: boolean, extra = ''): string =>
+    `${PILL_BASE} ${active ? PILL_ACTIVE : PILL_INACTIVE} ${extra}`.trim();
 
 // ── Inline topbar items ────────────────────────────────────────────────
 
@@ -212,23 +238,31 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     //  for project-name / fps / adaptive / pause are skipped via
     //  installTopBar({hideDefaults}) and we register our own here.)
     topbar.register({ id: 'gmt-logo',             slot: 'left', order: -10, component: GmtLogo });
-    topbar.register({ id: 'gmt-div-1',            slot: 'left', order: 1,   component: TopBarDivider });
+    topbar.register({ id: 'gmt-div-1',            slot: 'left', order: 1,   component: mobileHidden(TopBarDivider) });
     topbar.register({ id: 'fps',                  slot: 'left', order: 2,   component: FpsCounter });
     topbar.register({ id: 'pause',                slot: 'left', order: 3,   component: PauseControls });
-    topbar.register({ id: 'gmt-div-2',            slot: 'left', order: 4,   component: TopBarDivider });
-    topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5,   component: ViewportQuality });
-    topbar.register({ id: 'adaptive',             slot: 'left', order: 6,   component: AdaptiveResolution });
+    topbar.register({ id: 'gmt-div-2',            slot: 'left', order: 4,   component: mobileHidden(TopBarDivider) });
+    topbar.register({ id: 'gmt-viewport-quality', slot: 'left', order: 5,   component: mobileHidden(ViewportQuality) });
+    topbar.register({ id: 'adaptive',             slot: 'left', order: 6,   component: mobileHidden(AdaptiveResolution) });
     topbar.register({ id: 'gmt-path-tracing',     slot: 'left', order: 10,  component: PathTracingToggle });
     topbar.register({ id: 'gmt-playing-badge',    slot: 'left', order: 20,  component: PlayingBadge });
-    topbar.register({ id: 'gmt-render-region',    slot: 'left', order: 25,  component: RenderRegionToggle });
-    installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render', anchor: 'bucket-btn' });
+    topbar.register({ id: 'gmt-render-region',    slot: 'left', order: 25,  component: mobileHidden(RenderRegionToggle) });
+    // Bucket-render install runs once at boot. Skip on mobile so it
+    // doesn't register at all. Toggling Force Mobile after boot won't
+    // dynamically remove the already-installed item; reload required.
+    // Acceptable for first-pass cull — most desktop users start in
+    // desktop, most mobile users on mobile.
+    if (!isMobileSnapshot()) {
+        installBucketRender({ controller: new GmtBucketController(), slot: 'left', order: 30, id: 'gmt-bucket-render', anchor: 'bucket-btn' });
+    }
 
     // ── Center slot — Light Studio HUD ─────────────────────────────────
     // Vibration feedback callback — noop here; apps that want haptic
     // feedback on mobile override this via GmtTopbarOptions later.
-    const CenterHUDWrapper: React.FC = () => (
-        <CenterHUD isMobileMode={false} vibrate={() => {}} />
-    );
+    const CenterHUDWrapper: React.FC = () => {
+        const { isMobile } = useMobileLayout();
+        return <CenterHUD isMobileMode={isMobile} vibrate={(ms) => navigator.vibrate?.(ms)} />;
+    };
     topbar.register({
         id: 'gmt-center-hud',
         slot: 'center',
@@ -237,7 +271,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     });
 
     // ── Share link button (right slot, before Camera) ─────────────────
-    topbar.register({ id: 'share-link', slot: 'right', order: 27, component: ShareLinkButton });
+    topbar.register({ id: 'share-link', slot: 'right', order: 27, component: mobileHidden(ShareLinkButton) });
 
     // Slot-saved toast — absolute-positioned floating pill that appears
     // below the topbar when a camera slot is saved (or rejected as
@@ -369,6 +403,44 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     });
 
     menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator' });
+
+    // --- Mobile-only: surrogates for items hidden from the topbar -----
+    menu.registerItem('system', {
+        id: 'mobile-quality-section',
+        type: 'section',
+        label: 'Quality',
+        when: () => isMobileSnapshot(),
+    });
+    menu.registerItem('system', {
+        id: 'mobile-quality',
+        type: 'custom',
+        when: () => isMobileSnapshot(),
+        component: MobileQualityMenuItem,
+    });
+    menu.registerItem('system', {
+        id: 'mobile-adaptive',
+        type: 'toggle',
+        label: 'Adaptive Resolution',
+        title: 'Auto-scale resolution to maintain framerate during interaction.',
+        when: () => isMobileSnapshot(),
+        isActive: () => {
+            const q = (useEngineStore.getState() as any).quality;
+            const sup = (useEngineStore.getState() as any).adaptiveSuppressed;
+            return !!(q?.dynamicScaling && (q.adaptiveTarget ?? 0) > 0 && !sup);
+        },
+        onToggle: () => {
+            const s = useEngineStore.getState() as any;
+            const q = s.quality;
+            const sup = s.adaptiveSuppressed;
+            const isOn = !!(q?.dynamicScaling && (q.adaptiveTarget ?? 0) > 0 && !sup);
+            s.setQuality?.(isOn ? { dynamicScaling: false } : { dynamicScaling: true, adaptiveTarget: 30 });
+        },
+    });
+    menu.registerItem('system', {
+        id: 'mobile-sep-display',
+        type: 'separator',
+        when: () => isMobileSnapshot(),
+    });
 
     // --- Dynamic feature toggles --------------------------------------
     // Each feature that declares `menuConfig` gets an auto-toggle here.
@@ -513,15 +585,73 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     });
 
     menu.registerItem('system', {
-        id: 'force-mobile',
-        type: 'toggle',
-        label: 'Force Mobile UI',
-        title: 'Preview the mobile layout on desktop. Dev / debug only.',
-        when: () => useEngineStore.getState().advancedMode,
-        isActive: () => useEngineStore.getState().debugMobileLayout,
-        onToggle: () => {
-            const s = useEngineStore.getState();
-            s.setDebugMobileLayout(!s.debugMobileLayout);
-        },
+        id: 'ui-mode-pref',
+        type: 'custom',
+        component: UiModePreferenceMenuItem,
     });
+};
+
+// ── UI mode preference (tri-state) ────────────────────────────────────
+
+const UI_MODE_OPTIONS: Array<{ value: 'auto' | 'mobile' | 'desktop'; label: string; hint: string }> = [
+    { value: 'auto',    label: 'Auto',          hint: 'Detect by device' },
+    { value: 'mobile',  label: 'Force Mobile',  hint: 'Mobile layout on any device' },
+    { value: 'desktop', label: 'Force Desktop', hint: 'Desktop layout on any device' },
+];
+
+const UiModePreferenceMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
+    const pref = useEngineStore((s) => s.uiModePreference);
+    const setPref = useEngineStore((s) => s.setUiModePreference);
+
+    return (
+        <div className="px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1.5">UI Layout</div>
+            <div className="flex gap-1">
+                {UI_MODE_OPTIONS.map((opt) => {
+                    const active = pref === opt.value;
+                    return (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            title={opt.hint}
+                            onClick={() => { setPref(opt.value); close(); }}
+                            className={pillClass(active, 'flex-1')}
+                        >
+                            {opt.label}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+// Per-subsystem fine-tuning isn't surfaced on mobile — only the 6
+// master presets. The desktop ViewportQuality popover is the full UI.
+
+const MobileQualityMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
+    const scalability = useEngineStore((s) => s.scalability);
+    const applyPreset = useEngineStore((s) => s.applyScalabilityPreset);
+    const currentLabel = getScalabilityLabel(scalability);
+
+    return (
+        <div className="px-3 py-2">
+            <div className="grid grid-cols-3 gap-1">
+                {SCALABILITY_PRESETS.map((p) => {
+                    const active = currentLabel === p.label;
+                    return (
+                        <button
+                            key={p.id}
+                            type="button"
+                            title={p.description ?? p.label}
+                            onClick={() => { applyPreset(p.id); close(); }}
+                            className={pillClass(active)}
+                        >
+                            {p.label}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
 };

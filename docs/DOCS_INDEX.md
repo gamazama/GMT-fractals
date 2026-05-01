@@ -87,6 +87,7 @@ Each engine architecture doc opens with a marker:
 | 14 | [Panel Manifest](engine/14_Panel_Manifest.md) | 🚧 | How `panels.ts` declares which features compose into which panels |
 | 15 | [Camera Manager Extraction](engine/15_Camera_Manager_Extraction.md) | 🚧 | StateLibrary primitive — how cameras/views/palettes share one mechanism |
 | 16 | [Type Augmentation](engine/16_Type_Augmentation.md) | 🔒 | DDFS slices + state-library keys — the two-target declaration-merge rule |
+| 17 | [Mobile Layout](engine/17_Mobile_Layout.md) | 🚧 | Mobile detection, UI-mode preference, layout primitives, mobile menu rendering, sibling-app adoption |
 
 ### Audit
 | # | File | Status | Scope |

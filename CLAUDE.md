@@ -35,6 +35,7 @@ Before ANY code change, consult the doc for the area you're touching. The engine
 | **Extracting a GMT feature as generic** — triage + worked example | `docs/engine/13_Extracting_From_GMT.md` |
 | **Panel manifests** — how `panels.ts` composes features into panels | `docs/engine/14_Panel_Manifest.md` |
 | **Type augmentation** — DDFS slices + state-library keys (the no-`as any` rule) | `docs/engine/16_Type_Augmentation.md` |
+| **Mobile layout** — detection, UI-mode preference, layout primitives, mobile menu, sibling-app adoption | `docs/engine/17_Mobile_Layout.md` |
 | Known fragilities + remediation status | `docs/engine/20_Fragility_Audit.md` |
 | Save/load, SceneFormat, preset field registry | `docs/engine/04_Core_Plugins.md#scene-io` + `utils/SceneFormat.ts` |
 | GMT-era reference (fractal, raymarching, formulas) | `docs/gmt/` — historical, NOT authoritative for the engine |

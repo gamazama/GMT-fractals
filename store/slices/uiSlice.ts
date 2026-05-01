@@ -1,9 +1,24 @@
 
 import { StateCreator } from 'zustand';
-import { EngineStoreState, EngineActions, PanelId, PanelState, DockZone, CompositionOverlayType, CompositionOverlaySettings } from '../../types';
+import { EngineStoreState, EngineActions, PanelId, PanelState, DockZone, CompositionOverlayType, CompositionOverlaySettings, UiModePreference } from '../../types';
 import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
+
+// UI mode preference — persisted across reloads so the user's
+// auto/mobile/desktop choice survives. Read once at slice init, written
+// from setUiModePreference. Single key, app-agnostic.
+const UI_MODE_PREF_KEY = 'gmt.uiModePreference';
+function readUiModePreference(): UiModePreference {
+    try {
+        const v = localStorage.getItem(UI_MODE_PREF_KEY);
+        if (v === 'auto' || v === 'mobile' || v === 'desktop') return v;
+    } catch { /* SSR / private mode */ }
+    return 'auto';
+}
+function writeUiModePreference(v: UiModePreference): void {
+    try { localStorage.setItem(UI_MODE_PREF_KEY, v); } catch { /* quota */ }
+}
 
 // Tutorial completion persistence — namespaced per app via
 // `setTutorialStorageKey(key)` (called by installTutorial). Default
@@ -30,7 +45,7 @@ export type UISlice = Pick<EngineStoreState,
     'showLightGizmo' | 'isGizmoDragging' |
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
-    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'debugMobileLayout' | 'invertY' |
+    'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'uiModePreference' | 'invertY' |
     'helpWindow' | 'contextMenu' |
     'lockSceneOnSwitch' | 'exportIncludeScene' |
     'isTimelineHovered' | 
@@ -50,7 +65,7 @@ export type UISlice = Pick<EngineStoreState,
     'setShowLightGizmo' | 'setGizmoDragging' | 
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
-    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setDebugMobileLayout' | 'setInvertY' |
+    'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setUiModePreference' | 'setInvertY' |
     'setLockSceneOnSwitch' | 'setExportIncludeScene' |
     'setIsTimelineHovered' | 
     'setInteractionMode' | 'setFocusLock' |
@@ -102,7 +117,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
 
     advancedMode: false,
     showHints: true,
-    debugMobileLayout: false,
+    uiModePreference: readUiModePreference(),
     invertY: false,
 
     // resolutionMode + fixedResolution migrated to viewportSlice (Phase 2a).
@@ -193,7 +208,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     setVpQualityOpen: (v) => set({ vpQualityOpen: v }),
     setAdvancedMode: (v) => set({ advancedMode: v }),
     setShowHints: (v) => set({ showHints: v }),
-    setDebugMobileLayout: (v) => set({ debugMobileLayout: v }),
+    setUiModePreference: (v) => { writeUiModePreference(v); set({ uiModePreference: v }); },
     setInvertY: (v) => set({ invertY: v }),
 
     // setResolutionMode / setFixedResolution migrated to viewportSlice (Phase 2a).

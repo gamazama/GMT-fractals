@@ -52,6 +52,11 @@ import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LoadingScreen } from './LoadingScreen';
 import { FormulaWorkshop } from '../engine-gmt/features/fragmentarium_import/FormulaWorkshop';
 import { useAppStartup } from '../hooks/useAppStartup';
+import { useMobileLayout } from '../hooks/useMobileLayout';
+import { LandscapeGate } from '../engine/components/LandscapeGate';
+import { MobileViewportShell } from '../engine/components/MobileViewportShell';
+import MobileControls from '../components/MobileControls';
+import { MobileMenuHost, mobileMenu } from '../engine/plugins/Menu';
 
 const DomOverlays: React.FC = () => {
     const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
@@ -80,6 +85,12 @@ const DomOverlays: React.FC = () => {
 
 export const AppGmt: React.FC = () => {
     const state     = useEngineStore();
+    const { isMobile } = useMobileLayout();
+    // Mobile-menu state is only ever set when on mobile (MenuAnchor
+    // gates `mobileMenu.toggle` on isMobile), so the active id alone
+    // tells us whether the right-dock should swap to MobileMenuHost.
+    const mobileActiveMenu = React.useSyncExternalStore(mobileMenu.subscribe, mobileMenu.getActive, mobileMenu.getActive);
+    const isMobileMenuOpen = mobileActiveMenu !== null;
 
     const [isSceneReady, setIsSceneReady] = useState(false);
     const [loadingVisible, setLoadingVisible] = useState(true);
@@ -153,7 +164,7 @@ export const AppGmt: React.FC = () => {
 
     return (
         <StoreCallbacksProvider value={storeCallbacks}>
-            <div className="fixed inset-0 w-full h-full bg-black text-white select-none overflow-hidden flex flex-col">
+            <MobileViewportShell className="bg-black text-white select-none overflow-hidden flex flex-col">
                 {loadingVisible && (
                     <LoadingScreen
                         isReady={isSceneReady}
@@ -162,6 +173,12 @@ export const AppGmt: React.FC = () => {
                         bootEngine={bootEngine}
                         isHydrated={isHydrated}
                     />
+                )}
+                {!loadingVisible && (
+                    <>
+                        <LandscapeGate />
+                        {!state.isBroadcastMode && <MobileControls />}
+                    </>
                 )}
                 <EngineBridge />
                 <RenderLoopDriver />
@@ -189,7 +206,7 @@ export const AppGmt: React.FC = () => {
                             />
                         </React.Suspense>
                     ) : (
-                        <Dock side="left" />
+                        !isMobile && <Dock side="left" />
                     )}
 
                     <ViewportFrame
@@ -203,7 +220,7 @@ export const AppGmt: React.FC = () => {
                                 <GmtNavigationHud
                                     state={state as any}
                                     actions={state as any}
-                                    isMobile={false}
+                                    isMobile={isMobile}
                                     hudRefs={hudRefs}
                                     region="bottom"
                                 />
@@ -250,7 +267,7 @@ export const AppGmt: React.FC = () => {
                         <GmtNavigationHud
                             state={state as any}
                             actions={state as any}
-                            isMobile={false}
+                            isMobile={isMobile}
                             hudRefs={hudRefs}
                             region="top"
                         />
@@ -288,10 +305,19 @@ export const AppGmt: React.FC = () => {
                         </div>
                     </ViewportFrame>
 
-                    <Dock side="right" />
+                    {/* On mobile, an open menu replaces the right dock so
+                        items get their own scrollable panel. Right dock
+                        also hides in Fly mode for joystick reach. */}
+                    {isMobileMenuOpen && <MobileMenuHost />}
+                    {!isMobileMenuOpen && !(isMobile && cameraMode === 'Fly') && <Dock side="right" />}
                 </div>
 
-                <TimelineHost />
+                {/* Timeline / animation editing is desktop-only — the
+                    panel collapses the viewport to ~60px on a phone and
+                    the workflow needs precise multi-track interaction
+                    that doesn't translate to touch. Skip mounting on
+                    mobile entirely. */}
+                {!isMobile && <TimelineHost />}
 
                 <HelpOverlay />
 
@@ -336,7 +362,7 @@ export const AppGmt: React.FC = () => {
                     />
                 )}
 
-            </div>
+            </MobileViewportShell>
         </StoreCallbacksProvider>
     );
 };

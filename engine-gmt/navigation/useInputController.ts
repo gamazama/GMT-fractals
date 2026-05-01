@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { CameraMode } from '../types';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
+import { useMobileLayout } from '../../hooks/useMobileLayout';
 
 export const useInputController = (
     mode: CameraMode, 
@@ -12,7 +13,7 @@ export const useInputController = (
 ) => {
     const { gl } = useThree();
     const invertY = useFractalStore(s => s.invertY);
-    const debugMobileLayout = useFractalStore(s => s.debugMobileLayout);
+    const { isMobile: isMobileLayout } = useMobileLayout();
     
     // Input State
     const moveState = useRef({ forward: false, backward: false, left: false, right: false, up: false, down: false, rollLeft: false, rollRight: false, boost: false });
@@ -196,7 +197,7 @@ export const useInputController = (
                 if ((e.target as HTMLElement).closest('.pointer-events-auto')) return;
             }
             
-            const isMobile = debugMobileLayout || window.innerWidth < 768 || (e as MouseEvent & { pointerType?: string }).pointerType === 'touch';
+            const isMobile = isMobileLayout || (e as MouseEvent & { pointerType?: string }).pointerType === 'touch';
             if (isMobile && mode === 'Fly') return;
 
             markActivity();
@@ -236,7 +237,7 @@ export const useInputController = (
             window.removeEventListener('mousemove', onMouseMove);
             window.removeEventListener('mouseup', onMouseUp);
         };
-    }, [mode, gl, debugMobileLayout, hudRefs]); 
+    }, [mode, gl, isMobileLayout, hudRefs]);
 
     const isInteracting = () => {
         const ms = moveState.current;
