@@ -1,37 +1,42 @@
 
 
-export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochasticShadows: boolean = true) => {
+export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochasticShadows: boolean = true, areaLightsActive: boolean = false) => {
 
     const loopLimit = isMobile ? '2' : 'maxBounces';
-     const shadowLogic = (!stochasticShadows || isMobile) ? `
+    // Three cases collapse to a single emitted shadow call:
+    //   1. !stochasticShadows or mobile → soft only (compile-stripped)
+    //   2. stochasticShadows && !areaLightsActive → soft only (NEW: was both
+    //      paths emitted with runtime `if (uAreaLights > 0.5)`)
+    //   3. stochasticShadows && areaLightsActive → stochastic only
+    // ANGLE/D3D11 was likely predicating both paths in case 2 — running both
+    // shadow marches per shadow-casting light. Compile-gating eliminates one.
+    const useSoft = !stochasticShadows || isMobile || !areaLightsActive;
+    const shadowLogic = useSoft ? `
         shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
     ` : `
-        if (uAreaLights > 0.5) {
-            vec2 jitter = blueNoise.gb;
-            vec3 sT, sB;
-            buildTangentBasis(lDir, sT, sB);
+        // Stochastic area-light path (areaLights checkbox ON, compile-gated).
+        vec2 jitter = blueNoise.gb;
+        vec3 sT, sB;
+        buildTangentBasis(lDir, sT, sB);
 
-            float spread = 2.0 / max(uShadowSoftness, 0.1);
-            float r = sqrt(jitter.x) * spread;
-            float theta = jitter.y * TAU;
+        float spread = 2.0 / max(uShadowSoftness, 0.1);
+        float r = sqrt(jitter.x) * spread;
+        float theta = jitter.y * TAU;
 
-            vec3 offsetDir = sT * cos(theta) * r + sB * sin(theta) * r;
-            vec3 shadowDir = normalize(lDir + offsetDir);
-            float shadowDist = distToLight;
+        vec3 offsetDir = sT * cos(theta) * r + sB * sin(theta) * r;
+        vec3 shadowDir = normalize(lDir + offsetDir);
+        float shadowDist = distToLight;
 
-            if (!isDirectional) {
-                 float radius = spread * distToLight;
-                 vec3 jitterOffset = (sT * cos(theta) + sB * sin(theta)) * sqrt(jitter.x) * radius;
-                 vec3 targetPos = uLightPos[lightIdx] + jitterOffset;
-                 vec3 tVec = targetPos - p_ray;
-                 shadowDist = length(tVec);
-                 shadowDir = tVec / max(1.0e-5, shadowDist);
-            }
-
-            shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
-        } else {
-            shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
+        if (!isDirectional) {
+            float radius = spread * distToLight;
+            vec3 jitterOffset = (sT * cos(theta) + sB * sin(theta)) * sqrt(jitter.x) * radius;
+            vec3 targetPos = uLightPos[lightIdx] + jitterOffset;
+            vec3 tVec = targetPos - p_ray;
+            shadowDist = length(tVec);
+            shadowDir = tVec / max(1.0e-5, shadowDist);
         }
+
+        shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
     `;
 
     return `
@@ -66,6 +71,51 @@ vec3 importanceSampleGGX(vec3 n, float roughness, vec2 seedVec) {
     vec3 t, b;
     buildTangentBasis(n, t, b);
     return normalize(t * h.x + b * h.y + n * h.z);
+}
+
+// Heitz 2018 — "Sampling the GGX Distribution of Visible Normals."
+// Returns a half-vector h in WORLD space, sampled from the visible normal
+// distribution conditioned on viewDir. Compared to half-vector sampling
+// (importanceSampleGGX above): the resulting BRDF/PDF weight collapses to
+// F * G2/G1 (bounded), eliminating the grazing-angle fireflies of the
+// classical NdotH/(NdotV*NdotH) form. Same compute cost; isotropic case.
+vec3 sampleGGXVNDF(vec3 n, vec3 viewDir, float roughness, vec2 seedVec) {
+    vec2 u = vec2(
+        fract(seedVec.x * phi),
+        fract(seedVec.y * phi + 0.5)
+    );
+    float a = roughness * roughness;
+
+    // 1. Build tangent basis around n; transform viewDir into tangent space
+    //    (z-up = surface normal).
+    vec3 t, b;
+    buildTangentBasis(n, t, b);
+    vec3 Ve = vec3(dot(viewDir, t), dot(viewDir, b), dot(viewDir, n));
+
+    // 2. Heitz §3.2: stretch view direction into the hemisphere config.
+    vec3 Vh = normalize(vec3(a * Ve.x, a * Ve.y, Ve.z));
+
+    // 3. Heitz §4.1: orthonormal basis aligned with Vh.
+    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    vec3 T1 = lensq > 0.0 ? vec3(-Vh.y, Vh.x, 0.0) * inversesqrt(lensq) : vec3(1.0, 0.0, 0.0);
+    vec3 T2 = cross(Vh, T1);
+
+    // 4. Heitz §4.2: sample uniformly in the projected disk, then warp.
+    float r = sqrt(u.x);
+    float phiVN = TAU * u.y;
+    float t1 = r * cos(phiVN);
+    float t2 = r * sin(phiVN);
+    float s = 0.5 * (1.0 + Vh.z);
+    t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
+
+    // 5. Heitz §4.3: reproject onto the hemisphere.
+    vec3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1 * t1 - t2 * t2)) * Vh;
+
+    // 6. Unstretch back to ellipsoid configuration → tangent-space half-vector.
+    vec3 Ne = normalize(vec3(a * Nh.x, a * Nh.y, max(0.0, Nh.z)));
+
+    // 7. Transform back to world space.
+    return normalize(t * Ne.x + b * Ne.y + n * Ne.z);
 }
 
 vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) {
@@ -106,10 +156,10 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         float roughness;
         getSurfaceMaterial(p_ray, p_fractal, result, d, albedo, n, emission, roughness, bounce == 0);
 
+        // AO removed from PT path: it's a screen-space approximation of multi-
+        // bounce GI, which the bounce loop computes for real. Keeping it would
+        // double-shade corners. Saves ~5 DE_Dist taps per primary pixel.
         float ao = 1.0;
-        if (uAOIntensity > 0.01 && bounce == 0) {
-            ao = GetAO(p_ray, n, seed + float(bounce) * 13.37);
-        }
 
         if (bounce == 0 && uRim > 0.01) {
             float NdotV_rim = max(0.0, dot(n, -currentRd));
@@ -231,9 +281,11 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
 
                     vec3 directContrib = (kD_nee * albedo * uDiffuse / PI + spec) * uLightColor[lightIdx] * uLightIntensity[lightIdx] * ndotl * shadow * att * ao * pdf;
 
-                    // Firefly clamp: suppress outlier samples (runtime, raise uPTMaxLuminance to disable)
-                    float dcLum = luminance(directContrib);
-                    directContrib *= min(1.0, uPTMaxLuminance / max(dcLum, 0.001));
+                    // (Firefly clamp removed: with VNDF the throughput weight is
+                    // bounded F*G2/G1, so per-sample contributions can no longer
+                    // explode at grazing angles. The clamp was a biased dim-shift
+                    // band-aid for the half-vector IS form's NdotH/(NdotV*NdotH)
+                    // blow-up. Bench-verified bias-neutral.)
 
                     radiance += directContrib * throughput;
                 }
@@ -264,6 +316,13 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         }
         #endif
 
+        // Last-bounce skip: bounce-direction selection, the next-bounce trace,
+        // and RR all only matter for the *next* iteration. On the final bounce,
+        // their outputs are written and never read. The fog block is the one
+        // exception — it adds a real radiance contribution along the bounce
+        // ray — so we keep the loop running when fog is enabled.
+        if (bounce + 1 >= maxBounces && uFogDensity < 0.001) break;
+
         // --- BOUNCE DIRECTION SELECTION ---
         vec3 kS = F_surface;
         vec3 kD = (vec3(1.0) - kS) * (1.0 - uReflection);
@@ -279,18 +338,18 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         vec2 dirSeed = blueNoise.gb;
 
         if (randType < probSpec) {
-            vec3 H = importanceSampleGGX(n, roughness, dirSeed);
+            // VNDF sampling (Heitz 2018). The half-vector H is sampled from the
+            // visible normal distribution conditioned on viewDir, so the BRDF/PDF
+            // weight collapses to F * G2/G1 = F * G1(L) (uncorrelated Smith form).
+            // No NdotH/(NdotV*NdotH) ratio → no grazing-angle fireflies.
+            vec3 H = sampleGGXVNDF(n, viewDir, roughness, dirSeed);
             vec3 newDir = reflect(currentRd, H);
-            // GGX IS weight: BRDF/PDF ≈ F * G * HdotV / (NdotV * NdotH)
-            float HdotV_sp = max(0.001, dot(H, -currentRd));
-            float NdotH_sp = max(0.001, dot(n, H));
             float NdotL_sp = max(0.001, dot(n, newDir));
-            float NdotV_sp = max(0.001, NdotV);
-            // Schlick-GGX geometry (matches NEE and pbr.ts)
             float G1L_sp = NdotL_sp / (NdotL_sp * (1.0 - kG) + kG);
-            float G1V_sp = NdotV_sp / (NdotV_sp * (1.0 - kG) + kG);
             currentRd = newDir;
-            throughput *= F_surface * G1L_sp * G1V_sp * HdotV_sp / (NdotV_sp * NdotH_sp) / probSpec;
+            throughput *= F_surface * G1L_sp / probSpec;
+            // Below-horizon fallback: rare, but VNDF can still produce L below
+            // the surface for very rough surfaces + grazing views.
             if (dot(currentRd, n) < 0.0) currentRd = cosineSampleHemisphere(n, dirSeed);
         } else {
             currentRd = cosineSampleHemisphere(n, dirSeed);
@@ -312,19 +371,21 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             throughput *= trans;
         }
 
-        // Russian roulette termination (decorrelated from bounce type selection)
-        // Start after bounce 2 to guarantee primary + 1st indirect are always evaluated
-        if (bounce > 2) {
+        // Russian roulette: standard form (PBRT §13.7, Arvo & Kirk 1990).
+        // Survival probability scales with current throughput; survivors get 1/q
+        // reweighting so the estimator stays unbiased. Bright paths survive freely
+        // (q→1), dim paths terminate stochastically. Starts at bounce 1 — primary
+        // direct lighting always evaluates, but indirect contributions are subject
+        // to RR from the first bounce.
+        if (bounce >= 1) {
             float maxThroughput = max(throughput.r, max(throughput.g, throughput.b));
-            if (maxThroughput < 0.05) {  // Below 5% contribution — candidate for termination
-                // Use a separate noise sample for termination to avoid correlation with randType
-                float rrRand = fract(blueNoise.r * 1.618 + 0.7);  // 1.618 = golden ratio decorrelation
-                float survivalProb = maxThroughput * 10.0;  // Scale: 5% throughput → 50% survival
-                if (rrRand > survivalProb) break;
-                throughput /= survivalProb;  // Energy-conserving boost for surviving paths
-            }
+            float q = clamp(maxThroughput, 0.05, 1.0);  // 5% floor prevents pathological 1/q boost
+            float rrRand = fract(blueNoise.r * 1.618 + 0.7);  // golden-ratio decorrelation from bounce-type rand
+            if (rrRand > q) break;
+            throughput /= q;
         }
-        throughput = min(throughput, vec3(4.0));  // Firefly suppression clamp
+        // (Throughput firefly clamp removed alongside the NEE clamp — both were
+        // band-aids for the half-vector IS variance source that VNDF eliminates.)
     }
     return radiance;
 }

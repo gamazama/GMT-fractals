@@ -39,8 +39,13 @@ export const Mandelbulb: FractalDefinition = {
             float sp = sin(phi);
             float cp = cos(phi);
             z3 = zr * vec3(st * cp, sp * st, ct);
-            
-            // Optional Z-Twist (Param D)
+
+            // Optional Z-Twist (Param D). Tried wrapping this body in
+            // a user function (mandelbulb_zTwist) to test whether fxc would
+            // dispatch the call dynamically (skipping sin/cos when paramD=0)
+            // instead of predicating the inline body. Result was NEUTRAL —
+            // fxc auto-inlines short user functions and predicates the result
+            // identically. See BENCH_SHADER_HANDOFF.md "What didn't work".
             if (abs(uParamD) > 0.001) {
                 float twist = z3.z * uParamD;
                 float s = sin(twist);

@@ -19,13 +19,6 @@ vec3 applyEnvFog(vec3 env) {
     return mix(env, uFogColorLinear, fogFactor);
 }
 
-// Apply distance-based fog to shaded geometry
-vec3 applyDistanceFog(vec3 col, float dist) {
-    if (uFogIntensity < 0.001 || uFogFar >= 1000.0) return col;
-    float fogFactor = smoothstep(uFogNear, uFogFar, dist) * uFogIntensity;
-    return mix(col, uFogColorLinear, fogFactor);
-}
-
 // Sample environment for a miss ray (reflection/bounce), with fog and feature overrides
 vec3 sampleMissEnv(vec3 ro, vec3 rd, float roughness, vec3 throughput) {
     return applyEnvFog(sampleMiss(ro, rd, roughness) * uEnvStrength) * throughput;

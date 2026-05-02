@@ -3,8 +3,15 @@
 // Each BRDF variant gets its own complete function to avoid dead-code overhead.
 // stochasticShadows: compile-time gate — when false, the stochastic jitter block
 // and its GetHardShadow dependency are stripped, saving significant compile time.
+// areaLightsActive: compile-time gate within the stochastic-shadow build —
+// session-2 found that the runtime `if (uAreaLights > 0.5)` was emitting BOTH
+// the stochastic and soft shadow paths and ANGLE/D3D11 was likely predicating
+// (running both 128-step shadow marches). When areaLightsActive=false (default
+// for `uAreaLights=false`), only the soft path is emitted; when true, only the
+// stochastic+GetHardShadow path. Toggling the `areaLights` checkbox triggers a
+// recompile, consistent with the existing compile-toggle UX.
 
-const getLoopOpen = (stochasticShadows: boolean) => `
+const getLoopOpen = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
 vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughness, float metallic, float stochasticSeed, bool calcShadows) {
     vec3 Lo = vec3(0.0);
 
@@ -64,36 +71,32 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
         float shadow = 1.0;
         if (calcShadows && uShadows > 0.5 && uLightShadows[i] > 0.5) {
             float s = 1.0;
-${stochasticShadows ? `
-            bool useStochasticShadows = (uAreaLights > 0.5);
-            if (useStochasticShadows) {
-                 float samplingSeed = fract(stochasticSeed + float(i) * 1.618);
+${stochasticShadows && areaLightsActive ? `
+            // Stochastic area-light path (areaLights checkbox ON, compile-gated).
+            float samplingSeed = fract(stochasticSeed + float(i) * 1.618);
 
-                 vec3 u, v;
-                 buildTangentBasis(l, u, v);
+            vec3 u, v;
+            buildTangentBasis(l, u, v);
 
-                 float r_jitter = sqrt(samplingSeed);
-                 float theta = samplingSeed * TAU * 1.618033;
-                 float spread = 2.0 / max(uShadowSoftness, 0.1);
+            float r_jitter = sqrt(samplingSeed);
+            float theta = samplingSeed * TAU * 1.618033;
+            float spread = 2.0 / max(uShadowSoftness, 0.1);
 
-                 vec3 offset = (u * cos(theta) + v * sin(theta)) * r_jitter * spread;
+            vec3 offset = (u * cos(theta) + v * sin(theta)) * r_jitter * spread;
 
-                 vec3 jitteredLDir = normalize(l + offset);
-                 float jitteredDist = distToLight;
+            vec3 jitteredLDir = normalize(l + offset);
+            float jitteredDist = distToLight;
 
-                 if (!isDirectional) {
-                      vec3 jitteredTarget = uLightPos[i] + offset * distToLight;
-                      vec3 jVec = jitteredTarget - p;
-                      jitteredDist = length(jVec);
-                      jitteredLDir = jVec / jitteredDist;
-                 }
-
-                 s = GetHardShadow(shadowRo, jitteredLDir, jitteredDist);
-            } else {
-                 s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
+            if (!isDirectional) {
+                vec3 jitteredTarget = uLightPos[i] + offset * distToLight;
+                vec3 jVec = jitteredTarget - p;
+                jitteredDist = length(jVec);
+                jitteredLDir = jVec / jitteredDist;
             }
+
+            s = GetHardShadow(shadowRo, jitteredLDir, jitteredDist);
 ` : `
-                 s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
+            s = GetSoftShadow(shadowRo, l, uShadowSoftness, distToLight, stochasticSeed);
 `}
             shadow = mix(1.0, s, uShadowIntensity);
         }
@@ -117,11 +120,11 @@ const LOOP_CLOSE = `
 `;
 
 // Simple Blinn-Phong (fast compile, good visual quality)
-export const getLightingPBRSimple = (stochasticShadows: boolean) => `
+export const getLightingPBRSimple = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
 // ------------------------------------------------------------------
 // PBR HELPERS (Blinn-Phong)
 // ------------------------------------------------------------------
-${getLoopOpen(stochasticShadows)}
+${getLoopOpen(stochasticShadows, areaLightsActive)}
         // Blinn-Phong specular — uses hoisted bpShininess / bpSpecNorm /
         // specularTint / diffuseTerm from the prelude (per-pixel invariants).
         vec3 h = normalize(l + v);
@@ -134,11 +137,11 @@ ${LOOP_CLOSE}
 `;
 
 // Full Cook-Torrance (GGX + Smith-GGX + Schlick — slower compile)
-export const getLightingPBRFull = (stochasticShadows: boolean) => `
+export const getLightingPBRFull = (stochasticShadows: boolean, areaLightsActive: boolean = false) => `
 // ------------------------------------------------------------------
 // PBR HELPERS (Cook-Torrance GGX)
 // ------------------------------------------------------------------
-${getLoopOpen(stochasticShadows)}
+${getLoopOpen(stochasticShadows, areaLightsActive)}
         // F0 / NdotV / ggxA2 / ggxKG / ggxG1V are hoisted in the prelude.
         vec3 h = normalize(l + v);
         float HdotV = max(0.0, dot(h, v));

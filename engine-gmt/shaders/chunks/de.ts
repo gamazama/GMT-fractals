@@ -149,10 +149,12 @@ vec4 map(vec3 p) {
 
     // Color mode 8 = LLI (Last Length Iteration) decomposition — needs lastLength from escape check
     bool useLLI = (abs(uColorMode - 8.0) < 0.1) || (abs(uColorMode2 - 8.0) < 0.1);
+#ifdef USE_TEXTURE
     if (uUseTexture > 0.5) {
         if (abs(uTextureModeU - 8.0) < 0.1) useLLI = true;
         if (abs(uTextureModeV - 8.0) < 0.1) useLLI = true;
     }
+#endif
     float outTrap = useLLI ? lastLength : trap;
 
     // --- FEATURE INJECTION: POST-MAP (accumulative) ---

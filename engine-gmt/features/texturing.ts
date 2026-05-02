@@ -30,7 +30,12 @@ export const TexturingFeature: FeatureDefinition = {
             shortId: 'ac',
             uniform: 'uUseTexture',
             group: 'main',
-            hidden: true 
+            hidden: true,
+            // Compile-gated so the runtime if() doesn't predicate getTextureColor()
+            // on every surface eval when textures are off (default). Mirrors the
+            // burningEnabled pattern. Runtime sync is preserved for completeness
+            // (toggling re-compiles, then sets the uniform; both sides agree).
+            onUpdate: 'compile', noReset: true
         },
         layer1Data: {
             type: 'image',
@@ -121,6 +126,12 @@ export const TexturingFeature: FeatureDefinition = {
             uniform: 'uTextureOffset',
             min: -2.0, max: 2.0, step: 0.01,
             group: 'transform'
+        }
+    },
+    inject: (builder, config) => {
+        const state = config.texturing as TexturingState | undefined;
+        if (state?.active) {
+            builder.addDefine('USE_TEXTURE');
         }
     },
 };

@@ -273,15 +273,18 @@ export const GeometryFeature: FeatureDefinition = {
             condition: { param: 'hybridCompiled', bool: true }
         },
 
-        // --- GLOBAL MODIFIERS (Runtime) ---
-        // Toggle stays runtime — instant feedback, no recompile pause.
-        // Bench (2026-05-02) confirmed `mix(z, abs(z), step(0.5, u))` and
-        // `if (u > 0.5) z = abs(z)` cost the same on ANGLE/D3D11 — both are
-        // predicated. We keep the mix() form (slightly smaller IR).
+        // --- GLOBAL MODIFIERS ---
+        // Compile-gated: with the line removed from DXBC entirely (rather
+        // than runtime-predicated by uBurningEnabled), the per-iter abs+mix
+        // ALU disappears when burning is off. Toggle is a discrete checkbox
+        // so recompile-on-flip is acceptable per the engine's compile-toggle
+        // rules. Uniform `uBurningEnabled` is kept declared in ShaderBuilder
+        // because formulas like MandelTerrain still query it directly.
         burningEnabled: {
             type: 'boolean', default: false, label: 'Burning Mode', shortId: 'bm', group: 'burning',
             description: 'Applies absolute value to coordinates every iteration. Creates "Burning Ship" variations.',
-            uniform: 'uBurningEnabled'
+            uniform: 'uBurningEnabled',
+            onUpdate: 'compile', noReset: true
         },
 
         // --- HYBRID BOX RUNTIME PARAMS (visible when compiled AND active) ---
@@ -422,14 +425,15 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
         let hybridPreLoop = "";
         let hybridInLoop = "";
 
-        // --- BURNING MODE (Runtime, ANGLE/D3D11 doesn't optimize uniform if-branches) ---
-        // The bench (2026-05-02) showed if-branch and mix cost the same on
-        // this stack — both are predicated. Keeping the original mix; no
-        // free-when-off pattern available without compile-time gating.
+        // --- BURNING MODE (Compile-gated) ---
+        // ANGLE/D3D11 predicates uniform if-branches, so the runtime mix()
+        // form ran abs(z.xyz) every iter regardless of toggle. Compile-gating
+        // drops the line from DXBC entirely when burning is off (default).
         const formula = config.formula as any;
         const isSelfContainedSDE = registry.get(formula)?.shader.selfContainedSDE ?? false;
-        if (!isSelfContainedSDE) {
-            hybridInLoop += `z.xyz = mix(z.xyz, abs(z.xyz), step(0.5, uBurningEnabled));`;
+        const burningOn = state?.burningEnabled ?? false;
+        if (!isSelfContainedSDE && burningOn) {
+            hybridInLoop += `z.xyz = abs(z.xyz);`;
         }
 
         if (hybridCompiled && !isSelfContainedSDE) {

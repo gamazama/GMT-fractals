@@ -231,6 +231,11 @@ export const LightingFeature: FeatureDefinition = {
             condition: { param: 'ptStochasticShadows', bool: true },
             description: 'Stochastic area light shadows. Disable for sharp analytical shadows.',
             helpId: 'shadows',
+            // Compile-gated. ANGLE/D3D11 was likely predicating the runtime
+            // `if (uAreaLights > 0.5)` shadow-path switch — running both
+            // GetSoftShadow AND GetHardShadow per shadow-casting light. The
+            // compile gate emits exactly one path. Toggle triggers recompile.
+            onUpdate: 'compile', noReset: true
         },
         shadowIntensity: {
             type: 'float', default: 1.0, label: 'Opacity', shortId: 'si', uniform: 'uShadowIntensity',
@@ -338,6 +343,12 @@ export const LightingFeature: FeatureDefinition = {
         }
 
         const stochasticShadows = state?.ptStochasticShadows === true && shadowsCompiled;
+        // areaLightsActive: compile-gates the *runtime* `if (uAreaLights > 0.5)`
+        // branch in the shadow path. When false (default), only soft shadows
+        // are emitted; when true, only the stochastic+GetHardShadow path. This
+        // resolves the case where ANGLE was likely predicating both paths.
+        // Toggling the `areaLights` checkbox now triggers a recompile.
+        const areaLightsActive = state?.areaLights === true && stochasticShadows;
 
         const isPathTracing = config.renderMode === 'PathTracing' || state?.renderMode === 1.0;
         const quality = config.quality as QualityState;
@@ -347,12 +358,12 @@ export const LightingFeature: FeatureDefinition = {
             builder.addIntegrator(LIGHTING_SHARED); // PT needs fresnelSchlick
             builder.setRenderMode('PathTracing');
             builder.addDefine('RENDER_MODE_PATHTRACING', '1');
-            builder.addIntegrator(getPathTracerGLSL(isLite, MAX_LIGHTS, stochasticShadows));
+            builder.addIntegrator(getPathTracerGLSL(isLite, MAX_LIGHTS, stochasticShadows, areaLightsActive));
         } else {
             const useCookTorrance = state?.specularModel === 1.0;
             builder.addIntegrator(useCookTorrance ? LIGHTING_SHARED : LIGHTING_SHARED_CORE);
             builder.setRenderMode('Direct');
-            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows) : getLightingPBRSimple(stochasticShadows));
+            builder.addIntegrator(useCookTorrance ? getLightingPBRFull(stochasticShadows, areaLightsActive) : getLightingPBRSimple(stochasticShadows, areaLightsActive));
             // Shading integrator (calculateShading) is deferred to buildFragment() via requestShading()
             // so that reflection code from ReflectionsFeature is available at generation time.
             builder.requestShading();

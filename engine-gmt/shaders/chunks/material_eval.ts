@@ -97,10 +97,15 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     // --- Coloring Calculation ---
     vec3 col1 = vec3(0.0);
     
-    // Layer 1 (Always calculated as base)
+    // Layer 1 (Always calculated as base). Texture branch is compile-gated
+    // because uUseTexture is a checkbox toggle (default off) but ANGLE
+    // predicates the runtime if() and runs getTextureColor() anyway.
+#ifdef USE_TEXTURE
     if (uUseTexture > 0.5) {
         col1 = getTextureColor(p_fractal, n, result);
-    } else {
+    } else
+#endif
+    {
         float val1 = getMappingValue(uColorMode, p_fractal, result, n, uColorScale);
         float twistAngle = 0.0;
         if (abs(uColorTwist) > 0.001) {

@@ -142,6 +142,30 @@ const MATERIAL_PRESET = argVal('--material') ?? '';
 const SCENE_TAG = argVal('--tag') ?? '';   // appended to image filenames so
                                             // matrix runs don't overwrite
 
+// Render-mode + path-tracer overrides. PT mode requires both:
+//   1. lighting.ptEnabled = true (master compile gate that emits the PT chunk)
+//   2. renderMode = 'PathTracing' (flips the active code path)
+// Sub-toggles control compile-time PT defines (#define PT_NEE_ALL_LIGHTS,
+// #define PT_ENV_NEE) — each adds material amounts of GLSL when on. Default
+// to off so the bench measures the minimal PT path unless explicitly opted in.
+//
+//   --render-mode=Direct|PathTracing            (default Direct)
+//   --pt-bounces=<n>                            (uPTBounces override; default 3)
+//   --pt-nee-all=true|false                     (PT_NEE_ALL_LIGHTS define)
+//   --pt-env-nee=true|false                     (PT_ENV_NEE define)
+const RENDER_MODE = argVal('--render-mode') ?? '';
+const PT_BOUNCES = argVal('--pt-bounces') ? parseInt(argVal('--pt-bounces')!, 10) : null;
+const parseBool = (v: string | undefined): boolean | null => {
+    if (v === undefined) return null;
+    const s = v.toLowerCase();
+    if (s === 'true' || s === '1' || s === 'on') return true;
+    if (s === 'false' || s === '0' || s === 'off') return false;
+    return null;
+};
+const PT_NEE_ALL = parseBool(argVal('--pt-nee-all'));
+const PT_ENV_NEE = parseBool(argVal('--pt-env-nee'));
+const IS_PT = RENDER_MODE === 'PathTracing';
+
 const APP_URL   = (process.env.ENGINE_URL ?? 'http://localhost:3400') + '/app-gmt.html';
 const BENCH_URL = (process.env.ENGINE_URL ?? 'http://localhost:3400') + '/shader-bench.html';
 
@@ -309,6 +333,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     // downstream — better to abort cleanly than barrel ahead with a
     // stale or partial state.
     const pageErrors: string[] = [];
+    const consoleLog: { type: string; text: string }[] = [];
     let snapshotAbort: ((err: Error) => void) | null = null;
     page.on('pageerror', (e) => {
         pageErrors.push(e.message);
@@ -316,12 +341,21 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         if (snapshotAbort) snapshotAbort(new Error(`page error during snapshot: ${e.message}`));
     });
     page.on('console', (m) => {
-        if (m.type() === 'error') {
-            const t = m.text();
-            // Filter noisy/expected console.error from feature warnings
-            if (/CompileError|SyntaxError|Failed to fetch dynamically imported|HMR.*failed/i.test(t)) {
-                console.error(`[bench-shader] CONSOLE ERROR (snapshot): ${t}`);
-                if (snapshotAbort) snapshotAbort(new Error(`console error during snapshot: ${t}`));
+        const t = m.text();
+        const type = m.type();
+        consoleLog.push({ type, text: t });
+        if (type === 'error' || type === 'warning') {
+            // Always surface errors/warnings — silent timeouts on a real shader
+            // compile failure waste 30 seconds with no signal. Abort only on
+            // patterns that mean compile/load actually failed; benign info-log
+            // warnings (X3557 "loop only executes for 0 iter") DO NOT abort.
+            // Match: "ERROR: x:y" (GLSL compile error), explicit JS errors,
+            // module-load failures, and fatal Three.js messages.
+            const fatal = /(^|[\s'"])ERROR:\s*\d+:\d+|SyntaxError:|Cannot read prop|TypeError:|ReferenceError:|Uncaught\s|Shader couldn[''‛]?t compile|Failed to (compile|link) shader|Failed to fetch dynamically imported|HMR.*failed/i;
+            const tag = fatal.test(t) ? 'FATAL' : type.toUpperCase();
+            console.error(`[bench-shader] ${tag} (snapshot): ${t.slice(0, 600)}`);
+            if (fatal.test(t) && snapshotAbort) {
+                snapshotAbort(new Error(`fatal console message during snapshot: ${t.slice(0, 200)}`));
             }
         }
     });
@@ -334,6 +368,36 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         p.then(v => { snapshotAbort = prevAbort; resolve(v); },
                e => { snapshotAbort = prevAbort; reject(e); });
     });
+
+    // Dump engine state + recent console history when a wait gate fails, so
+    // the user can see *why* boot/compile didn't progress. Without this, a
+    // wait timeout looks identical regardless of root cause.
+    const dumpDiagnostics = async (where: string) => {
+        try {
+            const state = await page.evaluate(`(() => {
+                const p = window.__gmtProxy;
+                if (!p) return { proxy: 'missing' };
+                return {
+                    proxy: 'present',
+                    isBooted: p.isBooted,
+                    hasCompiledShader: p.hasCompiledShader,
+                    isCompiling: p.isCompiling,
+                    accumulationCount: p.accumulationCount,
+                    lastError: p.lastError ?? null,
+                };
+            })()`);
+            console.error(`[bench-shader] DIAG (${where}): engine state = ${JSON.stringify(state)}`);
+        } catch (e: any) {
+            console.error(`[bench-shader] DIAG (${where}): could not query engine state: ${e?.message ?? e}`);
+        }
+        const recentErrors = consoleLog.filter(m => m.type === 'error' || m.type === 'warning').slice(-10);
+        if (recentErrors.length > 0) {
+            console.error(`[bench-shader] DIAG (${where}): last ${recentErrors.length} console errors/warnings:`);
+            recentErrors.forEach(m => console.error(`  [${m.type}] ${m.text.slice(0, 400)}`));
+        } else {
+            console.error(`[bench-shader] DIAG (${where}): no console errors/warnings recorded`);
+        }
+    };
 
     const bailIfErrors = (where: string) => {
         if (pageErrors.length > 0) {
@@ -348,13 +412,18 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     // (TS syntax error, vite HMR fail, GLSL compile error) bails immediately
     // instead of hanging until APP_TIMEOUT_MS.
     console.log('[bench-shader] waiting for engine boot…');
-    await abortable(page.waitForFunction(
-        `window.__gmtProxy
-            && window.__gmtProxy.isBooted
-            && window.__gmtProxy.hasCompiledShader
-            && !window.__gmtProxy.isCompiling`,
-        { timeout: APP_TIMEOUT_MS, polling: 100 },
-    ));
+    try {
+        await abortable(page.waitForFunction(
+            `window.__gmtProxy
+                && window.__gmtProxy.isBooted
+                && window.__gmtProxy.hasCompiledShader
+                && !window.__gmtProxy.isCompiling`,
+            { timeout: APP_TIMEOUT_MS, polling: 100 },
+        ));
+    } catch (e: any) {
+        await dumpDiagnostics('boot-wait');
+        throw e;
+    }
     bailIfErrors('post-boot');
     const accumBaseline = await page.evaluate(`window.__gmtProxy.accumulationCount`) as number;
     console.log(`[bench-shader] compiled — waiting for first painted frame (accum > ${accumBaseline})…`);
@@ -379,6 +448,10 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         reflectionMode: string;
         reflectionBounces: number;
         materialPreset: string;
+        renderMode: string;
+        ptBounces: number | null;
+        ptNeeAll: boolean | null;
+        ptEnvNee: boolean | null;
     }) => {
         const store = (window as any).__store;
         const reg = (window as any).__fractalRegistry;
@@ -448,6 +521,26 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             if (m) setters.setMaterials(m);
         }
 
+        // Render-mode + PT setup. Order matters:
+        //   1. Flip lighting.ptEnabled (master compile gate). If off, the PT
+        //      chunk is never injected and renderMode='PathTracing' is a no-op.
+        //   2. Apply PT sub-toggles (ptNEEAllLights, ptEnvNEE) which toggle
+        //      compile-time #defines.
+        //   3. Apply uPTBounces if given (loop-bound — runtime, but worth
+        //      pinning so bench results aren't sensitive to default drift).
+        //   4. Last, call setRenderMode — that's the actual switch that
+        //      triggers the PT recompile via MaterialController.
+        if (opts.renderMode === 'PathTracing' && setters.setLighting) {
+            const lightingPatch: any = { ptEnabled: true };
+            if (opts.ptNeeAll !== null) lightingPatch.ptNEEAllLights = opts.ptNeeAll;
+            if (opts.ptEnvNee !== null) lightingPatch.ptEnvNEE = opts.ptEnvNee;
+            if (opts.ptBounces !== null) lightingPatch.ptBounces = opts.ptBounces;
+            setters.setLighting(lightingPatch);
+        }
+        if (opts.renderMode && setters.setRenderMode) {
+            setters.setRenderMode(opts.renderMode);
+        }
+
         const after = (window as any).__store.getState();
         return {
             ok: true,
@@ -455,9 +548,24 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             appliedReflectionMode: after.reflections?.reflectionMode ?? 'unset',
             appliedRoughness: after.materials?.roughness ?? 'unset',
             appliedReflection: after.materials?.reflection ?? 'unset',
+            appliedRenderMode: after.renderMode ?? 'unset',
+            appliedPtEnabled: after.lighting?.ptEnabled ?? 'unset',
+            appliedPtNeeAll: after.lighting?.ptNEEAllLights ?? 'unset',
+            appliedPtEnvNee: after.lighting?.ptEnvNEE ?? 'unset',
         };
-    }, { reflectionMode: REFLECTION_MODE, reflectionBounces: REFLECTION_BOUNCES, materialPreset: MATERIAL_PRESET });
+    }, {
+        reflectionMode: REFLECTION_MODE,
+        reflectionBounces: REFLECTION_BOUNCES,
+        materialPreset: MATERIAL_PRESET,
+        renderMode: RENDER_MODE,
+        ptBounces: PT_BOUNCES,
+        ptNeeAll: PT_NEE_ALL,
+        ptEnvNee: PT_ENV_NEE,
+    });
     console.log(`[bench-shader] preset diag: applied=${JSON.stringify({ refl: presetApplied.appliedReflectionMode, rough: presetApplied.appliedRoughness, reflectionStrength: presetApplied.appliedReflection })}`);
+    if (RENDER_MODE) {
+        console.log(`[bench-shader] render-mode diag: applied=${JSON.stringify({ mode: presetApplied.appliedRenderMode, ptEnabled: presetApplied.appliedPtEnabled, ptNeeAll: presetApplied.appliedPtNeeAll, ptEnvNee: presetApplied.appliedPtEnvNee })}`);
+    }
     if (!presetApplied.ok) {
         console.log(`[bench-shader] WARNING: ${presetApplied.reason} — using whatever state the engine had`);
     } else {
@@ -685,10 +793,15 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     // reference produces meaningless "FAIL" verdicts. Users still get the
     // bench image saved for visual inspection; they just don't get a diff
     // metric until a per-scene reference is established.
-    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET);
+    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET || IS_PT);
     let diff: { mae: number; rmse: number; maxErr: number; diffDataUrl: string } | null = null;
     if (isSceneVariant) {
-        console.log(`[bench-shader] skipping diff: scene overrides active (refl=${REFLECTION_MODE || 'default'}, mat=${MATERIAL_PRESET || 'default'}) — reference is calibrated for the default scene only`);
+        const variantParts = [
+            REFLECTION_MODE && `refl=${REFLECTION_MODE}`,
+            MATERIAL_PRESET && `mat=${MATERIAL_PRESET}`,
+            IS_PT && `mode=PT(neeAll=${PT_NEE_ALL ?? 'def'},envNEE=${PT_ENV_NEE ?? 'def'},bounces=${PT_BOUNCES ?? 'def'})`,
+        ].filter(Boolean).join(', ');
+        console.log(`[bench-shader] skipping diff: scene overrides active (${variantParts}) — reference is calibrated for the default scene only`);
     } else if (existsSync(REF_IMAGE_PATH) && typeof result.captured === 'string') {
         try {
             diff = await computeDiff(page, REF_IMAGE_PATH, {
@@ -767,6 +880,10 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
         'GMT.compile.linkms':   result.compileTiming ? result.compileTiming.linkMs.toFixed(1) : 'n/a',
         'GMT.scene.refl_mode':  REFLECTION_MODE || '(default)',
         'GMT.scene.material':   MATERIAL_PRESET || '(default)',
+        'GMT.scene.render_mode': RENDER_MODE || '(default)',
+        'GMT.scene.pt_bounces':  PT_BOUNCES !== null ? String(PT_BOUNCES) : '(default)',
+        'GMT.scene.pt_nee_all':  PT_NEE_ALL !== null ? String(PT_NEE_ALL) : '(default)',
+        'GMT.scene.pt_env_nee':  PT_ENV_NEE !== null ? String(PT_ENV_NEE) : '(default)',
         'GMT.scene.tag':        SCENE_TAG || '(none)',
         'GMT.diff.mae':         diff ? diff.mae.toFixed(3) : 'n/a',
         'GMT.diff.rmse':        diff ? diff.rmse.toFixed(3) : 'n/a',
@@ -835,7 +952,7 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
         strippedUniforms: result.missingUniforms ?? [],
         timingsUs:        t,
         compileTiming:    result.compileTiming ?? null,
-        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, reflectionBounces: REFLECTION_BOUNCES },
+        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, reflectionBounces: REFLECTION_BOUNCES, renderMode: RENDER_MODE || null, ptBounces: PT_BOUNCES, ptNeeAll: PT_NEE_ALL, ptEnvNee: PT_ENV_NEE },
         pageErrors,
         refImage:         refPath.replace(process.cwd() + '\\', '').replace(process.cwd() + '/', ''),
         diff: diff ? { mae: diff.mae, rmse: diff.rmse, maxErr: diff.maxErr } : null,
@@ -866,8 +983,16 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     if (result.compileTiming) {
         console.log(`compile:        ${result.compileTiming.totalMs.toFixed(0)}ms total  (${result.compileTiming.compileMs.toFixed(0)}ms compile + ${result.compileTiming.linkMs.toFixed(0)}ms link/sync)`);
     }
-    if (REFLECTION_MODE || MATERIAL_PRESET) {
-        console.log(`scene overrides: reflection=${REFLECTION_MODE || 'default'}  material=${MATERIAL_PRESET || 'default'}`);
+    if (REFLECTION_MODE || MATERIAL_PRESET || RENDER_MODE) {
+        const lines = [
+            REFLECTION_MODE && `reflection=${REFLECTION_MODE}`,
+            MATERIAL_PRESET && `material=${MATERIAL_PRESET}`,
+            RENDER_MODE     && `renderMode=${RENDER_MODE}`,
+            IS_PT && PT_BOUNCES !== null && `ptBounces=${PT_BOUNCES}`,
+            IS_PT && PT_NEE_ALL !== null && `ptNeeAll=${PT_NEE_ALL}`,
+            IS_PT && PT_ENV_NEE !== null && `ptEnvNee=${PT_ENV_NEE}`,
+        ].filter(Boolean).join('  ');
+        console.log(`scene overrides: ${lines}`);
     }
     console.log('');
     if (diff) {
