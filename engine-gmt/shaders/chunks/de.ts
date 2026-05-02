@@ -99,12 +99,17 @@ vec4 map(vec3 p) {
         float r2 = dot(z.xyz, z.xyz);
         g_orbitTrap = min(g_orbitTrap, abs(vec4(z.xyz, r2)));
 
-        // Branchless color iteration snapshot: keep updating until iter exceeds limit
-        float colorGate = step(iter, uColorIter);  // 1.0 while iter <= uColorIter, 0.0 after
-        savedOrbitTrap = mix(savedOrbitTrap, g_orbitTrap, colorGate);
-        savedTrap = mix(savedTrap, trap, colorGate);
-        savedGeomTrap = mix(savedGeomTrap, g_geomTrap, colorGate);
-        savedIter = mix(savedIter, iter, colorGate);
+        // Color iteration snapshot. Direct if-assignment (rather than mix
+        // with a 0/1 gate) lets fxc co-locate savedX with the running X
+        // in the same register: with mix, savedX was both an operand and
+        // a destination on every iter, forcing a separate live range.
+        // Audit Tier 2 / compile #3.
+        if (iter <= uColorIter) {
+            savedOrbitTrap = g_orbitTrap;
+            savedTrap      = trap;
+            savedGeomTrap  = g_geomTrap;
+            savedIter      = iter;
+        }
 
         if (!decompCaptured && r2 > uEscapeThresh) {
             decomp = atan(z.y, z.x) * INV_TAU + 0.5;

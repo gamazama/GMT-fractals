@@ -38,8 +38,12 @@ vec3 calculateShading(vec3 ro, vec3 rd, float d, vec4 result, float stochasticSe
     vec3 albedo, n, emission;
     float roughness;
 
-    // 1. Primary Surface
-    getSurfaceMaterial(p_ray, p_fractal, result, d, albedo, n, emission, roughness, true);
+    // 1. Primary Surface — 3-tap forward-difference (GetFastNormal). With
+    // shadows dominating cost on the corrected bench, this is statistically
+    // tied with 4-tap tetra (within run-to-run noise) but ~5% theoretically
+    // cheaper on math-only scenes. Visually indistinguishable for default
+    // Mandelbulb. Audit Tier 1 #2.
+    getSurfaceMaterial(p_ray, p_fractal, result, d, albedo, n, emission, roughness, false);
 
     vec3 v = normalize(-rd);
 

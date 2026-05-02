@@ -53,14 +53,20 @@ float GetSoftShadow(vec3 ro, vec3 rd, float k, float lightDist, float noise) {
         float fudge = uFudgeFactor;
     `;
 
+    // Early-out when res saturates: GetSoftShadow returns clamp(res, 0, 1)
+    // and `res` only ever decreases (min op). Once it drops below ~0.005 the
+    // pixel is visually black; further marching can't change the output.
+    // For deeply-shadowed surface points this skips most of the 128-step loop.
     const softLoopBody = qualityLevel < 1.5 ? `
             if(h < 0.005) return 0.0;
             res = min(res, k * h / t);
+            if (res < 0.005) return 0.0;
             t += max(h, 0.05);
     ` : `
             float thresh = max(1.0e-6, t * 0.0001);
             if(h < thresh) return 0.0;
             res = min(res, k * h / max(t, 1.0e-5));
+            if (res < 0.005) return 0.0;
             t += h * fudge;
     `;
 

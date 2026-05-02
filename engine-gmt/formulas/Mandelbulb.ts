@@ -13,13 +13,18 @@ export const Mandelbulb: FractalDefinition = {
         void formula_Mandelbulb(inout vec4 z, inout float dr, inout float trap, vec4 c) {
             vec3 z3 = z.xyz;
             float r = length(z3);
-            
+
             // Standard derivative — reuse pow(r, power-1) for both dr and zr
             float power = uParamA;
             float rp1 = pow(r, power - 1.0);
             dr = rp1 * power * dr + 1.0;
 
-            // Spherical exponentiation
+            // Spherical exponentiation. Fast-math substitutes (Lagae acosFast +
+            // Padé atan2Fast) were tried 2026-05-02: NEUTRAL on this stack
+            // (ANGLE/D3D11 already lowers hardware acos/atan2 efficiently)
+            // and incurred MAE drift of 0.03 vs reference. Keep the hardware
+            // calls — the polynomials only help on stacks where the hardware
+            // intrinsic is genuinely slow.
             float theta = acos(clamp(z3.z / r, -1.0, 1.0));
             float phi = atan(z3.y, z3.x);
 
@@ -28,7 +33,12 @@ export const Mandelbulb: FractalDefinition = {
             phi = phi * power + uVec2A.y;
 
             float zr = rp1 * r;
-            z3 = zr * vec3(sin(theta) * cos(phi), sin(phi) * sin(theta), cos(theta));
+            // Cache trig terms — sin(theta) was computed twice. Audit T1#3.
+            float st = sin(theta);
+            float ct = cos(theta);
+            float sp = sin(phi);
+            float cp = cos(phi);
+            z3 = zr * vec3(st * cp, sp * st, ct);
             
             // Optional Z-Twist (Param D)
             if (abs(uParamD) > 0.001) {

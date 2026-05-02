@@ -83,23 +83,23 @@ float GetAO(vec3 p_ray, vec3 n, float seed) {
         if (i >= limit) break;
 
         float h = (0.1 + 0.125 * float(i)) * spread + jitterBias;
-        
+
         vec3 aopos = p_bias + dir * h;
-        
+
         // OPTIMIZATION: Use DE_Dist for geometry-only check
         float d = DE_Dist(aopos);
-        
+
         if (d < h) {
             float diff = h - d;
             occ += diff * weight;
         }
-        
+
         totalWeight += h * weight;
-        weight *= 0.8; 
+        weight *= 0.8;
     }
-    
+
     occ /= (totalWeight + 0.0001);
-    
+
     return clamp(1.0 - (occ * uAOIntensity * 2.5), 0.0, 1.0);
 }
 `;

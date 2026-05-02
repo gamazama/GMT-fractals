@@ -138,7 +138,9 @@ export const generateMappingShader = () => {
     float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale) {
         float v = 0.0;
 
-        // Mode Selection (switch for jump-table codegen)
+        // Mode Selection (switch for jump-table codegen).
+        // Bench (2026-05-02) confirmed an if-chain fast-path for common modes
+        // (0/1/2/3/7) was neutral — fxc already produces efficient dispatch.
         switch(int(mode + 0.1)) {
     `;
 

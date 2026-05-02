@@ -274,6 +274,10 @@ export const GeometryFeature: FeatureDefinition = {
         },
 
         // --- GLOBAL MODIFIERS (Runtime) ---
+        // Toggle stays runtime — instant feedback, no recompile pause.
+        // Bench (2026-05-02) confirmed `mix(z, abs(z), step(0.5, u))` and
+        // `if (u > 0.5) z = abs(z)` cost the same on ANGLE/D3D11 — both are
+        // predicated. We keep the mix() form (slightly smaller IR).
         burningEnabled: {
             type: 'boolean', default: false, label: 'Burning Mode', shortId: 'bm', group: 'burning',
             description: 'Applies absolute value to coordinates every iteration. Creates "Burning Ship" variations.',
@@ -418,7 +422,10 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
         let hybridPreLoop = "";
         let hybridInLoop = "";
 
-        // --- BURNING MODE (Global Runtime) ---
+        // --- BURNING MODE (Runtime, ANGLE/D3D11 doesn't optimize uniform if-branches) ---
+        // The bench (2026-05-02) showed if-branch and mix cost the same on
+        // this stack — both are predicated. Keeping the original mix; no
+        // free-when-off pattern available without compile-time gating.
         const formula = config.formula as any;
         const isSelfContainedSDE = registry.get(formula)?.shader.selfContainedSDE ?? false;
         if (!isSelfContainedSDE) {

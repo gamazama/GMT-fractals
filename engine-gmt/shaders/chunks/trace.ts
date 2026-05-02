@@ -30,6 +30,15 @@ export const getTraceGLSL = (
     ${volumeFinalizeCode}`
         : `h = vec4(MISS_DIST, 0.0, 0.0, 0.0);`;
 
+    // Audit Tier 1 #1 (split map/mapDist in march loop) was tried and reverted:
+    // the compiler already DCEs unused trap/iter/decomposition in map() because
+    // h.y/h.z/h.w aren't read downstream when no volumetric body needs them.
+    // Replacing the inner call with mapDist() saved nothing per-step but added
+    // a redundant map() call at hit detection, net slower (+5%). See
+    // bench-shader history 2026-05-02 for the regression run.
+    const innerDistCall = `h = map(p + uCameraPosition);`;
+    const hitFinalizeCall = ``;
+
     return `
 // ------------------------------------------------------------------
 // STAGE 2: RAYMARCHING (Flattened & Optimized)
@@ -40,6 +49,11 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
     result = vec4(0.0);
 
     // 1. Bounding Sphere
+    // Pre-compute the world-origin offset once. uCameraPosition + uSceneOffset*
+    // are all frame-constant and were being re-summed every march step at the
+    // precision-check site below — moving the addition outside the loop saves
+    // 2 vec3 adds per step per pixel (audit Tier 1).
+    vec3 worldOriginOffset = uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
     vec3 sphereCenter = -(uSceneOffsetHigh + uSceneOffsetLow);
     vec2 bounds = intersectSphere(ro - sphereCenter, rd, BOUNDING_RADIUS);
     if (bounds.x > bounds.y) { fogScatter = vec3(0.0); return false; }
@@ -69,16 +83,17 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
 
         vec3 p = ro + rd * d;
         
-        // A. Distance Estimation (Raw vec4 return)
-        // Note: map() now adds uCameraPosition internally
-        h = map(p + uCameraPosition);
+        // A. Distance Estimation
+        // When no per-step volumetric body needs trap data, use mapDist() —
+        // distance only, skipping orbit-trap mins / decomposition / smoothing.
+        ${innerDistCall}
         
         // B. Volumetric Effects (Inlined Code Block)
         // Uses: d, h, p, accColor, accDensity, accAlpha
         ${volumeBodyCode}
         
         // C. Precision
-        vec3 p_fractal_approx = p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh;
+        vec3 p_fractal_approx = p + worldOriginOffset;
         float distFromFractalOrigin = length(p_fractal_approx);
         
         ${precisionLogic}
@@ -98,7 +113,12 @@ bool ${functionName}(vec3 ro, vec3 rd, out float d, out vec4 result, inout vec3 
         
         // D. Hit Detection
         if (h.x < finalEps) {
-            
+
+            // Populate full map() data (orbit-trap, iter, decomposition) once
+            // at the hit point — only the distance was tracked through the
+            // inner loop when innerVolumeBodyEmpty is true. No-op otherwise.
+            ${hitFinalizeCall}
+
             // --- SURFACE REFINEMENT (Edge Polish) ---
             // If enabled, take a few extra tiny steps to settle exactly on the surface.
             // Helps significantly when uFudgeFactor is low but step count limited.

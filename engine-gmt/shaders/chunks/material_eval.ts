@@ -78,19 +78,19 @@ void getSurfaceMaterial(vec3 p_ray_in, vec3 p_fractal_in, vec4 result, float d, 
     
     if (useL3) {
         noiseVal = getLayer3Noise(noiseP);
-        
-        if (abs(uLayer3Bump) > 0.001) {
+
+        // Bump-map finite-difference is gated on highQuality at the apply
+        // site below; gate the COMPUTATION too so reflection-bounce inlines
+        // (highQuality=false) skip the 3 noise taps entirely. Saves ~3
+        // getLayer3Noise calls per bounce hit pixel on raymarched reflections.
+        // Audit compile #2 (minimal version of getSurfaceMaterialBounce).
+        if (abs(uLayer3Bump) > 0.001 && highQuality) {
             vec2 e = vec2(0.01, 0.0);  // Fixed-size finite difference step for bump gradient (world-space units)
             float nx = getLayer3Noise(noiseP + e.xyy) - noiseVal;
             float ny = getLayer3Noise(noiseP + e.yxy) - noiseVal;
             float nz = getLayer3Noise(noiseP + e.yyx) - noiseVal;
             vec3 grad = vec3(nx, ny, nz);
-            
-            // Only apply detailed bump mapping on high quality rays (primary hit)
-            // Skip bump on bounces to save perf and reduce shimmering
-            if (highQuality) {
-                n = normalize(n - grad * uLayer3Bump * 10.0);  // 10x amplification to make bump visually significant at world scale
-            }
+            n = normalize(n - grad * uLayer3Bump * 10.0);  // 10x amplification to make bump visually significant at world scale
         }
     }
 

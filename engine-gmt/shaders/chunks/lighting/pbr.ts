@@ -12,6 +12,22 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
     float biasAmount = uShadowBias + pixelSizeScale * 2.0;
     vec3 shadowRo = p + n * biasAmount;
 
+    // BRDF invariants — depend only on roughness/metallic/albedo/n/v, NOT on
+    // per-light direction. Computing them once here saves N-1 redundant
+    // recomputes per pixel on a multi-light scene (3 lights at default ⇒ 2x
+    // savings on these ops). Audit Tier 1 lighting #1.
+    float roughnessSq = roughness * roughness;
+    vec3  specularTint = mix(vec3(1.0), albedo, metallic);   // Blinn-Phong tint
+    vec3  diffuseTerm  = (1.0 - metallic) * albedo * uDiffuse * (1.0 / PI);
+    vec3  F0           = mix(vec3(0.04), albedo, metallic);  // Cook-Torrance base
+    float NdotV        = max(0.001, dot(n, v));              // view-dep, light-indep
+    float ggxA2        = roughnessSq * roughnessSq;
+    float ggxKG        = roughnessSq * 0.5;
+    float ggxG1V       = NdotV / (NdotV * (1.0 - ggxKG) + ggxKG);
+    // Blinn-Phong specular normalisation: shininess + (shininess+2)/(8π)
+    float bpShininess  = max(2.0, 2.0 / (roughnessSq + 0.001) - 2.0);
+    float bpSpecNorm   = (bpShininess + 2.0) * (1.0 / (8.0 * PI));
+
     // COMPILER OPTIMIZATION: Prevent unrolling of light loop
     int lightCount = uLightCount;
 
@@ -24,19 +40,23 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
         float type = uLightType[i];
         bool isDirectional = type > 0.5;
 
-        vec3 lVec;
-        float distToLight;
+        vec3 lVec = isDirectional ? uLightDir[i] : (uLightPos[i] - p);
 
+        // Cheap backface bail: dot sign survives un-normalized, so we can
+        // skip backside lights BEFORE the length/divide. Saves a sqrt + div
+        // for ~half of pixels in typical scenes (audit T1 lighting #7).
+        if (dot(n, lVec) <= 0.0) continue;
+
+        float distToLight;
+        vec3 l;
         if (isDirectional) {
-             lVec = uLightDir[i]; // Already "toward light" from uniform manager
              distToLight = DIR_LIGHT_DIST;  // Directional: treat as infinitely far (> BOUNDING_RADIUS)
+             l = normalize(lVec);
         } else {
-             lVec = uLightPos[i] - p;
              distToLight = length(lVec);
              if (distToLight < 0.0001) continue;  // Skip degenerate (light inside surface)
+             l = lVec / distToLight;
         }
-
-        vec3 l = isDirectional ? normalize(lVec) : lVec / distToLight;
 
         float NdotL = max(0.0, dot(n, l));
         if (NdotL <= 0.0) continue;
@@ -102,15 +122,14 @@ export const getLightingPBRSimple = (stochasticShadows: boolean) => `
 // PBR HELPERS (Blinn-Phong)
 // ------------------------------------------------------------------
 ${getLoopOpen(stochasticShadows)}
-        // Blinn-Phong specular
+        // Blinn-Phong specular — uses hoisted bpShininess / bpSpecNorm /
+        // specularTint / diffuseTerm from the prelude (per-pixel invariants).
         vec3 h = normalize(l + v);
         float NdotH = max(0.0, dot(n, h));
-        float shininess = max(2.0, 2.0 / (roughness * roughness + 0.001) - 2.0);
-        float spec = pow(NdotH, shininess) * (shininess + 2.0) / (8.0 * PI);
-        vec3 specular = mix(vec3(1.0), albedo, metallic) * spec;
+        float spec = pow(NdotH, bpShininess) * bpSpecNorm;
+        vec3 specular = specularTint * spec;
 
-        float kD = (1.0 - metallic);
-        Lo += (kD * albedo * uDiffuse / PI + specular * uSpecular) * radiance * NdotL;
+        Lo += (diffuseTerm + specular * uSpecular) * radiance * NdotL;
 ${LOOP_CLOSE}
 `;
 
@@ -120,9 +139,7 @@ export const getLightingPBRFull = (stochasticShadows: boolean) => `
 // PBR HELPERS (Cook-Torrance GGX)
 // ------------------------------------------------------------------
 ${getLoopOpen(stochasticShadows)}
-        vec3 F0 = mix(vec3(0.04), albedo, metallic);
-        float NdotV = max(0.001, dot(n, v));
-
+        // F0 / NdotV / ggxA2 / ggxKG / ggxG1V are hoisted in the prelude.
         vec3 h = normalize(l + v);
         float HdotV = max(0.0, dot(h, v));
         float NdotH = max(0.0, dot(n, h));
@@ -131,16 +148,12 @@ ${getLoopOpen(stochasticShadows)}
         vec3 F = fresnelSchlick(HdotV, F0);
 
         // Distribution (GGX / Trowbridge-Reitz)
-        float a = roughness * roughness;
-        float a2 = a * a;
-        float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
-        float D = a2 / (PI * denom * denom + GGX_EPSILON);
+        float denom = NdotH * NdotH * (ggxA2 - 1.0) + 1.0;
+        float D = ggxA2 / (PI * denom * denom + GGX_EPSILON);
 
         // Geometry (Smith-GGX)
-        float kG = a * 0.5;
-        float G1V = NdotV / (NdotV * (1.0 - kG) + kG);
-        float G1L = NdotL / (NdotL * (1.0 - kG) + kG);
-        float G = G1V * G1L;
+        float G1L = NdotL / (NdotL * (1.0 - ggxKG) + ggxKG);
+        float G = ggxG1V * G1L;
 
         // Cook-Torrance specular BRDF
         vec3 specular = (D * F * G) / (4.0 * NdotV * NdotL + GGX_EPSILON);
