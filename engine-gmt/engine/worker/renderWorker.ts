@@ -442,6 +442,52 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 }
                 break;
 
+            case 'GET_UNIFORMS_SNAPSHOT':
+                // Snapshot the live mainUniforms for debug tools (bench-shader).
+                // Walk the IUniform map, serialize each .value into a postMessage-
+                // safe shape: primitives + arrays pass through; THREE classes
+                // serialize to flat arrays / matrix shapes; Textures become a
+                // sentinel { __sampler: true, kind } so consumers can bind dummies.
+                if (engine) {
+                    const out: Record<string, any> = {};
+                    const ser = (v: any): any => {
+                        if (v == null) return v;
+                        if (typeof v !== 'object') return v;
+                        if (Array.isArray(v)) return v.map(ser);
+                        // Typed arrays (Float32Array, Int32Array, Uint8Array, …)
+                        // are how light arrays / vec3[] are usually stored. They
+                        // ARE postMessage-safe but their JSON serialization is
+                        // garbage; convert to plain Array. Caught BEFORE the
+                        // duck-typed checks because typed arrays don't have .x/.y.
+                        if (ArrayBuffer.isView(v) && !(v instanceof DataView)) {
+                            return Array.from(v as any);
+                        }
+                        if (v.isTexture || v.isCubeTexture || v.isDataTexture ||
+                            v.isVideoTexture || v.isCanvasTexture) {
+                            return { __sampler: true, kind: v.isCubeTexture ? 'cube' : '2d' };
+                        }
+                        if (v.isVector2)    return [v.x, v.y];
+                        if (v.isVector3)    return [v.x, v.y, v.z];
+                        if (v.isVector4)    return [v.x, v.y, v.z, v.w];
+                        if (v.isQuaternion) return [v.x, v.y, v.z, v.w];
+                        if (v.isMatrix3)    return { mat3: Array.from(v.elements) };
+                        if (v.isMatrix4)    return { mat4: Array.from(v.elements) };
+                        if (v.isColor)      return [v.r, v.g, v.b];
+                        if (typeof v.toArray === 'function') {
+                            try { return v.toArray(); } catch { /* fall through */ }
+                        }
+                        return null; // unserializable — drop
+                    };
+                    const u = engine.mainUniforms || {};
+                    for (const [k, slot] of Object.entries(u)) {
+                        out[k] = ser((slot as any)?.value);
+                    }
+                    postMsg({ type: 'UNIFORMS_SNAPSHOT_RESULT', id: msg.id, uniforms: out });
+                } else {
+                    postMsg({ type: 'UNIFORMS_SNAPSHOT_RESULT', id: msg.id, uniforms: null });
+                }
+                break;
+
             case 'TEXTURE':
                 if (engine && msg.bitmap) {
                     // Create THREE.Texture from ImageBitmap (transferred from main thread)

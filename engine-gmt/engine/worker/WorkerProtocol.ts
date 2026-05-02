@@ -88,6 +88,7 @@ export type MainToWorkerMessage =
     | { type: 'REGISTER_FORMULA'; id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean } }
     // ─── Shader Debug ───
     | { type: 'GET_SHADER_SOURCE'; id: string; variant: 'compiled' | 'translated' }
+    | { type: 'GET_UNIFORMS_SNAPSHOT'; id: string }
     | { type: 'CONFIG_DONE' };
 
 // ─── Worker → Main Thread ───────────────────────────────────────────────
@@ -115,4 +116,5 @@ export type WorkerToMainMessage =
     | { type: 'BUCKET_IMAGE'; pixels: Uint8ClampedArray; width: number; height: number;
         presetJson: string; filename: string }
     // ─── Shader Debug ───
-    | { type: 'SHADER_SOURCE_RESULT'; id: string; code: string | null };
+    | { type: 'SHADER_SOURCE_RESULT'; id: string; code: string | null }
+    | { type: 'UNIFORMS_SNAPSHOT_RESULT'; id: string; uniforms: Record<string, any> | null };

@@ -29,6 +29,21 @@ fractal_generator_*.glsl
 # Shader-validator harness output (regenerated per run)
 debug/shader-validator-results.jsonl
 
+# bench-shader artifacts — timestamped archives + regenerable per-run images.
+# The locked reference image (GMT_Mandelbulb_v1.png) is tracked explicitly.
+debug/bench-shader-2*.json
+debug/bench-shader-latest.json
+debug/bench-shader-snapshot.json
+debug/bench-shader-baseline*.json
+debug/bench-shader-refs/Mandelbulb-*.png
+debug/shader-dump/
+
+# bench-perf timestamped archives (paired with debug/bench-perf.mts)
+debug/bench-perf-2*.json
+debug/bench-perf-latest.json
+debug/bench-perf-baseline.json
+debug/bench-perf-after-*.json
+
 # One-off exploration / debug scripts, not part of the test suite
 debug/scratch/
 

@@ -439,6 +439,9 @@ applyPanelManifest(GmtPanels);
 if (typeof window !== 'undefined') {
     (window as any).__store = useEngineStore;
     (window as any).__gmtProxy = getProxy();
+    (window as any).__fractalEvents = FractalEvents;
+    (window as any).__fractalEventNames = FRACTAL_EVENTS;
+    (window as any).__fractalRegistry = registry;
 }
 
 const rootElement = document.getElementById('root');

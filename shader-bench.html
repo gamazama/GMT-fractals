@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>shader-bench</title>
+    <style>
+        html, body { margin: 0; padding: 0; background: #111; color: #ccc; font: 12px/1.4 ui-monospace, monospace; }
+        canvas { display: block; }
+        #log { position: fixed; left: 8px; bottom: 8px; right: 8px; max-height: 40vh; overflow: auto; pointer-events: none; }
+        #log div { white-space: pre; }
+        .err { color: #f88; }
+        .ok  { color: #8f8; }
+    </style>
+</head>
+<body>
+    <canvas id="gl"></canvas>
+    <div id="log"></div>
+
+    <script type="module">
+    /**
+     * shader-bench harness.
+     *
+     * No framework. The driver (debug/bench-shader.mts) hands us a config blob
+     * via window.__shaderBench.run({...}); we compile, set uniforms, render N
+     * draws while capturing GPU time via EXT_disjoint_timer_query_webgl2, and
+     * return the raw timings array. The driver reduces to median/p5/p95.
+     *
+     * Why bare WebGL2 (not Three.js): we want to measure *only* the cost of
+     * the assembled fragment shader. Three.js adds its own uniform machinery,
+     * RawShaderMaterial wrapping, and per-frame state validation. Skipping
+     * all of that means a regression in this bench is unambiguously a shader
+     * change.
+     */
+
+    const logEl = document.getElementById('log');
+    function log(msg, cls) {
+        const d = document.createElement('div');
+        if (cls) d.className = cls;
+        d.textContent = msg;
+        logEl.appendChild(d);
+        logEl.scrollTop = logEl.scrollHeight;
+        console.log('[shader-bench]', msg);
+    }
+
+    // Trivial fullscreen-tri vertex shader. Outputs vUv in [0,1] which the
+    // engine's fragment shader expects.
+    const VERT_SRC = `#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+    // Single-triangle trick: gl_VertexID 0/1/2 → covers viewport.
+    vec2 p = vec2(
+        (gl_VertexID == 1) ? 3.0 : -1.0,
+        (gl_VertexID == 2) ? 3.0 : -1.0
+    );
+    vUv = (p + 1.0) * 0.5;
+    gl_Position = vec4(p, 0.0, 1.0);
+}`;
+
+    // ─── GL setup ──────────────────────────────────────────────────────
+    const canvas = document.getElementById('gl');
+    const gl = canvas.getContext('webgl2', {
+        antialias: false,
+        depth: false,
+        stencil: false,
+        powerPreference: 'high-performance',
+        preserveDrawingBuffer: true,  // needed for screenshot capture
+    });
+    if (!gl) {
+        log('WebGL2 not supported', 'err');
+        throw new Error('webgl2 unsupported');
+    }
+
+    const adapterInfo = (() => {
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        return {
+            vendor:   ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)   : gl.getParameter(gl.VENDOR),
+            renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+            version:  gl.getParameter(gl.VERSION),
+            glsl:     gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+        };
+    })();
+    log(`adapter: ${adapterInfo.vendor} | ${adapterInfo.renderer}`);
+
+    const timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    if (!timerExt) {
+        log('EXT_disjoint_timer_query_webgl2 unavailable — timing will be RAF-based (lower fidelity)', 'err');
+    } else {
+        log('EXT_disjoint_timer_query_webgl2: ok', 'ok');
+    }
+
+    // ─── Helpers ───────────────────────────────────────────────────────
+    function compileShader(type, src, label) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+            const info = gl.getShaderInfoLog(s);
+            const lines = src.split('\n').map((l, i) => `${(i+1).toString().padStart(4)}: ${l}`).join('\n');
+            console.error(`[shader-bench] ${label} compile failed:\n${info}\n--- source ---\n${lines}`);
+            throw new Error(`${label} compile failed: ${info}`);
+        }
+        return s;
+    }
+
+    // Returns { prog, timing: {compileMs, linkMs, totalMs} }. WebGL compile/
+    // link timing on D3D11 (ANGLE) is mostly *deferred* — `compileShader` and
+    // `linkProgram` queue work; the real cost shows up when the driver is
+    // forced to sync, which is what `getShaderParameter(s, COMPILE_STATUS)`
+    // and `getProgramParameter(p, LINK_STATUS)` do. So timing the full call
+    // *including the status query* gives accurate numbers.
+    function buildProgram(vertSrc, fragSrc) {
+        const tCompile0 = performance.now();
+        const vs = compileShader(gl.VERTEX_SHADER, vertSrc, 'vert');
+        const fs = compileShader(gl.FRAGMENT_SHADER, fragSrc, 'frag');
+        const tCompile1 = performance.now();
+
+        const tLink0 = performance.now();
+        const prog = gl.createProgram();
+        gl.attachShader(prog, vs);
+        gl.attachShader(prog, fs);
+        gl.linkProgram(prog);
+        // Blocks until link is done (ANGLE/D3D11 defers HLSL translation
+        // and DXBC compile until first program parameter query).
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+            throw new Error('link failed: ' + gl.getProgramInfoLog(prog));
+        }
+        const tLink1 = performance.now();
+
+        return {
+            prog,
+            timing: {
+                compileMs: tCompile1 - tCompile0,
+                linkMs:    tLink1 - tLink0,
+                totalMs:   tLink1 - tCompile0,
+            },
+        };
+    }
+
+    function makeDummyTex2D(w = 1, h = 1, rgba = [0, 0, 0, 0]) {
+        const t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+            new Uint8Array(rgba));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        return t;
+    }
+
+    // Build a 256x1 gradient ramp, pos→[r,g,b,a] in [0..1]. Used as a stand-in
+    // for the engine's procedural gradient textures (color/env). Not a perfect
+    // match for the engine's gradient stops, but produces a visible image so
+    // the bench output can be eyeballed for quality regressions.
+    function makeRampTex2D(stops) {
+        const N = 256;
+        const data = new Uint8Array(N * 4);
+        const sorted = [...stops].sort((a, b) => a.pos - b.pos);
+        for (let i = 0; i < N; i++) {
+            const p = i / (N - 1);
+            // Find surrounding stops
+            let lo = sorted[0], hi = sorted[sorted.length - 1];
+            for (let j = 0; j < sorted.length - 1; j++) {
+                if (p >= sorted[j].pos && p <= sorted[j + 1].pos) {
+                    lo = sorted[j]; hi = sorted[j + 1]; break;
+                }
+            }
+            const span = Math.max(1e-6, hi.pos - lo.pos);
+            const t = Math.max(0, Math.min(1, (p - lo.pos) / span));
+            data[i * 4 + 0] = Math.round(255 * (lo.r + (hi.r - lo.r) * t));
+            data[i * 4 + 1] = Math.round(255 * (lo.g + (hi.g - lo.g) * t));
+            data[i * 4 + 2] = Math.round(255 * (lo.b + (hi.b - lo.b) * t));
+            data[i * 4 + 3] = 255;
+        }
+        const t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        return t;
+    }
+
+    // Load a 2D texture from a URL (PNG). Returns a Promise<WebGLTexture>.
+    async function loadTex2D(url) {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        return t;
+    }
+
+    function makeDummyCube() {
+        const t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_CUBE_MAP, t);
+        for (let i = 0; i < 6; i++) {
+            gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, gl.RGBA, 1, 1, 0,
+                gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]));
+        }
+        gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        return t;
+    }
+
+    /**
+     * Apply a uniform value. Type is inferred from the value shape:
+     *   number      → uniform1f / 1i (1f if has decimal or `Float`-like)
+     *   [a,b]       → uniform2fv
+     *   [a,b,c]     → uniform3fv
+     *   [a,b,c,d]   → uniform4fv (or matrix2 — caller marks via { mat2:[...] })
+     *   { mat3:[…9] }, { mat2:[…4] } → matrix uniforms
+     *   { tex:idx, kind:'2d'|'cube' } → bind texture unit
+     *   { int: n } → uniform1i (forces int interpretation)
+     */
+    function setUniform(prog, name, value, textureUnits, uniformTypes) {
+        const loc = gl.getUniformLocation(prog, name);
+        if (loc === null) return false;  // uniform optimized out — fine
+        if (value == null) return false;
+
+        // GLSL type info (from program introspection) lets us dispatch by
+        // declared type rather than by JS value shape — necessary because a
+        // plain `300` could be either an int uniform (uMaxSteps) or a float
+        // uniform (uIterations) and they take different gl.uniformN calls.
+        const tInfo = uniformTypes && uniformTypes[name];
+        const T = tInfo && tInfo.type;
+        const isIntType = T === gl.INT || T === gl.BOOL ||
+                          T === gl.INT_VEC2 || T === gl.INT_VEC3 || T === gl.INT_VEC4 ||
+                          T === gl.BOOL_VEC2 || T === gl.BOOL_VEC3 || T === gl.BOOL_VEC4;
+
+        if (typeof value === 'number') {
+            if (isIntType) gl.uniform1i(loc, value | 0);
+            else gl.uniform1f(loc, value);
+            return true;
+        }
+        if (Array.isArray(value)) {
+            // The worker snapshot serializes vec3[8] arrays as [[x,y,z],…]
+            // (array-of-arrays). Float32Array.from() doesn't recurse — it
+            // coerces nested arrays to NaN. Flatten if any element is an
+            // array. This was a silent-but-catastrophic bug — light arrays
+            // came out as all-NaN, every light got dropped, the shader's
+            // output was just env contribution.
+            const flat = (Array.isArray(value[0]) || ArrayBuffer.isView(value[0]))
+                ? value.flat()
+                : value;
+
+            if (T === gl.FLOAT_VEC2)        { gl.uniform2fv(loc, Float32Array.from(flat)); return true; }
+            if (T === gl.FLOAT_VEC3)        { gl.uniform3fv(loc, Float32Array.from(flat)); return true; }
+            if (T === gl.FLOAT_VEC4)        { gl.uniform4fv(loc, Float32Array.from(flat)); return true; }
+            if (T === gl.FLOAT_MAT2)        { gl.uniformMatrix2fv(loc, false, Float32Array.from(flat)); return true; }
+            if (T === gl.FLOAT_MAT3)        { gl.uniformMatrix3fv(loc, false, Float32Array.from(flat)); return true; }
+            if (T === gl.FLOAT_MAT4)        { gl.uniformMatrix4fv(loc, false, Float32Array.from(flat)); return true; }
+            if (T === gl.FLOAT)             { gl.uniform1fv(loc, Float32Array.from(flat)); return true; }
+            if (isIntType) {
+                gl.uniform1iv(loc, Int32Array.from(flat));
+                return true;
+            }
+            // Type unknown — length-based heuristic (post-flatten).
+            const v = Float32Array.from(flat);
+            if (v.length === 2) gl.uniform2fv(loc, v);
+            else if (v.length === 3) gl.uniform3fv(loc, v);
+            else if (v.length === 4) gl.uniform4fv(loc, v);
+            else if (v.length === 9) gl.uniformMatrix3fv(loc, false, v);
+            else if (v.length === 16) gl.uniformMatrix4fv(loc, false, v);
+            else gl.uniform1fv(loc, v);
+            return true;
+        }
+        if (typeof value === 'object') {
+            if ('int' in value) { gl.uniform1i(loc, value.int | 0); return true; }
+            // Explicit-type hints for array uniforms (vec3[N] etc.). Necessary
+            // because a length-24 flat array could be either float[24] or
+            // vec3[8] and the JS side has no way to know without the GLSL type.
+            if ('vec2' in value) { gl.uniform2fv(loc, Float32Array.from(value.vec2)); return true; }
+            if ('vec3' in value) { gl.uniform3fv(loc, Float32Array.from(value.vec3)); return true; }
+            if ('vec4' in value) { gl.uniform4fv(loc, Float32Array.from(value.vec4)); return true; }
+            if ('floats' in value) { gl.uniform1fv(loc, Float32Array.from(value.floats)); return true; }
+            if ('ints' in value) { gl.uniform1iv(loc, Int32Array.from(value.ints)); return true; }
+            if ('mat2' in value) { gl.uniformMatrix2fv(loc, false, Float32Array.from(value.mat2)); return true; }
+            if ('mat3' in value) { gl.uniformMatrix3fv(loc, false, Float32Array.from(value.mat3)); return true; }
+            if ('mat4' in value) { gl.uniformMatrix4fv(loc, false, Float32Array.from(value.mat4)); return true; }
+            if ('tex' in value) {
+                const unit = textureUnits.allocate(name, value);
+                gl.uniform1i(loc, unit);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ─── Run ───────────────────────────────────────────────────────────
+    /**
+     * Single bench run. `config` shape:
+     * {
+     *   fragSrc:   string                    // assembled fragment shader
+     *   width:     number                    // viewport width
+     *   height:    number                    // viewport height
+     *   uniforms:  { [name]: value }         // see setUniform() for value shapes
+     *   warmupDraws: number                  // discard before measuring
+     *   measureDraws: number                 // measured frame count
+     * }
+     * Returns { timingsUs:[…], disjointBatches, captured: dataURL, adapter, missingUniforms }
+     */
+    async function run(config) {
+        const {
+            fragSrc,
+            width = 1280,
+            height = 720,
+            uniforms = {},
+            warmupDraws = 60,
+            measureDraws = 240,
+            accumFrames = 256,    // for the post-timing converged image
+        } = config;
+
+        canvas.width = width;
+        canvas.height = height;
+        canvas.style.width  = width  + 'px';
+        canvas.style.height = height + 'px';
+        gl.viewport(0, 0, width, height);
+
+        log(`compiling shader (${fragSrc.length} bytes)…`);
+        const { prog, timing: compileTiming } = buildProgram(VERT_SRC, fragSrc);
+        log(`compile/link: ${compileTiming.compileMs.toFixed(0)}ms compile + ${compileTiming.linkMs.toFixed(0)}ms link = ${compileTiming.totalMs.toFixed(0)}ms`, 'ok');
+        gl.useProgram(prog);
+
+        // Build name-aware textures for the engine's known sampler uniforms.
+        // The bench can't reach into the worker's bound textures, but it can
+        // reproduce reasonable substitutes from known data:
+        //   - blueNoise.png is a static asset, fetchable directly
+        //   - color/env gradients are procedural — use sensible default ramps
+        //   - history texture is irrelevant when uBlendFactor=1.0 (set by driver)
+        const dummyBlack = makeDummyTex2D();
+        const dummyCube  = makeDummyCube();
+        let blueNoiseTex;
+        try { blueNoiseTex = await loadTex2D('/blueNoise.png'); }
+        catch (e) { log('failed to load /blueNoise.png — using dummy', 'err'); blueNoiseTex = dummyBlack; }
+        // Pure white ramp for the fractal-color samplers. The engine usually
+        // builds these from user-defined gradient stops and the iteration value
+        // can hit any position — using a constant-white ramp guarantees albedo
+        // is non-black so the lighting is actually visible in the bench output.
+        // Real per-stop colours can be snapshotted from the store later if we
+        // care about exact colour reproduction.
+        const whiteBlackRamp = makeRampTex2D([
+            { pos: 0, r: 1, g: 1, b: 1 },
+            { pos: 1, r: 1, g: 1, b: 1 },
+        ]);
+        // Sky gradient (horizon→zenith) for env sampler.
+        const skyGradient = makeRampTex2D([
+            { pos: 0, r: 0.13, g: 0.20, b: 0.27 },
+            { pos: 1, r: 0.53, g: 0.80, b: 1.00 },
+        ]);
+
+        const namedTextures = {
+            uBlueNoiseTexture: blueNoiseTex,
+            uHistoryTexture:   dummyBlack,           // ignored when uBlendFactor=1.0
+            uGradientTexture:  whiteBlackRamp,
+            uGradientTexture2: whiteBlackRamp,
+            uEnvGradient:      skyGradient,
+            uEnvMapTexture:    skyGradient,
+        };
+
+        let nextUnit = 0;
+        const textureUnits = {
+            allocate(name, value) {
+                const unit = nextUnit++;
+                gl.activeTexture(gl.TEXTURE0 + unit);
+                const isCube = value && value.kind === 'cube';
+                const target = isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D;
+                const tex = namedTextures[name] ?? (isCube ? dummyCube : dummyBlack);
+                gl.bindTexture(target, tex);
+                return unit;
+            },
+        };
+
+        // Build a name→GLSL-type table from the linked program. WebGL is
+        // strict: an int uniform must be set via uniform1i, a float via
+        // uniform1f. Plain numbers from the worker snapshot don't carry that
+        // info, so we look it up from the active program and dispatch
+        // accordingly. This is what makes the live-snapshot path work without
+        // hand-annotating every value with { int }.
+        const uniformTypes = {};   // name → gl.<TYPE>
+        const numActiveU = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+        for (let i = 0; i < numActiveU; i++) {
+            const info = gl.getActiveUniform(prog, i);
+            if (!info) continue;
+            const baseName = info.name.replace(/\[0\]$/, '');
+            uniformTypes[baseName] = { type: info.type, size: info.size };
+        }
+
+        // Apply uniforms; collect any that the program rejected (location null
+        // means GLSL stripped them as dead — useful diagnostic).
+        const missingUniforms = [];
+        const appliedUniforms = [];
+        for (const [name, value] of Object.entries(uniforms)) {
+            const ok = setUniform(prog, name, value, textureUnits, uniformTypes);
+            (ok ? appliedUniforms : missingUniforms).push(name);
+        }
+        log(`uniforms: ${appliedUniforms.length} applied, ${missingUniforms.length} stripped (likely dead in default config)`);
+
+        // Trigger texture-array uniforms with default unit assignments for any
+        // sampler we declared but didn't supply (avoids INVALID_OPERATION).
+        const numActive = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+        for (let i = 0; i < numActive; i++) {
+            const info = gl.getActiveUniform(prog, i);
+            if (!info) continue;
+            const isSampler =
+                info.type === gl.SAMPLER_2D ||
+                info.type === gl.SAMPLER_CUBE ||
+                info.type === gl.SAMPLER_2D_ARRAY ||
+                info.type === gl.SAMPLER_3D;
+            if (!isSampler) continue;
+            // Strip [0] suffix that getActiveUniform appends for arrays.
+            const name = info.name.replace(/\[0\]$/, '');
+            if (uniforms[name] == null) {
+                const loc = gl.getUniformLocation(prog, name);
+                if (loc !== null) {
+                    const unit = nextUnit++;
+                    gl.activeTexture(gl.TEXTURE0 + unit);
+                    const isCube = info.type === gl.SAMPLER_CUBE;
+                    const target = isCube ? gl.TEXTURE_CUBE_MAP : gl.TEXTURE_2D;
+                    const tex = namedTextures[name] ?? (isCube ? dummyCube : dummyBlack);
+                    gl.bindTexture(target, tex);
+                    gl.uniform1i(loc, unit);
+                }
+            }
+        }
+
+        // VAO with no attribs — gl_VertexID drives the fullscreen tri.
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+
+        // ─── Warmup ────────────────────────────────────────────────────
+        log(`warmup: ${warmupDraws} draws`);
+        for (let i = 0; i < warmupDraws; i++) {
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+        // Force a sync after warmup so the first measured draw isn't paying
+        // for queued warmup work.
+        const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.flush();
+        await waitSync(sync, 5000);
+        gl.deleteSync(sync);
+
+        // ─── Measure ───────────────────────────────────────────────────
+        const timingsUs = [];
+        let disjointBatches = 0;
+
+        if (timerExt) {
+            // Pipeline N queries to keep GPU busy. Reading too eagerly stalls.
+            const PIPELINE = 4;
+            const queries = [];
+
+            const issueDraw = (i) => {
+                const q = gl.createQuery();
+                gl.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                gl.endQuery(timerExt.TIME_ELAPSED_EXT);
+                queries.push({ q, i });
+            };
+
+            const drainOne = async () => {
+                const head = queries[0];
+                while (true) {
+                    const available = gl.getQueryParameter(head.q, gl.QUERY_RESULT_AVAILABLE);
+                    if (available) break;
+                    await frameYield();
+                }
+                const disjoint = gl.getParameter(timerExt.GPU_DISJOINT_EXT);
+                const ns = gl.getQueryParameter(head.q, gl.QUERY_RESULT);
+                gl.deleteQuery(head.q);
+                queries.shift();
+                if (disjoint) {
+                    disjointBatches += 1;
+                } else {
+                    timingsUs.push(ns / 1000);  // ns → µs
+                }
+            };
+
+            // Prime
+            for (let i = 0; i < Math.min(PIPELINE, measureDraws); i++) issueDraw(i);
+            // Steady state
+            for (let i = PIPELINE; i < measureDraws; i++) {
+                await drainOne();
+                issueDraw(i);
+            }
+            // Drain tail
+            while (queries.length) await drainOne();
+        } else {
+            // Fallback: RAF-based wall time (gives upper-bound, vsync-capped).
+            for (let i = 0; i < measureDraws; i++) {
+                const t0 = performance.now();
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                gl.finish();
+                timingsUs.push((performance.now() - t0) * 1000);
+                await frameYield();
+            }
+        }
+
+        // ─── Accumulation pass (after timing) ────────────────────────────
+        // Engine renders accumulate stochastic-shadow / AO / jitter noise over
+        // many frames (TAA) to converge on a clean image. The bench's single-
+        // frame timing draws above can't show that — we'd see noisy point-
+        // light shadows. Run N more draws here with varying jitter, average
+        // the canvas pixels in JS, and save the converged result. This pass
+        // is OUT of the timing window — its only purpose is the saved image.
+        log(`accumulating ${accumFrames} frames for converged image…`);
+
+        const uJitterLoc      = gl.getUniformLocation(prog, 'uJitter');
+        const uFrameCountLoc  = gl.getUniformLocation(prog, 'uFrameCount');
+        const uTimeLoc        = gl.getUniformLocation(prog, 'uTime');
+        const uBlendFactorLoc = gl.getUniformLocation(prog, 'uBlendFactor');
+        // uBlendFactor must be < 0.99 for the shader's getCameraRay to
+        // actually APPLY the per-frame jitter (see chunks/trace.ts isMoving).
+        // Anything between [0, 0.99) works; 0.5 is a safe value that doesn't
+        // accidentally land on any other branch threshold.
+        if (uBlendFactorLoc) gl.uniform1f(uBlendFactorLoc, 0.5);
+
+        // Halton(2,3) sub-pixel jitter sequence — same pattern engine TAA uses.
+        // Centred at 0 in pixels-of-NDC; the shader scales to viewport pixel.
+        function halton(i, b) { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; }
+
+        const accumulator = new Float32Array(width * height * 4);
+        const readBuf = new Uint8Array(width * height * 4);
+        let acceptedFrames = 0;
+        for (let i = 0; i < accumFrames; i++) {
+            const jx = halton(i + 1, 2) - 0.5;
+            const jy = halton(i + 1, 3) - 0.5;
+            if (uJitterLoc)     gl.uniform2f(uJitterLoc, jx, jy);
+            if (uFrameCountLoc) gl.uniform1i(uFrameCountLoc, i);
+            if (uTimeLoc)       gl.uniform1f(uTimeLoc, i * 0.01666);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, readBuf);
+            for (let p = 0; p < readBuf.length; p++) {
+                accumulator[p] += readBuf[p];
+            }
+            acceptedFrames += 1;
+            if ((i & 31) === 31) await frameYield();  // keep page responsive
+        }
+
+        // Average and write back to a 2D canvas for tonemap.
+        // Note: averaging happens in 8-bit space (HDR clipping is the same as
+        // what the engine's display pass would see). This gives the
+        // stochastic-shadow / AO convergence we want without needing a
+        // float framebuffer.
+        const avgPixels = new Uint8ClampedArray(width * height * 4);
+        const inv = 1.0 / acceptedFrames;
+        for (let p = 0; p < avgPixels.length; p++) {
+            avgPixels[p] = Math.round(accumulator[p] * inv);
+        }
+        const avgCanvas = document.createElement('canvas');
+        avgCanvas.width = width; avgCanvas.height = height;
+        avgCanvas.getContext('2d').putImageData(new ImageData(avgPixels, width, height), 0, 0);
+
+        log(`accumulation done (${acceptedFrames} frames). applying tonemap…`, 'ok');
+
+        // The fractal shader writes raw HDR linear values; the live engine
+        // applies tonemap + gamma in a separate post-process pass we don't
+        // reproduce here. Apply ACES-fit + gamma 2.2 to the AVERAGED canvas
+        // before saving so the bench output looks like what the user sees
+        // in app-gmt with full TAA convergence.
+        const captured = await tonemapCanvas(avgCanvas);
+
+        // Cleanup so subsequent run() calls in the same page (A/B mode) start
+        // from a clean slate.
+        gl.deleteProgram(prog);
+        gl.deleteVertexArray(vao);
+        gl.deleteTexture(dummyBlack);
+        gl.deleteTexture(dummyCube);
+        gl.deleteTexture(blueNoiseTex);
+        gl.deleteTexture(whiteBlackRamp);
+        gl.deleteTexture(skyGradient);
+
+        log(`done: ${timingsUs.length} samples, ${disjointBatches} disjoint`, 'ok');
+
+        return {
+            timingsUs,
+            disjointBatches,
+            captured,
+            adapter: adapterInfo,
+            missingUniforms,
+            appliedUniforms,
+            compileTiming,
+        };
+    }
+
+    function frameYield() {
+        return new Promise(r => requestAnimationFrame(() => r()));
+    }
+
+    // Read canvas pixels, apply Narkowicz ACES + sRGB encode (matches the
+    // engine's display-pass post-process), return as PNG data URL. The shader
+    // outputs raw HDR linear values; the engine runs ACES + sRGB in a
+    // separate display pass we don't reproduce on GPU here. Doing it in JS
+    // keeps the GPU timing pure.
+    //
+    // Constants below match shaders/chunks/post_process.ts ACESFilm() exactly.
+    // No exposure boost — the engine doesn't apply one, so we shouldn't either
+    // if we want the bench to match what the user sees in app-gmt.
+    async function tonemapCanvas(srcCanvas) {
+        const w = srcCanvas.width, h = srcCanvas.height;
+        const tmp = document.createElement('canvas');
+        tmp.width = w; tmp.height = h;
+        const ctx = tmp.getContext('2d');
+        ctx.drawImage(srcCanvas, 0, 0);
+        const img = ctx.getImageData(0, 0, w, h);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+            for (let c = 0; c < 3; c++) {
+                // Canvas data is 8-bit (0..255). Shader wrote linear HDR
+                // values that were clamped to [0,1] when the GPU stored them
+                // in the 8-bit canvas — for HDR fidelity beyond 1.0 we'd need
+                // a float framebuffer, but for matching the engine's display
+                // output (also clipped to [0,1]) this is correct.
+                let x = d[i + c] / 255.0;
+                // ACES (Narkowicz): (x*(2.51*x+0.03)) / (x*(2.43*x+0.59)+0.14)
+                x = (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14);
+                // sRGB encode (linear → display)
+                x = Math.pow(Math.max(0, Math.min(1, x)), 1.0 / 2.2);
+                d[i + c] = Math.round(255 * Math.min(1, Math.max(0, x)));
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        return tmp.toDataURL('image/png');
+    }
+
+    function waitSync(sync, timeoutMs) {
+        return new Promise((resolve) => {
+            const start = performance.now();
+            (function poll() {
+                const status = gl.clientWaitSync(sync, gl.SYNC_FLUSH_COMMANDS_BIT, 0);
+                if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) return resolve();
+                if (performance.now() - start > timeoutMs) return resolve();
+                requestAnimationFrame(poll);
+            })();
+        });
+    }
+
+    window.__shaderBench = {
+        run,
+        adapter: adapterInfo,
+        ready: true,
+    };
+
+    log('ready. waiting for driver to call __shaderBench.run({...})');
+    </script>
+</body>
+</html>

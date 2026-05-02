@@ -60,6 +60,7 @@ export class WorkerProxy implements AccumulationController {
     private _pendingFocusPicks: Map<string, (distance: number) => void> = new Map();
     private _pendingHistograms: Map<string, (data: Float32Array) => void> = new Map();
     private _pendingShaderSource: Map<string, (code: string | null) => void> = new Map();
+    private _pendingUniformsSnapshot: Map<string, (u: Record<string, any> | null) => void> = new Map();
     private _gpuInfo: string = '';
     private _lastGeneratedFrag: string = '';
     private _onWorkerFrame: (() => void) | null = null;
@@ -259,6 +260,9 @@ export class WorkerProxy implements AccumulationController {
             case 'SHADER_SOURCE_RESULT':
                 this._resolveRequest(msg.id, this._pendingShaderSource, msg.code);
                 break;
+            case 'UNIFORMS_SNAPSHOT_RESULT':
+                this._resolveRequest(msg.id, this._pendingUniformsSnapshot, msg.uniforms);
+                break;
             case 'BOOTED':
                 this._shadow.isBooted = true;
                 if (msg.gpuInfo) this._gpuInfo = msg.gpuInfo;
@@ -399,6 +403,8 @@ export class WorkerProxy implements AccumulationController {
         this._pendingHistograms.clear();
         this._pendingShaderSource.forEach(resolve => resolve(null));
         this._pendingShaderSource.clear();
+        this._pendingUniformsSnapshot.forEach(resolve => resolve(null));
+        this._pendingUniformsSnapshot.clear();
         // Reject pending export promises
         if (this._exportReady) { this._exportReady = null; }
         if (this._exportComplete) { this._exportComplete = null; }
@@ -614,6 +620,13 @@ export class WorkerProxy implements AccumulationController {
     getTranslatedFragmentShader(): Promise<string | null> {
         return this._pendingRequest(this._pendingShaderSource,
             id => ({ type: 'GET_SHADER_SOURCE', id, variant: 'translated' } as any), null, 5000);
+    }
+
+    /** Snapshot the live mainUniforms map. Used by debug tools (bench-shader) to
+     *  replay the engine's exact uniform state in an isolated WebGL2 harness. */
+    getUniformsSnapshot(): Promise<Record<string, any> | null> {
+        return this._pendingRequest(this._pendingUniformsSnapshot,
+            id => ({ type: 'GET_UNIFORMS_SNAPSHOT', id } as any), null, 5000);
     }
     checkHalfFloatAlphaSupport() { return true; }
 
