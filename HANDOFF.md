@@ -2,7 +2,51 @@
 
 **Location:** `h:/GMT/workspace-gmt/dev/` (was `h:/GMT/gmt-engine/`)
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
-**Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01** — see entry below.
+**Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03** — see entry below.
+
+**📋 2026-05-03 — True area lights for the path tracer (Phases 1–4 + UX cleanup):**
+
+Plan: [plans/area-lights.md](plans/area-lights.md). Code in `engine-gmt/shaders/chunks/pathtracer.ts` + `engine-gmt/features/lighting/` + `engine-gmt/engine/managers/UniformManager.ts` + duplicate type plumbing in both `types/graphics.ts` copies.
+
+User context: prior to this, "Area Lights" in GMT was a stochastic-shadow-jitter trick — a runtime cone perturbation on the shadow ray that *looked* like a soft area light but was still mathematically a delta point. No MIS, no BSDF-side direct catches, ~256 frames to converge clean shadows. New system adds a real light type and physically-correct integration.
+
+**New light type: `'Sphere'`** alongside existing `'Point'` and `'Directional'` (`types/graphics.ts` and `engine-gmt/types/graphics.ts` both widened — duplicate-state pattern). Encoded as `uLightType[i] = 2.0`. Per-light dropdown in the right-click menu (`features/lighting/utils/lightMenuUtils.ts`) — selecting Sphere bumps a zero radius to 0.5 default. Backward-compat: existing GMF/JSON scenes load unchanged; `'Sphere'` only appears for explicit user opt-in.
+
+**New compile gate `ptAreaLights`** ("True Area Lights" engine checkbox under Path Tracing). Off by default — when off, Sphere lights fall through to the Point-light branch (visual no-op vs old behavior). On: emits the new code paths under `#ifdef PT_AREA_LIGHTS`. ~600ms compile cost. Independent of the legacy "Soft Shadow Jitter" (`ptStochasticShadows`) checkbox, which keeps working for Point lights.
+
+**Shader changes (`engine-gmt/shaders/chunks/pathtracer.ts`):**
+- New helpers: `intersectAreaLight` (closest-hit test against type-2 sphere lights, reuses `intersectSphere` from `math.ts`), `pdfSphereLightDir` (solid-angle PDF for uniform-area sphere sampling — `activeCount` divisor passed explicitly to keep callers honest), `pdfVNDF` (Heitz 2018 §3 eq. 17), `pdfBSDF` (mixture density matching the bounce-direction sampler at line ~640), `misPower2` (Veach 1995 power-heuristic helper, called from both estimator sites), `tracePTBounce` (wrapper around `traceSceneLean` that tests sphere lights alongside the fractal march and returns whichever is closer).
+- NEE block forks on light type: type-2 lights sample a point on the sphere surface (Marsaglia 1972), compute `pdfSphereDir`, and use `1/pdfSphereDir` as the compensation factor instead of `activeCount`. Shadow ray for sphere lights goes to the sampled surface point (not a re-jittered direction); `GetHardShadow` is forced for type-2 regardless of `ptStochasticShadows`/`areaLights` settings (a runtime branch gated on `PT_AREA_LIGHTS` so default builds emit only one shadow path — preserves the S3 ANGLE fix).
+- BSDF estimator at the `!hit` branch (next-iter): when `lightHit >= 0`, computes `pdf_light = pdfSphereLightDir(...)`, `pdf_bsdf = pdfBSDF(n_prev, viewDir_prev, currentRd, roughness_prev, probSpec_prev)`, weights with `misPower2(pdf_bsdf, pdf_light)`. Surface state from the bounce that *emitted* the ray is captured before each bounce trace (`n_prev` / `viewDir_prev` / `roughness_prev` / `probSpec_prev` declared at function scope). For delta lights `pdf_light = ∞ → w_nee = 1, w_bsdf = 0`, naturally collapsing to current behavior.
+- env-NEE call site swapped to `tracePTBounce` so a sphere light correctly occludes the env-NEE visibility ray (gate: `!envHit && envLightHit < 0`).
+- `probSpec` calculation hoisted above NEE so MIS reads the same mixture density the bounce-direction sampler uses below. `activeCount` / `activeIndices` hoisted to function scope (loop-invariant — depends only on uniforms).
+
+**Latent Direct-mode + volumetric bugs fixed.** `engine-gmt/shaders/chunks/lighting/pbr.ts:48` and `engine-gmt/shaders/chunks/lighting/volumetric_scatter.ts:48` were checking `uLightType[i] > 0.5` for "is directional" — Sphere (type 2) was matching that range, so Direct-mode shading and god-ray scatter were treating Sphere lights as Directional (no position, ignoring `uLightPos`). Both narrowed to `> 0.5 && < 1.5`. Sphere lights in Direct mode now correctly fall through to the Point branch.
+
+**`hideEmitter` field added to `LightParams`.** Decouples "show the visible glowing emitter ball" from "what's the physical light radius." For Point lights the legacy `radius == 0 = invisible` behavior is preserved (Visible Sphere toggle flips radius). For Sphere lights, the toggle controls only `hideEmitter` — radius stays > 0 so area sampling is unaffected. New uniform `uLightHideEmitter` (Float32Array, MAX_LIGHTS) gates the emitter render in `engine-gmt/shaders/chunks/lighting/shared.ts`.
+
+**Visible-emitter render fix.** `intersectLightSphere` in `shared.ts:33` was filtering with `uLightType[i] > 0.5`, which excluded both Directional (1) AND Sphere (2). Narrowed so type 2 lights render their emitter sphere normally.
+
+**UI cleanup:**
+- `ptStochasticShadows` checkbox renamed `"Area Lights" → "Soft Shadow Jitter"` (the label collision was confusing users).
+- ShadowControls.tsx button renamed `"Area" → "Jitter"` with tooltip pointing at Sphere lights for the physical path.
+- Per-light popover gets an amber warning banner when a Sphere light is configured but the conditions for area integration aren't met (`renderMode != PathTracing` OR `!ptAreaLights`).
+- Hardness slider description gains a note: "Affects Point and Directional lights only — Sphere area lights derive shadow softness from physical sphere sampling."
+- `ptAreaLights` description rewritten to explain how to opt in.
+
+**Cleanup pass (multi-agent code review).** Reuse / quality / efficiency agents in parallel; triaged. Taken: extracted `misPower2` helper (deduped two MIS sites), reused existing `intersectSphere` from `math.ts` inside `intersectAreaLight` (4 lines instead of 12), extracted JSX IIFE in LightControls into a named `renderEmitterSection()` helper, removed phase-narration comments and the "trap that killed Patch 3" task reference. Skipped: GLSL `LIGHT_TYPE_*` constants (codebase convention is float-range comparisons everywhere), per-light loop preamble macro (too short), GGX `D_nee`/`G1V_nee` hoist to share with `pdfVNDF` (efficiency agent itself recommended skip unless profiling shows >1% win).
+
+**Verified:** `npm run typecheck` clean, `npm run build` clean (8.3s), `npm run shader:dump --pt --all-features` shows `misPower2`, `intersectSphere(ro - uLightPos...)`, and all gated paths emit correctly. Default-PT shader retains all helpers behind `#ifdef PT_AREA_LIGHTS` so the GPU driver strips them at compile when the gate is off.
+
+**Pending:**
+- Visual smoke testing (user does this — memory `feedback_visual_smokes`).
+- Phase 4 unbias bench: spec is in `plans/area-lights.md` "Phase 4 unbias bench spec" section. Requires building `debug/bench-area-lights-unbias.mts` plus a `PT_NEE_DISABLE` compile gate. Without it, the math is "reasonably believed correct" but not proven bias-free.
+- Phase 5 (re-attempt power-weighted light selection from S3 history) — would build on the MIS framework; deferred per plan.
+
+**Known limitations:**
+- When using `ptAreaLights` + Sphere lights, `Hardness` and `Edge Softness` sliders have no effect on those lights. UI surfaces this via slider description and the per-light banner; no hard runtime gate.
+- Sphere lights in Direct mode render as Point lights (no warning beyond the per-light banner). True area integration requires PT mode.
+- Per-bounce sphere-intersect cost scales with `MAX_LIGHTS` (3 default). At 8+ lights with `ptAreaLights` on, may show measurable GPU cost — bench-verify if it surfaces.
 
 **📋 2026-05-01 — Mobile mode for app-gmt (Phase A–C iter, D6, E1, F1):**
 

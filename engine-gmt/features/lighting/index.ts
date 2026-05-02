@@ -26,6 +26,7 @@ export interface LightingState {
     ptGIStrength: number;
     ptStochasticShadows: boolean;
     areaLights: boolean;
+    ptAreaLights: boolean;
     ptNEEAllLights: boolean;
     ptEnvNEE: boolean;
     ptMaxLuminance: number;
@@ -105,6 +106,7 @@ export const LightingFeature: FeatureDefinition = {
         { name: Uniforms.LightFalloffType, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
         { name: Uniforms.LightRadius, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
         { name: Uniforms.LightSoftness, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        { name: Uniforms.LightHideEmitter, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
     ],
     params: {
         // --- ENGINE MASTER ---
@@ -185,17 +187,24 @@ export const LightingFeature: FeatureDefinition = {
             noReset: true
         },
         ptStochasticShadows: {
-            type: 'boolean', default: true, label: 'Area Lights', shortId: 'ps',
+            type: 'boolean', default: true, label: 'Soft Shadow Jitter', shortId: 'ps',
             group: 'engine_settings',
             parentId: 'shadowsCompile',
             ui: 'checkbox',
             onUpdate: 'compile',
             noReset: true,
             estCompileMs: 800,
-            description: 'Compiles stochastic area light shadow code. Creates realistic penumbras via accumulation.'
+            description: 'Stochastic shadow jitter for Point lights — fakes soft penumbras via accumulation. Independent of True Area Lights (which uses physical sphere sampling for type=Sphere lights).'
         },
 
         // --- PATH TRACING QUALITY (Engine Panel) ---
+        ptAreaLights: {
+            type: 'boolean', default: false, label: 'True Area Lights', shortId: 'pal2',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            ui: 'checkbox', onUpdate: 'compile', noReset: true,
+            estCompileMs: 600,
+            description: 'Physically-correct sphere area light integration (sphere-surface sampling + MIS). Required for lights with type=Sphere. Enable + change a light type to Sphere via the per-light menu. Costs ~600ms compile + one extra sphere intersection per bounce.'
+        },
         ptNEEAllLights: {
             type: 'boolean', default: false, label: 'Sample All Lights', shortId: 'pal',
             group: 'engine_settings', parentId: 'ptEnabled',
@@ -248,7 +257,7 @@ export const LightingFeature: FeatureDefinition = {
             type: 'float', default: 16.0, label: 'Hardness', shortId: 'ss', uniform: 'uShadowSoftness',
             min: 2.0, max: 2000.0, step: 1.0, group: 'shadows', scale: 'log',
             condition: { bool: true },
-            description: 'Higher values give crisper shadows; lower values give wider penumbras.',
+            description: 'Higher values give crisper shadows; lower values give wider penumbras. Affects Point and Directional lights only — Sphere area lights derive shadow softness from physical sphere sampling.',
             helpId: 'shadows',
         },
         shadowSteps: {
@@ -339,6 +348,7 @@ export const LightingFeature: FeatureDefinition = {
             builder.addDefine('PT_ENABLED', '1');
             if (state?.ptNEEAllLights) builder.addDefine('PT_NEE_ALL_LIGHTS', '1');
             if (state?.ptEnvNEE)      builder.addDefine('PT_ENV_NEE', '1');
+            if (state?.ptAreaLights)  builder.addDefine('PT_AREA_LIGHTS', '1');
             // PT_VOLUMETRIC moved to features/volumetric
         }
 

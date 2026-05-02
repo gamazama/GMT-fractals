@@ -268,6 +268,7 @@ export class UniformManager {
             const shaArr = this.uniforms[Uniforms.LightShadows].value as Float32Array;
             const radArr = this.uniforms[Uniforms.LightRadius].value as Float32Array;
             const sofArr = this.uniforms[Uniforms.LightSoftness].value as Float32Array;
+            const hideArr = this.uniforms[Uniforms.LightHideEmitter].value as Float32Array;
     
             const count = Math.min(lighting.lights.length, MAX_LIGHTS);
             this.uniforms[Uniforms.LightCount].value = count;
@@ -285,7 +286,8 @@ export class UniformManager {
                 const dRotZ = modulations[`lighting.light${i}_rotZ`] || 0;
 
                 const isDirectional = l.type === 'Directional';
-                typeArr[i] = isDirectional ? 1.0 : 0.0;
+                const isSphere      = l.type === 'Sphere';
+                typeArr[i] = isDirectional ? 1.0 : (isSphere ? 2.0 : 0.0);
                 // EV→linear conversion: 2^ev. Raw mode passes through unchanged.
                 const baseIntensity = (l.intensityUnit === 'ev') ? Math.pow(2, l.intensity + dIntensity) : (l.intensity + dIntensity);
                 intArr[i] = l.visible ? Math.max(0, baseIntensity) : 0.0;
@@ -315,6 +317,7 @@ export class UniformManager {
                     }
                     radArr[i] = l.radius ?? 0.0;
                     sofArr[i] = l.softness ?? 0.0;
+                    hideArr[i] = l.hideEmitter ? 1.0 : 0.0;
 
                     // Position / rotation may be omitted on legacy presets
                     // (e.g. older formulas with lights-array entries that

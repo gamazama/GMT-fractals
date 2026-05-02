@@ -185,15 +185,57 @@ This is critical for fractals: bounce rays in concave regions often hit nearby g
 
 The same principle applies to direct-mode reflections (`features/reflections/index.ts`) and to the `d` parameter passed to `getSurfaceMaterial()` for reflected hits (controls normal epsilon).
 
+### PT_AREA_LIGHTS (`ptAreaLights`)
+
+**Default off.** Compile-gates the new sphere-area-light integration path. When on:
+
+- **NEE samples a point on the sphere surface** (uniform area sampling, Marsaglia 1972) instead of treating the light as a delta point. The sample direction `lDir` and `distToLight` go to the sampled surface point, and the per-direction PDF (`pdfSphereLightDir` — solid-angle measure, with `activeCount` selection-probability divisor folded in) replaces the delta-light `activeCount` compensation factor.
+- **Bounce rays test against sphere lights via `tracePTBounce`**, a wrapper around `traceSceneLean` that runs `intersectAreaLight` alongside the fractal march and returns the closer hit. When the bounce lands on a sphere light, the next iter's `!hit` branch reads `lightHit >= 0` and adds the light's emission via the BSDF estimator.
+- **MIS combines both estimators** with Veach 1995 power-heuristic (β=2) via the `misPower2(pdfA, pdfB)` helper. NEE-side weight uses `pdfSphereLightDir` and `pdfBSDF`; BSDF-side weight reads previous-bounce surface state (`n_prev`/`viewDir_prev`/`roughness_prev`/`probSpec_prev`, captured before each bounce trace) to evaluate the BSDF PDF at the direction now hitting the light. Delta lights (Point, Directional) collapse to `w_nee = 1, w_bsdf = 0` automatically — no special-casing.
+- **Shadow path forks for sphere lights.** `GetHardShadow(shadowRo, lDir, distToLight)` is forced for type-2 lights regardless of `ptStochasticShadows`/`areaLights` settings — accumulation across frames produces the correct soft shadow from sphere sampling alone. Skipping this would either double-soften (`GetSoftShadow` adds penumbra on top of sphere sampling) or defeat sphere sampling (the stochastic-jitter path overwrites `lDir` with a `uLightPos`-relative target). Runtime branch is gated by `PT_AREA_LIGHTS` so default builds still emit only one shadow path.
+- **env-NEE call site uses `tracePTBounce` too** so a sphere light correctly occludes the env visibility ray. Sky contribution is gated on `!envHit && envLightHit < 0`.
+
+#### Helpers (all in `shaders/chunks/pathtracer.ts`)
+
+| Helper | Purpose |
+|--------|---------|
+| `intersectAreaLight(ro, rd, tMax, out outIdx)` | Closest-hit test against type-2 lights; reuses `intersectSphere` from `math.ts` |
+| `pdfSphereLightDir(lDir, sphereOutNormal, dist, radius, activeCount)` | Solid-angle PDF for uniform-area sphere sampling; activeCount divides out selection-probability |
+| `pdfVNDF(n, v, l, roughness)` | Heitz 2018 §3 eq. 17 — VNDF half-vector PDF in solid-angle measure for arbitrary L |
+| `pdfBSDF(n, v, l, roughness, probSpec)` | Mixture density combining VNDF specular lobe + cosine-weighted diffuse lobe; **must** match the bounce-direction sampler |
+| `misPower2(pdfA, pdfB)` | Veach 1995 power-heuristic, β=2 |
+| `tracePTBounce(...)` | Bounce-ray trace that also tests sphere area lights; returns `lightHit >= 0` if a light is closer than the fractal hit |
+
+#### State carried across bounce iterations
+
+Function-scope declarations (above the bounce loop) so the next iter's `!hit` branch can read what the previous iter's trace saw:
+
+- `lightHit: int = -1`
+- `n_prev: vec3`, `viewDir_prev: vec3`, `roughness_prev: float`, `probSpec_prev: float` — surface state from the bounce that *emitted* the current ray, needed for the BSDF-side MIS weight
+- `activeCount: int`, `activeIndices: int[3]` — loop-invariant, hoisted out of the bounce loop (depends only on uniforms)
+
+#### Compile-gate behavior
+
+- `ptAreaLights = false` (default): `#ifdef PT_AREA_LIGHTS` regions are stripped at GPU compile. `tracePTBounce` becomes a passthrough to `traceSceneLean`. Default builds are bit-identical to before this feature landed.
+- `ptAreaLights = true`: emits `intersectAreaLight`, `pdfSphereLightDir`, the type-2 NEE branch, the BSDF-side emission branch, the sphere-light shadow override, and the MIS weights. ~600 ms compile cost. Per-bounce GPU cost scales with sphere-light count; default 3-light scenes pay only what's used.
+
+#### Direct mode behavior
+
+Sphere lights in Direct (non-PT) mode fall through to the Point-light branch in `pbr.ts` and `volumetric_scatter.ts` — they integrate as a Point at the sphere center. The visible emitter still renders. The per-light popover surfaces an amber warning when type=Sphere is set without PT mode + ptAreaLights both on.
+
 ### Key Files
 
 | File | Role |
 |------|------|
-| `features/lighting/index.ts` | Defines and injects `PT_NEE_ALL_LIGHTS`, `PT_ENV_NEE`, `PT_VOLUMETRIC` defines; injects `LIGHTING_SHARED` |
-| `shaders/chunks/pathtracer.ts` | Compile-gated branches for each define; calls `traceSceneLean` for bounces |
+| `features/lighting/index.ts` | Defines and injects `PT_NEE_ALL_LIGHTS`, `PT_ENV_NEE`, `PT_VOLUMETRIC`, `PT_AREA_LIGHTS` defines; injects `LIGHTING_SHARED` |
+| `shaders/chunks/pathtracer.ts` | Compile-gated branches for each define; sphere-light NEE / BSDF / MIS; calls `traceSceneLean` (or `tracePTBounce` wrapper when `PT_AREA_LIGHTS`) for bounces |
+| `shaders/chunks/lighting/shared.ts` | Visible emitter render (`intersectLightSphere`); type-2 included, gated on `uLightHideEmitter` |
+| `shaders/chunks/lighting/pbr.ts` | Direct-mode shading; Sphere lights treated as Point at sphere center |
+| `shaders/chunks/lighting/volumetric_scatter.ts` | God-ray scatter; same Sphere-as-Point fall-through |
 | `shaders/chunks/trace.ts` | `getTraceGLSL()` — parameterized `functionName` for lean variant |
 | `engine/ShaderBuilder.ts` | Emits `traceSceneLean` alongside `traceScene` in PT mode |
-| `engine/UniformSchema.ts` | `uPTMaxLuminance` uniform definition |
+| `engine/managers/UniformManager.ts` | Writes `uLightType[i] = 2.0` for Sphere; writes `uLightHideEmitter[i]` |
+| `engine/UniformSchema.ts` | `uPTMaxLuminance`, `uLightHideEmitter` uniform definitions |
 
 ## 2.6 Volumetric Scatter (God Rays)
 

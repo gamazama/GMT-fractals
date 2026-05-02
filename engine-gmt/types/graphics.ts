@@ -27,7 +27,7 @@ export interface GradientConfig {
     blendSpace: BlendColorSpace;
 }
 
-export type LightType = 'Point' | 'Directional';
+export type LightType = 'Point' | 'Directional' | 'Sphere';
 
 // Monotonic counter for generating stable light IDs
 let _lightIdCounter = 0;
@@ -60,4 +60,8 @@ export interface LightParams {
     radius?: number;
     // Soft edge width as a fraction of radius. 0 = hard edge, 1 = fade extends one full radius beyond sphere.
     softness?: number;
+    // Hide the visible emitter sphere from the viewport. For Sphere area lights
+    // this lets the user keep the physical light radius active for area sampling
+    // while suppressing the rendered glowing ball. Defaults to false.
+    hideEmitter?: boolean;
 }

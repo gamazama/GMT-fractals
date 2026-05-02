@@ -110,7 +110,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
      let newRot = current.rotation;
 
      if (cam) {
-         if (current.type === 'Point') {
+         if (current.type !== 'Directional') {
              const o = engine.sceneOffset;
              if (wasFixed) {
                  const worldPos = new THREE.Vector3(newPos.x, newPos.y, newPos.z);
@@ -259,7 +259,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
               />
            </div>
            
-           {currentLight.type === 'Point' ? (
+           {currentLight.type !== 'Directional' ? (
                <div data-help-id="light.pos">
                    <Vector3Input 
                        label={currentLight.fixed ? "Offset XYZ" : "World Position"}
@@ -324,8 +324,8 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                />
            )}
 
-           {/* --- Range slider + Falloff type (Point lights only) --- */}
-           {currentLight.type === 'Point' && (
+           {/* --- Range slider + Falloff type (positional lights: Point + Sphere) --- */}
+           {currentLight.type !== 'Directional' && (
                <>
                    <Slider
                      label="Range"

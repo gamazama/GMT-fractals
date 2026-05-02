@@ -45,7 +45,10 @@ vec3 calculatePBRContribution(vec3 p, vec3 n, vec3 v, vec3 albedo, float roughne
         if (intensity < 0.01) continue;
 
         float type = uLightType[i];
-        bool isDirectional = type > 0.5;
+        // type 1 = Directional, type 2 = Sphere area (Direct mode treats Sphere
+        // as a Point at the sphere center — physical area integration requires
+        // the path tracer; see ptAreaLights compile gate).
+        bool isDirectional = type > 0.5 && type < 1.5;
 
         vec3 lVec = isDirectional ? uLightDir[i] : (uLightPos[i] - p);
 

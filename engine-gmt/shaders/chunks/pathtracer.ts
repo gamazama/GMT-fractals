@@ -11,7 +11,7 @@ export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochast
     // ANGLE/D3D11 was likely predicating both paths in case 2 — running both
     // shadow marches per shadow-casting light. Compile-gating eliminates one.
     const useSoft = !stochasticShadows || isMobile || !areaLightsActive;
-    const shadowLogic = useSoft ? `
+    const baseShadowLogic = useSoft ? `
         shadow = GetSoftShadow(shadowRo, lDir, uShadowSoftness, distToLight, blueNoise.r);
     ` : `
         // Stochastic area-light path (areaLights checkbox ON, compile-gated).
@@ -37,6 +37,24 @@ export const getPathTracerGLSL = (isMobile: boolean, maxLights: number, stochast
         }
 
         shadow = GetHardShadow(shadowRo, shadowDir, shadowDist);
+    `;
+    // Sphere area lights override both shadow paths: the NEE site already
+    // sampled a point on the sphere surface and lDir/distToLight point to that
+    // sample. Adding GetSoftShadow's penumbra would double-soften; the
+    // stochastic path's uLightPos-based re-jitter would defeat sphere sampling
+    // entirely. GetHardShadow on the sphere-sampled direction, accumulated
+    // across frames, is the physically-correct integration of an area light.
+    // Runtime branch is gated by PT_AREA_LIGHTS so default builds are unaffected
+    // and ANGLE doesn't get double-emitted shadow paths in non-area-light scenes.
+    const shadowLogic = `
+        #ifdef PT_AREA_LIGHTS
+        if (uLightType[lightIdx] > 1.5) {
+            shadow = GetHardShadow(shadowRo, lDir, distToLight);
+        } else
+        #endif
+        {
+            ${baseShadowLogic}
+        }
     `;
 
     return `
@@ -118,6 +136,132 @@ vec3 sampleGGXVNDF(vec3 n, vec3 viewDir, float roughness, vec2 seedVec) {
     return normalize(t * Ne.x + b * Ne.y + n * Ne.z);
 }
 
+#ifdef PT_AREA_LIGHTS
+// Closest-hit test against type-2 sphere area lights for the path tracer's
+// geometric integration of the light surface. Distinct from
+// intersectLightSphere() in shared.ts, which renders the visible emitter
+// (chord-thickness shading, halo softness) and is gated on type-0 only.
+float intersectAreaLight(vec3 ro, vec3 rd, float tMax, out int outIdx) {
+    float tBest = tMax;
+    outIdx = -1;
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+        if (i >= uLightCount) break;
+        if (uLightType[i] < 1.5 || uLightType[i] > 2.5) continue;
+        if (uLightIntensity[i] < 0.01) continue;
+        if (uLightRadius[i] < 0.001) continue;
+
+        vec2 hit = intersectSphere(ro - uLightPos[i], rd, uLightRadius[i]);
+        if (hit.x > hit.y) continue;                       // miss sentinel
+        float t = hit.x > 1.0e-4 ? hit.x : hit.y;          // pick exit if origin inside
+        if (t < 1.0e-4 || t >= tBest) continue;
+        tBest = t; outIdx = i;
+    }
+    return outIdx >= 0 ? tBest : -1.0;
+}
+
+// Solid-angle PDF for uniform-area sampling on a sphere light, conditioned
+// on receiver point. sphereOutNormal is the outward unit normal at the
+// sampled surface point. activeCount is exposed as an explicit arg because
+// MIS weights are extremely sensitive to forgetting the light-selection
+// divisor — the failure mode is a uniform brightness bias on glossy surfaces.
+//
+// pdf_area  = 1 / (4 * PI * r^2)
+// pdf_omega = pdf_area * dist^2 / |cos(theta_light)|
+float pdfSphereLightDir(vec3 lDir, vec3 sphereOutNormal, float dist,
+                        float radius, int activeCount) {
+    float cosThetaLight = max(1.0e-5, abs(dot(-lDir, sphereOutNormal)));
+    float pdfArea = 1.0 / (4.0 * PI * radius * radius);
+    float pdfDir  = pdfArea * dist * dist / cosThetaLight;
+    return pdfDir / float(max(1, activeCount));
+}
+#endif
+
+// Veach 1995 power-heuristic (β=2): w_A = pdf_A² / (pdf_A² + pdf_B²).
+// Caller picks which estimator's PDF goes in pdfA — pass yours first.
+float misPower2(float pdfA, float pdfB) {
+    float a2 = pdfA * pdfA;
+    float b2 = pdfB * pdfB;
+    return a2 / max(1.0e-20, a2 + b2);
+}
+
+// Heitz 2018 §3 eq. 17 — VNDF half-vector PDF in solid-angle measure for an
+// arbitrary direction L. The reflection mapping H = (V+L)/|V+L| contributes
+// |dH/dL| = 1/(4 * VdotH); the VdotH terms in the standard pdf_VNDF(H) cancel
+// against the BRDF/PDF Jacobian, leaving the clean form below.
+//
+// Self-consistency: when L is sampled via sampleGGXVNDF, the throughput weight
+// f(L)*NdotL/pdf_VNDF(L) collapses to F * G2/G1(V) = F * G1(L), matching the
+// weight applied at the bounce-direction site.
+float pdfVNDF(vec3 nrm, vec3 v, vec3 l, float roughness) {
+    vec3 h = v + l;
+    float lensq = dot(h, h);
+    if (lensq < 1.0e-10) return 0.0;
+    h *= inversesqrt(lensq);
+
+    float NdotV = max(0.001, dot(nrm, v));
+    float NdotH = max(0.0, dot(nrm, h));
+    if (NdotH <= 0.0) return 0.0;
+
+    float a  = roughness * roughness;
+    float a2 = a * a;
+    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    float D     = a2 / (PI * denom * denom + GGX_EPSILON);
+
+    float kGv  = a * 0.5;
+    float G1V = NdotV / (NdotV * (1.0 - kGv) + kGv);
+
+    return G1V * D / (4.0 * NdotV);
+}
+
+// Mixture density combining VNDF specular lobe + cosine-weighted diffuse lobe.
+// MUST match the bounce-direction sampler's mixture (search "BOUNCE DIRECTION
+// SELECTION" below). If probSpec calculation changes there, update here in
+// lockstep or MIS goes biased on rough surfaces.
+float pdfBSDF(vec3 nrm, vec3 v, vec3 l, float roughness, float probSpec) {
+    float NdotL = max(0.0, dot(nrm, l));
+    float pSpec = pdfVNDF(nrm, v, l, roughness);
+    float pDiff = NdotL / PI;
+    return probSpec * pSpec + (1.0 - probSpec) * pDiff;
+}
+
+// Bounce-ray trace that also tests sphere area lights. Reuses traceSceneLean
+// untouched. Sphere-light intersection runs alongside the fractal march; the
+// closer of the two wins.
+//
+// Returns:
+//   true                   → fractal hit (use d, result for shading)
+//   false, lightHit >= 0   → sphere light hit at distance d
+//   false, lightHit  < 0   → ray escaped (caller adds env contribution)
+//
+// Without PT_AREA_LIGHTS this is just a passthrough — single function avoids
+// duplicating the call sites between gated/ungated builds.
+bool tracePTBounce(
+    vec3 ro, vec3 rd,
+    out float d, out vec4 result, inout vec3 glow,
+    float traceSeed, inout float volumetric, out vec3 fogScatter,
+    out int lightHit
+) {
+#ifdef PT_AREA_LIGHTS
+    int   tmpIdx;
+    float tLight = intersectAreaLight(ro, rd, MAX_DIST, tmpIdx);
+    bool hit = traceSceneLean(ro, rd, d, result, glow, traceSeed, volumetric, fogScatter);
+
+    if (tmpIdx >= 0 && (!hit || tLight < d)) {
+        // Light closer than fractal — overwrite distance so fog/volumetric
+        // accumulators see the correct path length to the light surface.
+        d = tLight;
+        lightHit = tmpIdx;
+        return false;
+    }
+    // Fractal occluded the light, or no light hit. Either way ignore the light.
+    lightHit = -1;
+    return hit;
+#else
+    lightHit = -1;
+    return traceSceneLean(ro, rd, d, result, glow, traceSeed, volumetric, fogScatter);
+#endif
+}
+
 vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, float seed) {
     vec3 radiance = vec3(0.0);
     vec3 throughput = vec3(1.0);
@@ -128,6 +272,26 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
     bool hit = true;
     int maxBounces = uPTBounces;
     float pixelSizeScale = uPixelSizeBase / uInternalScale;
+
+    // Carried across bounce iterations so the next iter's !hit branch can
+    // inspect what the previous iter's trace saw. Unconditional declaration
+    // keeps the loop shape stable; compiler DCEs writes when the gate is off.
+    int   lightHit = -1;
+    // Surface state from the bounce that EMITTED the ray now potentially hitting
+    // a light — needed by BSDF-side MIS, which weights against the BSDF PDF
+    // evaluated at the previous bounce's surface, not the light's surface.
+    vec3  n_prev = vec3(0.0, 1.0, 0.0);
+    vec3  viewDir_prev = vec3(0.0, 0.0, 1.0);
+    float roughness_prev = 1.0;
+    float probSpec_prev = 0.0;
+
+    // Loop-invariant light list (depends only on uniforms) — also reused by the
+    // next-iter !hit branch's MIS, which needs activeCount without re-scanning.
+    int activeCount = 0;
+    int activeIndices[3];
+    if (uLightIntensity[0] > 0.01) activeIndices[activeCount++] = 0;
+    if (uLightIntensity[1] > 0.01) activeIndices[activeCount++] = 1;
+    if (uLightIntensity[2] > 0.01) activeIndices[activeCount++] = 2;
 
     for (int bounce = 0; bounce < 8; bounce++) {
         if (bounce >= ${loopLimit}) break;
@@ -140,6 +304,33 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         vec4 blueNoise = getBlueNoise4(gl_FragCoord.xy + bounceOffset);
 
         if (!hit) {
+#ifdef PT_AREA_LIGHTS
+            // BSDF-side direct light hit: bounce ray landed on a sphere light.
+            // MIS combines this with NEE's contribution at the previous bounce.
+            // pdfSphereLightDir divides by activeCount internally; pdfBSDF does
+            // not (the BSDF doesn't pick which light). Active-count from the
+            // PREVIOUS bounce isn't tracked, so we read the current count —
+            // exact when the light set is stable across bounces.
+            if (lightHit >= 0) {
+                vec3 lightPt    = currentRo + currentRd * d;
+                vec3 lightN     = normalize(lightPt - uLightPos[lightHit]);
+                int  pdfSelBsdf;
+                #ifdef PT_NEE_ALL_LIGHTS
+                    pdfSelBsdf = 1;
+                #else
+                    pdfSelBsdf = activeCount;
+                #endif
+                float pdf_light = pdfSphereLightDir(currentRd, lightN, d,
+                                                    uLightRadius[lightHit], pdfSelBsdf);
+                float pdf_bsdf  = pdfBSDF(n_prev, viewDir_prev, currentRd,
+                                          roughness_prev, probSpec_prev);
+                float w_bsdf = misPower2(pdf_bsdf, pdf_light);
+
+                vec3 emission = uLightColor[lightHit] * uLightIntensity[lightHit];
+                radiance += w_bsdf * emission * throughput;
+                break;
+            }
+#endif
             float skyIntensity = (bounce == 0) ? uEnvBackgroundStrength : uEnvStrength;
             vec3 env = sampleMiss(currentRo, currentRd, 0.0) * skyIntensity;
             if (bounce == 0 && uFogFar < 1000.0) {
@@ -181,13 +372,22 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         float a_ggx = roughness * roughness;
         float kG = a_ggx * 0.5;
 
+        // probSpec hoisted above NEE so MIS reads the same mixture density that
+        // the bounce-direction sampler uses below. Depends only on F_surface,
+        // albedo, uDiffuse, uReflection, roughness — all in scope here.
+        vec3 weightSpec = F_surface;
+        vec3 weightDiff = (vec3(1.0) - F_surface) * (1.0 - uReflection) * albedo * uDiffuse;
+        float lumSpec = luminance(weightSpec);
+        float lumDiff = luminance(weightDiff);
+        float probSpec = lumSpec / max(0.0001, lumSpec + lumDiff);
+        float smoothness = 1.0 - roughness;
+        probSpec = mix(probSpec, 1.0, smoothness * 0.4);
+        probSpec = clamp(probSpec, 0.05, 0.95);
+
         // --- NEXT EVENT ESTIMATION ---
-        // Active light list — hoisted so PT_VOLUMETRIC can reuse it
-        int activeCount = 0;
-        int activeIndices[3];
-        if (uLightIntensity[0] > 0.01) activeIndices[activeCount++] = 0;
-        if (uLightIntensity[1] > 0.01) activeIndices[activeCount++] = 1;
-        if (uLightIntensity[2] > 0.01) activeIndices[activeCount++] = 2;
+        // activeCount + activeIndices hoisted to function scope (above this
+        // for-loop). Loop-invariant so we don't rebuild per bounce. PT_VOLUMETRIC
+        // and the next-iter BSDF-MIS branch share the same arrays.
 
         // Bias epsilon — hoisted so PT_ENV_NEE can reuse it
         // Use camera-to-point distance for pixel footprint (not bounce travel distance).
@@ -222,11 +422,44 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     lightIdx = activeIndices[pick];
                 #endif
 
-                bool isDirectional = uLightType[lightIdx] > 0.5;
+                bool isDirectional = uLightType[lightIdx] > 0.5 && uLightType[lightIdx] < 1.5;
                 vec3 shadowRo = p_ray + n * (biasEps * 2.0 + uShadowBias);
 
                 vec3 lVec;
                 float distToLight;
+                #ifdef PT_AREA_LIGHTS
+                // Sphere area light NEE: sample a point uniformly on the sphere
+                // surface (Marsaglia 1972), shoot toward it. pdfSphereDir is the
+                // resulting per-direction PDF in solid-angle measure, already
+                // divided by light-selection probability. Used to weight the
+                // contribution and as the MIS pdf_light estimator.
+                bool isSphere = uLightType[lightIdx] > 1.5 && uLightType[lightIdx] < 2.5;
+                vec3 sphereOutNormal = vec3(0.0);
+                float pdfSphereDir = 0.0;
+                if (isSphere) {
+                    // Fresh blue-noise dims, decorrelated from light-pick (.r),
+                    // shadow jitter (.gb), bounce-type (.a), env-NEE (.rg+offset).
+                    vec4 areaNoise = getBlueNoise4(gl_FragCoord.xy + bounceOffset + vec2(13.7, 19.3));
+                    float z = 1.0 - 2.0 * areaNoise.x;
+                    float r2 = sqrt(max(0.0, 1.0 - z * z));
+                    float phi = TAU * areaNoise.y;
+                    sphereOutNormal = vec3(r2 * cos(phi), r2 * sin(phi), z);
+                    vec3 surfacePt = uLightPos[lightIdx] + uLightRadius[lightIdx] * sphereOutNormal;
+                    lVec = surfacePt - p_ray;
+                    distToLight = length(lVec);
+                    // When PT_NEE_ALL_LIGHTS, every light is evaluated so there's
+                    // no selection-probability divisor — pass 1.
+                    int pdfSel;
+                    #ifdef PT_NEE_ALL_LIGHTS
+                        pdfSel = 1;
+                    #else
+                        pdfSel = activeCount;
+                    #endif
+                    pdfSphereDir = pdfSphereLightDir(lVec / max(1.0e-5, distToLight),
+                                                    sphereOutNormal, distToLight,
+                                                    uLightRadius[lightIdx], pdfSel);
+                } else
+                #endif
                 if (isDirectional) {
                     lVec = uLightDir[lightIdx]; // Already "toward light" from uniform manager
                     distToLight = DIR_LIGHT_DIST;
@@ -271,15 +504,38 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     vec3 kS_nee = F_nee;
                     vec3 kD_nee = (vec3(1.0) - kS_nee) * (1.0 - uReflection);
 
-                    // PDF: 1 when sampling all lights, activeCount when sampling 1 randomly
+                    // Compensation factor = 1 / true_PDF.
+                    //   Delta lights: PDF = 1/activeCount (one of N picked uniformly), so
+                    //                 compensation = activeCount.
+                    //                 PT_NEE_ALL_LIGHTS evaluates every light so PDF = 1.
+                    //   Sphere area:  PDF = pdfSphereDir (already includes selection divisor),
+                    //                 compensation = 1/pdfSphereDir.
                     float pdf;
-                    #ifdef PT_NEE_ALL_LIGHTS
-                        pdf = 1.0;
-                    #else
-                        pdf = float(activeCount);
+                    #ifdef PT_AREA_LIGHTS
+                    if (isSphere) {
+                        pdf = 1.0 / max(1.0e-10, pdfSphereDir);
+                    } else
                     #endif
+                    {
+                        #ifdef PT_NEE_ALL_LIGHTS
+                            pdf = 1.0;
+                        #else
+                            pdf = float(activeCount);
+                        #endif
+                    }
 
                     vec3 directContrib = (kD_nee * albedo * uDiffuse / PI + spec) * uLightColor[lightIdx] * uLightIntensity[lightIdx] * ndotl * shadow * att * ao * pdf;
+
+                    // For delta lights (point/directional), pdf_light is a delta
+                    // and pdf_bsdf is bounded → w_nee = 1, no weighting needed.
+                    // Sphere lights have finite densities on both sides.
+                    float w_nee = 1.0;
+                    #ifdef PT_AREA_LIGHTS
+                    if (isSphere) {
+                        float pdf_bsdf_nee = pdfBSDF(n, viewDir, lDir, roughness, probSpec);
+                        w_nee = misPower2(pdfSphereDir, pdf_bsdf_nee);
+                    }
+                    #endif
 
                     // (Firefly clamp removed: with VNDF the throughput weight is
                     // bounded F*G2/G1, so per-sample contributions can no longer
@@ -287,7 +543,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     // band-aid for the half-vector IS form's NdotH/(NdotV*NdotH)
                     // blow-up. Bench-verified bias-neutral.)
 
-                    radiance += directContrib * throughput;
+                    radiance += w_nee * directContrib * throughput;
                 }
             }
         } // End NEE
@@ -303,8 +559,13 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             if (envNdotL > 0.001) {
                 vec3 envOrigin = p_ray + n * (biasEps * 2.0);
                 float envD; vec4 envResult; vec3 envGlow = vec3(0.0); float envVol = 0.0; vec3 envScatter = vec3(0.0);
-                bool envHit = traceSceneLean(envOrigin, envDir, envD, envResult, envGlow, seed + float(bounce) * 5.31, envVol, envScatter);
-                if (!envHit) {
+                int  envLightHit;
+                bool envHit = tracePTBounce(envOrigin, envDir, envD, envResult, envGlow, seed + float(bounce) * 5.31, envVol, envScatter, envLightHit);
+                // Sky reached only when nothing intercepted: no fractal AND no
+                // sphere light. Light occlusion suppresses env contribution; the
+                // light's own emission is delivered by the dedicated NEE block
+                // above (or BSDF-side hit at the next iter) — not double-counted.
+                if (!envHit && envLightHit < 0) {
                     // Cosine-weighted PDF = NdotL/PI cancels with Lambertian BRDF = kD*albedo/PI
                     // → weight = kD * albedo (clean, no NdotL needed)
                     vec3 envF = fresnelSchlick(envNdotL, F0);
@@ -324,16 +585,8 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         if (bounce + 1 >= maxBounces && uFogDensity < 0.001) break;
 
         // --- BOUNCE DIRECTION SELECTION ---
-        vec3 kS = F_surface;
-        vec3 kD = (vec3(1.0) - kS) * (1.0 - uReflection);
-        vec3 weightSpec = kS;
-        vec3 weightDiff = kD * albedo * uDiffuse;
-        float lumSpec = luminance(weightSpec);
-        float lumDiff = luminance(weightDiff);
-        float probSpec = lumSpec / max(0.0001, lumSpec + lumDiff);
-        float smoothness = 1.0 - roughness;
-        probSpec = mix(probSpec, 1.0, smoothness * 0.4);  // Bias smooth surfaces toward specular bounces
-        probSpec = clamp(probSpec, 0.05, 0.95);  // Ensure both bounce types always have non-zero probability
+        // probSpec, weightSpec, weightDiff hoisted above NEE (see header of this
+        // bounce iteration). Reused here for direction sampling.
         float randType = fract(blueNoise.a * 1.618);  // Golden ratio decorrelation for bounce type selection
         vec2 dirSeed = blueNoise.gb;
 
@@ -361,7 +614,15 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         float bounceVol = 0.0;
         vec3 bounceGlow = vec3(0.0);
         vec3 bounceScatter = vec3(0.0);
-        hit = traceSceneLean(currentRo, currentRd, d, result, bounceGlow, seed + float(bounce), bounceVol, bounceScatter);
+
+        // Snapshot for BSDF-side MIS at the next iter's light-hit branch.
+        // Cheap unconditional writes — compiler DCEs when the gate is off.
+        n_prev = n;
+        viewDir_prev = viewDir;
+        roughness_prev = roughness;
+        probSpec_prev = probSpec;
+
+        hit = tracePTBounce(currentRo, currentRd, d, result, bounceGlow, seed + float(bounce), bounceVol, bounceScatter, lightHit);
 
         // Absorption-only fog on bounce paths (Beer-Lambert with actual march distance).
         // Primary-ray scatter (god rays) is accumulated in traceScene on the camera ray.

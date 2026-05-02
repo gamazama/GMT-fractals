@@ -36,6 +36,7 @@ export const Uniforms = {
     LightFalloffType: 'uLightFalloffType',
     LightRadius: 'uLightRadius',
     LightSoftness: 'uLightSoftness',
+    LightHideEmitter: 'uLightHideEmitter',
 
     // Accumulation & History
     HistoryTexture: 'uHistoryTexture',

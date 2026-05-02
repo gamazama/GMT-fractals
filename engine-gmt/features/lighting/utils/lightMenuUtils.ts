@@ -30,6 +30,12 @@ export function buildCoreLightMenuItems(
             checked: light.type === 'Directional',
             action: () => onUpdate({ type: 'Directional' })
         },
+        {
+            label: 'Sphere (Area)',
+            checked: light.type === 'Sphere',
+            // Sphere area lights need finite extent (shader rejects radius<0.001).
+            action: () => onUpdate({ type: 'Sphere', radius: (light.radius && light.radius > 0.001) ? light.radius : 0.5 })
+        },
         { label: 'Intensity Unit', isHeader: true },
         {
             label: 'Raw (Linear)',

@@ -30,7 +30,13 @@ export const LIGHT_SPHERE_INTERSECTION_GLSL = `
 vec3 intersectLightSphere(vec3 ro, vec3 rd, float radiusJitter) {
     for (int i = 0; i < MAX_LIGHTS; i++) {
         if (i >= uLightCount) break;
-        if (uLightIntensity[i] < 0.01 || uLightType[i] > 0.5 || uLightRadius[i] < 0.001) continue;
+        // Skip directional lights (type 1) — they have no position; sphere area
+        // lights (type 2) DO render the visible emitter (same data, same look).
+        if (uLightIntensity[i] < 0.01 || uLightRadius[i] < 0.001) continue;
+        if (uLightType[i] > 0.5 && uLightType[i] < 1.5) continue;
+        // hideEmitter lets users keep a Sphere area light's physical radius
+        // active for area sampling while suppressing the rendered glowing ball.
+        if (uLightHideEmitter[i] > 0.5) continue;
 
         vec3 oc = ro - uLightPos[i];
         float distSq = dot(oc, oc);

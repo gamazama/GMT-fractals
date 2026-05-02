@@ -45,7 +45,9 @@ export const VOLUMETRIC_SCATTER_BODY = `
                     for (int _li = 0; _li < MAX_LIGHTS; _li++) {
                         if (_li >= uLightCount || _li >= _volLightMax) break;
                         if (uLightIntensity[_li] < 0.01) continue;
-                        bool _dir = uLightType[_li] > 0.5;
+                        // type 1 = Directional only; type 2 = Sphere falls through
+                        // as a Point at the sphere center for volumetric scatter.
+                        bool _dir = uLightType[_li] > 0.5 && uLightType[_li] < 1.5;
                         vec3  _lv  = _dir ? uLightDir[_li] : (uLightPos[_li] - p);
                         float _ld  = _dir ? 10000.0 : length(_lv);
                         if (!_dir && _ld < 0.001) continue;

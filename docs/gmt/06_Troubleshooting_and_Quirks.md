@@ -348,7 +348,30 @@ materials: {
 *   **Issue:** When a user selects a node type from the `<select>` dropdown, the browser fires a click event after the `onChange` that can propagate through to ReactFlow's `onPaneClick`. If `onPaneClick` sees `pendingNodeType` already set (state updated synchronously), it immediately places the node at the dropdown's coordinates.
 *   **Fix:** Use `setTimeout(() => setPendingNodeType(type), 0)` in the `onChange` handler. This defers state update past the current event propagation cycle, so any propagated click fires while `pendingNodeType` is still `null`.
 
-## 14. Removed / Deprecated Features
+## 14. Sphere Area Lights — UX Gotchas
+
+### "I set my light to Sphere but the shadow looks the same as before"
+- **Cause:** True Area Lights are off. The `ptAreaLights` compile gate (engine panel: Path Tracing → True Area Lights) must be enabled for Sphere lights to integrate as area lights instead of as a Point at the sphere center. The per-light popover shows an amber warning banner when this is the case.
+- **Fix:** Enable Path Tracing Core, switch Active Mode to Path Tracing, then enable True Area Lights. ~600 ms one-time recompile.
+
+### "Sphere light looks broken in Direct mode"
+- **Expected behaviour.** In Direct (non-PT) mode, Sphere lights fall through to the Point branch in `pbr.ts` and `volumetric_scatter.ts` — they integrate as a Point at the sphere center. The visible emitter still renders. True area integration requires the path tracer.
+- **Latent bug fixed 2026-05-03:** prior to this date, the Direct-mode and god-ray code were treating Sphere lights as *Directional* (no position, ignoring `uLightPos`) due to a too-broad `uLightType[i] > 0.5` check. The per-light banner explains the limitation; no separate fix needed.
+
+### "Hardness slider has no effect on my Sphere light"
+- **Expected.** Sphere lights derive shadow softness from physical sphere sampling — the Hardness slider is only for Point and Directional lights. The shadow softness for a Sphere light is determined by its radius and distance to the surface (closer = sharper, farther = softer), the way a real lamp behaves.
+- The slider description and the "Jitter" button tooltip both surface this.
+
+### "I want to hide the glowing emitter ball but keep the area light working"
+- Open the per-light popover and toggle **Visible Sphere** off. For Sphere lights this controls only the rendered emitter (`hideEmitter` flag) — the radius stays > 0 so area sampling continues unaffected. (For Point lights the toggle keeps its old meaning: off = invisible analytical light at zero radius.)
+
+### "Soft Shadow Jitter doesn't seem to do anything for my Sphere lights"
+- **Expected.** When `ptAreaLights` is on, sphere lights force `GetHardShadow` on the sphere-sampled direction (accumulation produces the soft shadow). The `ptStochasticShadows` jitter path is bypassed for type-2 lights — applying it on top would either double-soften or defeat sphere sampling. Soft Shadow Jitter still works for Point lights.
+
+### "Sphere light + 8 lights in scene → frame rate dropped"
+- Per-bounce sphere-intersect cost scales with `MAX_LIGHTS` (3 default). Default scenes with 3 lights are unaffected. With 8+ lights and `ptAreaLights` on, the per-pixel per-bounce cost may show up. If you hit this, bench-verify and consider reducing `ptBounces` or splitting your scene's lights into "physical" (Sphere) and "fill" (Point) categories.
+
+## 15. Removed / Deprecated Features
 
 ### Parameter Quick-Edit Popup Sliders (Keys 1–6) — Removed
 *   **What it was:** Pressing keys 1–6 opened a floating popup slider for formula parameters A–F at the cursor position (`PopupSliderSystem.tsx`).

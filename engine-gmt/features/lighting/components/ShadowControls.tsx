@@ -30,9 +30,9 @@ const ShadowSettingsPopup = () => {
                                     handleInteractionEnd();
                                 }}
                                 className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${areaLights ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : 'bg-gray-800 text-gray-500 border-gray-600'}`}
-                                title="Toggle stochastic area light shadows"
+                                title="Stochastic shadow jitter — softens Point-light shadows via accumulation. For physical area lights, use a Sphere light type instead."
                             >
-                                Area
+                                Jitter
                             </button>
                         )}
                         <button

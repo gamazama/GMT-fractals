@@ -2,6 +2,39 @@
 
 Chronological log of significant changes during the v0.9.3 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-05-03
+
+### True area lights — physical soft shadows + correct specular highlights
+
+**User-facing**
+- New light type: **Sphere (Area)**, alongside Point and Directional. Right-click any light orb (or use the ☰ menu) and pick "Sphere (Area)" to convert it. Selecting Sphere on a zero-radius light bumps the radius to 0.5 so it has finite extent to start from.
+- Sphere lights produce real soft shadows that get **sharper close to occluders, softer far from them** — geometrically correct, the way an actual lamp behaves. Shadow softness is determined by the sphere's size and distance to the surface, not by the global Hardness slider.
+- Glossy and mirror surfaces now show **specular reflections of the lights themselves** — the bright highlight you'd expect from a physical area light reflecting off a polished surface. Previously the path tracer caught light only via the diffuse direct-lighting estimator, so direct specular highlights from lights were missing.
+- Convergence is **roughly twice as fast** for scenes that use sphere lights — clean shadows in ~64–128 accumulation frames instead of 256+. The path tracer combines two estimators (next-event sampling + BSDF sampling) using Multiple Importance Sampling, which lowers variance.
+- Enable via the engine panel: **Path Tracing Core ON → Active Mode = Path Tracing → True Area Lights ON**. Then change a light's type to Sphere via its right-click menu. Recommended workflow is in the Light Studio help.
+- The "Visible Sphere" toggle on a Sphere light now controls **only the rendered emitter ball** — turn it off to hide the glowing sphere from the viewport while keeping the area light fully active. (For Point lights the toggle keeps its old meaning: off = invisible analytical light.)
+- Compile cost: about **+600 ms** the first time you enable True Area Lights (one-time recompile). Per-frame GPU cost scales with sphere-light count; default 3-light scenes are unaffected by anything other than the lights you actually convert.
+- Existing scenes load unchanged. The new system is opt-in per light AND per compile gate.
+
+**UI cleanup**
+- The "Area Lights" checkbox under the shadow engine settings was renamed **Soft Shadow Jitter** — it was confusingly named the same thing as the new True Area Lights, even though it's a separate feature (a fast stochastic-jitter trick for Point lights, kept as-is). The shadows-panel header button changed from "Area" to "Jitter" with a tooltip pointing to Sphere lights for the physical path.
+- The Hardness slider description now notes it only affects Point and Directional lights — Sphere lights derive softness from physics.
+- A small amber warning appears in a Sphere light's popover if the light won't actually integrate as an area light (e.g. you set type to Sphere but haven't enabled Path Tracing or True Area Lights yet). It tells you exactly what's missing.
+
+**Bug fixes (along the way)**
+- Sphere lights in Direct (non-PT) mode were treated as Directional — they had no position and ignored their `uLightPos` uniform entirely. Now correctly fall through to the Point branch in Direct mode and look identical to a Point light at the sphere's center.
+- The visible glowing emitter sphere wasn't rendering for Sphere-type lights — the visualization filter was excluding them alongside Directional lights. Fixed.
+- Volumetric god-rays scatter had the same Sphere-as-Directional bug. Fixed.
+
+**Implementation**
+- Plan: `plans/area-lights.md`. Live status: `HANDOFF.md`. Architecture notes: `docs/gmt/02_Rendering_Internals.md` § Sphere Area Lights & MIS.
+- New shader helpers in `engine-gmt/shaders/chunks/pathtracer.ts`: `intersectAreaLight` (closest-hit test against type-2 lights, reuses `intersectSphere` from `math.ts`), `pdfSphereLightDir`, `pdfVNDF` (Heitz 2018 §3 eq. 17), `pdfBSDF` (mixture density matching the bounce-direction sampler), `misPower2` (Veach 1995 power-heuristic), `tracePTBounce` (wrapper around `traceSceneLean` that runs the sphere-light intersection alongside the fractal march).
+- New light-type-2 NEE branch samples a point on the sphere surface (Marsaglia 1972) and uses `1/pdfSphereDir` as the compensation factor instead of the delta-light `activeCount`. Shadow ray for sphere lights forces `GetHardShadow` on the sampled direction so accumulation across frames produces the correct soft shadow — no double-soften from `GetSoftShadow`'s penumbra approximation, no override from the stochastic-jitter path.
+- BSDF estimator at the next-iter `!hit` branch reads previous-bounce surface state (`n_prev` / `viewDir_prev` / `roughness_prev` / `probSpec_prev`, captured before each bounce trace), evaluates `pdfBSDF` against the direction now hitting a light, weights against `pdfSphereLightDir` via `misPower2`. Delta lights collapse to `w_nee = 1, w_bsdf = 0` automatically.
+- New `LightType` value `'Sphere'` widened in both `types/graphics.ts` copies. New `hideEmitter?: boolean` field decouples emitter visibility from physical radius. New `uLightHideEmitter` Float32Array uniform.
+- New compile gate `ptAreaLights` in `LightingFeature` params. All shader code is `#ifdef PT_AREA_LIGHTS` so default-PT shaders are bit-identical to before; GPU driver strips the gated paths at compile when off.
+- Pending: Phase 4 unbias bench (spec is in the plan doc) — until built, MIS correctness is "reasonably believed" but not pixel-proven.
+
 ## 2026-05-01
 
 ### Mobile mode for app-gmt

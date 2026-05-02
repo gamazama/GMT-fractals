@@ -130,6 +130,8 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
 
 export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?: () => void }) => {
     const light = useEngineStore(s => getLightFromSlice(s.lighting, index));
+    const renderMode = useEngineStore(s => s.lighting?.renderMode);
+    const ptAreaLights = useEngineStore(s => s.lighting?.ptAreaLights);
     const updateLight = useEngineStore(s => s.updateLight);
     const removeLight = useEngineStore(s => s.removeLight);
     const duplicateLight = useEngineStore(s => s.duplicateLight);
@@ -182,7 +184,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
          const cam = getViewportCamera();
 
          if (cam) {
-             if (light.type === 'Point') {
+             if (light.type !== 'Directional') {
                  const o = engine.sceneOffset;
                  if (wasFixed) {
                      const worldPos = new THREE.Vector3(newPos.x, newPos.y, newPos.z);
@@ -259,7 +261,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
     const posStatus = getPosKeyStatus();
 
     const prefix = `lighting.light${index}`;
-    
+
     // Smart 5-digit formatter for UI
     const formatValue = (val: number) => {
         if (val === 0) return "0";
@@ -268,12 +270,69 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
         return s.includes('.') ? s.replace(/\.?0+$/, "") : s;
     };
 
+    // For Sphere lights the "Visible Sphere" toggle controls only the rendered
+    // emitter via hideEmitter — radius stays > 0 so area sampling is unaffected.
+    // Point lights keep the legacy radius==0 means "invisible analytical light".
+    const renderEmitterSection = () => {
+        if (light.type === 'Directional') return null;
+        const isSphereLight = light.type === 'Sphere';
+        const emitterShown = isSphereLight ? !light.hideEmitter : (light.radius ?? 0) > 0.001;
+        const showSliders = isSphereLight || emitterShown;
+        const onToggle = () => {
+            handleInteractionStart('param');
+            if (isSphereLight) {
+                updateLight({ index, params: { hideEmitter: emitterShown } });
+            } else {
+                updateLight({ index, params: { radius: emitterShown ? 0 : 0.1 } });
+            }
+            handleInteractionEnd();
+        };
+        return (
+            <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                    <label className="text-xs text-gray-400 font-medium">Visible Sphere</label>
+                    <button
+                        onClick={onToggle}
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                            emitterShown
+                                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
+                                : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
+                        }`}
+                        title={isSphereLight
+                            ? 'Show or hide the visible emitter ball. Light continues to integrate as an area light either way.'
+                            : 'Toggle visible emitter sphere. Off = invisible analytical point light.'}
+                    >
+                        {emitterShown ? 'ON' : 'OFF'}
+                    </button>
+                </div>
+                {showSliders && (
+                    <>
+                        <Slider
+                            label={isSphereLight ? 'Light Radius' : 'Sphere Radius'}
+                            value={light.radius ?? 0.1}
+                            min={0.001} max={1.0} step={0.001}
+                            onChange={(v) => updateLight({ index, params: { radius: v } })}
+                            trackId={`${prefix}_radius`}
+                        />
+                        <Slider
+                            label="Edge Softness"
+                            value={light.softness ?? 0.0}
+                            min={0} max={2.0} step={0.01}
+                            onChange={(v) => updateLight({ index, params: { softness: v } })}
+                            trackId={`${prefix}_softness`}
+                        />
+                    </>
+                )}
+            </div>
+        );
+    };
+
     return (
         <Popover width="w-52" onClose={onClose}>
             <div className="relative space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2">
                     <div className="flex items-center gap-2">
-                        {light.type === 'Point' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
+                        {light.type !== 'Directional' && <KeyframeButton status={posStatus} onClick={handlePositionKey} />}
                         <SectionLabel>Light {index + 1}</SectionLabel>
                     </div>
                     <div className="flex items-center gap-1">
@@ -300,6 +359,12 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         </button>
                     </div>
                 </div>
+
+                {light.type === 'Sphere' && (renderMode !== 1.0 || !ptAreaLights) && (
+                    <div className="text-[10px] text-amber-300/90 bg-amber-900/20 border border-amber-500/30 rounded px-2 py-1 leading-tight">
+                        Sphere area lights only integrate as area lights in Path Tracing mode with True Area Lights enabled. Currently rendering as a Point at the sphere center.
+                    </div>
+                )}
 
                 <div className="space-y-1">
                     {/* Add Direction Control for Sun Lights */}
@@ -359,46 +424,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                             trackId={`${prefix}_falloff`}
                         />
                     )}
-                    {light.type !== 'Directional' && (
-                        <div className="space-y-1">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs text-gray-400 font-medium">Visible Sphere</label>
-                                <button
-                                    onClick={() => {
-                                        const isOn = (light.radius ?? 0) > 0.001;
-                                        handleInteractionStart('param');
-                                        updateLight({ index, params: { radius: isOn ? 0 : 0.1 } });
-                                        handleInteractionEnd();
-                                    }}
-                                    className={`text-[9px] font-bold px-2 py-0.5 rounded border transition-colors ${
-                                        (light.radius ?? 0) > 0.001
-                                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                                            : 'bg-white/5 text-gray-400 border-white/20 hover:border-white/40'
-                                    }`}
-                                >
-                                    {(light.radius ?? 0) > 0.001 ? 'ON' : 'OFF'}
-                                </button>
-                            </div>
-                            {(light.radius ?? 0) > 0.001 && (
-                                <>
-                                <Slider
-                                    label="Sphere Radius"
-                                    value={light.radius ?? 0.1}
-                                    min={0.001} max={1.0} step={0.001}
-                                    onChange={(v) => updateLight({ index, params: { radius: v } })}
-                                    trackId={`${prefix}_radius`}
-                                />
-                                <Slider
-                                    label="Edge Softness"
-                                    value={light.softness ?? 0.0}
-                                    min={0} max={2.0} step={0.01}
-                                    onChange={(v) => updateLight({ index, params: { softness: v } })}
-                                    trackId={`${prefix}_softness`}
-                                />
-                                </>
-                            )}
-                        </div>
-                    )}
+                    {renderEmitterSection()}
                 </div>
 
                 <div className="pt-2 border-t border-white/10 space-y-2">
