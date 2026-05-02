@@ -35,14 +35,18 @@ const MOBILE_STYLE: React.CSSProperties = {
 const DESKTOP_STYLE: React.CSSProperties = {};
 
 export const MobileViewportShell: React.FC<MobileViewportShellProps> = ({ children, className = '' }) => {
-    const { isMobile } = useMobileLayout();
+    // Use `isDeviceMobile` (raw device flag) — the sticky+dvh trick is
+    // meant to handle iOS address bar / Android keyboard. Force Mobile
+    // UI on a desktop browser shouldn't apply it; desktop layout (fixed
+    // inset-0) is correct there.
+    const { isDeviceMobile } = useMobileLayout();
 
-    const positioning = isMobile
+    const positioning = isDeviceMobile
         ? 'sticky top-0 h-[100dvh] overflow-hidden shadow-2xl'
         : 'fixed inset-0 w-full h-full';
 
     return (
-        <div className={`${positioning} ${className}`} style={isMobile ? MOBILE_STYLE : DESKTOP_STYLE}>
+        <div className={`${positioning} ${className}`} style={isDeviceMobile ? MOBILE_STYLE : DESKTOP_STYLE}>
             {children}
         </div>
     );

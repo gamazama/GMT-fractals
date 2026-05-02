@@ -53,12 +53,19 @@ export const isMobileSnapshot = (): boolean => {
  * width; `mobile` / `desktop` overrides force the layout regardless
  * of device.
  *
- * `isPortrait` always reflects actual orientation (the rotate-prompt
- * gate uses it directly).
+ * Three flags:
+ *   - `isMobile`        — preference-aware ("should we render mobile UI?").
+ *                          Use for joystick, mobile menu host, hidden chrome.
+ *   - `isDeviceMobile`  — raw device-mobile flag, ignores preference.
+ *                          Use for things that only make sense on a real
+ *                          touch device (address-bar collapse trick,
+ *                          scroll-trigger intro). Forcing Mobile UI on
+ *                          a desktop browser shouldn't render those.
+ *   - `isPortrait`      — actual orientation; rotate-prompt uses directly.
  */
 export const useMobileLayout = () => {
     const pref = useEngineStore((s) => s.uiModePreference);
     const isDeviceMobile = useEngineStore((s) => s.isDeviceMobile);
     const isPortrait = useEngineStore((s) => s.isPortrait);
-    return { isPortrait, isMobile: resolveIsMobile(pref, isDeviceMobile) };
+    return { isPortrait, isDeviceMobile, isMobile: resolveIsMobile(pref, isDeviceMobile) };
 };

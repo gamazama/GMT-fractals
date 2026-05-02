@@ -30,8 +30,14 @@ export const MobileScrollIntro: React.FC<MobileScrollIntroProps> = ({
     title = 'GMT',
     subtitle = 'Swipe up to enter',
 }) => {
-    const { isMobile } = useMobileLayout();
-    if (!isMobile) return null;
+    // Intentionally `isDeviceMobile`, not `isMobile` — the address-bar
+    // collapse trick has no purpose on a desktop browser, and rendering
+    // a 100svh banner there would deadlock (desktop body has
+    // overflow:hidden so there's no scroll past it). Force Mobile UI on
+    // a desktop still gets the rest of the mobile layout, just not
+    // this banner.
+    const { isDeviceMobile } = useMobileLayout();
+    if (!isDeviceMobile) return null;
 
     return (
         <div

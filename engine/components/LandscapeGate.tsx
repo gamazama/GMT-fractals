@@ -13,8 +13,10 @@ import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { SmartphoneRotateIcon } from '../../components/Icons';
 
 export const LandscapeGate: React.FC = () => {
-    const { isMobile, isPortrait } = useMobileLayout();
-    if (!isMobile || !isPortrait) return null;
+    // Real-device only: telling a desktop user with a portrait window
+    // to "rotate your device" is nonsensical.
+    const { isDeviceMobile, isPortrait } = useMobileLayout();
+    if (!isDeviceMobile || !isPortrait) return null;
 
     return (
         <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-10 text-center text-white">
