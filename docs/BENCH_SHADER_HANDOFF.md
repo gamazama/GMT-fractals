@@ -727,6 +727,154 @@ practically depends on bounce budget. At infinite bounces, PT replaces
 AO completely. At 3 bounces, AO was a useful approximation. Drop or
 keep is a creative judgment call — perf alone doesn't justify it.
 
+---
+
+## Session 3 wrap-up — reflection-bounce research + diminishing returns
+
+After patches 1+2+4+5 shipped (commit 048652f), launched a focused 2-agent
+review on PT reflection-bounce-specific code: one neutral code review, one
+production-veteran lens. Bench scene was switched to `--material=mirror`
+(roughness=0.05) to actually exercise low-roughness specular bounces.
+
+### Mirror-mode bench baseline
+| Config | b=3 GPU p50 |
+|---|---|
+| PT default scene (roughness=0.75, no real reflections firing) | 17,772 µs |
+| PT mirror mode (roughness=0.05, specular bounces fire) | 18,846 µs |
+
+Mirror only adds ~6% — VNDF's grazing-angle handling is doing its job at
+low roughness. The scene is *almost* equally cheap to render in mirror
+mode as in default mode.
+
+### Key qualitative finding (user observation)
+**Mirror mode in PT is a degenerate scene.** Point lights have no surface
+that BSDF rays can intersect, so a mirror surface in PT can only reflect:
+(a) other Mandelbulb geometry, (b) the env map. The colored point lights
+contribute via NEE direct lighting only — they don't appear in the mirror
+reflections at all. Visible-light-spheres are a cosmetic overlay (added
+at end of trace, not in BSDF intersection), not a true emission surface.
+
+Result: mirror-mode renders look "wrong" because the scene fundamentally
+can't render colored highlights of the lights via specular paths. Until
+true area lights ship (`plans/area-lights.md`), reflection-quality
+optimization is hard to validate visually — the underlying scene is
+incomplete for specular evaluation.
+
+### Patch 6 — Roughness regularization (Kaplanyan & Dachsbacher 2013)
+
+Tried: `roughness = max(roughness, 0.1 * float(bounce));` after the
+existing min-roughness clamp. Production-standard ("Filter Glossy" in
+Cycles) — widens GGX lobe progressively on indirect bounces to reduce
+sharp-specular caustic-style firefly variance.
+
+**Bench result:** perf-neutral on both default and mirror (variance
+reduction is convergence-rate not per-frame GPU). Image effect:
+- Default scene (roughness 0.75 > all per-bounce floors): bit-equivalent.
+  MAE 0.24 vs run-to-run 0.23 — patch is a true no-op.
+- Mirror scene: MAE 0.34 vs run-to-run 0.18. Real but small visual shift —
+  bounces 1+ slightly fuzzier.
+
+**REVERTED.** Two reasons:
+1. The mirror scene is degenerate (no light reflections — see above).
+   Without true area lights, the scene can't validate whether the
+   "filter glossy" effect is helping. User judgment: "marginally better
+   but within the 'looks wrong' category."
+2. Hardcoded `0.1 * bounce` is a magic number; if shipped, should be a
+   slider. Defer until area lights make the visual validation meaningful.
+
+**When to revisit:** after `plans/area-lights.md` Phase 3 ships and
+mirror-mode renders are visually correct. Then re-attempt with proper
+visual validation; consider exposing the floor as a slider.
+
+### Patches 7+8 — Refinement DE→DE_Dist + skip refinement on bounce ≥ 1
+
+Both proposed by the code-review agent as 3-7% wins each in mirror mode.
+**Did not implement** — discovered `uRefinementSteps = 0` in the default
+bench scene. The refinement loop (`trace.ts:125-143`) is gated by
+`if (refine > 0)` and never fires when the slider is off.
+
+ANGLE/D3D11 dynamically dispatches around the function-call uniform
+branch (per S2 finding), so when `uRefinementSteps = 0` the entire
+refinement block is skipped at runtime — there's nothing for these
+patches to optimize on the default bench.
+
+**For users who enable refinement** (`uRefinementSteps > 0`), these
+patches would still pay off:
+- P7: replace `map(p_ref + uCameraPosition)` with `mapDist(p_ref + uCameraPosition)`
+  in the inner loop, then one final `map()` at convergence to refresh
+  trap data. Mirror of the S1 reflection-shader win.
+- P8: gate refinement on `bounce == 0` only — indirect bounce hits use
+  unrefined position (throughput attenuation hides sub-pixel error).
+
+**Deferred** rather than blind-shipped: without bench validation, can't
+catch a regression. If refinement-enabled users surface as a target
+audience, add a `--refinement-steps=N` CLI flag to the bench harness and
+verify these patches against that scene config.
+
+### Veteran's strategic note (worth preserving)
+
+> "Your S3 work is the kind of work that ages well. VNDF, RR, dead-work
+> elimination, AO drop — these are foundational. The +6% mirror penalty
+> over diffuse tells me you're already in the 'diminishing returns'
+> regime for specular. The next 30% will come from architectural changes
+> (a real area-light + MIS pass, or a guided-importance scheme), not
+> from squeezing the bounce loop. Don't let perfectionism on items 1+4
+> burn a week — they're worth a day, total."
+
+### Production false-starts the veteran agent flagged to NOT pursue
+
+Recorded so future sessions don't waste time exploring:
+- **Manifold NEE / Newton-solve specular connectors** — needs SDF
+  derivatives + per-iteration state. Mitsuba uses 200+ lines of C++ per
+  closure. Forbidden by the single-shader fragment-shader constraint.
+- **Caustic detection (photon mapping / SPPM)** — multi-pass with spatial
+  structure. Forbidden.
+- **Bidirectional path tracing, MLT, ERPT** — multi-pass.
+- **"Bounce 0 uses VNDF, bounces 1+ use cheaper half-vector IS"** — would
+  re-introduce the firefly bug VNDF just fixed.
+- **Per-bounce light-PDF caching across pixels** — wavefront-only.
+- **Splitting specular lobe into sharp + rough sub-BRDFs** (Disney style) —
+  fxc inlines and predicates them anyway; net neutral.
+- **Halton sequences instead of blue-noise + golden-ratio decorrelation** —
+  Halton needs per-bounce dimension tracking → more uniform-indexed
+  array reads, which ANGLE flattens poorly.
+- **Hero wavelength sampling for chromatic dispersion** — out of scope
+  unless prism caustics become a feature.
+- **RR by path contribution instead of throughput** — requires per-bounce
+  expected-radiance tracking. Throughput-RR is the right call for a
+  fragment shader.
+
+### Where this goes next
+
+The clear architectural step is `plans/area-lights.md`:
+- Phase 3 (BSDF rays detect sphere hits) makes mirror-mode rendering
+  correct (lights become visible in reflections).
+- Phase 4 (MIS power-heuristic) unlocks the textbook variance reduction
+  agents identified — actually applies once area lights exist.
+- Phase 5 (re-attempt power-weighted lights) becomes viable post-MIS.
+- Reattempting Patch 6 (roughness regularization) becomes meaningfully
+  validatable post-Phase 3.
+
+For shader-perf squeezing on the default scene, **we're done.** The
+remaining options are creative-judgment knobs (P6 with sliders) or
+refinement-loop work that only helps a niche user population (P7+P8).
+Both deferred pending architectural changes that make their value
+measurable.
+
+### Final shipped state (commit 048652f)
+
+```
+pathtracer.ts:
+  + last-bounce dead-work skip (P1)
+  + standard PBRT Russian Roulette (P2)
+  + VNDF GGX sampling (P4) — Heitz 2018
+  + firefly clamps removed (alongside VNDF)
+  + AO dropped from PT path (P5)
+```
+
+Total cumulative: **-31% PT GPU at b=3** (25,901 → 17,772 µs).
+Image now mathematically correct (vs prior clamp-biased dim baseline).
+
 ### Procedure (set in stone — follow this for any further PT/volumetric work)
 
 The session-1/2 history has ~30 plausible-looking optimizations of which only
