@@ -164,6 +164,7 @@ const parseBool = (v: string | undefined): boolean | null => {
 };
 const PT_NEE_ALL = parseBool(argVal('--pt-nee-all'));
 const PT_ENV_NEE = parseBool(argVal('--pt-env-nee'));
+const PT_AREA_LIGHTS = parseBool(argVal('--pt-area-lights'));
 const IS_PT = RENDER_MODE === 'PathTracing';
 
 // --scene=<gmf-path> loads a saved scene file. The Scene block's JSON is
@@ -470,6 +471,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptBounces: number | null;
         ptNeeAll: boolean | null;
         ptEnvNee: boolean | null;
+        ptAreaLights: boolean | null;
         scenePreset: any;
     }) => {
         const store = (window as any).__store;
@@ -550,10 +552,19 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         //      pinning so bench results aren't sensitive to default drift).
         //   4. Last, call setRenderMode — that's the actual switch that
         //      triggers the PT recompile via MaterialController.
-        if (opts.renderMode === 'PathTracing' && setters.setLighting) {
-            const lightingPatch: any = { ptEnabled: true };
+        // Fire the lighting patch when either we're explicitly switching to
+        // PT mode OR a scene preset already has PT enabled and we want to
+        // override sub-flags (--pt-area-lights, --pt-nee-all, etc.).
+        const sceneHasPT = opts.scenePreset?.features?.lighting?.ptEnabled === true;
+        const wantsLightingOverride = opts.renderMode === 'PathTracing'
+            || opts.ptNeeAll !== null || opts.ptEnvNee !== null
+            || opts.ptAreaLights !== null || opts.ptBounces !== null;
+        if (wantsLightingOverride && setters.setLighting) {
+            const lightingPatch: any = {};
+            if (opts.renderMode === 'PathTracing') lightingPatch.ptEnabled = true;
             if (opts.ptNeeAll !== null) lightingPatch.ptNEEAllLights = opts.ptNeeAll;
             if (opts.ptEnvNee !== null) lightingPatch.ptEnvNEE = opts.ptEnvNee;
+            if (opts.ptAreaLights !== null) lightingPatch.ptAreaLights = opts.ptAreaLights;
             if (opts.ptBounces !== null) lightingPatch.ptBounces = opts.ptBounces;
             setters.setLighting(lightingPatch);
         }
@@ -581,6 +592,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptBounces: PT_BOUNCES,
         ptNeeAll: PT_NEE_ALL,
         ptEnvNee: PT_ENV_NEE,
+        ptAreaLights: PT_AREA_LIGHTS,
         scenePreset: SCENE_PRESET,
     });
     console.log(`[bench-shader] preset diag: applied=${JSON.stringify({ refl: presetApplied.appliedReflectionMode, rough: presetApplied.appliedRoughness, reflectionStrength: presetApplied.appliedReflection })}`);
