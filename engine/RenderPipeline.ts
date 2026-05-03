@@ -70,6 +70,15 @@ export class RenderPipeline {
     // Skipped during bucket rendering (BucketRenderer manages its own).
     private static readonly VIEWPORT_CONVERGENCE_INTERVAL = 8;
     private _isBucketRendering: boolean = false;
+    // Gate the viewport convergence pass behind an explicit consumer flag.
+    // The only consumer is RegionOverlay (engine-gmt/components/viewport/
+    // RegionOverlay.tsx) which polls `convergenceValue` while a render-region
+    // is active. When no consumer is mounted, the measurement (1 render +
+    // 2 setRenderTarget swaps + 1 sync readPixels every 8 samples) is pure
+    // waste — the result is computed and never read. Default off; toggled
+    // from main thread via SET_CONVERGENCE_NEEDED worker message.
+    private _convergenceNeeded: boolean = false;
+    public setConvergenceNeeded(v: boolean) { this._convergenceNeeded = v; }
 
     public isHolding: boolean = false;
 
@@ -559,7 +568,7 @@ export class RenderPipeline {
         // Skipped during bucket rendering (BucketRenderer manages its own measurements).
         // Measures the active render region (or full viewport if no region set).
         // Cost: one convergence diff pass every 8 frames + non-blocking fence poll.
-        if (accumEnabled && !this._isBucketRendering && this.accumulationCount > 2) {
+        if (accumEnabled && !this._isBucketRendering && this.accumulationCount > 2 && this._convergenceNeeded) {
             // Poll any pending result first
             if (this.convergencePending) {
                 this.pollConvergenceResult(renderer);

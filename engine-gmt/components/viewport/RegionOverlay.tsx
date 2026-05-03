@@ -42,11 +42,19 @@ export const RegionOverlay: React.FC<{
     const [convergence, setConvergence] = useState(1.0);
 
     useEffect(() => {
+        // Activate the worker's viewport convergence measurement only while
+        // this overlay is mounted. Without this, the measurement runs every
+        // 8 accumulation samples regardless of whether anything reads the
+        // result — pure GPU waste during normal browsing.
+        engine.setConvergenceNeeded?.(true);
         const id = setInterval(() => {
             setSamples((engine as any).accumulationCount ?? 0);
             setConvergence((engine as any).convergenceValue ?? 1);
         }, 100);
-        return () => clearInterval(id);
+        return () => {
+            clearInterval(id);
+            engine.setConvergenceNeeded?.(false);
+        };
     }, []);
 
     const [canvasW, canvasH] = getCanvasPhysicalPixelSize(useEngineStore.getState());

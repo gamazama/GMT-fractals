@@ -642,6 +642,14 @@ export class WorkerProxy implements AccumulationController {
         return this._pendingRequest(this._pendingRenderInfo,
             id => ({ type: 'GET_RENDER_INFO', id } as any), null, 3000);
     }
+
+    /** Toggle the worker's viewport convergence pass on/off. RegionOverlay
+     *  is the sole consumer of `convergenceValue`; when it isn't mounted
+     *  the measurement (one render + two setRenderTarget swaps + one sync
+     *  readPixels every 8 accumulation samples) is wasted GPU work. */
+    setConvergenceNeeded(needed: boolean) {
+        this.post({ type: 'SET_CONVERGENCE_NEEDED', needed } as any);
+    }
     checkHalfFloatAlphaSupport() { return true; }
 
     // ─── Worker communication ────────────────────────────────────────────

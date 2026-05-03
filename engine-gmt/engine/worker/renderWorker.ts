@@ -602,6 +602,13 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 }
                 break;
 
+            case 'SET_CONVERGENCE_NEEDED':
+                // RegionOverlay (the only convergence consumer) toggles this on
+                // mount/unmount. Without it, the viewport convergence pass runs
+                // every 8 accumulation samples and the result is never read.
+                if (engine?.pipeline) engine.pipeline.setConvergenceNeeded(msg.needed);
+                break;
+
             case 'GET_GPU_INFO': {
                 let info = 'Generic WebGL Device';
                 try {

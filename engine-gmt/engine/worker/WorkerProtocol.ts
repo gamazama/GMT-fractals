@@ -67,6 +67,7 @@ export type MainToWorkerMessage =
     | { type: 'HISTOGRAM_READBACK'; id: string; source: 'geometry' | 'color' }
     | { type: 'GET_GPU_INFO' }
     | { type: 'GET_RENDER_INFO'; id: string }
+    | { type: 'SET_CONVERGENCE_NEEDED'; needed: boolean }
     // ─── Video Export ───
     | { type: 'EXPORT_START'; config: VideoExportConfig; stream: WritableStream | null; dirHandle?: FileSystemDirectoryHandle }
     | { type: 'EXPORT_RENDER_FRAME'; frameIndex: number; time: number;
