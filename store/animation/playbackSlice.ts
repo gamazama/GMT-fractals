@@ -69,8 +69,15 @@ export const createPlaybackSlice: StateCreator<AnimationStore, [["zustand/subscr
     
     setLoopMode: (mode) => set({ loopMode: mode }),
     
-    setIsScrubbing: (v) => set({ isScrubbing: v }),
-    setIsCameraInteracting: (v) => set({ isCameraInteracting: v }),
+    setIsScrubbing: (v) => { if (get().isScrubbing !== v) set({ isScrubbing: v }); },
+    // Equality gate: this setter is called from `Navigation.tsx`'s per-frame
+    // useFrame at ~60Hz with the same `false` value during idle. Without the
+    // gate, every fire emits a Zustand notification that flooded every
+    // useAnimationStore subscriber and forced re-renders of Slider, Timeline,
+    // DopeSheet, GraphEditor, and friends. Saving the no-op was 60×/sec of
+    // pure waste (verified via debug/probe-anim-set-source.mts: 239 calls /
+    // 4s idle, all this one site). See docs/UI_PERF_HANDOFF.md.
+    setIsCameraInteracting: (v) => { if (get().isCameraInteracting !== v) set({ isCameraInteracting: v }); },
     seek: (frame) => set({ currentFrame: Math.max(0, Math.min(get().durationFrames, frame)) }),
     setDuration: (frames) => { set({ durationFrames: frames }); },
     setFps: (newFps, mode = 'keep') => {
