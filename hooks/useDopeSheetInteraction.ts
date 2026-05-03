@@ -54,19 +54,17 @@ export const useDopeSheetInteraction = ({
     selectedTrackIds
 }: DopeSheetInteractionProps) => {
     // Narrow per-field subs — `useAnimationStore()` (full sub) re-rendered the
-    // hook's host component (DopeSheet) every RAF due to ~60Hz no-op set()
-    // calls flooding the store. Reactive value (`selectedKeyframeIds`) gets a
-    // selector; actions read lazily via getState().
+    // hook's host component every RAF on the no-op set() flood. Action selectors
+    // use `useAnimationStore((s) => s.fn)` so refs stay stable across renders
+    // (Object.is bail-out) — wrapper-closures break useCallback dep stability.
     const selectedKeyframeIds = useAnimationStore((s) => s.selectedKeyframeIds);
-    const updateKeyframes        = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
-        useAnimationStore.getState().updateKeyframes(...a);
-    const selectKeyframes        = (keys: string[], multi: boolean) =>
-        useAnimationStore.getState().selectKeyframes(keys, multi);
-    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
-    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
-    const deselectAllKeys        = () => useAnimationStore.getState().deselectAllKeys();
-    const setIsScrubbing         = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
-    const snapshot               = () => useAnimationStore.getState().snapshot();
+    const updateKeyframes      = useAnimationStore((s) => s.updateKeyframes);
+    const selectKeyframes      = useAnimationStore((s) => s.selectKeyframes);
+    const setTrackSelection    = useAnimationStore((s) => s.setTrackSelection);
+    const addTracksToSelection = useAnimationStore((s) => s.addTracksToSelection);
+    const deselectAllKeys      = useAnimationStore((s) => s.deselectAllKeys);
+    const setIsScrubbing       = useAnimationStore((s) => s.setIsScrubbing);
+    const snapshot             = useAnimationStore((s) => s.snapshot);
 
     const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
     

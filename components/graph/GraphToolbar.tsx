@@ -55,11 +55,11 @@ const ToolButton = ({ onClick, active, icon, tooltip, onPointerDown, danger, onC
 // This ensures the sliders are reactive even inside a static context menu snapshot
 const BounceSettingsMenu = () => {
     // Narrow per-field — destructuring useAnimationStore() (full sub) re-rendered
-    // this menu every RAF on the no-op set() flood.
-    const bounceTension  = useAnimationStore((s) => s.bounceTension);
-    const bounceFriction = useAnimationStore((s) => s.bounceFriction);
-    const setBouncePhysics = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setBouncePhysics']>) =>
-        useAnimationStore.getState().setBouncePhysics(...a);
+    // this menu every RAF on the no-op set() flood. Action selector returns
+    // the stable slice ref via Object.is bail-out.
+    const bounceTension    = useAnimationStore((s) => s.bounceTension);
+    const bounceFriction   = useAnimationStore((s) => s.bounceFriction);
+    const setBouncePhysics = useAnimationStore((s) => s.setBouncePhysics);
     
     return (
         <div className="flex flex-col gap-1 py-1">

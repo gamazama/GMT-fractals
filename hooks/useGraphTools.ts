@@ -32,17 +32,14 @@ export const useGraphTools = ({
     v2p,
     canvasPixelToFrame
 }: GraphToolsProps) => {
-    // Narrow per-field subs — `useAnimationStore()` (full sub) re-rendered the
-    // GraphEditor host every RAF on the no-op set() flood.
-    const bounceTension  = useAnimationStore((s) => s.bounceTension);
-    const bounceFriction = useAnimationStore((s) => s.bounceFriction);
-    const updateKeyframes = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
-        useAnimationStore.getState().updateKeyframes(...a);
-    const snapshot        = () => useAnimationStore.getState().snapshot();
-    const addKeyframe     = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['addKeyframe']>) =>
-        useAnimationStore.getState().addKeyframe(...a);
-    const selectKeyframes = (keys: string[], multi: boolean) =>
-        useAnimationStore.getState().selectKeyframes(keys, multi);
+    // Narrow per-field subs + stable action refs via `useAnimationStore((s) => s.fn)`.
+    // The earlier wrapper-closure form broke useCallback dep stability.
+    const bounceTension   = useAnimationStore((s) => s.bounceTension);
+    const bounceFriction  = useAnimationStore((s) => s.bounceFriction);
+    const updateKeyframes = useAnimationStore((s) => s.updateKeyframes);
+    const snapshot        = useAnimationStore((s) => s.snapshot);
+    const addKeyframe     = useAnimationStore((s) => s.addKeyframe);
+    const selectKeyframes = useAnimationStore((s) => s.selectKeyframes);
 
     // --- TOOL STATE ---
     const [isSmoothing, setIsSmoothing] = useState(false);

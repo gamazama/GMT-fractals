@@ -57,23 +57,24 @@ export const useGraphInteraction = (
     const softSelectionEnabled  = useAnimationStore((s) => s.softSelectionEnabled);
     const softSelectionRadius   = useAnimationStore((s) => s.softSelectionRadius);
     const softSelectionType     = useAnimationStore((s) => s.softSelectionType);
-    // Actions — stable refs, read lazily.
-    const updateKeyframe         = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframe']>) =>
-        useAnimationStore.getState().updateKeyframe(...a);
-    const updateKeyframes        = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
-        useAnimationStore.getState().updateKeyframes(...a);
-    const selectKeyframe         = (trackId: string, keyId: string, multi: boolean) =>
-        useAnimationStore.getState().selectKeyframe(trackId, keyId, multi);
-    const selectKeyframes        = (keys: string[], multi: boolean) =>
-        useAnimationStore.getState().selectKeyframes(keys, multi);
-    const deselectAllKeys        = () => useAnimationStore.getState().deselectAllKeys();
-    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
-    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
-    const snapshot               = () => useAnimationStore.getState().snapshot();
-    const setIsScrubbing         = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
-    const seek                   = (n: number) => useAnimationStore.getState().seek(n);
-    const setSoftSelection       = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setSoftSelection']>) =>
-        useAnimationStore.getState().setSoftSelection(...a);
+    // Action selectors — read via `useAnimationStore((s) => s.fn)` so the
+    // returned reference is stable across renders (Zustand bails on Object.is).
+    // The earlier wrapper-closure form `(...a) => getState().fn(...a)` returned
+    // a NEW function each render, breaking useCallback dep stability —
+    // handleGlobalMove was re-created every render, the effect at the end of
+    // this hook removed the in-flight mousemove listener mid-drag, and key
+    // movement / scrub silently failed.
+    const updateKeyframe         = useAnimationStore((s) => s.updateKeyframe);
+    const updateKeyframes        = useAnimationStore((s) => s.updateKeyframes);
+    const selectKeyframe         = useAnimationStore((s) => s.selectKeyframe);
+    const selectKeyframes        = useAnimationStore((s) => s.selectKeyframes);
+    const deselectAllKeys        = useAnimationStore((s) => s.deselectAllKeys);
+    const setTrackSelection      = useAnimationStore((s) => s.setTrackSelection);
+    const addTracksToSelection   = useAnimationStore((s) => s.addTracksToSelection);
+    const snapshot               = useAnimationStore((s) => s.snapshot);
+    const setIsScrubbing         = useAnimationStore((s) => s.setIsScrubbing);
+    const seek                   = useAnimationStore((s) => s.seek);
+    const setSoftSelection       = useAnimationStore((s) => s.setSoftSelection);
 
     const isDraggingRef = useRef(false);
     const lastMousePos = useRef({ x: 0, y: 0 });

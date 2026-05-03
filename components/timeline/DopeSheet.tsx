@@ -62,18 +62,15 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
     // to avoid the full-store destructured subscription that was forcing
     // DopeSheet to re-render every RAF (~60Hz no-op set() calls flood the
     // animationStore; see useTrackAnimation.ts for the original analysis).
-    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
-    const toggleTrackSelection   = (id: string) => useAnimationStore.getState().toggleTrackSelection(id);
-    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
-    const selectKeyframe         = (trackId: string, keyId: string, multi: boolean) =>
-        useAnimationStore.getState().selectKeyframe(trackId, keyId, multi);
-    const selectKeyframes        = (keys: string[], multi: boolean) =>
-        useAnimationStore.getState().selectKeyframes(keys, multi);
-    const removeTrack            = (id: string) => useAnimationStore.getState().removeTrack(id);
-    const addKeyframe            = (id: string, frame: number, value: number) =>
-        useAnimationStore.getState().addKeyframe(id, frame, value);
-    const snapshot               = () => useAnimationStore.getState().snapshot();
-    const deleteSelectedKeyframes = () => useAnimationStore.getState().deleteSelectedKeyframes();
+    const setTrackSelection       = useAnimationStore((s) => s.setTrackSelection);
+    const toggleTrackSelection    = useAnimationStore((s) => s.toggleTrackSelection);
+    const addTracksToSelection    = useAnimationStore((s) => s.addTracksToSelection);
+    const selectKeyframe          = useAnimationStore((s) => s.selectKeyframe);
+    const selectKeyframes         = useAnimationStore((s) => s.selectKeyframes);
+    const removeTrack             = useAnimationStore((s) => s.removeTrack);
+    const addKeyframe             = useAnimationStore((s) => s.addKeyframe);
+    const snapshot                = useAnimationStore((s) => s.snapshot);
+    const deleteSelectedKeyframes = useAnimationStore((s) => s.deleteSelectedKeyframes);
     const selectTrackBy = (id: string, multi: boolean) =>
         multi ? toggleTrackSelection(id) : setTrackSelection(id);
 

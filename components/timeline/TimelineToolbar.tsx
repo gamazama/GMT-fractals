@@ -167,23 +167,21 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     const isArmingModulation     = useAnimationStore((s) => s.isArmingModulation);
     const isRecordingModulation  = useAnimationStore((s) => s.isRecordingModulation);
     const deterministicPlayback  = useAnimationStore((s) => s.deterministicPlayback);
-    // Actions — stable refs read lazily via getState().
-    const play                   = () => useAnimationStore.getState().play();
-    const pause                  = () => useAnimationStore.getState().pause();
-    const stop                   = () => useAnimationStore.getState().stop();
-    const toggleRecording        = () => useAnimationStore.getState().toggleRecording();
-    const setFps                 = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setFps']>) =>
-        useAnimationStore.getState().setFps(...a);
-    const setDuration            = (n: number) => useAnimationStore.getState().setDuration(n);
-    const seek                   = (n: number) => useAnimationStore.getState().seek(n);
-    const deleteAllKeys          = () => useAnimationStore.getState().deleteAllKeys();
-    const deleteAllTracks        = () => useAnimationStore.getState().deleteAllTracks();
-    const snapshot               = () => useAnimationStore.getState().snapshot();
-    const toggleRecordCamera     = () => useAnimationStore.getState().toggleRecordCamera();
-    const setLoopMode            = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setLoopMode']>) =>
-        useAnimationStore.getState().setLoopMode(...a);
-    const toggleArmModulation    = () => useAnimationStore.getState().toggleArmModulation();
-    const setDeterministicPlayback = (v: boolean) => useAnimationStore.getState().setDeterministicPlayback(v);
+    // Action selectors — stable refs via Zustand's Object.is bail-out.
+    const play                   = useAnimationStore((s) => s.play);
+    const pause                  = useAnimationStore((s) => s.pause);
+    const stop                   = useAnimationStore((s) => s.stop);
+    const toggleRecording        = useAnimationStore((s) => s.toggleRecording);
+    const setFps                 = useAnimationStore((s) => s.setFps);
+    const setDuration            = useAnimationStore((s) => s.setDuration);
+    const seek                   = useAnimationStore((s) => s.seek);
+    const deleteAllKeys          = useAnimationStore((s) => s.deleteAllKeys);
+    const deleteAllTracks        = useAnimationStore((s) => s.deleteAllTracks);
+    const snapshot               = useAnimationStore((s) => s.snapshot);
+    const toggleRecordCamera     = useAnimationStore((s) => s.toggleRecordCamera);
+    const setLoopMode            = useAnimationStore((s) => s.setLoopMode);
+    const toggleArmModulation    = useAnimationStore((s) => s.toggleArmModulation);
+    const setDeterministicPlayback = useAnimationStore((s) => s.setDeterministicPlayback);
 
     const handleContextMenu = useHelpContextMenu();
     const [showRender, setShowRender] = useState(false);

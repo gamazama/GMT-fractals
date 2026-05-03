@@ -50,26 +50,21 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     const softSelectionEnabled  = useAnimationStore((s) => s.softSelectionEnabled);
     const softSelectionRadius   = useAnimationStore((s) => s.softSelectionRadius);
     const softSelectionType     = useAnimationStore((s) => s.softSelectionType);
-    // Actions — match slice signatures exactly.
-    const selectKeyframe         = (trackId: string, keyId: string, multi: boolean) =>
-        useAnimationStore.getState().selectKeyframe(trackId, keyId, multi);
-    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
-    const selectKeyframes        = (keys: string[], multi: boolean) =>
-        useAnimationStore.getState().selectKeyframes(keys, multi);
-    const deselectAllKeys        = () => useAnimationStore.getState().deselectAllKeys();
-    const copySelectedKeyframes  = () => useAnimationStore.getState().copySelectedKeyframes();
-    const pasteKeyframes         = (frame: number) => useAnimationStore.getState().pasteKeyframes(frame);
-    const deleteSelectedKeyframes = () => useAnimationStore.getState().deleteSelectedKeyframes();
+    // Action selectors — stable refs via Object.is bail-out.
+    const selectKeyframe          = useAnimationStore((s) => s.selectKeyframe);
+    const setTrackSelection       = useAnimationStore((s) => s.setTrackSelection);
+    const selectKeyframes         = useAnimationStore((s) => s.selectKeyframes);
+    const deselectAllKeys         = useAnimationStore((s) => s.deselectAllKeys);
+    const copySelectedKeyframes   = useAnimationStore((s) => s.copySelectedKeyframes);
+    const pasteKeyframes          = useAnimationStore((s) => s.pasteKeyframes);
+    const deleteSelectedKeyframes = useAnimationStore((s) => s.deleteSelectedKeyframes);
 
     // Selected-only filter: hides any track in the graph that has no selected key.
     // Industry "key-only mode" — focuses the curve editor on what the user is editing.
     const [selectedOnly, setSelectedOnly] = useState(false);
     
-    // openContextMenu is a stable action ref — read lazily so we don't
-    // subscribe GraphEditor to the entire engineStore (was firing on every
-    // setQuality / camera-tick / etc).
-    const openGlobalContextMenu = (...a: Parameters<ReturnType<typeof useEngineStore.getState>['openContextMenu']>) =>
-        useEngineStore.getState().openContextMenu(...a);
+    // openContextMenu via stable selector — same Object.is bail-out trick.
+    const openGlobalContextMenu = useEngineStore((s) => s.openContextMenu);
     
     const [viewY, setViewY] = useState({ pan: 0, scale: 50 });
     const [normalized, setNormalized] = useState(propNormalized); 

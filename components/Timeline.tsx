@@ -26,8 +26,10 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     // React work per 4s scenario, dropping wkrFps from 60 → 50. With narrow
     // selectors the per-RAF noise no longer reaches this tree.
     //
-    // Action fns are stable slice-init refs — read lazily via `getState()`
-    // at call time to avoid re-binding handlers on every render.
+    // Reactive values + action selectors via `useAnimationStore((s) => s.fn)`.
+    // For actions this returns a stable ref (Object.is bail-out) without forcing
+    // re-renders. The earlier wrapper-closure pattern broke useCallback dep
+    // stability and silently disabled mousemove handlers mid-drag.
     const isPlaying           = useAnimationStore((s) => s.isPlaying);
     const currentFrame        = useAnimationStore((s) => s.currentFrame);
     const durationFrames      = useAnimationStore((s) => s.durationFrames);
@@ -35,18 +37,15 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     const selectedTrackIds    = useAnimationStore((s) => s.selectedTrackIds);
     const selectedKeyframeIds = useAnimationStore((s) => s.selectedKeyframeIds);
     const clipboard           = useAnimationStore((s) => s.clipboard);
-    // Actions — stable refs, no subscription needed.
-    const updateKeyframes        = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
-        useAnimationStore.getState().updateKeyframes(...a);
-    const setTangents            = (m: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') =>
-        useAnimationStore.getState().setTangents(m);
-    const deleteSelectedKeyframes = () => useAnimationStore.getState().deleteSelectedKeyframes();
-    const snapshot               = () => useAnimationStore.getState().snapshot();
-    const copySelectedKeyframes  = () => useAnimationStore.getState().copySelectedKeyframes();
-    const pasteKeyframes         = (frame: number) => useAnimationStore.getState().pasteKeyframes(frame);
-    const duplicateSelection     = () => useAnimationStore.getState().duplicateSelection();
-    const loopSelection          = (times: number) => useAnimationStore.getState().loopSelection(times);
-    const setIsScrubbing         = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
+    const updateKeyframes        = useAnimationStore((s) => s.updateKeyframes);
+    const setTangents            = useAnimationStore((s) => s.setTangents);
+    const deleteSelectedKeyframes = useAnimationStore((s) => s.deleteSelectedKeyframes);
+    const snapshot               = useAnimationStore((s) => s.snapshot);
+    const copySelectedKeyframes  = useAnimationStore((s) => s.copySelectedKeyframes);
+    const pasteKeyframes         = useAnimationStore((s) => s.pasteKeyframes);
+    const duplicateSelection     = useAnimationStore((s) => s.duplicateSelection);
+    const loopSelection          = useAnimationStore((s) => s.loopSelection);
+    const setIsScrubbing         = useAnimationStore((s) => s.setIsScrubbing);
 
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const setIsTimelineHovered = useEngineStore(s => s.setIsTimelineHovered);

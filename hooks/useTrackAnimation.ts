@@ -13,17 +13,18 @@ export const useTrackAnimation = (trackId: string | undefined, currentValue: num
     // actually changed — verified via debug/probe-fpw.mts: 240 no-op notifs/4s
     // → 0 re-renders here.
     //
-    // Action functions (addTrack/addKeyframe/removeKeyframe/snapshot) are stable
-    // refs from slice init, read lazily via getState() at call time.
-    const sequence = useAnimationStore((s) => s.sequence);
-    const currentFrame = useAnimationStore((s) => s.currentFrame);
-    const isRecording = useAnimationStore((s) => s.isRecording);
-    const addTrack = (id: string, lbl: string) => useAnimationStore.getState().addTrack(id, lbl);
-    const addKeyframe = (id: string, frame: number, value: number) =>
-        useAnimationStore.getState().addKeyframe(id, frame, value);
-    const removeKeyframe = (id: string, kfId: string) =>
-        useAnimationStore.getState().removeKeyframe(id, kfId);
-    const snapshot = () => useAnimationStore.getState().snapshot();
+    // Action selectors via `useAnimationStore((s) => s.fn)` — Zustand returns
+    // the stable slice-init ref and bails on Object.is, so consumers using
+    // these in useCallback/useEffect deps get a stable identity across
+    // renders. (The earlier wrapper-closure form returned a NEW function each
+    // render, which broke drag handlers that pinned listeners via deps.)
+    const sequence       = useAnimationStore((s) => s.sequence);
+    const currentFrame   = useAnimationStore((s) => s.currentFrame);
+    const isRecording    = useAnimationStore((s) => s.isRecording);
+    const addTrack       = useAnimationStore((s) => s.addTrack);
+    const addKeyframe    = useAnimationStore((s) => s.addKeyframe);
+    const removeKeyframe = useAnimationStore((s) => s.removeKeyframe);
+    const snapshot       = useAnimationStore((s) => s.snapshot);
 
     // 1. Status Calculation
     const status: KeyStatus = (() => {

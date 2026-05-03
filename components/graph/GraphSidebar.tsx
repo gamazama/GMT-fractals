@@ -39,15 +39,13 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     // commit history for the pattern).
     const sequence           = useAnimationStore((s) => s.sequence);
     const selectedTrackIds   = useAnimationStore((s) => s.selectedTrackIds);
-    // Actions — stable refs.
-    const selectKeyframes        = (keys: string[], multi: boolean) =>
-        useAnimationStore.getState().selectKeyframes(keys, multi);
-    const removeTrack            = (id: string) => useAnimationStore.getState().removeTrack(id);
-    const setTrackBehavior       = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setTrackBehavior']>) =>
-        useAnimationStore.getState().setTrackBehavior(...a);
-    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
-    const toggleTrackSelection   = (id: string) => useAnimationStore.getState().toggleTrackSelection(id);
-    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
+    // Action selectors — stable refs via Object.is bail-out.
+    const selectKeyframes      = useAnimationStore((s) => s.selectKeyframes);
+    const removeTrack          = useAnimationStore((s) => s.removeTrack);
+    const setTrackBehavior     = useAnimationStore((s) => s.setTrackBehavior);
+    const setTrackSelection    = useAnimationStore((s) => s.setTrackSelection);
+    const toggleTrackSelection = useAnimationStore((s) => s.toggleTrackSelection);
+    const addTracksToSelection = useAnimationStore((s) => s.addTracksToSelection);
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
     // Grouping State

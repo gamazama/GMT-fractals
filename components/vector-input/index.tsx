@@ -31,10 +31,9 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
     // re-render every frame. See useTrackAnimation.ts for the same pattern.
     const sequence = useAnimationStore((s) => s.sequence);
     const isRecording = useAnimationStore((s) => s.isRecording);
-    const addTrack = (id: string, lbl: string) => useAnimationStore.getState().addTrack(id, lbl);
-    const addKeyframe = (id: string, frame: number, value: number) =>
-        useAnimationStore.getState().addKeyframe(id, frame, value);
-    const snapshot = () => useAnimationStore.getState().snapshot();
+    const addTrack    = useAnimationStore((s) => s.addTrack);
+    const addKeyframe = useAnimationStore((s) => s.addKeyframe);
+    const snapshot    = useAnimationStore((s) => s.snapshot);
     const lastValueRef = useRef(props.value);
 
     useEffect(() => {
@@ -177,10 +176,9 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
     // re-render every frame. See useTrackAnimation.ts for the same pattern.
     const sequence = useAnimationStore((s) => s.sequence);
     const isRecording = useAnimationStore((s) => s.isRecording);
-    const addTrack = (id: string, lbl: string) => useAnimationStore.getState().addTrack(id, lbl);
-    const addKeyframe = (id: string, frame: number, value: number) =>
-        useAnimationStore.getState().addKeyframe(id, frame, value);
-    const snapshot = () => useAnimationStore.getState().snapshot();
+    const addTrack    = useAnimationStore((s) => s.addTrack);
+    const addKeyframe = useAnimationStore((s) => s.addKeyframe);
+    const snapshot    = useAnimationStore((s) => s.snapshot);
     const lastValueRef = useRef(props.value);
 
     useEffect(() => {
@@ -322,10 +320,9 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
     // re-render every frame. See useTrackAnimation.ts for the same pattern.
     const sequence = useAnimationStore((s) => s.sequence);
     const isRecording = useAnimationStore((s) => s.isRecording);
-    const addTrack = (id: string, lbl: string) => useAnimationStore.getState().addTrack(id, lbl);
-    const addKeyframe = (id: string, frame: number, value: number) =>
-        useAnimationStore.getState().addKeyframe(id, frame, value);
-    const snapshot = () => useAnimationStore.getState().snapshot();
+    const addTrack    = useAnimationStore((s) => s.addTrack);
+    const addKeyframe = useAnimationStore((s) => s.addKeyframe);
+    const snapshot    = useAnimationStore((s) => s.snapshot);
     const lastValueRef = useRef(props.value);
 
     useEffect(() => {
