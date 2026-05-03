@@ -26,7 +26,15 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
-    const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
+    // Narrow per-field subs (no-op `set()` calls on animationStore happen at
+    // RAF rate — destructuring useAnimationStore() makes every vector input
+    // re-render every frame. See useTrackAnimation.ts for the same pattern.
+    const sequence = useAnimationStore((s) => s.sequence);
+    const isRecording = useAnimationStore((s) => s.isRecording);
+    const addTrack = (id: string, lbl: string) => useAnimationStore.getState().addTrack(id, lbl);
+    const addKeyframe = (id: string, frame: number, value: number) =>
+        useAnimationStore.getState().addKeyframe(id, frame, value);
+    const snapshot = () => useAnimationStore.getState().snapshot();
     const lastValueRef = useRef(props.value);
 
     useEffect(() => {
@@ -164,7 +172,15 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
-    const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
+    // Narrow per-field subs (no-op `set()` calls on animationStore happen at
+    // RAF rate — destructuring useAnimationStore() makes every vector input
+    // re-render every frame. See useTrackAnimation.ts for the same pattern.
+    const sequence = useAnimationStore((s) => s.sequence);
+    const isRecording = useAnimationStore((s) => s.isRecording);
+    const addTrack = (id: string, lbl: string) => useAnimationStore.getState().addTrack(id, lbl);
+    const addKeyframe = (id: string, frame: number, value: number) =>
+        useAnimationStore.getState().addKeyframe(id, frame, value);
+    const snapshot = () => useAnimationStore.getState().snapshot();
     const lastValueRef = useRef(props.value);
 
     useEffect(() => {
@@ -301,7 +317,15 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
-    const { sequence, isRecording, addTrack, addKeyframe, snapshot } = useAnimationStore();
+    // Narrow per-field subs (no-op `set()` calls on animationStore happen at
+    // RAF rate — destructuring useAnimationStore() makes every vector input
+    // re-render every frame. See useTrackAnimation.ts for the same pattern.
+    const sequence = useAnimationStore((s) => s.sequence);
+    const isRecording = useAnimationStore((s) => s.isRecording);
+    const addTrack = (id: string, lbl: string) => useAnimationStore.getState().addTrack(id, lbl);
+    const addKeyframe = (id: string, frame: number, value: number) =>
+        useAnimationStore.getState().addKeyframe(id, frame, value);
+    const snapshot = () => useAnimationStore.getState().snapshot();
     const lastValueRef = useRef(props.value);
 
     useEffect(() => {

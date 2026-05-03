@@ -37,6 +37,7 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { Accordion, AccordionSection } from './Accordion';
 import { CompilableFeatureSection } from './CompilableFeatureSection';
 import { useEngineStore } from '../store/engineStore';
+import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 
 interface PanelRouterProps {
     activeTab: PanelId;
@@ -176,7 +177,14 @@ const renderItem = (
         default:
             return null;
     }
-    return withHelpId(node, item.helpId, `helpwrap-${index}`);
+    // Per-item BenchProfiler boundary for diagnosing per-RAF commits.
+    // Tag includes type and id (where present) so the bench output can
+    // attribute commits to a specific manifest item.
+    const itemTag = item.type === 'feature' || item.type === 'widget' || item.type === 'compilable'
+        ? `${item.type}:${(item as any).id}${(item as any).groupFilter ? `:${(item as any).groupFilter}` : ''}`
+        : `${item.type}:${index}`;
+    const wrapped = <BenchProfiler id={`Item:${itemTag}`}>{node}</BenchProfiler>;
+    return withHelpId(wrapped, item.helpId, `helpwrap-${index}`);
 };
 
 const accordionSectionToProp = (
