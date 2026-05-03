@@ -41,7 +41,12 @@ import {
  * Works for any app without knowing its store shape.
  */
 const KeyCamButton: React.FC = () => {
-    const { sequence, currentFrame, isPlaying } = useAnimationStore();
+    // Narrow per-field — destructuring useAnimationStore() was re-rendering
+    // this button on every no-op set() (~60 Hz). The engineStore full sub
+    // below is deliberate (the dirty check needs to react to anything).
+    const sequence     = useAnimationStore((s) => s.sequence);
+    const currentFrame = useAnimationStore((s) => s.currentFrame);
+    const isPlaying    = useAnimationStore((s) => s.isPlaying);
 
     // Rebuild camera track list when apps (re-)register
     const tracks = useSyncExternalStore(
@@ -150,12 +155,35 @@ interface TimelineToolbarProps {
 export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     mode, setMode, totalContentWidth, viewportWidth, scrollLeft, onScroll, onZoom, onClose, containerRef, frameWidth, durationFrames,
 }) => {
-    const {
-        isPlaying, isRecording, currentFrame, fps, durationFrames: storeDuration, recordCamera, loopMode,
-        isArmingModulation, isRecordingModulation, deterministicPlayback,
-        play, pause, stop, toggleRecording, setFps, setDuration, seek, deleteAllKeys, deleteAllTracks, snapshot, toggleRecordCamera,
-        setLoopMode, toggleArmModulation, setDeterministicPlayback,
-    } = useAnimationStore();
+    // Narrow per-field subs — `useAnimationStore()` (full sub) was re-rendering
+    // the toolbar every RAF due to no-op set() calls flooding the store.
+    const isPlaying              = useAnimationStore((s) => s.isPlaying);
+    const isRecording            = useAnimationStore((s) => s.isRecording);
+    const currentFrame           = useAnimationStore((s) => s.currentFrame);
+    const fps                    = useAnimationStore((s) => s.fps);
+    const storeDuration          = useAnimationStore((s) => s.durationFrames);
+    const recordCamera           = useAnimationStore((s) => s.recordCamera);
+    const loopMode               = useAnimationStore((s) => s.loopMode);
+    const isArmingModulation     = useAnimationStore((s) => s.isArmingModulation);
+    const isRecordingModulation  = useAnimationStore((s) => s.isRecordingModulation);
+    const deterministicPlayback  = useAnimationStore((s) => s.deterministicPlayback);
+    // Actions — stable refs read lazily via getState().
+    const play                   = () => useAnimationStore.getState().play();
+    const pause                  = () => useAnimationStore.getState().pause();
+    const stop                   = () => useAnimationStore.getState().stop();
+    const toggleRecording        = () => useAnimationStore.getState().toggleRecording();
+    const setFps                 = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setFps']>) =>
+        useAnimationStore.getState().setFps(...a);
+    const setDuration            = (n: number) => useAnimationStore.getState().setDuration(n);
+    const seek                   = (n: number) => useAnimationStore.getState().seek(n);
+    const deleteAllKeys          = () => useAnimationStore.getState().deleteAllKeys();
+    const deleteAllTracks        = () => useAnimationStore.getState().deleteAllTracks();
+    const snapshot               = () => useAnimationStore.getState().snapshot();
+    const toggleRecordCamera     = () => useAnimationStore.getState().toggleRecordCamera();
+    const setLoopMode            = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setLoopMode']>) =>
+        useAnimationStore.getState().setLoopMode(...a);
+    const toggleArmModulation    = () => useAnimationStore.getState().toggleArmModulation();
+    const setDeterministicPlayback = (v: boolean) => useAnimationStore.getState().setDeterministicPlayback(v);
 
     const handleContextMenu = useHelpContextMenu();
     const [showRender, setShowRender] = useState(false);

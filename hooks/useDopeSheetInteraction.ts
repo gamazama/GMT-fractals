@@ -53,16 +53,20 @@ export const useDopeSheetInteraction = ({
     sequence,
     selectedTrackIds
 }: DopeSheetInteractionProps) => {
-    const {
-        updateKeyframes,
-        selectKeyframes,
-        setTrackSelection,
-        addTracksToSelection,
-        deselectAllKeys,
-        setIsScrubbing,
-        selectedKeyframeIds,
-        snapshot
-    } = useAnimationStore();
+    // Narrow per-field subs — `useAnimationStore()` (full sub) re-rendered the
+    // hook's host component (DopeSheet) every RAF due to ~60Hz no-op set()
+    // calls flooding the store. Reactive value (`selectedKeyframeIds`) gets a
+    // selector; actions read lazily via getState().
+    const selectedKeyframeIds = useAnimationStore((s) => s.selectedKeyframeIds);
+    const updateKeyframes        = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
+        useAnimationStore.getState().updateKeyframes(...a);
+    const selectKeyframes        = (keys: string[], multi: boolean) =>
+        useAnimationStore.getState().selectKeyframes(keys, multi);
+    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
+    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
+    const deselectAllKeys        = () => useAnimationStore.getState().deselectAllKeys();
+    const setIsScrubbing         = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
+    const snapshot               = () => useAnimationStore.getState().snapshot();
 
     const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
     

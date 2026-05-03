@@ -32,10 +32,17 @@ export const useGraphTools = ({
     v2p,
     canvasPixelToFrame
 }: GraphToolsProps) => {
-    const { 
-        updateKeyframes, snapshot, addKeyframe, selectKeyframes,
-        bounceTension, bounceFriction
-    } = useAnimationStore();
+    // Narrow per-field subs — `useAnimationStore()` (full sub) re-rendered the
+    // GraphEditor host every RAF on the no-op set() flood.
+    const bounceTension  = useAnimationStore((s) => s.bounceTension);
+    const bounceFriction = useAnimationStore((s) => s.bounceFriction);
+    const updateKeyframes = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
+        useAnimationStore.getState().updateKeyframes(...a);
+    const snapshot        = () => useAnimationStore.getState().snapshot();
+    const addKeyframe     = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['addKeyframe']>) =>
+        useAnimationStore.getState().addKeyframe(...a);
+    const selectKeyframes = (keys: string[], multi: boolean) =>
+        useAnimationStore.getState().selectKeyframes(keys, multi);
 
     // --- TOOL STATE ---
     const [isSmoothing, setIsSmoothing] = useState(false);

@@ -58,21 +58,27 @@ const InspectorRow = ({ label, children }: { label: string, children?: React.Rea
 );
 
 export const KeyframeInspector: React.FC = () => {
-    const { 
-        selectedKeyframeIds, 
-        sequence, 
-        updateKeyframes, 
-        setTangents, 
-        deleteSelectedKeyframes,
-        snapshot,
-        setIsScrubbing,
-        softSelectionEnabled,
-        softSelectionRadius,
-        setSoftSelection,
-        softSelectionType,
-        setSoftSelectionType,
-        setGlobalInterpolation
-    } = useAnimationStore();
+    // Narrow per-field subs — `useAnimationStore()` (full sub) was re-rendering
+    // every RAF due to no-op set() calls. Reactive values get selectors;
+    // actions read lazily via getState().
+    const selectedKeyframeIds  = useAnimationStore((s) => s.selectedKeyframeIds);
+    const sequence             = useAnimationStore((s) => s.sequence);
+    const softSelectionEnabled = useAnimationStore((s) => s.softSelectionEnabled);
+    const softSelectionRadius  = useAnimationStore((s) => s.softSelectionRadius);
+    const softSelectionType    = useAnimationStore((s) => s.softSelectionType);
+    const updateKeyframes        = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
+        useAnimationStore.getState().updateKeyframes(...a);
+    const setTangents            = (m: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') =>
+        useAnimationStore.getState().setTangents(m);
+    const deleteSelectedKeyframes = () => useAnimationStore.getState().deleteSelectedKeyframes();
+    const snapshot               = () => useAnimationStore.getState().snapshot();
+    const setIsScrubbing         = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
+    const setSoftSelection       = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setSoftSelection']>) =>
+        useAnimationStore.getState().setSoftSelection(...a);
+    const setSoftSelectionType   = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setSoftSelectionType']>) =>
+        useAnimationStore.getState().setSoftSelectionType(...a);
+    const setGlobalInterpolation = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setGlobalInterpolation']>) =>
+        useAnimationStore.getState().setGlobalInterpolation(...a);
 
     // Analyze selection
     const selectedKeys = useMemo<{ tid: string, kid: string, key: Keyframe, prevKey?: Keyframe, nextKey?: Keyframe, isRotation: boolean }[]>(() => {

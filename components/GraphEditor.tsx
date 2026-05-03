@@ -38,18 +38,38 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     // We use a Div to capture pointer events reliably even if canvas is re-rendering
     const interactionRef = useRef<HTMLDivElement>(null);
 
-    const {
-        sequence, currentFrame, durationFrames,
-        selectedKeyframeIds, selectedTrackIds, selectKeyframe, setTrackSelection, selectKeyframes, deselectAllKeys,
-        softSelectionEnabled, softSelectionRadius, softSelectionType,
-        copySelectedKeyframes, pasteKeyframes, deleteSelectedKeyframes
-    } = useAnimationStore();
+    // Narrow per-field subscriptions instead of `useAnimationStore()` (full
+    // sub). The store receives ~60 no-op set() calls per second and the
+    // destructured form re-rendered GraphEditor every RAF. Action fns are
+    // stable refs read lazily via getState().
+    const sequence              = useAnimationStore((s) => s.sequence);
+    const currentFrame          = useAnimationStore((s) => s.currentFrame);
+    const durationFrames        = useAnimationStore((s) => s.durationFrames);
+    const selectedKeyframeIds   = useAnimationStore((s) => s.selectedKeyframeIds);
+    const selectedTrackIds      = useAnimationStore((s) => s.selectedTrackIds);
+    const softSelectionEnabled  = useAnimationStore((s) => s.softSelectionEnabled);
+    const softSelectionRadius   = useAnimationStore((s) => s.softSelectionRadius);
+    const softSelectionType     = useAnimationStore((s) => s.softSelectionType);
+    // Actions — match slice signatures exactly.
+    const selectKeyframe         = (trackId: string, keyId: string, multi: boolean) =>
+        useAnimationStore.getState().selectKeyframe(trackId, keyId, multi);
+    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
+    const selectKeyframes        = (keys: string[], multi: boolean) =>
+        useAnimationStore.getState().selectKeyframes(keys, multi);
+    const deselectAllKeys        = () => useAnimationStore.getState().deselectAllKeys();
+    const copySelectedKeyframes  = () => useAnimationStore.getState().copySelectedKeyframes();
+    const pasteKeyframes         = (frame: number) => useAnimationStore.getState().pasteKeyframes(frame);
+    const deleteSelectedKeyframes = () => useAnimationStore.getState().deleteSelectedKeyframes();
 
     // Selected-only filter: hides any track in the graph that has no selected key.
     // Industry "key-only mode" — focuses the curve editor on what the user is editing.
     const [selectedOnly, setSelectedOnly] = useState(false);
     
-    const { openContextMenu: openGlobalContextMenu } = useEngineStore();
+    // openContextMenu is a stable action ref — read lazily so we don't
+    // subscribe GraphEditor to the entire engineStore (was firing on every
+    // setQuality / camera-tick / etc).
+    const openGlobalContextMenu = (...a: Parameters<ReturnType<typeof useEngineStore.getState>['openContextMenu']>) =>
+        useEngineStore.getState().openContextMenu(...a);
     
     const [viewY, setViewY] = useState({ pan: 0, scale: 50 });
     const [normalized, setNormalized] = useState(propNormalized); 
@@ -231,7 +251,7 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
             if ((e.target as HTMLElement).tagName === 'INPUT') return;
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === 'c') { e.preventDefault(); copySelectedKeyframes(); }
-                else if (e.key === 'v') { e.preventDefault(); pasteKeyframes(); }
+                else if (e.key === 'v') { e.preventDefault(); pasteKeyframes(useAnimationStore.getState().currentFrame); }
             } else if (e.altKey && (e.key === 'a' || e.key === 'A')) {
                 // Alt+A: deselect all keys (industry standard)
                 e.preventDefault();

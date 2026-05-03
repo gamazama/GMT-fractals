@@ -34,10 +34,20 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
 };
 
 export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, setVisibleTracks }) => {
-    const {
-        sequence, selectedTrackIds, selectKeyframes, removeTrack, setTrackBehavior,
-        setTrackSelection, toggleTrackSelection, addTracksToSelection,
-    } = useAnimationStore();
+    // Narrow per-field subs — `useAnimationStore()` (full sub) re-rendered the
+    // sidebar every RAF on the no-op set() flood (see useTrackAnimation
+    // commit history for the pattern).
+    const sequence           = useAnimationStore((s) => s.sequence);
+    const selectedTrackIds   = useAnimationStore((s) => s.selectedTrackIds);
+    // Actions — stable refs.
+    const selectKeyframes        = (keys: string[], multi: boolean) =>
+        useAnimationStore.getState().selectKeyframes(keys, multi);
+    const removeTrack            = (id: string) => useAnimationStore.getState().removeTrack(id);
+    const setTrackBehavior       = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setTrackBehavior']>) =>
+        useAnimationStore.getState().setTrackBehavior(...a);
+    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
+    const toggleTrackSelection   = (id: string) => useAnimationStore.getState().toggleTrackSelection(id);
+    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
     // Grouping State

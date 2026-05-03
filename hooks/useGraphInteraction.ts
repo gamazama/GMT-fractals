@@ -49,13 +49,31 @@ export const useGraphInteraction = (
     canvasPixelToFrame: (px: number) => number,
     LEFT_GUTTER_WIDTH: number
 ) => {
-    const { 
-        sequence, currentFrame, 
-        updateKeyframe, updateKeyframes, 
-        selectKeyframe, selectKeyframes, deselectAllKeys, setTrackSelection, addTracksToSelection,
-        selectedKeyframeIds, snapshot, setIsScrubbing, seek,
-        softSelectionEnabled, softSelectionRadius, setSoftSelection, softSelectionType
-    } = useAnimationStore();
+    // Narrow per-field subs — destructuring `useAnimationStore()` (full sub)
+    // forced GraphEditor to re-render every RAF on the no-op set() flood.
+    const sequence              = useAnimationStore((s) => s.sequence);
+    const currentFrame          = useAnimationStore((s) => s.currentFrame);
+    const selectedKeyframeIds   = useAnimationStore((s) => s.selectedKeyframeIds);
+    const softSelectionEnabled  = useAnimationStore((s) => s.softSelectionEnabled);
+    const softSelectionRadius   = useAnimationStore((s) => s.softSelectionRadius);
+    const softSelectionType     = useAnimationStore((s) => s.softSelectionType);
+    // Actions — stable refs, read lazily.
+    const updateKeyframe         = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframe']>) =>
+        useAnimationStore.getState().updateKeyframe(...a);
+    const updateKeyframes        = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
+        useAnimationStore.getState().updateKeyframes(...a);
+    const selectKeyframe         = (trackId: string, keyId: string, multi: boolean) =>
+        useAnimationStore.getState().selectKeyframe(trackId, keyId, multi);
+    const selectKeyframes        = (keys: string[], multi: boolean) =>
+        useAnimationStore.getState().selectKeyframes(keys, multi);
+    const deselectAllKeys        = () => useAnimationStore.getState().deselectAllKeys();
+    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
+    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
+    const snapshot               = () => useAnimationStore.getState().snapshot();
+    const setIsScrubbing         = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
+    const seek                   = (n: number) => useAnimationStore.getState().seek(n);
+    const setSoftSelection       = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['setSoftSelection']>) =>
+        useAnimationStore.getState().setSoftSelection(...a);
 
     const isDraggingRef = useRef(false);
     const lastMousePos = useRef({ x: 0, y: 0 });

@@ -14,7 +14,12 @@ interface TimelineRulerProps {
 
 export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durationFrames, scrollLeft, visibleWidth }) => {
     const rulerRef = useRef<HTMLCanvasElement>(null);
-    const { currentFrame, seek, setIsScrubbing } = useAnimationStore();
+    // Narrow per-field sub — `useAnimationStore()` (full sub) re-renders on
+    // every no-op set() call (~60 Hz). currentFrame is the only reactive
+    // value here; seek/setIsScrubbing are stable action refs.
+    const currentFrame = useAnimationStore((s) => s.currentFrame);
+    const seek           = (f: number) => useAnimationStore.getState().seek(f);
+    const setIsScrubbing = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
 
     // The canvas should fill the visible timeline area (viewport - sidebar)
     // We add a small buffer to prevent flickering at edges
