@@ -159,7 +159,7 @@ ${GLSL_MATH_CONSTANTS}
 #define BOUNDING_RADIUS 400.0
 #define PRECISION_RATIO_HIGH 5.0e-7 // ~0.5 ppm — float precision floor, scales with distance from fractal origin
 #define PRECISION_RATIO_LOW  1.0e-5 // ~10 ppm — low precision / mobile float floor
-#define GGX_EPSILON 0.0001          // GGX denominator safety — prevents divide-by-zero near specular singularities
+#define GGX_EPSILON 1.0e-7          // GGX denominator safety — must be tiny: at low roughness (a²≈6e-6 at r=0.05), an epsilon of 1e-4 dominates the peak math and crushes specular highlights ~800,000× dimmer than they should be. 1e-7 only kicks in at literal div-by-zero singularities and leaves the GGX peak math intact.
 #define DIR_LIGHT_DIST 100.0        // Directional light distance proxy — larger than BOUNDING_RADIUS, treated as infinite
 
 // --- RANDOM FUNCTIONS ---

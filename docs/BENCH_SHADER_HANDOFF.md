@@ -875,6 +875,55 @@ pathtracer.ts:
 Total cumulative: **-31% PT GPU at b=3** (25,901 → 17,772 µs).
 Image now mathematically correct (vs prior clamp-biased dim baseline).
 
+---
+
+## Bug fix — GGX_EPSILON crushed specular peaks at low roughness
+
+**Discovered while attempting to bench against a real area-light + mirror
+scene.** User noticed that low-roughness materials (~0.05) showed no
+visible specular highlights from the lights, masquerading as some
+"anti-firefly code killing speculars."
+
+Real cause: `GGX_EPSILON = 0.0001` ([math.ts:162](engine-gmt/shaders/chunks/math.ts#L162))
+was being added to the GGX D-distribution denominator:
+```glsl
+float D = a² / (PI * denom² + GGX_EPSILON)
+```
+
+Quick math: at roughness=0.05, `a² = 6.25e-6`. At the GGX peak
+(NdotH≈1), `denom² ≈ 3.9e-11`, so `PI*denom² ≈ 1.2e-10`. Adding
+GGX_EPSILON=1e-4 makes the denominator **dominated by epsilon**:
+- True peak: `D ≈ 1/(π·a²) ≈ 51,000`
+- With epsilon: `D ≈ 6.25e-6 / 1e-4 = 0.0625`
+- **800,000× too dim at the spec peak.**
+
+At roughness=0.224 it's only ~5× too dim — barely noticeable, which is
+why the bug went undetected at default scene roughness. At 0.05 the
+entire specular highlight gets crushed → no visible reflection of bright
+sources on mirror surfaces.
+
+**Fix:** lowered `GGX_EPSILON` from `0.0001` to `1.0e-7`. Now only kicks
+in at literal div-by-zero singularities; leaves the GGX peak math
+intact.
+
+**Verification:**
+- Mirror+area-light scene MAE 1.725 (max 230) vs pre-fix — clear visual
+  recovery of specular highlights. User confirmed.
+- Default scene (roughness=0.75) MAE 0.258 vs run-to-run noise 0.234 —
+  no regression. Default-roughness scenes were essentially unaffected
+  by the bug because `denom²` dominates at high roughness.
+- Other use site (`pbr.ts:165`: `(4*NdotV*NdotL + GGX_EPSILON)` for
+  Direct-mode PBR div-by-zero guard) unaffected — that's a pure-zero
+  protection where 1e-7 is safer than 1e-4.
+
+**Lesson:** bug had been masked because (a) all prior testing happened
+at default-Mandelbulb roughness=0.75 where the epsilon-induced bias is
+modest, and (b) the firefly clamps that S3 removed were also dimming
+specular contributions, masking the GGX-peak crushing. Without the
+clamps + at low roughness, the bug became visible. Catching it required
+both a real test scene (mirror + visible bright source) and the prior
+S3 clamp removal.
+
 ### Procedure (set in stone — follow this for any further PT/volumetric work)
 
 The session-1/2 history has ~30 plausible-looking optimizations of which only

@@ -166,6 +166,24 @@ const PT_NEE_ALL = parseBool(argVal('--pt-nee-all'));
 const PT_ENV_NEE = parseBool(argVal('--pt-env-nee'));
 const IS_PT = RENDER_MODE === 'PathTracing';
 
+// --scene=<gmf-path> loads a saved scene file. The Scene block's JSON is
+// applied as the preset *instead* of the formula's defaultPreset. This lets
+// us bench against deliberately-authored scenes (e.g., area-light + mirror
+// for testing reflection-bounce optimizations). Mutually compatible with
+// the override flags above — overrides apply on top of the loaded preset.
+const SCENE_FILE = argVal('--scene') ?? '';
+let SCENE_PRESET: any = null;
+if (SCENE_FILE) {
+    const content = readFileSync(resolve(SCENE_FILE), 'utf-8');
+    const sceneMatch = content.match(/<Scene>([\s\S]*?)<\/Scene>/);
+    if (!sceneMatch) {
+        console.error(`[bench-shader] --scene=${SCENE_FILE} has no <Scene> block — is this a GMF v2 file?`);
+        process.exit(1);
+    }
+    SCENE_PRESET = JSON.parse(sceneMatch[1].trim());
+    console.log(`[bench-shader] loaded scene preset from ${SCENE_FILE} (formula=${SCENE_PRESET.formula})`);
+}
+
 const APP_URL   = (process.env.ENGINE_URL ?? 'http://localhost:3400') + '/app-gmt.html';
 const BENCH_URL = (process.env.ENGINE_URL ?? 'http://localhost:3400') + '/shader-bench.html';
 
@@ -443,7 +461,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     // different scene from the formula author's intent. Doing this here means
     // the bench always measures THE canonical scene for whatever formula is
     // active, with exactly the lighting setup the formula was designed for.
-    console.log('[bench-shader] applying formula defaultPreset…');
+    console.log(SCENE_PRESET ? '[bench-shader] applying scene preset from --scene file…' : '[bench-shader] applying formula defaultPreset…');
     const presetApplied = await page.evaluate((opts: {
         reflectionMode: string;
         reflectionBounces: number;
@@ -452,18 +470,20 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptBounces: number | null;
         ptNeeAll: boolean | null;
         ptEnvNee: boolean | null;
+        scenePreset: any;
     }) => {
         const store = (window as any).__store;
         const reg = (window as any).__fractalRegistry;
         const state = store.getState();
-        const formula = state.formula;
-        const def = reg ? reg.get(formula) : null;
-        const preset = def?.defaultPreset;
-        if (!preset) return { ok: false, reason: 'no defaultPreset on formula def' };
+        const formula = opts.scenePreset?.formula ?? state.formula;
+        // Scene preset (loaded from --scene) wins; otherwise use the formula's
+        // own defaultPreset for the formula the engine is currently running.
+        const sourcePreset = opts.scenePreset ?? reg?.get(formula)?.defaultPreset;
+        if (!sourcePreset) return { ok: false, reason: 'no preset available (no --scene and formula has no defaultPreset)' };
 
         // Deep-clone the preset so we can tweak features without polluting the
         // formula def for subsequent runs in the same engine session.
-        const p = JSON.parse(JSON.stringify(preset));
+        const p = JSON.parse(JSON.stringify(sourcePreset));
         p.features = p.features || {};
 
         // Reflection mode override: env / raymarch / off
@@ -561,6 +581,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptBounces: PT_BOUNCES,
         ptNeeAll: PT_NEE_ALL,
         ptEnvNee: PT_ENV_NEE,
+        scenePreset: SCENE_PRESET,
     });
     console.log(`[bench-shader] preset diag: applied=${JSON.stringify({ refl: presetApplied.appliedReflectionMode, rough: presetApplied.appliedRoughness, reflectionStrength: presetApplied.appliedReflection })}`);
     if (RENDER_MODE) {
@@ -793,7 +814,7 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     // reference produces meaningless "FAIL" verdicts. Users still get the
     // bench image saved for visual inspection; they just don't get a diff
     // metric until a per-scene reference is established.
-    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET || IS_PT);
+    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET || IS_PT || SCENE_FILE);
     let diff: { mae: number; rmse: number; maxErr: number; diffDataUrl: string } | null = null;
     if (isSceneVariant) {
         const variantParts = [
