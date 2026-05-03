@@ -95,6 +95,81 @@ cp debug/bench-perf-latest.json debug/bench-perf-baseline.json
 
 ---
 
+## Resolved findings (2026-05-03 session)
+
+After the framework session above, four candidate findings were chased
+in a single sitting. Three resolved with measurable wins; one was
+re-classified as "expected behavior, defer."
+
+### Headline: convergence pass + Slider per-RAF re-render
+
+These were the two big wins. Commits and bench numbers:
+
+| Commit | Fix | Bench delta |
+|---|---|---|
+| `7a05b73` | Gate viewport convergence pass on RegionOverlay consumer flag | idle: rtSwitch -58, readPx -28, frames -29 |
+| `405c2d8` | Narrow `useAnimationStore` subs in `useTrackAnimation` + `BaseVectorInput` | idle Dock:right: 173ms/240c → **13ms/8c** (-93%, -97%) |
+| `46bf555` | Narrow AppGmt root subscription (defensive, no bench delta but architecturally cleaner) | — |
+
+The convergence-gate fix: `engine/RenderPipeline.ts` ran a convergence
+measurement every 8 accumulation samples (1 render + 2 setRenderTarget
+swaps + 1 sync readPixels). The only consumer of the result is
+`engine-gmt/components/viewport/RegionOverlay.tsx`. When no region is
+drawn, the work was discarded. Now gated behind a worker flag toggled
+on RegionOverlay mount/unmount via a new `SET_CONVERGENCE_NEEDED`
+message.
+
+The re-render fix: `useTrackAnimation` and `BaseVectorInput` were
+destructuring `useAnimationStore()` (full-store sub). Probe revealed
+**~60 no-op `set()` calls per second on animationStore** from somewhere
+in the engine (values equal to previous, but Zustand still notifies).
+With the full sub, every Slider and Vec input in every mounted panel
+re-rendered 60×/sec — Formula panel mounts ~10 of these → 240 commits
+per 4s idle. Narrow per-field subs (`sequence`/`currentFrame`/`isRecording`
+only, actions via `getState()`) drops it to 8/scenario.
+
+### Re-classified: rtSwitch=1.8/f was structural, not a navigation issue
+
+The original "2nd render targets in navigation" hint was a misread of
+the bench output. Confirmed by per-scenario decomposition: idle, orbit,
+and stress-orbit all show the same 1.8 rtSwitch/render rate, which is
+the structural cost of Three.js' internal `setRenderTarget` calls during
+each `renderer.render()` plus our explicit canvas bind in
+`handleRenderTick.ts:135`. The 0.8 *extra* switches above the structural
+1.0 came from the convergence pass — fixed by `7a05b73`. Post-fix:
+~1.5/render, which matches the structural floor.
+
+### Deferred: TopBar / DomOverlays per-slider-step cost
+
+Both commit ~125 times during the slider scenario (matching the 120
+`setQuality` calls + a handful of incidentals). Per-commit cost
+~0.8ms. Total ~100ms over a 4s heavy-drag scenario.
+
+This is the "real cost of actual user input" rather than a bug.
+PauseControls subscribes to `accumulationCount`, which gets reset on
+every `setQuality` (via the RESET_ACCUM event), so it re-renders once
+per slider step. Could be eliminated with stricter memoization or by
+narrowing PauseControls' display to only the values that actually
+change visibly per step. Left as a future follow-up — the cost only
+shows up during heavy interaction and isn't catastrophic.
+
+### Open follow-up: root cause of the 60Hz no-op `set()` calls
+
+Probe (`debug/probe-fpw.mts`, since deleted) showed all 240 anim-store
+notifications per 4s idle were no-ops — Zustand fired but no field
+value actually changed. The calls don't go through
+`useAnimationStore.setState`, so they're slice-bound `set` from a
+closure. Likely candidate: a tick loop calling `seek`/`setIsScrubbing`/
+`setCurrentFrame` without an equality gate. Hard to find without
+per-action instrumentation.
+
+The consumer-side narrowing (`405c2d8`) already neutralizes the React
+impact, so this isn't urgent — but the calls still flow through
+Zustand's notify pipeline (~240 fires per 4s of background subscriber
+work). Worth a separate session.
+
+---
+
 ## Initial findings (2026-05-03 baseline run)
 
 Run on default scene (Mandelbulb), 1920×1080×1 DPR, headed Chrome,
