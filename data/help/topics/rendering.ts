@@ -354,17 +354,13 @@ Adds depth and atmospheric effects to the scene. Fog controls appear when **Fog 
 - **Fog Color**: The color distant objects fade into.
 
 ## Volumetric Scatter (God Rays)
-Simulates light scattering through a participating medium. Requires **Volumetric Scattering (HG)** to be compiled — enable via the Viewport Quality dropdown (Atmosphere: Volumetric) or the Engine panel.
+God-ray-style light scattering through a participating medium. The volumetric pass lives in its own panel — see **Volumetric Scatter** in the Rendering section for full controls (Quality slider, density, anisotropy, light sources, color scatter, height fog).
 
-- **Volumetric Density (σ)**: Thickness of the air. Higher values = denser fog, shorter light shafts. Good range: 0.005–0.05.
-- **Anisotropy (g)**: Controls direction bias of scattered light (Henyey-Greenstein phase):
-  - **0**: Isotropic — light scatters equally in all directions.
-  - **+0.9**: Strong forward scatter — classic god rays pointing toward lights.
-  - **−0.9**: Back scatter — halo effect around light sources.
+Quick overview: enable via the Volumetric Scatter panel toggle (one-time ~5.5s shader compile), then use **Density** for fog thickness, **Anisotropy** for direction bias (positive = forward god rays, negative = back-scatter halos), and the **Quality** slider to trade per-frame cost vs frames-to-converge.
 
 ## Tips
 - God rays accumulate over frames via Temporal Accumulation — they look best when the camera is still.
-- Shadow jitter is proportional to the DE distance at each scatter sample, which softens the fractal silhouette in open sky while keeping crisp edges near the surface.
+- During interaction the volumetric pass auto-throttles to a cheap preview rate so FPS stays high; once you stop, accumulation builds up the fog quickly.
 - In Direct mode, god rays work without Path Tracing enabled.
 `
     },
@@ -414,6 +410,16 @@ Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored
 
 **Note:** This is a compile-time feature. Enabling it triggers a shader recompile (~5.5s). You can also toggle it on/off at runtime without recompiling once it has been compiled in.
 
+## Quality (Sample Rate)
+The **Quality** slider controls how many samples per frame the volumetric pass takes. The default is **0** — a cheap preview rate that's friendly to interactive work.
+
+- **0 (default)**: ~1/16 the per-frame cost of full-rate sampling. Looks noisy in a single frame but accumulates to a clean image over more frames.
+- **1**: Full sample rate. Each frame lands closer to the converged image — useful for short-accumulation final renders.
+
+The final accumulated image is the same regardless of where you set this slider — only the speed of convergence differs. Quality=0 is the right setting for the day-to-day "tweak the scene" workflow; bump toward 1 only when you're rendering a still and want minimum frames-to-clean.
+
+**Interaction rule:** while you're moving the camera, dragging a slider, or moving a light, sampling automatically caps at the cheap rate regardless of slider position — so a high Quality setting won't tank your interactive FPS. Once you stop, the slider's full rate takes over for accumulation.
+
 ## Density & Shadow Rays
 - **Density**: Thickness of the participating medium. Log scale — small values (0.01-0.05) produce subtle haze, higher values create thick fog.
 - **Anisotropy (g)**: Direction bias for scattered light.
@@ -431,6 +437,11 @@ Henyey-Greenstein single-scatter volumetric rendering. Enables god rays, colored
 ## Height Fog
 - **Height Falloff**: Density varies with Y coordinate. Creates ground fog or rising mist.
 - **Height Origin**: The Y level where fog is densest.
+
+## Tips
+- **Want god rays without paying the cost?** Leave Quality at 0 and use the Color Scatter section instead — it produces colored volumetric haze using the fractal's gradient and doesn't fire shadow rays.
+- **Banding visible during interaction?** This shouldn't happen on current builds — if it does, check that Light Sources is at least 1 and Density is above 0.001. (Earlier builds had a banding bug when both Volumetric and DOF were off; that's now fixed via the noise-source dependency in the camera ray module.)
+- **Fog that fades in after stopping is normal**: during interaction the gate samples cheaply for FPS; once you stop, accumulation builds the fog up over the first several frames. This is intentional and you'll see the converged result within a second or two.
 `
     },
     'mat.reflection': {

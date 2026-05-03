@@ -167,6 +167,21 @@ const PT_ENV_NEE = parseBool(argVal('--pt-env-nee'));
 const PT_AREA_LIGHTS = parseBool(argVal('--pt-area-lights'));
 const IS_PT = RENDER_MODE === 'PathTracing';
 
+// Volumetric scatter overrides. ptVolumetric is a compile gate (recompiles
+// the trace loop with the per-step body); volEnabled is the runtime gate;
+// remaining knobs are sliders. --volumetric=on flips both compile + runtime.
+//   --volumetric=on|off
+//   --vol-density=N        (uVolDensity, default 0.01 if --volumetric=on)
+//   --vol-emissive=N       (uVolEmissive)
+//   --vol-lights=N         (uVolMaxLights, 1..3)
+//   --vol-anisotropy=N     (uVolAnisotropy, -0.99..0.99)
+const VOLUMETRIC = parseBool(argVal('--volumetric'));
+const VOL_DENSITY    = argVal('--vol-density')    !== undefined ? parseFloat(argVal('--vol-density')!)    : null;
+const VOL_EMISSIVE   = argVal('--vol-emissive')   !== undefined ? parseFloat(argVal('--vol-emissive')!)   : null;
+const VOL_LIGHTS     = argVal('--vol-lights')     !== undefined ? parseFloat(argVal('--vol-lights')!)     : null;
+const VOL_ANISOTROPY = argVal('--vol-anisotropy') !== undefined ? parseFloat(argVal('--vol-anisotropy')!) : null;
+const IS_VOL = VOLUMETRIC === true;
+
 // --scene=<gmf-path> loads a saved scene file. The Scene block's JSON is
 // applied as the preset *instead* of the formula's defaultPreset. This lets
 // us bench against deliberately-authored scenes (e.g., area-light + mirror
@@ -370,7 +385,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             // warnings (X3557 "loop only executes for 0 iter") DO NOT abort.
             // Match: "ERROR: x:y" (GLSL compile error), explicit JS errors,
             // module-load failures, and fatal Three.js messages.
-            const fatal = /(^|[\s'"])ERROR:\s*\d+:\d+|SyntaxError:|Cannot read prop|TypeError:|ReferenceError:|Uncaught\s|Shader couldn[''‛]?t compile|Failed to (compile|link) shader|Failed to fetch dynamically imported|HMR.*failed/i;
+            const fatal = /(^|[\s'"])ERROR:\s*\d+:\d+|SyntaxError:|Cannot read prop|TypeError:|ReferenceError:|Uncaught\s|Shader couldn[''‛]?t compile|Failed to (compile|link) shader|Failed to fetch dynamically imported|HMR.*failed|Failed to load resource:.*?5\d\d|Failed to load resource:.*?4\d\d/i;
             const tag = fatal.test(t) ? 'FATAL' : type.toUpperCase();
             console.error(`[bench-shader] ${tag} (snapshot): ${t.slice(0, 600)}`);
             if (fatal.test(t) && snapshotAbort) {
@@ -472,6 +487,11 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptNeeAll: boolean | null;
         ptEnvNee: boolean | null;
         ptAreaLights: boolean | null;
+        volumetric: boolean | null;
+        volDensity: number | null;
+        volEmissive: number | null;
+        volLights: number | null;
+        volAnisotropy: number | null;
         scenePreset: any;
     }) => {
         const store = (window as any).__store;
@@ -572,6 +592,27 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             setters.setRenderMode(opts.renderMode);
         }
 
+        // Volumetric scatter overrides. Two-step: (1) flip ptVolumetric (compile
+        // gate, recompiles with the per-step body in the trace loop), (2) flip
+        // volEnabled (runtime gate) and apply slider values. Even with
+        // --volumetric=on we keep these explicit so the preset can't override
+        // back to defaults during loadPreset.
+        if (opts.volumetric !== null && setters.setVolumetric) {
+            const volPatch: any = {
+                ptVolumetric: opts.volumetric,
+                volEnabled: opts.volumetric,
+            };
+            if (opts.volumetric) {
+                // Apply per-knob overrides only when turning on. If a knob
+                // wasn't given, use a sensible default so the gate fires.
+                volPatch.volDensity    = opts.volDensity    ?? 0.01;
+                if (opts.volEmissive   !== null) volPatch.volEmissive   = opts.volEmissive;
+                if (opts.volLights     !== null) volPatch.volMaxLights  = opts.volLights;
+                if (opts.volAnisotropy !== null) volPatch.volAnisotropy = opts.volAnisotropy;
+            }
+            setters.setVolumetric(volPatch);
+        }
+
         const after = (window as any).__store.getState();
         return {
             ok: true,
@@ -583,6 +624,11 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             appliedPtEnabled: after.lighting?.ptEnabled ?? 'unset',
             appliedPtNeeAll: after.lighting?.ptNEEAllLights ?? 'unset',
             appliedPtEnvNee: after.lighting?.ptEnvNEE ?? 'unset',
+            appliedPtVolumetric: after.volumetric?.ptVolumetric ?? 'unset',
+            appliedVolEnabled:   after.volumetric?.volEnabled   ?? 'unset',
+            appliedVolDensity:   after.volumetric?.volDensity   ?? 'unset',
+            appliedVolEmissive:  after.volumetric?.volEmissive  ?? 'unset',
+            appliedVolLights:    after.volumetric?.volMaxLights ?? 'unset',
         };
     }, {
         reflectionMode: REFLECTION_MODE,
@@ -593,11 +639,19 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptNeeAll: PT_NEE_ALL,
         ptEnvNee: PT_ENV_NEE,
         ptAreaLights: PT_AREA_LIGHTS,
+        volumetric: VOLUMETRIC,
+        volDensity: VOL_DENSITY,
+        volEmissive: VOL_EMISSIVE,
+        volLights: VOL_LIGHTS,
+        volAnisotropy: VOL_ANISOTROPY,
         scenePreset: SCENE_PRESET,
     });
     console.log(`[bench-shader] preset diag: applied=${JSON.stringify({ refl: presetApplied.appliedReflectionMode, rough: presetApplied.appliedRoughness, reflectionStrength: presetApplied.appliedReflection })}`);
     if (RENDER_MODE) {
         console.log(`[bench-shader] render-mode diag: applied=${JSON.stringify({ mode: presetApplied.appliedRenderMode, ptEnabled: presetApplied.appliedPtEnabled, ptNeeAll: presetApplied.appliedPtNeeAll, ptEnvNee: presetApplied.appliedPtEnvNee })}`);
+    }
+    if (VOLUMETRIC !== null) {
+        console.log(`[bench-shader] volumetric diag: applied=${JSON.stringify({ pt: presetApplied.appliedPtVolumetric, runtime: presetApplied.appliedVolEnabled, density: presetApplied.appliedVolDensity, emissive: presetApplied.appliedVolEmissive, lights: presetApplied.appliedVolLights })}`);
     }
     if (!presetApplied.ok) {
         console.log(`[bench-shader] WARNING: ${presetApplied.reason} — using whatever state the engine had`);
@@ -826,13 +880,14 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     // reference produces meaningless "FAIL" verdicts. Users still get the
     // bench image saved for visual inspection; they just don't get a diff
     // metric until a per-scene reference is established.
-    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET || IS_PT || SCENE_FILE);
+    const isSceneVariant = !!(REFLECTION_MODE || MATERIAL_PRESET || IS_PT || SCENE_FILE || IS_VOL);
     let diff: { mae: number; rmse: number; maxErr: number; diffDataUrl: string } | null = null;
     if (isSceneVariant) {
         const variantParts = [
             REFLECTION_MODE && `refl=${REFLECTION_MODE}`,
             MATERIAL_PRESET && `mat=${MATERIAL_PRESET}`,
             IS_PT && `mode=PT(neeAll=${PT_NEE_ALL ?? 'def'},envNEE=${PT_ENV_NEE ?? 'def'},bounces=${PT_BOUNCES ?? 'def'})`,
+            IS_VOL && `vol(density=${VOL_DENSITY ?? 'def'},emissive=${VOL_EMISSIVE ?? 'def'},lights=${VOL_LIGHTS ?? 'def'})`,
         ].filter(Boolean).join(', ');
         console.log(`[bench-shader] skipping diff: scene overrides active (${variantParts}) — reference is calibrated for the default scene only`);
     } else if (existsSync(REF_IMAGE_PATH) && typeof result.captured === 'string') {
@@ -917,6 +972,11 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
         'GMT.scene.pt_bounces':  PT_BOUNCES !== null ? String(PT_BOUNCES) : '(default)',
         'GMT.scene.pt_nee_all':  PT_NEE_ALL !== null ? String(PT_NEE_ALL) : '(default)',
         'GMT.scene.pt_env_nee':  PT_ENV_NEE !== null ? String(PT_ENV_NEE) : '(default)',
+        'GMT.scene.volumetric':  VOLUMETRIC !== null ? String(VOLUMETRIC) : '(default)',
+        'GMT.scene.vol_density':    VOL_DENSITY    !== null ? String(VOL_DENSITY)    : '(default)',
+        'GMT.scene.vol_emissive':   VOL_EMISSIVE   !== null ? String(VOL_EMISSIVE)   : '(default)',
+        'GMT.scene.vol_lights':     VOL_LIGHTS     !== null ? String(VOL_LIGHTS)     : '(default)',
+        'GMT.scene.vol_anisotropy': VOL_ANISOTROPY !== null ? String(VOL_ANISOTROPY) : '(default)',
         'GMT.scene.tag':        SCENE_TAG || '(none)',
         'GMT.diff.mae':         diff ? diff.mae.toFixed(3) : 'n/a',
         'GMT.diff.rmse':        diff ? diff.rmse.toFixed(3) : 'n/a',
@@ -985,7 +1045,7 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
         strippedUniforms: result.missingUniforms ?? [],
         timingsUs:        t,
         compileTiming:    result.compileTiming ?? null,
-        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, reflectionBounces: REFLECTION_BOUNCES, renderMode: RENDER_MODE || null, ptBounces: PT_BOUNCES, ptNeeAll: PT_NEE_ALL, ptEnvNee: PT_ENV_NEE },
+        scene:            { reflectionMode: REFLECTION_MODE || null, material: MATERIAL_PRESET || null, tag: SCENE_TAG || null, reflectionBounces: REFLECTION_BOUNCES, renderMode: RENDER_MODE || null, ptBounces: PT_BOUNCES, ptNeeAll: PT_NEE_ALL, ptEnvNee: PT_ENV_NEE, volumetric: VOLUMETRIC, volDensity: VOL_DENSITY, volEmissive: VOL_EMISSIVE, volLights: VOL_LIGHTS, volAnisotropy: VOL_ANISOTROPY },
         pageErrors,
         refImage:         refPath.replace(process.cwd() + '\\', '').replace(process.cwd() + '/', ''),
         diff: diff ? { mae: diff.mae, rmse: diff.rmse, maxErr: diff.maxErr } : null,
@@ -1016,7 +1076,7 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
     if (result.compileTiming) {
         console.log(`compile:        ${result.compileTiming.totalMs.toFixed(0)}ms total  (${result.compileTiming.compileMs.toFixed(0)}ms compile + ${result.compileTiming.linkMs.toFixed(0)}ms link/sync)`);
     }
-    if (REFLECTION_MODE || MATERIAL_PRESET || RENDER_MODE) {
+    if (REFLECTION_MODE || MATERIAL_PRESET || RENDER_MODE || VOLUMETRIC !== null) {
         const lines = [
             REFLECTION_MODE && `reflection=${REFLECTION_MODE}`,
             MATERIAL_PRESET && `material=${MATERIAL_PRESET}`,
@@ -1024,6 +1084,11 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
             IS_PT && PT_BOUNCES !== null && `ptBounces=${PT_BOUNCES}`,
             IS_PT && PT_NEE_ALL !== null && `ptNeeAll=${PT_NEE_ALL}`,
             IS_PT && PT_ENV_NEE !== null && `ptEnvNee=${PT_ENV_NEE}`,
+            VOLUMETRIC !== null && `volumetric=${VOLUMETRIC}`,
+            VOL_DENSITY    !== null && `volDensity=${VOL_DENSITY}`,
+            VOL_EMISSIVE   !== null && `volEmissive=${VOL_EMISSIVE}`,
+            VOL_LIGHTS     !== null && `volLights=${VOL_LIGHTS}`,
+            VOL_ANISOTROPY !== null && `volAnisotropy=${VOL_ANISOTROPY}`,
         ].filter(Boolean).join('  ');
         console.log(`scene overrides: ${lines}`);
     }

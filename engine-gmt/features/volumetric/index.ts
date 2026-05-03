@@ -13,6 +13,7 @@ const VOLUMETRIC_SCATTER_POST = `
 export interface VolumetricState {
     ptVolumetric: boolean;
     volEnabled: boolean;
+    volQuality: number;
     volDensity: number;
     volAnisotropy: number;
     volMaxLights: number;
@@ -60,6 +61,23 @@ export const VolumetricFeature: FeatureDefinition = {
         volEnabled: {
             type: 'boolean', default: false, label: 'Enabled', shortId: 'ven', uniform: 'uVolEnabled',
             hidden: true,
+        },
+
+        // --- QUALITY ---
+        // Per-frame sampling rate of the volumetric gate. Both extremes
+        // are unbiased estimators (energy compensated by seg-weight) — the
+        // final accumulated image is the same regardless. Slider just
+        // trades per-frame cost vs convergence speed:
+        //   0.0 = 1/128 sampling (super-cheap preview, ~16x cheaper than
+        //         full, needs ~16x more accumulation frames to hit same SNR)
+        //   1.0 = 1/8 sampling (final-render rate, ~16x more shadow rays
+        //         per frame, converges fast)
+        volQuality: {
+            type: 'float', default: 0.0, label: 'Quality', shortId: 'vq', uniform: 'uVolQuality',
+            min: 0.0, max: 1.0, step: 0.01,
+            condition: { param: 'ptVolumetric', bool: true },
+            description: '0 = 1/128 cheap preview (clean after many frames). 1 = 1/8 full sampling (converges fast, ~16× per-frame cost). Same final image either way; tradeoff is per-frame FPS vs frames-to-converge.',
+            helpId: 'render.volumetric',
         },
 
         // --- DENSITY SCATTER (expensive — shadow rays per light) ---

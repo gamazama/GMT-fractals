@@ -239,55 +239,264 @@ Sphere lights in Direct (non-PT) mode fall through to the Point-light branch in 
 
 ## 2.6 Volumetric Scatter (God Rays)
 
-Primary-ray single-scatter volumetric lighting. Injected into `traceScene`'s march loop via `builder.addVolumeTracing()`. Active in both Direct and Path Tracing modes. Controlled via **Scene → Fog → Volumetric Density**.
+> Significantly revised 2026-05-03. Earlier text referenced `uFogDensity` /
+> `uPTFogG` / `uFogEmissiveStrength` from the pre-extraction GMT codebase; the
+> engine-gmt fork uses dedicated `uVol*` uniforms owned by
+> `features/volumetric/`. This section reflects the current implementation.
 
-### Technique
+Primary-ray single-scatter volumetric lighting. Injected into `traceScene`'s
+march loop via `builder.addVolumeTracing()`. Active in both Direct and Path
+Tracing modes. UI panel: **Volumetric Scatter** in the engine settings group.
 
-At each march step, a stochastic gate fires with probability 1/8 (spatially distributed, decoupled from DE iteration count to prevent orbit-trap banding in sky). When fired:
+### Architecture
 
-1. **Beer-Lambert transmittance** `T = exp(-σ·d)` attenuates contribution from camera to scatter point. Early-out when `T < 0.001`.
-2. **Per-light shadow ray** with jitter proportional to `h.x` (the DE distance at that step):
-   - Near the surface (`h.x` small) → minimal jitter → hard god-ray edges.
-   - Open sky (`h.x` large) → large jitter → temporal accumulation blurs the fractal silhouette, eliminating iteration-count banding.
-3. **Henyey-Greenstein phase function** `p(θ) = (1−g²) / (4π·(1+g²−2g·cosθ)^1.5)` — controlled by **Anisotropy (g)**:
-   - `g=0`: isotropic scatter (uniform glow).
-   - `g>0`: forward scatter (classic god rays toward lights).
-   - `g<0`: back scatter.
-4. **Surface Color Scatter** (optional): at the same stochastic sample, evaluates the fractal's Layer 1 orbit-trap color field via `getMappingValue` + `uGradientTexture` — no extra `map()` call needed since `h.yzw` is already in scope. Adds colored volumetric haze driven by the fractal's own gradient palette.
+The feature is a self-contained DDFS module at
+[engine-gmt/features/volumetric/](../../engine-gmt/features/volumetric/) plus
+the GLSL body at
+[engine-gmt/shaders/chunks/lighting/volumetric_scatter.ts](../../engine-gmt/shaders/chunks/lighting/volumetric_scatter.ts).
+DDFS auto-derives the `uVol*` uniforms from the param `uniform` fields, so
+adding a new knob is a one-line edit to `index.ts` — no manual uniform plumbing.
 
-### Key Files
+The body is injected into the trace loop's per-step block via
+`builder.addVolumeTracing(VOLUMETRIC_SCATTER_BODY, '')` (Position 14 in the
+ShaderBuilder assembly order). The compositing line `col += fogScatter;` is
+injected into `applyPostProcessing()` via `addPostProcessLogic()` (Position 16).
+
+### Per-step body — control flow
+
+```
+PT_VOLUMETRIC compile-gate (ptVolumetric: onUpdate=compile)
+└── uVolEnabled > 0.5 runtime gate
+    └── uVolDensity > 0.001  OR  uVolEmissive > 0.001        (work-to-do guard)
+        └── stochastic firing gate (P scaled by uVolQuality)
+            ├── DENSITY scatter — per-light shadow ray, HG phase, Beer-Lambert
+            └── EMISSIVE scatter — orbit-trap gradient lookup (no shadow rays)
+```
+
+The two contributions (density and emissive) are independent and stack — you
+can run pure-emissive (cheap, no shadow rays) or pure-density (expensive god
+rays) or both.
+
+### Stochastic sampling — uVolQuality slider
+
+```glsl
+// 1/128 at slider 0, 1/8 at slider 1, exponential interpolation between.
+float _gateP = exp2(-7.0 + 4.0 * uVolQuality);
+// Cap during interaction so a high-quality setting can't tank nav FPS.
+if (uBlendFactor >= 0.99) _gateP = min(_gateP, 0.03125);
+// Energy-conserved: seg = 1/gateP. Total expected radiance is invariant.
+float _seg = 1.0 / _gateP;
+if (fract(_volSeed * 7.43 + d * 1.0) < _gateP) { ... seg-weighted contribution ... }
+```
+
+Both extremes are unbiased estimators of the same integral. Slider only trades
+**per-frame cost vs frames-to-converge**:
+
+| `uVolQuality` | Gate P | Per-frame cost vs full | Frames to converge vs full |
+|---|---|---|---|
+| 0.00 (default) | 1/128 | ~16× cheaper | ~16× more |
+| 0.25           | 1/64  | ~8× cheaper  | ~8× more  |
+| 0.50           | 1/32  | ~4× cheaper  | ~4× more  |
+| 0.75           | 1/16  | ~2× cheaper  | ~2× more  |
+| 1.00           | 1/8   | full         | reference |
+
+The default 0.0 (1/128) is calibrated for **interactive artist work**: cheap
+per-frame preview that accumulates to the same final image as 1.0. Bump to
+1.0 for short-accumulation final renders where you want minimum frames to
+hit noise floor.
+
+The interaction clamp (`uBlendFactor >= 0.99 → P ≤ 1/32`) means even at
+quality=1.0, navigation frames still cap at 1/32 sampling. Once camera
+stops, the slider's full rate kicks in for accumulation.
+
+### Critical dependency — stochasticSeed via blue noise
+
+The gate hash `fract(_volSeed * 7.43 + d * 1.0)` relies on per-pixel variation
+in `_volSeed` (which derives from `stochasticSeed`). If `stochasticSeed` is
+the same value across all pixels, the gate fires identically for every pixel
+at every iter → screen-wide banding synced to fixed `d`-values.
+
+`stochasticSeed` is generated in [engine-gmt/shaders/chunks/ray.ts](../../engine-gmt/shaders/chunks/ray.ts)
+inside `getCameraRay()`:
+
+```glsl
+stochasticSeed = 0.5;  // default safe value
+bool needNoise = false;
+${noiseLogic}
+if (needNoise) {
+    stochasticSeed = isMoving ? getStableBlueNoise4(noisePixel).r
+                              : getBlueNoise4(noisePixel).r;
+}
+```
+
+`needNoise` is set by feature-specific runtime checks in `noiseLogic`. The
+clauses currently are:
+
+```glsl
+if (uDOFStrength > 0.00001) needNoise = true;
+if (!isMoving)              needNoise = true;
+if (uAreaLights > 0.5)      needNoise = true;
+if (uVolEnabled > 0.5)      needNoise = true;   // ← required for volumetric
+```
+
+**The `uVolEnabled` clause is mandatory.** Without it, during nav with DOF
+and area lights off, `needNoise` stays false, `stochasticSeed = 0.5` for
+every pixel, `_volSeed = 0.5` regardless of `uVolStepJitter`, and the gate
+collapses to a function of `d` only. This was the root cause of a long
+debugging detour through the gate hash itself — no amount of mixing-constant
+tuning helps if the seed is uniform.
+
+### Henyey-Greenstein phase function
+
+`p(θ) = (1−g²) / (4π · (1+g² − 2g·cosθ)^1.5)`, where `g = uVolAnisotropy`:
+- `g=0`: isotropic scatter (uniform glow).
+- `g>0`: forward scatter (classic god rays toward lights).
+- `g<0`: back scatter.
+
+### Beer-Lambert transmittance
+
+`T = exp(-σ_eff · d)` attenuates contribution from camera to scatter point.
+σ_eff includes the optional height-fog modulation (`uVolHeightFalloff` /
+`uVolHeightOrigin`). Early-out when `T < 0.001`.
+
+### Surface color scatter (cheap path)
+
+When `uVolEmissive > 0.001`, the same firing gate also evaluates the
+fractal's Layer-1 orbit-trap color field via `getMappingValue` +
+`uGradientTexture`. No extra `map()` call needed — `h.yzw` is already in
+scope from the trace's per-step DE evaluation. Adds colored volumetric haze
+driven by the fractal's gradient palette without firing any shadow rays.
+
+### Shadow-ray jitter (god-ray softness)
+
+Shadow ray direction is jittered by `_jDir * _jScale` where:
+- `_jScale = min(h.x * 0.2, 0.35)` — scales with DE distance, so near-surface
+  samples (small `h.x`) get hard god-ray edges and open-sky samples get
+  softer scatter that temporally averages the fractal silhouette away.
+- `_jDir` — a per-pixel-per-step ALU hash (`fract(stochasticSeed*K + d*K)`
+  with coprime constants 127.1 / 31.7 / 47.1 / 73.7 / 13.3).
+
+### Directional-light shadow-march cap
+
+Directional lights use `_ld = DIR_LIGHT_DIST` (=100, defined in
+[math.ts](../../engine-gmt/shaders/chunks/math.ts)) — same sentinel that
+surface-shadow rays use in
+[pbr.ts](../../engine-gmt/shaders/chunks/lighting/pbr.ts). The earlier value
+(`10000.0`) was an outlier that made `GetHardShadow` march to its full step
+budget every fire even when the loop's `t > lightDist` early-out should
+have terminated sooner. Bench-invisible on point-light-only scenes (the
+default Mandelbulb), but matters on scenes with at least one directional
+light.
+
+### Key files
 
 | File | Role |
 |------|------|
-| `shaders/chunks/lighting/volumetric_scatter.ts` | Full GLSL body, injected into march loop |
-| `shaders/chunks/trace.ts` | `traceScene` accumulates `accScatter`, outputs `fogScatter` |
-| `shaders/chunks/main.ts` | `renderPixel` calls `applyPostProcessing` for final compositing |
-| `shaders/chunks/pathtracer.ts` | PT bounce fog uses `exp(-uFogDensity·d)` Beer-Lambert; bounce traces use `traceSceneLean` (no volume) |
-| `features/atmosphere/index.ts` | UI params: Density, Anisotropy, Surface Color Scatter |
-| `features/volumetric/index.ts` | Injects `#define PT_VOLUMETRIC`, `addVolumeTracing()`, and scatter compositing via `addPostProcessLogic()` |
+| [features/volumetric/index.ts](../../engine-gmt/features/volumetric/index.ts) | DDFS def: params, groups, panel, compile + runtime gates, body injection |
+| [shaders/chunks/lighting/volumetric_scatter.ts](../../engine-gmt/shaders/chunks/lighting/volumetric_scatter.ts) | The injected per-step body (single template literal) |
+| [shaders/chunks/trace.ts](../../engine-gmt/shaders/chunks/trace.ts) | `traceScene` accumulates `accScatter`, outputs `fogScatter` (line 47/152/208/218) |
+| [shaders/chunks/post.ts](../../engine-gmt/shaders/chunks/post.ts) | `applyPostProcessing` shell receives the `col += fogScatter;` injection |
+| [shaders/chunks/main.ts](../../engine-gmt/shaders/chunks/main.ts) | `renderPixel` calls `applyPostProcessing` for compositing |
+| [shaders/chunks/ray.ts](../../engine-gmt/shaders/chunks/ray.ts) | `noiseLogic` includes `uVolEnabled > 0.5 → needNoise = true` |
+| [shaders/chunks/lighting/shadows.ts](../../engine-gmt/shaders/chunks/lighting/shadows.ts) | `GetHardShadow` (used by density path; early-outs on `t > lightDist`) |
+| [shaders/chunks/pathtracer.ts](../../engine-gmt/shaders/chunks/pathtracer.ts) | PT bounce traces use `traceSceneLean` — no volume on bounces, primary only |
 
 ### Parameters
 
-| Param | Uniform | Range | Notes |
-|-------|---------|-------|-------|
-| Fog Intensity | `uFogIntensity` | 0–1 | Master switch for fog section visibility |
-| Volumetric Density (σ) | `uFogDensity` | 0–0.5 (log) | Beer-Lambert extinction. Sweet spot ~0.005–0.05 |
-| Anisotropy (g) | `uPTFogG` | −0.99–0.99 | HG phase. Default 0.3 (mild forward) |
-| Surface Color Scatter | `uFogEmissiveStrength` | 0–2 (log) | Layer 1 orbit trap color injected into fog |
+All `uVol*` uniforms are auto-derived by DDFS from the feature def's `uniform`
+fields — `engine/UniformSchema.ts` calls `featureRegistry.getUniformDefinitions()`.
 
-### Stochastic Sampling Strategy
+| Param | Uniform | Type / Range | Notes |
+|-------|---------|--------------|-------|
+| Volume Scatter (compile gate) | `ptVolumetric` (define `PT_VOLUMETRIC`) | bool | `onUpdate: 'compile'`, recompiles to inject the body |
+| Enabled (runtime gate) | `uVolEnabled` | bool | Hidden; controlled by `CompilableFeatureSection` |
+| **Quality** | `uVolQuality` | float 0–1, default 0 | 0=1/128 sampling (cheap preview), 1=1/8 (final). Exponential mapping. Both ends converge to same image |
+| Density (σ) | `uVolDensity` | float 0.001–5.0 (log), default 0.01 | Beer-Lambert extinction; sweet spot 0.005–0.05 |
+| Anisotropy (g) | `uVolAnisotropy` | float -0.99–0.99, default 0.3 | HG phase parameter |
+| Light Sources | `uVolMaxLights` | float 1–3, default 1 | Cap on shadow-ray count per fire (cost scales linearly) |
+| Scatter Tint | `uVolScatterTint` | color, default white | Multiplicative tint on scattered radiance |
+| Color Scatter | `uVolEmissive` | float 0–100 (log), default 0 | Cheap path; enables the orbit-trap gradient lookup |
+| Surface Falloff | `uVolEmissiveFalloff` | float 0–5 (log), default 0 | Concentrates color near fractal surface (parent: `volEmissive>0`) |
+| Step Jitter | `uVolStepJitter` | float 0–1, default 1.0 | 1.0 = stochastic seed (smooth via accumulation), 0.0 = fixed seed (artistic banded fog) |
+| Height Falloff | `uVolHeightFalloff` | float 0–5 (log), default 0 | Density modulation by Y distance from origin |
+| Height Origin | `uVolHeightOrigin` | float -5–5, default 0 | Y level where height-modulated density peaks (parent: `volHeightFalloff>0`) |
 
-- **Gate**: `fract(stochasticSeed × 7.43 + d × 1.0) < 0.125` — spatial, not iteration-indexed.
-- **Segment weight**: `_seg = 8.0` (unbiased: 8× contribution compensates 1/8 sampling rate).
-- **Why spatial not iterative**: DE step sizes follow the fractal's level-set structure. Iteration-indexed sampling creates visible banding correlated with orbit counts, especially visible in sky regions. Distance-based sampling (`d × K`) is uniform in world space.
+### Performance characteristics
 
-### Path Tracer Fog Fixes
+Bench (1280×720, RTX 2070, Mandelbulb default + 1 vol light, ANGLE/D3D11):
 
-Two bugs in `shaders/chunks/pathtracer.ts` were fixed alongside the volumetric scatter work:
+| Configuration | p50 GPU | vs vol-off (~6,700 µs) |
+|---|---|---|
+| vol off | 6,670 µs | — |
+| vol on, Quality=1.0 (1/8), accumulating | ~18,800 µs | +12,100 µs |
+| vol on, Quality=0.0 (1/128), accumulating | ~7,500 µs | +800 µs |
+| vol on, any Quality, **navigation frame** (clamped to 1/32) | ~7,500 µs | +800 µs |
+| emissive-only (no shadow rays) | ~7,800 µs | +1,100 µs |
 
-1. **Bounce fog Beer-Lambert**: The PT bounce loop previously applied `exp(-volumetric * 2.0)` where `2.0` was an arbitrary artistic constant. Changed to `exp(-uFogDensity * d)` — proper Beer-Lambert using the actual march distance `d` and the same density uniform as the primary scatter, giving physically consistent fog attenuation across all bounces.
+Density paths are dominated by `GetHardShadow` cost (one full SDF march per
+shadow-ray fire). Emissive-only is essentially free because it skips shadow
+rays entirely.
 
-2. **envNEE traceScene call**: The `PT_ENV_NEE` branch called `traceScene` with 7 arguments after the signature was extended to 8 (`out vec3 fogScatter`). Fixed by adding the missing `vec3 envScatter = vec3(0.0)` output argument.
+### Gotchas
+
+- **`uVolEnabled` must trigger `needNoise=true`** in ray.ts. If you add new
+  scenarios that bypass the noise path (e.g. a new render variant), confirm
+  the gate hash still has per-pixel variation.
+- **`stepJitter = 1.0` during nav** ([trace.ts:181](../../engine-gmt/shaders/chunks/trace.ts#L181)) — the primary march is deterministic during nav (no random advance per step). All pixels at the same iter see identical `d`. The volumetric gate's `d * 1.0` term then doesn't decorrelate per-pixel; only the `_volSeed * 7.43` term does. This is the design — don't try to add stronger d-mixing to the gate (see "What didn't work" below).
+- **Warp coherence is load-bearing** for performance. The gate hash uses
+  small constants (7.43, 1.0) that produce somewhat coherent firing patterns
+  across pixels in a warp. Decorrelating with larger constants (tested with
+  127.1/31.7) made the bench 2.4× slower because warps fan out — every iter
+  where any lane fires, the whole warp pays the shadow-ray cost. The "bands
+  visible during interaction" people sometimes notice are the visible side
+  of warp coherence; randomizing breaks it.
+- **PT bounces don't accumulate vol** — `traceSceneLean` (used for bounces
+  and env-NEE shadow rays) is generated with empty volume body/finalize.
+  Volumetric only applies to the primary camera ray. Documented design;
+  avoiding it would multiply PT bounce cost.
+
+### What didn't work (logged so future sessions don't redo)
+
+- **Loop-invariant hoists** (world-pos sum cached once per gate-fire,
+  `pow(x, 1.5) → x*sqrt(x)`): bench-neutral. ANGLE/D3D11 already CSEs across
+  the two `if` branches and lowers `pow` efficiently.
+- **Stronger gate-hash mixing** (`fract(_volSeed * 127.1 + d * 31.7)`):
+  2.4× slower (warp divergence) AND visually worse (slabbing banding at
+  d-period 1/31.7 ≈ 0.032).
+- **Per-frame phase shift** (`+ float(uFrameCount) * 0.137`) for temporal
+  decorrelation: rejected — design rule is per-pixel jitter, not per-frame
+  (per-frame produces visible flicker without helping convergence under
+  uBlendFactor=1.0 history-replace).
+- **Item B set** (`applyPrecisionOffset` for emissive lookup, smoothstep
+  `_jScale`, blue-noise shadow-ray jitter via `getBlueNoise4`): +1.5–3.3%
+  perf cost for marginal visual change. Reverted; the perf cost wasn't
+  earning the visual difference at typical accumulation lengths.
+
+### Bench harness
+
+The volumetric scenes are exercised via [debug/bench-shader.mts](../../debug/bench-shader.mts):
+
+```bash
+npx tsx debug/bench-shader.mts --volumetric=on --vol-density=0.01 --vol-lights=1 --tag=my-tag
+```
+
+Flags: `--volumetric=on|off`, `--vol-density=N`, `--vol-emissive=N`,
+`--vol-lights=N`, `--vol-anisotropy=N`. Vol scenes auto-skip the reference
+diff (the locked `GMT_Mandelbulb_v1.png` reference is calibrated for vol
+off); bench saves a per-tag PNG so you can side-by-side compare runs.
+
+### Path Tracer Fog Fixes (historical)
+
+Two bugs in [shaders/chunks/pathtracer.ts](../../engine-gmt/shaders/chunks/pathtracer.ts) were fixed alongside the volumetric scatter work:
+
+1. **Bounce fog Beer-Lambert**: The PT bounce loop previously applied
+   `exp(-volumetric * 2.0)` where `2.0` was an arbitrary artistic constant.
+   Changed to use the actual march distance `d` and the same density signal
+   as the primary scatter, giving physically consistent attenuation across
+   all bounces.
+2. **envNEE traceScene call**: The `PT_ENV_NEE` branch called `traceScene`
+   with 7 arguments after the signature was extended to 8 (`out vec3
+   fogScatter`). Fixed by adding the missing output argument.
 
 ## 2.7 Two-Stage Shader Compilation
 

@@ -4,6 +4,13 @@
 Session 2 additions documented inline below; original session-1 content preserved
 unchanged so the "what didn't work" history doesn't bitrot.
 
+> **Volumetric scatter session (2026-05-03)** — see
+> [`docs/VOLUMETRIC_HANDOFF.md`](VOLUMETRIC_HANDOFF.md) for the volumetric
+> optimization log. Added `--volumetric=on/off`, `--vol-density=N`,
+> `--vol-emissive=N`, `--vol-lights=N`, `--vol-anisotropy=N` CLI flags to the
+> bench harness, plus a 4xx/5xx HTTP fail-fast clause to the fatal-pattern
+> regex (chunk-load failures previously took 30s to surface).
+
 This is a working doc for the next session picking up shader-perf work. Read
 the **Hard constraints** and **What didn't work** sections before suggesting
 optimizations — most of the obvious-looking wins don't apply on this stack.

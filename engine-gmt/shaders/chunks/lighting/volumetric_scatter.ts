@@ -15,10 +15,23 @@ export const VOLUMETRIC_SCATTER_BODY = `
     bool _hasDensity = uVolDensity > 0.001;
     bool _hasEmissive = uVolEmissive > 0.001;
     if (uVolEnabled > 0.5 && (_hasDensity || _hasEmissive)) {
-        // Spatial stochastic gate: P=0.125
-        // uVolStepJitter blends between fixed seed (persistent slicing) and temporal seed (smooth accumulation)
+        // Stochastic gate sampling rate. uVolQuality slider:
+        //   0.0 = 1/128 sampling (super-cheap preview)
+        //   1.0 = 1/8   sampling (final-render rate)
+        // Mapping is exponential so each slider stop halves/doubles the
+        // sampling rate. Both extremes are unbiased estimators (seg
+        // compensates) — the converged image is identical at every slider
+        // setting. Slider only trades per-frame cost vs frames-to-converge.
+        // During interaction (uBlendFactor >= 0.99) we clamp to 1/32 max
+        // so a high-quality slider position doesn't tank interactive FPS.
+        // uVolStepJitter blends between fixed seed (persistent slicing)
+        // and temporal seed (smooth accumulation).
         float _volSeed = mix(0.5, stochasticSeed, uVolStepJitter);
-        if (fract(_volSeed * 7.43 + d * 1.0) < 0.125) {
+        // gateP = 1/128 * 16^volQuality  →  0→1/128, 0.5→1/32, 1.0→1/8
+        float _gateP = exp2(-7.0 + 4.0 * uVolQuality);
+        // Cap during interaction at 1/32 to keep nav frames cheap.
+        if (uBlendFactor >= 0.99) _gateP = min(_gateP, 0.03125);
+        if (fract(_volSeed * 7.43 + d * 1.0) < _gateP) {
             float _sigma = uVolDensity;
 
             // Height fog: modulate density by Y distance from origin
@@ -31,7 +44,8 @@ export const VOLUMETRIC_SCATTER_BODY = `
             // Beer-Lambert transmittance from camera to this scatter point
             float _trans = exp(-_sigmaEff * d);
             if (_trans > 0.001) {
-                float _seg = 8.0;
+                // Energy compensation: seg = 1 / gateP. Steady = 8, interaction = 32.
+                float _seg = 1.0 / _gateP;
 
                 // --- DENSITY SCATTER (shadow rays — expensive) ---
                 if (_hasDensity && _sigma > 0.001) {
@@ -49,7 +63,13 @@ export const VOLUMETRIC_SCATTER_BODY = `
                         // as a Point at the sphere center for volumetric scatter.
                         bool _dir = uLightType[_li] > 0.5 && uLightType[_li] < 1.5;
                         vec3  _lv  = _dir ? uLightDir[_li] : (uLightPos[_li] - p);
-                        float _ld  = _dir ? 10000.0 : length(_lv);
+                        // Use the same DIR_LIGHT_DIST sentinel surface-shadow
+                        // rays use in pbr.ts. The original 10000.0 was an
+                        // outlier; this aligns with convention and lets the
+                        // shadow loop's t > lightDist early-out fire at the
+                        // expected scene-bound proxy distance for directional
+                        // lights. Bench-invisible on point-light-only scenes.
+                        float _ld  = _dir ? DIR_LIGHT_DIST : length(_lv);
                         if (!_dir && _ld < 0.001) continue;
                         vec3 _l = _dir ? normalize(_lv) : (_lv / _ld);
                         float _att = 1.0;

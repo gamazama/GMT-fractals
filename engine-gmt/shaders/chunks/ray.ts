@@ -9,6 +9,12 @@ export const getRayGLSL = (renderMode: 'Direct' | 'PathTracing') => {
         if (uDOFStrength > 0.00001) needNoise = true;
         if (!isMoving) needNoise = true;  // Other effects need noise when stationary
         if (uAreaLights > 0.5) needNoise = true;
+        // Volumetric scatter: gate hash relies on per-pixel stochasticSeed
+        // for spatial decorrelation. Without this clause, during navigation
+        // the seed defaults to 0.5 for every pixel and the gate fires/skips
+        // identically across the whole screen — producing visible bands
+        // synced to fixed d-values.
+        if (uVolEnabled > 0.5) needNoise = true;
         `;
 
     return `
