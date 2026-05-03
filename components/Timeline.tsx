@@ -7,6 +7,7 @@ import GraphEditor from './GraphEditor';
 import { TimelineToolbar } from './timeline/TimelineToolbar';
 import { KeyframeInspector } from './timeline/KeyframeInspector';
 import { DopeSheet } from './timeline/DopeSheet';
+import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 import { getKeyframeMenuItems } from './timeline/KeyframeContextMenu'; 
 import { TIMELINE_SIDEBAR_WIDTH } from '../data/constants';
 import { Track } from '../types';
@@ -17,12 +18,35 @@ interface TimelineProps {
 }
 
 const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
-    const {
-        isPlaying, currentFrame, durationFrames, sequence,
-        selectedTrackIds, updateKeyframes, setTangents, deleteSelectedKeyframes, snapshot,
-        selectedKeyframeIds, clipboard, copySelectedKeyframes, pasteKeyframes, duplicateSelection, loopSelection,
-        setIsScrubbing
-    } = useAnimationStore();
+    // Narrow per-field subscriptions instead of `useAnimationStore()` (full
+    // store sub). The animationStore receives ~60 no-op `set()` calls per
+    // second; with the destructured full sub Timeline.tsx re-rendered every
+    // RAF (241 commits per 240 RAFs idle) and DopeSheet/GraphEditor inherited
+    // the work — bench-perf-timeline showed 15ms/commit dope-idle = 3.7s of
+    // React work per 4s scenario, dropping wkrFps from 60 → 50. With narrow
+    // selectors the per-RAF noise no longer reaches this tree.
+    //
+    // Action fns are stable slice-init refs — read lazily via `getState()`
+    // at call time to avoid re-binding handlers on every render.
+    const isPlaying           = useAnimationStore((s) => s.isPlaying);
+    const currentFrame        = useAnimationStore((s) => s.currentFrame);
+    const durationFrames      = useAnimationStore((s) => s.durationFrames);
+    const sequence            = useAnimationStore((s) => s.sequence);
+    const selectedTrackIds    = useAnimationStore((s) => s.selectedTrackIds);
+    const selectedKeyframeIds = useAnimationStore((s) => s.selectedKeyframeIds);
+    const clipboard           = useAnimationStore((s) => s.clipboard);
+    // Actions — stable refs, no subscription needed.
+    const updateKeyframes        = (...a: Parameters<ReturnType<typeof useAnimationStore.getState>['updateKeyframes']>) =>
+        useAnimationStore.getState().updateKeyframes(...a);
+    const setTangents            = (m: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') =>
+        useAnimationStore.getState().setTangents(m);
+    const deleteSelectedKeyframes = () => useAnimationStore.getState().deleteSelectedKeyframes();
+    const snapshot               = () => useAnimationStore.getState().snapshot();
+    const copySelectedKeyframes  = () => useAnimationStore.getState().copySelectedKeyframes();
+    const pasteKeyframes         = (frame: number) => useAnimationStore.getState().pasteKeyframes(frame);
+    const duplicateSelection     = () => useAnimationStore.getState().duplicateSelection();
+    const loopSelection          = (times: number) => useAnimationStore.getState().loopSelection(times);
+    const setIsScrubbing         = (v: boolean) => useAnimationStore.getState().setIsScrubbing(v);
 
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const setIsTimelineHovered = useEngineStore(s => s.setIsTimelineHovered);
@@ -45,6 +69,15 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     }, []);
 
     const [mode, setMode] = useState<'DopeSheet' | 'Graph'>('DopeSheet');
+    // Expose setMode + a heavy-state seed hook so debug/bench-perf-timeline.mts
+    // can drive Dope/Graph switching and inject a pre-seeded sequence
+    // without simulating 20 s of mouse-record. Stable refs across renders;
+    // teardown clears the globals so they don't leak between mounts.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        (window as any).__timelineSetMode = setMode;
+        return () => { delete (window as any).__timelineSetMode; };
+    }, []);
     const [panelHeight, setPanelHeight] = useState(250);
     const [isResizing, setIsResizing] = useState(false);
     const [frameWidth, setFrameWidth] = useState(8); 
@@ -281,43 +314,47 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                     {/* Changed bg-transparent to bg-[#080808] */}
                     <div className="flex-1 flex flex-col min-w-0 bg-[#080808] relative">
                         {mode === 'DopeSheet' ? (
-                            <div 
-                                ref={scrollContainerRef}
-                                onScroll={handleScroll}
-                                className="flex-1 overflow-auto bg-transparent no-scrollbar relative"
-                            >
-                                <DopeSheet
-                                    frameWidth={frameWidth}
-                                    totalContentWidth={totalContentWidth}
-                                    scrollContainerRef={scrollContainerRef}
-                                    onContextMenu={handleKeyContextMenu}
-                                    onCanvasContextMenu={handleDopeSheetCanvasMenu}
-                                    scrollLeft={scrollLeft}
-                                    visibleWidth={viewportWidth}
-                                    visibleGraphTracks={visibleGraphTracks}
-                                    setVisibleGraphTracks={setVisibleGraphTracks}
-                                />
-                            </div>
+                            <BenchProfiler id="Timeline:DopeSheet">
+                                <div
+                                    ref={scrollContainerRef}
+                                    onScroll={handleScroll}
+                                    className="flex-1 overflow-auto bg-transparent no-scrollbar relative"
+                                >
+                                    <DopeSheet
+                                        frameWidth={frameWidth}
+                                        totalContentWidth={totalContentWidth}
+                                        scrollContainerRef={scrollContainerRef}
+                                        onContextMenu={handleKeyContextMenu}
+                                        onCanvasContextMenu={handleDopeSheetCanvasMenu}
+                                        scrollLeft={scrollLeft}
+                                        visibleWidth={viewportWidth}
+                                        visibleGraphTracks={visibleGraphTracks}
+                                        setVisibleGraphTracks={setVisibleGraphTracks}
+                                    />
+                                </div>
+                            </BenchProfiler>
                         ) : (
-                            <div ref={scrollContainerRef} className="flex-1 bg-transparent relative overflow-hidden">
-                                <GraphEditor 
-                                    // Graph now receives the decoupled VISIBLE tracks list
-                                    trackIds={visibleGraphTracks} 
-                                    setVisibleTracks={setVisibleGraphTracks}
-                                    width={viewportWidth}
-                                    height={panelHeight - 32} 
-                                    scrollLeft={scrollLeft}
-                                    frameWidth={frameWidth}
-                                    sidebarWidth={TIMELINE_SIDEBAR_WIDTH}
-                                    onSetScroll={setScrollLeft}
-                                    onSetFrameWidth={setFrameWidth}
-                                    onContextMenu={(e, tid, kid, interp) => {
-                                        const track = sequence.tracks[tid];
-                                        const k = track?.keyframes.find(kf => kf.id === kid);
-                                        handleKeyContextMenu(e, tid, kid, interp, k?.brokenTangents, k?.autoTangent);
-                                    }}
-                                />
-                            </div>
+                            <BenchProfiler id="Timeline:Graph">
+                                <div ref={scrollContainerRef} className="flex-1 bg-transparent relative overflow-hidden">
+                                    <GraphEditor
+                                        // Graph now receives the decoupled VISIBLE tracks list
+                                        trackIds={visibleGraphTracks}
+                                        setVisibleTracks={setVisibleGraphTracks}
+                                        width={viewportWidth}
+                                        height={panelHeight - 32}
+                                        scrollLeft={scrollLeft}
+                                        frameWidth={frameWidth}
+                                        sidebarWidth={TIMELINE_SIDEBAR_WIDTH}
+                                        onSetScroll={setScrollLeft}
+                                        onSetFrameWidth={setFrameWidth}
+                                        onContextMenu={(e, tid, kid, interp) => {
+                                            const track = sequence.tracks[tid];
+                                            const k = track?.keyframes.find(kf => kf.id === kid);
+                                            handleKeyContextMenu(e, tid, kid, interp, k?.brokenTangents, k?.autoTangent);
+                                        }}
+                                    />
+                                </div>
+                            </BenchProfiler>
                         )}
                     </div>
                     

@@ -58,11 +58,22 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
     const selectedKeyframeIds = useAnimationStore(s => s.selectedKeyframeIds);
     const durationFrames = useAnimationStore(s => s.durationFrames);
     
-    const {
-        setTrackSelection, toggleTrackSelection, addTracksToSelection,
-        selectKeyframe, selectKeyframes,
-        removeTrack, addKeyframe, snapshot, deleteSelectedKeyframes
-    } = useAnimationStore();
+    // Actions are stable refs from slice init — read lazily via getState()
+    // to avoid the full-store destructured subscription that was forcing
+    // DopeSheet to re-render every RAF (~60Hz no-op set() calls flood the
+    // animationStore; see useTrackAnimation.ts for the original analysis).
+    const setTrackSelection      = (id: string) => useAnimationStore.getState().setTrackSelection(id);
+    const toggleTrackSelection   = (id: string) => useAnimationStore.getState().toggleTrackSelection(id);
+    const addTracksToSelection   = (ids: string[]) => useAnimationStore.getState().addTracksToSelection(ids);
+    const selectKeyframe         = (trackId: string, keyId: string, multi: boolean) =>
+        useAnimationStore.getState().selectKeyframe(trackId, keyId, multi);
+    const selectKeyframes        = (keys: string[], multi: boolean) =>
+        useAnimationStore.getState().selectKeyframes(keys, multi);
+    const removeTrack            = (id: string) => useAnimationStore.getState().removeTrack(id);
+    const addKeyframe            = (id: string, frame: number, value: number) =>
+        useAnimationStore.getState().addKeyframe(id, frame, value);
+    const snapshot               = () => useAnimationStore.getState().snapshot();
+    const deleteSelectedKeyframes = () => useAnimationStore.getState().deleteSelectedKeyframes();
     const selectTrackBy = (id: string, multi: boolean) =>
         multi ? toggleTrackSelection(id) : setTrackSelection(id);
 

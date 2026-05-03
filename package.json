@@ -48,6 +48,8 @@
     "bench:perf": "tsx debug/bench-perf.mts",
     "bench:perf:with-server": "tsx debug/runWithServer.mts -- npx tsx debug/bench-perf.mts",
     "bench:perf:gate": "tsx debug/bench-perf.mts --gate",
+    "bench:perf:timeline": "tsx debug/bench-perf-timeline.mts",
+    "bench:perf:timeline:with-server": "tsx debug/runWithServer.mts -- npx tsx debug/bench-perf-timeline.mts",
     "shader:dump": "tsx debug/dump-default-shader.mts"
   },
   "dependencies": {

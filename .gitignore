@@ -43,6 +43,12 @@ debug/bench-perf-2*.json
 debug/bench-perf-latest.json
 debug/bench-perf-baseline.json
 debug/bench-perf-after-*.json
+# bench-perf-timeline artifacts (paired with debug/bench-perf-timeline.mts).
+# The seed cache is kept per-machine — re-record with --bench-record if needed.
+debug/bench-perf-timeline-2*.json
+debug/bench-perf-timeline-latest.json
+debug/bench-perf-timeline-baseline.json
+debug/bench-perf-timeline-seed.json
 
 # One-off exploration / debug scripts, not part of the test suite
 debug/scratch/
