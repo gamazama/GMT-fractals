@@ -92,7 +92,29 @@ const DomOverlays: React.FC = () => {
 };
 
 export const AppGmt: React.FC = () => {
-    const state     = useEngineStore();
+    // Narrow per-field subscriptions instead of one full-store `useEngineStore()`.
+    // The previous full subscription re-ran AppGmt's body on every store
+    // mutation (tens of times per slider step, once per RAF during animation),
+    // which forced every child component (Dock, TopBar, DomOverlays, …) to
+    // re-execute even when their own selectors had stable values. Profile-
+    // verified hot path; see `docs/UI_PERF_HANDOFF.md`.
+    //
+    // Action functions on the store are stable references created at slice
+    // init, so handlers read them via `useEngineStore.getState().<action>`
+    // at call time — no subscription needed.
+    const panels                     = useEngineStore((s) => s.panels);
+    const isBroadcastMode            = useEngineStore((s) => s.isBroadcastMode);
+    const interactionMode            = useEngineStore((s) => (s as any).interactionMode);
+    const workshopOpen               = useEngineStore((s) => (s as any).workshopOpen);
+    const workshopEditFormula        = useEngineStore((s) => (s as any).workshopEditFormula);
+    const histogramActiveCount       = useEngineStore((s) => (s as any).histogramActiveCount);
+    const histogramAutoUpdate        = useEngineStore((s) => (s as any).histogramAutoUpdate);
+    const histogramTrigger           = useEngineStore((s) => (s as any).histogramTrigger);
+    const sceneHistogramActiveCount  = useEngineStore((s) => (s as any).sceneHistogramActiveCount);
+    const sceneHistogramTrigger      = useEngineStore((s) => (s as any).sceneHistogramTrigger);
+    const contextMenu                = useEngineStore((s) => s.contextMenu);
+    const cameraMode                 = useEngineStore((s) => (s as any).cameraMode ?? 'Orbit');
+
     const { isMobile } = useMobileLayout();
     // Mobile-menu state is only ever set when on mobile (MenuAnchor
     // gates `mobileMenu.toggle` on isMobile), so the active id alone
@@ -137,13 +159,18 @@ export const AppGmt: React.FC = () => {
         reticle:   React.createRef<HTMLDivElement>(),
     }), []);
 
-    const storeCallbacks = useMemo<StoreCallbacks>(() => ({
-        handleInteractionStart: state.handleInteractionStart,
-        handleInteractionEnd:   state.handleInteractionEnd,
-        openContextMenu:        state.openContextMenu,
-    }), [state.handleInteractionStart, state.handleInteractionEnd, state.openContextMenu]);
+    // Action functions are stable across setState calls — capture once via
+    // getState() so storeCallbacks identity stays stable across renders.
+    const storeCallbacks = useMemo<StoreCallbacks>(() => {
+        const s = useEngineStore.getState();
+        return {
+            handleInteractionStart: s.handleInteractionStart,
+            handleInteractionEnd:   s.handleInteractionEnd,
+            openContextMenu:        s.openContextMenu,
+        };
+    }, []);
 
-    const floatingPanels = (Object.values(state.panels) as PanelState[])
+    const floatingPanels = (Object.values(panels) as PanelState[])
         .filter((p) => p.location === 'float' && p.isOpen);
 
     const viewportRef = useRef<HTMLDivElement>(null);
@@ -151,10 +178,8 @@ export const AppGmt: React.FC = () => {
     const { visualRegion, drawPreview, isGhostDragging, renderRegion } = useRegionSelection(viewportRef);
     const { ghostRect: previewGhostRect } = usePreviewTarget(viewportRef);
     const activeRegion = drawPreview || visualRegion || renderRegion;
-    const interactionMode = (state as any).interactionMode;
     const isSelectingRegion = interactionMode === 'selecting_region';
 
-    const cameraMode = (state as any).cameraMode ?? 'Orbit';
     // Navigation (Orbit/Fly) calls setSceneOffset whenever the camera
     // moves. Delegate to cameraSlice's action — it updates BOTH the
     // store AND engine.virtualSpace.state in lockstep, then emits
@@ -187,7 +212,7 @@ export const AppGmt: React.FC = () => {
                 {!loadingVisible && (
                     <>
                         <LandscapeGate />
-                        {!state.isBroadcastMode && <MobileControls />}
+                        {!isBroadcastMode && <MobileControls />}
                     </>
                 )}
                 <EngineBridge />
@@ -199,9 +224,9 @@ export const AppGmt: React.FC = () => {
                         <DraggableWindow id={p.id} title={p.id}>
                             <PanelRouter
                                 activeTab={p.id as PanelId}
-                                state={state}
-                                actions={state}
-                                onSwitchTab={(t) => state.togglePanel(t, true)}
+                                state={useEngineStore.getState()}
+                                actions={useEngineStore.getState()}
+                                onSwitchTab={(t) => useEngineStore.getState().togglePanel(t, true)}
                             />
                         </DraggableWindow>
                     </BenchProfiler>
@@ -210,12 +235,12 @@ export const AppGmt: React.FC = () => {
                 <BenchProfiler id="TopBarHost"><TopBarHost /></BenchProfiler>
 
                 <div className="flex-1 flex overflow-hidden relative">
-                    {(state as any).workshopOpen ? (
+                    {workshopOpen ? (
                         <React.Suspense fallback={null}>
                             <BenchProfiler id="FormulaWorkshop">
                                 <FormulaWorkshop
-                                    onClose={() => (state as any).closeWorkshop()}
-                                    editFormula={(state as any).workshopEditFormula}
+                                    onClose={() => (useEngineStore.getState() as any).closeWorkshop()}
+                                    editFormula={workshopEditFormula}
                                 />
                             </BenchProfiler>
                         </React.Suspense>
@@ -271,8 +296,8 @@ export const AppGmt: React.FC = () => {
                                     mode={cameraMode}
                                     hudRefs={hudRefs}
                                     setSceneOffset={setSceneOffset}
-                                    onStart={(s) => (state as any).pushCameraTransaction(s)}
-                                    onEnd={() => state.handleInteractionEnd()}
+                                    onStart={(s) => (useEngineStore.getState() as any).pushCameraTransaction(s)}
+                                    onEnd={() => useEngineStore.getState().handleInteractionEnd()}
                                 />
                             </Canvas>
                         </BenchProfiler>
@@ -302,7 +327,7 @@ export const AppGmt: React.FC = () => {
                                 region={activeRegion}
                                 isGhostDragging={isGhostDragging}
                                 isDrawing={!!drawPreview}
-                                onClear={() => (state as any).setRenderRegion(null)}
+                                onClear={() => (useEngineStore.getState() as any).setRenderRegion(null)}
                             />
                         )}
                         {isSelectingRegion && (
@@ -356,32 +381,32 @@ export const AppGmt: React.FC = () => {
                     consumer mounted (ColoringPanel / Scene panel widgets
                     register+unregister on mount via the connected wrappers
                     in engine-gmt/features/ui.tsx). */}
-                {(state as any).histogramActiveCount > 0 && (
+                {histogramActiveCount > 0 && (
                     <HistogramProbe
                         source="geometry"
-                        autoUpdate={(state as any).histogramAutoUpdate}
-                        trigger={(state as any).histogramTrigger}
-                        onUpdate={(state as any).setHistogramData}
-                        onLoadingChange={(state as any).setHistogramLoading}
+                        autoUpdate={histogramAutoUpdate}
+                        trigger={histogramTrigger}
+                        onUpdate={(useEngineStore.getState() as any).setHistogramData}
+                        onLoadingChange={(useEngineStore.getState() as any).setHistogramLoading}
                     />
                 )}
-                {(state as any).sceneHistogramActiveCount > 0 && (
+                {sceneHistogramActiveCount > 0 && (
                     <HistogramProbe
                         source="color"
                         autoUpdate
-                        trigger={(state as any).sceneHistogramTrigger}
-                        onUpdate={(state as any).setSceneHistogramData}
+                        trigger={sceneHistogramTrigger}
+                        onUpdate={(useEngineStore.getState() as any).setSceneHistogramData}
                     />
                 )}
 
-                {state.contextMenu.visible && (
+                {contextMenu.visible && (
                     <GlobalContextMenu
-                        x={state.contextMenu.x}
-                        y={state.contextMenu.y}
-                        items={state.contextMenu.items}
-                        targetHelpIds={state.contextMenu.targetHelpIds}
-                        onClose={state.closeContextMenu}
-                        onOpenHelp={state.openHelp}
+                        x={contextMenu.x}
+                        y={contextMenu.y}
+                        items={contextMenu.items}
+                        targetHelpIds={contextMenu.targetHelpIds}
+                        onClose={useEngineStore.getState().closeContextMenu}
+                        onOpenHelp={useEngineStore.getState().openHelp}
                     />
                 )}
 

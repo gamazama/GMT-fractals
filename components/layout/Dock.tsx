@@ -2,6 +2,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { PanelRouter } from '../PanelRouter';
+import { BenchProfiler } from '../../engine-gmt/utils/BenchProfiler';
 import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
 import { collectHelpIds } from '../../utils/helpUtils';
@@ -175,7 +176,9 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                 was wasting ~32px of dock width. */}
             <div className={`flex-1 overflow-y-auto py-2 relative ${isMobile ? 'mobile-scroll' : 'custom-scroll'}`}>
                 {activeTabId ? (
-                     <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />
+                     <BenchProfiler id={`Dock:${side}/PanelRouter:${activeTabId}`}>
+                        <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />
+                     </BenchProfiler>
                 ) : (
                     <div className="flex h-full items-center justify-center text-gray-700 text-xs italic">
                         Select a panel
