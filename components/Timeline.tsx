@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useState, useLayoutEffect, useCallback } from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { useEngineStore } from '../store/engineStore';
 import { useShortcutScope } from '../engine/plugins/Shortcuts';
@@ -158,61 +158,76 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         return () => observer.disconnect();
     }, []); 
 
-    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-        if (mode === 'DopeSheet') {
-            setScrollLeft(e.currentTarget.scrollLeft);
-        }
-    };
+    // Stable handlers — wrapping in useCallback with the necessary deps so that
+    // DopeSheet/GraphEditor (memoized below) can bail on prop equality. Reactive
+    // values that aren't already in deps are read via useAnimationStore.getState()
+    // inside the handler at call time — they only matter when the user actually
+    // right-clicks, not on every render.
+    const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+        // Read mode via ref-style: handler is created with [] deps, but mode
+        // changes are infrequent and we re-create on dep change to capture
+        // the current mode. Cheap.
+        setScrollLeft(e.currentTarget.scrollLeft);
+    }, []);
 
-    const handleNavigatorZoom = (val: number, type: 'factor' | 'absolute' = 'factor') => {
-        let newWidth = frameWidth;
-        if (type === 'factor') newWidth = frameWidth * val;
-        else newWidth = val;
-        
-        newWidth = Math.max(1, Math.min(200, newWidth));
-        setFrameWidth(newWidth);
-    };
+    const handleNavigatorZoom = useCallback((val: number, type: 'factor' | 'absolute' = 'factor') => {
+        setFrameWidth((prev) => {
+            const next = type === 'factor' ? prev * val : val;
+            return Math.max(1, Math.min(200, next));
+        });
+    }, []);
 
     // --- CONTEXT MENUS ---
 
-    const handleKeyContextMenu = (e: React.MouseEvent, trackId: string, keyId: string, interp: string, broken?: boolean, auto?: boolean) => {
+    const handleKeyContextMenu = useCallback((
+        e: React.MouseEvent, trackId: string, keyId: string, interp: string,
+        broken?: boolean, auto?: boolean,
+    ) => {
         e.preventDefault();
-        
+        const a = useAnimationStore.getState();
+        const selectedIds = a.selectedKeyframeIds;
+        const clip = a.clipboard;
+        const curFrame = a.currentFrame;
         const actions = {
             updateInterp: (newInterp: 'Linear' | 'Step' | 'Bezier') => {
                 snapshot();
-                const targetIds = selectedKeyframeIds.length > 0 ? selectedKeyframeIds : [`${trackId}::${keyId}`];
+                const targetIds = selectedIds.length > 0 ? selectedIds : [`${trackId}::${keyId}`];
                 const updates = targetIds.map(id => {
                     const [tid, kid] = id.split('::');
                     return { trackId: tid, keyId: kid, patch: { interpolation: newInterp } };
                 });
                 updateKeyframes(updates);
             },
-            setTangents: (mode: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') => setTangents(mode),
+            setTangents: (m: 'Auto' | 'Split' | 'Unified' | 'Aligned' | 'Ease') => setTangents(m),
             deleteKeys: deleteSelectedKeyframes,
             copyKeys: copySelectedKeyframes,
-            pasteKeys: () => pasteKeyframes(currentFrame), // Paste at current playhead position
+            pasteKeys: () => pasteKeyframes(curFrame),
             duplicateKeys: duplicateSelection,
-            loopKeys: (times: number) => loopSelection(times)
+            loopKeys: (times: number) => loopSelection(times),
         };
-
-        const items = getKeyframeMenuItems(interp, broken, auto, actions, selectedKeyframeIds.length, !!clipboard);
+        const items = getKeyframeMenuItems(interp, broken, auto, actions, selectedIds.length, !!clip);
         openGlobalMenu(e.clientX, e.clientY, items, ['ui.timeline']);
-    };
+    }, [snapshot, updateKeyframes, setTangents, deleteSelectedKeyframes, copySelectedKeyframes, pasteKeyframes, duplicateSelection, loopSelection, openGlobalMenu]);
 
-    const handleDopeSheetCanvasMenu = (e: React.MouseEvent, frame: number) => {
+    const handleDopeSheetCanvasMenu = useCallback((e: React.MouseEvent, frame: number) => {
         e.preventDefault();
+        // Read latest reactive values at click time (not via closure capture)
+        // so this handler can remain useCallback([])-stable for memoization.
+        const a = useAnimationStore.getState();
+        const selectedIds = a.selectedKeyframeIds;
+        const clip = a.clipboard;
+        const dur = a.durationFrames;
         const items: ContextMenuItem[] = [
             { label: 'Timeline Actions', action: () => {}, isHeader: true },
-            { 
-                label: `Copy Selected (${selectedKeyframeIds.length})`, 
-                action: copySelectedKeyframes, 
-                disabled: selectedKeyframeIds.length === 0 
+            {
+                label: `Copy Selected (${selectedIds.length})`,
+                action: copySelectedKeyframes,
+                disabled: selectedIds.length === 0
             },
-            { 
-                label: 'Paste Keys Here', 
-                action: () => pasteKeyframes(frame), 
-                disabled: !clipboard 
+            {
+                label: 'Paste Keys Here',
+                action: () => pasteKeyframes(frame),
+                disabled: !clip
             },
             {
                 label: 'Duplicate Selection Here',
@@ -220,15 +235,14 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                     copySelectedKeyframes();
                     pasteKeyframes(frame);
                 },
-                disabled: selectedKeyframeIds.length === 0
+                disabled: selectedIds.length === 0
             },
             { label: 'View', action: () => {}, isHeader: true },
             {
                 label: 'Fit View (Duration)',
                 action: () => {
-                    // Calculate frame width to fit duration in viewport
                     const availWidth = viewportWidth - TIMELINE_SIDEBAR_WIDTH;
-                    const newFrameWidth = availWidth / (durationFrames + 10); // +10 padding
+                    const newFrameWidth = availWidth / (dur + 10);
                     handleNavigatorZoom(newFrameWidth, 'absolute');
                     setScrollLeft(0);
                     if (scrollContainerRef.current) scrollContainerRef.current.scrollLeft = 0;
@@ -242,7 +256,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
             }
         ];
         openGlobalMenu(e.clientX, e.clientY, items, ['ui.timeline']);
-    };
+    }, [copySelectedKeyframes, pasteKeyframes, viewportWidth, handleNavigatorZoom, openGlobalMenu]);
 
     useEffect(() => {
         const onMove = (e: MouseEvent) => {

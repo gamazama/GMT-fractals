@@ -27,7 +27,7 @@ interface GraphEditorProps {
     onSetFrameWidth: (px: number) => void;
 }
 
-const GraphEditor: React.FC<GraphEditorProps> = ({ 
+const GraphEditorInner: React.FC<GraphEditorProps> = ({
     trackIds, setVisibleTracks, width, height, normalized: propNormalized = false, onContextMenu,
     scrollLeft, frameWidth, sidebarWidth, onSetScroll, onSetFrameWidth
 }) => {
@@ -432,4 +432,9 @@ const GraphEditor: React.FC<GraphEditorProps> = ({
     );
 };
 
+// React.memo: bail out when props are reference-equal so currentFrame ticks
+// during playback don't force GraphEditor to re-render. Inner Zustand selectors
+// (sequence, selectedKeyframeIds, etc.) still re-render when their slice
+// values change.
+const GraphEditor = React.memo(GraphEditorInner);
 export default GraphEditor;

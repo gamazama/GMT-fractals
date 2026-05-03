@@ -50,6 +50,13 @@ const OUTPUT_DIR = 'debug';
 const SEED_PATH = join(OUTPUT_DIR, 'bench-perf-timeline-seed.json');
 const SEED_DURATION_FRAMES = 600;
 const SEED_RECORD_MS = 20_000;       // 20 s of mouse-record
+// Heavy synthetic seed — for stress-testing UI cost when the user has
+// recorded a lot. 1500 frames × 6 camera tracks ≈ user-reported stress.
+const HEAVY_SEED_FRAMES = 1500;
+const HEAVY_SEED_TRACK_IDS = [
+    'camera.unified.x', 'camera.unified.y', 'camera.unified.z',
+    'camera.unified.qx', 'camera.unified.qy', 'camera.unified.qz',
+];
 
 // ─── types (mirror bench-perf.mts so JSON output stays consistent) ────
 interface ProfilerBucket {
@@ -455,7 +462,7 @@ const recordSeed = async (page: Page): Promise<any> => {
     return sequence;
 };
 
-const applySeed = async (page: Page, sequence: any) => {
+const applySeed = async (page: Page, sequence: any, duration: number) => {
     await page.evaluate(({ duration, sequence: seq }) => {
         const a = (window as any).useAnimationStore;
         a.setState({
@@ -466,7 +473,35 @@ const applySeed = async (page: Page, sequence: any) => {
             isRecording: false,
             isPlaying: false,
         });
-    }, { duration: SEED_DURATION_FRAMES, sequence });
+    }, { duration, sequence });
+};
+
+/** Generate a heavy synthetic sequence in-process — no browser round-trip,
+ *  no recording. 1500 frames × 6 camera tracks, every frame keyed, linear
+ *  interpolation. Approximates the user's 1500-frame stress recording but
+ *  produces deterministic data: y values trace overlapping sines so the
+ *  Graph view has visible curves and the DopeSheet has a packed key wall. */
+const synthHeavySeed = (): any => {
+    const tracks: Record<string, any> = {};
+    let kid = 0;
+    const nextId = () => `synth-${(kid++).toString(36)}`;
+    for (let t = 0; t < HEAVY_SEED_TRACK_IDS.length; t++) {
+        const id = HEAVY_SEED_TRACK_IDS[t];
+        const phase = (t / HEAVY_SEED_TRACK_IDS.length) * Math.PI * 2;
+        const keyframes: any[] = [];
+        for (let f = 0; f < HEAVY_SEED_FRAMES; f++) {
+            keyframes.push({
+                id: nextId(),
+                frame: f,
+                value: Math.sin(phase + (f / HEAVY_SEED_FRAMES) * Math.PI * 4) * 0.5,
+                interpolation: 'Linear',
+                autoTangent: false,
+                brokenTangents: false,
+            });
+        }
+        tracks[id] = { id, type: 'float', label: id, keyframes, hidden: false };
+    }
+    return { tracks };
 };
 
 const seedKeyframeStats = async (page: Page) => {
@@ -487,21 +522,83 @@ const runIdle = async (page: Page): Promise<ScenarioMetrics> => {
     return snapshotToMetrics(await page.evaluate(`window.__bench.snapshot()`));
 };
 
-/** Drive the playhead from 0 → durationFrames via animationStore.seek().
- *  Exercises the timeline's per-frame visual update path without taking
- *  a dependency on hitting a specific DOM element with the mouse. */
+/** Drive the playhead from 0 → durationFrames. Mirrors what
+ *  TimelineRuler.handleScrubStart does on a real mouse-drag: seek() into
+ *  the store AND call animationEngine.scrub(f) to evaluate keyframes
+ *  through the binders so the camera/uniforms actually follow the
+ *  playhead. The seek-only path was leaving the picture frozen during
+ *  scrub, undercounting cost in the camera-binder + worker-tick path. */
 const runScrub = async (page: Page): Promise<ScenarioMetrics> => {
     await page.evaluate(`window.__bench.start()`);
     await page.evaluate(`(async () => {
         const a = window.useAnimationStore;
+        const eng = window.__animEngine;
         const dur = a.getState().durationFrames;
         const STEPS = ${SCRUB_STEPS};
         for (let i = 0; i <= STEPS; i++) {
             const f = (i / STEPS) * dur;
             a.getState().seek(f);
+            if (eng && typeof eng.scrub === 'function') eng.scrub(f);
             await new Promise(requestAnimationFrame);
         }
     })()`);
+    await page.evaluate(`window.__bench.stop()`);
+    return snapshotToMetrics(await page.evaluate(`window.__bench.snapshot()`));
+};
+
+/** Real playback: toggle isPlaying=true and let AnimationEngine.tick drive
+ *  currentFrame via the TickRegistry. Captures `FRAMES_PER_SCENARIO` RAFs
+ *  of work, then pauses + seeks back to 0. This is the path the user
+ *  reported stuttering on with 1500-keyframe sequences. */
+const runPlay = async (page: Page): Promise<ScenarioMetrics> => {
+    await page.evaluate(() => {
+        const a = (window as any).useAnimationStore;
+        a.getState().seek(0);
+        a.getState().play();
+    });
+    await page.evaluate(`window.__bench.start()`);
+    await page.evaluate(`window.__bench.waitFrames(${FRAMES_PER_SCENARIO})`);
+    await page.evaluate(`window.__bench.stop()`);
+    const m = snapshotToMetrics(await page.evaluate(`window.__bench.snapshot()`));
+    await page.evaluate(() => {
+        const a = (window as any).useAnimationStore;
+        a.getState().pause();
+        a.getState().seek(0);
+    });
+    await page.evaluate(`window.__bench.waitFrames(20)`);
+    return m;
+};
+
+/** Programmatically select a single track via setTrackSelection. The user
+ *  reported "selecting takes long, then hangs between interactions" with a
+ *  450-frame track — measures the burst cost of the resulting re-render
+ *  cascade. Run a few selection toggles in sequence to detect O(n²) behavior. */
+const runSelectTrack = async (page: Page): Promise<ScenarioMetrics> => {
+    // Pre-collect track ids in deterministic order.
+    const trackIds: string[] = await page.evaluate(() => {
+        const seq = (window as any).useAnimationStore.getState().sequence;
+        return Object.keys(seq.tracks);
+    });
+    if (trackIds.length === 0) {
+        // Empty timeline — nothing to measure; return an empty snapshot.
+        await page.evaluate(`window.__bench.start()`);
+        await page.evaluate(`window.__bench.waitFrames(${FRAMES_PER_SCENARIO})`);
+        await page.evaluate(`window.__bench.stop()`);
+        return snapshotToMetrics(await page.evaluate(`window.__bench.snapshot()`));
+    }
+    await page.evaluate(`window.__bench.start()`);
+    // Toggle through each track, then back to none. Lets us observe both
+    // the "first selection" cost AND the per-toggle cost when state is hot.
+    await page.evaluate(`(async (ids) => {
+        const a = window.useAnimationStore;
+        for (const id of ids) {
+            a.getState().setTrackSelection(id);
+            await new Promise(requestAnimationFrame);
+            await new Promise(requestAnimationFrame);
+        }
+        a.getState().deselectAll && a.getState().deselectAll();
+        await new Promise(requestAnimationFrame);
+    })(${JSON.stringify(trackIds)})`);
     await page.evaluate(`window.__bench.stop()`);
     return snapshotToMetrics(await page.evaluate(`window.__bench.snapshot()`));
 };
@@ -535,6 +632,7 @@ async function main() {
         force: process.argv.includes('--force'),
     });
     const forceRecord = process.argv.includes('--bench-record');
+    const heavySeed   = process.argv.includes('--seed=heavy');
 
     try {
     console.log(`[bench] launching chromium → ${URL}`);
@@ -581,21 +679,29 @@ async function main() {
     console.log(`[bench] timeline open`);
 
     let sequence: any = null;
-    if (!forceRecord && existsSync(SEED_PATH)) {
-        try {
-            sequence = JSON.parse(readFileSync(SEED_PATH, 'utf8'));
-            console.log(`[bench] using cached seed: ${SEED_PATH}`);
-        } catch (e) {
-            console.warn(`[bench] failed to read seed cache (${(e as Error).message}); re-recording`);
-            sequence = null;
-        }
-    }
-    if (!sequence) {
-        sequence = await recordSeed(page);
-        writeFileSync(SEED_PATH, JSON.stringify(sequence));
-        console.log(`[bench] wrote seed cache: ${SEED_PATH}`);
+    let seedDuration = SEED_DURATION_FRAMES;
+    if (heavySeed) {
+        sequence = synthHeavySeed();
+        seedDuration = HEAVY_SEED_FRAMES;
+        await applySeed(page, sequence, seedDuration);
+        console.log(`[bench] using synthetic heavy seed (${HEAVY_SEED_FRAMES} frames × ${HEAVY_SEED_TRACK_IDS.length} tracks)`);
     } else {
-        await applySeed(page, sequence);
+        if (!forceRecord && existsSync(SEED_PATH)) {
+            try {
+                sequence = JSON.parse(readFileSync(SEED_PATH, 'utf8'));
+                console.log(`[bench] using cached seed: ${SEED_PATH}`);
+            } catch (e) {
+                console.warn(`[bench] failed to read seed cache (${(e as Error).message}); re-recording`);
+                sequence = null;
+            }
+        }
+        if (!sequence) {
+            sequence = await recordSeed(page);
+            writeFileSync(SEED_PATH, JSON.stringify(sequence));
+            console.log(`[bench] wrote seed cache: ${SEED_PATH}`);
+        } else {
+            await applySeed(page, sequence, seedDuration);
+        }
     }
     const stats = await seedKeyframeStats(page);
     console.log(`[bench] seeded ${stats.trackCount} tracks / ${stats.keyframeCount} keyframes`);
@@ -610,15 +716,19 @@ async function main() {
     }
     const scenarios: Scenario[] = [
         // Dope sheet first — the default mode, simplest geometry.
-        { name: 'dope-idle',  mode: 'DopeSheet', fn: runIdle },
-        { name: 'dope-scrub', mode: 'DopeSheet', fn: runScrub },
-        { name: 'dope-zoom',  mode: 'DopeSheet', fn: runZoom },
+        { name: 'dope-idle',         mode: 'DopeSheet', fn: runIdle },
+        { name: 'dope-scrub',        mode: 'DopeSheet', fn: runScrub },
+        { name: 'dope-play',         mode: 'DopeSheet', fn: runPlay },
+        { name: 'dope-zoom',         mode: 'DopeSheet', fn: runZoom },
+        { name: 'dope-select-track', mode: 'DopeSheet', fn: runSelectTrack },
         // Graph mode — canvas-rendered curves, expected to be more
         // expensive per visible track. Mode switch is itself measured
         // implicitly (cost shows up in setMode + first render of Graph).
-        { name: 'graph-idle',  mode: 'Graph', fn: runIdle },
-        { name: 'graph-scrub', mode: 'Graph', fn: runScrub },
-        { name: 'graph-zoom',  mode: 'Graph', fn: runZoom },
+        { name: 'graph-idle',         mode: 'Graph', fn: runIdle },
+        { name: 'graph-scrub',        mode: 'Graph', fn: runScrub },
+        { name: 'graph-play',         mode: 'Graph', fn: runPlay },
+        { name: 'graph-zoom',         mode: 'Graph', fn: runZoom },
+        { name: 'graph-select-track', mode: 'Graph', fn: runSelectTrack },
     ];
 
     const results: ScenarioResult[] = [];

@@ -34,7 +34,13 @@ const PlayheadCursor = ({ frameWidth }: { frameWidth: number }) => {
     );
 };
 
-export const DopeSheet: React.FC<DopeSheetProps> = ({
+// React.memo: bail out when props are reference-equal. With 1500-keyframe
+// sequences DopeSheet's render is ~135ms (it spits out ~9000 DOM diamonds);
+// without memo, every parent re-render — including the per-frame currentFrame
+// updates Timeline subscribes to during playback — would re-run the whole
+// thing and stutter the app. Inner Zustand selectors still drive re-renders
+// when keyframe data actually changes.
+const DopeSheetInner: React.FC<DopeSheetProps> = ({
     frameWidth, totalContentWidth, onContextMenu, onCanvasContextMenu, scrollContainerRef, scrollLeft, visibleWidth,
     visibleGraphTracks, setVisibleGraphTracks
 }) => {
@@ -477,3 +483,5 @@ export const DopeSheet: React.FC<DopeSheetProps> = ({
         </div>
     );
 };
+
+export const DopeSheet = React.memo(DopeSheetInner);
