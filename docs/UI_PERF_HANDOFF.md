@@ -143,6 +143,62 @@ GraphCanvas draws curves to a `<canvas>` instead of one DOM diamond
 per keyframe. Future optimization: switch DopeSheet to canvas
 rendering for the keyframe diamonds, or virtualize off-screen tracks.
 
+### Heavy-timeline session (2026-05-03 — same day, third sitting)
+
+User reported: with a 1500-frame recording across 6 camera tracks,
+playback stuttered when the timeline panel was open and was fine when
+hidden. Selecting tracks "hung for seconds." Bench-perf-timeline
+confirmed under `--seed=heavy` (9000 keyframes synthetic): DopeSheet's
+render function was running ~130ms because it emits one DOM diamond
+per keyframe; Timeline's `currentFrame` selector ticks every frame
+during playback so DopeSheet was re-running 240×/scenario × 130ms =
+**32.7 SECONDS of React work over a 4-second window** at the worst.
+
+Fix shipped in `2d22b91`:
+- `React.memo` around DopeSheet + GraphEditor.
+- `useCallback` the inline handler props passed from Timeline so memo
+  can actually bail (inline arrows generate new identities every
+  render).
+- Reactive values inside the menus (`selectedKeyframeIds`, `clipboard`,
+  `durationFrames`) are now read via `useAnimationStore.getState()` at
+  click-time so the callbacks stay `[]`-dep stable.
+
+Bench delta with `--seed=heavy` (9000 keys):
+
+| Scenario  | Pre TimelineHost | Post TimelineHost | Δ |
+|-----------|------------------|-------------------|---|
+| dope-idle | 1487ms / 11c     | **5ms / 8c**      | -99.7% |
+| dope-zoom | 1611ms / 13c     | **4ms / 10c**     | -99.7% |
+| dope-play | 32660ms / 249c   | **969ms / 491c**  | -97.0% |
+| dope-scrub| 24730ms / 181c   | **79ms / 131c**   | -99.7% |
+
+Also added these to `debug/bench-perf-timeline.mts`:
+- `runScrub` now calls `animationEngine.scrub(f)` after `seek(f)` so
+  the camera + binders fire (previously the bench advanced currentFrame
+  in the store but the picture stayed frozen during scrub — undercounting
+  the camera-binder + worker-tick cost).
+- New scenarios: `dope-play` / `graph-play` (toggle isPlaying, capture
+  4s of playback) and `dope-select-track` / `graph-select-track`
+  (programmatic setTrackSelection).
+- `--seed=heavy` synthesizes a 1500×6 = 9000-keyframe sequence
+  in-process (no recording needed).
+
+### Open: dope-select-track + DopeSheet keyframe rendering at scale
+
+`dope-select-track` improved from 1494ms to 944ms (-37%) — but each
+selection toggle still costs ~150ms because DopeSheet legitimately
+re-renders when `selectedTrackIds` changes (React.memo can't help when
+the input did change). The fundamental cost is rendering ~9000 DOM
+diamonds; we need virtualization (only render keyframes inside the
+visible scroll window) or canvas-render (like Graph mode does).
+Graph mode handles the same 9000 keys at ~35ms because it's already
+canvas-based.
+
+Worker-fps drops to ~24 during heavy `dope-play` even after the React
+fix, but that's a *path-tracer* effect: every per-frame camera-binder
+write resets accumulation, so the renderer has to start a fresh sample
+pass on every frame. Not a UI issue.
+
 ### Recurring lesson
 
 This is the third pattern of the same shape today (Slider →
