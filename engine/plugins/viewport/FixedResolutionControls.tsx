@@ -1,9 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from '../../../components/Icons';
 import { useHelpContextMenu } from '../../../hooks/useHelpContextMenu';
 import { ASPECT_RATIOS, type AspectRatioValue } from '../../../data/resolutionPresets';
 import { snap8 } from '../../../utils/resolutionUtils';
+import { NumberInput } from '../../../components/NumberInput';
+import { Button } from '../../../components/Button';
 
 interface FixedResolutionControlsProps {
     width: number;
@@ -20,6 +23,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
     width, height, top, left, maxAvailableWidth, maxAvailableHeight, onSetResolution, onSetMode
 }) => {
     const [showResMenu, setShowResMenu] = useState(false);
+    const [showCustomDialog, setShowCustomDialog] = useState(false);
     const presetMenuRef = useRef<HTMLDivElement>(null);
     
     // Track X and Y start positions
@@ -91,6 +95,11 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
     // Fit Logic: Finds the largest WxH that fits in the window with padding
     const applyPreset = (targetRatio: AspectRatioValue) => {
         if (targetRatio === 'Free') return;
+        if (targetRatio === 'Custom') {
+            setShowResMenu(false);
+            setShowCustomDialog(true);
+            return;
+        }
         const padding = 40;
         const availW = Math.max(100, maxAvailableWidth - padding);
         const availH = Math.max(100, maxAvailableHeight - padding);
@@ -154,7 +163,7 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
                 </div>
             )}
 
-            <button 
+            <button
                 onClick={(e) => { e.stopPropagation(); onSetMode('Full'); }}
                 className="flex items-center gap-1.5 text-[9px] font-bold text-gray-300 bg-black/80 px-2 py-1 rounded border border-white/10 hover:border-cyan-500/50 hover:text-cyan-400 hover:bg-cyan-900/30 transition-all shadow-sm backdrop-blur-md group"
                 title="Return to Fullscreen Mode"
@@ -162,6 +171,64 @@ export const FixedResolutionControls: React.FC<FixedResolutionControlsProps> = (
                 <span className="w-2 h-2 border border-current rounded-sm group-hover:scale-110 transition-transform"></span>
                 Fill
             </button>
+
+            {showCustomDialog && (
+                <CustomResolutionDialog
+                    initialWidth={width}
+                    initialHeight={height}
+                    onClose={() => setShowCustomDialog(false)}
+                    onApply={(w, h) => {
+                        onSetResolution(snap8(w), snap8(h));
+                        setShowCustomDialog(false);
+                    }}
+                />
+            )}
         </div>
+    );
+};
+
+interface CustomResolutionDialogProps {
+    initialWidth: number;
+    initialHeight: number;
+    onClose: () => void;
+    onApply: (w: number, h: number) => void;
+}
+
+const CustomResolutionDialog: React.FC<CustomResolutionDialogProps> = ({
+    initialWidth, initialHeight, onClose, onApply,
+}) => {
+    const [w, setW] = useState(initialWidth);
+    const [h, setH] = useState(initialHeight);
+
+    // Latest-ref so the listener registers once but always sees current values
+    // / callbacks. Plain dep array would re-bind on every keystroke.
+    const latestRef = useRef({ w, h, onClose, onApply });
+    latestRef.current = { w, h, onClose, onApply };
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            const cur = latestRef.current;
+            if (e.key === 'Escape') cur.onClose();
+            else if (e.key === 'Enter') cur.onApply(cur.w, cur.h);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
+    return createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={onClose}>
+            <div className="bg-gray-900 border border-white/10 rounded-lg p-5 w-72 shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="text-xs font-bold text-white mb-3">Custom Resolution</div>
+                <div className="flex gap-2 mb-4">
+                    <NumberInput label="Width"  value={w} onChange={setW} step={8} min={64} max={32768} />
+                    <NumberInput label="Height" value={h} onChange={setH} step={8} min={64} max={32768} />
+                </div>
+                <div className="flex justify-end gap-2">
+                    <Button size="small" label="Cancel" onClick={onClose} />
+                    <Button size="small" variant="primary" active label="Apply" onClick={() => onApply(w, h)} />
+                </div>
+            </div>
+        </div>,
+        document.body,
     );
 };

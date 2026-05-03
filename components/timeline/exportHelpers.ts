@@ -30,3 +30,25 @@ export const formatDurationMs = (ms: number) => {
     if (secs < 60) return `${secs.toFixed(1)}s`;
     return formatTimeWithUnits(secs);
 };
+
+/**
+ * Coarse ETA format for the bucket-render pill. Rounds to 30s in the
+ * minute range (so "10.5m" / "12m") and to 30m in the hour range. Only
+ * the bucket ETA uses this; elapsed counters / video export keep the
+ * precise `formatTimeWithUnits` output.
+ */
+export const formatEtaCoarse = (secs: number) => {
+    if (!isFinite(secs) || secs < 0) return "--";
+
+    if (secs < 60) return `${secs.toFixed(0)}s`;
+
+    if (secs < 3600) {
+        const halfMin = Math.round(secs / 30) / 2;
+        return halfMin % 1 === 0 ? `${halfMin.toFixed(0)}m` : `${halfMin.toFixed(1)}m`;
+    }
+
+    const h = Math.floor(secs / 3600);
+    const remM = Math.round((secs % 3600) / 60);
+    if (remM >= 30) return `${h}h 30m`;
+    return `${h}h`;
+};

@@ -135,16 +135,17 @@ installViewport({
 // Point the in-canvas render-scale pill at GMT's actual internal-pixel
 // multiplier (Quality panel's "Internal Scale" slider). The default
 // source — viewportSlice.renderScale — is consumed only by fluid-toy;
-// in GMT the equivalent knob is quality.aaLevel and changing it goes
-// through the standard DDFS setter so the worker / shader see it via
-// the same path as the panel slider.
+// in GMT the equivalent knob is the renderControlSlice's `aaLevel`,
+// which `setAALevel` pipes to `dpr` for the viewport. Both the in-canvas
+// pill and the Quality > Resolution > Internal Scale dropdown read/write
+// the same field — single source of truth.
 setRenderScaleSource({
     use: () => {
-        const value = useEngineStore((s: any) => s.quality?.aaLevel ?? 1.0);
-        const setQuality = useEngineStore((s: any) => s.setQuality);
-        return [value, (v: number) => setQuality({ aaLevel: v })];
+        const value = useEngineStore((s: any) => s.aaLevel ?? 1.0);
+        const setAALevel = useEngineStore((s: any) => s.setAALevel);
+        return [value, (v: number) => setAALevel(v)];
     },
-    steps: [0.25, 0.5, 1.0, 1.5, 2.0],
+    steps: [0.25, 0.5, 0.75, 1.0, 1.5, 2.0],
 });
 
 // hideDefaults: registerGmtTopbar registers fps/adaptive/pause itself in

@@ -16,9 +16,9 @@ const ShadowSettingsPopup = () => {
     const areaAnchor = useTutorAnchor('shadow-area-btn');
 
     return (
-        <Popover width="w-52" tutAnchor="shadow-panel">
+        <Popover width="w-52" tutAnchor="shadow-panel" padding="none">
             <div className="relative space-y-2">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2 px-1">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2 px-3">
                     <SectionLabel>Shadows</SectionLabel>
                     <div className="flex items-center gap-1.5">
                         {areaLightsCompiled && (

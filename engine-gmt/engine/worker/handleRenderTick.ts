@@ -141,6 +141,7 @@ export const handleRenderTick = (
         // render. Letterbox the tile into a centered rect matching its own
         // aspect so the preview matches what gets saved.
         const gl = renderer.getContext();
+        const boxTapsUniform = engine.materials.displayMaterial.uniforms.uPreviewBoxTaps;
         if (bucketRenderer.getIsRunning()) {
             const [tileW, tileH] = bucketRenderer.getCurrentTilePixelSize();
             const cW = canvas.width, cH = canvas.height;
@@ -157,13 +158,22 @@ export const handleRenderTick = (
                         vx = Math.floor((cW - vw) / 2);
                     }
                 }
+                // NxN box average in displayMaterial when the source tile is
+                // larger than its on-canvas footprint. Bilinear-only would only
+                // sample 4 of every (ratio^2) source texels and look pixelated.
+                if (boxTapsUniform) {
+                    const ratio = Math.max(tileW / Math.max(1, vw), tileH / Math.max(1, vh));
+                    boxTapsUniform.value = Math.min(8, Math.max(1, Math.ceil(ratio)));
+                }
                 renderer.setViewport(vx, vy, vw, vh);
                 renderer.render(displayScene, displayCamera);
                 renderer.setViewport(0, 0, cW, cH);
             } else {
+                if (boxTapsUniform) boxTapsUniform.value = 1;
                 renderer.render(displayScene, displayCamera);
             }
         } else {
+            if (boxTapsUniform) boxTapsUniform.value = 1;
             renderer.render(displayScene, displayCamera);
         }
 

@@ -43,6 +43,21 @@ interface AutoFeaturePanelProps {
     pendingChanges?: Record<string, any>; 
 }
 
+/**
+ * Log-scale Slider mapping for [min, max]. Exported so hand-rolled Sliders
+ * (those not driven by AutoFeaturePanel) can share the canonical impl.
+ */
+export const buildLogMapping = (min: number, max: number) => {
+    const safeMin = Math.max(0.000001, min);
+    const lo = Math.log10(safeMin);
+    const span = Math.log10(max) - lo;
+    return {
+        min: 0, max: 100,
+        toSlider: (v: number) => v <= min ? 0 : ((Math.log10(Math.max(safeMin, v)) - lo) / span) * 100,
+        fromSlider: (v: number) => v <= 0 ? min : Math.pow(10, lo + (v / 100) * span),
+    };
+};
+
 const getMapping = (config: ParamConfig) => {
     const min = config.min ?? 0;
     const max = config.max ?? 1;
@@ -53,14 +68,7 @@ const getMapping = (config: ParamConfig) => {
     if (config.scale === 'square') {
         return { min: 0, max: 100, toSlider: (v: number) => Math.sqrt((v - min) / (max - min)) * 100, fromSlider: (v: number) => min + Math.pow(v / 100, 2) * (max - min) };
     }
-    if (config.scale === 'log') {
-        const safeMin = Math.max(0.000001, min);
-        return {
-            min: 0, max: 100,
-            toSlider: (v: number) => (v <= min) ? 0 : ((Math.log10(Math.max(safeMin, v)) - Math.log10(safeMin)) / (Math.log10(max) - Math.log10(safeMin))) * 100,
-            fromSlider: (v: number) => (v <= 0) ? min : Math.pow(10, Math.log10(safeMin) + (v / 100) * (Math.log10(max) - Math.log10(safeMin)))
-        };
-    }
+    if (config.scale === 'log') return buildLogMapping(min, max);
     return undefined;
 };
 

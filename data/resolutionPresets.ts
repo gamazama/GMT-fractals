@@ -10,11 +10,12 @@
  * Add a new preset here once and it appears in every dropdown.
  */
 
-export type AspectRatioValue = number | 'Max' | 'Free';
+export type AspectRatioValue = number | 'Max' | 'Free' | 'Custom';
 
 export interface AspectRatio {
     label: string;
-    /** numeric ratio = w/h. 'Max' = fit to window (no fixed ratio). 'Free' = no lock. */
+    /** numeric ratio = w/h. 'Max' = fit to window (no fixed ratio). 'Free' = no lock.
+     *  'Custom' = open a W×H dialog (viewport dropdown only). */
     ratio: AspectRatioValue;
 }
 
@@ -29,16 +30,17 @@ export const ASPECT_RATIOS: AspectRatio[] = [
     { label: 'Portrait (4:5)',     ratio: 0.8    },
     { label: 'Social (9:16)',      ratio: 9 / 16 },
     { label: 'Skybox (2:1)',       ratio: 2.0    },
+    { label: 'Custom...',          ratio: 'Custom' },
 ];
 
 /**
  * Aspect-LOCK options for paired W/H controls. 'Free' = unlocked; numeric values
  * lock H = W / ratio. Excludes 'Maximum' (fit-to-window doesn't apply when there
- * are explicit dimension inputs).
+ * are explicit dimension inputs) and 'Custom' (a viewport-only dialog opener).
  */
 export const ASPECT_LOCK_OPTIONS: AspectRatio[] = [
     { label: 'Free', ratio: 'Free' },
-    ...ASPECT_RATIOS.filter(r => r.ratio !== 'Max'),
+    ...ASPECT_RATIOS.filter(r => r.ratio !== 'Max' && r.ratio !== 'Custom'),
 ];
 
 export interface ResolutionPreset {

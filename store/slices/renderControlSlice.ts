@@ -55,7 +55,7 @@ export const createRenderControlSlice: StateCreator<
     renderMode: 'Direct',
 
     isPaused: false,
-    sampleCap: 256,
+    sampleCap: 64,
     accumulationCount: 0,
 
     isExporting: false,
@@ -80,6 +80,7 @@ export const createRenderControlSlice: StateCreator<
     // drives `dpr` when aaMode is Always/Auto, because `dpr` is how the
     // viewport plugin scales the actual drawing buffer.
     setAALevel: (v) => {
+        if (get().aaLevel === v) return;
         set({ aaLevel: v });
         const { aaMode } = get();
         if (aaMode === 'Always' || aaMode === 'Auto') set({ dpr: v });
@@ -133,5 +134,8 @@ export const createRenderControlSlice: StateCreator<
     setSamplesPerBucket: (v) => set({ samplesPerBucket: v }),
 
     setIsExporting: (v) => set({ isExporting: v }),
-    setAdaptiveSuppressed: (v) => set({ adaptiveSuppressed: v }),
+    setAdaptiveSuppressed: (v) => {
+        if (get().adaptiveSuppressed === v) return;
+        set({ adaptiveSuppressed: v });
+    },
 });

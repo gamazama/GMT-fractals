@@ -1,6 +1,43 @@
-# GMT Development Changelog (v0.9.3 dev)
+# GMT Development Changelog (v0.9.4 dev)
 
-Chronological log of significant changes during the v0.9.3 development cycle (engine-extraction trunk; merges to `main` once stable).
+Chronological log of significant changes during the v0.9.4 development cycle (engine-extraction trunk; merges to `main` once stable).
+
+## 2026-05-04
+
+### app-gmt UI touchups (batch)
+
+Plan: [plans/app-gmt-touchups.md](../plans/app-gmt-touchups.md). Ten small items the user listed against `dev/app-gmt`; each addressed independently. No new architecture, no breaking changes.
+
+**User-facing**
+- **Gradient → Repeats slider** is now log-scaled. Half the bar covers the artistic 0.1–~3 range instead of compressing it into the leftmost 5%. Geometric midpoint at slider 50%.
+- **Internal Scale** dropdown (Quality → Resolution) gains a **0.75×** option between 0.5 and 1.0.
+- **Viewport render-scale pill** (top-center, only in Fixed mode) is now linked to the same `aaLevel` field as the Quality panel's Internal Scale — changing one updates the other. Same 0.75 step added.
+- **Auto-Stop default** dropped from 256 to 64 samples — better default for fast iteration. Existing scenes with an explicit cap saved into a preset keep their value.
+- **Bucket-render ETA pill** rounds to 30s (`10.5m – 12m`) instead of showing seconds during long renders. Elapsed counter and video-export timing keep their precise format.
+- **Live blit during a high-res bucket render** (e.g. 8k tile downsampled to ~800px viewport canvas) is now box-filtered instead of bilinear-only. Cap 8×8 taps. No visible change outside bucket render.
+- **Loading screen progress bar** is now a clip-path mask instead of a `transform: scaleX` — the inner Julia animation no longer compresses with the fill.
+- **Viewport aspect-ratio dropdown** has a new **Custom...** entry that opens a small W×H dialog (Enter applies, Esc cancels).
+- **Shadow popover** is now flush to its edges; the per-row content owns its own padding.
+- **Bucket-render popover** no longer resets the on-screen accumulator on open/close at default settings. Adaptive-resolution suppression is now scoped to "while a bucket render is actually running" instead of the whole popover lifecycle, and the Fixed-mode swap is restored on close only if it was actually applied on open.
+
+**Implementation**
+- New `Popover` `padding?: 'default' \| 'none'` prop replaces an `!important` Tailwind override path.
+- New `buildLogMapping(min, max)` helper exported from `AutoFeaturePanel.tsx` so hand-rolled Sliders (those bypassing the auto-panel) can share the canonical log-scale `customMapping` instead of re-deriving it. Used by the Repeats slider in `ColoringHistogram.tsx`.
+- New `formatEtaCoarse(secs)` helper in `components/timeline/exportHelpers.ts` (re-exported from the engine-gmt shim). The bucket panel calls it; existing `formatTimeWithUnits` consumers untouched.
+- `setAALevel` and `setAdaptiveSuppressed` in `renderControlSlice.ts` now early-return on no-op writes — re-clicking the active viewport pill (or repeat-suppressing) no longer emits stray `reset_accum` events.
+- `setRenderScaleSource(...)` in `app-gmt/main.tsx` repointed at the canonical root `aaLevel` field. Was reading `quality.aaLevel` (a stale field still seeded by some preset blocks; no UI now reads it — separate cleanup).
+- Bucket panel tracks `didSuppressAdaptiveRef` / `didSwapResolutionRef` so the unmount cleanup only undoes side effects it actually applied.
+- New `uPreviewBoxTaps` uniform on `displayMaterial`. The post-process shader does an N×N box average around `sampleUV` when taps > 1 (capped 8×8). `handleRenderTick` sets `taps = ceil(srcSize/canvasFootprint)` during bucket render; default 1 = single sample = bit-identical to before for normal rendering.
+- Custom-resolution dialog uses the same portal/backdrop pattern as `HardwarePreferences.tsx` and `Help.tsx`. Worth extracting a `Modal` primitive when there's a fourth caller; the three current sites all carry slight variations and the deduplication isn't load-bearing yet.
+- `applyAspectLock` in the bucket panel narrows on `typeof value !== 'number'` instead of enumerating sentinels — `'Custom'` and any future non-numeric ratio sentinel can no longer leak into a NaN-divide.
+
+**Initial mis-diagnosis on the tile filtering (worth recording so we don't repeat it)**
+- First fix path tried mipmaps on the per-tile composite RT (`LinearMipmapLinearFilter` + manual `gl.generateMipmap` regen at blit time). Float32 + manual generate-mipmap on a Three `WebGLRenderTarget` with `generateMipmaps: false` produces black output — likely Three's RT-tracking doesn't allocate mip-level storage when the flag is off, so the GPU samples undefined memory at mip > 0. Reverted.
+- Second mis-diagnosis: the *composite* end-of-tile blit isn't where the user actually saw the blockiness. The visible "blocky" comes from the *live in-progress* blit reading `pipeline.outputTexture` (the per-tile MRT, e.g. 8k for an 8k 1×1 export) into the canvas (~800px CSS) every frame. The display path is `handleRenderTick` → `displayMaterial`, not `onTileBlitToScreen`. Real fix is the box-tap uniform on `displayMaterial`, applied in the live blit path.
+
+**Pending**
+- Item #4 (the "saved bucket export was the last tile enlarged") — couldn't reproduce after the dual-`aaLevel` rewire (#3b). User confirmed deferred-acceptance pending re-test against this build.
+- Stale `quality.aaLevel` field in 8 formula preset blocks + 2 type files — no reader after the rewire above. Separate cleanup PR.
 
 ## 2026-05-03
 

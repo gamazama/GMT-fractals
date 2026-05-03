@@ -41,6 +41,10 @@ export const generatePostProcessFrag = () => {
 uniform sampler2D map;
 uniform vec2 uResolution;
 uniform float uEncodeOutput;
+// Live-blit box filter (NxN average around sampleUV). 1 = single sample.
+// The bucket-render frame loop sets this to ceil(srcSize/canvasSize) so that a
+// large render target downsampled to a smaller canvas isn't bilinear-aliased.
+uniform float uPreviewBoxTaps;
 // Multi-pass export uniforms — shared with the main shader via mainUniforms. At defaults
 // (uOutputPass=0) these are no-ops; WorkerExporter drives them per session.
 uniform float uOutputPass;  // 0=beauty, 1=alpha mask, 2=depth
@@ -151,7 +155,31 @@ void main() {
     // --- FEATURE INJECTION: UV MODIFICATION ---
     ${injectedMainUV}
 
-    vec4 tex = texture(map, sampleUV);
+    vec4 tex;
+    int boxTaps = int(uPreviewBoxTaps + 0.5);
+    if (boxTaps <= 1) {
+        tex = texture(map, sampleUV);
+    } else {
+        // NxN box average to filter heavy downsampling (live blit during a
+        // bucket render at high export res). Capped at 8x8 so worst-case is
+        // 64 taps per fragment — negligible on a small preview canvas.
+        const int MAX_TAPS = 8;
+        int taps = min(boxTaps, MAX_TAPS);
+        vec2 texelSize = 1.0 / uResolution;
+        float halfN = float(taps) * 0.5 - 0.5;
+        vec4 sum = vec4(0.0);
+        float wsum = 0.0;
+        for (int y = 0; y < MAX_TAPS; y++) {
+            if (y >= taps) break;
+            for (int x = 0; x < MAX_TAPS; x++) {
+                if (x >= taps) break;
+                vec2 off = (vec2(float(x), float(y)) - halfN) * texelSize;
+                sum += texture(map, sampleUV + off);
+                wsum += 1.0;
+            }
+        }
+        tex = sum / wsum;
+    }
 
     // --- EXPORT PASS BRANCHES ---
     // Alpha and depth passes skip tone mapping + feature color injections entirely

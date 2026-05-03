@@ -166,14 +166,16 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
             </div>
 
             <div className="relative z-10 w-[500px] h-16 bg-gray-900/80 rounded-full border border-gray-700/50 overflow-hidden shadow-[0_0_50px_rgba(0,255,255,0.1)] backdrop-blur-sm">
-                {/* Inner clip uses transform: scaleX so the fill animates on
-                    the compositor thread — keeps moving even when the worker's
-                    synchronous WebGL compile starves main-thread paint on
-                    Firefox. The Julia canvas inside is rendered at full width
-                    and revealed by the clip. */}
+                {/* clip-path masks the canvas reveal — canvas paints once at
+                    full width and the clip animates on the compositor thread,
+                    so the bar keeps moving even when the worker's synchronous
+                    WebGL compile starves main-thread paint on Firefox. */}
                 <div
-                    className="absolute top-0 left-0 w-[500px] h-full origin-left overflow-hidden transition-transform duration-75 ease-linear"
-                    style={{ transform: `scaleX(${Math.max(0, Math.min(1, progress / 100))})`, willChange: 'transform' }}
+                    className="absolute top-0 left-0 w-[500px] h-full transition-[clip-path] duration-75 ease-linear"
+                    style={{
+                        clipPath: `inset(0 ${(1 - Math.max(0, Math.min(1, progress / 100))) * 100}% 0 0)`,
+                        willChange: 'clip-path',
+                    }}
                 >
                     <canvas ref={fgCanvasRef} className="absolute top-0 left-0 w-[500px] h-16" />
                 </div>

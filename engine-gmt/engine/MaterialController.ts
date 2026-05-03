@@ -156,7 +156,11 @@ export class MaterialController {
             map: { value: null },
             uResolution: { value: new THREE.Vector2(1,1) },
             uEncodeOutput: { value: 1.0 },
-            uBloomTexture: { value: null }   // Set by BloomPass in worker
+            uBloomTexture: { value: null },   // Set by BloomPass in worker
+            // Live-blit downsample taps (NxN box average). 1 = single sample
+            // (default, normal rendering). >1 = bucket render at high export
+            // resolution where the source target is much larger than the canvas.
+            uPreviewBoxTaps: { value: 1.0 }
             // uOutputPass / uDepthMin / uDepthMax are SHARED from mainUniforms (declared in UniformSchema
             // so the main fractal shader and both post-process materials see the same value). Setting
             // `engine.mainUniforms.uOutputPass.value = 1` inside the worker updates the preview (display),

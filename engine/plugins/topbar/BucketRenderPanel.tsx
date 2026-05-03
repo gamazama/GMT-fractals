@@ -24,7 +24,7 @@ import { SectionLabel } from '../../../components/SectionLabel';
 import { Button } from '../../../components/Button';
 import { Hint } from '../../../components/Hint';
 import { NumberInput } from '../../../components/NumberInput';
-import { formatTimeWithUnits, calcEtaRange } from '../../../components/timeline/exportHelpers';
+import { formatTimeWithUnits, formatEtaCoarse, calcEtaRange } from '../../../components/timeline/exportHelpers';
 import { snap8 } from '../../../utils/resolutionUtils';
 import {
     RESOLUTION_PRESETS,
@@ -142,6 +142,12 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
         fixed: [number, number];
         availPhysPx: [number, number];
     } | null>(null);
+    // Track whether the panel actually applied side effects so unmount only
+    // reverses what it did. Otherwise toggling the popover open/closed at
+    // defaults (matchViewportAspect=true, no render started) reset accumulation
+    // by re-suppressing adaptive and bouncing the resolution mode.
+    const didSuppressAdaptiveRef = useRef(false);
+    const didSwapResolutionRef = useRef(false);
 
     useEffect(() => {
         const s0 = useEngineStore.getState();
@@ -151,21 +157,26 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
             fixed: [s0.fixedResolution[0], s0.fixedResolution[1]],
             availPhysPx: [initialPhysPx[0], initialPhysPx[1]],
         };
-        s0.setAdaptiveSuppressed(true);
         return () => {
             const sNow = useEngineStore.getState();
-            sNow.setAdaptiveSuppressed(false);
+            if (didSuppressAdaptiveRef.current) {
+                sNow.setAdaptiveSuppressed(false);
+                didSuppressAdaptiveRef.current = false;
+            }
             if (sNow.interactionMode === 'selecting_preview') sNow.setInteractionMode('none');
             if (sNow.previewRegion) {
                 sNow.setPreviewRegion(null);
                 controller.clearPreviewRegion?.();
             }
             controller.stopBucketRender();
-            // Restore the saved resolution mode from before the popover was opened.
+            // Restore saved resolution only if the Fixed-mode swap actually
+            // applied — otherwise we'd push a redundant set that can trigger
+            // a pipeline resize / accumulator reset.
             const saved = savedResolutionRef.current;
-            if (saved) {
+            if (saved && didSwapResolutionRef.current) {
                 sNow.setResolutionMode(saved.mode);
                 sNow.setFixedResolution(saved.fixed[0], saved.fixed[1]);
+                didSwapResolutionRef.current = false;
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,6 +227,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
                 state.fixedResolution[1] !== saved.fixed[1]) {
                 state.setResolutionMode(saved.mode);
                 state.setFixedResolution(saved.fixed[0], saved.fixed[1]);
+                didSwapResolutionRef.current = false;
             }
             return;
         }
@@ -249,6 +261,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
 
         state.setFixedResolution(fitW, fitH);
         state.setResolutionMode('Fixed');
+        didSwapResolutionRef.current = true;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [outputWidth, outputHeight, matchViewportAspect]);
 
@@ -321,9 +334,9 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
     const [aspectLockValue, setAspectLockValue] = useState<AspectRatioValue>('Free');
     const applyAspectLock = (value: AspectRatioValue) => {
         setAspectLockValue(value);
-        if (value === 'Free' || value === 'Max') return;
+        if (typeof value !== 'number') return;
         if (matchViewportAspect) state.setMatchViewportAspect(false);
-        state.setOutputHeight(snap8(outputWidth / (value as number)));
+        state.setOutputHeight(snap8(outputWidth / value));
     };
 
     const withRenderAction = (action: () => void) => {
@@ -344,8 +357,19 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
         }
     };
 
+    // Suppress adaptive resolution only while a bucket render is in flight —
+    // not for the popover lifecycle. Prevents the open/close adaptive-resize
+    // bounce from resetting the viewport accumulator.
+    const suppressAdaptiveForRender = () => {
+        if (!didSuppressAdaptiveRef.current) {
+            state.setAdaptiveSuppressed(true);
+            didSuppressAdaptiveRef.current = true;
+        }
+    };
+
     const handleStartRefine = () => withRenderAction(() => {
         clearPreviewForRender();
+        suppressAdaptiveForRender();
         // Refine View is always a single-tile render at viewport resolution.
         controller.startBucketRender(false, {
             bucketSize: state.bucketSize,
@@ -361,6 +385,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
 
     const handleExport = () => withRenderAction(() => {
         clearPreviewForRender();
+        suppressAdaptiveForRender();
         controller.startBucketRender(true, {
             bucketSize: state.bucketSize,
             outputWidth,
@@ -383,7 +408,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
             ? `${Math.min(tileInfo.done + 1, tileInfo.total)} / ${tileInfo.total}`
             : '—';
         const etaLabel = etaRange.max > 0
-            ? `${formatTimeWithUnits(etaRange.min)} – ${formatTimeWithUnits(etaRange.max)}`
+            ? `${formatEtaCoarse(etaRange.min)} – ${formatEtaCoarse(etaRange.max)}`
             : '—';
         return (
             <Popover width="w-64">
