@@ -183,6 +183,27 @@ Also added these to `debug/bench-perf-timeline.mts`:
 - `--seed=heavy` synthesizes a 1500×6 = 9000-keyframe sequence
   in-process (no recording needed).
 
+### `cameraInUse` rename + playback/scrub extension (`89229e0`)
+
+The engine flag `isCameraInteracting` was renamed to `cameraInUse` and
+its setter widened: `GmtRendererTickDriver` now sends
+`animState.isCameraInteracting || isPlaying || isScrubbing` into the
+worker's renderState. `useAnimationStore.isCameraInteracting` stays
+user-only (HUD / PauseControls semantic preserved).
+
+Practical impact for path-tracer playback fps: **none directly**. In PT
+mode every per-frame binder write fires CAMERA_TELEPORT →
+resetAccumulation → isHolding=false, so pipeline.render doesn't bail.
+The cost is the per-frame 1-sample path-trace, not the accumulation
+thrash. A hold flag can't recover that without either temporal
+reprojection or accepting frozen-preview frames during playback.
+
+What the rename DOES enable:
+- Adaptive resolution downscale during playback when `dynamicScaling`
+  is on (UniformManager's `isInteracting` now sees `cameraInUse`).
+- A single "playback or interaction in progress" signal for any future
+  fix (auto-Direct during playback, PT reprojection, etc).
+
 ### Open: dope-select-track + DopeSheet keyframe rendering at scale
 
 `dope-select-track` improved from 1494ms to 944ms (-37%) — but each
