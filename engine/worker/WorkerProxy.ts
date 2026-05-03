@@ -149,8 +149,8 @@ export class WorkerProxy implements AccumulationController {
     set shouldSnapCamera(_v: boolean) {}
     get isGizmoInteracting() { return this._isGizmoInteracting; }
     set isGizmoInteracting(v: boolean) { this._isGizmoInteracting = v; }
-    get isCameraInteracting() { return false; }
-    set isCameraInteracting(_v: boolean) {}
+    get cameraInUse() { return false; }
+    set cameraInUse(_v: boolean) {}
     get bootSent() { return this._bootSent; }
     get gpuInfo(): string { return this._gpuInfo || 'Stub (no worker)'; }
 

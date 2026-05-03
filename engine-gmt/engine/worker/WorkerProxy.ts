@@ -455,8 +455,8 @@ export class WorkerProxy implements AccumulationController {
     private _isGizmoInteracting = false;
     get isGizmoInteracting() { return this._isGizmoInteracting; }
     set isGizmoInteracting(v: boolean) { this._isGizmoInteracting = v; }
-    get isCameraInteracting() { return false; }
-    set isCameraInteracting(v: boolean) { if (v) this.post({ type: 'MARK_INTERACTION' }); }
+    get cameraInUse() { return false; }
+    set cameraInUse(v: boolean) { if (v) this.post({ type: 'MARK_INTERACTION' }); }
 
     // ─── Methods ─────────────────────────────────────────────────────────
 

@@ -33,7 +33,13 @@ export interface EngineRenderState {
     isExporting: boolean;
     isBucketRendering: boolean;
     isGizmoInteracting: boolean;
-    isCameraInteracting: boolean;
+    /** Engine-internal hold gate: true when the camera is being driven from
+     *  *any* source (user mouse/orbit OR animation playback OR timeline
+     *  scrubbing). When true, accumulation is held — no per-frame reset
+     *  thrash. The animationStore-side `isCameraInteracting` flag stays
+     *  user-input-only (consumed by HUD fade logic etc); the bridge in
+     *  GmtRendererTickDriver ORs in isPlaying/isScrubbing for the engine. */
+    cameraInUse: boolean;
     isMobile: boolean;
     mouseOverCanvas: boolean;
     optics: OpticsState | null;
@@ -73,7 +79,7 @@ export class FractalEngine {
         isExporting: false,
         isBucketRendering: false,
         isGizmoInteracting: false,
-        isCameraInteracting: false,
+        cameraInUse: false,
         isMobile: false,
         mouseOverCanvas: true,
         optics: null,
@@ -87,11 +93,11 @@ export class FractalEngine {
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }
     public set isGizmoInteracting(v: boolean) { this.state.isGizmoInteracting = v; }
 
-    public get isCameraInteracting() { return this.state.isCameraInteracting; }
-    public set isCameraInteracting(v: boolean) { this.state.isCameraInteracting = v; }
+    public get cameraInUse() { return this.state.cameraInUse; }
+    public set cameraInUse(v: boolean) { this.state.cameraInUse = v; }
     public isPaused: boolean = false;
     private lastInteractionTime: number = 0;
-    private _lastCameraInteractingTime: number = 0;
+    private _lastCameraInUseTime: number = 0;
 
     public shouldSnapCamera: boolean = false;
     public lastMeasuredDistance: number = 10.0;
@@ -481,8 +487,8 @@ export class FractalEngine {
         const dofEnabled = (this.state.optics?.dofStrength ?? 0) > 0.0001;
         const wasHolding = this.pipeline.isHolding;
 
-        const isCamInteracting = this.state.isCameraInteracting || this.state.isGizmoInteracting;
-        if (isCamInteracting) this._lastCameraInteractingTime = now;
+        const cameraInUse = this.state.cameraInUse || this.state.isGizmoInteracting;
+        if (cameraInUse) this._lastCameraInUseTime = now;
 
         // Extend hold until adaptive resolution has settled at full res.
         // Without this, accumulation starts at reduced res, then the adaptive grace period
@@ -490,10 +496,10 @@ export class FractalEngine {
         // By keeping hold active for the adaptive grace period + a small buffer, the resize
         // happens while hold is still active (a no-op), so accumulation starts once at full res.
         const adaptiveEnabled = this.state.quality?.dynamicScaling ?? false;
-        const timeSinceCam = now - this._lastCameraInteractingTime;
+        const timeSinceCam = now - this._lastCameraInUseTime;
         const holdForAdaptive = adaptiveEnabled && timeSinceCam < this.uniformManager.getAdaptiveGrace() + 50;
 
-        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (isCamInteracting || holdForAdaptive);
+        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (cameraInUse || holdForAdaptive);
         this.pipeline.setHold(shouldHold);
 
         // If we just started holding, reset accumulation for clean frame

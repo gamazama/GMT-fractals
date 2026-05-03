@@ -1073,8 +1073,10 @@ const Navigation: React.FC<NavigationProps> = ({
       if (isCameraLocked) {
           if (orbitRef.current) orbitRef.current.enabled = false;
           if (setIsCameraInteracting) setIsCameraInteracting(false);
-          // Don't update engine here, handled by RenderLoop in ViewportArea
-          engine.isCameraInteracting = false; 
+          // Don't update engine here, handled by RenderLoop in ViewportArea.
+          // engine.cameraInUse is per-frame-driven from GmtRendererTickDriver
+          // and includes animationStore.isPlaying / isScrubbing — leave it.
+          engine.cameraInUse = false;
           return;
       }
       
@@ -1145,8 +1147,13 @@ const Navigation: React.FC<NavigationProps> = ({
 
       if (setIsCameraInteracting) setIsCameraInteracting(isCurrentlyActive);
 
-      // Signal Engine Interaction State (Consumer is RenderLoop in ViewportArea)
-      engine.isCameraInteracting = isCurrentlyActive;
+      // Signal engine to enter "camera in use" hold while user is moving the
+      // camera. The persistent engine state (worker side) is set per-frame by
+      // GmtRendererTickDriver — this proxy assignment fires MARK_INTERACTION
+      // for the adaptive-resolution kick-in path only. Animation playback /
+      // scrub do NOT route through this setter; their hold is engaged via
+      // the renderState bridge (no MARK_INTERACTION pulse needed for them).
+      engine.cameraInUse = isCurrentlyActive;
 
       // No dirty kick needed here — the engine's own threshold detection
       // in update() handles accumulation transitions naturally:

@@ -96,7 +96,7 @@ export class UniformManager {
             const adaptive = tickAdaptiveResolution(this._adaptive, {
                 now: performance.now(),
                 accumCount: this.pipeline.accumulationCount,
-                isInteracting: runtimeState.isGizmoInteracting || runtimeState.isCameraInteracting,
+                isInteracting: runtimeState.isGizmoInteracting || runtimeState.cameraInUse,
                 mouseOverCanvas: runtimeState.mouseOverCanvas,
                 dynamicScaling: !!runtimeState.quality?.dynamicScaling,
                 adaptiveTarget,

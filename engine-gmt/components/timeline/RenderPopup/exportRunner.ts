@@ -92,7 +92,7 @@ const runFramePump = async (
 
         const renderState: Partial<EngineRenderState> = {
             cameraMode:          storeState.cameraMode,
-            isCameraInteracting: false,
+            cameraInUse:         false,
             optics:              (storeState as any).optics ?? null,
             lighting:            (storeState as any).lighting ?? null,
             quality:             (storeState as any).quality ?? null,

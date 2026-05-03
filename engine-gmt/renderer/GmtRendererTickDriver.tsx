@@ -229,9 +229,16 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0,
         };
 
+        // `cameraInUse` (engine-side hold gate) ORs the animationStore's
+        // user-driven flag with `isPlaying` and `isScrubbing` so the engine
+        // suppresses accumulation reset during animation playback and timeline
+        // scrubbing — same path that already worked for orbit drag. Keeps
+        // path-tracer accumulation from thrashing on every per-frame
+        // CAMERA_TELEPORT during heavy playback.
+        const animState = useAnimationStore.getState();
         const renderState = {
             cameraMode: storeState.cameraMode,
-            isCameraInteracting: useAnimationStore.getState().isCameraInteracting,
+            cameraInUse: animState.isCameraInteracting || animState.isPlaying || animState.isScrubbing,
             isGizmoInteracting: proxy.isGizmoInteracting,
             mouseOverCanvas: isMouseOverCanvas(),
             optics:   storeState.optics   ?? null,
