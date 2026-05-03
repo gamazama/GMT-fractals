@@ -95,6 +95,67 @@ cp debug/bench-perf-latest.json debug/bench-perf-baseline.json
 
 ---
 
+## Timeline session (2026-05-03 — same day, second sitting)
+
+A separate bench (`npm run bench:perf:timeline`) was added for the
+keyframe timeline; it boots app-gmt, presses `T` to open the timeline,
+records a heavy sequence (882 keys × 6 tracks across a 600-frame
+timeline) once and caches the result, then runs 6 scenarios:
+`dope-idle`, `dope-scrub`, `dope-zoom`, `graph-idle`, `graph-scrub`,
+`graph-zoom`.
+
+Initial baseline showed Timeline-tree re-renders pinned at 240/RAF with
+~14ms per commit — `dope-idle` was using **3.7 seconds of React work
+out of every 4-second idle window**. Same root cause as the Slider/vec
+fix from earlier today: nine more places in the timeline subtree
+destructured `useAnimationStore()` (full sub) and got hammered by the
+~60Hz no-op `set()` flood:
+
+- `components/Timeline.tsx`
+- `components/timeline/DopeSheet.tsx` (host + via `useDopeSheetInteraction`)
+- `components/timeline/TimelineRuler.tsx`
+- `components/timeline/TimelineToolbar.tsx` (`KeyCamButton` + main toolbar)
+- `components/timeline/KeyframeInspector.tsx`
+- `components/GraphEditor.tsx` (host + via `useGraphInteraction` + `useGraphTools`)
+- `components/graph/GraphSidebar.tsx`
+- `components/graph/GraphToolbar.tsx` (`BounceSettingsMenu`)
+- `hooks/useDopeSheetInteraction.ts`
+- `hooks/useGraphInteraction.ts`
+- `hooks/useGraphTools.ts`
+
+Each was narrowed to per-field selectors for reactive values + lazy
+`useAnimationStore.getState()` for actions. Commits `d0c9861` (bench)
+and `76bdb07` (fix).
+
+Final bench numbers (882 keyframes):
+
+| Scenario   | Pre TimelineHost | Post TimelineHost | wkrFps |
+|------------|------------------|-------------------|--------|
+| dope-idle  | 3668ms / 241c    | **120ms / 8c**    | 50.8 → 59.9 |
+| dope-zoom  | 5457ms / 365c    | **173ms / 14c**   | 49.9 → 60.4 |
+| graph-idle | 758ms / 240c     | **31ms / 8c**     | 60 → 60 |
+| graph-zoom | 1125ms / 360c    | **38ms / 12c**    | 60 → 60 |
+
+`dope-scrub` remains expensive (1800ms / 125c = 14ms/commit) but that
+work is real — every playhead step legitimately re-renders DopeSheet's
+keyframe DOM. Graph-scrub on the same input costs 2.5ms/commit because
+GraphCanvas draws curves to a `<canvas>` instead of one DOM diamond
+per keyframe. Future optimization: switch DopeSheet to canvas
+rendering for the keyframe diamonds, or virtualize off-screen tracks.
+
+### Recurring lesson
+
+This is the third pattern of the same shape today (Slider →
+useTrackAnimation; AppGmt root → defensive only; timeline subtree →
+just shipped). Whenever a `set()` hot path on a Zustand store doesn't
+gate on equality, **every destructured `useStore()` subscriber within
+the relevant tree re-renders at the rate of those calls** — even if no
+field actually changes value. Narrow per-field selectors are the
+mitigation; the root cause (~60Hz no-op `set()` calls on
+`useAnimationStore`) remains unidentified and is still listed below.
+
+---
+
 ## Resolved findings (2026-05-03 session)
 
 After the framework session above, four candidate findings were chased
