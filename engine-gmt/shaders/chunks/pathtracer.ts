@@ -361,6 +361,11 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         }
 
         roughness = max(roughness, 0.04);  // Minimum roughness — prevents NaN in GGX distribution denominator
+        // Roughness regularization (Kaplanyan & Dachsbacher 2013, Cycles "Filter
+        // Glossy"). Widen the GGX lobe progressively on indirect bounces so
+        // sharp-specular caustic-style paths NEE can never catch don't dominate
+        // variance. Bounce 0 unaffected; bounce N gets +0.1*N floor.
+        roughness = max(roughness, 0.1 * float(bounce));
         float emissionMult = (bounce == 0) ? 1.0 : uPTEmissionMult;
         radiance += (emission * ao * emissionMult) * throughput;
 
