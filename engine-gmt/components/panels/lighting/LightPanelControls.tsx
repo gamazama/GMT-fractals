@@ -292,15 +292,34 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
                </div>
            )}
            
-           {/* --- Power slider (all modes) --- */}
+           {/* --- Power slider (all modes) — Sphere lights get extended range
+                because sphere sampling spreads emission over 4πr², so small
+                lights pay 1/r² in contribution and need much higher intensity. */}
            {currentLight.intensityUnit === 'ev' ? (
                <Slider
                  label="Power (EV)"
                  value={currentLight.intensity}
-                 min={-4} max={10} step={0.1}
+                 min={-4} max={currentLight.type === 'Sphere' ? 20 : 10} step={0.1}
                  onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })}
                  mapTextInput={false}
                  overrideInputText={`${formatValue(currentLight.intensity)} EV`}
+                 dataHelpId="light.intensity"
+                 trackId={`${prefix}_intensity`}
+                 liveValue={liveModulations[`${prefix}_intensity`]}
+               />
+           ) : currentLight.type === 'Sphere' ? (
+               <Slider
+                 label="Power"
+                 value={currentLight.intensity}
+                 min={0} max={10000} step={0.01}
+                 onChange={(v) => actions.updateLight({ index: activeLight, params: { intensity: v } })}
+                 customMapping={{
+                     min: 0, max: 10000,
+                     toSlider: (val) => (Math.log10(val + 1) / Math.log10(10001)) * 100,
+                     fromSlider: (val) => Math.pow(10001, val / 100) - 1,
+                 }}
+                 mapTextInput={false}
+                 overrideInputText={formatValue(currentLight.intensity)}
                  dataHelpId="light.intensity"
                  trackId={`${prefix}_intensity`}
                  liveValue={liveModulations[`${prefix}_intensity`]}

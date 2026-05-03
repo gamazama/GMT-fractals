@@ -326,7 +326,9 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                                           roughness_prev, probSpec_prev);
                 float w_bsdf = misPower2(pdf_bsdf, pdf_light);
 
-                vec3 emission = uLightColor[lightHit] * uLightIntensity[lightHit];
+                // Sphere light is power-normalized — see NEE site below for rationale.
+                float lr = uLightRadius[lightHit];
+                vec3 emission = uLightColor[lightHit] * uLightIntensity[lightHit] / (4.0 * PI * lr * lr);
                 radiance += w_bsdf * emission * throughput;
                 break;
             }
@@ -524,7 +526,20 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                         #endif
                     }
 
-                    vec3 directContrib = (kD_nee * albedo * uDiffuse / PI + spec) * uLightColor[lightIdx] * uLightIntensity[lightIdx] * ndotl * shadow * att * ao * pdf;
+                    // Sphere lights: treat uLightIntensity as TOTAL EMITTED POWER rather
+                    // than per-area radiance. Divide by emitter area (4πr²) so brightness
+                    // is invariant to radius — radius controls shadow softness only. The
+                    // 4πr² cancels with the same factor that appears in 1/pdfSphereDir,
+                    // making sphere-light contributions match a point-light-with-falloff
+                    // at the same intensity. Standard convention in physical area lights.
+                    vec3 lightFlux = uLightColor[lightIdx] * uLightIntensity[lightIdx];
+                    #ifdef PT_AREA_LIGHTS
+                    if (isSphere) {
+                        float r = uLightRadius[lightIdx];
+                        lightFlux *= 1.0 / (4.0 * PI * r * r);
+                    }
+                    #endif
+                    vec3 directContrib = (kD_nee * albedo * uDiffuse / PI + spec) * lightFlux * ndotl * shadow * att * ao * pdf;
 
                     // For delta lights (point/directional), pdf_light is a delta
                     // and pdf_bsdf is bounded → w_nee = 1, no weighting needed.

@@ -19,6 +19,13 @@ import { kelvinToHex, COLOR_TEMPERATURE_PRESETS } from '../../../../utils/colorU
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { Popover } from '../../../../components/Popover';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
+import { FractalEvents } from '../../../../engine/FractalEvents';
+
+// Log-scale endpoints for the Light Radius slider — module-scope so the
+// Slider's customMapping closure doesn't allocate them per render.
+const LR_LOG_MIN = -4;                          // log10(0.0001)
+const LR_LOG_MAX = Math.log10(5);
+const LR_LOG_RANGE = LR_LOG_MAX - LR_LOG_MIN;
 
 export const LightOrb = ({ index, color, active, type, rotation, onClick, onDragStart }: { index: number, color: string, active: boolean, type?: LightType, rotation?: {x:number, y:number, z:number}, onClick: () => void, onDragStart: () => void }) => {
     
@@ -132,6 +139,7 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
     const light = useEngineStore(s => getLightFromSlice(s.lighting, index));
     const renderMode = useEngineStore(s => s.lighting?.renderMode);
     const ptAreaLights = useEngineStore(s => s.lighting?.ptAreaLights);
+    const setLighting = useEngineStore(s => s.setLighting);
     const updateLight = useEngineStore(s => s.updateLight);
     const removeLight = useEngineStore(s => s.removeLight);
     const duplicateLight = useEngineStore(s => s.duplicateLight);
@@ -310,7 +318,16 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         <Slider
                             label={isSphereLight ? 'Light Radius' : 'Sphere Radius'}
                             value={light.radius ?? 0.1}
-                            min={0.001} max={1.0} step={0.001}
+                            min={0.0001} max={5.0} step={0.0001}
+                            customMapping={{
+                                min: 0.0001, max: 5.0,
+                                // Log scale spans 5 decades (0.0001 → 5) so tiny fractal-scale
+                                // lights are reachable without crowding all useful values to the left.
+                                toSlider: (val) => (Math.log10(Math.max(0.0001, val)) - LR_LOG_MIN) / LR_LOG_RANGE * 100,
+                                fromSlider: (val) => Math.pow(10, LR_LOG_MIN + (val / 100) * LR_LOG_RANGE),
+                            }}
+                            mapTextInput={false}
+                            overrideInputText={formatValue(light.radius ?? 0.1)}
                             onChange={(v) => updateLight({ index, params: { radius: v } })}
                             trackId={`${prefix}_radius`}
                         />
@@ -361,8 +378,25 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                 </div>
 
                 {light.type === 'Sphere' && (renderMode !== 1.0 || !ptAreaLights) && (
-                    <div className="text-[10px] text-amber-300/90 bg-amber-900/20 border border-amber-500/30 rounded px-2 py-1 leading-tight">
-                        Sphere area lights only integrate as area lights in Path Tracing mode with True Area Lights enabled. Currently rendering as a Point at the sphere center.
+                    <div className="text-[10px] text-amber-300/90 bg-amber-900/20 border border-amber-500/30 rounded px-2 py-1 leading-tight space-y-1">
+                        <div>
+                            Sphere area lights need Path Tracing mode + True Area Lights. Currently rendering as a Point at the sphere center.
+                        </div>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                const updates: Record<string, any> = {};
+                                if (renderMode !== 1.0) updates.renderMode = 1.0;
+                                if (!ptAreaLights) updates.ptAreaLights = true;
+                                if (Object.keys(updates).length === 0) return;
+                                FractalEvents.emit('is_compiling', 'Enabling True Area Lights...');
+                                setTimeout(() => setLighting(updates), 50);
+                            }}
+                            className="px-2 py-0.5 bg-amber-500/30 hover:bg-amber-500/50 text-amber-100 text-[9px] font-bold rounded transition-colors w-full"
+                            title="Switches to Path Tracing and compiles in True Area Lights support."
+                        >
+                            Enable & Compile
+                        </button>
                     </div>
                 )}
 
@@ -381,14 +415,33 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                         </div>
                     )}
 
+                    {/* Sphere area lights need much higher intensity to show up — sphere
+                        sampling spreads emission over 4πr², so small lights pay 1/r² in
+                        contribution. Bump EV ceiling to 20 (≈1M×) and raw ceiling to 10000
+                        with log mapping; Point/Directional lights keep the original ranges. */}
                     {light.intensityUnit === 'ev' ? (
                         <Slider
                             label="Power (EV)"
                             value={light.intensity}
-                            min={-4} max={10} step={0.1}
+                            min={-4} max={light.type === 'Sphere' ? 20 : 10} step={0.1}
                             onChange={(v) => updateLight({ index, params: { intensity: v } })}
                             mapTextInput={false}
                             overrideInputText={`${formatValue(light.intensity)} EV`}
+                            trackId={`${prefix}_intensity`}
+                        />
+                    ) : light.type === 'Sphere' ? (
+                        <Slider
+                            label="Power"
+                            value={light.intensity}
+                            min={0} max={10000} step={0.01}
+                            onChange={(v) => updateLight({ index, params: { intensity: v } })}
+                            customMapping={{
+                                min: 0, max: 10000,
+                                toSlider: (val) => (Math.log10(val + 1) / Math.log10(10001)) * 100,
+                                fromSlider: (val) => Math.pow(10001, val / 100) - 1,
+                            }}
+                            mapTextInput={false}
+                            overrideInputText={formatValue(light.intensity)}
                             trackId={`${prefix}_intensity`}
                         />
                     ) : (
