@@ -48,7 +48,12 @@ export const GmtPanels: PanelManifest = [
                 id: 'geometry',
                 groupFilter: 'julia',
                 helpId: 'julia.mode',
-                showIf: (s: any) => registry.get(s.formula)?.juliaType !== 'none',
+                showIf: (s: any) => {
+                    if (registry.get(s.formula)?.juliaType !== 'none') return true;
+                    const il = s.interlace;
+                    if (il?.interlaceCompiled && registry.get(il.interlaceFormula)?.juliaType !== 'none') return true;
+                    return false;
+                },
             },
             { type: 'separator' },
             { type: 'compilable', id: 'geometry', helpId: 'hybrid.mode' },
