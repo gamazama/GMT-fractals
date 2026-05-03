@@ -150,9 +150,17 @@ useTrackAnimation; AppGmt root → defensive only; timeline subtree →
 just shipped). Whenever a `set()` hot path on a Zustand store doesn't
 gate on equality, **every destructured `useStore()` subscriber within
 the relevant tree re-renders at the rate of those calls** — even if no
-field actually changes value. Narrow per-field selectors are the
-mitigation; the root cause (~60Hz no-op `set()` calls on
-`useAnimationStore`) remains unidentified and is still listed below.
+field actually changes value.
+
+Narrow per-field selectors are the consumer-side mitigation. The
+**writer-side root cause** is fixed in `746dc73`:
+`Navigation.tsx:1146` calls `setIsCameraInteracting(isCurrentlyActive)`
+from the orbit useFrame on every frame; `playbackSlice`'s setter
+didn't gate on equality, so 60×/sec of identical `false` fires emitted
+60×/sec of Zustand notifications. The fix:
+`(v) => { if (get().X !== v) set({ X: v }); }` on `setIsCameraInteracting`
+and (defensively) `setIsScrubbing`. Verified via the same trace probe
+that found it: 239 fires / 4s idle → 0.
 
 ---
 
