@@ -66,6 +66,7 @@ export type MainToWorkerMessage =
     | { type: 'FOCUS_PICK_END' }
     | { type: 'HISTOGRAM_READBACK'; id: string; source: 'geometry' | 'color' }
     | { type: 'GET_GPU_INFO' }
+    | { type: 'GET_RENDER_INFO'; id: string }
     // ─── Video Export ───
     | { type: 'EXPORT_START'; config: VideoExportConfig; stream: WritableStream | null; dirHandle?: FileSystemDirectoryHandle }
     | { type: 'EXPORT_RENDER_FRAME'; frameIndex: number; time: number;
@@ -105,6 +106,11 @@ export type WorkerToMainMessage =
     | { type: 'FOCUS_RESULT'; id: string; distance: number }
     | { type: 'HISTOGRAM_RESULT'; id: string; data: Float32Array }
     | { type: 'GPU_INFO'; info: string }
+    | { type: 'RENDER_INFO'; id: string; info: {
+        calls: number; triangles: number; points: number; lines: number; frame: number;
+        geometries: number; textures: number; programs: number;
+        readRenderTargetPixels: number; setRenderTargetSwitches: number;
+      } }
     | { type: 'ERROR'; message: string }
     // ─── Video Export ───
     | { type: 'EXPORT_READY' }

@@ -115,6 +115,27 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     // drawingBufferColorSpace stays 'srgb' regardless, so the browser correctly interprets
     // our sRGB-encoded output for canvas compositing.
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+
+    // Bench instrumentation — count two operations that aren't surfaced by
+    // renderer.info: readRenderTargetPixels (sync GPU stall, used by depth
+    // probe / histogram / picking) and setRenderTarget switches (counts
+    // every framebuffer bind, including duplicates which usually indicate
+    // a missed batching opportunity). Counters live on the renderer's
+    // .info struct (extended) so GET_RENDER_INFO returns them in the same
+    // payload as the built-in counts. Cost is two integer increments per
+    // call; trivially below the noise floor.
+    const benchCounts = { readRenderTargetPixels: 0, setRenderTargetSwitches: 0 };
+    (renderer as any).__benchCounts = benchCounts;
+    const origRead = renderer.readRenderTargetPixels.bind(renderer);
+    renderer.readRenderTargetPixels = function (...args: any[]) {
+        benchCounts.readRenderTargetPixels += 1;
+        return (origRead as any)(...args);
+    };
+    const origSetTarget = renderer.setRenderTarget.bind(renderer);
+    renderer.setRenderTarget = function (target: any, ...rest: any[]) {
+        benchCounts.setRenderTargetSwitches += 1;
+        return (origSetTarget as any)(target, ...rest);
+    };
     renderer.setSize(initMsg.width, initMsg.height, false);
     renderer.setPixelRatio(initMsg.dpr);
 
@@ -591,6 +612,29 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                     }
                 } catch {}
                 postMsg({ type: 'GPU_INFO', info });
+                break;
+            }
+
+            case 'GET_RENDER_INFO': {
+                // Snapshot of THREE.WebGLRenderer.info + bench counters. Bench
+                // takes two snapshots (start, end) and diffs to attribute draw
+                // calls / RT readbacks / RT switches per scenario.
+                const r = renderer;
+                const benchCounts = r ? ((r as any).__benchCounts ?? {}) : {};
+                postMsg({
+                    type: 'RENDER_INFO', id: msg.id, info: {
+                        calls:      r?.info.render.calls ?? 0,
+                        triangles:  r?.info.render.triangles ?? 0,
+                        points:     r?.info.render.points ?? 0,
+                        lines:      r?.info.render.lines ?? 0,
+                        frame:      r?.info.render.frame ?? 0,
+                        geometries: r?.info.memory.geometries ?? 0,
+                        textures:   r?.info.memory.textures ?? 0,
+                        programs:   r?.info.programs?.length ?? 0,
+                        readRenderTargetPixels:   benchCounts.readRenderTargetPixels ?? 0,
+                        setRenderTargetSwitches:  benchCounts.setRenderTargetSwitches ?? 0,
+                    },
+                });
                 break;
             }
 

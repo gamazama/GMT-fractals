@@ -45,6 +45,7 @@ import { RegionOverlay } from '../engine-gmt/components/viewport/RegionOverlay';
 import { PreviewGhostOverlay } from '../engine-gmt/components/viewport/PreviewGhostOverlay';
 
 import { GmtRendererCanvas, GmtRendererTickDriver, gmtRenderer, getProxy } from '../engine-gmt';
+import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 import { estimateCompileTime } from '../engine-gmt/features/engine/profiles';
 import { GmtNavigation, GmtNavigationHud } from '../engine-gmt/navigation';
 import { featureRegistry } from '../engine/FeatureSystem';
@@ -194,28 +195,32 @@ export const AppGmt: React.FC = () => {
                 <DropZones />
 
                 {floatingPanels.map((p) => (
-                    <DraggableWindow key={p.id} id={p.id} title={p.id}>
-                        <PanelRouter
-                            activeTab={p.id as PanelId}
-                            state={state}
-                            actions={state}
-                            onSwitchTab={(t) => state.togglePanel(t, true)}
-                        />
-                    </DraggableWindow>
+                    <BenchProfiler key={p.id} id={`FloatingPanel:${p.id}`}>
+                        <DraggableWindow id={p.id} title={p.id}>
+                            <PanelRouter
+                                activeTab={p.id as PanelId}
+                                state={state}
+                                actions={state}
+                                onSwitchTab={(t) => state.togglePanel(t, true)}
+                            />
+                        </DraggableWindow>
+                    </BenchProfiler>
                 ))}
 
-                <TopBarHost />
+                <BenchProfiler id="TopBarHost"><TopBarHost /></BenchProfiler>
 
                 <div className="flex-1 flex overflow-hidden relative">
                     {(state as any).workshopOpen ? (
                         <React.Suspense fallback={null}>
-                            <FormulaWorkshop
-                                onClose={() => (state as any).closeWorkshop()}
-                                editFormula={(state as any).workshopEditFormula}
-                            />
+                            <BenchProfiler id="FormulaWorkshop">
+                                <FormulaWorkshop
+                                    onClose={() => (state as any).closeWorkshop()}
+                                    editFormula={(state as any).workshopEditFormula}
+                                />
+                            </BenchProfiler>
                         </React.Suspense>
                     ) : (
-                        !isMobile && <Dock side="left" />
+                        !isMobile && <BenchProfiler id="Dock:left"><Dock side="left" /></BenchProfiler>
                     )}
 
                     <ViewportFrame
@@ -226,12 +231,14 @@ export const AppGmt: React.FC = () => {
                                     doesn't shrink with the canvas in Fixed mode.
                                     Top region (crosshair / reticle) stays inside
                                     children where it follows the canvas. */}
-                                <GmtNavigationHud
-                                    isMobile={isMobile}
-                                    hudRefs={hudRefs}
-                                    region="bottom"
-                                />
-                                <HudHost region="bottom" />
+                                <BenchProfiler id="GmtNavigationHud:bottom">
+                                    <GmtNavigationHud
+                                        isMobile={isMobile}
+                                        hudRefs={hudRefs}
+                                        region="bottom"
+                                    />
+                                </BenchProfiler>
+                                <BenchProfiler id="HudHost:bottom"><HudHost region="bottom" /></BenchProfiler>
                             </>
                         }
                     >
@@ -249,39 +256,43 @@ export const AppGmt: React.FC = () => {
                         {/* R3F scene — transparent overlay that hosts the
                             tick driver (sendRenderTick each frame) + the
                             navigation input handler. */}
-                        <Canvas
-                            style={{ position: 'absolute', inset: 0 }}
-                            camera={{ position: [0, 0, 3], fov: 60 }}
-                            gl={{ alpha: true, antialias: false, premultipliedAlpha: false }}
-                            onCreated={(s) => {
-                                s.gl.setClearColor(0x000000, 0);
-                                s.gl.setClearAlpha(0);
-                            }}
-                        >
-                            <GmtRendererTickDriver onLoaded={handleSceneReady} />
-                            <GmtNavigation
-                                mode={cameraMode}
-                                hudRefs={hudRefs}
-                                setSceneOffset={setSceneOffset}
-                                onStart={(s) => (state as any).pushCameraTransaction(s)}
-                                onEnd={() => state.handleInteractionEnd()}
-                            />
-                        </Canvas>
+                        <BenchProfiler id="R3FCanvas">
+                            <Canvas
+                                style={{ position: 'absolute', inset: 0 }}
+                                camera={{ position: [0, 0, 3], fov: 60 }}
+                                gl={{ alpha: true, antialias: false, premultipliedAlpha: false }}
+                                onCreated={(s) => {
+                                    s.gl.setClearColor(0x000000, 0);
+                                    s.gl.setClearAlpha(0);
+                                }}
+                            >
+                                <GmtRendererTickDriver onLoaded={handleSceneReady} />
+                                <GmtNavigation
+                                    mode={cameraMode}
+                                    hudRefs={hudRefs}
+                                    setSceneOffset={setSceneOffset}
+                                    onStart={(s) => (state as any).pushCameraTransaction(s)}
+                                    onEnd={() => state.handleInteractionEnd()}
+                                />
+                            </Canvas>
+                        </BenchProfiler>
 
                         {/* Top HUD region — crosshair + reticle. Lives inside
                             children so it stays canvas-relative (centred on the
                             rendered fractal in Fixed mode). */}
-                        <GmtNavigationHud
-                            isMobile={isMobile}
-                            hudRefs={hudRefs}
-                            region="top"
-                        />
+                        <BenchProfiler id="GmtNavigationHud:top">
+                            <GmtNavigationHud
+                                isMobile={isMobile}
+                                hudRefs={hudRefs}
+                                region="top"
+                            />
+                        </BenchProfiler>
 
-                        <HudHost region="top" />
+                        <BenchProfiler id="HudHost:top"><HudHost region="top" /></BenchProfiler>
 
                         {/* DOM viewport overlays — LightGizmo, DrawingOverlay, etc.
                             Iterated from featureRegistry.getViewportOverlays() */}
-                        <DomOverlays />
+                        <BenchProfiler id="DomOverlays"><DomOverlays /></BenchProfiler>
 
                         {/* Region-selection overlay — mounted inside
                             viewportRef so useRegionSelection's mouse
@@ -319,7 +330,9 @@ export const AppGmt: React.FC = () => {
                         layout doubling. Right dock also hides in Fly
                         mode on mobile for joystick reach. */}
                     <MobileMenuHost />
-                    {!isMobileMenuOpen && !(isMobile && cameraMode === 'Fly') && <Dock side="right" />}
+                    {!isMobileMenuOpen && !(isMobile && cameraMode === 'Fly') && (
+                        <BenchProfiler id="Dock:right"><Dock side="right" /></BenchProfiler>
+                    )}
                 </div>
 
                 {/* Timeline / animation editing is desktop-only — the
@@ -327,7 +340,7 @@ export const AppGmt: React.FC = () => {
                     the workflow needs precise multi-track interaction
                     that doesn't translate to touch. Skip mounting on
                     mobile entirely. */}
-                {!isMobile && <TimelineHost />}
+                {!isMobile && <BenchProfiler id="TimelineHost"><TimelineHost /></BenchProfiler>}
 
                 <HelpOverlay />
 

@@ -61,6 +61,7 @@ export class WorkerProxy implements AccumulationController {
     private _pendingHistograms: Map<string, (data: Float32Array) => void> = new Map();
     private _pendingShaderSource: Map<string, (code: string | null) => void> = new Map();
     private _pendingUniformsSnapshot: Map<string, (u: Record<string, any> | null) => void> = new Map();
+    private _pendingRenderInfo: Map<string, (info: any | null) => void> = new Map();
     private _gpuInfo: string = '';
     private _lastGeneratedFrag: string = '';
     private _onWorkerFrame: (() => void) | null = null;
@@ -273,6 +274,9 @@ export class WorkerProxy implements AccumulationController {
             case 'GPU_INFO':
                 this._gpuInfo = msg.info;
                 break;
+            case 'RENDER_INFO':
+                this._resolveRequest(msg.id, this._pendingRenderInfo, msg.info);
+                break;
             case 'HISTOGRAM_RESULT':
                 this._resolveRequest(msg.id, this._pendingHistograms, msg.data);
                 break;
@@ -405,6 +409,8 @@ export class WorkerProxy implements AccumulationController {
         this._pendingShaderSource.clear();
         this._pendingUniformsSnapshot.forEach(resolve => resolve(null));
         this._pendingUniformsSnapshot.clear();
+        this._pendingRenderInfo.forEach(resolve => resolve(null));
+        this._pendingRenderInfo.clear();
         // Reject pending export promises
         if (this._exportReady) { this._exportReady = null; }
         if (this._exportComplete) { this._exportComplete = null; }
@@ -627,6 +633,14 @@ export class WorkerProxy implements AccumulationController {
     getUniformsSnapshot(): Promise<Record<string, any> | null> {
         return this._pendingRequest(this._pendingUniformsSnapshot,
             id => ({ type: 'GET_UNIFORMS_SNAPSHOT', id } as any), null, 5000);
+    }
+
+    /** Snapshot of THREE.WebGLRenderer.info plus bench-only readRenderTargetPixels
+     *  / setRenderTarget counters. Used by bench-perf to diff scenario start →
+     *  scenario end and attribute draw calls / RT switches per scenario. */
+    getRenderInfo(): Promise<any | null> {
+        return this._pendingRequest(this._pendingRenderInfo,
+            id => ({ type: 'GET_RENDER_INFO', id } as any), null, 3000);
     }
     checkHalfFloatAlphaSupport() { return true; }
 

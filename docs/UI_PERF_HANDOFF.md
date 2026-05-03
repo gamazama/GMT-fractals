@@ -1,13 +1,151 @@
 # UI perf — session handoff
 
-**Last updated:** 2026-05-03 by the shader-perf session (Sessions 1–4).
-**Next session focus:** UI performance — React render cost, Zustand
-subscriptions, worker round-trips, slider responsiveness, panel re-render
-churn, R3F overlay tick cost.
+**Last updated:** 2026-05-03 by the UI-perf framework session.
+**Status:** Bench framework extended for UI-perf work (per-area React
+attribution, GPU draw / RT counters, baseline auto-diff). First findings
+documented below.
+
+**Previous shader-perf sessions** (1–4, ending 2026-05-02) shipped GPU
+shader optimizations and authored the methodology now applied to UI work.
+Their handoff content is preserved below the new section.
 
 This doc captures what the shader-perf work learned that's relevant to
 UI-perf work, points you at the right tools, and flags known issues we
 saw but didn't fix.
+
+---
+
+## Current bench capabilities (post 2026-05-03 framework session)
+
+`debug/bench-perf.mts` — full-pipeline bench. Six scenarios (orbit, slider,
+idle, mutation, stress-orbit, stress-slider) at pinned 1920×1080, 3 runs
+each, ~95s total. Run via:
+
+```
+npm run bench:perf              # vite already up on :3400
+npm run bench:perf:with-server  # spawns vite for the run
+npm run bench:perf:gate         # exit 2 on regression vs baseline
+```
+
+Outputs `debug/bench-perf-latest.json` + timestamped archive +
+`debug/bench-perf-baseline.json` (when overwritten manually).
+
+### Per-area React attribution
+12 `<BenchProfiler>` boundaries are wrapped around major chrome regions
+in `app-gmt/AppGmt.tsx`: TopBarHost, Dock:left, Dock:right, R3FCanvas,
+GmtNavigationHud:top, GmtNavigationHud:bottom, HudHost:top, HudHost:bottom,
+DomOverlays, TimelineHost, FloatingPanel:*, FormulaWorkshop. The wrapper
+(`engine-gmt/utils/BenchProfiler.tsx`) is zero-overhead in normal runs —
+it only attaches `<React.Profiler>` when `window.__bench.onRender` is
+present (set by the bench's init script before React mounts).
+
+Per-scenario console output shows top-3 hotspots inline:
+
+```
+[bench] scenario: idle
+  3/3 runs: wkrFps=60.0  main p5=59.5  notify=16  posts=240
+    react: Dock:right 171.1ms/240c  TopBarHost 8.3ms/16c  DomOverlays 6.1ms/8c
+```
+
+End-of-run pivot table: per-id × per-scenario `totalActualMs / commitCount`.
+
+### GPU draw / RT activity
+`renderWorker.ts` instruments `readRenderTargetPixels` and `setRenderTarget`
+calls plus snapshots `THREE.WebGLRenderer.info`, exposed via the new
+`GET_RENDER_INFO` worker RPC and `WorkerProxy.getRenderInfo()`. The bench
+brackets each scenario with two snapshots and emits the diff. Surfaced
+as a `gpu:` line under each scenario:
+
+```
+    gpu: frames=494  draws=0 (0.0/f)  rtSwitch=908 (1.8/f)  readPx=28  tex=8 prog=3
+```
+
+Why these specific counters: drawCalls is the canonical "how much work"
+metric, RT switches signal hidden extra passes (the user's "navigation
+2nd render target" concern), readRenderTargetPixels is a known sync GPU
+stall pattern.
+
+### postMessage payload sampling
+1-in-16 stringify-sample to estimate `workerPostBytes` per scenario
+without the 0.5fps overhead the previous always-stringify approach hit.
+Estimator: `avg(sampledBytes) × totalPostCount`.
+
+### Auto-diff vs baseline
+End-of-run diff against `debug/bench-perf-baseline.json`. Per-scenario
+verdict (✓/WARN/FAIL) on each metric. Strict-zero tolerance for RT
+switches and readPx (any increase is FAIL). Pass `--gate` to make
+regressions exit non-zero (CI-friendly).
+
+To save current as baseline:
+```
+cp debug/bench-perf-latest.json debug/bench-perf-baseline.json
+```
+
+`debug/bench-perf-baseline.json` is gitignored — keep it local per-machine.
+
+### What's NOT instrumented (yet)
+- Per-`setRenderTarget`-call origin labelling. Knowing `rtSwitch=1.8/f` is
+  high but not which subsystem owns the second pass. Next move: a tiny
+  push/pop label stack in renderWorker so each switch records its caller.
+- React fiber-level attribution. Currently only 12 chrome-area boundaries.
+  Drilling into AutoFeaturePanel internals would need either DevTools-
+  hook injection or per-row Profilers — defer until the chrome cost is
+  known.
+- Worker GC pauses. `performance.memory` is main-thread-only.
+
+---
+
+## Initial findings (2026-05-03 baseline run)
+
+Run on default scene (Mandelbulb), 1920×1080×1 DPR, headed Chrome,
+Windows 10 / RTX 2070.
+
+### Headline issue: Dock:right re-renders every RAF, even idle
+- idle: **240 commits in 240 frames** → once per RAF. 171 ms total.
+- slider: 240 commits, 266 ms.
+- mutation: 240 commits, 251 ms.
+- orbit / stress-orbit: 142 commits (lower because orbit tick rate is
+  slower than RAF in stress).
+
+`Dock.tsx` already uses granular Zustand selectors (each field one
+`useEngineStore(s => s.X)`). The cost comes from the parent —
+`AppGmt.tsx:94` does `const state = useEngineStore();` (full subscription)
+which re-runs AppGmt on every store mutation, causing Dock's function
+body to re-execute even though its selectors return stable values.
+
+This matches the deferred item #2 from `project_appgmt_perf_bench.md`:
+"AppGmt root narrow subscription via useShallow + getState() pass-throughs
+— high variance; one orbit run rendered black canvas." The bench can now
+*verify* the fix without that 4%-coverage regression slipping through —
+coverage is already a captured metric.
+
+### Confirmed: extra render-target switches per frame
+`rtSwitch=1.8/f` at idle (60fps × 1.8 = 108 switches/sec). A bare app
+should be ~1.0–1.5 (canvas + maybe one post pass). The 0.8 extra switches
+are unaccounted. User's "2nd render targets in navigation" intuition was
+correct.
+
+Two known candidate causes (call sites grep'd):
+1. `usePhysicsProbe.ts:130` — Direct mode reads from
+   `pipeline.getPreviousRenderTarget()` then `readPixels`. Worker mode
+   uses shadow state so this *shouldn't* fire in app-gmt.
+2. `FractalEngine.ts:546` — `pipeline.readPixels` allocates a fresh
+   `WebGLRenderTarget` per call.
+
+Next move: label each `setRenderTarget` with its caller so the bench
+can attribute the extra 0.8 switches/frame to one subsystem.
+
+### readPx = 28 during idle scenario
+Depth probe is reading 12% of frames even with no movement (idle
+scenario is 240 RAFs of zero input, 28 readbacks). Worth checking
+`usePhysicsProbe` debounce / change-detection logic.
+
+### Slider/mutation panel cost
+`TopBarHost` and `DomOverlays` both ~90 ms during slider/mutation, ~125
+commits each (matches the per-step rate). Both subscribe to something
+that ticks per slider step. Granular selector audit needed.
+
+---
 
 ---
 
