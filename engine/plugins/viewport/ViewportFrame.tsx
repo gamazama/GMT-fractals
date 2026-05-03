@@ -147,6 +147,14 @@ export const ViewportFrame: React.FC<ViewportFrameProps> = ({
         ? {
               width: fw,
               height: fh,
+              // Tailwind's preflight sets box-sizing: border-box globally.
+              // Combined with the 1px border below, that would shrink the
+              // content area to (fw-2) × (fh-2), which children sized via
+              // `width:100%` (the worker canvas, R3F canvas, drawing
+              // overlay) propagate into the saved image — a 1280×720 fixed
+              // mode would screenshot as 1278×718. Force content-box so
+              // `fw × fh` is the actual content area.
+              boxSizing: 'content-box',
               transform: `scale(${fitScale})`,
               transformOrigin: 'center center',
               boxShadow: '0 0 50px rgba(0,0,0,0.5)',
