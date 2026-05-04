@@ -569,9 +569,17 @@ export class FractalEngine {
         const w = Math.min(srcW, maxEdge);
         const h = Math.min(srcH, maxEdge);
 
+        // SRGBColorSpace on the render target → Three encodes the shader's
+        // linear output to sRGB at write time. Without it we'd have to apply
+        // gamma manually; with the wrong combination of source colorSpace
+        // and manual gamma the result double-encodes and the JPEG comes
+        // back too bright (which is what happens for HDR sources). Letting
+        // Three own the encoding step is consistent with how the main
+        // render target is set up.
         const target = new THREE.WebGLRenderTarget(w, h, {
             type: THREE.UnsignedByteType,
             format: THREE.RGBAFormat,
+            colorSpace: THREE.SRGBColorSpace,
             stencilBuffer: false,
             depthBuffer: false,
             minFilter: THREE.NearestFilter,
@@ -595,9 +603,10 @@ export class FractalEngine {
                     return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
                 }
                 void main() {
+                    // Output linear; the render target's SRGBColorSpace
+                    // handles the gamma encoding.
                     vec3 col = texture2D(uMap, vUv).rgb;
                     col = aces(col);
-                    col = pow(col, vec3(1.0/2.2));
                     gl_FragColor = vec4(col, 1.0);
                 }
             `,
