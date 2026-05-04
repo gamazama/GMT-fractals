@@ -98,13 +98,9 @@ async function extractSkyJpeg(
     try {
         const proxy = getProxy();
         const skyBlob = await proxy.captureEnvMap(maxEdge);
-        if (skyBlob) {
-            console.log(`[gallery-submit] sky ${skyBlob.type || 'unknown'} (GPU readback):`, skyBlob.size, 'bytes');
-            return { skyBlob, presetClone };
-        }
-        console.warn('[gallery-submit] worker captureEnvMap returned null — falling back to client-side decode');
-    } catch (err) {
-        console.warn('[gallery-submit] worker captureEnvMap failed, falling back:', err);
+        if (skyBlob) return { skyBlob, presetClone };
+    } catch {
+        // Fall through to LDR fallback below.
     }
 
     // Fallback: try createImageBitmap on the original data URL. Works for
@@ -120,7 +116,6 @@ async function extractSkyJpeg(
         if (!ctx) throw new Error('No 2D context for sky transcode');
         ctx.drawImage(bmp, 0, 0, w, h);
         const skyBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
-        console.log('[gallery-submit] sky JPEG (fallback):', skyBlob.size, 'bytes (' + w + 'x' + h + ')');
         return { skyBlob, presetClone };
     } catch (err) {
         console.warn('[gallery-submit] could not transcode env map; submitting without sky:', err);
@@ -130,11 +125,9 @@ async function extractSkyJpeg(
 
 /** Capture the live worker canvas as a JPEG blob, resized to <= maxWidth. */
 async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
-    console.log('[gallery-submit] requesting snapshot from worker…');
     const proxy = getProxy();
     const pngBlob = await proxy.captureSnapshot();
     if (!pngBlob) throw new Error('Renderer not ready — try again once the scene is rendering');
-    console.log('[gallery-submit] got PNG snapshot:', pngBlob.size, 'bytes — transcoding to JPEG');
 
     const bmp = await createImageBitmap(pngBlob);
     const scale = Math.min(1, maxWidth / bmp.width);
@@ -145,9 +138,7 @@ async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Could not create 2D context for JPEG transcode');
     ctx.drawImage(bmp, 0, 0, w, h);
-    const jpg = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
-    console.log('[gallery-submit] JPEG ready:', jpg.size, 'bytes (' + w + 'x' + h + ')');
-    return jpg;
+    return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
 }
 
 export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResult> {
@@ -165,10 +156,10 @@ export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResul
     // preset.materials.envMapData from that URL on click-to-load.
     const { skyBlob, presetClone } = await extractSkyJpeg(rawPreset);
     const gmf = saveGMFScene(presetClone as any);
-    console.log('[gallery-submit] GMF size:', gmf.length, 'chars');
 
-    // Plan 41 §7.3 caps GMF at 100 KB. Anything bigger after env extraction
-    // is a different runaway field — diagnostic for which one.
+    // Server-side validator caps GMF at 100 KB (plan 41 §7.3). Anything
+    // bigger after env extraction is a different runaway field — log the
+    // top contributors so the curator can diagnose without instrumenting.
     const GMF_MAX = 100_000;
     if (gmf.length > GMF_MAX) {
         const breakdown: Record<string, number> = {};
@@ -199,13 +190,11 @@ export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResul
     if (input.author) form.append('author', input.author);
     if (input.featured) form.append('featured', '1');
 
-    console.log('[gallery-submit] POSTing to', SUBMIT_URL);
     const res = await fetch(SUBMIT_URL, {
         method: 'POST',
         body: form,
         headers: { 'X-Submit-Token': token },
     });
-    console.log('[gallery-submit] response:', res.status, res.statusText);
 
     if (!res.ok) {
         let msg = `Submit failed (${res.status})`;
