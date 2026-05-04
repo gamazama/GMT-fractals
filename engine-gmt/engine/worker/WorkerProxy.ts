@@ -507,7 +507,9 @@ export class WorkerProxy implements AccumulationController {
             const b64Data = b64Start >= 0 ? dataUrl.substring(b64Start + 8, b64Start + 12) : '';
             const isHDR = dataUrl.startsWith('data:image/vnd.radiance') ||
                           dataUrl.startsWith('data:image/x-hdr') ||
-                          b64Data.startsWith('Iz8') || b64Data.startsWith('Iz9');
+                          b64Data.startsWith('Iz8') || b64Data.startsWith('Iz9') ||
+                          // HTTP URLs ending in .hdr (gallery-stored Radiance files).
+                          /\.hdr(?:\?|#|$)/i.test(dataUrl);
 
             if (isHDR) {
                 // HDR: send raw ArrayBuffer for RGBE parsing in worker

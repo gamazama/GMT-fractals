@@ -23,6 +23,60 @@ import { detectHardwareProfileMainThread } from './HardwareDetection';
 import { createFullscreenPass } from './utils/FullscreenQuad';
 import { createDefaultShaderConfig } from './ConfigDefaults';
 
+// ──────────────────────────────────────────────────────────────────────
+// Radiance HDR (RGBE) encoder — used by captureEnvMapAsHDR.
+//
+// Float pixels (RGBA, but we ignore A) -> RGBE bytes -> Radiance .hdr file.
+// Uncompressed, stride-by-stride. RLE would shrink files ~50% but isn't
+// worth the implementation cost yet at the resolutions we cap to (≤512).
+// ──────────────────────────────────────────────────────────────────────
+function encodeRadianceHDR(floats: Float32Array, w: number, h: number): Blob {
+    const pixels = w * h;
+    const rgbe = new Uint8Array(pixels * 4);
+
+    for (let i = 0; i < pixels; i++) {
+        let r = Math.max(0, floats[i * 4 + 0]);
+        let g = Math.max(0, floats[i * 4 + 1]);
+        let b = Math.max(0, floats[i * 4 + 2]);
+        const v = Math.max(r, g, b);
+        if (v < 1e-32) {
+            // (0,0,0,0) is the canonical "all zero" RGBE pixel.
+            rgbe[i * 4 + 0] = 0;
+            rgbe[i * 4 + 1] = 0;
+            rgbe[i * 4 + 2] = 0;
+            rgbe[i * 4 + 3] = 0;
+        } else {
+            // Standard frexp split: e in [1, ...], mant in [0.5, 1).
+            // Math.log2 + ceil reconstructs the exponent reliably.
+            const exp = Math.ceil(Math.log2(v));
+            const norm = 256 / Math.pow(2, exp);
+            rgbe[i * 4 + 0] = Math.min(255, Math.floor(r * norm));
+            rgbe[i * 4 + 1] = Math.min(255, Math.floor(g * norm));
+            rgbe[i * 4 + 2] = Math.min(255, Math.floor(b * norm));
+            rgbe[i * 4 + 3] = exp + 128;
+        }
+    }
+
+    // GPU readback yields rows bottom-up; Radiance HDR expects rows top-down
+    // when the resolution string is "-Y H +X W". Flip in place.
+    const flipped = new Uint8Array(rgbe.length);
+    const stride = w * 4;
+    for (let y = 0; y < h; y++) {
+        const src = (h - 1 - y) * stride;
+        flipped.set(rgbe.subarray(src, src + stride), y * stride);
+    }
+
+    const header =
+        '#?RADIANCE\n' +
+        'FORMAT=32-bit_rle_rgbe\n' +
+        '\n' +
+        `-Y ${h} +X ${w}\n`;
+    const headerBytes = new TextEncoder().encode(header);
+
+    return new Blob([headerBytes, flipped], { type: 'image/vnd.radiance' });
+}
+
+
 /** Custom input event passed to FractalEngine.handleInput() from viewport interaction handlers. */
 export type EngineInputEvent =
     | { type: 'wheel'; delta: number }
@@ -560,9 +614,16 @@ export class FractalEngine {
     public async captureEnvMap(maxEdge: number = 1024, quality: number = 0.85): Promise<Blob | null> {
         if (!this.renderer) return null;
         const envTex = this.materials.getUniform('uEnvMapTexture') as THREE.Texture | null | undefined;
-        // Sanity: ensure it's actually a usable texture (DataTexture for HDR or Texture for LDR)
         if (envTex && !(envTex instanceof THREE.Texture)) return null;
         if (!envTex || !envTex.image) return null;
+
+        // HDR sources (HalfFloat / Float DataTexture) round-trip via Radiance
+        // RGBE rather than tonemapping to JPEG. Smaller max edge keeps the
+        // raw RGBE bytes under ~1 MB without RLE.
+        const texType = (envTex as any).type;
+        if (texType === THREE.HalfFloatType || texType === THREE.FloatType) {
+            return this.captureEnvMapAsHDR(envTex, 512);
+        }
 
         const srcW = (envTex.image as any).width ?? maxEdge;
         const srcH = (envTex.image as any).height ?? maxEdge;
@@ -652,6 +713,74 @@ export class FractalEngine {
         return new Promise(resolve =>
             (canvas2d as HTMLCanvasElement).toBlob(resolve, 'image/jpeg', quality)
         );
+    }
+
+    /**
+     * Re-encode an HDR env-map texture as a Radiance .hdr blob via GPU
+     * readback. Preserves dynamic range > 1.0 (sun, etc.) so on-load
+     * lighting matches the source — JPEG would tonemap-clip the highlights.
+     *
+     * Output format: Radiance HDR (RGBE), no RLE compression. At 512×W
+     * (max edge clamped) the raw bytes land between ~256 KB and ~1 MB,
+     * which is acceptable for the gallery. RLE compression would halve
+     * that further but the encoder isn't worth the complexity yet.
+     */
+    private async captureEnvMapAsHDR(envTex: THREE.Texture, maxEdge: number): Promise<Blob | null> {
+        if (!this.renderer) return null;
+        const srcW = (envTex.image as any).width ?? maxEdge;
+        const srcH = (envTex.image as any).height ?? maxEdge;
+        const w = Math.min(srcW, maxEdge);
+        const h = Math.min(srcH, maxEdge);
+
+        // Float32 render target — preserves HDR values above 1.0 through
+        // the readback. NoColorSpace because we want raw linear floats,
+        // not sRGB-encoded ones.
+        const target = new THREE.WebGLRenderTarget(w, h, {
+            type: THREE.FloatType,
+            format: THREE.RGBAFormat,
+            colorSpace: THREE.NoColorSpace,
+            stencilBuffer: false,
+            depthBuffer: false,
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+        });
+
+        const scene = new THREE.Scene();
+        const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        const mat = new THREE.ShaderMaterial({
+            uniforms: { uMap: { value: envTex } },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+            `,
+            fragmentShader: `
+                precision highp float;
+                uniform sampler2D uMap;
+                varying vec2 vUv;
+                void main() {
+                    // No tonemap, no gamma — preserve linear HDR values.
+                    gl_FragColor = vec4(texture2D(uMap, vUv).rgb, 1.0);
+                }
+            `,
+            depthTest: false,
+            depthWrite: false,
+        });
+        const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+        scene.add(quad);
+
+        const originalTarget = this.renderer.getRenderTarget();
+        this.renderer.setRenderTarget(target);
+        this.renderer.clear();
+        this.renderer.render(scene, cam);
+        const floats = new Float32Array(w * h * 4);
+        this.renderer.readRenderTargetPixels(target, 0, 0, w, h, floats);
+        this.renderer.setRenderTarget(originalTarget);
+
+        target.dispose();
+        mat.dispose();
+        (quad.geometry as THREE.BufferGeometry).dispose();
+
+        return encodeRadianceHDR(floats, w, h);
     }
 
     public async captureSnapshot(): Promise<Blob | null> {

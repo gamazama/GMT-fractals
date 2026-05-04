@@ -91,15 +91,15 @@ async function extractSkyJpeg(
     }
 
     // Primary path: ask the worker to read its bound env texture back from
-    // the GPU, tonemap it, and JPEG-encode. This works for any source the
-    // engine could load — LDR (PNG/JPEG via TextureLoader) AND HDR (.hdr
-    // via RGBELoader-decoded DataTexture) — without depending on the
-    // browser being able to decode the original bytes.
+    // the GPU. For LDR sources this returns a tonemapped JPEG; for HDR
+    // (HalfFloat / Float DataTexture) it returns a Radiance .hdr blob so
+    // dynamic range above 1.0 (sun, etc.) survives the round-trip. Works
+    // for any source the engine could load.
     try {
         const proxy = getProxy();
         const skyBlob = await proxy.captureEnvMap(maxEdge);
         if (skyBlob) {
-            console.log('[gallery-submit] sky JPEG (GPU readback):', skyBlob.size, 'bytes');
+            console.log(`[gallery-submit] sky ${skyBlob.type || 'unknown'} (GPU readback):`, skyBlob.size, 'bytes');
             return { skyBlob, presetClone };
         }
         console.warn('[gallery-submit] worker captureEnvMap returned null — falling back to client-side decode');
@@ -185,7 +185,11 @@ export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResul
 
     const form = new FormData();
     form.append('jpg', jpg, `${input.slug}.jpg`);
-    if (skyBlob) form.append('sky', skyBlob, `${input.slug}-sky.jpg`);
+    if (skyBlob) {
+        // Server uses Content-Type to pick the R2 key extension (.hdr vs .jpg).
+        const skyExt = skyBlob.type === 'image/vnd.radiance' ? 'hdr' : 'jpg';
+        form.append('sky', skyBlob, `${input.slug}-sky.${skyExt}`);
+    }
     form.append('gmf', gmf);
     form.append('slug', input.slug);
     form.append('title', input.title);
