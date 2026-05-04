@@ -426,6 +426,14 @@ export const useEngineStore = _hook as unknown as EngineStore;
 // for the consumer-side rationale.
 (globalThis as { __engineStore?: typeof useEngineStore }).__engineStore = useEngineStore;
 
+// Peek that returns the underlying store ONLY if already instantiated.
+// Calling `useEngineStore.getState()` would itself trigger ensureStore()
+// and freeze the feature registry — so pre-boot consumers (PanelManifest's
+// addPanel during registerFormula) need a way to ask "is the store live
+// yet?" without materialising it. Returns null until the first legitimate
+// hook call instantiates `_store`.
+(globalThis as { __engineStorePeek?: () => EngineStore | null }).__engineStorePeek = () => _store;
+
 export const selectIsGlobalInteraction = (state: EngineStoreState) => {
     return state.isUserInteracting || state.interactionMode !== 'none';
 };

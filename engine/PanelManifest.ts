@@ -34,6 +34,22 @@ const getStore = (): typeof _UseEngineStore | null => {
     return (globalThis as { __engineStore?: typeof _UseEngineStore }).__engineStore ?? null;
 };
 
+// Peek that returns the store ONLY if it has already been instantiated.
+// Calling `useEngineStore.getState()` would itself materialise the store
+// and freeze the feature registry — fatal during the registerFormula →
+// addPanel chain that runs before the store is supposed to exist. Both
+// addPanel and applyPanelManifest fall back to the pre-boot path
+// (writes land in `_byId` and the next post-mount applyPanelManifest
+// sweeps them into the store) when this returns null.
+type StoreLike = {
+    getState: () => unknown;
+    setState: (...args: unknown[]) => void;
+};
+const peekLiveStore = (): StoreLike | null => {
+    return (globalThis as { __engineStorePeek?: () => StoreLike | null })
+        .__engineStorePeek?.() ?? null;
+};
+
 /** Predicate for conditional panel visibility.
  *  - String form reads a top-level boolean field on the store, e.g.
  *    `'advancedMode'`. Dotted paths resolve into feature slices, e.g.
@@ -314,15 +330,16 @@ export const applyPanelManifest = (manifest: PanelManifest): void => {
         _byId.set(def.id, def);
     }
 
-    const useStore = getStore();
-    if (!useStore) {
-        // Pre-boot call. Should be rare — applyPanelManifest is meant
-        // to be called during app setup after the store exists. If it
-        // somehow fires earlier, the merge into _byId above is enough;
-        // a later applyPanelManifest will sweep _byId into the store.
+    const liveStore = peekLiveStore();
+    if (!liveStore) {
+        // Pre-boot call. Touching `useStore.getState()` here would
+        // instantiate the store and freeze the feature registry while
+        // registrations are still in flight — instead we leave the
+        // merged `_byId` alone and let the next post-mount
+        // applyPanelManifest sweep it into the live store.
         return;
     }
-    const store = useStore.getState();
+    const store = liveStore.getState() as { panels?: Record<string, unknown>; activeLeftTab?: string | null; activeRightTab?: string | null };
     const existingPanels = store.panels ?? {};
     const panels: Record<string, unknown> = { ...existingPanels };
 
@@ -353,8 +370,8 @@ export const applyPanelManifest = (manifest: PanelManifest): void => {
         return inDock[0].id;
     };
 
-    const activeLeft = pickActive('left', store.activeLeftTab);
-    const activeRight = pickActive('right', store.activeRightTab);
+    const activeLeft = pickActive('left', store.activeLeftTab ?? null);
+    const activeRight = pickActive('right', store.activeRightTab ?? null);
 
     // Sync isOpen on the chosen actives.
     for (const [dock, activeId] of [
@@ -366,7 +383,7 @@ export const applyPanelManifest = (manifest: PanelManifest): void => {
         }
     }
 
-    useStore.setState({
+    liveStore.setState({
         panels: panels as never,
         activeLeftTab: (activeLeft ?? null) as never,
         activeRightTab: (activeRight ?? null) as never,
@@ -387,20 +404,25 @@ export const addPanel = (def: PanelDefinition): void => {
     _manifest = [..._manifest, def];
     _byId.set(def.id, def);
 
-    const useStore = getStore();
-    if (!useStore) {
+    const liveStore = peekLiveStore();
+    if (!liveStore) {
         // Pre-boot registration (e.g. fractal-toy's formula registry
-        // calls addPanel during registerFeatures' module-load phase,
-        // before the engine store has been constructed). The panel is
-        // already in _byId; the next applyPanelManifest call (during
-        // app setup) will sweep _byId into the store.
+        // calls addPanel during registerFormula's module-load phase,
+        // before the engine store has been instantiated). Calling
+        // `useStore.getState()` here would materialise the store and
+        // freeze the feature registry in the middle of the registration
+        // sweep — the symptom is that camera/lighting features never
+        // make it in and their shader uniforms are missing. The panel
+        // is already in _byId; the next applyPanelManifest call (after
+        // mount, when the store is genuinely live) sweeps _byId into
+        // the store.
         return;
     }
-    const store = useStore.getState();
+    const store = liveStore.getState() as { panels?: Record<string, unknown>; activeLeftTab?: string | null; activeRightTab?: string | null };
     const currentActive = def.dock === 'left' ? store.activeLeftTab : store.activeRightTab;
     const shouldBecomeActive = def.active && !currentActive;
 
-    useStore.setState((s) => ({
+    liveStore.setState((s: any) => ({
         panels: {
             ...s.panels,
             [def.id]: {
