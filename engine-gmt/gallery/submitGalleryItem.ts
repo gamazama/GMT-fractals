@@ -71,7 +71,7 @@ export function clearSubmitToken(): void {
  */
 async function extractSkyJpeg(
     preset: any,
-    maxLongEdge = 1024,
+    maxEdge = 1024,
 ): Promise<{ skyBlob: Blob | null; presetClone: any }> {
     const presetClone = structuredClone(preset);
     const materials = presetClone?.features?.materials;
@@ -95,9 +95,11 @@ async function extractSkyJpeg(
         const res = await fetch(envData);
         const blob = await res.blob();
         const bmp = await createImageBitmap(blob);
-        const scale = Math.min(1, maxLongEdge / Math.max(bmp.width, bmp.height));
-        const w = Math.round(bmp.width * scale);
-        const h = Math.round(bmp.height * scale);
+        // Aspect-agnostic: clamp each dimension to maxEdge independently.
+        // Equirect sampling stretches as needed; for environment-lighting
+        // purposes the visual difference is minimal.
+        const w = Math.min(bmp.width, maxEdge);
+        const h = Math.min(bmp.height, maxEdge);
         const canvas = new OffscreenCanvas(w, h);
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('No 2D context for sky transcode');
