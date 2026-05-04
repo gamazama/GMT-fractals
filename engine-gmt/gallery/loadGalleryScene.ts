@@ -48,8 +48,8 @@ export async function loadGalleryScene(item: GalleryItem): Promise<void> {
   // strips envMapData from the preset on save to keep gmf_data tiny.
   if (item.sky_url) {
     const p = preset as any;
-    if (p.materials && typeof p.materials === 'object') {
-      p.materials.envMapData = item.sky_url;
+    if (p.features?.materials && typeof p.features.materials === 'object') {
+      p.features.materials.envMapData = item.sky_url;
     }
   }
 

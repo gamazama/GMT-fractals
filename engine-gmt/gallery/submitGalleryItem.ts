@@ -71,30 +71,31 @@ export function clearSubmitToken(): void {
  */
 async function extractSkyJpeg(
     preset: any,
-    maxWidth = 2048,
+    maxLongEdge = 1024,
 ): Promise<{ skyBlob: Blob | null; presetClone: any }> {
     const presetClone = structuredClone(preset);
-    const envData: unknown = presetClone?.materials?.envMapData;
-    if (typeof envData !== 'string' || envData.length === 0) {
+    const materials = presetClone?.features?.materials;
+    const envData: unknown = materials?.envMapData;
+    if (!materials || typeof envData !== 'string' || envData.length === 0) {
         return { skyBlob: null, presetClone };
     }
 
     // Strip from clone regardless — we either externalize it or drop it.
-    presetClone.materials.envMapData = null;
+    materials.envMapData = null;
 
-    // Already an HTTP URL (re-submitted gallery item). Server side will see
-    // null sky multipart but we want the URL preserved in gmf_data so the
-    // sky still loads. Restore it.
+    // Already an HTTP URL (re-submitted gallery item). Keep it inline so the
+    // sky still loads — no transcoding needed.
     if (envData.startsWith('http://') || envData.startsWith('https://')) {
-        presetClone.materials.envMapData = envData;
+        materials.envMapData = envData;
         return { skyBlob: null, presetClone };
     }
 
     try {
+        // For data URLs, fetch() works fine in browsers.
         const res = await fetch(envData);
         const blob = await res.blob();
         const bmp = await createImageBitmap(blob);
-        const scale = Math.min(1, maxWidth / bmp.width);
+        const scale = Math.min(1, maxLongEdge / Math.max(bmp.width, bmp.height));
         const w = Math.round(bmp.width * scale);
         const h = Math.round(bmp.height * scale);
         const canvas = new OffscreenCanvas(w, h);
