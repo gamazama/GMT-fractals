@@ -58,6 +58,7 @@ export type MainToWorkerMessage =
     | { type: 'MARK_INTERACTION' }
     | { type: 'SNAP_CAMERA' }
     | { type: 'CAPTURE_SNAPSHOT'; id: string }
+    | { type: 'CAPTURE_ENV_MAP'; id: string; maxEdge?: number }
     | { type: 'TEXTURE'; textureType: 'color' | 'env'; bitmap: ImageBitmap | null }
     | { type: 'TEXTURE_HDR'; textureType: 'color' | 'env'; buffer: ArrayBuffer }
     | { type: 'PICK_WORLD_POSITION'; id: string; x: number; y: number; fast?: boolean }
@@ -102,6 +103,7 @@ export type WorkerToMainMessage =
     | { type: 'COMPILE_TIME'; duration: number }
     | { type: 'SHADER_CODE'; code: string }
     | { type: 'SNAPSHOT_RESULT'; id: string; blob: Blob }
+    | { type: 'ENV_MAP_RESULT'; id: string; blob: Blob | null }
     | { type: 'BOOTED'; gpuInfo?: string }
     | { type: 'PICK_RESULT'; id: string; position: [number, number, number] | null }
     | { type: 'FOCUS_RESULT'; id: string; distance: number }

@@ -377,6 +377,10 @@ export class MaterialController {
         return tex;
     }
 
+    public getUniform(key: string): any {
+        return this.mainUniforms[key]?.value;
+    }
+
     public setUniform(key: string, value: any) {
         let valToAssign = value;
 

@@ -90,14 +90,29 @@ async function extractSkyJpeg(
         return { skyBlob: null, presetClone };
     }
 
+    // Primary path: ask the worker to read its bound env texture back from
+    // the GPU, tonemap it, and JPEG-encode. This works for any source the
+    // engine could load — LDR (PNG/JPEG via TextureLoader) AND HDR (.hdr
+    // via RGBELoader-decoded DataTexture) — without depending on the
+    // browser being able to decode the original bytes.
     try {
-        // For data URLs, fetch() works fine in browsers.
+        const proxy = getProxy();
+        const skyBlob = await proxy.captureEnvMap(maxEdge);
+        if (skyBlob) {
+            console.log('[gallery-submit] sky JPEG (GPU readback):', skyBlob.size, 'bytes');
+            return { skyBlob, presetClone };
+        }
+        console.warn('[gallery-submit] worker captureEnvMap returned null — falling back to client-side decode');
+    } catch (err) {
+        console.warn('[gallery-submit] worker captureEnvMap failed, falling back:', err);
+    }
+
+    // Fallback: try createImageBitmap on the original data URL. Works for
+    // LDR but not HDR — kept around in case the worker proxy isn't ready.
+    try {
         const res = await fetch(envData);
         const blob = await res.blob();
         const bmp = await createImageBitmap(blob);
-        // Aspect-agnostic: clamp each dimension to maxEdge independently.
-        // Equirect sampling stretches as needed; for environment-lighting
-        // purposes the visual difference is minimal.
         const w = Math.min(bmp.width, maxEdge);
         const h = Math.min(bmp.height, maxEdge);
         const canvas = new OffscreenCanvas(w, h);
@@ -105,7 +120,7 @@ async function extractSkyJpeg(
         if (!ctx) throw new Error('No 2D context for sky transcode');
         ctx.drawImage(bmp, 0, 0, w, h);
         const skyBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
-        console.log('[gallery-submit] sky JPEG:', skyBlob.size, 'bytes (' + w + 'x' + h + ')');
+        console.log('[gallery-submit] sky JPEG (fallback):', skyBlob.size, 'bytes (' + w + 'x' + h + ')');
         return { skyBlob, presetClone };
     } catch (err) {
         console.warn('[gallery-submit] could not transcode env map; submitting without sky:', err);

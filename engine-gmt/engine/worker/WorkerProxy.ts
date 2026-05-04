@@ -56,6 +56,7 @@ export class WorkerProxy implements AccumulationController {
     private _onShaderCode: ((code: string) => void) | null = null;
     private _onBootedCallback: (() => void) | null = null;
     private _pendingSnapshots: Map<string, (blob: Blob) => void> = new Map();
+    private _pendingEnvMaps: Map<string, (blob: Blob | null) => void> = new Map();
     private _pendingPicks: Map<string, (pos: THREE.Vector3 | null) => void> = new Map();
     private _pendingFocusPicks: Map<string, (distance: number) => void> = new Map();
     private _pendingHistograms: Map<string, (data: Float32Array) => void> = new Map();
@@ -282,6 +283,9 @@ export class WorkerProxy implements AccumulationController {
                 break;
             case 'SNAPSHOT_RESULT':
                 this._resolveRequest(msg.id, this._pendingSnapshots, msg.blob);
+                break;
+            case 'ENV_MAP_RESULT':
+                this._resolveRequest(msg.id, this._pendingEnvMaps, msg.blob);
                 break;
             case 'PICK_RESULT':
                 this._resolveRequest(msg.id, this._pendingPicks,
@@ -607,6 +611,11 @@ export class WorkerProxy implements AccumulationController {
     captureSnapshot(): Promise<Blob | null> {
         return this._pendingRequest(this._pendingSnapshots as Map<string, (v: Blob | null) => void>,
             id => ({ type: 'CAPTURE_SNAPSHOT', id }), null, 10000);
+    }
+
+    captureEnvMap(maxEdge: number = 1024): Promise<Blob | null> {
+        return this._pendingRequest(this._pendingEnvMaps,
+            id => ({ type: 'CAPTURE_ENV_MAP', id, maxEdge }), null, 10000);
     }
 
     get gpuInfo(): string {

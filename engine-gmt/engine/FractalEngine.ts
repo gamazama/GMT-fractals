@@ -542,6 +542,109 @@ export class FractalEngine {
         }
     }
     
+    /**
+     * Read the active env-map texture back from the GPU as a tonemapped
+     * JPEG blob. Used by the gallery submission flow to externalize the
+     * env as a separate accompanying image so the GMF stays small and
+     * round-trips cleanly even when the source was HDR (which the browser
+     * can't decode via createImageBitmap).
+     *
+     * The pipeline samples the equirect texture to a fixed-size render
+     * target, applies ACES tonemap + sRGB encoding, reads back, and JPEG-
+     * encodes via OffscreenCanvas. Aspect is intentionally not preserved
+     * — env-lighting sample distribution is robust to mild stretching
+     * and a square texture cuts file size further.
+     *
+     * Returns null if no env map is bound.
+     */
+    public async captureEnvMap(maxEdge: number = 1024, quality: number = 0.85): Promise<Blob | null> {
+        if (!this.renderer) return null;
+        const envTex = this.materials.getUniform('uEnvMapTexture') as THREE.Texture | null | undefined;
+        // Sanity: ensure it's actually a usable texture (DataTexture for HDR or Texture for LDR)
+        if (envTex && !(envTex instanceof THREE.Texture)) return null;
+        if (!envTex || !envTex.image) return null;
+
+        const srcW = (envTex.image as any).width ?? maxEdge;
+        const srcH = (envTex.image as any).height ?? maxEdge;
+        const w = Math.min(srcW, maxEdge);
+        const h = Math.min(srcH, maxEdge);
+
+        const target = new THREE.WebGLRenderTarget(w, h, {
+            type: THREE.UnsignedByteType,
+            format: THREE.RGBAFormat,
+            stencilBuffer: false,
+            depthBuffer: false,
+            minFilter: THREE.NearestFilter,
+            magFilter: THREE.NearestFilter,
+        });
+
+        const scene = new THREE.Scene();
+        const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        const mat = new THREE.ShaderMaterial({
+            uniforms: { uMap: { value: envTex } },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+            `,
+            fragmentShader: `
+                precision highp float;
+                uniform sampler2D uMap;
+                varying vec2 vUv;
+                vec3 aces(vec3 x) {
+                    float a=2.51, b=0.03, c=2.43, d=0.59, e=0.14;
+                    return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
+                }
+                void main() {
+                    vec3 col = texture2D(uMap, vUv).rgb;
+                    col = aces(col);
+                    col = pow(col, vec3(1.0/2.2));
+                    gl_FragColor = vec4(col, 1.0);
+                }
+            `,
+            depthTest: false,
+            depthWrite: false,
+        });
+        const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+        scene.add(quad);
+
+        const originalTarget = this.renderer.getRenderTarget();
+        this.renderer.setRenderTarget(target);
+        this.renderer.clear();
+        this.renderer.render(scene, cam);
+        const buffer = new Uint8Array(w * h * 4);
+        this.renderer.readRenderTargetPixels(target, 0, 0, w, h, buffer);
+        this.renderer.setRenderTarget(originalTarget);
+
+        // Tear down throwaway resources
+        target.dispose();
+        mat.dispose();
+        (quad.geometry as THREE.BufferGeometry).dispose();
+
+        // Build a 2D canvas from the readback. Worker context = OffscreenCanvas;
+        // host-app context = HTMLCanvasElement (kept for symmetry with snapshot).
+        const canvas2d = (typeof document !== 'undefined')
+            ? document.createElement('canvas')
+            : new OffscreenCanvas(w, h);
+        canvas2d.width = w;
+        canvas2d.height = h;
+        const ctx = canvas2d.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+        if (!ctx) return null;
+        const imageData = ctx.createImageData(w, h);
+        const stride = w * 4;
+        for (let y = 0; y < h; y++) {
+            const srcStart = y * stride;
+            const destRowStart = (h - 1 - y) * stride;
+            imageData.data.set(buffer.subarray(srcStart, srcStart + stride), destRowStart);
+        }
+        ctx.putImageData(imageData, 0, 0);
+        if (canvas2d instanceof OffscreenCanvas) {
+            return canvas2d.convertToBlob({ type: 'image/jpeg', quality });
+        }
+        return new Promise(resolve =>
+            (canvas2d as HTMLCanvasElement).toBlob(resolve, 'image/jpeg', quality)
+        );
+    }
+
     public async captureSnapshot(): Promise<Blob | null> {
         if (!this.renderer) return null;
         const tex = this.pipeline.getOutputTexture();

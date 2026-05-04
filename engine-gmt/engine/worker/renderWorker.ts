@@ -380,10 +380,9 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 // VALUE in the new tick is already correct (engine.sceneOffset
                 // is updated synchronously by queueOffsetSync), so we just
                 // need to preserve the flag.
-                if (_pendingTick?.syncOffset && !msg.syncOffset) {
-                    msg = { ...msg, syncOffset: true };
-                }
-                _pendingTick = msg;
+                _pendingTick = _pendingTick?.syncOffset && !msg.syncOffset
+                    ? { ...msg, syncOffset: true }
+                    : msg;
                 if (!_tickScheduled) {
                     _tickScheduled = true;
                     _tickChannel.port2.postMessage(null);
@@ -446,6 +445,21 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                             postMsg({ type: 'SNAPSHOT_RESULT', id: msg.id, blob });
                         }
                     });
+                }
+                break;
+
+            case 'CAPTURE_ENV_MAP':
+                if (engine) {
+                    engine.captureEnvMap(msg.maxEdge ?? 1024).then(blob => {
+                        // Always reply, even with null, so the proxy doesn't
+                        // wait for the timeout when there's simply no env bound.
+                        postMsg({ type: 'ENV_MAP_RESULT', id: msg.id, blob });
+                    }).catch(err => {
+                        console.error('[worker] captureEnvMap failed:', err);
+                        postMsg({ type: 'ENV_MAP_RESULT', id: msg.id, blob: null });
+                    });
+                } else {
+                    postMsg({ type: 'ENV_MAP_RESULT', id: msg.id, blob: null });
                 }
                 break;
 
