@@ -19,6 +19,7 @@ import { getSubmitToken } from './submitGalleryItem';
 import { SubmitGalleryModal } from './SubmitGalleryModal';
 
 export { GalleryPage as GalleryOverlay } from './GalleryPage';
+export { AdminQueueOverlay } from './AdminQueue';
 
 /**
  * Mounts the submit modal driven by galleryStore.isSubmitOpen.
@@ -44,6 +45,13 @@ const SubmitIcon: React.FC = () => (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 5v14" />
         <path d="M5 12l7-7 7 7" />
+    </svg>
+);
+
+const AdminIcon: React.FC = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </svg>
 );
 
@@ -85,6 +93,19 @@ export const installGallery = (options: InstallGalleryOptions = {}) => {
         when: () => !!getSubmitToken(),
         onSelect: () => {
             useGalleryStore.getState().openSubmit();
+        },
+    });
+
+    // "Gallery Admin" — moderation queue. Same admin gate as Submit.
+    menu.registerItem(options.menuId ?? 'file', {
+        id: 'admin-gallery',
+        type: 'button',
+        label: 'Gallery Admin',
+        icon: <AdminIcon />,
+        order: (options.order ?? 25) + 0.6,
+        when: () => !!getSubmitToken(),
+        onSelect: () => {
+            useGalleryStore.getState().openAdmin();
         },
     });
 };

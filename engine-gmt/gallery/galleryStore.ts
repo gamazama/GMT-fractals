@@ -16,6 +16,7 @@ interface GalleryFilter {
 interface GalleryStore {
   isOpen: boolean;
   isSubmitOpen: boolean;
+  isAdminOpen: boolean;
   filter: GalleryFilter;
   // Snapshot of engine pause state at open time so we can restore on close.
   prevPaused: boolean | null;
@@ -24,12 +25,15 @@ interface GalleryStore {
   closeGallery: () => void;
   openSubmit: () => void;
   closeSubmit: () => void;
+  openAdmin: () => void;
+  closeAdmin: () => void;
   setFilter: (filter: GalleryFilter) => void;
 }
 
 export const useGalleryStore = create<GalleryStore>((set, get) => ({
   isOpen: false,
   isSubmitOpen: false,
+  isAdminOpen: false,
   filter: {},
   prevPaused: null,
 
@@ -51,6 +55,9 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
 
   openSubmit: () => set({ isSubmitOpen: true }),
   closeSubmit: () => set({ isSubmitOpen: false }),
+
+  openAdmin: () => set({ isAdminOpen: true }),
+  closeAdmin: () => set({ isAdminOpen: false }),
 
   setFilter: (filter) => set({ filter }),
 }));
