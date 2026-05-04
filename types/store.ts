@@ -89,6 +89,10 @@ export interface EngineStoreState extends FeatureStateMap {
   projectSettings: {
       name: string;
       version: number;
+      /** Optional free-form attribution. Round-trips via the GMF scene block
+       *  so downloaded scenes preserve their author. Empty string when
+       *  unauthored. */
+      author: string;
   };
   
   // State Tracking for Smart Versioning
@@ -276,7 +280,7 @@ export type EngineState = EngineStoreState;
 export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setFormula: (f: FormulaType, options?: { skipDefaultPreset?: boolean }) => void;
     
-    setProjectSettings: (s: Partial<{ name: string, version: number }>) => void;
+    setProjectSettings: (s: Partial<{ name: string, version: number, author: string }>) => void;
     
     // Checks if state has changed since last save. Increments version if dirty. Returns active version.
     prepareExport: () => number;

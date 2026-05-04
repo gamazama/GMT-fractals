@@ -10,6 +10,10 @@ import { AnimationParams, AnimationSequence } from './animation';
 export interface Preset {
   version?: number;
   name: string;
+  /** Free-form author display name. Lives in the GMF scene block so attribution
+   *  travels with the file. Phase 2B replaces this with a user_id FK once auth
+   *  ships — see stable/debug/scratch/43_Gallery_Implementation_Notes.md. */
+  author?: string;
   formula: FormulaType;
 
   // --- CORE SYSTEMS ---

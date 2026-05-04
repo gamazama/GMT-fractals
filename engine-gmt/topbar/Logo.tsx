@@ -17,23 +17,32 @@ import { CheckIcon } from '../../components/Icons';
 export const GmtLogo: React.FC = () => {
     const name = useEngineStore((s) => s.projectSettings.name);
     const version = useEngineStore((s) => s.projectSettings.version);
+    const author = useEngineStore((s) => s.projectSettings.author);
     const setProjectSettings = useEngineStore((s) => s.setProjectSettings);
 
     const [isRenaming, setIsRenaming] = useState(false);
     const [tempName, setTempName] = useState(name);
     const [tempVersion, setTempVersion] = useState(version);
+    const [tempAuthor, setTempAuthor] = useState(author);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (isRenaming) {
             setTempName(name);
             setTempVersion(version);
+            setTempAuthor(author);
             setTimeout(() => inputRef.current?.focus(), 0);
         }
-    }, [isRenaming, name, version]);
+    }, [isRenaming, name, version, author]);
 
     const save = () => {
-        if (tempName.trim()) setProjectSettings({ name: tempName.trim(), version: tempVersion });
+        if (tempName.trim()) {
+            setProjectSettings({
+                name: tempName.trim(),
+                version: tempVersion,
+                author: tempAuthor.trim(),
+            });
+        }
         setIsRenaming(false);
     };
 
@@ -63,6 +72,17 @@ export const GmtLogo: React.FC = () => {
                                 onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setIsRenaming(false); }}
                                 className="w-full bg-gray-900 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500"
                                 placeholder="Enter name..."
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[9px] text-gray-500 font-bold block mb-1">Author</label>
+                            <input
+                                type="text"
+                                value={tempAuthor}
+                                onChange={(e) => setTempAuthor(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setIsRenaming(false); }}
+                                className="w-full bg-gray-900 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500"
+                                placeholder="Optional"
                             />
                         </div>
                         <div className="flex gap-2">

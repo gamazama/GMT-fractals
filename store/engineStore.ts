@@ -97,7 +97,7 @@ const storeFactory: StateCreator<
 
     // ── Engine-level scalar state (minimal) ──
     formula: '',
-    projectSettings: { name: 'Untitled', version: 0 },
+    projectSettings: { name: 'Untitled', version: 0, author: '' },
     lastSavedHash: null,
 
     animations: [],
@@ -260,7 +260,7 @@ const storeFactory: StateCreator<
             newName = p.formula || 'Untitled';
         }
 
-        set({ projectSettings: { name: newName, version: 0 }, lastSavedHash: null });
+        set({ projectSettings: { name: newName, version: 0, author: p.author ?? '' }, lastSavedHash: null });
         applyPresetState(p, set as (partial: Record<string, unknown>) => void, get as unknown as () => Record<string, unknown>);
 
         // Emit CAMERA_TELEPORT so apps that drive a 3D camera (GMT-style
@@ -353,6 +353,9 @@ const storeFactory: StateCreator<
             formula: s.formula,
             features: {},
         };
+        // Only serialize when set — keeps GMF byte-clean for legacy scenes
+        // and round-trips through unchanged.
+        if (s.projectSettings.author) p.author = s.projectSettings.author;
 
         if (options?.includeScene !== false) {
             // Non-feature scene fields from the registry (cameraRot, targetDistance, …).
