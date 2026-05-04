@@ -55,6 +55,7 @@ import {
 } from './renderDialogExtras';
 import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
+import { installGallery } from '../engine-gmt/gallery';
 import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
 import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
 import { GMT_LESSONS } from './tutorial/lessons';
@@ -217,6 +218,11 @@ menu.registerItem('file', {
     label: 'Copy Share Link (URL)',
     onSelect: () => { void copyShareLink(); },
 });
+
+// Online gallery — Phase 1 read-only curated catalog (Supabase + R2).
+// Registers a "Browse Online Gallery" item in the File menu. The overlay
+// component is mounted in AppGmt.tsx as <GalleryOverlay />.
+installGallery();
 
 installModulation();
 // GMT's LFO defaults: a fresh LFO targets coreMath.paramA (the first

@@ -58,6 +58,7 @@
     "@react-three/drei": "^9.102.6",
     "@react-three/fiber": "^8.16.1",
     "@shaderfrog/glsl-parser": "^6.1.0",
+    "@supabase/supabase-js": "^2.105.1",
     "codemirror": "^6.0.2",
     "cross-env": "^7.0.3",
     "mediabunny": "^1.40.1",
