@@ -103,7 +103,14 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        // Static dev landing — lists the apps below. No JS entry, just
+        // copied to dist/ so dev-preview's root URL resolves to a menu.
         main: path.resolve(__dirname, 'index.html'),
+        // Engine "Demo" app — the generic plugin-host showcase that
+        // used to live at the root. Now has its own URL so the public
+        // landing site can deep-link to it. Loads /index.tsx (kept as
+        // the demo entry for minimal churn).
+        demo: path.resolve(__dirname, 'demo.html'),
         'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
         'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
         'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
