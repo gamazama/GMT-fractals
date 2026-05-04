@@ -1,6 +1,8 @@
 # engine-gmt/gallery
 
-Online curated gallery plugin for GMT. Phase 1 (read-only, Supabase + Cloudflare R2) shipped 2026-05-04.
+Online curated gallery plugin for GMT.
+- **Phase 1** (read-only, Supabase + Cloudflare R2) shipped 2026-05-04.
+- **Phase 2A** (admin-gated submissions via Edge Function) shipped 2026-05-04.
 
 Plans: `stable/debug/scratch/40_Online_Gallery_Plan.md` (ADR), `41_Gallery_Implementation_Plan.md` (build spec), `43_Gallery_Implementation_Notes.md` (Phase 1 actuals + Phase 2 plan).
 
@@ -14,8 +16,10 @@ Plans: `stable/debug/scratch/40_Online_Gallery_Plan.md` (ADR), `41_Gallery_Imple
 | `GalleryClient.ts` | Supabase client + types + `listGallery()` / `getGalleryItem()`. Lazy-creates the client; safe to import in builds without env vars (`galleryEnabled` exports false). |
 | `galleryStore.ts` | Standalone Zustand store: `isOpen`, `filter`, `prevPaused`. `openGallery()` snapshots `engineStore.isPaused` and sets it true; `closeGallery()` restores it. |
 | `useGalleryItems.ts` | Paginated query hook with stable JSON-stringified deps. |
-| `loadGalleryScene.ts` | Click-to-load: fetch the canonical PNG, extract `FractalData` from iTXt, parse GMF, register the embedded formula def if needed, hand the preset to `engineStore.loadScene`. |
-| `index.ts` | Public surface. Exports `installGallery`, `GalleryOverlay`, `useGalleryStore`, types. |
+| `loadGalleryScene.ts` | Click-to-load: read GMF from the row's `gmf_data` column (Phase 2 path), or extract `FractalData` from iTXt for legacy Phase 1 rows, parse GMF, register the embedded formula def if needed, hand the preset to `engineStore.loadScene`. |
+| `submitGalleryItem.ts` | Phase 2 submission path: capture worker frame as JPEG, serialize preset to GMF, POST multipart to `submit-gallery-item` Edge Function. Reads admin token from `localStorage`. |
+| `SubmitGalleryModal.tsx` | Form UI for submissions — title, slug (auto-derived), description, formula, tags, author, featured. ESC / click-outside to close. |
+| `index.ts` | Public surface. Exports `installGallery`, `GalleryOverlay`, `SubmitGalleryOverlay`, `useGalleryStore`, token helpers, types. |
 
 ## Wiring
 
@@ -30,10 +34,21 @@ installGallery();
 
 ```tsx
 // AppGmt.tsx
-import { GalleryOverlay } from '../engine-gmt/gallery';
+import { GalleryOverlay, SubmitGalleryOverlay } from '../engine-gmt/gallery';
 // ... mounted near <HelpOverlay />:
 <GalleryOverlay />
+<SubmitGalleryOverlay />
 ```
+
+## Admin token (Phase 2A)
+
+The "Submit to Gallery" menu entry hides itself unless `localStorage.gmt_submit_token` is set. To enable it, run in DevTools:
+
+```js
+localStorage.setItem('gmt_submit_token', '<the SUBMIT_TOKEN secret>')
+```
+
+The token must match the `SUBMIT_TOKEN` secret set on the `submit-gallery-item` Edge Function. Phase 2B will replace this with Supabase Auth JWT verification.
 
 ## Environment
 
