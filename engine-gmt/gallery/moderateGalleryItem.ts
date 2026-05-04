@@ -49,3 +49,8 @@ export async function setFeatured(slug: string, value: boolean): Promise<Moderat
     const r = await call<{ item: ModerationItem }>({ action: 'set-featured', slug, value });
     return r.item;
 }
+
+export async function deleteItem(slug: string): Promise<{ slug: string; r2Failures: number }> {
+    const r = await call<{ deleted: { slug: string; r2Keys: string[]; r2Failures: number } }>({ action: 'delete', slug });
+    return { slug: r.deleted.slug, r2Failures: r.deleted.r2Failures };
+}

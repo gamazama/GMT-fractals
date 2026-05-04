@@ -6,6 +6,7 @@ import {
     approve,
     reject,
     setFeatured,
+    deleteItem,
     ModerationItem,
 } from './moderateGalleryItem';
 
@@ -68,6 +69,23 @@ export const AdminQueueOverlay: React.FC = () => {
         try { const updated = await setFeatured(slug, value); patchItem(updated); }
         catch (err) { setError(err instanceof Error ? err.message : String(err)); }
         finally { setBusySlug(null); }
+    };
+    const onDelete = async (slug: string, title: string) => {
+        if (!window.confirm(
+            `Delete "${title}" forever?\n\nThis removes the database row AND the R2 image / thumb / sky files. Cannot be undone.`,
+        )) return;
+        setBusySlug(slug);
+        try {
+            const r = await deleteItem(slug);
+            setItems(prev => prev.filter(p => p.slug !== slug));
+            if (r.r2Failures > 0) {
+                setError(`Deleted "${title}" (DB row gone), but ${r.r2Failures} R2 object(s) failed to delete — clean up manually if needed.`);
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusySlug(null);
+        }
     };
 
     const patchItem = (item: ModerationItem) => {
@@ -204,6 +222,13 @@ export const AdminQueueOverlay: React.FC = () => {
                                         {item.featured ? 'Unfeature' : 'Feature'}
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => onDelete(item.slug, item.title)}
+                                    className="text-[10px] font-bold px-3 py-1.5 rounded bg-red-700/30 hover:bg-red-700/60 text-red-200 border border-red-500/50"
+                                    title="Permanently remove DB row and R2 image / thumb / sky files"
+                                >
+                                    Delete
+                                </button>
                             </div>
                         </div>
                     ))}
