@@ -66,6 +66,16 @@ float luminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
+// HDR firefly suppression. Caps per-sample radiance contribution at Rec.709
+// luminance ≤ uPTMaxLuminance. Applied AFTER throughput, so deep-bounce
+// paths catching a sun-disc HDR (Le * w_bsdf can be in the thousands) get
+// clamped at the radiance step rather than per-bounce. Slightly dim-biased
+// where it fires; raise uPTMaxLuminance to disable.
+vec3 clampByLuminance(vec3 c) {
+    float l = luminance(c);
+    return c * min(1.0, uPTMaxLuminance / max(l, 0.001));
+}
+
 vec3 cosineSampleHemisphere(vec3 n, vec2 seedVec) {
     float r = fract(seedVec.x * phi);
     float angle = seedVec.y * TAU;
@@ -183,6 +193,234 @@ float misPower2(float pdfA, float pdfB) {
     float b2 = pdfB * pdfB;
     return a2 / max(1.0e-20, a2 + b2);
 }
+
+#ifdef PT_SOBOL_BOUNCE
+// 2D Sobol' sequence with Cranley-Patterson rotation per pixel.
+// Used only for the GGX bounce-direction seed — blue noise is retained for
+// shadow jitter, light selection, and RR (where its spatial-dither property
+// matters more than per-sequence stratification).
+//
+// Implementation notes:
+//   - radicalInverse_VdC(i) = van der Corput base-2 = bit-reverse(i)/2^32.
+//     This is the d=0 dimension of Sobol' (identity direction matrix).
+//   - sobol2_d1(i) = the d=1 dimension's direction matrix gives the upper-
+//     triangular all-ones generator. Loop walks the bits of i and XORs in
+//     the surviving direction-vector contributions.
+//   - cpHash(fragCoord): per-pixel 2D PCG-flavored hash → uniform [0,1)².
+//     Adding (mod 1) decorrelates pixels so neighbors don't draw the same
+//     subsequence (which would manifest as visible structure).
+float radicalInverse_VdC(uint bits) {
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10;  // 1 / 2^32
+}
+
+float sobol2_d1(uint i) {
+    uint r = 0u;
+    uint v = 1u << 31u;
+    for (int k = 0; k < 32; k++) {
+        if (i == 0u) break;
+        if ((i & 1u) != 0u) r ^= v;
+        i >>= 1u;
+        v ^= v >> 1u;
+    }
+    return float(r) * 2.3283064365386963e-10;
+}
+
+vec2 cpHash(vec2 fragCoord) {
+    // Two independent PCG-style hashes per axis. Constants are coprime;
+    // any pair from the standard LCG / PCG mixer set works.
+    uvec2 p = uvec2(fragCoord);
+    uint hx = p.x * 1664525u + p.y * 1013904223u;
+    uint hy = p.y * 1664525u + p.x * 1013904223u;
+    hx ^= hx >> 16u; hx *= 0x21f0aaadu; hx ^= hx >> 15u;
+    hy ^= hy >> 16u; hy *= 0x21f0aaadu; hy ^= hy >> 15u;
+    return vec2(float(hx), float(hy)) * 2.3283064365386963e-10;
+}
+
+// Sobol' + CP rotation with a purpose seed. Index is stride-1 across frames
+// (sIdx = uFrameCount); decorrelation between use sites (bounce dir vs env-
+// NEE dir, and across bounces) lives in the CP rotation, NOT the index.
+// Stride-N indexing traps every pixel inside a 1/N-wide band of the sample
+// space — VdC(N*k) = VdC(k)/N — which shows up as fixed-pixel hotspots
+// that don't average out.
+vec2 sobol2CPSeeded(uint i, vec2 fragCoord, int purpose) {
+    vec2 s = vec2(radicalInverse_VdC(i), sobol2_d1(i));
+    vec2 phOffset = vec2(float(purpose) * 17.123, float(purpose) * 23.456);
+    vec2 ph = cpHash(fragCoord + phOffset);
+    return fract(s + ph);
+}
+#endif
+
+#ifdef PT_ENV_MIS
+#ifdef PT_ENV_MIS_IS
+// Env-map luminance importance sampling. Two-LUT inverse CDF (Pharr/Jakob/
+// Humphreys §13.6.5): binary search the marginal for a row, then binary
+// search that row's conditional for a column. Recover (θ, φ) from the cell
+// center and convert to a unit direction.
+//
+// CPU side (features/reflections/env_cdf.buildEnvCDF) computes the CDFs
+// from a downsampled env map weighted by sin(θ). The GLSL is just lookup +
+// arithmetic; no per-frame rebuild.
+//
+// PDF (Pharr §14.2.4): pdf(ω) = (W·H · L_ij) / (TAU·PI · sin(θ) · lumIntegral).
+// L_ij is recovered from successive-difference of the conditional CDF row,
+// which avoids carrying a third texture.
+
+const int ENV_CDF_SEARCH_STEPS = 9;  // log2(256) + 1 — covers up to W=256 rows/cols
+
+int binarySearchCDF1D(sampler2D cdf, float target, int N, float fixedX) {
+    int lo = 0;
+    int hi = N - 1;
+    for (int k = 0; k < ENV_CDF_SEARCH_STEPS; k++) {
+        if (lo >= hi) break;
+        int mid = (lo + hi) >> 1;
+        // 1D lookup: y axis is the search axis when fixedX=0.5/W and the
+        // texture is laid out as 1×H. Conditional row uses fixedX = (j+0.5)/H
+        // and searches along x.
+        vec2 uv = vec2(fixedX, (float(mid) + 0.5) / float(N));
+        float v = textureLod(cdf, uv, 0.0).r;
+        if (v < target) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+}
+
+int binarySearchCDFRow(sampler2D cdf, float target, int W, float row_v) {
+    int lo = 0;
+    int hi = W - 1;
+    for (int k = 0; k < ENV_CDF_SEARCH_STEPS; k++) {
+        if (lo >= hi) break;
+        int mid = (lo + hi) >> 1;
+        vec2 uv = vec2((float(mid) + 0.5) / float(W), row_v);
+        float v = textureLod(cdf, uv, 0.0).r;
+        if (v < target) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+}
+
+vec3 sampleEnvImportance(vec2 seed, out float pdf) {
+    int W = int(uEnvCDFSize.x);
+    int H = int(uEnvCDFSize.y);
+
+    // Stub guard — when the CDF hasn't been built (or env source is gradient/
+    // procedural), fall back to uniform sphere so the call site stays safe.
+    if (W <= 1 || H <= 1) {
+        float z = 1.0 - 2.0 * seed.x;
+        float r = sqrt(max(0.0, 1.0 - z * z));
+        float phi = TAU * seed.y;
+        pdf = 1.0 / (4.0 * PI);
+        return vec3(r * cos(phi), r * sin(phi), z);
+    }
+
+    // 1. Marginal search → row index j.
+    int j = binarySearchCDF1D(uEnvCDFMarginal, seed.x, H, 0.5);
+    float row_v = (float(j) + 0.5) / float(H);
+
+    // 2. Conditional search within row j → column index i.
+    int i = binarySearchCDFRow(uEnvCDFConditional, seed.y, W, row_v);
+
+    // 3. Recover (θ, φ) at cell center, convert to direction. Match the env
+    //    convention used in env.ts:
+    //      latitude  v ∈ [0,1]  →  θ = v · π   (north pole at v=0)
+    //      longitude u ∈ [0,1]  →  φ = (u - 0.5) · TAU
+    //      dir.x = cos(φ) sin(θ)  ; .y = -cos(θ)  ; .z = sin(φ) sin(θ)
+    float u = (float(i) + 0.5) / float(W);
+    float v = (float(j) + 0.5) / float(H);
+    float theta = v * PI;
+    float phi   = (u - 0.5) * TAU;
+    float sinT = sin(theta);
+    float cosT = cos(theta);
+    // Direction in CDF (pre-rotation env) space; rotate back to world so
+    // shadow-trace and BSDF eval are in the right basis. GetEnvMap will
+    // re-apply the forward rotation when sampling the texture, returning
+    // to CDF space — no double-rotation.
+    vec3 dir = vec3(cos(phi) * sinT, -cosT, sin(phi) * sinT);
+    // Inverse 2D rotation = transpose. v*M in GLSL = M^T * v (row-vector
+    // convention), giving the inverse without an explicit transpose().
+    dir.xz = dir.xz * uEnvRotationMatrix;
+
+    // 4. Evaluate pdf via successive-difference on the CDFs. Derivation
+    //    (Pharr/Jakob/Humphreys §14.2.4):
+    //      du = c1 - c0          = L_ij / rowSum_unweighted_j
+    //      dv = m1 - m0          = sin(θ_j) · rowSum_unweighted_j / S
+    //                              (where S = Σ L_kl sin(θ_l))
+    //      du · dv               = L_ij · sin(θ) / S
+    //    Per-cell solid angle on a (W,H) equirectangular grid:
+    //      dω = sin(θ) · TAU·π / (W·H)
+    //    pdf(ω) = (probability of cell) / dω
+    //           = (L_ij · sin(θ) / S) · W·H / (TAU·π · sin(θ))
+    //           = (du · dv · W·H) / (TAU·π · sin(θ))
+    //    — clean, lumIntegral cancels.
+    float c1 = textureLod(uEnvCDFConditional, vec2((float(i) + 0.5) / float(W), row_v), 0.0).r;
+    float c0 = i > 0 ? textureLod(uEnvCDFConditional, vec2((float(i - 1) + 0.5) / float(W), row_v), 0.0).r : 0.0;
+    float m1 = textureLod(uEnvCDFMarginal, vec2(0.5, row_v), 0.0).r;
+    float m0 = j > 0 ? textureLod(uEnvCDFMarginal, vec2(0.5, (float(j - 1) + 0.5) / float(H)), 0.0).r : 0.0;
+    float du = c1 - c0;
+    float dv = m1 - m0;
+    pdf = (du * dv * float(W) * float(H)) / (TAU * PI * max(1.0e-6, sinT));
+    if (pdf <= 1.0e-10) pdf = 1.0 / (4.0 * PI);
+
+    return dir;
+}
+
+float pdfEnvImportance(vec3 dir) {
+    int W = int(uEnvCDFSize.x);
+    int H = int(uEnvCDFSize.y);
+    if (W <= 1 || H <= 1) return 1.0 / (4.0 * PI);
+
+    // Forward map: direction → (i, j). Inverse of the convention in
+    // sampleEnvImportance. Apply uEnvRotationMatrix here too — the CDF
+    // lives in pre-rotation env space, the BSDF-side dir is in world.
+    vec3 d = dir;
+    d.xz = uEnvRotationMatrix * d.xz;
+    float theta = acos(clamp(-d.y, -1.0, 1.0));
+    float phi   = atan(d.z, d.x);
+    float v = theta / PI;
+    float u = phi / TAU + 0.5;
+    int i = clamp(int(u * float(W)), 0, W - 1);
+    int j = clamp(int(v * float(H)), 0, H - 1);
+
+    float row_v = (float(j) + 0.5) / float(H);
+    float c1 = textureLod(uEnvCDFConditional, vec2((float(i) + 0.5) / float(W), row_v), 0.0).r;
+    float c0 = i > 0 ? textureLod(uEnvCDFConditional, vec2((float(i - 1) + 0.5) / float(W), row_v), 0.0).r : 0.0;
+    float m1 = textureLod(uEnvCDFMarginal, vec2(0.5, row_v), 0.0).r;
+    float m0 = j > 0 ? textureLod(uEnvCDFMarginal, vec2(0.5, (float(j - 1) + 0.5) / float(H)), 0.0).r : 0.0;
+
+    float du = c1 - c0;
+    float dv = m1 - m0;
+    float pdf = (du * dv * float(W) * float(H)) / (TAU * PI * max(1.0e-6, sin(theta)));
+    return pdf > 1.0e-10 ? pdf : 1.0 / (4.0 * PI);
+}
+#endif
+
+// Direction sampling + PDF for the env estimator. Default branch is uniform
+// sphere (Marsaglia 1972, pdf = 1/(4π)). The CDF branch lights up under
+// PT_ENV_MIS_IS — same call sites, two implementations.
+vec3 sampleEnvDirection(vec2 seed, out float pdf) {
+#ifdef PT_ENV_MIS_IS
+    return sampleEnvImportance(seed, pdf);
+#else
+    float z = 1.0 - 2.0 * seed.x;
+    float r = sqrt(max(0.0, 1.0 - z * z));
+    float phiU = TAU * seed.y;
+    pdf = 1.0 / (4.0 * PI);
+    return vec3(r * cos(phiU), r * sin(phiU), z);
+#endif
+}
+
+// PDF lookup for the BSDF-side MIS weight at the !hit branch. Argument is
+// the world-space direction the bounce ray escaped along.
+float pdfEnvSample(vec3 dir) {
+#ifdef PT_ENV_MIS_IS
+    return pdfEnvImportance(dir);
+#else
+    return 1.0 / (4.0 * PI);
+#endif
+}
+#endif
 
 // Heitz 2018 §3 eq. 17 — VNDF half-vector PDF in solid-angle measure for an
 // arbitrary direction L. The reflection mapping H = (V+L)/|V+L| contributes
@@ -329,7 +567,7 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 // Sphere light is power-normalized — see NEE site below for rationale.
                 float lr = uLightRadius[lightHit];
                 vec3 emission = uLightColor[lightHit] * uLightIntensity[lightHit] / (4.0 * PI * lr * lr);
-                radiance += w_bsdf * emission * throughput;
+                radiance += clampByLuminance(w_bsdf * emission * throughput);
                 break;
             }
 #endif
@@ -339,7 +577,26 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 float fogFactor = smoothstep(uFogNear, uFogFar, uFogFar * 0.95);
                 env = mix(env, uFogColorLinear, fogFactor * 0.5);
             }
-            radiance += env * throughput;
+
+            // BSDF-side MIS weight when the bounce ray escaped to env. Pairs
+            // with the per-bounce NEE block above. Bounce 0's primary-ray sky
+            // has no surface BSDF source — pass through unweighted AND
+            // unclamped (it's the literal scene backdrop, not a path-traced
+            // contribution). Indirect bounces (≥1) read the previous surface's
+            // snapshotted BSDF state and get firefly-clamped — that's where
+            // shiny multi-bounce chains catch sun discs.
+            if (bounce == 0) {
+                radiance += env * throughput;
+            } else {
+                #ifdef PT_ENV_MIS
+                    float pdf_bsdf = pdfBSDF(n_prev, viewDir_prev, currentRd, roughness_prev, probSpec_prev);
+                    float pdf_env  = pdfEnvSample(currentRd);
+                    float w_bsdf   = misPower2(pdf_bsdf, pdf_env);
+                    radiance += clampByLuminance(w_bsdf * env * throughput);
+                #else
+                    radiance += clampByLuminance(env * throughput);
+                #endif
+            }
             break;
         }
 
@@ -557,26 +814,31 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                     }
                     #endif
 
-                    // (Firefly clamp removed: with VNDF the throughput weight is
-                    // bounded F*G2/G1, so per-sample contributions can no longer
-                    // explode at grazing angles. The clamp was a biased dim-shift
-                    // band-aid for the half-vector IS form's NdotH/(NdotV*NdotH)
-                    // blow-up. Bench-verified bias-neutral.)
-
-                    radiance += w_nee * directContrib * throughput;
+                    radiance += clampByLuminance(w_nee * directContrib * throughput);
                 }
             }
         } // End NEE
 
-        // --- ENVIRONMENT NEE (compile switch) ---
-        // Directly samples the env map as a diffuse light source each bounce.
-        // Eliminates the need for a bounce to "accidentally" escape to sky.
-        #ifdef PT_ENV_NEE
+        // --- ENVIRONMENT NEE WITH MIS ---
+        // Sample env as a direct light using the env PDF (uniform sphere, or
+        // luminance-CDF under PT_ENV_MIS_IS); paired with the BSDF-side env
+        // hit at the next iter's !hit branch via balance heuristic. Glossy /
+        // mirror surfaces get a full BSDF * Le * NdotL / pdf_env contribution
+        // per bounce, not the diffuse-only Lambertian we had before MIS.
+        #ifdef PT_ENV_MIS
         if (uEnvStrength > 0.001) {
-            vec4 envNoise = getBlueNoise4(gl_FragCoord.xy + bounceOffset + vec2(7.31, 11.17));
-            vec3 envDir = cosineSampleHemisphere(n, envNoise.rg);
+            // Env-NEE direction seed. The +1 purpose decorrelates from the
+            // bounce-direction site (purpose +0) at the same bounce.
+            #ifdef PT_SOBOL_BOUNCE
+                vec2 envSeed = sobol2CPSeeded(uint(uFrameCount), gl_FragCoord.xy, bounce * 2 + 1);
+            #else
+                vec4 envNoise = getBlueNoise4(gl_FragCoord.xy + bounceOffset + vec2(7.31, 11.17));
+                vec2 envSeed = envNoise.rg;
+            #endif
+            float pdf_env_nee;
+            vec3 envDir = sampleEnvDirection(envSeed, pdf_env_nee);
             float envNdotL = max(0.0, dot(n, envDir));
-            if (envNdotL > 0.001) {
+            if (envNdotL > 0.001 && pdf_env_nee > 1.0e-10) {
                 vec3 envOrigin = p_ray + n * (biasEps * 2.0);
                 float envD; vec4 envResult; vec3 envGlow = vec3(0.0); float envVol = 0.0; vec3 envScatter = vec3(0.0);
                 int  envLightHit;
@@ -586,12 +848,39 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
                 // light's own emission is delivered by the dedicated NEE block
                 // above (or BSDF-side hit at the next iter) — not double-counted.
                 if (!envHit && envLightHit < 0) {
-                    // Cosine-weighted PDF = NdotL/PI cancels with Lambertian BRDF = kD*albedo/PI
-                    // → weight = kD * albedo (clean, no NdotL needed)
-                    vec3 envF = fresnelSchlick(envNdotL, F0);
-                    vec3 envKD = (vec3(1.0) - envF) * (1.0 - uReflection);
-                    vec3 envColor = GetEnvMap(envDir, 0.0) * uEnvStrength;
-                    radiance += envKD * albedo * uDiffuse * envColor * throughput;
+                    // Full BSDF eval at envDir (matches the bounce-direction
+                    // sampler's mixture: VNDF specular + Lambert diffuse).
+                    vec3 hEnv = normalize(envDir + viewDir);
+                    float ndoth_e = max(0.0, dot(n, hEnv));
+                    float hdotv_e = max(0.0, dot(hEnv, viewDir));
+                    vec3  F_env = fresnelSchlick(hdotv_e, F0);
+
+                    float a2_e = a_ggx * a_ggx;
+                    float denom_e = ndoth_e * ndoth_e * (a2_e - 1.0) + 1.0;
+                    float D_env = a2_e / (PI * denom_e * denom_e + GGX_EPSILON);
+                    float G1V_e = NdotV / (NdotV * (1.0 - kG) + kG);
+                    float G1L_e = envNdotL / (envNdotL * (1.0 - kG) + kG);
+                    vec3  spec_env = (D_env * F_env * G1V_e * G1L_e) / max(0.001, 4.0 * NdotV * envNdotL);
+
+                    vec3 kS_env = F_env;
+                    vec3 kD_env = (vec3(1.0) - kS_env) * (1.0 - uReflection);
+
+                    // Le must be queried at CDF resolution under PT_ENV_MIS_IS
+                    // so it matches the cell-average luminance the pdf was built
+                    // from; sharp sun reflections come through the BSDF-side
+                    // !hit branch via full-res sampleMiss.
+                    #ifdef PT_ENV_MIS_IS
+                        vec3 envColor = sampleEnvAtCDFMip(envDir) * uEnvStrength;
+                    #else
+                        vec3 envColor = GetEnvMap(envDir, 0.0) * uEnvStrength;
+                    #endif
+                    vec3 brdf_eval = kD_env * albedo * uDiffuse / PI + spec_env;
+
+                    // MIS power-heuristic: pdf_env vs pdf_bsdf at envDir.
+                    float pdf_bsdf_nee = pdfBSDF(n, viewDir, envDir, roughness, probSpec);
+                    float w_nee = misPower2(pdf_env_nee, pdf_bsdf_nee);
+
+                    radiance += clampByLuminance(w_nee * brdf_eval * envColor * envNdotL / pdf_env_nee * throughput);
                 }
             }
         }
@@ -608,7 +897,15 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
         // probSpec, weightSpec, weightDiff hoisted above NEE (see header of this
         // bounce iteration). Reused here for direction sampling.
         float randType = fract(blueNoise.a * 1.618);  // Golden ratio decorrelation for bounce type selection
-        vec2 dirSeed = blueNoise.gb;
+        // Bounce-direction seed: purpose +0 at this bounce. Env-NEE above
+        // takes +1 with the same Sobol' index, decorrelating the two via CP
+        // rotation. See sobol2CPSeeded for why purpose lives there, not in
+        // the index.
+        #ifdef PT_SOBOL_BOUNCE
+            vec2 dirSeed = sobol2CPSeeded(uint(uFrameCount), gl_FragCoord.xy, bounce * 2 + 0);
+        #else
+            vec2 dirSeed = blueNoise.gb;
+        #endif
 
         if (randType < probSpec) {
             // VNDF sampling (Heitz 2018). The half-vector H is sampled from the
@@ -665,8 +962,10 @@ vec3 calculatePathTracedColor(vec3 ro, vec3 rd, float d_init, vec4 result_init, 
             if (rrRand > q) break;
             throughput /= q;
         }
-        // (Throughput firefly clamp removed alongside the NEE clamp — both were
-        // band-aids for the half-vector IS variance source that VNDF eliminates.)
+        // No throughput cap here: VNDF + Schlick keep the per-bounce multiplier
+        // bounded, so accumulated throughput can't run away on its own. HDR
+        // fireflies come from Le, not throughput, and are clamped at each
+        // radiance-contribution site via clampByLuminance.
     }
     return radiance;
 }

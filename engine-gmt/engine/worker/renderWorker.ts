@@ -541,6 +541,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         tex.minFilter = THREE.LinearMipmapLinearFilter;
                         tex.generateMipmaps = true;
                         engine.materials.setUniform('uEnvMapTexture', tex);
+                        engine.materials.rebuildEnvCDF(tex);
                     }
                     engine.resetAccumulation();
                 } else if (engine && !msg.bitmap) {
@@ -570,6 +571,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                             engine.materials.setUniform('uUseTexture', 1.0);
                         } else {
                             engine.materials.setUniform('uEnvMapTexture', hdrTex);
+                            engine.materials.rebuildEnvCDF(hdrTex);
                         }
                         engine.resetAccumulation();
                     }

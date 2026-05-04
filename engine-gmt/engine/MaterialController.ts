@@ -12,6 +12,7 @@ import { FractalEvents, FRACTAL_EVENTS } from './FractalEvents';
 import { featureRegistry } from './FeatureSystem';
 import { LightingState } from '../features/lighting';
 import { createBlueNoiseTexture } from '../../data/BlueNoiseData';
+import { buildEnvCDF, extractEnvImageSource } from '../features/reflections/env_cdf';
 
 const cloneUniforms = (src: { [key: string]: THREE.IUniform }) => {
     const clone: { [key: string]: THREE.IUniform } = {};
@@ -489,8 +490,58 @@ export class MaterialController {
                 tex.minFilter = THREE.LinearMipmapLinearFilter;
                 tex.generateMipmaps = true;
                 this.setUniform(Uniforms.EnvMapTexture, tex);
+                this.rebuildEnvCDF(tex);
             }
         });
+    }
+
+    /**
+     * Rebuild the env-map luminance CDF used by PT_ENV_MIS_IS. Called from
+     * the env-map upload paths (LDR loadTexture, HDR worker handler). Falls
+     * back to a 1×1 stub if the source can't be read (caller should never
+     * see broken sampling — the GLSL already handles `uEnvCDFSize == (1,1)`
+     * by returning uniform-sphere PDF).
+     */
+    public rebuildEnvCDF(tex: THREE.Texture | null) {
+        if (!tex || !tex.image) {
+            this.setEnvCDFStub();
+            return;
+        }
+        // Lazy 2D-canvas — only allocated for image-backed textures.
+        // DataTexture path doesn't need it. Picks OffscreenCanvas in the
+        // worker (no `document`) and HTMLCanvasElement on the main thread.
+        let canvas2D: { canvas: HTMLCanvasElement | OffscreenCanvas, ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D } | undefined;
+        if (!(tex instanceof THREE.DataTexture)) {
+            if (typeof document !== 'undefined') {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (!ctx) { this.setEnvCDFStub(); return; }
+                canvas2D = { canvas, ctx };
+            } else if (typeof OffscreenCanvas !== 'undefined') {
+                const canvas = new OffscreenCanvas(1, 1);
+                const ctx = canvas.getContext('2d', { willReadFrequently: true } as any);
+                if (!ctx) { this.setEnvCDFStub(); return; }
+                canvas2D = { canvas, ctx: ctx as OffscreenCanvasRenderingContext2D };
+            } else {
+                this.setEnvCDFStub();
+                return;
+            }
+        }
+        const src = extractEnvImageSource(tex, canvas2D);
+        if (!src) { this.setEnvCDFStub(); return; }
+
+        const cdf = buildEnvCDF(src);
+        this.setUniform(Uniforms.EnvCDFMarginal, cdf.marginal);
+        this.setUniform(Uniforms.EnvCDFConditional, cdf.conditional);
+        this.setUniform(Uniforms.EnvCDFSize, new THREE.Vector2(cdf.size.w, cdf.size.h));
+        this.setUniform(Uniforms.EnvLumIntegral, cdf.lumIntegral);
+        this.setUniform(Uniforms.EnvCDFMipBias, cdf.mipBias);
+    }
+
+    private setEnvCDFStub() {
+        this.setUniform(Uniforms.EnvCDFSize, new THREE.Vector2(1, 1));
+        this.setUniform(Uniforms.EnvLumIntegral, 1.0);
+        this.setUniform(Uniforms.EnvCDFMipBias, 0.0);
     }
     
     public setGradient(stops: GradientStop[] | GradientConfig, layer: 1 | 2 | 3) {

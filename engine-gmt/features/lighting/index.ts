@@ -28,7 +28,17 @@ export interface LightingState {
     areaLights: boolean;
     ptAreaLights: boolean;
     ptNEEAllLights: boolean;
+    /** @deprecated retained for back-compat scene loads — superseded by `ptReflMode`. */
     ptEnvNEE: boolean;
+    /**
+     * Path-traced reflection quality mode (compile-gated).
+     *   0.0 = Off          — current behavior (BSDF samples only).
+     *   1.0 = Env MIS      — adds direct env sample with MIS, uniform-sphere PDF.
+     *   2.0 = Env MIS + IS — also imports samples bright env regions via CDF.
+     */
+    ptReflMode: number;
+    /** Sobol(2)+Cranley-Patterson rotation for the bounce direction seed. */
+    ptSobolBounce: boolean;
     ptMaxLuminance: number;
     specularModel: number; // 0=Blinn-Phong (fast), 1=Cook-Torrance GGX (quality)
     lights: LightParams[];
@@ -107,6 +117,13 @@ export const LightingFeature: FeatureDefinition = {
         { name: Uniforms.LightRadius, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
         { name: Uniforms.LightSoftness, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
         { name: Uniforms.LightHideEmitter, type: 'float', arraySize: MAX_LIGHTS, default: new Float32Array(MAX_LIGHTS).fill(0) },
+        // Env map luminance CDF — populated by env_cdf.buildEnvCDF when ptReflMode = 'Env MIS + IS'.
+        // Defaults are 1×1 stubs so the GLSL declarations stay valid when no CDF has been built.
+        { name: Uniforms.EnvCDFMarginal, type: 'sampler2D', default: null },
+        { name: Uniforms.EnvCDFConditional, type: 'sampler2D', default: null },
+        { name: Uniforms.EnvCDFSize, type: 'vec2', default: new THREE.Vector2(1, 1) },
+        { name: Uniforms.EnvLumIntegral, type: 'float', default: 1.0 },
+        { name: Uniforms.EnvCDFMipBias, type: 'float', default: 0.0 },
     ],
     params: {
         // --- ENGINE MASTER ---
@@ -211,11 +228,28 @@ export const LightingFeature: FeatureDefinition = {
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
             description: 'Evaluates every active light per bounce instead of one random light. Reduces shadow noise at the cost of N× more shadow rays.'
         },
-        ptEnvNEE: {
-            type: 'boolean', default: false, label: 'Environment NEE', shortId: 'pen',
+        ptReflMode: {
+            type: 'float', default: 0.0, label: 'Env Sampling', shortId: 'prm',
+            group: 'engine_settings', parentId: 'ptEnabled',
+            options: [
+                { label: 'Off',           value: 0.0, estCompileMs: 0 },
+                { label: 'Env MIS',       value: 1.0, estCompileMs: 250 },
+                { label: 'Env MIS + IS',  value: 2.0, estCompileMs: 650 },
+            ],
+            onUpdate: 'compile', noReset: true,
+            description: 'Direct env-map sampling with MIS for path-traced reflections. Env MIS handles broad skies; Env MIS + IS adds importance sampling for HDR maps with sun discs / concentrated lights. Replaces the older Environment NEE (which only handled diffuse).'
+        },
+        ptSobolBounce: {
+            type: 'boolean', default: false, label: 'Sobol Bounce Sampling', shortId: 'psb',
             group: 'engine_settings', parentId: 'ptEnabled',
             ui: 'checkbox', onUpdate: 'compile', noReset: true,
-            description: 'Directly samples the environment as a light source each bounce. Large noise reduction for sky-lit scenes at the cost of one extra trace per bounce.'
+            estCompileMs: 50,
+            description: 'Low-discrepancy 2D sequence (Sobol) with per-pixel rotation for the bounce-direction seed. Measurably less variance on shiny surfaces; no effect on rough/diffuse-heavy scenes.'
+        },
+        ptEnvNEE: {
+            type: 'boolean', default: false, hidden: true, label: 'Environment NEE (legacy)', shortId: 'pen',
+            group: 'engine_settings', parentId: 'ptEnabled', noReset: true,
+            description: 'Deprecated — kept so old scene files load without dropping state. Migrated to ptReflMode at boot.'
         },
         ptMaxLuminance: {
             type: 'float', default: 10.0, label: 'Firefly Clamp', shortId: 'pfl', uniform: 'uPTMaxLuminance',
@@ -347,8 +381,26 @@ export const LightingFeature: FeatureDefinition = {
         if (state?.ptEnabled !== false) {
             builder.addDefine('PT_ENABLED', '1');
             if (state?.ptNEEAllLights) builder.addDefine('PT_NEE_ALL_LIGHTS', '1');
-            if (state?.ptEnvNEE)      builder.addDefine('PT_ENV_NEE', '1');
-            if (state?.ptAreaLights)  builder.addDefine('PT_AREA_LIGHTS', '1');
+            if (state?.ptAreaLights)   builder.addDefine('PT_AREA_LIGHTS', '1');
+
+            // Env reflection quality. Old scenes (saved before this feature
+            // existed) lack `ptReflMode` entirely — when they also have
+            // `ptEnvNEE = true`, auto-promote to Env MIS so their look
+            // doesn't regress on first load. New scenes always write
+            // `ptReflMode` explicitly (default 0), so the migration branch
+            // never fires past the upgrade — explicitly turning the mode off
+            // sticks even if the orphan ptEnvNEE field is still true.
+            const reflModeRaw = state?.ptReflMode;
+            let reflMode: number;
+            if (reflModeRaw === undefined && state?.ptEnvNEE === true) {
+                reflMode = 1.0;
+            } else {
+                reflMode = reflModeRaw ?? 0.0;
+            }
+            if (reflMode >= 1.0) builder.addDefine('PT_ENV_MIS', '1');
+            if (reflMode >= 2.0) builder.addDefine('PT_ENV_MIS_IS', '1');
+
+            if (state?.ptSobolBounce) builder.addDefine('PT_SOBOL_BOUNCE', '1');
             // PT_VOLUMETRIC moved to features/volumetric
         }
 

@@ -51,6 +51,11 @@ export const Uniforms = {
     // Environment
     EnvMapTexture: 'uEnvMapTexture',
     EnvRotationMatrix: 'uEnvRotationMatrix', // CPU Optimization
+    EnvCDFMarginal: 'uEnvCDFMarginal',       // 1×H R32F — row CDF (PT_ENV_MIS_IS only)
+    EnvCDFConditional: 'uEnvCDFConditional', // W×H R32F — per-row column CDF (PT_ENV_MIS_IS only)
+    EnvCDFSize: 'uEnvCDFSize',               // (W,H) of CDF; (1,1) = stub, fall back to uniform sphere
+    EnvLumIntegral: 'uEnvLumIntegral',       // ∫L sin(θ) dθ dφ — pdf normalizer
+    EnvCDFMipBias: 'uEnvCDFMipBias',         // log2(srcW/cdfW) — mip level matching CDF resolution
     FogColorLinear: 'uFogColorLinear', // CPU: InverseACESFilm(uFogColor)
 
     // Debug Tools

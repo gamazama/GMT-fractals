@@ -2,7 +2,36 @@
 
 **Location:** `h:/GMT/workspace-gmt/dev/` (was `h:/GMT/gmt-engine/`)
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
-**Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03** — see entry below.
+**Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03.** **PT reflection quality (env MIS + IS + Sobol) shipped 2026-05-05** — see entry below.
+
+**📋 2026-05-05 — Path-traced reflection quality (env MIS + IS + Sobol bounce):**
+
+Plan: [plans/path-trace-reflections.md](plans/path-trace-reflections.md). Code in `engine-gmt/shaders/chunks/pathtracer.ts` + `engine-gmt/features/lighting/index.ts` + new `engine-gmt/features/reflections/env_cdf.ts` + env-load hooks in `engine-gmt/engine/MaterialController.ts` and `engine-gmt/engine/worker/renderWorker.ts`.
+
+User context: env-map reflections in PT mode remained noisy after 4000 samples even with the VNDF + Filter-Glossy work. Three layered noise sources, all in the env-reflection path: (1) no specular env NEE — the existing `PT_ENV_NEE` was cosine-only, useless on glossy surfaces; (2) no env-map importance sampling — bright HDR features (sun discs, lamps) only contributed when the GGX lobe accidentally aligned with them; (3) blue-noise GGX seeds aren't stratified enough for tight reflection lobes.
+
+**New compile gates (all default off, all gated under `parentId: 'ptEnabled'`):**
+- `ptReflMode` — float dropdown, `0=Off / 1=Env MIS / 2=Env MIS + IS`. Replaces the diffuse-only `ptEnvNEE` (which becomes `hidden: true` for back-compat scene loads). Estimated compile cost: 0/250/650 ms.
+- `ptSobolBounce` — boolean. Sobol(2) + per-pixel Cranley-Patterson rotation for the bounce-direction seed. ~50ms compile cost.
+
+**Phase 1 — Sobol bounce sampling.** New helpers `radicalInverse_VdC`, `sobol2_d1`, `cpHash`, `sobol2CP` (gated by `PT_SOBOL_BOUNCE`). Replace `vec2 dirSeed = blueNoise.gb` with `sobol2CP(uint(uFrameCount) * 8u + uint(bounce), gl_FragCoord.xy)`. Other blue-noise consumers (shadow jitter, RR, light pick) untouched — LDS only earns its keep where the lobe is tight. `uFrameCount` already exists in scope (used by `getBlueNoise4` for temporal R2 offset); no new uniform.
+
+**Phase 2 — Env MIS (uniform-sphere PDF).** New helpers `sampleEnvDirection(seed, out pdf)`, `pdfEnvSample(dir)` — uniform-sphere fallback (`pdf = 1/(4π)`) when `PT_ENV_MIS_IS` isn't also defined. Replaced the `PT_ENV_NEE` block with a `PT_ENV_MIS` block that draws one direction from `pdf_env`, evaluates the full BSDF (kD diffuse + GGX specular) at that direction, and weights by `misPower2(pdf_env, pdf_bsdf)`. The `!hit` branch's env contribution at `bounce > 0` now applies `misPower2(pdf_bsdf, pdf_env)` against the snapshotted `n_prev` / `viewDir_prev` / `roughness_prev` / `probSpec_prev` (the area-lights work already captures these, so this is free). Bounce 0 still passes through unweighted (no NEE counterpart fired).
+
+**Phase 3 — Env CDF + IS.** CPU builder at `features/reflections/env_cdf.ts`: downsamples the env to 256×128, builds a 1×H marginal CDF (per-row ∫L sin θ totals) and a W×H per-row conditional CDF, plus the lumIntegral normalizer. Output is two R32F `DataTexture`s + a vec2 size + a float scalar — total VRAM ≈128 KB. Triggered from `MaterialController.loadTexture` (LDR DOM path) and `renderWorker` `TEXTURE` / `TEXTURE_HDR` handlers (worker uses `OffscreenCanvas` for image readback; HDR `DataTexture` is read directly with a half-float→float32 conversion). New uniforms `uEnvCDFMarginal` / `uEnvCDFConditional` / `uEnvCDFSize` / `uEnvLumIntegral` defined in `LightingFeature.extraUniforms`; defaults are 1×1 stubs and `uEnvCDFSize = (1,1)` triggers GLSL fall-through to uniform-sphere sampling. New GLSL helpers `sampleEnvImportance(seed, out pdf)` and `pdfEnvImportance(dir)` (gated by `PT_ENV_MIS_IS`) do binary search on the two CDFs and recover pdf via successive-difference (`pdf = du · dv · W·H / (TAU·π · sin θ)`, derivation in code comment). Env rotation is handled by inverse-rotating the sampled direction (`dir.xz * uEnvRotationMatrix` = `M^T * v` in GLSL row-vec convention) before returning to world space — `GetEnvMap` re-applies forward rotation when sampling the texture, no double-rotation. `pdfEnvImportance(dir)` does the matching forward rotation before mapping back to (i, j).
+
+**Migration: `ptEnvNEE` is hidden, not deleted.** Old GMF/JSON scenes that had Environment NEE on auto-promote to `ptReflMode = 1.0` on first load (only when `ptReflMode` is entirely undefined and `ptEnvNEE = true` — explicit `ptReflMode = 0` from new saves wins).
+
+**Verified:** `npm run typecheck` clean, `npm run build` clean (8.9s), `npm run shader:dump --pt` shows zero new symbols (default build strips all gated paths), `npm run shader:dump --pt --all-features` shows 33 occurrences of new gated symbols and 16 of the existing area-light helpers (no regression). User does final visual verification.
+
+**Pending:**
+- Visual smoke testing on a chrome-ball + HDR sun-disc scene to confirm the variance-reduction story plays out as expected.
+- Optional `debug/bench-pt-refl.mts` (per plan) — converged-reflection-variance bench across the three modes plus rough-ball regression scene. Deferred unless the visual results suggest anything off.
+
+**Known limitations:**
+- CDF rebuild fires on every env-map upload, not gated by `ptReflMode`. ~10ms cost is cheap insurance; users can toggle MIS + IS without reloading the env.
+- `pdfEnvImportance` does 4 texture lookups per call, called twice per bounce (once at NEE for MIS weight, once at the BSDF-side `!hit` branch). Worth measuring if PT frame-time regresses; could be cached in a vec2 if needed.
+- Procedural sky and gradient env (`uEnvSource > 0.5` or `uUseEnvMap < 0.5`) don't get a CDF — the GLSL falls back to uniform sphere via the `uEnvCDFSize == (1,1)` stub. These envs are uniform enough that uniform-sphere MIS converges fast; CDF only matters for HDR textures with concentrated features.
 
 **📋 2026-05-03 — True area lights for the path tracer (Phases 1–4 + UX cleanup):**
 

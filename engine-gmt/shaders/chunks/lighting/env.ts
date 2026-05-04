@@ -51,4 +51,21 @@ vec3 GetEnvMap(vec3 dir, float roughness) {
 
     return col;
 }
+
+// Sample the env map at the resolution the CDF was built from. Used by
+// path-traced env-NEE under PT_ENV_MIS_IS so per-direction Le matches what
+// the CDF pdf claims for the cell — without this match, sub-pixel features
+// (sun discs) inside dim cells produce firefly spikes proportional to the
+// resolution ratio between source and CDF. Sharp sun reflections still
+// resolve via the BSDF-side !hit branch (full-res sampleMiss); MIS picks
+// the lower-variance estimator per direction.
+vec3 sampleEnvAtCDFMip(vec3 dir) {
+    // Non-texture paths have no high-res mismatch — fall back to GetEnvMap.
+    if (uEnvSource > 0.5 || uUseEnvMap < 0.5) return GetEnvMap(dir, 0.0);
+
+    dir.xz = uEnvRotationMatrix * dir.xz;
+    vec2 uv = vec2(atan(dir.z, dir.x) * INV_TAU + 0.5, 1.0 - acos(dir.y) * INV_PI);
+    vec3 col = textureLod(uEnvMapTexture, uv, uEnvCDFMipBias).rgb;
+    return applyTextureProfile(col, uEnvMapColorSpace);
+}
 `;
