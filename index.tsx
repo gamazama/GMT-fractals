@@ -9,7 +9,7 @@ import App from './App';
 import { registerUI } from './engine/features/ui';
 import { wireDemoPanel } from './demo/setup';
 import { getDemoCanvas } from './demo/demoCanvasRef';
-import { DemoRenderDialog } from './demo/DemoRenderDialog';
+import { demoRenderRunner } from './demo/demoRenderRunner';
 
 import { installTopBar } from './engine/plugins/TopBar';
 import { installSceneIO } from './engine/plugins/SceneIO';
@@ -20,7 +20,7 @@ import { installHelp } from './engine/plugins/Help';
 import { installHud } from './engine/plugins/Hud';
 import { installModulation } from './engine/animation/modulationTick';
 import { installModulationUI, setLfoListConfig } from './engine/components/modulation';
-import { registerRenderPopup } from './engine/animation/renderPopupRegistry';
+import { installRenderDialog } from './engine/plugins/RenderDialog';
 
 // Boots the engine's UI registry (AutoFeaturePanel + built-in widgets).
 registerUI();
@@ -42,6 +42,7 @@ installHelp();
 installHud();
 installModulation();
 installModulationUI();
+installRenderDialog({ runner: demoRenderRunner, showSamplesPerFrame: false, disableDiskMode: true });
 // __SHOWCASE_END__
 
 // A fresh LFO defaults to demo.position_x — gives the user a visible
@@ -50,10 +51,6 @@ setLfoListConfig({ defaultTarget: 'demo.position_x' });
 
 // Demo-flavoured wiring: panel manifest, custom shortcuts, hint pill.
 wireDemoPanel();
-
-// Surface the timeline's "Render" button. TimelineToolbar hides it
-// entirely until a popup component is registered.
-registerRenderPopup(DemoRenderDialog);
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Could not find root element to mount to');

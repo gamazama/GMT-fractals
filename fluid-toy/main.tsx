@@ -52,8 +52,8 @@ import { useEngineStore } from '../store/engineStore';
 import { installFluidToyViewLibrary } from './viewLibrary';
 import { ViewLibraryPanel } from './components/ViewLibraryPanel';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
-import { registerRenderPopup } from '../engine/animation/renderPopupRegistry';
-import { RenderDialog } from './components/RenderDialog';
+import { installRenderDialog } from '../engine/plugins/RenderDialog';
+import { runVideoExport } from './components/RenderDialog/exportRunner';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -240,8 +240,9 @@ installFluidToyViewLibrary();
 componentRegistry.register('panel-views', ViewLibraryPanel);
 
 // Register the video-export dialog so the shared TimelineToolbar's
-// "Render" button surfaces it. Without this the button stays hidden.
-registerRenderPopup(RenderDialog);
+// "Render" button surfaces it. Plugin owns UI + flags + status; the
+// runner does the per-frame TSAA convergence + sim-step + encode.
+installRenderDialog({ runner: runVideoExport, defaults: { samplesPerFrame: 32 } });
 
 setupFluidToy();
 

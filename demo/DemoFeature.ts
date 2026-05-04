@@ -1,22 +1,13 @@
-import type { FeatureDefinition } from '../engine/FeatureSystem';
+import { defineFeature, type FeatureState } from '../engine/features/setFeature';
 
 // One declarative object → Zustand slice + auto-generated panel +
 // save/load round-trip + undo/redo + animatable params. No bespoke
 // wiring per feature.
+//
+// `defineFeature` preserves the params literal types so setFeature /
+// getFeature can infer `DemoState` automatically — no manual interface.
 
-export interface DemoState {
-    color: string;
-    position: { x: number; y: number };
-    size: number;
-    opacity: number;
-    count: number;
-    iterOffset: { x: number; y: number };
-    iterRotation: number;
-    iterScale: number;
-    iterHueShift: number;
-}
-
-export const DemoFeature: FeatureDefinition = {
+export const DemoFeature = defineFeature({
     id: 'demo',
     name: 'Demo',
     category: 'Engine',
@@ -36,4 +27,9 @@ export const DemoFeature: FeatureDefinition = {
         iterScale:    { type: 'float', default: 0.94,               label: 'Scale / step',        min: 0.5,  max: 1.2, step: 0.005, group: 'Iteration' },
         iterHueShift: { type: 'float', default: 18,                 label: 'Hue shift / step (°)', min: -180, max: 180, step: 1, group: 'Iteration' },
     },
-};
+});
+
+// Keep the named DemoState export — DemoOverlay imports it. It used to
+// be a hand-written interface; now it's inferred from the feature so
+// the param types stay in sync automatically.
+export type DemoState = FeatureState<typeof DemoFeature>;

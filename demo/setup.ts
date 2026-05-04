@@ -3,6 +3,8 @@ import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { applyPanelManifest } from '../engine/PanelManifest';
 import { shortcuts } from '../engine/plugins/Shortcuts';
 import { help } from '../engine/plugins/Help';
+import { setFeature } from '../engine/features/setFeature';
+import { DemoFeature } from './DemoFeature';
 import { DemoOverlay } from './DemoOverlay';
 
 // Panel manifest + custom shortcuts + hint pill. Runs after the store
@@ -15,7 +17,7 @@ const rand = (min: number, max: number, step = 0.001): number => {
 };
 
 const randomLayout = () => {
-    (useEngineStore.getState() as any).setDemo({
+    setFeature(DemoFeature, {
         count:        Math.round(rand(5, 18, 1)),
         iterOffset:   { x: rand(-0.08, 0.08, 0.005), y: rand(-0.08, 0.08, 0.005) },
         iterRotation: rand(-20, 20, 0.5),
@@ -40,7 +42,7 @@ export const wireDemoPanel = () => {
     // Routed through setDemo so each press is one undo entry.
     shortcuts.register({
         id: 'demo.randomize', key: 'R', description: 'Randomize the demo square color', category: 'Demo',
-        handler: () => (useEngineStore.getState() as any).setDemo({ color: randomHex() }),
+        handler: () => setFeature(DemoFeature, { color: randomHex() }),
     });
     shortcuts.register({
         id: 'demo.randomizeLayout', key: 'L', description: 'Randomize the duplicate-stack layout', category: 'Demo',
@@ -49,7 +51,7 @@ export const wireDemoPanel = () => {
     shortcuts.register({
         id: 'demo.scramble', key: 'S', description: 'Scramble color + layout', category: 'Demo',
         handler: () => {
-            (useEngineStore.getState() as any).setDemo({ color: randomHex() });
+            setFeature(DemoFeature, { color: randomHex() });
             randomLayout();
         },
     });

@@ -26,8 +26,66 @@ import { applyExportModulations } from '../exportModulations';
 import type { SerializedCamera, SerializedOffset } from '../../../engine/worker/WorkerProtocol';
 import type { EngineRenderState } from '../../../engine/FractalEngine';
 import type { ExportPass, VideoExportConfig } from '../../../../engine/codec/VideoExportTypes';
-import type { ExportRunDeps } from './types';
+import type {
+    RenderDialogDeps,
+    RenderDialogRunner,
+} from '../../../../engine/plugins/RenderDialog';
 import { calcEtaRange } from '../exportHelpers';
+
+// app-gmt's app-specific config bag — fed by the plugin's
+// `extraFormFields` slot and threaded into the runner via deps.extra.
+export interface AppGmtExtra {
+    internalScale: number;
+    exportBeauty:  boolean;
+    exportAlpha:   boolean;
+    exportDepth:   boolean;
+    depthMin:      number;
+    depthMax:      number;
+}
+
+// Adapter: plugin's flat config + extra bag → the legacy
+// `cfg.vidRes/.vidSamples/.vidBitrate + multi-pass + depth` shape that
+// the runner internals already use. Keeps the runner diff minimal.
+type LegacyDeps = Omit<RenderDialogDeps<AppGmtExtra>, 'cfg' | 'extra'> & {
+    cfg: {
+        vidRes:        { w: number; h: number };
+        formatIndex:   number;
+        vidSamples:    number;
+        vidBitrate:    number;
+        startFrame:    number;
+        endFrame:      number;
+        frameStep:     number;
+        fps:           number;
+        internalScale: number;
+        exportBeauty:  boolean;
+        exportAlpha:   boolean;
+        exportDepth:   boolean;
+        depthMin:      number;
+        depthMax:      number;
+    };
+};
+
+const toLegacyDeps = (deps: RenderDialogDeps<AppGmtExtra>): LegacyDeps => ({
+    flags:      deps.flags,
+    status:     deps.status,
+    isDiskMode: deps.isDiskMode,
+    cfg: {
+        vidRes:        { w: deps.cfg.width, h: deps.cfg.height },
+        formatIndex:   deps.cfg.formatIndex,
+        vidSamples:    deps.cfg.samplesPerFrame,
+        vidBitrate:    deps.cfg.bitrate,
+        startFrame:    deps.cfg.startFrame,
+        endFrame:      deps.cfg.endFrame,
+        frameStep:     deps.cfg.frameStep,
+        fps:           deps.cfg.fps,
+        internalScale: deps.extra.internalScale,
+        exportBeauty:  deps.extra.exportBeauty,
+        exportAlpha:   deps.extra.exportAlpha,
+        exportDepth:   deps.extra.exportDepth,
+        depthMin:      deps.extra.depthMin,
+        depthMax:      deps.extra.depthMax,
+    },
+});
 
 const engine = getProxy();
 
@@ -49,7 +107,8 @@ const runFramePump = async (
     config: VideoExportConfig,
     totalFrames: number,
     applyFocusLock: boolean,
-    deps: ExportRunDeps,
+    deps: LegacyDeps,
+    passPrefix = '',
 ): Promise<'completed' | 'cancelled' | 'finishEarly'> => {
     const { cfg, flags, status } = deps;
     const { cancelledRef, finishEarlyRef, stoppingRef, startTimeRef } = flags;
@@ -115,8 +174,10 @@ const runFramePump = async (
             }
         }
 
-        const pct = ((i + 1) / totalFrames) * 100;
-        status.setProgress(pct);
+        const fraction = (i + 1) / totalFrames;
+        // Plugin's setProgress takes 0..1 (it formats as percent for the UI).
+        status.setProgress(fraction);
+        status.setStatusText(`${passPrefix}Frame ${i + 1} / ${totalFrames}`);
 
         const now = Date.now();
         const elapsed = (now - startTimeRef.current) / 1000;
@@ -125,7 +186,10 @@ const runFramePump = async (
         status.setEtaRange(calcEtaRange(elapsed, framesDone, totalFrames));
         status.setLastFrameTime(elapsed / framesDone);
 
-        FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: true, progress: pct });
+        // BUCKET_STATUS still uses a 0..100 percent — listeners outside
+        // the dialog (preview HUD, app-gmt's render-time estimator)
+        // expect the legacy units.
+        FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: true, progress: fraction * 100 });
     }
     return 'completed';
 };
@@ -138,11 +202,11 @@ const runFramePump = async (
  * beauty+alpha into RGBA, JPG writes separate files per pass, depth is
  * always a separate file).
  */
-export const runImageSequenceExport = async (
+const runImageSequenceExport = async (
     passesToExport: ExportPass[],
-    deps: ExportRunDeps,
+    deps: LegacyDeps,
 ): Promise<void> => {
-    const { cfg, flags, status, sizing } = deps;
+    const { cfg, flags, status } = deps;
 
     if (typeof (window as any).showDirectoryPicker !== 'function') {
         alert('Image-sequence export requires the File System Access API, which is only available in Chrome / Edge. Use an MP4 or WebM format in other browsers.');
@@ -164,7 +228,6 @@ export const runImageSequenceExport = async (
     const exportVersion = state.prepareExport();
     const baseName = `${state.projectSettings.name}_v${exportVersion}_${cfg.vidRes.w}x${cfg.vidRes.h}`;
 
-    sizing.setWinSize({ width: sizing.EXPANDED_WIDTH, height: sizing.BASE_HEIGHT });
     status.setIsRendering(true);
     status.setIsStopping(false);
 
@@ -223,7 +286,6 @@ export const runImageSequenceExport = async (
         alert(`Image sequence export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
         status.setIsRendering(false);
-        sizing.setWinSize({ width: sizing.BASE_WIDTH, height: sizing.BASE_HEIGHT });
         FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
 
         animationEngine.scrub(savedFrame);
@@ -241,8 +303,9 @@ export const runImageSequenceExport = async (
  * is preserved across awaits, so this works in browsers that support
  * `showSaveFilePicker`).
  */
-export const runVideoExport = async (deps: ExportRunDeps): Promise<void> => {
-    const { cfg, flags, status, sizing, isDiskMode } = deps;
+export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps): Promise<void> => {
+    const deps = toLegacyDeps(pluginDeps);
+    const { cfg, flags, status, isDiskMode } = deps;
 
     const passesToExport: ExportPass[] = [];
     if (cfg.exportBeauty) passesToExport.push('beauty');
@@ -264,7 +327,6 @@ export const runVideoExport = async (deps: ExportRunDeps): Promise<void> => {
     const baseProjectName = state.projectSettings.name;
     const isMultiPass = passesToExport.length > 1;
 
-    sizing.setWinSize({ width: sizing.EXPANDED_WIDTH, height: sizing.BASE_HEIGHT });
     status.setIsRendering(true);
     status.setIsStopping(false);
 
@@ -361,7 +423,7 @@ export const runVideoExport = async (deps: ExportRunDeps): Promise<void> => {
 
             // Focus-lock DOF only meaningful on the beauty pass.
             const totalFrames = Math.floor((cfg.endFrame - cfg.startFrame) / cfg.frameStep) + 1;
-            const outcome = await runFramePump(config, totalFrames, pass === 'beauty', deps);
+            const outcome = await runFramePump(config, totalFrames, pass === 'beauty', deps, passPrefix);
 
             if (outcome === 'cancelled') {
                 engine.cancelExport();
@@ -395,7 +457,6 @@ export const runVideoExport = async (deps: ExportRunDeps): Promise<void> => {
         alert(`Export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
         status.setIsRendering(false);
-        sizing.setWinSize({ width: sizing.BASE_WIDTH, height: sizing.BASE_HEIGHT });
         FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
 
         animationEngine.scrub(savedFrame);

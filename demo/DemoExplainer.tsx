@@ -6,13 +6,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import bootSrc          from '../index.tsx?raw';
-import featureSrc       from './DemoFeature.ts?raw';
-import registerSrc      from './registerFeatures.ts?raw';
-import setupSrc         from './setup.ts?raw';
-import canvasRefSrc     from './demoCanvasRef.ts?raw';
-import overlaySrc       from './DemoOverlay.tsx?raw';
-import renderDialogSrc  from './DemoRenderDialog.tsx?raw';
+import bootSrc        from '../index.tsx?raw';
+import featureSrc     from './DemoFeature.ts?raw';
+import registerSrc    from './registerFeatures.ts?raw';
+import setupSrc       from './setup.ts?raw';
+import canvasRefSrc   from './demoCanvasRef.ts?raw';
+import overlaySrc     from './DemoOverlay.tsx?raw';
+import renderRunnerSrc from './demoRenderRunner.ts?raw';
 
 const SHOWCASE_START = '// __SHOWCASE_START__';
 const SHOWCASE_END   = '// __SHOWCASE_END__';
@@ -31,7 +31,7 @@ const SOURCES: Array<{ path: string; code: string }> = [
     { path: 'demo/setup.ts',             code: setupSrc },
     { path: 'demo/demoCanvasRef.ts',     code: canvasRefSrc },
     { path: 'demo/DemoOverlay.tsx',      code: overlaySrc },
-    { path: 'demo/DemoRenderDialog.tsx', code: renderDialogSrc },
+    { path: 'demo/demoRenderRunner.ts',  code: renderRunnerSrc },
 ];
 
 const countLines = (s: string): number => s.split('\n').length;

@@ -1,38 +1,36 @@
-/**
- * In-progress export view — progress bar, ETA, settings summary,
- * stop / resume / finish-early / discard controls. Mounts whenever
- * `isRendering` is true on the parent dialog.
- */
+// In-progress export view — progress bar, ETA, settings summary,
+// stop / resume / finish-early / discard controls. Lifted from
+// fluid-toy and made generic.
 
 import React from 'react';
 import Button from '../../../components/Button';
 import { PlayIcon, StopIcon, CheckIcon, TrashIcon } from '../../../components/Icons';
 import { VIDEO_FORMATS } from '../../../data/constants';
-import { formatTimeWithUnits } from './timeFormat';
+import { formatTimeWithUnits } from '../../../components/timeline/exportHelpers';
+import type { RenderDialogConfig } from './types';
 
 export interface RenderingViewProps {
     onStop:           () => void;
     onResume:         () => void;
     onConfirmStitch:  () => void;
     onDiscard:        () => void;
-    progress:         number;
+    progress:         number; // 0..100
     statusText:       string;
     elapsedTime:      number;
     etaRange:         { min: number; max: number };
     lastFrameTime:    number;
     isStopping:       boolean;
-    width:            number;
-    height:           number;
-    formatIndex:      number;
-    samplesPerFrame:  number;
+    cfg:              RenderDialogConfig;
+    showSamplesPerFrame: boolean;
+    extraSummary?:    React.ReactNode;
 }
 
 export const RenderingView: React.FC<RenderingViewProps> = ({
     onStop, onResume, onConfirmStitch, onDiscard,
     progress, statusText, elapsedTime, etaRange, lastFrameTime, isStopping,
-    width, height, formatIndex, samplesPerFrame,
+    cfg, showSamplesPerFrame, extraSummary,
 }) => {
-    const fmt = VIDEO_FORMATS[formatIndex];
+    const fmt = VIDEO_FORMATS[cfg.formatIndex];
 
     return (
         <div className="flex flex-col h-full space-y-4 p-2">
@@ -42,8 +40,13 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
                     <span className="text-[9px] text-gray-400 font-normal truncate max-w-[200px]">{statusText}</span>
                 </div>
                 <div className="h-3 w-full bg-gray-900 rounded-full overflow-hidden border border-white/10">
+                    {/* No transition on width — runners push setProgress
+                     *  faster than 300ms in many cases (each call kicks
+                     *  off a new tween that the next call interrupts at
+                     *  a fraction of the way through), so the bar
+                     *  visibly stalls. Snap to the latest value. */}
                     <div
-                        className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-300 ease-out relative"
+                        className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 relative"
                         style={{ width: `${progress}%` }}
                     >
                         <div className="absolute inset-0 bg-white/20 animate-pulse" />
@@ -77,9 +80,12 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
             </div>
 
             <div className="text-[9px] text-gray-500 grid grid-cols-2 gap-y-1 border-t border-white/5 pt-3">
-                <span>Resolution: <span className="text-gray-300">{width}x{height}</span></span>
+                <span>Resolution: <span className="text-gray-300">{cfg.width}x{cfg.height}</span></span>
                 <span>Format: <span className="text-gray-300">{fmt?.label.split(' ')[0] ?? '?'}</span></span>
-                <span>Samples: <span className="text-gray-300">{samplesPerFrame}</span></span>
+                {showSamplesPerFrame && (
+                    <span>Samples: <span className="text-gray-300">{cfg.samplesPerFrame}</span></span>
+                )}
+                {extraSummary}
             </div>
 
             <div className="mt-auto pt-2">

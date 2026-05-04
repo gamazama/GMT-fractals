@@ -4,31 +4,29 @@ import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { useEngineStore } from '../../../store/engineStore';
 import { modulationEngine } from '../../../engine/features/modulation/ModulationEngine';
+import { applyModulationsAt } from '../../../engine/features/modulation/applyAt';
 import { featureRegistry } from '../../../engine/FeatureSystem';
 
 /**
- * Apply modulations (LFOs + rules) for a given export time.
- * Simplified version of AnimationSystem's per-frame logic — no recording, no UI feedback.
- * Sets uniforms via engine.setUniform() (forwarded to worker) and engine.modulations dict.
+ * Apply modulations (LFOs + rules) for a given export time, then push
+ * the resulting offsets into the GMT worker's uniform stream. The
+ * first part — reset + oscillators + rules + publish to
+ * `liveModulations` — is the generic dance shared with demo /
+ * fluid-toy and lives in `applyModulationsAt`. This function adds the
+ * GMT-specific uniform-mapping pass on top so the worker (which
+ * doesn't read slices directly) sees per-target uniform values.
  */
 export function applyExportModulations(time: number, dt: number) {
-    const storeState = useEngineStore.getState();
-    const animations = storeState.animations;
+    // Generic prelude: oscillators + rules → liveModulations.
+    applyModulationsAt(time, dt);
 
-    // 1. Reset
-    modulationEngine.resetOffsets();
+    // GMT-specific: clear the worker's modulations dict; we'll rebuild
+    // it from the offsets `applyModulationsAt` just published.
     engine.modulations = {};
 
-    // 2. Update oscillators
-    modulationEngine.updateOscillators(animations, time, dt);
+    const storeState = useEngineStore.getState();
 
-    // 3. Apply modulation rules
-    const modulationSlice = (storeState as any).modulation;
-    if (modulationSlice && modulationSlice.rules) {
-        modulationEngine.update(modulationSlice.rules, dt);
-    }
-
-    // 4. Apply offsets to uniforms
+    // Apply offsets to uniforms
     const offsets = modulationEngine.offsets;
     let juliaDirty = false;
     let juliaX = 0, juliaY = 0, juliaZ = 0;

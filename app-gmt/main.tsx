@@ -42,8 +42,17 @@ import { installCamera } from '../engine/plugins/Camera';
 import { installGmtCameraBinders } from '../engine-gmt/animation/cameraBinders';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
 import { useAnimationStore } from '../store/animationStore';
-import { registerRenderPopup } from '../engine/animation/renderPopupRegistry';
-import { RenderPopup } from '../engine-gmt/components/timeline/RenderPopup';
+import { installRenderDialog } from '../engine/plugins/RenderDialog';
+import { runVideoExport, type AppGmtExtra } from '../engine-gmt/components/timeline/RenderPopup/exportRunner';
+import {
+    AppGmtExtraFormFields,
+    AppGmtExtraWarning,
+    APP_GMT_DEFAULT_EXTRA,
+    appGmtResolutionPresets,
+    appGmtStartLabel,
+    appGmtIsStartDisabled,
+    appGmtCanEncode,
+} from './renderDialogExtras';
 import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
@@ -272,10 +281,26 @@ registerCameraKeyTracks([
 ]);
 
 // Register the GMT video-export popup. The shared TimelineToolbar's
-// "Render" button (component-level visibility gated on a registered
-// popup) shows once this fires and opens the popup on click. The
-// popup itself drives mediabunny via WorkerExporter.
-registerRenderPopup(RenderPopup);
+// Install the generic render-dialog plugin with app-gmt's runner +
+// extras. Plugin handles UI / form / progress / capability / disk-
+// mode; the runner drives the GMT worker (multi-pass beauty / alpha /
+// depth, image-sequence path, focus-lock) and the extras component
+// adds the multi-pass selectors, depth-range, internal-scale, and
+// the viewport-sample-time estimator.
+installRenderDialog<AppGmtExtra>({
+    runner:              runVideoExport,
+    title:               'Render Sequence',
+    showSamplesPerFrame: true,
+    formatFilter:        () => true, // keep image-sequence formats in the dropdown
+    canEncode:           appGmtCanEncode,
+    resolutionPresets:   appGmtResolutionPresets,
+    extraFormFields:     AppGmtExtraFormFields,
+    extraWarning:        AppGmtExtraWarning,
+    startLabel:          appGmtStartLabel,
+    isStartDisabled:     appGmtIsStartDisabled,
+    defaults:            { samplesPerFrame: 16, extra: APP_GMT_DEFAULT_EXTRA },
+    expandedSize:        { width: 400, height: 450 },
+});
 
 // Warm the help-topics chunk on idle so the first ?-button click
 // doesn't fall back to an empty topic map. Mirrors gmt-0.8.5's App.tsx.

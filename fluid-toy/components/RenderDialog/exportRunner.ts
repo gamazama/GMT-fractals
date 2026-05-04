@@ -24,28 +24,13 @@
 import { useAnimationStore } from '../../../store/animationStore';
 import { useEngineStore } from '../../../store/engineStore';
 import { animationEngine } from '../../../engine/AnimationEngine';
-import { modulationEngine } from '../../../engine/features/modulation/ModulationEngine';
+import { applyModulationsAt } from '../../../engine/features/modulation/applyAt';
 import { MainThreadEncoder } from '../../../engine/export/videoEncoder';
 import { VIDEO_FORMATS } from '../../../data/constants';
 import { getExportFileName } from '../../../utils/fileUtils';
-import type { RenderRunDeps } from './types';
+import type { RenderDialogRunner } from '../../../engine/plugins/RenderDialog';
 import { calcEtaRange } from '../../../components/timeline/exportHelpers';
-
-/** Apply oscillator/rule modulation offsets for the controlled `time` /`dt`,
- *  publish them into `liveModulations`. Fluid-toy slices read `liveModulations`
- *  via `useLiveModulations()` in `useEngineSync` — pushing the same map the
- *  live tick would have written keeps the export visually identical to a
- *  scrub-then-pause snapshot. */
-const applyExportModulations = (time: number, dt: number) => {
-    const storeState = useEngineStore.getState();
-    modulationEngine.resetOffsets();
-    modulationEngine.updateOscillators(storeState.animations, time, dt);
-    const modSlice = (storeState as { modulation?: { rules?: unknown[] } }).modulation;
-    if (modSlice && Array.isArray(modSlice.rules) && modSlice.rules.length > 0) {
-        modulationEngine.update(modSlice.rules as never[], dt);
-    }
-    storeState.setLiveModulations({ ...modulationEngine.offsets });
-};
+import { appEngine } from '../../engineHandles';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -58,10 +43,10 @@ const yieldToReact = () => sleep(0);
 const computeTotalFrames = (cfg: { startFrame: number; endFrame: number; frameStep: number }) =>
     Math.floor((cfg.endFrame - cfg.startFrame) / Math.max(1, cfg.frameStep)) + 1;
 
-export const runVideoExport = async (deps: RenderRunDeps): Promise<void> => {
-    const { cfg, flags, status, isDiskMode, getEngine, getCanvas } = deps;
-    const engine = getEngine();
-    const canvas = getCanvas();
+export const runVideoExport: RenderDialogRunner = async (deps) => {
+    const { cfg, flags, status, isDiskMode } = deps;
+    const engine = appEngine.ref.current;
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas');
     if (!engine || !canvas) {
         alert('Renderer is not booted yet — try again in a moment.');
         return;
@@ -175,7 +160,7 @@ export const runVideoExport = async (deps: RenderRunDeps): Promise<void> => {
             const dt            = 1 / cfg.fps;
 
             animationEngine.scrub(timelineFrame);
-            applyExportModulations(time, dt);
+            applyModulationsAt(time, dt);
 
             // Let useEngineSync's slice useEffects flush pushed params into engine.
             await yieldToReact();
@@ -199,8 +184,9 @@ export const runVideoExport = async (deps: RenderRunDeps): Promise<void> => {
             // ─── Capture + encode ───
             encoder.encodeCanvas(canvas, i);
 
-            const pct = ((i + 1) / totalFrames) * 100;
-            status.setProgress(pct);
+            // Plugin expects 0..1; it formats as percent for display.
+            status.setProgress((i + 1) / totalFrames);
+            status.setStatusText(`Frame ${i + 1} / ${totalFrames}`);
             const elapsed = (Date.now() - flags.startTimeRef.current) / 1000;
             status.setElapsedTime(elapsed);
             status.setEtaRange(calcEtaRange(elapsed, i + 1, totalFrames));
