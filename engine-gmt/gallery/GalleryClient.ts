@@ -40,6 +40,10 @@ export interface GalleryItem {
   created_at: string;
   author: string | null;
   image_format: 'jpg' | 'png';
+  /** Externalized env-map URL. Loader injects this into
+   *  preset.materials.envMapData before applying so the scene's sky comes
+   *  back without storing megabytes of base64 inside gmf_data. */
+  sky_url: string | null;
   /** Only populated when the item is fetched individually via getGalleryItem.
    *  The listGallery query intentionally excludes this column so browse pages
    *  don't drag scene-blob bytes for every tile. */
@@ -50,7 +54,7 @@ export interface GalleryItem {
 // loads light — the click-to-open path re-queries the single row with
 // gmf_data via getGalleryItem.
 const LIST_COLUMNS =
-  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format';
+  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format,sky_url';
 
 export interface ListGalleryOpts {
   limit?: number;

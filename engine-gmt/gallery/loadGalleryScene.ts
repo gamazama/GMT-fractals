@@ -43,6 +43,16 @@ export async function loadGalleryScene(item: GalleryItem): Promise<void> {
   FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, 'Loading scene from gallery...');
   const { def, preset } = loadGMFScene(gmf);
 
+  // Inject externalized env-map URL back into the preset before applying,
+  // so the env loader (THREE.TextureLoader) fetches it from R2. submitGalleryItem
+  // strips envMapData from the preset on save to keep gmf_data tiny.
+  if (item.sky_url) {
+    const p = preset as any;
+    if (p.materials && typeof p.materials === 'object') {
+      p.materials.envMapData = item.sky_url;
+    }
+  }
+
   // Mirror SceneIO's parseScene: register the embedded formula def if it
   // isn't already in the registry, so workshop / Fragmentarium scenes load
   // cleanly even on a fresh runtime.
