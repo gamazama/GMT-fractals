@@ -15,17 +15,21 @@ interface GalleryFilter {
 
 interface GalleryStore {
   isOpen: boolean;
+  isSubmitOpen: boolean;
   filter: GalleryFilter;
   // Snapshot of engine pause state at open time so we can restore on close.
   prevPaused: boolean | null;
 
   openGallery: () => void;
   closeGallery: () => void;
+  openSubmit: () => void;
+  closeSubmit: () => void;
   setFilter: (filter: GalleryFilter) => void;
 }
 
 export const useGalleryStore = create<GalleryStore>((set, get) => ({
   isOpen: false,
+  isSubmitOpen: false,
   filter: {},
   prevPaused: null,
 
@@ -44,6 +48,9 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
       (useEngineStore.getState() as any).setIsPaused?.(prevPaused);
     }
   },
+
+  openSubmit: () => set({ isSubmitOpen: true }),
+  closeSubmit: () => set({ isSubmitOpen: false }),
 
   setFilter: (filter) => set({ filter }),
 }));

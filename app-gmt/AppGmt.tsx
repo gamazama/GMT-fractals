@@ -34,7 +34,7 @@ import { EngineBridge } from '../components/EngineBridge';
 import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
-import { GalleryOverlay } from '../engine-gmt/gallery';
+import { GalleryOverlay, SubmitGalleryOverlay } from '../engine-gmt/gallery';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
@@ -370,6 +370,7 @@ export const AppGmt: React.FC = () => {
 
                 <HelpOverlay />
                 <GalleryOverlay />
+                <SubmitGalleryOverlay />
 
                 <TutorialRunner />
                 <TutorialOverlay />

@@ -15,8 +15,20 @@
 import React from 'react';
 import { menu } from '../../engine/plugins/Menu';
 import { useGalleryStore } from './galleryStore';
+import { getSubmitToken } from './submitGalleryItem';
+import { SubmitGalleryModal } from './SubmitGalleryModal';
 
 export { GalleryPage as GalleryOverlay } from './GalleryPage';
+
+/**
+ * Mounts the submit modal driven by galleryStore.isSubmitOpen.
+ * Mount once at app root next to <GalleryOverlay />.
+ */
+export const SubmitGalleryOverlay: React.FC = () => {
+    const isOpen = useGalleryStore((s) => s.isSubmitOpen);
+    const close  = useGalleryStore((s) => s.closeSubmit);
+    return <SubmitGalleryModal open={isOpen} onClose={close} />;
+};
 
 const GalleryIcon: React.FC = () => (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -25,6 +37,13 @@ const GalleryIcon: React.FC = () => (
         <rect x="14" y="14" width="7" height="7" />
         <path d="M10 7h4" />
         <path d="M17 10v4" />
+    </svg>
+);
+
+const SubmitIcon: React.FC = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 5v14" />
+        <path d="M5 12l7-7 7 7" />
     </svg>
 );
 
@@ -51,6 +70,21 @@ export const installGallery = (options: InstallGalleryOptions = {}) => {
         order: options.order ?? 25,
         onSelect: () => {
             useGalleryStore.getState().openGallery();
+        },
+    });
+
+    // "Submit to Gallery" — visible only when the admin submit token is
+    // configured in localStorage. Phase 2A admin gate; replaced with a
+    // signed-in user check in Phase 2B.
+    menu.registerItem(options.menuId ?? 'file', {
+        id: 'submit-gallery',
+        type: 'button',
+        label: 'Submit to Gallery',
+        icon: <SubmitIcon />,
+        order: (options.order ?? 25) + 0.5,
+        when: () => !!getSubmitToken(),
+        onSelect: () => {
+            useGalleryStore.getState().openSubmit();
         },
     });
 };

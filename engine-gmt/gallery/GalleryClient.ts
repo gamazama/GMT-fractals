@@ -38,7 +38,19 @@ export interface GalleryItem {
   tags: string[];
   featured: boolean;
   created_at: string;
+  author: string | null;
+  image_format: 'jpg' | 'png';
+  /** Only populated when the item is fetched individually via getGalleryItem.
+   *  The listGallery query intentionally excludes this column so browse pages
+   *  don't drag scene-blob bytes for every tile. */
+  gmf_data?: string | null;
 }
+
+// Columns pulled by the browse-grid query. Excludes gmf_data to keep tile
+// loads light — the click-to-open path re-queries the single row with
+// gmf_data via getGalleryItem.
+const LIST_COLUMNS =
+  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format';
 
 export interface ListGalleryOpts {
   limit?: number;
@@ -54,7 +66,7 @@ export async function listGallery(opts: ListGalleryOpts = {}): Promise<GalleryIt
 
   let query = client()
     .from('gallery_items')
-    .select('*')
+    .select(LIST_COLUMNS)
     .eq('status', 'approved')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);

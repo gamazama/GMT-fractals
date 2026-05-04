@@ -1,24 +1,44 @@
 /**
- * Fetch a gallery PNG from R2, extract its embedded GMF, and load the scene
- * into the engine. The PNG carries the full scene (formula shader + preset)
- * via the existing GMT save pipeline, so loading is symmetric with the
- * "Load Scene" file menu item.
+ * Load a gallery scene into the engine.
+ *
+ * Phase 2 path: read the GMF text from the row's `gmf_data` column. One
+ * Supabase request, no image download needed.
+ *
+ * Phase 1 fallback: legacy rows store the GMF inside the PNG's iTXt chunk
+ * with no separate gmf_data. We detect this (gmf_data null) and fetch the
+ * image from R2, extract via the same pngMetadata helper that `Open Scene`
+ * uses. Slow (full PNG download) but correct.
  */
 import { extractMetadata } from '../../utils/pngMetadata';
 import { loadGMFScene } from '../utils/FormulaFormat';
 import { useEngineStore } from '../../store/engineStore';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { registry as gmtRegistry } from '../engine/FractalRegistry';
+import { getGalleryItem, GalleryItem } from './GalleryClient';
 
-export async function loadGalleryScene(imageUrl: string): Promise<void> {
+async function gmfFromImageItxt(imageUrl: string): Promise<string> {
   const res = await fetch(imageUrl, { mode: 'cors' });
   if (!res.ok) throw new Error(`Failed to fetch scene image (${res.status})`);
   const blob = await res.blob();
-
-  // extractMetadata's signature takes File but only uses arrayBuffer() — wrap to satisfy TS.
+  // extractMetadata's signature takes File but only uses arrayBuffer().
   const file = new File([blob], 'gallery-scene.png', { type: 'image/png' });
   const gmf = await extractMetadata(file, 'FractalData');
   if (!gmf) throw new Error('No GMT scene data found in this image');
+  return gmf;
+}
+
+export async function loadGalleryScene(item: GalleryItem): Promise<void> {
+  // Re-fetch the row to populate gmf_data — listGallery omits the column
+  // to keep browse responses small.
+  let gmf: string | null = item.gmf_data ?? null;
+  if (!gmf) {
+    const full = await getGalleryItem(item.slug);
+    gmf = full?.gmf_data ?? null;
+  }
+  if (!gmf) {
+    // Legacy row (Phase 1): fall back to extracting from the PNG.
+    gmf = await gmfFromImageItxt(item.image_url);
+  }
 
   FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, 'Loading scene from gallery...');
   const { def, preset } = loadGMFScene(gmf);

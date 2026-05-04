@@ -31,7 +31,7 @@ export const GalleryPage: React.FC = () => {
     setLoadingSlug(item.slug);
     setLoadError(null);
     try {
-      await loadGalleryScene(item.image_url);
+      await loadGalleryScene(item);
       closeGallery();
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
