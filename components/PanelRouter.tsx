@@ -183,7 +183,11 @@ const renderItem = (
     const itemTag = item.type === 'feature' || item.type === 'widget' || item.type === 'compilable'
         ? `${item.type}:${(item as any).id}${(item as any).groupFilter ? `:${(item as any).groupFilter}` : ''}`
         : `${item.type}:${index}`;
-    const wrapped = <BenchProfiler id={`Item:${itemTag}`}>{node}</BenchProfiler>;
+    const wrapped = (
+        <BenchProfiler key={`item-${index}-${itemTag}`} id={`Item:${itemTag}`}>
+            {node}
+        </BenchProfiler>
+    );
     return withHelpId(wrapped, item.helpId, `helpwrap-${index}`);
 };
 
