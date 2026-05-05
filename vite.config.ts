@@ -69,8 +69,14 @@ export default defineConfig({
           // Preset gallery (gallery.json index + .gmf scene files)
           'gmf/**/*.{gmf,json}',
         ],
-        // Serve cached index.html for offline navigation.
+        // Serve cached index.html for offline navigation to unknown
+        // URLs (typos, deep links). The denylist excludes our actual
+        // .html entry points so they get served from precache directly
+        // instead of being swapped for the landing — without this,
+        // clicking /dev/demo.html on the listing page would route
+        // through NavigationRoute and return the cached index.html.
         navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/\.html$/],
         runtimeCaching: [
           {
             // CDN assets (Tailwind, jsdelivr) — try network, fall back to cache.
