@@ -34,6 +34,15 @@ jobs:
 
       # Only the matching branch's deploy step runs. keep_files: true means
       # main pushes don't wipe /dev and vice-versa — gh-pages branch holds both.
+      #
+      # Layout:
+      #   /dev/index.html    → static landing (lists GMT, fluid-toy, demo, …)
+      #   /dev/demo.html     → engine demo app
+      #   /dev/<other>.html  → fractal-toy / fluid-toy / app-gmt / mesh-export
+      #
+      # Both index.html and demo.html are now Vite entries
+      # (vite.config.ts rollupOptions.input), so the build produces them
+      # directly — no post-build file swap needed.
       - name: Deploy main to root
         if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
@@ -41,14 +50,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           keep_files: true
-
-      # Replace the legacy index.html with a dev landing page that lists
-      # all available app entries and points back to gmt-fractals.com for
-      # the live build. dev-landing.html is a static file (not a Vite
-      # entry) so it's never included in main builds — safe.
-      - name: Swap in dev landing page
-        if: github.ref == 'refs/heads/dev'
-        run: cp dev-landing.html dist/index.html
 
       - name: Deploy dev to /dev subfolder
         if: github.ref == 'refs/heads/dev'
