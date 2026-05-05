@@ -6,6 +6,7 @@ import { MAX_MODULAR_PARAMS } from '../../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
 import { QualityState } from './quality';
+import type { InterlaceState } from './interlace';
 import { Uniforms } from '../engine/UniformNames';
 
 export interface CoreMathState {
@@ -170,11 +171,21 @@ export const CoreMathFeature: FeatureDefinition = {
         let functions = "";
         let loopBody = "";
         let loopInit = "";
-        
+
+        // Detect if EITHER side of an interlace pair supports cutting-plane DE.
+        // Without this check, interlacing a non-CP primary (e.g. Mandelbulb) with a
+        // CP-aware secondary (e.g. MengerSponge) would emit cp_* writes from the
+        // secondary's body without the corresponding engine-side declarations.
+        const interlaceState = config.interlace as InterlaceState | undefined;
+        const interlaceDef = interlaceState?.interlaceCompiled && interlaceState.interlaceFormula
+            ? registry.get(interlaceState.interlaceFormula as FormulaType)
+            : undefined;
+        const pairSupportsCuttingPlane = !!def?.shader.supportsCuttingPlane || !!interlaceDef?.shader.supportsCuttingPlane;
+
         // Generate optimized getDist based on Quality Settings
         // Default to 0 (Analytic) if missing
         const estimatorType = quality?.estimator || 0;
-        let getDistBody = generateGetDist(estimatorType, !!def?.shader.supportsCuttingPlane);
+        let getDistBody = generateGetDist(estimatorType, pairSupportsCuttingPlane);
 
         if (formula === 'Modular') {
             const modularCode = compileGraph(config.pipeline || [], config.graph?.edges || []);
@@ -198,8 +209,10 @@ export const CoreMathFeature: FeatureDefinition = {
             }
             // Cutting-plane formulas: engine declares the cp_* accumulators and
             // initializes them. The formula's own loopBody writes to them; getDist
-            // reads them iff estimator===5 (Cutting Plane).
-            if (def.shader.supportsCuttingPlane) {
+            // reads them iff estimator===5 (Cutting Plane). Triggered when either
+            // the primary or the interlace secondary supports CP — addPreamble
+            // dedupes by exact string so duplicate calls are safe.
+            if (pairSupportsCuttingPlane) {
                 builder.addPreamble(CP_PREAMBLE);
                 loopInit = CP_INIT + loopInit;
             }

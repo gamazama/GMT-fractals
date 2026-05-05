@@ -295,10 +295,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 // Evaluate per-option disabledIf predicates against current store state.
                 // Used to gray out options that need formula capabilities the current
                 // formula doesn't declare (e.g. Cutting Plane estimator on non-CP formulas).
-                const renderedOptions = config.options.map((o) => {
-                    const disabled = (o as { disabledIf?: (s: any) => boolean }).disabledIf?.(globalState) === true;
-                    return disabled ? { ...o, disabled: true } : o;
-                });
+                const renderedOptions = config.options.map((o) =>
+                    o.disabledIf?.(globalState) === true ? { ...o, disabled: true } : o
+                );
                 return (
                     <div className={`mb-px ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                         <Dropdown

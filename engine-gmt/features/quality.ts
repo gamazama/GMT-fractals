@@ -105,10 +105,19 @@ export const QualityFeature: FeatureDefinition = {
                 {
                     label: 'Cutting Plane',
                     value: 5.0,
-                    // Gray out unless the current formula declares supportsCuttingPlane.
-                    // Engine still falls back to Linear if a user somehow forces this on
-                    // a non-CP formula (e.g. via a loaded GMF), so this is purely UX.
-                    disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsCuttingPlane,
+                    // Gray out unless either the current formula OR the active interlace
+                    // secondary declares supportsCuttingPlane. Engine falls back to Linear
+                    // if a user somehow forces this on a non-CP pair, so this is purely UX.
+                    disabledIf: (state: any) => {
+                        const primary = registry.get(state?.formula);
+                        if (primary?.shader.supportsCuttingPlane) return false;
+                        const il = state?.interlace;
+                        if (il?.interlaceCompiled && il.interlaceFormula) {
+                            const sec = registry.get(il.interlaceFormula);
+                            if (sec?.shader.supportsCuttingPlane) return false;
+                        }
+                        return true;
+                    },
                 }
             ],
             description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix, Cutting Plane=Knighty fold-and-cut polyhedra.',

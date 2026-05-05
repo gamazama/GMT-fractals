@@ -305,6 +305,28 @@ The Distance Metric setting (Euclidean / Chebyshev / Manhattan / Minkowski) only
 
 `mesh-export/components/PipelineControls.tsx` has its own statically-defined estimator dropdown (separate from the main app's auto-rendered one). Added Cutting Plane (5) to its options list with `disabled: !supportsCP` derived from `loadedDefinition?.shader.supportsCuttingPlane`. Verified via `debug/dump-mesh-cp.mts` that all 5 mesh-export shader variants (SDF / Newton / Preview / Escape / Color) emit the correct `cp_*` declarations and CP `getDist` body for all 12 supported formulas, and that non-CP formulas at estimator=5 fall back to Linear without crashing.
 
+### Pair-aware CP declaration (interlace bug fix)
+
+**Bug**: Initial migration only declared `cp_*` globals when the **primary** formula had `supportsCuttingPlane`. Interlacing a non-CP primary (e.g. `Mandelbulb`) with a CP-aware secondary (e.g. `MengerSponge`) emitted `cp_*` writes from the secondary's body without the corresponding declarations — `'cp_dmin' : undeclared identifier` shader compile errors. Caught by the `native-interlace-sweep` (336/1600 pair failures).
+
+**Fix**: Engine now checks **either** side of the interlace pair when deciding whether to emit `cp_*` declarations + initialization:
+
+- `engine-gmt/features/core_math.ts` — reads `config.interlace?.interlaceFormula`, looks up the secondary's def, ORs with primary's flag into `pairSupportsCuttingPlane`. Single source of truth for whether the shader needs cp_* declared.
+- `engine-gmt/engine/SDFShaderBuilder.ts` — added `pairSupportsCP(def, interlace)` helper, used at all 5 mesh-export shader builder sites + the iteration loop init + 3 `buildDEReturn` calls.
+- `engine-gmt/features/quality.ts` — Cutting Plane dropdown's `disabledIf` now also checks the interlace secondary, so CP option enables when either side supports it.
+
+`builder.addPreamble` dedupes by exact string content, so emitting `CP_PREAMBLE` from the (rare) case where both primary and secondary call it is naturally safe.
+
+### Verification harness
+
+`debug/native-interlace-sweep.mts` — ported from `stable/debug/`. Compiles every native × native interlace pair (1600 combinations) through real WebGL and reports per-pair compile/render gates. Run with:
+
+```
+npx tsx debug/native-interlace-sweep.mts --fresh
+```
+
+Took ~7 minutes on the local machine. Required validator harness: `debug/validator.html` (also ported from stable). After the fix, **1600 pass / 0 fail**.
+
 ### Skipped (not CP candidates)
 
 - `MixPinski` — uses 4D Chebyshev norm DE; that's its signature behavior, not cutting-plane. Custom `getDist` retained.

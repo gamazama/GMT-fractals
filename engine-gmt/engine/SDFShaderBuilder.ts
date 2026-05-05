@@ -199,6 +199,12 @@ function buildInterlaceGLSL(interlace: MeshInterlaceConfig): { preamble: string;
   return { preamble, func, loopInit };
 }
 
+/** True when the primary OR interlace secondary supports cutting-plane DE.
+ *  Either side writing to cp_* requires engine-side declarations + init. */
+function pairSupportsCP(def: FractalDefinition, interlace?: MeshInterlaceConfig): boolean {
+  return !!def.shader.supportsCuttingPlane || !!interlace?.definition.shader.supportsCuttingPlane;
+}
+
 /** Build the common formula iteration block */
 function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?: MeshInterlaceConfig): string {
   // Build interlace pre-loop and in-loop logic if interlace is active
@@ -224,7 +230,8 @@ function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?
     : def.shader.loopBody;
 
   // Cutting-plane formulas: init engine-provided accumulators before loopInit runs.
-  const cpInit = def.shader.supportsCuttingPlane
+  // Triggers when either primary or interlace secondary supports CP — see pairSupportsCP.
+  const cpInit = pairSupportsCP(def, interlace)
     ? 'cp_dmin = -1e10; cp_scale = 1.0; cp_trap = 1e10;'
     : '';
 
@@ -276,7 +283,7 @@ export function buildMeshSDFShader(config: MeshShaderConfig): string {
   const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator, !!def.shader.supportsCuttingPlane);
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator, pairSupportsCP(def, il));
 
   return `#version 300 es
 // GMT mesh-sdf ${Date.now()}
@@ -296,7 +303,7 @@ out vec4 fragColor;
 ${MESH_GLSL_HELPERS}
 
 // --- Preamble (global variables / helpers) ---
-${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
+${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -400,7 +407,7 @@ out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
-${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
+${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -433,7 +440,7 @@ export function buildMeshNewtonShader(config: MeshShaderConfig): string {
   const il = config.interlace;
   const ilGLSL = il ? buildInterlaceGLSL(il) : null;
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5', config.estimator, !!def.shader.supportsCuttingPlane);
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5', config.estimator, pairSupportsCP(def, il));
 
   return `#version 300 es
 precision highp float;
@@ -450,7 +457,7 @@ layout(location = 1) out vec4 outNormal;
 
 ${MESH_GLSL_HELPERS}
 
-${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
+${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -535,7 +542,7 @@ out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
-${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
+${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -579,7 +586,7 @@ export function buildMeshPreviewShader(config: MeshShaderConfig): string {
   // IFS preview: threshold 0.0 places the zero-crossing at r=1. Using '0.001' would shift it by
   // 0.001*dr ≈ 8 units (for dr=8192), making the raymarcher see everything as interior.
   const previewThresh = deType === 'ifs' ? '0.0' : '0.001';
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator, !!def.shader.supportsCuttingPlane);
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator, pairSupportsCP(def, il));
 
   return `#version 300 es
 // GMT mesh-preview ${Date.now()}
@@ -603,7 +610,7 @@ out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
-${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
+${pairSupportsCP(def, il) ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
