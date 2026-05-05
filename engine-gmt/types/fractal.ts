@@ -88,6 +88,10 @@ export interface FractalDefinition {
         /** Formula owns its full SDE: loopBody calls the function once then breaks.
          *  Engine guards: SKIP_PRE_BAILOUT, no hybrid fold injection, no interlacing. */
         selfContainedSDE?: boolean;
+        /** Formula writes to engine-provided cutting-plane accumulators (cp_dmin, cp_scale, cp_trap).
+         *  When true, engine declares those globals + initializes them in loopInit. When estimator
+         *  is set to "Cutting Plane" (5), engine's getDist returns vec2(abs(cp_dmin), cp_trap). */
+        supportsCuttingPlane?: boolean;
     };
     parameters: (FractalParameter | null)[];
     description?: string;

@@ -27,6 +27,12 @@ export interface ParamOption {
      *  rather than carrying one all-encompassing description on the
      *  param. AutoFeaturePanel renders a small caption row off this. */
     hint?: string;
+    /** Optional predicate evaluated against the global engine store. When
+     *  it returns true, AutoFeaturePanel renders this option as `<option disabled>`
+     *  in the dropdown — selectable in the list but visibly grayed out and
+     *  rejected by the browser. Used to gate options on formula capabilities
+     *  (e.g. estimator=Cutting Plane requires shader.supportsCuttingPlane). */
+    disabledIf?: (state: any) => boolean;
 }
 
 export interface TextureConfig {

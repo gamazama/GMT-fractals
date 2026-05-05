@@ -29,7 +29,20 @@ export interface CoreMathState {
 }
 
 // Generate optimized DE logic based on compile-time estimator type
-const generateGetDist = (estimatorType: number) => {
+const generateGetDist = (estimatorType: number, supportsCuttingPlane = false) => {
+    // 5: Cutting Plane — Knighty fold-and-cut. Reads engine-provided cp_dmin/cp_trap
+    // accumulators (declared only when formula has shader.supportsCuttingPlane).
+    // For non-CP formulas, fall back to Linear (1.0) — picking CP on a formula that
+    // doesn't write to cp_* would otherwise produce undeclared-identifier compile errors.
+    if (estimatorType > 4.5 && supportsCuttingPlane) {
+        return `
+        vec2 getDist(float r, float dr, float iter, vec4 z) {
+            return vec2(abs(cp_dmin), cp_trap);
+        }`;
+    }
+    // Treat estimator=5 on a non-CP formula as Linear (best-effort fallback).
+    if (estimatorType > 4.5) estimatorType = 1.0;
+
     let mathLine = "d = 0.5 * log(max(r, 1.0e-5)) * r / dr_safe;"; // Default 0 (Analytic)
 
     // Optimized GPU math using log2 where possible
@@ -67,7 +80,7 @@ const generateGetDist = (estimatorType: number) => {
         vec2 getDist(float r, float dr, float iter, vec4 z) {
             float m2 = r * r;
             if (m2 < 1.0e-20) return vec2(0.0, iter);
-            
+
             // Log Smoothing Calculation (Shared)
             // Guarded: Only calculate log smoothing if we have actually escaped (> 1.0)
             float smoothIter = iter;
@@ -75,15 +88,35 @@ const generateGetDist = (estimatorType: number) => {
                 float threshLog = log2(max(uEscapeThresh, 1.1));
                 smoothIter = iter + 1.0 - log2(log2(m2) / threshLog);
             }
-            
+
             float d = 0.0;
             float dr_safe = max(abs(dr), 1.0e-20);
-            
+
             ${mathLine}
-            
+
             return vec2(d, smoothIter);
         }`;
 };
+
+// Engine-provided cutting-plane accumulator globals + init lines.
+// Declared whenever a formula has shader.supportsCuttingPlane, regardless of estimator —
+// the formula's writes need a target. When estimator != 5, the writes are dead code that
+// the GLSL optimizer strips.
+//
+// MIRROR: keep in sync with `CP_PREAMBLE_GLOBALS` + the cp_* init line in
+// `engine/SDFShaderBuilder.ts` (mesh export). Both paths must declare and
+// initialize the same set of accumulators identically.
+const CP_PREAMBLE = `
+// --- Cutting-plane DE accumulators (engine-provided) ---
+float cp_dmin;
+float cp_scale;
+float cp_trap;
+`;
+const CP_INIT = `
+cp_dmin = -1e10;
+cp_scale = 1.0;
+cp_trap = 1e10;
+`;
 
 export const CoreMathFeature: FeatureDefinition = {
     id: 'coreMath',
@@ -141,7 +174,7 @@ export const CoreMathFeature: FeatureDefinition = {
         // Generate optimized getDist based on Quality Settings
         // Default to 0 (Analytic) if missing
         const estimatorType = quality?.estimator || 0;
-        let getDistBody = generateGetDist(estimatorType);
+        let getDistBody = generateGetDist(estimatorType, !!def?.shader.supportsCuttingPlane);
 
         if (formula === 'Modular') {
             const modularCode = compileGraph(config.pipeline || [], config.graph?.edges || []);
@@ -163,8 +196,16 @@ export const CoreMathFeature: FeatureDefinition = {
             if (def.shader.preamble) {
                 builder.addPreamble(def.shader.preamble);
             }
-            // Use custom getDist if defined, else use dynamic
-            if (def.shader.getDist) {
+            // Cutting-plane formulas: engine declares the cp_* accumulators and
+            // initializes them. The formula's own loopBody writes to them; getDist
+            // reads them iff estimator===5 (Cutting Plane).
+            if (def.shader.supportsCuttingPlane) {
+                builder.addPreamble(CP_PREAMBLE);
+                loopInit = CP_INIT + loopInit;
+            }
+            // Custom getDist override: keep for Frags/legacy formulas. Skipped when
+            // CP estimator is selected — engine's getDist takes precedence.
+            if (def.shader.getDist && estimatorType < 4.5) {
                  getDistBody = `vec2 getDist(float r, float dr, float iter, vec4 z) { ${def.shader.getDist} }`;
             }
         }

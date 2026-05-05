@@ -4,6 +4,29 @@
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
 **Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03.** **PT reflection quality (env MIS + IS + Sobol) shipped 2026-05-05** — see entry below.
 
+**📋 2026-05-05 — Cutting-plane DE promoted to engine-level estimator (option 5):**
+
+Code in `engine-gmt/types/fractal.ts` + `engine-gmt/features/quality.ts` + `engine-gmt/features/core_math.ts` + `engine-gmt/engine/SDFShaderBuilder.ts` + the 5 cutting-plane formulas. Full architecture writeup in `docs/gmt/24_Formula_Interlace_System.md` ("Cutting-Plane Estimator (2026-05-05)" section).
+
+User reported GSD + MengerSponge interlace produced "tiny dust" instead of solid surfaces (test GMF in `debug/errors/greatstellateddodecahedron-mengerSponge.gmf`). Diagnosis: GSD's custom `getDist` returned `vec2(abs(gsd_dmin), gsd_trap)` which silently overrode the user's estimator dropdown choice; the formula-private `gsd_dmin` accumulator is incoherent under interlace because the secondary doesn't update its scale tracker.
+
+Fix: Cutting Plane is now a first-class compile-time estimator (value 5, alongside Log/Linear/Pseudo/Dampened/Linear2). Engine declares shared `cp_dmin/cp_scale/cp_trap` globals when a formula has `shader.supportsCuttingPlane: true`. The 5 native cutting-plane formulas (`Coxeter`, `Cuboctahedron`, `GreatStellatedDodecahedron`, `RhombicDodecahedron`, `RhombicTriacontahedron`) were migrated to use the shared accumulators (the prefixed `gsd_*` / `cox_*` / `rd_*` / `rt_*` names all renamed to `cp_*`), their custom `getDist` blocks removed, and their `defaultPreset.features.quality.estimator` set to 5. Verified via `debug/dump-cp-shader.mts` and `debug/dump-cp-interlace.mts`.
+
+User can now switch the estimator dropdown to Linear (1) on these formulas to get the standard `(r-1)/dr` math, which composes correctly under interlace with non-CP secondaries — fixes the dust bug. Imported Frags with custom `getDist` are unaffected (their override path is preserved when estimator !== 5).
+
+**Same-day expansion** — additional CP-aware formulas:
+- `MengerSponge` — added cube-face cutting plane (3-axis max after sort), `supportsCuttingPlane: true`, default estimator 5. Now interlaces coherently with GSD/Coxeter/etc. under CP estimator.
+- `Octahedron`, `Icosahedron`, `Dodecahedron`, `TruncatedIcosahedron` — all four Knighty-fold polyhedra got their natural cutting-plane added (single-axis face for Octahedron; vertex-direction face for Icosa/TruncatedIcosa; (1,1,1)/√3 face for Dodeca's symmetric IFS attractor). Default switched to estimator 5 — visibly sharper polyhedral geometry.
+- `SierpinskiTetrahedron` — CP support added with average-of-per-axis scale tracker (geometrically approximate but stable when vec3C is non-uniform). Default estimator unchanged.
+- `MengerAdvanced` — CP support added with cube-face plane test computed BEFORE inner box fold + Z-Scale (exact when both extras are off; approximate otherwise). Default estimator unchanged.
+
+Estimator dropdown UI (`components/AutoFeaturePanel.tsx` + `components/GenericDropdown.tsx` + `engine/FeatureSystem.ts`) now supports per-option `disabledIf?: (state) => boolean`. Cutting Plane option in `engine-gmt/features/quality.ts` uses this to gray out for any formula without `supportsCuttingPlane` (engine still falls back to Linear if forced via GMF, so it's purely UX). Mesh-export's own dropdown in `mesh-export/components/PipelineControls.tsx` got CP added with `disabled: !supportsCP` from `loadedDefinition`.
+
+**Polish pass (same day):**
+- Sierpinski Tetrahedron's CP plane was originally `(1,1,1)/√3` (symmetry axis, not face normal) → produced octahedron silhouette. Replaced with 3-plane `max` test using actual tet face normals `(-1,1,1)`, `(1,-1,1)`, `(1,1,-1)` (each /√3) — now produces real tetrahedral geometry.
+- Help entry `data/help/topics/rendering.ts` → `quality.estimator` updated with all 6 estimator options + a note that Distance Metric only affects `length()`-based estimators (CP uses face normals directly, metric is no-op for CP geometry but still affects orbit-trap coloring).
+- New verification script `debug/dump-mesh-cp.mts` checks all 5 mesh-export shader variants × 12 CP formulas + non-CP fallback. All passing.
+
 **📋 2026-05-05 — Path-traced reflection quality (env MIS + IS + Sobol bounce):**
 
 Plan: [plans/path-trace-reflections.md](plans/path-trace-reflections.md). Code in `engine-gmt/shaders/chunks/pathtracer.ts` + `engine-gmt/features/lighting/index.ts` + new `engine-gmt/features/reflections/env_cdf.ts` + env-load hooks in `engine-gmt/engine/MaterialController.ts` and `engine-gmt/engine/worker/renderWorker.ts`.

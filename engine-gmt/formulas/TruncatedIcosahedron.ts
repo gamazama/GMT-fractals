@@ -41,16 +41,24 @@ export const TruncatedIcosahedron: FractalDefinition = {
         float trunc = clamp(uParamC, 0.0, 1.0);
         vec3 offsetDir = normalize(mix(trIco_vertexDir, trIco_dodecDir, trunc));
 
+        // Cutting-plane DE: face plane perpendicular to offsetDir at distance paramB.
+        // The truncation parameter morphs between icosa/dodec face geometries.
+        // Engine ignores cp_* writes when estimator != 5 (dead store).
+        float d_face = dot(z3, offsetDir) - uParamB;
+        cp_dmin = max(cp_dmin, cp_scale * d_face);
+
         // Scale and offset
         float scale = uParamA;
         vec3 offset = offsetDir * uParamB * (scale - 1.0);
         offset -= uVec3A;
         z3 = z3 * scale - offset;
+        cp_scale /= scale;
 
         if (uJuliaMode > 0.5) z3 += c.xyz;
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, getLength(z3));
+        cp_trap = trap;
     }`,
         loopBody: `formula_TruncatedIcosahedron(z, dr, trap, c);`,
         loopInit: `
@@ -67,6 +75,7 @@ export const TruncatedIcosahedron: FractalDefinition = {
         z.xyz = pf;
     }`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -236,7 +245,7 @@ export const TruncatedIcosahedron: FractalDefinition = {
                 bufferPrecision: 0,
                 maxSteps: 300,
                 distanceMetric: 0,
-                estimator: 1,
+                estimator: 5,
                 fudgeFactor: 0.8,
                 stepRelaxation: 0,
                 stepJitter: 0.1,

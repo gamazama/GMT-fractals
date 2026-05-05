@@ -29,11 +29,7 @@ export const RhombicTriacontahedron: FractalDefinition = {
     // Offset direction: pbc = icosidodecahedron vertex = RT face center
     const vec3 rt_pbc = vec3(0.52573111, 0.0, 0.85065081);
 
-    // Cutting-plane DE accumulator
-    float rt_dmin;
-    float rt_scale;
-    float rt_trap;`,
-        preambleVars: ['rt_dmin', 'rt_scale', 'rt_trap'],
+    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).`,
         function: `
     void formula_RhombicTriacontahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -59,30 +55,25 @@ export const RhombicTriacontahedron: FractalDefinition = {
         // After fold, domain concentrates near z-axis where (0,0,1) RT face dominates
         float size = uParamB;
         float d = z3.z - size;
-        rt_dmin = max(rt_dmin, rt_scale * d);
+        cp_dmin = max(cp_dmin, cp_scale * d);
 
         // Step 3: Scale and offset toward RT face center (pbc = icosidodecahedron vertex)
         float scale = uParamA;
         vec3 offset = rt_pbc * size * (scale - 1.0);
         offset -= uVec3A;
         z3 = z3 * scale - offset;
-        rt_scale /= scale;
+        cp_scale /= scale;
 
         if (uJuliaMode > 0.5) z3 += c.xyz;
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, getLength(z3));
-        rt_trap = trap;
+        cp_trap = trap;
     }`,
         loopBody: `formula_RhombicTriacontahedron(z, dr, trap, c);`,
-        loopInit: `gmt_precalcRodrigues(uVec3B);
-rt_dmin = -1e10;
-rt_scale = 1.0;
-rt_trap = 1e10;`,
-        getDist: `
-        return vec2(abs(rt_dmin), rt_trap);
-    `,
+        loopInit: `gmt_precalcRodrigues(uVec3B);`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -136,7 +127,7 @@ rt_trap = 1e10;`,
             },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false, postRotX: 0.75 },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 17.023, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 5, fudgeFactor: 0.6, pixelThreshold: 2, maxSteps: 400, distanceMetric: 1, stepJitter: 0.15, estimator: 1 },
+            quality: { detail: 5, fudgeFactor: 0.6, pixelThreshold: 2, maxSteps: 400, distanceMetric: 1, stepJitter: 0.15, estimator: 5 },
             colorGrading: { saturation: 1.15, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 32, dofStrength: 0, dofFocus: 5 }
         },

@@ -15,6 +15,8 @@ export const Cuboctahedron: FractalDefinition = {
     // Octahedral symmetry (Type=4), cuboctahedron = edge midpoint (pbc)
     // Cutting-plane DE: accumulates max(signed_distance_to_face_planes) across iterations
     // This avoids the fold boundary degeneracy that breaks r/dr estimation at (1,1,0)
+    //
+    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
 
     // Fold normal for octahedral symmetry: nc = (-0.5, -cos(pi/4), sqrt(0.75 - cos^2(pi/4)))
     const vec3 co_nc = vec3(-0.5, -0.70710678, 0.5);
@@ -24,13 +26,7 @@ export const Cuboctahedron: FractalDefinition = {
     const vec3 co_pca = vec3(0.0, 0.57735027, 0.81649658);    // cube vertex direction
     // Precomputed dot products for cutting planes: dot(pbc, pab) and dot(pbc, pca)
     const float co_d_pab = 0.70710678;  // 1/sqrt(2)
-    const float co_d_pca = 0.57735027;  // 1/sqrt(3)
-
-    // Cutting-plane DE accumulator (mutable — must be in preambleVars)
-    float cp_dmin;
-    float cp_scale;
-    float cp_trap;`,
-        preambleVars: ['cp_dmin', 'cp_scale', 'cp_trap'],
+    const float co_d_pca = 0.57735027;  // 1/sqrt(3)`,
         function: `
     void formula_Cuboctahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -71,14 +67,9 @@ export const Cuboctahedron: FractalDefinition = {
         cp_trap = trap;
     }`,
         loopBody: `formula_Cuboctahedron(z, dr, trap, c);`,
-        loopInit: `gmt_precalcRodrigues(uVec3B);
-cp_dmin = -1e10;
-cp_scale = 1.0;
-cp_trap = 1e10;`,
-        getDist: `
-        return vec2(abs(cp_dmin), cp_trap);
-    `,
+        loopInit: `gmt_precalcRodrigues(uVec3B);`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -247,7 +238,7 @@ cp_trap = 1e10;`,
                 bufferPrecision: 0,
                 maxSteps: 400,
                 distanceMetric: 0,
-                estimator: 1,
+                estimator: 5,
                 fudgeFactor: 0.6,
                 stepRelaxation: 0,
                 stepJitter: 0.15,

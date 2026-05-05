@@ -208,6 +208,113 @@ Most of these only have `const` preamble declarations (no `preambleVars` needed)
 
 ---
 
+## Cutting-Plane Estimator (2026-05-05)
+
+### What changed
+
+The five Knighty fold-and-cut polyhedra (`Coxeter`, `Cuboctahedron`, `GreatStellatedDodecahedron`, `RhombicDodecahedron`, `RhombicTriacontahedron`) previously each declared their own private DE accumulators (`gsd_dmin`, `cox_dmin`, `cp_dmin`, `rd_dmin`, `rt_dmin`) and shipped a custom `getDist` block returning `vec2(abs(<prefix>_dmin), <prefix>_trap)`. The custom `getDist` always overrode the user's estimator dropdown choice.
+
+This caused the GSD + MengerSponge interlace dust bug: the formula-private accumulator was incoherent under interlace because the secondary formula's iteration didn't update the cutting-plane scale tracker, and the user couldn't switch to a standard estimator (Linear/Log) to bypass the broken DE because the custom `getDist` silently won.
+
+### Architecture
+
+Cutting Plane is now a first-class engine estimator (option **5** in `features/quality.ts`'s estimator dropdown — alongside Log, Linear, Pseudo, Dampened, Linear2). Compile-time switched, same as the other estimators.
+
+**Engine side:**
+- `types/fractal.ts` — added `shader.supportsCuttingPlane?: boolean` flag.
+- `features/core_math.ts` — when a formula has `supportsCuttingPlane`, engine emits the shared `cp_dmin/cp_scale/cp_trap` globals via `addPreamble` and prepends the init lines to `loopInit`. Engine's `getDist` body when `estimator===5` is `return vec2(abs(cp_dmin), cp_trap);` (replaces any formula-supplied `getDist`).
+- `engine/SDFShaderBuilder.ts` — same wiring for all 5 mesh-export shaders. `buildEstimatorMath` added case 5; `buildDEReturn` skips the custom `getDist` path when CP is selected; `buildIterationLoop` prepends cp_* init when formula supports CP.
+
+**Formula side (the 5 natives):**
+- Renamed prefixed accumulators (`gsd_dmin` etc.) → `cp_dmin/cp_scale/cp_trap`.
+- Removed cp_* declarations from each formula's `preamble`.
+- Removed cp_* from `preambleVars` (they're shared engine globals now, not per-formula — the interlace renamer must NOT rewrite them).
+- Removed `getDist` block (engine provides).
+- Removed cp_* init lines from `loopInit` (engine prepends).
+- Added `supportsCuttingPlane: true`.
+- Set `defaultPreset.features.quality.estimator: 5`.
+
+### What it fixes
+
+1. **GSD + MengerSponge interlace** (the original bug). With CP estimator: both formulas write to the same shared `cp_*` accumulators. With Linear estimator: GSD's cp_* writes become dead stores, the standard `(r-1)/dr` math kicks in, and Menger's `dr*=scale` updates compose correctly — no more dust.
+2. **Silent override UX bug**. Users can now pick any estimator in the dropdown and have it actually take effect on these formulas.
+
+### Composition rules under CP estimator
+
+| Primary | Secondary | Result |
+|---|---|---|
+| CP-aware | CP-aware | Both contribute cutting planes; coherent. |
+| CP-aware | Standard | Standard formula warps z but doesn't update cp_scale; partial coherence (geometry approximate, doesn't dust out). |
+| Standard | CP-aware | Standard primary uses dr math; CP secondary's writes go to unused globals. Use Linear/Log estimator instead. |
+
+For mixed CP+standard interlace, fall back to Linear (1) — both formulas update `dr`, composition is mathematically clean.
+
+### Performance
+
+- **CP estimator selected**: identical to pre-refactor — same accumulator math (1 dot + 1 mul + 1 max + 1 div per iteration) just lifted into shared globals.
+- **Other estimator selected**: cp_* writes still happen but are dead stores; GLSL optimizer strips them. Net cost ≈ pre-refactor (which always ran the cp_* writes regardless).
+- **Other formulas (Mandelbulb, Menger, etc.)**: unaffected — `supportsCuttingPlane` is undefined, no globals declared, no init emitted.
+
+### Verification scripts
+
+- `debug/dump-cp-shader.mts <FormulaId>` — dumps `getDist` body and all cp_* references for any formula at estimator=5.
+- `debug/dump-cp-interlace.mts` — dumps the GSD+MengerSponge interlace shader at estimator=5 to confirm exactly 3 top-level `cp_*` declarations (no duplicates from the secondary).
+
+### Same-day expansion: 7 more CP-aware formulas
+
+After the initial 5, cutting-plane DE was added to 7 more formulas. The shape of each addition: insert a `cp_dmin = max(cp_dmin, cp_scale * d_face)` accumulation after the formula's fold (before the IFS scale step), insert `cp_scale /= scale` after the scale step, set `cp_trap = trap`, and add `supportsCuttingPlane: true`.
+
+| Formula | d_face | Default est. | Notes |
+|---|---|---|---|
+| `MengerSponge` | `max(z3.x-vB.x, z3.y-vB.y, z3.z-vB.z)` (cube faces after sort) | **5** | Default switched. Now interlaces coherently with the 5 originals under CP. |
+| `Octahedron` | `z3.x - paramB` (single-axis vertex direction) | **5** | Default switched. |
+| `Icosahedron` | `dot(z3, ico_vertexDir) - paramB` | **5** | Default switched. |
+| `Dodecahedron` | `dot(z3, (1,1,1)/√3) - paramB·√3` (symmetric IFS attractor) | **5** | Default switched. |
+| `TruncatedIcosahedron` | `dot(z3, offsetDir) - paramB` (offsetDir morphs with paramC truncation) | **5** | Default switched. |
+| `SierpinskiTetrahedron` | `dot(z3, (1,1,1)/√3) - paramB·√3` | unchanged (Linear) | Uses `cp_scale /= avgScale` because vec3C is per-axis — geometrically approximate but stable. |
+| `MengerAdvanced` | cube faces after sort, computed BEFORE inner box fold + Z-Scale | unchanged (Linear) | Exact when paramC=0 and paramD=1; approximate otherwise. The inner box fold and z-stretch warp z3 in ways that break straight cube geometry, so the CP test runs first. |
+
+### Estimator dropdown UI gating
+
+To prevent users from picking Cutting Plane on a formula that doesn't support it (used to silently fall back to Linear without explanation), the estimator dropdown grays the option out per-formula:
+
+- `engine/FeatureSystem.ts` — added `disabledIf?: (state: any) => boolean` to `ParamOption`.
+- `components/GenericDropdown.tsx` — added `disabled?: boolean` to options, propagates to `<option disabled>`.
+- `components/AutoFeaturePanel.tsx` — when rendering an options dropdown, evaluates each option's `disabledIf` against the current store state and stamps `disabled: true`.
+- `engine-gmt/features/quality.ts` — Cutting Plane option's `disabledIf: (state) => !registry.get(state?.formula)?.shader.supportsCuttingPlane`.
+
+Engine still falls back to Linear if a user somehow forces CP on a non-CP formula (e.g. via a hand-edited GMF), so the UI gating is purely about discoverability.
+
+### Sierpinski tetrahedron geometry fix
+
+Initial migration used `(1,1,1)/√3` as the cutting plane normal — that's the symmetry **axis** of the tetrahedron, not a face normal. A plane perpendicular to the axis cut through the +,+,+ octant produces a triangular cross-section that traces an octahedron silhouette, not a tetrahedron. User reported "diamond / Manhattan-distance look" under CP — that observation was correct.
+
+Replaced with a 3-plane `max` test using the actual face normals at vertex (paramB, paramB, paramB):
+
+- `(-1, 1, 1)/√3`, `(1,-1, 1)/√3`, `(1, 1,-1)/√3` — the three faces meeting at that vertex
+- offset `paramB/√3` for each
+- `d_face = max(d1, d2, d3)`
+
+Now produces actual tetrahedral geometry. Pattern is analogous to Cuboctahedron's 3-plane construction.
+
+### Distance Metric × CP estimator
+
+The Distance Metric setting (Euclidean / Chebyshev / Manhattan / Minkowski) only affects the four `length()`-based estimators. CP uses dot-products with face normals directly, so the metric has no visual effect on geometry under CP — though it still affects orbit-trap **coloring** because trap accumulation uses `getLength(z3-c)` regardless of estimator. This is documented in the user-facing help entry (`data/help/topics/rendering.ts` → `quality.estimator`).
+
+### Mesh export integration
+
+`mesh-export/components/PipelineControls.tsx` has its own statically-defined estimator dropdown (separate from the main app's auto-rendered one). Added Cutting Plane (5) to its options list with `disabled: !supportsCP` derived from `loadedDefinition?.shader.supportsCuttingPlane`. Verified via `debug/dump-mesh-cp.mts` that all 5 mesh-export shader variants (SDF / Newton / Preview / Escape / Color) emit the correct `cp_*` declarations and CP `getDist` body for all 12 supported formulas, and that non-CP formulas at estimator=5 fall back to Linear without crashing.
+
+### Skipped (not CP candidates)
+
+- `MixPinski` — uses 4D Chebyshev norm DE; that's its signature behavior, not cutting-plane. Custom `getDist` retained.
+- `KaliBox`, `Mandelbox`, `AmazingBox`, `AmazingSurf`, `AmazingSurface` — boxFold-based, no fold-and-cut structure.
+- `Apollonian` — sphereFold-based.
+- `PseudoKleinian*`, `Kleinian*`, `MarbleMarcher` — each has its own custom DE.
+- All power fractals (`Mandelbulb`, `Mandelbar3D`, `Buffalo`, `BoxBulb`, `MandelMap`, `MandelBolic`, `Bristorbrot`, `Tetrabrot`, `Mandelorus`, `Phoenix`, `MandelTerrain`, `JuliaMorph`, `Quaternion`, `Appell`, `Claude`, `MakinBrot`, `Borromean`).
+
+---
+
 ## Files Changed This Session
 
 | File | Change |

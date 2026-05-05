@@ -521,12 +521,16 @@ Controls how "distance" is measured in 3D space. Different metrics produce diffe
         content: `
 > **REQUIRES ADVANCED MODE**
 
-Controls the mathematical method used to estimate the distance to the fractal surface. Different estimators suit different formula types.
+Controls the mathematical method used to estimate the distance to the fractal surface. Different estimators suit different formula types. **Compile-time setting** — changing it triggers a shader rebuild.
 
 - **Analytic Log**: Uses the logarithmic distance estimate. Best for standard fractals (Mandelbulb, Mandelbox) where the analytic derivative is reliable.
-- **Linear**: A simpler linear estimate. Can work better for formulas with non-standard divergence behavior.
-- **Pseudo**: Approximates the distance without true derivatives. Useful as a fallback when analytic methods produce artifacts.
+- **Linear (Unit 1.0)**: A simpler linear estimate \`(r-1)/dr\`. Standard for IFS / box / Menger fractals.
+- **Linear (Offset 2.0)**: Same family with a 2.0 offset — classic Menger variant.
+- **Pseudo (Raw)**: Approximates the distance without true derivatives \`r/dr\`. Useful as a fallback when analytic methods produce artifacts.
 - **Dampened**: A conservative estimate that under-steps slightly for stability. Helps with formulas prone to overstepping artifacts (holes or noise on surfaces).
+- **Cutting Plane**: Knighty fold-and-cut DE — uses formula-specific face plane geometry instead of \`length(z)/dr\`. Produces visibly sharper edges and faces on supported polyhedra. Grayed out on formulas that don't support it; the supported set currently includes the Knighty polyhedra (Coxeter, Cuboctahedron, Dodecahedron, Icosahedron, Octahedron, Truncated Icosahedron, Great Stellated Dodecahedron, Rhombic Dodecahedron, Rhombic Triacontahedron) plus Menger Sponge, Menger Advanced, and Sierpinski Tetrahedron.
+
+**Note**: The **Distance Metric** setting (Euclidean / Chebyshev / Manhattan / Minkowski) only affects the four \`length()\`-based estimators above. Cutting Plane uses dot-products with face normals directly, so the metric setting has no visual effect on geometry under CP — though it still affects orbit-trap coloring.
 `
     },
     'quality.jitter': {

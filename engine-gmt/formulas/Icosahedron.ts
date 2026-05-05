@@ -32,16 +32,25 @@ export const Icosahedron: FractalDefinition = {
         float t = dot(z3, ico_n1);
         if (t > 0.0) z3 -= 2.0 * t * ico_n1;
 
+        // Cutting-plane DE: icosahedron face perpendicular to vertex direction.
+        // After fold, post-fold position lies in the wedge bounded by this plane;
+        // d_face = dot(z3, vertexDir) - paramB measures the signed distance to it.
+        // Engine ignores cp_* writes when estimator != 5 (dead store).
+        float d_face = dot(z3, ico_vertexDir) - uParamB;
+        cp_dmin = max(cp_dmin, cp_scale * d_face);
+
         // Scale and offset (toward icosahedron vertex direction)
         float scale = uParamA;
         vec3 offset = ico_vertexDir * uParamB * (scale - 1.0);
         offset -= uVec3A;
         z3 = z3 * scale - offset;
+        cp_scale /= scale;
 
         if (uJuliaMode > 0.5) z3 += c.xyz;
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, getLength(z3));
+        cp_trap = trap;
     }`,
         loopBody: `formula_Icosahedron(z, dr, trap, c);`,
         loopInit: `
@@ -59,6 +68,7 @@ export const Icosahedron: FractalDefinition = {
         z.xyz = pf;
     }`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -223,7 +233,7 @@ export const Icosahedron: FractalDefinition = {
                 bufferPrecision: 0,
                 maxSteps: 300,
                 distanceMetric: 0,
-                estimator: 1,
+                estimator: 5,
                 fudgeFactor: 0.8,
                 stepRelaxation: 0,
                 stepJitter: 0.15,

@@ -19,6 +19,24 @@ export const SierpinskiTetrahedron: FractalDefinition = {
         sf = step(0.0, z3.x + z3.y); z3.xy = mix(-z3.yx, z3.xy, sf);
         sf = step(0.0, z3.x + z3.z); z3.xz = mix(-z3.zx, z3.xz, sf);
         sf = step(0.0, z3.y + z3.z); z3.yz = mix(-z3.zy, z3.yz, sf);
+
+        // Cutting-plane DE: the 3 tetrahedron face planes meeting at the IFS
+        // vertex (paramB, paramB, paramB). Outward normals are (-1,1,1)/sqrt(3),
+        // (1,-1,1)/sqrt(3), (1,1,-1)/sqrt(3); each face passes through the vertex
+        // with offset paramB/sqrt(3). Take max — this is a 3-plane CSG analogous
+        // to Cuboctahedron. NOTE: with non-uniform per-axis scale (vec3C) the
+        // tracker below uses the average scale — geometrically approximate but
+        // stable. Engine ignores cp_* writes when estimator != 5 (dead store).
+        const vec3 sierp_n1 = vec3(-0.57735027,  0.57735027,  0.57735027);
+        const vec3 sierp_n2 = vec3( 0.57735027, -0.57735027,  0.57735027);
+        const vec3 sierp_n3 = vec3( 0.57735027,  0.57735027, -0.57735027);
+        float sierp_off = uParamB * 0.57735027;
+        float d1 = dot(z3, sierp_n1) - sierp_off;
+        float d2 = dot(z3, sierp_n2) - sierp_off;
+        float d3 = dot(z3, sierp_n3) - sierp_off;
+        float d_face = max(max(d1, d2), d3);
+        cp_dmin = max(cp_dmin, cp_scale * d_face);
+
         // Vec3C: Per-axis scale (average for DR calculation)
         vec3 scale3 = uVec3C;
         z3 = z3 * scale3 - vec3(uParamB * (scale3 - 1.0));
@@ -33,12 +51,15 @@ export const SierpinskiTetrahedron: FractalDefinition = {
         // Use average scale for derivative calculation
         float avgScale = (scale3.x + scale3.y + scale3.z) / 3.0;
         dr = dr * avgScale;
+        cp_scale /= avgScale;
         z.xyz = z3;
         trap = min(trap, length(z3));
+        cp_trap = trap;
     }`,
         loopBody: `formula_SierpinskiTetrahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [

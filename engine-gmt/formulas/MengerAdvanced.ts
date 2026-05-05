@@ -31,7 +31,16 @@ export const MengerAdvanced: FractalDefinition = {
         z3.x = max(max(ms.x, ms.y), ms.z);
         z3.z = min(min(ms.x, ms.y), ms.z);
         z3.y = ms.x + ms.y + ms.z - z3.x - z3.z;
-        
+
+        // Cutting-plane DE: cube face after sort. Computed BEFORE the Inner Box
+        // Fold and Z-Scale steps because both warp z3 in ways that break the
+        // straight cube-face geometry. The result is exact when Inner Fold = 0
+        // and Z-Scale = 1; otherwise it's an approximation. Engine ignores
+        // cp_* writes when estimator != 5 (dead store).
+        float cp_offset = uParamB;
+        float d_face = max(max(z3.x - cp_offset, z3.y - cp_offset), z3.z - cp_offset);
+        cp_dmin = max(cp_dmin, cp_scale * d_face);
+
         // 3. UBER FEATURE: Inner Box Fold (Param C)
         // Injects Mandelbox-like complexity inside the sponge voids
         if (uParamC > 0.0) {
@@ -42,14 +51,15 @@ export const MengerAdvanced: FractalDefinition = {
         // 4. Scaling & IFS
         float scale = (abs(uParamA - 1.0) < 0.001) ? 1.001 : uParamA;
         float offset = uParamB;
-        
+
         z3 = z3 * scale - vec3(offset * (scale - 1.0));
-        
+        cp_scale /= scale;
+
         // 5. UBER FEATURE: Z-Scale (Param D)
         // Calculate Adaptive Stretch based on alignment with the Z-Axis.
         float zScale = uParamD;
         float stretchFactor = 1.0;
-        
+
         if (abs(zScale - 1.0) > 0.01) {
             // Stretching: adaptive derivative based on Z-alignment
             // Squashing (zScale<1): conservative bound (1.0) prevents overstepping
@@ -60,15 +70,17 @@ export const MengerAdvanced: FractalDefinition = {
 
         // Injection
         if (uJuliaMode > 0.5) z3 += c.xyz;
-        
+
         // Derivative Update (Chain Rule)
         // We multiply by Scale, then by our Calculated Adaptive Stretch
         dr = dr * abs(scale) * stretchFactor;
-        
+
         z.xyz = z3;
         trap = min(trap, length(z3));
+        cp_trap = trap;
     }`,
-        loopBody: `formula_MengerAdvanced(z, dr, trap, c);`
+        loopBody: `formula_MengerAdvanced(z, dr, trap, c);`,
+        supportsCuttingPlane: true,
     },
 
     parameters: [

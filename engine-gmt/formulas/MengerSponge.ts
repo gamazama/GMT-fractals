@@ -34,13 +34,21 @@ export const MengerSponge: FractalDefinition = {
         z3.z = min(min(s.x, s.y), s.z);
         z3.y = s.x + s.y + s.z - z3.x - z3.z;
 
-        float scale = (abs(uParamA - 1.0) < 0.001) ? 1.001 : uParamA;
+        // Cutting-plane DE: cube face after sort. After abs+sort the position
+        // sits in the fundamental octant and the cube SDF reduces to the
+        // largest-axis face distance. Per-axis sizes come from uVec3B.
+        // Engine ignores cp_* writes when estimator != 5 (dead store).
         vec3 offset = uVec3B;
+        float d_face = max(max(z3.x - offset.x, z3.y - offset.y), z3.z - offset.z);
+        cp_dmin = max(cp_dmin, cp_scale * d_face);
+
+        float scale = (abs(uParamA - 1.0) < 0.001) ? 1.001 : uParamA;
 
         // IFS Shift: offset * (scale - 1.0) — per-axis
         vec3 shift = offset * (scale - 1.0);
 
         z3 = z3 * scale - shift;
+        cp_scale /= scale;
 
         // Param C: Center Z (The "Full Sponge" Correction)
         // If active, this conditional shift restores the full cubic symmetry
@@ -51,8 +59,10 @@ export const MengerSponge: FractalDefinition = {
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, length(z3 - c.xyz));
+        cp_trap = trap;
     }`,
-        loopBody: `formula_MengerSponge(z, dr, trap, c);`
+        loopBody: `formula_MengerSponge(z, dr, trap, c);`,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -105,7 +115,7 @@ export const MengerSponge: FractalDefinition = {
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
             lighting: { shadows: true, shadowSoftness: 2000, shadowIntensity: 0.8, shadowBias: 0.001 },
-            quality: { fudgeFactor: 1, detail: 1, pixelThreshold: 0.001, maxSteps: 200, estimator: 1.0 },
+            quality: { fudgeFactor: 1, detail: 1, pixelThreshold: 0.001, maxSteps: 200, estimator: 5.0 },
             optics: { camFov: 50, dofStrength: 0, dofFocus: 10 },
             reflections: { enabled: true, bounces: 1, steps: 64, mixStrength: 1, roughnessThreshold: 0.5 }
         },

@@ -17,7 +17,9 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export function PipelineControls() {
   const s = useMeshExportStore();
   const qs = useMeshExportStore((state) => state.qualitySettings);
+  const loadedDef = useMeshExportStore((state) => state.loadedDefinition);
   const isVDB = useMeshExportStore((state) => state.exportFormat) === 'vdb';
+  const supportsCP = !!loadedDef?.shader.supportsCuttingPlane;
 
   return (
     <CollapsibleSection label="Pipeline" defaultOpen>
@@ -33,6 +35,7 @@ export function PipelineControls() {
               { label: 'Pseudo (Raw)', value: 2 },
               { label: 'Dampened', value: 3 },
               { label: 'Linear (Fold 2.0)', value: 4 },
+              { label: 'Cutting Plane', value: 5, disabled: !supportsCP },
             ]}
             onChange={(v) => s.updateQuality('estimator', v)}
           />

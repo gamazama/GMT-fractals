@@ -15,7 +15,12 @@ export const Dodecahedron: FractalDefinition = {
     const float dodeca_Phi = (1.0 + sqrt(5.0)) * 0.5; // golden ratio 1.618...
     const vec3 dodeca_n1 = normalize(vec3(-1.0, dodeca_Phi - 1.0, 1.0 / (dodeca_Phi - 1.0)));
     const vec3 dodeca_n2 = normalize(vec3(dodeca_Phi - 1.0, 1.0 / (dodeca_Phi - 1.0), -1.0));
-    const vec3 dodeca_n3 = normalize(vec3(1.0 / (dodeca_Phi - 1.0), -1.0, dodeca_Phi - 1.0));`,
+    const vec3 dodeca_n3 = normalize(vec3(1.0 / (dodeca_Phi - 1.0), -1.0, dodeca_Phi - 1.0));
+
+    // Cutting plane normal: IFS attractor sits at (paramB, paramB, paramB), so
+    // the natural face plane has normal (1,1,1)/sqrt(3) and passes through that vertex.
+    const vec3 dodeca_faceNor = vec3(0.57735027, 0.57735027, 0.57735027);
+    const float dodeca_faceDist = 1.7320508; // sqrt(3) — multiplied by paramB at runtime`,
         function: `
     void formula_Dodecahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -34,6 +39,11 @@ export const Dodecahedron: FractalDefinition = {
         z3 -= 2.0 * min(0.0, dot(z3, dodeca_n2)) * dodeca_n2;
         z3 -= 2.0 * min(0.0, dot(z3, dodeca_n3)) * dodeca_n3;
 
+        // Cutting-plane DE: face plane through IFS attractor (paramB,paramB,paramB)
+        // with normal (1,1,1)/sqrt(3). Engine ignores cp_* writes when estimator != 5.
+        float d_face = dot(z3, dodeca_faceNor) - dodeca_faceDist * uParamB;
+        cp_dmin = max(cp_dmin, cp_scale * d_face);
+
         // Scale and offset
         float scale = uParamA;
         vec3 offset = vec3(uParamB * (scale - 1.0));
@@ -42,16 +52,19 @@ export const Dodecahedron: FractalDefinition = {
         offset -= uVec3A;
 
         z3 = z3 * scale - offset;
+        cp_scale /= scale;
 
         if (uJuliaMode > 0.5) z3 += c.xyz;
 
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, getLength(z3));
+        cp_trap = trap;
     }`,
         loopBody: `formula_Dodecahedron(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3B);`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -115,7 +128,7 @@ export const Dodecahedron: FractalDefinition = {
             },
             geometry: { juliaMode: false, juliaX: -0.495, juliaY: 0.43, juliaZ: -0.07, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 538, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 2, fudgeFactor: 0.618, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 3, stepJitter: 0.15, estimator: 4 },
+            quality: { detail: 2, fudgeFactor: 0.618, pixelThreshold: 0.2, maxSteps: 300, distanceMetric: 3, stepJitter: 0.15, estimator: 5 },
             colorGrading: { saturation: 1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 30, dofStrength: 0, dofFocus: 5.416511696387403 }
         },

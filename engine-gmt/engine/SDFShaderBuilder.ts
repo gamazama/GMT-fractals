@@ -19,6 +19,23 @@ import {
 } from '../features/interlace/glslRewriter';
 
 // ============================================================================
+// Cutting-plane DE shared accumulators
+// ============================================================================
+// Engine-provided globals for formulas with shader.supportsCuttingPlane.
+// Declared at top-level alongside the formula's preamble. Initialized in
+// buildIterationLoop. When estimator===5, getDist returns abs(cp_dmin).
+//
+// MIRROR: keep in sync with `CP_PREAMBLE` / `CP_INIT` in `features/core_math.ts`.
+// Both code paths (mesh export here, main render there) must produce the same
+// shape of cp_* declarations + initialization for parity.
+const CP_PREAMBLE_GLOBALS = `
+// --- Cutting-plane DE accumulators (engine-provided) ---
+float cp_dmin;
+float cp_scale;
+float cp_trap;
+`;
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -77,8 +94,11 @@ vec2 _getDistCustom(float r, float safeDr, float iter, vec4 z) {
 `;
 }
 
-/** Build DE math expression for a given estimator type */
-function buildEstimatorMath(estimator: number): string {
+/** Build DE math expression for a given estimator type. `supportsCuttingPlane` gates
+ *  the CP path (estimator===5); non-CP formulas fall back to Linear so we don't emit
+ *  references to undeclared `cp_dmin`/`cp_trap`. */
+function buildEstimatorMath(estimator: number, supportsCuttingPlane = false): string {
+  if (estimator > 4.5 && !supportsCuttingPlane) estimator = 1.0;
   if (estimator < 0.5) {
     // 0: Analytic (Log) — standard for power fractals
     return `float logR2 = log2(r * r);
@@ -97,13 +117,22 @@ function buildEstimatorMath(estimator: number): string {
     return `float logR2 = log2(r * r);
     return 0.34657359 * logR2 * r / (safeDr + 8.0);`;
   }
-  // 4: Linear (Fold 2.0) — classic Menger offset
-  return `return (r - 2.0) / safeDr;`;
+  if (estimator < 4.5) {
+    // 4: Linear (Fold 2.0) — classic Menger offset
+    return `return (r - 2.0) / safeDr;`;
+  }
+  // 5: Cutting Plane (Knighty fold-and-cut) — reads engine-provided cp_dmin accumulator
+  return `return abs(cp_dmin);`;
 }
 
 /** Build the DE return expression for formulaDE() */
-function buildDEReturn(deType: DEType, hasCustomDist: boolean, thresholdExpr: string, estimator?: number): string {
-  if (hasCustomDist) {
+function buildDEReturn(deType: DEType, hasCustomDist: boolean, thresholdExpr: string, estimator?: number, supportsCuttingPlane = false): string {
+  // Cutting Plane estimator (5) overrides any custom getDist — engine reads cp_dmin
+  // directly. Only takes effect when the formula actually declares CP support;
+  // otherwise the CP path falls back to Linear (handled in buildEstimatorMath).
+  const isCuttingPlane = estimator !== undefined && estimator > 4.5 && supportsCuttingPlane;
+
+  if (hasCustomDist && !isCuttingPlane) {
     return deType === 'ifs'
       ? `return _getDistCustom(r, safeDr, iter, z).x - ${thresholdExpr};`
       : `return _getDistCustom(r, safeDr, iter, z).x;`;
@@ -111,10 +140,10 @@ function buildDEReturn(deType: DEType, hasCustomDist: boolean, thresholdExpr: st
 
   // If an explicit estimator is provided, use it directly
   if (estimator !== undefined && estimator > 0) {
-    const math = buildEstimatorMath(estimator);
-    // For IFS-like estimators (1, 4), subtract threshold
+    const math = buildEstimatorMath(estimator, supportsCuttingPlane);
+    // For IFS-like estimators (1, 4) and CP (5), subtract threshold
     if (estimator >= 0.5 && estimator < 1.5 || estimator >= 3.5) {
-      // Linear estimators: subtract IFS threshold
+      // Linear / CP estimators: subtract IFS threshold
       const lines = math.split('\n');
       const lastLine = lines[lines.length - 1];
       lines[lines.length - 1] = lastLine.replace(/;$/, ` - ${thresholdExpr};`);
@@ -194,11 +223,17 @@ function buildIterationLoop(def: FractalDefinition, itersVar: string, interlace?
     ? `if (!skipMainFormula) { ${def.shader.loopBody} }`
     : def.shader.loopBody;
 
+  // Cutting-plane formulas: init engine-provided accumulators before loopInit runs.
+  const cpInit = def.shader.supportsCuttingPlane
+    ? 'cp_dmin = -1e10; cp_scale = 1.0; cp_trap = 1e10;'
+    : '';
+
   return `  vec4 z = vec4(pos, 0.0);
   vec4 c = mix(z, vec4(uJulia, uParamA), step(0.5, uJuliaMode));
   float dr = 1.0;
   float trap = 1e10;
   float iter = 0.0;
+  ${cpInit}
   ${def.shader.loopInit || ''}
   ${interlacePreLoop}
 
@@ -241,7 +276,7 @@ export function buildMeshSDFShader(config: MeshShaderConfig): string {
   const ilGLSL = il ? buildInterlaceGLSL(il) : null;
 
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator);
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uBoundsRange * uInvRes * 0.5', config.estimator, !!def.shader.supportsCuttingPlane);
 
   return `#version 300 es
 // GMT mesh-sdf ${Date.now()}
@@ -261,6 +296,7 @@ out vec4 fragColor;
 ${MESH_GLSL_HELPERS}
 
 // --- Preamble (global variables / helpers) ---
+${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -364,6 +400,7 @@ out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
+${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -396,7 +433,7 @@ export function buildMeshNewtonShader(config: MeshShaderConfig): string {
   const il = config.interlace;
   const ilGLSL = il ? buildInterlaceGLSL(il) : null;
   const getDistBlock = buildGetDistBlock(def);
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5', config.estimator);
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, 'uVoxelSize * 0.5', config.estimator, !!def.shader.supportsCuttingPlane);
 
   return `#version 300 es
 precision highp float;
@@ -413,6 +450,7 @@ layout(location = 1) out vec4 outNormal;
 
 ${MESH_GLSL_HELPERS}
 
+${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -497,6 +535,7 @@ out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
+${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 
@@ -540,7 +579,7 @@ export function buildMeshPreviewShader(config: MeshShaderConfig): string {
   // IFS preview: threshold 0.0 places the zero-crossing at r=1. Using '0.001' would shift it by
   // 0.001*dr ≈ 8 units (for dr=8192), making the raymarcher see everything as interior.
   const previewThresh = deType === 'ifs' ? '0.0' : '0.001';
-  const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator);
+  const deReturn = buildDEReturn(deType, !!def.shader.getDist, previewThresh, config.estimator, !!def.shader.supportsCuttingPlane);
 
   return `#version 300 es
 // GMT mesh-preview ${Date.now()}
@@ -564,6 +603,7 @@ out vec4 fragColor;
 
 ${MESH_GLSL_HELPERS}
 
+${def.shader.supportsCuttingPlane ? CP_PREAMBLE_GLOBALS : ''}
 ${def.shader.preamble || ''}
 ${ilGLSL?.preamble || ''}
 

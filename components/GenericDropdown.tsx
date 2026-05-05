@@ -11,6 +11,7 @@ import { ChevronDown } from './Icons';
 export interface GenericDropdownOption<T> {
     label: string;
     value: T;
+    disabled?: boolean;
 }
 
 export interface GenericDropdownProps<T> {
@@ -71,7 +72,7 @@ export function GenericDropdown<T extends string | number>({
                     className={`w-full h-full bg-transparent text-[10px] font-medium text-gray-200 px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
                 >
                     {options.map((opt) => (
-                        <option key={String(opt.value)} value={String(opt.value)} className="bg-[#111] text-gray-300">
+                        <option key={String(opt.value)} value={String(opt.value)} disabled={opt.disabled} className="bg-[#111] text-gray-300">
                             {opt.label}
                         </option>
                     ))}

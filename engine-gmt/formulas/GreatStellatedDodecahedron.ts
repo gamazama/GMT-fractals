@@ -36,10 +36,7 @@ export const GreatStellatedDodecahedron: FractalDefinition = {
     vec3 gsd_faceNor;
     float gsd_faceOff;
 
-    // Cutting-plane DE accumulator
-    float gsd_dmin;
-    float gsd_scale;
-    float gsd_trap;
+    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
 
     void GreatStellatedDodecahedron_precalc() {
         // Precompute stellated face normal from stellation parameter
@@ -64,7 +61,7 @@ export const GreatStellatedDodecahedron: FractalDefinition = {
         vec3 p = vec3(0.0, 0.35682209, 0.93417236);
         gsd_faceOff = dot(gsd_faceNor, p);
     }`,
-        preambleVars: ['gsd_faceNor', 'gsd_faceOff', 'gsd_dmin', 'gsd_scale', 'gsd_trap'],
+        preambleVars: ['gsd_faceNor', 'gsd_faceOff'],
         function: `
     void formula_GreatStellatedDodecahedron(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -83,31 +80,26 @@ export const GreatStellatedDodecahedron: FractalDefinition = {
         // Step 2: Cutting plane — distance to stellated face in fundamental domain
         float size = uParamB;
         float d_face = dot(z3, gsd_faceNor) - gsd_faceOff * size;
-        gsd_dmin = max(gsd_dmin, gsd_scale * d_face);
+        cp_dmin = max(cp_dmin, cp_scale * d_face);
 
         // Step 3: Scale and offset toward icosahedron vertex (spike tip)
         float scale = uParamA;
         vec3 offset = gsd_pab * size * (scale - 1.0);
         offset -= uVec3A;
         z3 = z3 * scale - offset;
-        gsd_scale /= scale;
+        cp_scale /= scale;
 
         if (uJuliaMode > 0.5) z3 += c.xyz;
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, getLength(z3));
-        gsd_trap = trap;
+        cp_trap = trap;
     }`,
         loopBody: `formula_GreatStellatedDodecahedron(z, dr, trap, c);`,
         loopInit: `GreatStellatedDodecahedron_precalc();
-gmt_precalcRodrigues(uVec3B);
-gsd_dmin = -1e10;
-gsd_scale = 1.0;
-gsd_trap = 1e10;`,
-        getDist: `
-        return vec2(abs(gsd_dmin), gsd_trap);
-    `,
+gmt_precalcRodrigues(uVec3B);`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -163,7 +155,7 @@ gsd_trap = 1e10;`,
             },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 200, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 2, fudgeFactor: 0.6, pixelThreshold: 0.2, maxSteps: 400, distanceMetric: 0, stepJitter: 0.15, estimator: 1 },
+            quality: { detail: 2, fudgeFactor: 0.6, pixelThreshold: 0.2, maxSteps: 400, distanceMetric: 0, stepJitter: 0.15, estimator: 5 },
             colorGrading: { saturation: 1.1, levelsMin: 0, levelsMax: 1, levelsGamma: 1 },
             optics: { camFov: 36, dofStrength: 0, dofFocus: 5 }
         },

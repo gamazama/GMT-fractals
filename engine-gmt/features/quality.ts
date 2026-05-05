@@ -1,6 +1,7 @@
 
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { DEFAULT_HARD_CAP } from '../../data/constants';
+import { registry } from '../engine/FractalRegistry';
 
 export interface QualityState {
     engineQuality: boolean; // Master Anchor
@@ -100,9 +101,17 @@ export const QualityFeature: FeatureDefinition = {
                 { label: 'Linear (Unit 1.0)', value: 1.0 },
                 { label: 'Linear (Offset 2.0)', value: 4.0 },
                 { label: 'Pseudo (Raw)', value: 2.0 },
-                { label: 'Dampened', value: 3.0 }
+                { label: 'Dampened', value: 3.0 },
+                {
+                    label: 'Cutting Plane',
+                    value: 5.0,
+                    // Gray out unless the current formula declares supportsCuttingPlane.
+                    // Engine still falls back to Linear if a user somehow forces this on
+                    // a non-CP formula (e.g. via a loaded GMF), so this is purely UX.
+                    disabledIf: (state: any) => !registry.get(state?.formula)?.shader.supportsCuttingPlane,
+                }
             ],
-            description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix.',
+            description: 'Algorithm for calculating distance. Log=Smooth, Linear=Sharp/IFS, Pseudo=Artifact Fix, Cutting Plane=Knighty fold-and-cut polyhedra.',
             helpId: 'quality.estimator',
             onUpdate: 'compile',
             noReset: true,

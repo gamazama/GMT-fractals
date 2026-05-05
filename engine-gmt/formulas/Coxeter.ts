@@ -24,10 +24,7 @@ export const Coxeter: FractalDefinition = {
     vec3 uCox_nor;
     vec3 uCox_pca;
 
-    // Cutting-plane DE accumulator
-    float cox_dmin;
-    float cox_scale;
-    float cox_trap;
+    // cp_dmin / cp_scale / cp_trap are engine-provided (shader.supportsCuttingPlane).
 
     void Coxeter_precalc() {
         float N = uParamC;
@@ -37,7 +34,7 @@ export const Coxeter: FractalDefinition = {
         uCox_nor = normalize(vec3(scospin, 0.0, 0.5));
         uCox_pca = normalize(vec3(0.0, scospin, cospin));
     }`,
-        preambleVars: ['uCox_nc', 'uCox_nor', 'uCox_pca', 'cox_dmin', 'cox_scale', 'cox_trap'],
+        preambleVars: ['uCox_nc', 'uCox_nor', 'uCox_pca'],
         function: `
     void formula_Coxeter(inout vec4 z, inout float dr, inout float trap, vec4 c) {
         vec3 z3 = z.xyz;
@@ -60,30 +57,25 @@ export const Coxeter: FractalDefinition = {
         // Cutting plane after fold
         float size = uParamB;
         float d = dot(z3, uCox_nor) - size;
-        cox_dmin = max(cox_dmin, cox_scale * d);
+        cp_dmin = max(cp_dmin, cp_scale * d);
 
         // Scale and offset toward pca vertex
         float scale = uParamA;
         vec3 offset = uCox_pca * size * (scale - 1.0);
         offset -= uVec3A;
         z3 = z3 * scale - offset;
-        cox_scale /= scale;
+        cp_scale /= scale;
 
         if (uJuliaMode > 0.5) z3 += c.xyz;
         dr = dr * abs(scale);
         z.xyz = z3;
         trap = min(trap, getLength(z3));
-        cox_trap = trap;
+        cp_trap = trap;
     }`,
         loopBody: `formula_Coxeter(z, dr, trap, c);`,
-        loopInit: `Coxeter_precalc(); gmt_precalcRodrigues(uVec3B);
-cox_dmin = -1e10;
-cox_scale = 1.0;
-cox_trap = 1e10;`,
-        getDist: `
-        return vec2(abs(cox_dmin), cox_trap);
-    `,
+        loopInit: `Coxeter_precalc(); gmt_precalcRodrigues(uVec3B);`,
         usesSharedRotation: true,
+        supportsCuttingPlane: true,
     },
 
     parameters: [
@@ -146,7 +138,7 @@ cox_trap = 1e10;`,
             },
             geometry: { juliaMode: false, juliaX: 0, juliaY: 0, juliaZ: 0, hybridMode: false },
             lighting: { advancedLighting: true, ptEnabled: true, shadows: true, shadowSoftness: 250, shadowIntensity: 1, shadowBias: 0 },
-            quality: { detail: 3, fudgeFactor: 1, pixelThreshold: 2, maxSteps: 400, distanceMetric: 1, stepJitter: 0.15, estimator: 1 },
+            quality: { detail: 3, fudgeFactor: 1, pixelThreshold: 2, maxSteps: 400, distanceMetric: 1, stepJitter: 0.15, estimator: 5 },
             colorGrading: { active: true, saturation: 1.1, levelsMin: 0, levelsMax: 0.537, levelsGamma: 0.966 },
             optics: { camFov: 36, dofStrength: 0, dofFocus: 5 }
         },
