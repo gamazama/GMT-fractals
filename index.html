@@ -146,5 +146,24 @@
       <a href="https://github.com/gamazama/GMT-fractals/tree/dev">view source on GitHub</a>
     </div>
   </div>
+
+  <!-- Stale-cache rescue for users who installed /dev/ as a PWA when
+       this URL was the engine demo (now at /dev/demo.html). The old
+       service worker is still serving the cached JS-bootstrapped page;
+       the new SW for the same scope is downloaded but waits in the
+       'installed' state because vite-plugin-pwa is set to
+       registerType: 'prompt' and this static page has no React UI to
+       host the Update pill. Force-update + skip-waiting on every visit
+       so old PWA users get unstuck without having to close all tabs. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => {
+          reg.update().catch(() => {});
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        });
+      });
+    }
+  </script>
 </body>
 </html>

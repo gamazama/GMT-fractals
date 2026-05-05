@@ -29,6 +29,7 @@ import { registerUI } from '../engine/features/ui';
 import { setupFractalToy } from './setup';
 import { installViewport, viewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
+import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
@@ -70,6 +71,10 @@ installViewport({
 // @engine/topbar — slot host + default items (project name, FPS,
 // adaptive badge).
 installTopBar();
+
+// PWA update pill. Surfaces an amber "Update" button in the topbar
+// when a new SW is detected; clicking skips-waiting + reloads.
+installPwaUpdate();
 
 // @engine/scene-io — Save + Load buttons + Alt+S screenshot hotkey.
 installSceneIO({

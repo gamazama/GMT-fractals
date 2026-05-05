@@ -16,6 +16,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- PWA auto-update: mesh-export has no topbar, so it can't host
+         the engine's "Update" pill. Instead, force-update any waiting
+         service worker on every page load. SKIP_WAITING is handled by
+         the default Workbox SW that vite-plugin-pwa generates. -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => {
+            reg.update().catch(() => {});
+            if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          });
+        });
+      }
+    </script>
     <script type="module" src="/mesh-export/main.tsx"></script>
   </body>
 </html>

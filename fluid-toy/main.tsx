@@ -32,6 +32,7 @@ import { registerUI } from '../engine/features/ui';
 import { setupFluidToy } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
+import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installPauseControls } from '../engine/plugins/topbar/PauseControls';
 import { installBucketRender } from '../engine/plugins/topbar/installBucketRender';
 import { FluidBucketController } from './bucket/FluidBucketController';
@@ -97,6 +98,10 @@ installViewport({
 // @engine/topbar — registers default items (project name, FPS, adaptive
 // badge). Save/load etc. slot-register from other plugins when those land.
 installTopBar();
+
+// PWA update pill. Surfaces an amber "Update" button in the topbar
+// when a new SW is detected; clicking skips-waiting + reloads.
+installPwaUpdate();
 
 // @engine/topbar/PauseControls — GMT-style pause button + accumulation
 // sample-cap popover. Reads renderControlSlice (isPaused, sampleCap)
