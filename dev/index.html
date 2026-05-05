@@ -78,8 +78,22 @@
       border-color: var(--accent);
       transform: translateY(-1px);
     }
+    .app.primary {
+      padding: 1.25rem 1.5rem;
+      border-color: rgba(34, 211, 238, 0.35);
+      background: rgba(34, 211, 238, 0.04);
+    }
+    .app.primary .app-name { font-size: 1.15rem; color: var(--accent); }
     .app-name { font-weight: 600; font-size: 1rem; }
     .app-desc { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; line-height: 1.4; }
+    .group-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 1.5rem 0 0.5rem;
+    }
+    .group-label:first-child { margin-top: 0; }
     .footer {
       margin-top: 2.5rem;
       font-size: 0.75rem;
@@ -89,7 +103,7 @@
     .footer a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted currentColor; }
     .footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
   </style>
-</head>
+<link rel="manifest" href="./manifest.webmanifest"></head>
 <body>
   <div class="wrap">
     <h1>GMT <span class="accent">— dev preview</span></h1>
@@ -100,18 +114,27 @@
       This subdirectory tracks the <code>dev</code> branch and may break or change at any time.
     </div>
 
+    <div class="group-label">Main app</div>
     <div class="apps">
-      <a class="app" href="app-gmt.html">
+      <a class="app primary" href="app-gmt.html">
         <div class="app-name">GMT — Fractal Explorer</div>
-        <div class="app-desc">Real-time 3D fractal renderer. Engine-architecture build.</div>
-      </a>
-      <a class="app" href="fractal-toy.html">
-        <div class="app-name">Fractal Toy</div>
-        <div class="app-desc">Julia + 2D fractal playground.</div>
+        <div class="app-desc">Real-time 3D fractal renderer. The full app, engine-architecture build.</div>
       </a>
       <a class="app" href="fluid-toy.html">
         <div class="app-name">Fluid Toy</div>
-        <div class="app-desc">Real-time 2D fluid simulation playground.</div>
+        <div class="app-desc">Real-time 2D fluid simulation. Companion app sharing the GMT engine.</div>
+      </a>
+    </div>
+
+    <div class="group-label">Engine demos</div>
+    <div class="apps">
+      <a class="app" href="demo.html">
+        <div class="app-name">Demo</div>
+        <div class="app-desc">Generic engine showcase — minimal app exercising the plugin host, panels, undo, save/load.</div>
+      </a>
+      <a class="app" href="fractal-toy.html">
+        <div class="app-name">Fractal Toy</div>
+        <div class="app-desc">Stripped-down raymarcher. Two formulas, DDFS camera + lighting only.</div>
       </a>
       <a class="app" href="mesh-export.html">
         <div class="app-name">Mesh Export Prototype</div>
@@ -123,5 +146,24 @@
       <a href="https://github.com/gamazama/GMT-fractals/tree/dev">view source on GitHub</a>
     </div>
   </div>
+
+  <!-- Stale-cache rescue for users who installed /dev/ as a PWA when
+       this URL was the engine demo (now at /dev/demo.html). The old
+       service worker is still serving the cached JS-bootstrapped page;
+       the new SW for the same scope is downloaded but waits in the
+       'installed' state because vite-plugin-pwa is set to
+       registerType: 'prompt' and this static page has no React UI to
+       host the Update pill. Force-update + skip-waiting on every visit
+       so old PWA users get unstuck without having to close all tabs. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => {
+          reg.update().catch(() => {});
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        });
+      });
+    }
+  </script>
 </body>
 </html>
