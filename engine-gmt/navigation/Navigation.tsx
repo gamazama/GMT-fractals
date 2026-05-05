@@ -312,6 +312,11 @@ const Navigation: React.FC<NavigationProps> = ({
           // This avoids the 1-frame mismatch where camera=(0,0,0) reaches the
           // worker before the new offset, causing a visible shift.
           engine.queueOffsetSync(absorbed);
+          // Mirror the absorbed offset into the store so getPreset() (save,
+          // snapshot, share-link) and reactive subscribers see the actual
+          // world position. setSceneOffset would re-emit OFFSET_SET — silent
+          // path skips that and writes directly.
+          useFractalStore.setState({ sceneOffset: absorbed });
       } else {
           setSceneOffset(absorbed);
       }

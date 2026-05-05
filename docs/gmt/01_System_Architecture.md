@@ -247,7 +247,7 @@ OrbitControls (drei/three-stdlib) requires a non-zero `camera.position` to defin
 - **OrbitControls target reset:** After absorb, the OrbitControls target is reset to a tiny offset along the current forward direction. This is critical because drei's OrbitControls runs `update()` at `useFrame` priority -1 (before all user code), which calls `lookAt(target)`. Without the target reset, `lookAt(target)` from `(0,0,0)` would produce a wrong quaternion.
 - **Shadow unified offset:** Computed every frame as `sceneOffset + camera.position` regardless of mode, so canonical world position is always available for reads.
 - **Orbit target (onStart):** Placed at `camera.position + forward * surfaceDistance`. Reconstructed fresh on each `onStart` callback — no persistent target state needed.
-- **No OFFSET_SET during orbit:** `setSceneOffset()` is never called during orbit interactions (it would reset worker accumulation). Offset manipulation only happens on mode switch or teleport.
+- **No OFFSET_SET during orbit:** `setSceneOffset()` is never called during silent (in-gesture) absorbs — it would re-emit `OFFSET_SET`, resetting worker accumulation and posting an extra worker message. Instead `absorbOrbitPosition(silent=true, …)` writes the new offset directly to the store via `useFractalStore.setState({ sceneOffset })` so `getPreset()` (save / snapshot / share-link) and reactive subscribers (world-position display, camera-manager dirty marker) see the live world position. The worker receives the same offset atomically through the next `RENDER_TICK`'s `syncOffset` flag. Mode switch and teleport still go through `setSceneOffset()` (silent=false) when an `OFFSET_SET` event is genuinely needed.
 
 ### 6.3 Mode Agnosticism
 
@@ -266,7 +266,7 @@ Mode awareness only exists in:
 | Helper | Purpose |
 |--------|---------|
 | `initOrbitPivot()` | Sets orbit target, radius ref, and camera.up from current state. Used on init, mode switch, camera unlock, and teleport. |
-| `absorbOrbitPosition()` | Folds non-zero `camera.position` into `sceneOffset` and zeros camera. Used on mode switch to Fly. |
+| `absorbOrbitPosition(silent, keepTarget)` | Folds non-zero `camera.position` into `sceneOffset` and zeros camera. `silent=true` writes the store directly + queues an atomic `syncOffset` tick (used per-frame during pan, on `onEnd`, on scroll-zoom, on middle-drag dolly). `silent=false` calls `setSceneOffset()` and emits `OFFSET_SET` (used on mode switch). `keepTarget=true` preserves the OrbitControls target's world position by subtracting the camera delta from it (used during pan). |
 
 ## 7. State Management
 
