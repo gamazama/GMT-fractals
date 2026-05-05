@@ -507,6 +507,12 @@ export class FluidEngine {
   private bucketRegionMin:  [number, number] = [0, 0];
   private bucketRegionMax:  [number, number] = [1, 1];
 
+  /** Full bucket-render output dimensions. The fractal world-coord mapping
+   *  uses uAspect = outW/outH so every tile/sub-bucket samples the same
+   *  world rect regardless of the canvas size we happen to be rendering at.
+   *  [0, 0] means "not in bucket render" — uAspect falls back to canvas aspect. */
+  private bucketOutputSize: [number, number] = [0, 0];
+
   /** Frame counter — advances every step. Feeds shader uFrameCount for
    *  blue-noise temporal animation. */
   private frameCount = 0;
@@ -1277,7 +1283,14 @@ export class FluidEngine {
     gl.uniform2f(this.progJulia.uniforms['uJuliaC'], this.params.juliaC[0], this.params.juliaC[1]);
     gl.uniform2f(this.progJulia.uniforms['uCenter'], this.params.center[0], this.params.center[1]);
     gl.uniform1f(this.progJulia.uniforms['uScale'], this.params.zoom);
-    gl.uniform1f(this.progJulia.uniforms['uAspect'], this.simW / this.simH);
+    // During bucket render, uAspect must be the FULL OUTPUT aspect — the canvas
+    // is whatever tile/sub-bucket size we're rendering, but uvJ is remapped into
+    // full-output UV by the imageTile uniforms. uAspect applies in world-coord
+    // mapping AFTER that remap, so it has to be full-output aspect, not canvas.
+    const aspect = (this.bucketOutputSize[0] > 0 && this.bucketOutputSize[1] > 0)
+      ? this.bucketOutputSize[0] / this.bucketOutputSize[1]
+      : this.simW / this.simH;
+    gl.uniform1f(this.progJulia.uniforms['uAspect'], aspect);
     const maxIt = Math.max(4, this.params.maxIter | 0);
     gl.uniform1i(this.progJulia.uniforms['uMaxIter'], maxIt);
     gl.uniform1i(this.progJulia.uniforms['uColorIter'], Math.max(1, Math.min(maxIt, this.params.colorIter | 0)));
@@ -1388,6 +1401,13 @@ export class FluidEngine {
   setBucketRegion(minUV: [number, number], maxUV: [number, number]): void {
     this.bucketRegionMin = [minUV[0], minUV[1]];
     this.bucketRegionMax = [maxUV[0], maxUV[1]];
+  }
+  /** Bucket-render: full output pixel size. Set once at render start so
+   *  uAspect tracks the export aspect across all tiles + sub-buckets,
+   *  regardless of the actual canvas size we're rendering at. Pass (0, 0)
+   *  to clear and fall back to canvas aspect for live viewport. */
+  setBucketOutputSize(w: number, h: number): void {
+    this.bucketOutputSize = [Math.max(0, Math.floor(w)), Math.max(0, Math.floor(h))];
   }
 
   /** TSAA blend pass. Reads juliaCur (current jittered frame) + juliaTsaa

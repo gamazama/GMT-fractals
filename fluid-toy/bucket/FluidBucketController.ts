@@ -1,25 +1,28 @@
 /**
  * FluidBucketController — fluid-toy adapter for the generic bucket-render panel.
  *
- * Two nested loops:
+ * Two nested loops, GMT-style:
  *   1. Image-tile loop — splits the output into separate PNG files when the
  *      user picks a tile grid > 1×1. Each tile becomes one saved file.
- *   2. GPU sub-bucket loop — within each image tile, splits the rendering
- *      into sub-rects (size driven by `config.bucketSize`) so a single tile
- *      can exceed VRAM. Sub-rects render to a small WebGL canvas and are
- *      composited into a tile-sized 2D canvas via `drawImage`. This is what
- *      lets fluid-toy do 8K (or larger) single-PNG renders without manual
- *      stitching: the GPU only ever sees `bucketSize × bucketSize` pixels at
- *      once, while the composite lives in (cheap) CPU RAM.
+ *   2. GPU sub-bucket loop — within each image tile, the canvas/sim grid is
+ *      held at the FULL TILE size and sub-buckets are rendered in-place via
+ *      `uRegionMin`/`uRegionMax` discard. The shader writes only inside the
+ *      current sub-bucket; outside is left untouched. Once a sub-bucket
+ *      converges we read just its pixel rect off the canvas into a tile-sized
+ *      2D composite.
  *
- * The phase-3 image-tile uniforms compose: the effective `uImageTileOrigin`/
- * `uImageTileSize` for a sub-bucket = the image tile's span × the sub-bucket's
- * span within the tile. The shader's region-mask uniforms are unused in this
- * approach (each sub-bucket renders the whole sub-canvas), kept at no-op.
+ * Why we hold the canvas at tile size (vs. resizing per sub-bucket): when the
+ * canvas is tile-sized, `simW/simH` matches the tile's pixel grid and the
+ * shader's UV→world mapping is consistent across every sub-bucket. Plus
+ * `uAspect` is forced to the FULL OUTPUT aspect via `setBucketOutputSize`, so
+ * the fractal sampled by every sub-bucket comes from the same world rect
+ * regardless of how the tile/sub-bucket grids divide it. The previous
+ * sub-bucket-sized canvas approach made every sub-bucket use its own
+ * (incorrect) aspect, garbling tile boundaries.
  *
- * Skipped vs GMT: no Float32 HDR composite — fluid-toy v1 has no bloom/CA, so
- * RGBA8 stitch is sufficient. If we eventually port GMT's bloom, the composite
- * would need to be Float32.
+ * Skipped vs GMT: no Float32 HDR composite — fluid-toy has no bloom/CA, so
+ * RGBA8 stitch via the canvas's preserveDrawingBuffer is sufficient. If we
+ * eventually port GMT's bloom, the composite would need to be Float32.
  */
 
 import type {
@@ -193,7 +196,6 @@ export class FluidBucketController implements BucketRenderController {
     }
 
     private async runLoop(engine: FluidEngine, exportImage: boolean, config: BucketRenderConfig): Promise<void> {
-        // Save state for restoration.
         const canvas = engine.getCanvas();
         const savedW = canvas.width;
         const savedH = canvas.height;
@@ -219,9 +221,11 @@ export class FluidBucketController implements BucketRenderController {
         const projectName = projectState.projectSettings?.name ?? 'fluid-toy';
         const projectVersion = 1;
 
-        // Bucket-render mode: julia only, sim frozen.
+        // Bucket-render mode: julia only, sim frozen, full-output aspect locked
+        // in so every sub-bucket samples the same world rect.
         engine.setForceJuliaOnly(true);
         engine.setForceFluidPaused(true);
+        engine.setBucketOutputSize(outW, outH);
 
         this.emitStatus(0, true, totalSubBuckets, 0);
 
@@ -236,34 +240,33 @@ export class FluidBucketController implements BucketRenderController {
                 const imageTileOriginUV: [number, number] = [tile.pixelX / outW, tile.pixelY / outH];
                 const imageTileSizeUV:   [number, number] = [tileW / outW,       tileH / outH];
 
-                // Per-tile composite (CPU-side 2D canvas at full tile resolution).
-                // OffscreenCanvas if available, else hidden DOM canvas.
-                const composite = exportImage ? createTileComposite(tileW, tileH) : null;
+                // Hold the canvas at the full tile size for the whole tile.
+                // setRenderSize is a heavyweight op (FBO realloc + blit) so we
+                // run it once per tile, not per sub-bucket.
+                engine.setRenderSize(tileW, tileH);
+                engine.setBucketImageTile(imageTileOriginUV, imageTileSizeUV);
 
+                const composite = exportImage ? createTileComposite(tileW, tileH) : null;
                 const subBuckets = this.buildSubBuckets(tileW, tileH, bucketSize);
 
                 for (const sb of subBuckets) {
                     if (this.cancelled) break;
 
-                    // Sub-bucket UV span within the image tile.
-                    const sbOriginInTileUV: [number, number] = [sb.pixelX / tileW, sb.pixelY / tileH];
-                    const sbSizeInTileUV:   [number, number] = [sb.pixelW / tileW, sb.pixelH / tileH];
-
-                    // Compose: sub-bucket canvas UV → full-output UV.
-                    //   fullOutUV = imageTileOrigin + imageTileSize * (sbOrigin + canvasUV * sbSize)
-                    // → equivalent uImageTileOrigin/Size for THIS sub-bucket render:
-                    const effOrigin: [number, number] = [
-                        imageTileOriginUV[0] + imageTileSizeUV[0] * sbOriginInTileUV[0],
-                        imageTileOriginUV[1] + imageTileSizeUV[1] * sbOriginInTileUV[1],
+                    // Sub-bucket region in tile-local vUv. Note Y flip: sb.pixelY
+                    // is DOM-top-down (row 0 = top), but vUv.y is bottom-up
+                    // (gl_FragCoord convention), so the bottom of the bucket in
+                    // DOM corresponds to the LOW end of vUv.y. The shader's
+                    // discard test uses vUv directly.
+                    const uMin: [number, number] = [
+                        sb.pixelX / tileW,
+                        (tileH - sb.pixelY - sb.pixelH) / tileH,
                     ];
-                    const effSize: [number, number] = [
-                        imageTileSizeUV[0] * sbSizeInTileUV[0],
-                        imageTileSizeUV[1] * sbSizeInTileUV[1],
+                    const uMax: [number, number] = [
+                        (sb.pixelX + sb.pixelW) / tileW,
+                        (tileH - sb.pixelY) / tileH,
                     ];
-                    engine.setBucketImageTile(effOrigin, effSize);
-                    engine.setBucketRegion([0, 0], [1, 1]);
+                    engine.setBucketRegion(uMin, uMax);
 
-                    engine.setRenderSize(sb.pixelW, sb.pixelH);
                     engine.resetAccumulation();
 
                     // Wait for TSAA convergence on this sub-rect.
@@ -276,12 +279,15 @@ export class FluidBucketController implements BucketRenderController {
                     }
                     if (this.cancelled) break;
 
-                    // Stitch the converged sub-canvas into the tile composite at the
-                    // sub-bucket's pixel offset. drawImage from a WebGL canvas is
-                    // safe because preserveDrawingBuffer:true is set on fluid-toy's gl
-                    // context (FluidEngine.ts:578).
+                    // drawImage is safe because preserveDrawingBuffer:true is set
+                    // on fluid-toy's gl context. Source/dest rects are DOM
+                    // top-down — the Y flip above is what bridges them with vUv.
                     if (composite) {
-                        composite.ctx.drawImage(canvas, sb.pixelX, sb.pixelY);
+                        composite.ctx.drawImage(
+                            canvas,
+                            sb.pixelX, sb.pixelY, sb.pixelW, sb.pixelH,
+                            sb.pixelX, sb.pixelY, sb.pixelW, sb.pixelH,
+                        );
                     }
 
                     doneSubBuckets++;
@@ -304,9 +310,9 @@ export class FluidBucketController implements BucketRenderController {
                 }
             }
         } finally {
-            // Restore state.
             engine.setBucketImageTile([0, 0], [1, 1]);
             engine.setBucketRegion([0, 0], [1, 1]);
+            engine.setBucketOutputSize(0, 0);
             engine.setRenderSize(savedW, savedH);
             engine.setForceJuliaOnly(savedJuliaOnly);
             engine.setForceFluidPaused(savedFluidPaused);
