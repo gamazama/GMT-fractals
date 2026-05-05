@@ -198,6 +198,35 @@ void main() {
         return t;
     }
 
+    // Load an env-map texture matching the live engine's upload shape. PNG /
+    // JPG paths use loadTex2D's byte path. HDR (.hdr) paths parse via
+    // RGBELoader → half-float RGBA, mirroring renderWorker.ts's TEXTURE_HDR
+    // handler so the bench renders with the same bit-depth as the live app.
+    async function loadEnvTex(url) {
+        if (!url) return null;
+        const isHDR = /\.hdr(\?|$)/i.test(url) || url.startsWith('data:application/octet-stream');
+        if (!isHDR) return loadTex2D(url);
+        const { RGBELoader } = await import('three/examples/jsm/loaders/RGBELoader.js');
+        const buf = await (await fetch(url)).arrayBuffer();
+        const loader = new RGBELoader();
+        // HalfFloatType matches what renderWorker.ts uses for HDR uploads.
+        const THREE = await import('three');
+        loader.setDataType(THREE.HalfFloatType);
+        const hdr = loader.parse(buf);
+        if (!hdr) throw new Error(`HDR parse failed for ${url}`);
+        const t = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, t);
+        // RGBA + HALF_FLOAT == GL_RGBA16F internal format under WebGL2.
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, hdr.width, hdr.height, 0,
+                      gl.RGBA, gl.HALF_FLOAT, hdr.data);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        return t;
+    }
+
     function makeDummyCube() {
         const t = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_CUBE_MAP, t);
@@ -316,6 +345,9 @@ void main() {
             warmupDraws = 60,
             measureDraws = 240,
             accumFrames = 256,    // for the post-timing converged image
+            envMapData = null,    // PNG/JPG/HDR URL (or data: URL); driver-supplied
+            envSource = 0,        // 0 = texture, 1 = gradient (matches uEnvSource)
+            useEnvMap = 0,        // 1 = use the texture, 0 = procedural sky fallback
         } = config;
 
         canvas.width = width;
@@ -356,13 +388,25 @@ void main() {
             { pos: 1, r: 0.53, g: 0.80, b: 1.00 },
         ]);
 
+        // Env-map texture: only the texture path uses uEnvMapTexture (uEnvSource
+        // == 0 && uUseEnvMap == 1 in env.ts). For other paths the gradient /
+        // procedural sky fires and the placeholder is fine.
+        let envTex = skyGradient;
+        if (envMapData && envSource === 0 && useEnvMap === 1) {
+            try {
+                envTex = await loadEnvTex(envMapData);
+                log(`env: loaded ${envMapData.length > 100 ? '(data url)' : envMapData}`);
+            } catch (e) {
+                log(`env: failed to load (${e.message}) — using placeholder gradient`, 'err');
+            }
+        }
         const namedTextures = {
             uBlueNoiseTexture: blueNoiseTex,
             uHistoryTexture:   dummyBlack,           // ignored when uBlendFactor=1.0
             uGradientTexture:  whiteBlackRamp,
             uGradientTexture2: whiteBlackRamp,
             uEnvGradient:      skyGradient,
-            uEnvMapTexture:    skyGradient,
+            uEnvMapTexture:    envTex,
         };
 
         let nextUnit = 0;

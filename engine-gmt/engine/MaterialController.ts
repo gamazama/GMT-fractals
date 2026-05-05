@@ -434,6 +434,10 @@ export class MaterialController {
                 if (value instanceof THREE.Vector2) cur.copy(value);
                 else if (value && typeof value.x === 'number' && typeof value.y === 'number') cur.set(value.x, value.y);
             }
+            else if (cur instanceof THREE.Vector4) {
+                if (value instanceof THREE.Vector4) cur.copy(value);
+                else if (value && typeof value.x === 'number' && typeof value.y === 'number' && typeof value.z === 'number' && typeof value.w === 'number') cur.set(value.x, value.y, value.z, value.w);
+            }
             else if (cur instanceof THREE.Color) {
                 if (value instanceof THREE.Color) cur.copy(value);
                 else if (value && typeof value.r === 'number') cur.setRGB(value.r, value.g, value.b);

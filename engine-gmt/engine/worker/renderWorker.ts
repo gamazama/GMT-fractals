@@ -511,6 +511,16 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                         if (typeof v.toArray === 'function') {
                             try { return v.toArray(); } catch { /* fall through */ }
                         }
+                        // Plain {x,y[,z[,w]]} fallback. Some feature defaults
+                        // store vectors as object literals (not THREE.Vector*
+                        // instances), so the duck-typed checks above miss them
+                        // and they'd serialize as null. Detect by .x being
+                        // numeric and round-trip as an array.
+                        if (typeof v.x === 'number' && typeof v.y === 'number') {
+                            if (typeof v.w === 'number') return [v.x, v.y, v.z, v.w];
+                            if (typeof v.z === 'number') return [v.x, v.y, v.z];
+                            return [v.x, v.y];
+                        }
                         return null; // unserializable — drop
                     };
                     const u = engine.mainUniforms || {};

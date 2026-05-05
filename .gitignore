@@ -36,7 +36,11 @@ debug/bench-shader-latest.json
 debug/bench-shader-snapshot.json
 debug/bench-shader-baseline*.json
 debug/bench-shader-refs/Mandelbulb-*.png
+debug/bench-shader-refs/Apollonian-*.png
 debug/shader-dump/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # bench-perf timestamped archives (paired with debug/bench-perf.mts)
 debug/bench-perf-2*.json

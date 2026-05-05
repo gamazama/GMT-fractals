@@ -146,13 +146,20 @@ const SCENE_TAG = argVal('--tag') ?? '';   // appended to image filenames so
 //   1. lighting.ptEnabled = true (master compile gate that emits the PT chunk)
 //   2. renderMode = 'PathTracing' (flips the active code path)
 // Sub-toggles control compile-time PT defines (#define PT_NEE_ALL_LIGHTS,
-// #define PT_ENV_NEE) — each adds material amounts of GLSL when on. Default
+// #define PT_ENV_MIS, …) — each adds material amounts of GLSL when on. Default
 // to off so the bench measures the minimal PT path unless explicitly opted in.
 //
 //   --render-mode=Direct|PathTracing            (default Direct)
 //   --pt-bounces=<n>                            (uPTBounces override; default 3)
 //   --pt-nee-all=true|false                     (PT_NEE_ALL_LIGHTS define)
-//   --pt-env-nee=true|false                     (PT_ENV_NEE define)
+//   --pt-env-nee=true|false                     (legacy PT_ENV_NEE; superseded
+//                                                by --pt-refl-mode but still
+//                                                round-trips for old benches)
+//   --pt-area-lights=true|false                 (PT_AREA_LIGHTS define)
+//   --pt-refl-mode=0|1|2                        (ptReflMode dropdown:
+//                                                  0=Off, 1=Env MIS,
+//                                                  2=Env MIS + IS)
+//   --pt-sobol-bounce=true|false                (PT_SOBOL_BOUNCE define)
 const RENDER_MODE = argVal('--render-mode') ?? '';
 const PT_BOUNCES = argVal('--pt-bounces') ? parseInt(argVal('--pt-bounces')!, 10) : null;
 const parseBool = (v: string | undefined): boolean | null => {
@@ -165,6 +172,8 @@ const parseBool = (v: string | undefined): boolean | null => {
 const PT_NEE_ALL = parseBool(argVal('--pt-nee-all'));
 const PT_ENV_NEE = parseBool(argVal('--pt-env-nee'));
 const PT_AREA_LIGHTS = parseBool(argVal('--pt-area-lights'));
+const PT_REFL_MODE = argVal('--pt-refl-mode') !== undefined ? parseInt(argVal('--pt-refl-mode')!, 10) : null;
+const PT_SOBOL_BOUNCE = parseBool(argVal('--pt-sobol-bounce'));
 const IS_PT = RENDER_MODE === 'PathTracing';
 
 // Volumetric scatter overrides. ptVolumetric is a compile gate (recompiles
@@ -340,6 +349,14 @@ interface Snapshot {
     captured: string;
     width: number;
     height: number;
+    /** Env-map source URL (data URL or HTTP) captured from the live store.
+     *  The serialized uniforms table only carries an `__sampler` sentinel for
+     *  textures, so the harness needs the URL separately to fetch + decode
+     *  the actual env data — without it we'd render against a stub gradient. */
+    envMapData?: string | null;
+    envSource?: number;
+    useEnvMap?: number;
+    envMapColorSpace?: number;
 }
 
 async function captureLiveSnapshot(): Promise<Snapshot> {
@@ -487,6 +504,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptNeeAll: boolean | null;
         ptEnvNee: boolean | null;
         ptAreaLights: boolean | null;
+        ptReflMode: number | null;
+        ptSobolBounce: boolean | null;
         volumetric: boolean | null;
         volDensity: number | null;
         volEmissive: number | null;
@@ -578,7 +597,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         const sceneHasPT = opts.scenePreset?.features?.lighting?.ptEnabled === true;
         const wantsLightingOverride = opts.renderMode === 'PathTracing'
             || opts.ptNeeAll !== null || opts.ptEnvNee !== null
-            || opts.ptAreaLights !== null || opts.ptBounces !== null;
+            || opts.ptAreaLights !== null || opts.ptBounces !== null
+            || opts.ptReflMode !== null || opts.ptSobolBounce !== null;
         if (wantsLightingOverride && setters.setLighting) {
             const lightingPatch: any = {};
             if (opts.renderMode === 'PathTracing') lightingPatch.ptEnabled = true;
@@ -586,6 +606,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             if (opts.ptEnvNee !== null) lightingPatch.ptEnvNEE = opts.ptEnvNee;
             if (opts.ptAreaLights !== null) lightingPatch.ptAreaLights = opts.ptAreaLights;
             if (opts.ptBounces !== null) lightingPatch.ptBounces = opts.ptBounces;
+            if (opts.ptReflMode !== null) lightingPatch.ptReflMode = opts.ptReflMode;
+            if (opts.ptSobolBounce !== null) lightingPatch.ptSobolBounce = opts.ptSobolBounce;
             setters.setLighting(lightingPatch);
         }
         if (opts.renderMode && setters.setRenderMode) {
@@ -624,6 +646,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             appliedPtEnabled: after.lighting?.ptEnabled ?? 'unset',
             appliedPtNeeAll: after.lighting?.ptNEEAllLights ?? 'unset',
             appliedPtEnvNee: after.lighting?.ptEnvNEE ?? 'unset',
+            appliedPtReflMode: after.lighting?.ptReflMode ?? 'unset',
+            appliedPtSobolBounce: after.lighting?.ptSobolBounce ?? 'unset',
             appliedPtVolumetric: after.volumetric?.ptVolumetric ?? 'unset',
             appliedVolEnabled:   after.volumetric?.volEnabled   ?? 'unset',
             appliedVolDensity:   after.volumetric?.volDensity   ?? 'unset',
@@ -639,6 +663,8 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         ptNeeAll: PT_NEE_ALL,
         ptEnvNee: PT_ENV_NEE,
         ptAreaLights: PT_AREA_LIGHTS,
+        ptReflMode: PT_REFL_MODE,
+        ptSobolBounce: PT_SOBOL_BOUNCE,
         volumetric: VOLUMETRIC,
         volDensity: VOL_DENSITY,
         volEmissive: VOL_EMISSIVE,
@@ -648,7 +674,7 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     });
     console.log(`[bench-shader] preset diag: applied=${JSON.stringify({ refl: presetApplied.appliedReflectionMode, rough: presetApplied.appliedRoughness, reflectionStrength: presetApplied.appliedReflection })}`);
     if (RENDER_MODE) {
-        console.log(`[bench-shader] render-mode diag: applied=${JSON.stringify({ mode: presetApplied.appliedRenderMode, ptEnabled: presetApplied.appliedPtEnabled, ptNeeAll: presetApplied.appliedPtNeeAll, ptEnvNee: presetApplied.appliedPtEnvNee })}`);
+        console.log(`[bench-shader] render-mode diag: applied=${JSON.stringify({ mode: presetApplied.appliedRenderMode, ptEnabled: presetApplied.appliedPtEnabled, ptNeeAll: presetApplied.appliedPtNeeAll, ptEnvNee: presetApplied.appliedPtEnvNee, ptReflMode: presetApplied.appliedPtReflMode, ptSobolBounce: presetApplied.appliedPtSobolBounce })}`);
     }
     if (VOLUMETRIC !== null) {
         console.log(`[bench-shader] volumetric diag: applied=${JSON.stringify({ pt: presetApplied.appliedPtVolumetric, runtime: presetApplied.appliedVolEnabled, density: presetApplied.appliedVolDensity, emissive: presetApplied.appliedVolEmissive, lights: presetApplied.appliedVolLights })}`);
@@ -707,8 +733,18 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
             proxy.getCompiledFragmentShader(),
             proxy.getUniformsSnapshot(),
         ]);
-        const formula = (window as any).__store?.getState?.()?.formula ?? '?';
-        return { fragSrc, uniforms: uniforms ?? {}, formula };
+        const state = (window as any).__store?.getState?.() ?? {};
+        const formula = state.formula ?? '?';
+        const mat = state.materials ?? {};
+        return {
+            fragSrc,
+            uniforms: uniforms ?? {},
+            formula,
+            envMapData: mat.envMapData ?? null,
+            envSource: mat.envSource ?? 0,
+            useEnvMap: mat.useEnvMap ? 1 : 0,
+            envMapColorSpace: mat.envMapColorSpace ?? 0,
+        };
     });
 
     await browser.close();
@@ -728,6 +764,10 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
         captured: new Date().toISOString(),
         width: WIDTH,
         height: HEIGHT,
+        envMapData: captured.envMapData,
+        envSource: captured.envSource,
+        useEnvMap: captured.useEnvMap,
+        envMapColorSpace: captured.envMapColorSpace,
     };
 
     mkdirSync(OUT_DIR, { recursive: true });
@@ -870,6 +910,14 @@ async function runBench(snap: Snapshot, fragOverride: string | null) {
         uniforms,
         warmupDraws: WARMUP_DRAWS,
         measureDraws: MEASURE_DRAWS,
+        // Env-map source carried from the live store. The serialized uniforms
+        // table only has __sampler sentinels for textures, so without these
+        // the harness substitutes a placeholder gradient and any env-lit
+        // surface looks wrong. Fetched + decoded inside shader-bench.html.
+        envMapData: snap.envMapData ?? null,
+        envSource: snap.envSource ?? 0,
+        useEnvMap: snap.useEnvMap ?? 0,
+        envMapColorSpace: snap.envMapColorSpace ?? 0,
     }));
 
     // Compute reference-image diff before the browser closes — we reuse the
