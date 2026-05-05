@@ -60,9 +60,13 @@ const ASPECT_DROPDOWN_OPTIONS = ASPECT_LOCK_OPTIONS.map(a => ({ label: a.label, 
 
 interface BucketRenderPanelProps {
     controller: BucketRenderController;
+    /** Popover alignment relative to its trigger. Defaults to 'center';
+     *  installBucketRender measures the trigger on open and overrides this
+     *  when the centered panel would clip the viewport edge. */
+    align?: 'center' | 'start' | 'end';
 }
 
-const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => {
+const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align = 'center' }) => {
     const state = useEngineStore();
     const [progress, setProgress] = useState(0);
     const [tileInfo, setTileInfo] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
@@ -411,7 +415,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
             ? `${formatEtaCoarse(etaRange.min)} – ${formatEtaCoarse(etaRange.max)}`
             : '—';
         return (
-            <Popover width="w-64">
+            <Popover width="w-64" align={align}>
                 <div className="space-y-2" data-help-id="bucket.render">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
@@ -460,7 +464,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller }) => 
 
     // ─── Setup view ────────────────────────────────────────────────────
     return (
-        <Popover width="w-72">
+        <Popover width="w-72" align={align}>
             <div className="relative space-y-2.5" data-help-id="bucket.render">
                 <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High Quality Render</span>

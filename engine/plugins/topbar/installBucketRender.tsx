@@ -16,7 +16,7 @@ import { RenderGridIcon } from '../../../components/Icons';
 import { topbar, type TopBarSlot } from '../TopBar';
 import BucketRenderPanel from './BucketRenderPanel';
 import type { BucketRenderController } from './BucketRenderController';
-import { useTutorAnchor } from '../Tutorial';
+import { useTutorAnchor, mergeRefs } from '../Tutorial';
 
 export interface InstallBucketRenderOptions {
     controller: BucketRenderController;
@@ -44,8 +44,27 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
     const BucketRenderToggle: React.FC = () => {
         const isBucketRendering = useEngineStore((s) => (s as { isBucketRendering?: boolean }).isBucketRendering);
         const rootRef = React.useRef<HTMLDivElement>(null);
+        const buttonRef = React.useRef<HTMLButtonElement>(null);
         const tutAnchor = useTutorAnchor(anchor);
         const [open, setOpen] = React.useState(false);
+        const [align, setAlign] = React.useState<'center' | 'start' | 'end'>('center');
+
+        // Pick the popover alignment that keeps the panel on screen. Panel is
+        // w-72 (288px); centered alignment extends ±144px from the button.
+        // Re-measured on every open so the choice tracks window resizes.
+        const PANEL_HALF_WIDTH = 144;
+        const handleToggle = () => {
+            if (open) { setOpen(false); return; }
+            const rect = buttonRef.current?.getBoundingClientRect();
+            if (rect) {
+                const buttonCenter = (rect.left + rect.right) / 2;
+                const margin = 8;
+                if (buttonCenter - PANEL_HALF_WIDTH < margin) setAlign('start');
+                else if (buttonCenter + PANEL_HALF_WIDTH > window.innerWidth - margin) setAlign('end');
+                else setAlign('center');
+            }
+            setOpen(true);
+        };
 
         React.useEffect(() => {
             if (!open) return;
@@ -72,9 +91,9 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
         return (
             <div className="relative" ref={rootRef}>
                 <button
-                    ref={tutAnchor}
+                    ref={mergeRefs(buttonRef, tutAnchor)}
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+                    onClick={(e) => { e.stopPropagation(); handleToggle(); }}
                     title="Render!"
                     className={`flex items-center justify-center p-1 rounded border transition-colors ${
                         isBucketRendering
@@ -87,12 +106,7 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
                     <RenderGridIcon />
                 </button>
                 {open && (
-                    <div
-                        className="absolute top-full left-0 mt-2 z-50"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <BucketRenderPanel controller={controller} />
-                    </div>
+                    <BucketRenderPanel controller={controller} align={align} />
                 )}
             </div>
         );
