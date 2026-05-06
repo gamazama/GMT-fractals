@@ -6,6 +6,7 @@ import { animationEngine } from '../../engine/AnimationEngine';
 import { Keyframe, SoftSelectionType } from '../../types';
 import * as THREE from 'three';
 import { getTangentStats, updateTangentFromStats } from '../../utils/timelineUtils';
+import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
 import { TrashIcon, LinkIcon, BrokenIcon } from '../Icons';
 
 interface ActionBtnProps {
@@ -283,7 +284,7 @@ export const KeyframeInspector: React.FC = () => {
                     <InspectorRow label={isAllRotation ? "Value (Deg)" : "Value"}>
                         <div className="w-20">
                             {sameValue ? (
-                                <DraggableNumber value={displayValue} onChange={handleValueChange} step={isAllRotation ? 1 : 0.01} highlight onDragStart={handleDragStart} onDragEnd={handleDragEnd} overrideText={displayValue.toFixed(3)} />
+                                <DraggableNumber value={displayValue} onChange={handleValueChange} step={isAllRotation ? 1 : 0.01} highlight onDragStart={handleDragStart} onDragEnd={handleDragEnd} overrideText={formatTimelineValue(displayValue, 3)} />
                             ) : <div className="text-center text-[10px] text-gray-600">---</div>}
                         </div>
                     </InspectorRow>

@@ -9,6 +9,7 @@ import { Track, TrackBehavior } from '../../types';
 import { groupTracks } from '../../utils/groupTracks';
 import { ContextMenuItem } from '../../types/help';
 import { useSidebarResize } from '../../hooks/useSidebarResize';
+import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
 
 interface GraphSidebarProps {
     visibleTrackIds: string[];
@@ -25,7 +26,7 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
             if (!ref.current) return;
             const state = animStore.getState();
             const val = getLiveValue(tid, state.isPlaying, state.currentFrame, state.sequence);
-            ref.current.innerText = val.toFixed(2);
+            ref.current.innerText = formatTimelineValue(val);
             rafId = requestAnimationFrame(update);
         };
         update();

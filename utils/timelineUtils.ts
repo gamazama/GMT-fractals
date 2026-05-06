@@ -130,19 +130,23 @@ export const getLiveValue = (trackId: string, isPlaying: boolean, currentFrame: 
 };
 
 // --- CURVE EVALUATION ---
-// Wrapper for AnimationMath to handle track traversal
-export const evaluateTrackValue = (keys: Keyframe[], frame: number, isRotation: boolean): number => {
+// Wrapper for AnimationMath to handle track traversal.
+// `isLog` mirrors the AnimationEngine path so the graph editor draws
+// (and the timeline samples) the same curve that actually plays back —
+// log-track params (e.g. fluid-toy's julia.zoom) interpolate in
+// log-value space with Bezier handles re-interpreted as log-units.
+export const evaluateTrackValue = (keys: Keyframe[], frame: number, isRotation: boolean, isLog: boolean = false): number => {
     if (keys.length === 0) return 0;
-    
+
     if (frame <= keys[0].frame) return keys[0].value;
     if (frame >= keys[keys.length - 1].frame) return keys[keys.length - 1].value;
-    
+
     for (let i = 0; i < keys.length - 1; i++) {
         const k1 = keys[i];
         const k2 = keys[i+1];
-        
+
         if (frame >= k1.frame && frame < k2.frame) {
-            return AnimationMath.interpolate(frame, k1, k2, isRotation);
+            return AnimationMath.interpolate(frame, k1, k2, isRotation, isLog);
         }
     }
     return keys[0].value;

@@ -7,6 +7,7 @@ import { simplifyTrack } from '../../utils/CurveFitting';
 import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';
 import { splitCubicBezier, solveCubicBezierT } from '../../engine/BezierMath';
+import { isLogTrack } from '../../engine/animation/logTrackRegistry';
 
 const DEFAULT_SEQUENCE: AnimationSequence = {
     durationFrames: 300,
@@ -185,13 +186,14 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     sorted[idx - 1] = updatedPrev;
                     sorted[idx + 1] = updatedNext;
                 } else {
-                    const { l, r } = AnimationMath.calculateTangents(tempKey, prev, next, 'Auto');
+                    const trackIsLog = isLogTrack(trackId);
+                    const { l, r } = AnimationMath.calculateTangents(tempKey, prev, next, 'Auto', trackIsLog);
                     tempKey.leftTangent = l;
                     tempKey.rightTangent = r;
-                    TrackUtils.updateNeighbors(sorted, idx);
+                    TrackUtils.updateNeighbors(sorted, idx, trackIsLog);
                 }
             } else {
-                TrackUtils.updateNeighbors(sorted, idx);
+                TrackUtils.updateNeighbors(sorted, idx, isLogTrack(trackId));
             }
 
             return {
@@ -417,13 +419,13 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     } else if (mode === 'Auto' || mode === 'Ease') {
                         const prev = track.keyframes[idx - 1];
                         const next = track.keyframes[idx + 1];
-                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, mode);
-                        track.keyframes[idx] = { 
-                            ...k, 
-                            autoTangent: mode === 'Auto', 
-                            brokenTangents: false, 
-                            leftTangent: l, 
-                            rightTangent: r 
+                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, mode, isLogTrack(tid));
+                        track.keyframes[idx] = {
+                            ...k,
+                            autoTangent: mode === 'Auto',
+                            brokenTangents: false,
+                            leftTangent: l,
+                            rightTangent: r
                         };
                     }
                 }
@@ -440,12 +442,13 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                 const track = newTracks[tid];
                 if (track.keyframes.length === 0) return;
                 
+                const trackIsLog = isLogTrack(tid);
                 track.keyframes.forEach((k, i) => {
                     k.interpolation = type;
                     if (type === 'Bezier' && tangentMode) {
                         const prev = track.keyframes[i-1];
                         const next = track.keyframes[i+1];
-                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, tangentMode);
+                        const { l, r } = AnimationMath.calculateTangents(k, prev, next, tangentMode, trackIsLog);
                         k.leftTangent = l;
                         k.rightTangent = r;
                         k.autoTangent = (tangentMode === 'Auto');

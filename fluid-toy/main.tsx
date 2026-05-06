@@ -39,6 +39,8 @@ import { FluidBucketController } from './bucket/FluidBucketController';
 import { appEngine } from './engineHandles';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { registerCameraKeyTracks } from '../engine/animation/cameraKeyRegistry';
+import { registerLogTrack } from '../engine/animation/logTrackRegistry';
+import { registerCameraPair } from '../engine/animation/cameraPairRegistry';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installModulationUI } from '../engine/components/modulation';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
@@ -138,10 +140,34 @@ installSceneIO({
 registerCameraKeyTracks([
     'julia.center_x',
     'julia.center_y',
-    'julia.centerLow_x',
-    'julia.centerLow_y',
+    // centerLow_* are sub-f64 DD-pair lo-words — meaningful values are
+    // ~1e-18 and unreachable by hand. The camera-pair binder below
+    // drives them automatically alongside center_*; flagging hidden:true
+    // here keeps Key Cam capturing them while the timeline UI shows
+    // only the human-meaningful pan + zoom.
+    { id: 'julia.centerLow_x', hidden: true },
+    { id: 'julia.centerLow_y', hidden: true },
     'julia.zoom',
 ]);
+
+// julia.zoom spans many decades during deep-zoom flythroughs (1.0 down
+// to 1e-30 with deepZoom enabled). Linear lerp would dump 99.999...% of
+// the timeline at one extreme — log-space tween makes the visual scale
+// change at a constant rate per frame, which is what the eye expects.
+registerLogTrack('julia.zoom');
+
+// Pair the pan + DD-pair lo-words with the zoom track. AnimationEngine
+// then interpolates pan via the linear-in-zoom formula
+//   c(f) = c0 + (c1−c0)·(z(f)−z0)/(z1−z0)
+// so a deep-zoom flythrough keeps visual pan velocity constant — pan
+// inherits the zoom track's easing, additional pan keys mid-zoom
+// continue the same pacing, and pure-pan-during-flat-zoom falls back
+// cleanly to time-linear lerp.
+registerCameraPair({
+    zoom:   'julia.zoom',
+    pan:    ['julia.center_x',    'julia.center_y'],
+    panLow: ['julia.centerLow_x', 'julia.centerLow_y'],
+});
 
 // Canonical modulation tick — processes the store's `animations` array
 // each frame into liveModulations (base + offset for every target).

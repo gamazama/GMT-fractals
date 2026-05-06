@@ -116,7 +116,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     menu.registerItem('file', {
         id: 'save-scene',
         type: 'button',
-        label: 'Save Scene (GMF)',
+        label: `Save Scene (${_fileExtension.toUpperCase()})`,
         onSelect: () => { saveScene(); },
     });
     if (_getCanvas) {
@@ -326,7 +326,7 @@ const LoadSceneMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
                 className="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
             >
                 <span className="flex items-center gap-2 min-w-0">
-                    <span className="truncate">Load Scene (PNG/GMF)</span>
+                    <span className="truncate">Load Scene (PNG/{_fileExtension.toUpperCase()})</span>
                 </span>
             </button>
         </>

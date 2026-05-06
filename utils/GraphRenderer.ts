@@ -2,6 +2,7 @@
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, pixelToValue, getGridStep, getTimeGridSteps, THEME } from './GraphUtils';
 import { AnimationSequence, Track, Keyframe } from '../types';
 import { calculateSoftFalloff, evaluateTrackValue } from './timelineUtils';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 
 export const TRACK_COLORS = [
@@ -295,6 +296,7 @@ export const drawGraph = (props: GraphRenderProps) => {
             ctx.moveTo(Math.min(startX, LEFT_GUTTER_WIDTH), startY); 
             ctx.lineTo(startX, startY);
 
+            const trackIsLog = isLogTrack(tid);
             for (let i = 0; i < keys.length - 1; i++) {
                 const k1 = keys[i];
                 const k2 = keys[i + 1];
@@ -305,6 +307,20 @@ export const drawGraph = (props: GraphRenderProps) => {
 
                 if (k1.interpolation === 'Step') {
                     ctx.lineTo(x2, y1); ctx.lineTo(x2, y2);
+                } else if (trackIsLog && k1.value > 0 && k2.value > 0) {
+                    // Log tracks need a sampled polyline because canvas
+                    // bezierCurveTo only does cubic-pixel-space curves —
+                    // can't represent the exponential shape of log
+                    // interpolation (or log-bezier easing). Sample at
+                    // ~4 px steps; matches the loop/pingpong path below.
+                    const sampleStepPx = 4;
+                    const span = Math.max(1, Math.floor((x2 - x1) / sampleStepPx));
+                    for (let s = 1; s <= span; s++) {
+                        const tt = s / span;
+                        const f = k1.frame + tt * (k2.frame - k1.frame);
+                        const v = evaluateTrackValue([k1, k2], f, false, true);
+                        ctx.lineTo(frameToCanvasPixel(f), v2p(v, tid));
+                    }
                 } else if (k1.interpolation === 'Linear') {
                     ctx.lineTo(x2, y2);
                 } else {

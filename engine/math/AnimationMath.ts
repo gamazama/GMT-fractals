@@ -13,8 +13,17 @@ const TANGENT_WEIGHT = 0.333;
 export const AnimationMath = {
     /**
      * Calculates the interpolated value at a specific frame between two keyframes.
+     *
+     * `isLog` — interpolate linearly in log(value) space. Used for
+     * log-scale params (e.g. fluid-toy's `julia.zoom`) so a flythrough
+     * spanning many decades progresses at a constant rate-of-change in
+     * scale rather than dumping 99.999% of the tween at one end. Bezier
+     * tangent semantics don't survive a log transform (tangent y-values
+     * are absolute), so log mode forces linear-in-log regardless of
+     * stored interpolation. Falls back to linear if either endpoint is
+     * non-positive.
      */
-    interpolate: (frame: number, k1: Keyframe, k2: Keyframe, isRotation: boolean = false): number => {
+    interpolate: (frame: number, k1: Keyframe, k2: Keyframe, isRotation: boolean = false, isLog: boolean = false): number => {
         if (k1.interpolation === 'Step') return k1.value;
 
         let v1 = k1.value;
@@ -26,6 +35,35 @@ export const AnimationMath = {
             const diff = v2 - v1;
             if (diff > Math.PI) v2 -= PI2;
             else if (diff < -Math.PI) v2 += PI2;
+        }
+
+        if (isLog && v1 > 0 && v2 > 0) {
+            const lv1 = Math.log(v1);
+            const lv2 = Math.log(v2);
+
+            if (k1.interpolation === 'Bezier') {
+                // Bezier in (frame, log-value) space — tangent y values
+                // are interpreted as log-units. Auto-tangents authored
+                // in linear-value space (addKeyframe time) map to small
+                // y-values in log space, giving near-linear-in-log
+                // curves; users shape easing by dragging the handles.
+                const h1x = k1.rightTangent ? k1.rightTangent.x : (k2.frame - k1.frame) * TANGENT_WEIGHT;
+                const h1y = k1.rightTangent ? k1.rightTangent.y : 0;
+                const h2x = k2.leftTangent ? k2.leftTangent.x : -(k2.frame - k1.frame) * TANGENT_WEIGHT;
+                const h2y = k2.leftTangent ? k2.leftTangent.y : 0;
+                const logResult = solveBezierY(
+                    frame,
+                    k1.frame, lv1, h1x, h1y,
+                    k2.frame, lv2, h2x, h2y,
+                );
+                return Math.exp(logResult);
+            }
+
+            // Linear-in-log (default for non-Bezier on log tracks)
+            const duration = k2.frame - k1.frame;
+            if (duration < 1e-9) return v1;
+            const t = (frame - k1.frame) / duration;
+            return Math.exp(lv1 + (lv2 - lv1) * t);
         }
 
         if (k1.interpolation === 'Bezier') {
@@ -97,39 +135,61 @@ export const AnimationMath = {
     /**
      * Calculates auto-tangents for a keyframe based on its neighbors.
      * Supports 'Auto' (Smooth/Catmull-Rom) and 'Ease' (Flat) modes.
+     *
+     * `isLog` — compute slopes in log-value space. The returned tangent
+     * y-values are expressed in log-units, matching what `interpolate()`
+     * with `isLog=true` consumes during a Bezier-on-log evaluation.
+     * Without this, auto-tangents on a log track (e.g. julia.zoom going
+     * 1 → 1e-30) would compute slopes like (1e-30 − 1)/Δframe ≈ −1/Δframe
+     * — the resulting tangents map to near-zero in log space, giving a
+     * visually-flat curve regardless of how the user shapes them. With
+     * isLog the slopes use Δlog(value), producing smooth Catmull-Rom-
+     * style easing in the same log-space as playback. Falls back to
+     * linear math when any value is non-positive.
      */
-    calculateTangents: (k: Keyframe, prev: Keyframe | undefined, next: Keyframe | undefined, mode: 'Auto' | 'Ease'): { l: BezierHandle, r: BezierHandle } => {
+    calculateTangents: (k: Keyframe, prev: Keyframe | undefined, next: Keyframe | undefined, mode: 'Auto' | 'Ease', isLog: boolean = false): { l: BezierHandle, r: BezierHandle } => {
         if (mode === 'Ease') {
             const lx = prev ? (k.frame - prev.frame) * TANGENT_WEIGHT : 10;
             const rx = next ? (next.frame - k.frame) * TANGENT_WEIGHT : 10;
             return { l: {x: -lx, y: 0}, r: {x: rx, y: 0} };
         }
-        
+
+        // Project keyframe values into the space we'll do the math in.
+        // For log tracks, all participating keys must have positive values
+        // — otherwise we silently fall back to linear math (matches what
+        // interpolate() does with isLog).
+        const useLog = isLog && k.value > 0
+            && (!prev || prev.value > 0)
+            && (!next || next.value > 0);
+        const v   = useLog ? Math.log(k.value)    : k.value;
+        const vP  = useLog && prev ? Math.log(prev.value) : prev?.value;
+        const vN  = useLog && next ? Math.log(next.value) : next?.value;
+
         // Edges
         if (!prev && !next) return { l: {x:-10,y:0}, r: {x:10,y:0} };
-        
+
         if (!prev) {
             // Start: Point linearly towards next
-            const m = (next!.value - k.value) / (next!.frame - k.frame);
+            const m = (vN! - v) / (next!.frame - k.frame);
             const rx = (next!.frame - k.frame) * TANGENT_WEIGHT;
             return { l: {x:-10, y:0}, r: {x: rx, y: rx * m} };
         }
-        
+
         if (!next) {
             // End: Point linearly from prev
-            const m = (k.value - prev!.value) / (k.frame - prev!.frame);
+            const m = (v - vP!) / (k.frame - prev!.frame);
             const lx = (k.frame - prev!.frame) * TANGENT_WEIGHT;
             return { l: {x: -lx, y: -lx * m}, r: {x: 10, y: 0} };
         }
 
         // --- SMART WEIGHTED TANGENTS ---
-        // Calculate slopes
+        // Calculate slopes (in log-space when useLog)
         const dt1 = k.frame - prev.frame;
-        const dv1 = k.value - prev.value;
+        const dv1 = v - vP!;
         const m1 = dt1 === 0 ? 0 : dv1 / dt1;
-        
+
         const dt2 = next.frame - k.frame;
-        const dv2 = next.value - k.value;
+        const dv2 = vN! - v;
         const m2 = dt2 === 0 ? 0 : dv2 / dt2;
 
         // Monotonicity Check: If slopes change direction (peak/valley), flatten tangents to prevent overshoot
@@ -138,22 +198,22 @@ export const AnimationMath = {
             const rx = dt2 * TANGENT_WEIGHT;
             return { l: {x: -lx, y: 0}, r: {x: rx, y: 0} };
         }
-        
+
         // Weighted Average Slope (Catmull-Rom style but weighted by interval)
         const dtTotal = next.frame - prev.frame;
-        const dvTotal = next.value - prev.value;
+        const dvTotal = vN! - vP!;
         let m = dtTotal === 0 ? 0 : dvTotal / dtTotal;
-        
+
         // Overshoot Protection
         const limit = 3 * Math.min(Math.abs(m1), Math.abs(m2));
         if (Math.abs(m) > limit) {
             m = Math.sign(m) * limit;
         }
-        
+
         // Calculate handles using weighted x-distances
         const lx = dt1 * TANGENT_WEIGHT;
         const rx = dt2 * TANGENT_WEIGHT;
-        
+
         return { l: { x: -lx, y: -lx * m }, r: { x: rx, y: rx * m } };
     },
 

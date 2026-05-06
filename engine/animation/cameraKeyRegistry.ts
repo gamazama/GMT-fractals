@@ -19,7 +19,23 @@
  * registration, no feature-registry heuristics, no hardcoding.
  */
 
-let cameraKeyTracks: readonly string[] = [];
+/** Track entry for `registerCameraKeyTracks`. Plain string for the
+ *  common case; object form when the track needs metadata (e.g.
+ *  `hidden:true` for sub-f64 DD-pair lo-words like fluid-toy's
+ *  `centerLow_x/_y`, which are paired-and-auto-managed and would
+ *  clutter the timeline if shown). */
+export type CameraKeyTrackEntry = string | { id: string; hidden?: boolean };
+
+interface NormalizedTrackEntry { id: string; hidden?: boolean }
+
+let cameraKeyTracks: readonly NormalizedTrackEntry[] = [];
+/** Cached `id`-only projection of `cameraKeyTracks`. Critical that this
+ *  reference stays stable between registrations — `KeyCamButton` reads
+ *  it via `useSyncExternalStore`, which polls `getCameraKeyTracks` on
+ *  every render and compares by reference. Returning a fresh `.map()`
+ *  each call would trip React's "snapshot changed without notify"
+ *  infinite-loop guard. Recomputed only inside `registerCameraKeyTracks`. */
+let cameraKeyTrackIds: readonly string[] = [];
 const listeners = new Set<() => void>();
 
 /** Options threaded into the registered capture function. Mirror what
@@ -71,17 +87,23 @@ export function captureCameraKeyFrame(
     frame: number,
     opts?: CameraKeyCaptureOptions,
 ): void {
-    if (_captureFn) { _captureFn(frame, cameraKeyTracks, opts); return; }
+    const trackIds = cameraKeyTracks.map(e => e.id);
+    if (_captureFn) { _captureFn(frame, trackIds, opts); return; }
     // Default capture: path-resolve each track to a scalar in the DDFS
     // store and call the animation-store addKeyframe. Supports both
     // pure-scalar paths (`sceneCamera.zoom`) and UNDERSCORE vec-component
     // paths (`sceneCamera.center_x`) — the latter resolves the base part
-    // (`center`) to a vec, then picks the axis. The walker doesn't honor
-    // skipSnapshot / interpolation — apps that need those options register
-    // a host-side capture fn instead.
+    // (`center`) to a vec, then picks the axis. Honors skipSnapshot;
+    // interpolation falls through to addKeyframe's auto-pick — apps
+    // that need an explicit override register a host-side capture fn.
     const state = useEngineStore.getState() as any;
-    const animActions = useAnimationStore.getState();
-    for (const tid of cameraKeyTracks) {
+    const animActions = useAnimationStore.getState() as any;
+
+    // Resolve all values up front so we can decide whether to take a
+    // snapshot at all (no-op press → no undo entry).
+    const resolved: Array<{ tid: string; v: number; hidden?: boolean }> = [];
+    for (const entry of cameraKeyTracks) {
+        const tid = entry.id;
         const parts = tid.split('.');
         let v: any = state;
         for (let i = 0; i < parts.length; i++) {
@@ -97,34 +119,58 @@ export function captureCameraKeyFrame(
             }
             v = v[p];
         }
-        if (typeof v === 'number' && isFinite(v)) {
-            // addKeyframe silently no-ops if the track doesn't exist yet;
-            // auto-create here so Key Cam works on first press without
-            // the app having to pre-register every track.
-            if (!(useAnimationStore.getState() as any).sequence.tracks[tid]) {
-                animActions.addTrack(tid, tid);
-            }
-            animActions.addKeyframe(tid, frame, v);
+        if (typeof v === 'number' && isFinite(v)) resolved.push({ tid, v, hidden: entry.hidden });
+    }
+    if (resolved.length === 0) return;
+
+    // ONE snapshot for the whole batch. Without this the first press
+    // would push N entries (addTrack snapshots per missing track) and
+    // subsequent presses would push zero (addKeyframe doesn't snapshot)
+    // — neither matches the "one press → one undo entry" mental model.
+    if (!opts?.skipSnapshot && typeof animActions.snapshot === 'function') {
+        animActions.snapshot();
+    }
+
+    for (const { tid, v, hidden } of resolved) {
+        if (!animActions.sequence.tracks[tid]) {
+            // Inline track creation — bypass addTrack so its internal
+            // snapshot doesn't multiply the single batch snapshot above.
+            // `hidden:true` keeps DD-pair lo-words (centerLow_*) out of
+            // the timeline UI; the camera-pair binder still drives them.
+            const newTrack: any = { id: tid, type: 'float', label: tid, keyframes: [] };
+            if (hidden) newTrack.hidden = true;
+            useAnimationStore.setState((s: any) => ({
+                sequence: {
+                    ...s.sequence,
+                    tracks: { ...s.sequence.tracks, [tid]: newTrack },
+                },
+            }));
         }
+        animActions.addKeyframe(tid, frame, v);
     }
 }
 
 /**
  * Register the set of track IDs that together represent the camera pose.
- * Calling again replaces the previous registration (apps should register
- * exactly once on boot; subsequent calls are allowed so hot-reload works).
+ * Accepts either a plain ID string or `{ id, hidden? }` for tracks that
+ * should be created with `hidden:true` (e.g. DD-pair lo-words). Calling
+ * again replaces the previous registration (apps should register exactly
+ * once on boot; subsequent calls are allowed so hot-reload works).
  */
-export function registerCameraKeyTracks(tracks: readonly string[]): void {
-    cameraKeyTracks = tracks.slice();
+export function registerCameraKeyTracks(tracks: readonly CameraKeyTrackEntry[]): void {
+    cameraKeyTracks = tracks.map(t => typeof t === 'string' ? { id: t } : { ...t });
+    cameraKeyTrackIds = cameraKeyTracks.map(e => e.id);
     listeners.forEach(l => l());
 }
 
 /**
  * Current registered camera track IDs. Empty array when no app has
  * registered yet — toolbar treats this as "hide the Key Cam button".
+ * Returns a stable reference (recomputed only in `registerCameraKeyTracks`)
+ * so `useSyncExternalStore` callers don't loop.
  */
 export function getCameraKeyTracks(): readonly string[] {
-    return cameraKeyTracks;
+    return cameraKeyTrackIds;
 }
 
 /**

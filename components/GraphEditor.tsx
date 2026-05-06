@@ -12,6 +12,7 @@ import { GraphCanvas } from './graph/GraphCanvas';
 import { GraphSelectionBBox } from './graph/GraphSelectionBBox';
 import { WaveIcon, BakeIcon, MagicIcon } from './Icons';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 import { ContextMenuItem } from '../types/help';
 
 interface GraphEditorProps {
@@ -109,6 +110,21 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                 if (k.value < min) min = k.value;
                 if (k.value > max) max = k.value;
             });
+            // Log tracks span many decades (julia.zoom: 1 → 1e-30). A
+            // linear min..max range squashes the curve to a single pixel
+            // at the deep end. Store the range in log space so the
+            // normalized v2p maps the curve across the full y-axis.
+            if (isLogTrack(tid) && min > 0) {
+                const logMin = Math.log(min);
+                const logMax = Math.log(max);
+                const logSpan = logMax - logMin;
+                if (logSpan < 0.00001) {
+                    ranges[tid] = { min: logMin - 0.5, max: logMax + 0.5, span: 1 };
+                } else {
+                    ranges[tid] = { min: logMin, max: logMax, span: logSpan };
+                }
+                return;
+            }
             const span = max - min;
             if (span < 0.00001) { min -= 0.5; max += 0.5; }
             ranges[tid] = { min, max, span: max - min };
@@ -120,7 +136,13 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
         if (!normalized) return val;
         const r = trackRanges[tid];
         if (!r) return 0.5;
-        return (val - r.min) / r.span; 
+        // Log-track ranges store log(min/max). Transform value into the
+        // same space so the normalized [0,1] mapping is meaningful for
+        // values spanning many decades.
+        if (isLogTrack(tid) && val > 0) {
+            return (Math.log(val) - r.min) / r.span;
+        }
+        return (val - r.min) / r.span;
     };
 
     const v2p = (val: number, tid: string) => {

@@ -4,6 +4,8 @@ import { solveBezierY } from './BezierMath';
 import { featureRegistry } from './FeatureSystem';
 import { AnimationMath } from './math/AnimationMath';
 import { binderRegistry } from './animation/binderRegistry';
+import { isLogTrack } from './animation/logTrackRegistry';
+import { evaluatePairedTrack } from './animation/cameraPairRegistry';
 
 type ValueSetter = (val: number) => void;
 
@@ -306,7 +308,14 @@ export class AnimationEngine {
 
             if (ignoreCamera && track.id.startsWith('camera.')) continue;
 
-            const val = this.interpolate(track, frame);
+            // Camera-pair tracks (pan + DD-pair lo-words tied to a zoom
+            // track) interpolate via the linear-in-zoom formula so a
+            // deep-zoom flythrough keeps visual pan velocity coherent
+            // with the log-zoom curve. Falls through to standard
+            // per-track interpolation when the track isn't paired or
+            // the formula doesn't apply (no keys, etc.).
+            const paired = evaluatePairedTrack(track.id, frame, sequence);
+            const val = paired !== undefined ? paired : this.interpolate(track, frame);
             const binder = this.getBinder(track.id);
             binder(val);
         }
@@ -323,7 +332,8 @@ export class AnimationEngine {
         const firstKey = keys[0];
         const lastKey = keys[keys.length - 1];
         const isRotation = track.id.startsWith('camera.rotation') || track.id.includes('rot') || track.id.includes('phase') || track.id.includes('twist');
-        
+        const isLog = isLogTrack(track.id);
+
         if (frame > lastKey.frame) {
             const behavior = track.postBehavior || 'Hold';
             
@@ -353,7 +363,7 @@ export class AnimationEngine {
             const cycleCount = Math.floor(timeSinceStart / duration);
             const localTime = firstKey.frame + (timeSinceStart % duration);
             
-            const baseVal = this.evaluateCurveInternal(keys, localTime, isRotation);
+            const baseVal = this.evaluateCurveInternal(keys, localTime, isRotation, isLog);
             
             if (behavior === 'Loop') return baseVal;
             
@@ -361,7 +371,7 @@ export class AnimationEngine {
                 const isReversed = cycleCount % 2 === 1;
                 if (isReversed) {
                     const reversedTime = lastKey.frame - (timeSinceStart % duration);
-                    return this.evaluateCurveInternal(keys, reversedTime, isRotation);
+                    return this.evaluateCurveInternal(keys, reversedTime, isRotation, isLog);
                 }
                 return baseVal;
             }
@@ -374,16 +384,16 @@ export class AnimationEngine {
         
         if (frame < firstKey.frame) return firstKey.value;
 
-        return this.evaluateCurveInternal(keys, frame, isRotation);
+        return this.evaluateCurveInternal(keys, frame, isRotation, isLog);
     }
-    
-    private evaluateCurveInternal(keys: Keyframe[], frame: number, isRotation: boolean): number {
+
+    private evaluateCurveInternal(keys: Keyframe[], frame: number, isRotation: boolean, isLog: boolean = false): number {
         for (let i = 0; i < keys.length - 1; i++) {
             const k1 = keys[i];
             const k2 = keys[i+1];
-            
-            if (frame >= k1.frame && frame <= k2.frame) { 
-                return AnimationMath.interpolate(frame, k1, k2, isRotation);
+
+            if (frame >= k1.frame && frame <= k2.frame) {
+                return AnimationMath.interpolate(frame, k1, k2, isRotation, isLog);
             }
         }
         return keys[keys.length - 1].value;

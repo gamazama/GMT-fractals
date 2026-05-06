@@ -6,11 +6,14 @@ export const TrackUtils = {
     /**
      * Updates the neighbors of a keyframe after it has been inserted or modified.
      * Ensures C1 continuity for Bezier curves if Auto Tangents are enabled.
-     * 
+     *
      * @param sortedKeys The full list of keys for the track, must be sorted by frame.
      * @param idx The index of the key that was just modified/inserted.
+     * @param isLog Track is log-scale — auto-tangents compute slopes in
+     *   log-value space so the resulting handles are meaningful for the
+     *   bezier-on-log evaluator. Callers pass `isLogTrack(trackId)`.
      */
-    updateNeighbors: (sortedKeys: Keyframe[], idx: number): void => {
+    updateNeighbors: (sortedKeys: Keyframe[], idx: number, isLog: boolean = false): void => {
         const newKey = sortedKeys[idx];
 
         // Only recompute neighbours whose tangents are auto-managed.
@@ -22,7 +25,7 @@ export const TrackUtils = {
             if (prev.interpolation === 'Bezier' && prev.autoTangent) {
                 const updated = { ...prev };
                 const prevPrev = sortedKeys[prevIdx - 1];
-                const { l, r } = AnimationMath.calculateTangents(updated, prevPrev, newKey, 'Auto');
+                const { l, r } = AnimationMath.calculateTangents(updated, prevPrev, newKey, 'Auto', isLog);
                 updated.leftTangent = l;
                 updated.rightTangent = r;
                 sortedKeys[prevIdx] = updated;
@@ -35,7 +38,7 @@ export const TrackUtils = {
             if (next.interpolation === 'Bezier' && next.autoTangent) {
                 const updated = { ...next };
                 const nextNext = sortedKeys[nextIdx + 1];
-                const { l, r } = AnimationMath.calculateTangents(updated, newKey, nextNext, 'Auto');
+                const { l, r } = AnimationMath.calculateTangents(updated, newKey, nextNext, 'Auto', isLog);
                 updated.leftTangent = l;
                 updated.rightTangent = r;
                 sortedKeys[nextIdx] = updated;

@@ -5,6 +5,7 @@ import { useAnimationStore } from '../../store/animationStore';
 import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { TrashIcon, EyeIcon, SelectAllIcon } from '../Icons';
 import { getLiveValue } from '../../utils/timelineUtils';
+import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
 
 // Global refs to track LiveValueDisplay components across ticks
 const liveValueState = {
@@ -43,7 +44,7 @@ export const tick = () => {
         if (ref) {
             try {
                 const val = getLiveValue(tid, isPlaying, currentFrame, sequence);
-                ref.innerText = val.toFixed(2);
+                ref.innerText = formatTimelineValue(val);
             } catch (e) {
                 console.error('Error updating live value display:', e);
             }

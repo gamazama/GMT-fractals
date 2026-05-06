@@ -249,6 +249,42 @@ export const lerpGradient = (a: GradientConfig, b: GradientConfig, t: number) =>
 
 Custom interpolators are allowed via `binder.interpolate = (a, b, t) => ...`. Good for app-specific types (quaternion slerp, bezier curves, etc.).
 
+### Log tracks (`engine/animation/logTrackRegistry.ts`)
+
+Track IDs registered via `registerLogTrack(id)` interpolate in **log-value space**. Linear lerp on a param spanning many decades (fluid-toy's `julia.zoom` flying 1 → 1e-30) collapses 99.999...% of the timeline to one extreme; `exp(lerp(log v0, log v1, t))` gives a constant rate-of-change in scale, which is what the eye expects.
+
+- Bezier on log tracks does the bezier solve in `(frame, log-value)` space; tangent y-values are interpreted as log-units.
+- `AnimationMath.calculateTangents(... , isLog)` computes auto-tangent slopes in log space too — without it, auto-tangents on a log track produce visually-flat curves regardless of how the user shapes them.
+- Falls back to linear math when any keyframe value is non-positive.
+- Graph editor honors log mode: `evaluateTrackValue(... , isLog)`, `GraphRenderer` samples log curves into a polyline (canvas `bezierCurveTo` can't represent the exponential), and `GraphEditor.trackRanges` log-normalises so the curve uses the full y-axis instead of squashing to the floor.
+
+Apps register on boot:
+```ts
+import { registerLogTrack } from '@engine/animation/logTrackRegistry';
+registerLogTrack('julia.zoom');
+```
+
+### Camera pairs (`engine/animation/cameraPairRegistry.ts`)
+
+Pairs a set of pan tracks with a zoom track so they tween coherently. With log-zoom + linear-time pan, pan whips across the view at deep zoom because world-units-per-frame stays constant while the visible world shrinks exponentially. The pair binder applies the closed-form **linear-in-zoom** formula (`pan = c0 + (c1−c0)·(zT−z0)/(z1−z0)`) so visual pan velocity stays constant.
+
+Two-layer easing:
+- **Macro** — zoom track's Bezier handles shape `z(t)`; pan inherits via the formula's `zoomAt()` lookups.
+- **Per-pan-segment** — pan keys' own Bezier handles re-shape `u(t)` within their segment via a "virtual frame" trick (compute eased `u`, advance the frame to `f0 + u·Δf`, sample zoom there).
+
+For DD-pair pan accumulators (e.g. fluid-toy's `centerLow_x/_y`), pass them as `panLow`. The binder lerps the `(hi, lo)` pair as a single DD operation (Knuth two-sum + Veltkamp-split two-product), giving ~1e-32 absolute precision through a tween — quiet motion past e-30 instead of per-frame ULP shake. `panLow` tracks are auto-flagged `hidden:true` in the timeline so the sub-f64 residuals don't clutter the UI.
+
+```ts
+import { registerCameraPair } from '@engine/animation/cameraPairRegistry';
+registerCameraPair({
+    zoom:   'julia.zoom',
+    pan:    ['julia.center_x',    'julia.center_y'],
+    panLow: ['julia.centerLow_x', 'julia.centerLow_y'],
+});
+```
+
+The pair binder fires inside `AnimationEngine.scrub()` before the standard interpolator — falls through to standard per-track interpolation when the formula doesn't apply (no pair, missing keys, flat zoom).
+
 ## Intra-feature coordination via tracks
 
 A feature can subscribe to a binder's output (without registering a derived value) via:
