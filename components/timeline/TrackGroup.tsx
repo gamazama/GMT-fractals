@@ -4,6 +4,7 @@ import { TrackRow, groupDiamondState } from './TrackRow';
 import { AnimationSequence } from '../../types';
 import { FolderIcon } from '../Icons';
 import { SelectionTransformBar } from './SelectionTransformBar';
+import { useAnimationStore } from '../../store/animationStore';
 
 // Group diamond that registers with tick system for dirty-state coloring
 const GroupDiamond = ({ groupName, frame, frameWidth, tids, onMouseDown }: {
@@ -60,6 +61,7 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
     onTrackSelect, onRemoveTrack, onAddKey, onKeyMouseDown, onGroupKeyMouseDown,
     onStartTransform, visibleGraphTracks, onToggleVisibility, onSelectAllKeys
 }) => {
+    const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
 
     // Calculate group summary keyframes
     const groupKeyframes = useMemo(() => {
@@ -98,9 +100,10 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
                 className="flex border-b border-white/5 bg-white/10"
                 style={{ height: 24 }}
             >
-                <div 
+                <div
                     // Increase Z-Index to 30 to match TrackRow sticky header, ensuring it sits above scrolling keyframes
-                    className="sticky left-0 z-30 w-[220px] bg-[#1a1a1a] border-r border-white/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-gray-700 select-none" 
+                    className="sticky left-0 z-30 bg-[#1a1a1a] border-r border-white/10 shrink-0 flex items-center px-2 cursor-pointer hover:bg-gray-700 select-none"
+                    style={{ width: sidebarWidth }}
                     onClick={(e) => { e.stopPropagation(); onToggle(groupName, e.altKey); }}
                     onMouseDown={(e) => e.stopPropagation()}
                     data-help-id="anim.tracks"

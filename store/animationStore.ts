@@ -5,11 +5,13 @@ import { AnimationStore } from './animation/types';
 import { createPlaybackSlice } from './animation/playbackSlice';
 import { createSelectionSlice } from './animation/selectionSlice';
 import { createSequenceSlice } from './animation/sequenceSlice';
+import { createUiSlice } from './animation/uiSlice';
 
 export const useAnimationStore = create<AnimationStore>()(subscribeWithSelector((set, get, api) => ({
     ...createPlaybackSlice(set, get, api),
     ...createSelectionSlice(set, get, api),
-    ...createSequenceSlice(set, get, api)
+    ...createSequenceSlice(set, get, api),
+    ...createUiSlice(set, get, api)
 })));
 
 // Dev-console handle (matching the __camera / __animEngine / __store

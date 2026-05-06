@@ -174,6 +174,7 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
     onSelect, onToggleVisibility, onSelectAllKeys, onRemove, onAddKey, onKeyMouseDown
 }) => {
     const handleContextMenu = useHelpContextMenu();
+    const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
 
     return (
         <div
@@ -182,7 +183,8 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
             data-help-id="anim.tracks"
         >
             <div
-                className={`sticky left-0 z-30 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-cyan-500' : ''}`}
+                className={`sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center justify-between px-3 cursor-pointer group select-none ${isSelected ? 'border-l-2 border-l-cyan-500' : ''}`}
+                style={{ width: sidebarWidth }}
                 onClick={(e) => onSelect(e, tid)}
                 onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={handleContextMenu}

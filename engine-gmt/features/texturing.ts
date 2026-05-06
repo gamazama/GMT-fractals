@@ -68,8 +68,8 @@ export const TexturingFeature: FeatureDefinition = {
         },
         mapU: {
             type: 'float',
-            default: 6.0, 
-            label: 'U',
+            default: 6.0,
+            label: 'Texture U Mode',
             shortId: 'mu',
             uniform: 'uTextureModeU',
             group: 'mapping',
@@ -89,8 +89,8 @@ export const TexturingFeature: FeatureDefinition = {
         },
         mapV: {
             type: 'float',
-            default: 1.0, 
-            label: 'V',
+            default: 1.0,
+            label: 'Texture V Mode',
             shortId: 'mv',
             uniform: 'uTextureModeV',
             group: 'mapping',

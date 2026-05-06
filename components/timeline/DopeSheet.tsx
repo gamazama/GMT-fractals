@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo, useLayoutEffect } from 'react';
+import React, { useRef, useEffect, useMemo, useLayoutEffect } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { TimelineRuler } from './TimelineRuler';
 import { Track } from '../../types';
@@ -8,7 +8,7 @@ import { TrackGroup } from './TrackGroup';
 import { SelectionTransformBar } from './SelectionTransformBar';
 import { useDopeSheetInteraction } from '../../hooks/useDopeSheetInteraction';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
-import { TIMELINE_SIDEBAR_WIDTH, TIMELINE_RULER_HEIGHT, TIMELINE_GROUP_HEIGHT, TIMELINE_TRACK_HEIGHT } from '../../data/constants';
+import { TIMELINE_RULER_HEIGHT, TIMELINE_GROUP_HEIGHT, TIMELINE_TRACK_HEIGHT } from '../../data/constants';
 import { getLiveValue } from '../../utils/timelineUtils';
 import { groupTracks, classifyTrackId } from '../../utils/groupTracks';
 
@@ -26,10 +26,11 @@ interface DopeSheetProps {
 
 const PlayheadCursor = ({ frameWidth }: { frameWidth: number }) => {
     const currentFrame = useAnimationStore(s => s.currentFrame);
+    const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
     return (
-        <div 
+        <div
             className="absolute top-6 bottom-0 w-px bg-red-500/50 pointer-events-none z-10"
-            style={{ left: `${TIMELINE_SIDEBAR_WIDTH + (currentFrame * frameWidth)}px` }} 
+            style={{ left: `${sidebarWidth + (currentFrame * frameWidth)}px` }}
         />
     );
 };
@@ -80,7 +81,11 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
     const selectTrackBy = (id: string, multi: boolean) =>
         multi ? toggleTrackSelection(id) : setTrackSelection(id);
 
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['Formula', 'Optics', 'Lighting', 'Shading']));
+    const collapsedGroupsArr = useAnimationStore(s => s.collapsedGroups);
+    const setCollapsedGroupsStore = useAnimationStore(s => s.setCollapsedGroups);
+    const toggleCollapsedGroupStore = useAnimationStore(s => s.toggleCollapsedGroup);
+    const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
+    const collapsedGroups = useMemo(() => new Set(collapsedGroupsArr), [collapsedGroupsArr]);
     const contentRef = useRef<HTMLDivElement>(null);
     const lastSelectedTrackId = useRef<string | null>(null);
 
@@ -123,32 +128,16 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
         const handleFocus = (trackId: string) => {
             if (!trackId) return;
             const targetGroup = classifyTrackId(String(trackId));
-            setCollapsedGroups(() => {
-                const allGroups = new Set<string>(['Camera', 'Formula', 'Optics', 'Lighting', 'Shading']);
-                allGroups.delete(targetGroup);
-                return allGroups;
-            });
+            const allGroups = ['Camera', 'Formula', 'Optics', 'Lighting', 'Shading'];
+            setCollapsedGroupsStore(allGroups.filter(g => g !== targetGroup));
         };
-        
+
         const unsub = FractalEvents.on(FRACTAL_EVENTS.TRACK_FOCUS, handleFocus);
         return unsub;
-    }, []);
+    }, [setCollapsedGroupsStore]);
 
     const toggleGroup = (groupName: string, isAlt: boolean) => {
-        setCollapsedGroups(prev => {
-            const next = new Set(prev);
-            if (isAlt) {
-                next.clear();
-                Object.keys(organizedTracks.groups).forEach(g => {
-                    if (g !== groupName) next.add(g);
-                });
-                next.delete(groupName);
-            } else {
-                if (next.has(groupName)) next.delete(groupName);
-                else next.add(groupName);
-            }
-            return next;
-        });
+        toggleCollapsedGroupStore(groupName, isAlt, Object.keys(organizedTracks.groups));
     };
 
     const organizedTracks = useMemo(() => groupTracks(sequence.tracks), [sequence.tracks]);
@@ -194,7 +183,7 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
         frameWidth,
         contentRef,
         scrollContainerRef,
-        SIDEBAR_WIDTH: TIMELINE_SIDEBAR_WIDTH,
+        SIDEBAR_WIDTH: sidebarWidth,
         RULER_HEIGHT: TIMELINE_RULER_HEIGHT,
         GROUP_HEIGHT: TIMELINE_GROUP_HEIGHT,
         TRACK_HEIGHT: TIMELINE_TRACK_HEIGHT,
@@ -363,13 +352,13 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
          const totalX = xRelativeToContainer + scrollOffset;
          
          // Remove Sidebar width
-         const frameAreaX = totalX - TIMELINE_SIDEBAR_WIDTH;
+         const frameAreaX = totalX - sidebarWidth;
          const frame = Math.max(0, Math.round(frameAreaX / frameWidth));
          
          onCanvasContextMenu(e, frame);
     };
 
-    const limitX = TIMELINE_SIDEBAR_WIDTH + durationFrames * frameWidth;
+    const limitX = sidebarWidth + durationFrames * frameWidth;
     const limitWidth = Math.max(0, (scrollLeft + visibleWidth) - limitX + 500); 
     
     return (
@@ -412,8 +401,9 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
                 className="flex border-b border-white/5 bg-white/5 sticky top-6 z-20"
                 style={{ height: TIMELINE_GROUP_HEIGHT }}
             >
-                <div 
-                    className="sticky left-0 z-20 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 select-none" 
+                <div
+                    className="sticky left-0 z-20 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 select-none"
+                    style={{ width: sidebarWidth }}
                 >
                     <span className="text-[10px] font-bold text-cyan-400 pl-4">Global Summary</span>
                 </div>

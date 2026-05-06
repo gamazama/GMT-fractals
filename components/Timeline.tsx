@@ -9,7 +9,6 @@ import { KeyframeInspector } from './timeline/KeyframeInspector';
 import { DopeSheet } from './timeline/DopeSheet';
 import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 import { getKeyframeMenuItems } from './timeline/KeyframeContextMenu'; 
-import { TIMELINE_SIDEBAR_WIDTH } from '../data/constants';
 import { Track } from '../types';
 import { ContextMenuItem } from '../types/help';
 
@@ -46,6 +45,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     const duplicateSelection     = useAnimationStore((s) => s.duplicateSelection);
     const loopSelection          = useAnimationStore((s) => s.loopSelection);
     const setIsScrubbing         = useAnimationStore((s) => s.setIsScrubbing);
+    const sidebarWidth           = useAnimationStore((s) => s.timelineSidebarWidth);
 
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const setIsTimelineHovered = useEngineStore(s => s.setIsTimelineHovered);
@@ -126,10 +126,10 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
         if (!isPlaying || !scrollContainerRef.current) return;
 
         const containerWidth = scrollContainerRef.current.clientWidth;
-        const playheadPos = TIMELINE_SIDEBAR_WIDTH + currentFrame * frameWidth;
+        const playheadPos = sidebarWidth + currentFrame * frameWidth;
         const currentScroll = scrollLeftRef.current;
 
-        const visibleStart = currentScroll + TIMELINE_SIDEBAR_WIDTH;
+        const visibleStart = currentScroll + sidebarWidth;
         const visibleEnd = currentScroll + containerWidth;
 
         const isOffscreenRight = playheadPos > visibleEnd;
@@ -144,7 +144,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                 setScrollLeft(Math.max(0, newScroll));
              }
         }
-    }, [currentFrame, isPlaying, mode, frameWidth]);
+    }, [currentFrame, isPlaying, mode, frameWidth, sidebarWidth]);
 
     useEffect(() => {
         if (!scrollContainerRef.current) return;
@@ -241,7 +241,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
             {
                 label: 'Fit View (Duration)',
                 action: () => {
-                    const availWidth = viewportWidth - TIMELINE_SIDEBAR_WIDTH;
+                    const availWidth = viewportWidth - sidebarWidth;
                     const newFrameWidth = availWidth / (dur + 10);
                     handleNavigatorZoom(newFrameWidth, 'absolute');
                     setScrollLeft(0);
@@ -256,7 +256,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
             }
         ];
         openGlobalMenu(e.clientX, e.clientY, items, ['ui.timeline']);
-    }, [copySelectedKeyframes, pasteKeyframes, viewportWidth, handleNavigatorZoom, openGlobalMenu]);
+    }, [copySelectedKeyframes, pasteKeyframes, viewportWidth, sidebarWidth, handleNavigatorZoom, openGlobalMenu]);
 
     useEffect(() => {
         const onMove = (e: MouseEvent) => {
@@ -278,7 +278,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     }, [isResizing]);
 
     const timelineAreaWidth = (durationFrames + 20) * frameWidth;
-    const totalContentWidth = TIMELINE_SIDEBAR_WIDTH + timelineAreaWidth;
+    const totalContentWidth = sidebarWidth + timelineAreaWidth;
 
     return (
         <div 
@@ -357,7 +357,7 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
                                         height={panelHeight - 32}
                                         scrollLeft={scrollLeft}
                                         frameWidth={frameWidth}
-                                        sidebarWidth={TIMELINE_SIDEBAR_WIDTH}
+                                        sidebarWidth={sidebarWidth}
                                         onSetScroll={setScrollLeft}
                                         onSetFrameWidth={setFrameWidth}
                                         onContextMenu={(e, tid, kid, interp) => {

@@ -308,8 +308,8 @@ export const GeometryFeature: FeatureDefinition = {
         hybridAddC: { type: 'boolean', default: false, label: 'Add Constant', shortId: 'hc', uniform: 'uHybridAddC', group: 'hybrid', condition: [{ param: 'hybridCompiled', bool: true }, { param: 'hybridMode', bool: true }] },
 
         // Hybrid Transform
-        hybridShift: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Shift', shortId: 'hs2', uniform: 'uHybridShift', min: -2.0, max: 2.0, step: 0.01, group: 'hybrid', condition: [{ param: 'hybridCompiled', bool: true }, { param: 'hybridMode', bool: true }] },
-        hybridRot: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Rotation', shortId: 'hr', uniform: 'uHybridRot', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', mode: 'rotation', group: 'hybrid', condition: [{ param: 'hybridCompiled', bool: true }, { param: 'hybridMode', bool: true }] },
+        hybridShift: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Hybrid Shift', shortId: 'hs2', uniform: 'uHybridShift', min: -2.0, max: 2.0, step: 0.01, group: 'hybrid', condition: [{ param: 'hybridCompiled', bool: true }, { param: 'hybridMode', bool: true }] },
+        hybridRot: { type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Hybrid Rotation', shortId: 'hr', uniform: 'uHybridRot', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', mode: 'rotation', group: 'hybrid', condition: [{ param: 'hybridCompiled', bool: true }, { param: 'hybridMode', bool: true }] },
 
         // Fold-type-specific params (auto-injected from fold definitions, with eq conditions)
         ...buildFoldExtraParams(),
@@ -338,9 +338,9 @@ export const GeometryFeature: FeatureDefinition = {
         },
 
         // Pre-rotation (before formula, inside loop)
-        preRotX: { type: 'float', default: 0.0, label: 'Pre X', shortId: 'rx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        preRotY: { type: 'float', default: 0.0, label: 'Pre Y', shortId: 'ry', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        preRotZ: { type: 'float', default: 0.0, label: 'Pre Z', shortId: 'rz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        preRotX: { type: 'float', default: 0.0, label: 'Pre Rotation X', shortId: 'rx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        preRotY: { type: 'float', default: 0.0, label: 'Pre Rotation Y', shortId: 'ry', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        preRotZ: { type: 'float', default: 0.0, label: 'Pre Rotation Z', shortId: 'rz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
         preRot: {
             type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Pre Rotation',
             composeFrom: ['preRotX', 'preRotY', 'preRotZ'],
@@ -348,9 +348,9 @@ export const GeometryFeature: FeatureDefinition = {
             group: 'transform', parentId: 'preRotEnabled', condition: { bool: true },
         },
         // Post-rotation (after formula, inside loop)
-        postRotX: { type: 'float', default: 0.0, label: 'Post X', shortId: 'qx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        postRotY: { type: 'float', default: 0.0, label: 'Post Y', shortId: 'qy', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        postRotZ: { type: 'float', default: 0.0, label: 'Post Z', shortId: 'qz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        postRotX: { type: 'float', default: 0.0, label: 'Post Rotation X', shortId: 'qx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        postRotY: { type: 'float', default: 0.0, label: 'Post Rotation Y', shortId: 'qy', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        postRotZ: { type: 'float', default: 0.0, label: 'Post Rotation Z', shortId: 'qz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
         postRot: {
             type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'Post Rotation',
             composeFrom: ['postRotX', 'postRotY', 'postRotZ'],
@@ -358,9 +358,9 @@ export const GeometryFeature: FeatureDefinition = {
             group: 'transform', parentId: 'preRotEnabled', condition: { bool: true },
         },
         // World-space rotation (outside loop, applied to p before iteration)
-        worldRotX: { type: 'float', default: 0.0, label: 'World X', shortId: 'wx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        worldRotY: { type: 'float', default: 0.0, label: 'World Y', shortId: 'wy', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
-        worldRotZ: { type: 'float', default: 0.0, label: 'World Z', shortId: 'wz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        worldRotX: { type: 'float', default: 0.0, label: 'World Rotation X', shortId: 'wx', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        worldRotY: { type: 'float', default: 0.0, label: 'World Rotation Y', shortId: 'wy', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
+        worldRotZ: { type: 'float', default: 0.0, label: 'World Rotation Z', shortId: 'wz', min: -Math.PI, max: Math.PI, step: 0.01, scale: 'pi', group: 'transform', parentId: 'preRotEnabled', condition: { bool: true }, hidden: true },
         worldRot: {
             type: 'vec3', default: new THREE.Vector3(0, 0, 0), label: 'World Rotation',
             composeFrom: ['worldRotX', 'worldRotY', 'worldRotZ'],

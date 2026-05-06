@@ -9,6 +9,7 @@ import { useGraphTools } from '../hooks/useGraphTools';
 import { GraphSidebar } from './graph/GraphSidebar';
 import { GraphToolbar } from './graph/GraphToolbar';
 import { GraphCanvas } from './graph/GraphCanvas';
+import { GraphSelectionBBox } from './graph/GraphSelectionBBox';
 import { WaveIcon, BakeIcon, MagicIcon } from './Icons';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 import { ContextMenuItem } from '../types/help';
@@ -366,8 +367,8 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
 
             <div className="flex-1 relative group overflow-hidden" data-help-id="anim.graph" ref={containerRef}>
                 {/* CANVAS VIEW */}
-                <div ref={interactionRef}> 
-                    <GraphCanvas 
+                <div ref={interactionRef} className="relative">
+                    <GraphCanvas
                         width={canvasWidth}
                         height={height}
                         view={view}
@@ -387,6 +388,14 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                         onMouseDown={handleCanvasMouseDown}
                         onContextMenu={handleContextMenu}
                         onDoubleClick={handleDoubleClick}
+                    />
+                    <GraphSelectionBBox
+                        sequence={sequence}
+                        selectedKeyframeIds={selectedKeyframeIds}
+                        view={view}
+                        normalized={normalized}
+                        frameToCanvasPixel={frameToCanvasPixel}
+                        v2p={v2p}
                     />
                 </div>
                 

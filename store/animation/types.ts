@@ -131,7 +131,25 @@ export interface SequenceSliceActions {
     redo: () => boolean;
 }
 
+export interface UiSliceState {
+    /** Group names currently collapsed in the timeline. Shared between DopeSheet
+     *  and GraphSidebar so opening a group in one view persists across view
+     *  switches. UI-only state — never saved into GMF, never undoable. */
+    collapsedGroups: string[];
+    /** Pixel width of the track-label sidebar shared by DopeSheet, GraphSidebar,
+     *  TimelineRuler etc. Drag-handle-resizable; clamped by the slice action. */
+    timelineSidebarWidth: number;
+}
+
+export interface UiSliceActions {
+    /** Toggle a group's collapsed state. When `isAlt` is true and `allGroupNames`
+     *  is supplied, solos the group (collapses all others). */
+    toggleCollapsedGroup: (name: string, isAlt?: boolean, allGroupNames?: string[]) => void;
+    setCollapsedGroups: (groups: string[]) => void;
+    setTimelineSidebarWidth: (w: number) => void;
+}
+
 // --- COMPOSITE STORE TYPE ---
-export type AnimationStoreState = PlaybackSliceState & SelectionSliceState & SequenceSliceState;
-export type AnimationStoreActions = PlaybackSliceActions & SelectionSliceActions & SequenceSliceActions;
+export type AnimationStoreState = PlaybackSliceState & SelectionSliceState & SequenceSliceState & UiSliceState;
+export type AnimationStoreActions = PlaybackSliceActions & SelectionSliceActions & SequenceSliceActions & UiSliceActions;
 export type AnimationStore = AnimationStoreState & AnimationStoreActions;

@@ -14,6 +14,15 @@ const GROUP_ORDER = ['Camera', 'Formula', 'Optics', 'Lighting', 'Shading'] as co
  */
 export function classifyTrackId(tid: string): typeof GROUP_ORDER[number] {
     if (tid.startsWith('camera.')) return 'Camera';
+    // Fluid-toy stores its 2D camera (pan + zoom) on the julia slice
+    // alongside the formula params (juliaC, maxIter, ...). Route the
+    // camera-shaped subset of julia.* into Camera so it doesn't end up
+    // mixed in with Formula tracks in the timeline / graph sidebar.
+    if (
+        tid === 'julia.zoom' ||
+        tid === 'julia.center_x' || tid === 'julia.center_y' ||
+        tid === 'julia.centerLow_x' || tid === 'julia.centerLow_y'
+    ) return 'Camera';
     if (tid.startsWith('lights.') || tid.startsWith('lighting.')) return 'Lighting';
     if (
         tid.startsWith('coreMath.') ||
@@ -21,6 +30,7 @@ export function classifyTrackId(tid: string): typeof GROUP_ORDER[number] {
         tid.startsWith('param') ||
         tid.startsWith('julia.') ||
         tid.startsWith('hybridParams.') ||
+        tid.startsWith('interlace.') ||
         tid === 'iterations'
     ) return 'Formula';
     if (tid === 'camFov' || tid.startsWith('optics.') || tid.startsWith('dof')) return 'Optics';

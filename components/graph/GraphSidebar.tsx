@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { useEngineStore } from '../../store/engineStore';
 import { getLiveValue } from '../../utils/timelineUtils';
@@ -8,6 +8,7 @@ import { EyeIcon, FolderIcon, SelectAllIcon, TrashIcon } from '../Icons';
 import { Track, TrackBehavior } from '../../types';
 import { groupTracks } from '../../utils/groupTracks';
 import { ContextMenuItem } from '../../types/help';
+import { useSidebarResize } from '../../hooks/useSidebarResize';
 
 interface GraphSidebarProps {
     visibleTrackIds: string[];
@@ -48,8 +49,12 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     const addTracksToSelection = useAnimationStore((s) => s.addTracksToSelection);
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     
-    // Grouping State
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['Formula', 'Optics', 'Lighting', 'Shading']));
+    // Collapsed-group state shared with DopeSheet via the animation UI slice.
+    const collapsedGroupsArr        = useAnimationStore((s) => s.collapsedGroups);
+    const toggleCollapsedGroupStore = useAnimationStore((s) => s.toggleCollapsedGroup);
+    const sidebarWidth              = useAnimationStore((s) => s.timelineSidebarWidth);
+    const collapsedGroups           = useMemo(() => new Set(collapsedGroupsArr), [collapsedGroupsArr]);
+    const handleSidebarResizeStart  = useSidebarResize();
     const lastSelectedTrackId = useRef<string | null>(null);
 
     // Organize tracks into groups (shared with DopeSheet via utils/groupTracks)
@@ -202,18 +207,7 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     };
 
     const toggleGroupCollapse = (groupName: string, isAlt: boolean) => {
-        setCollapsedGroups(prev => {
-            const next = new Set(prev);
-            if (isAlt) {
-                next.clear();
-                Object.keys(organizedTracks.groups).forEach(g => { if (g !== groupName) next.add(g); });
-                next.delete(groupName);
-            } else {
-                if (next.has(groupName)) next.delete(groupName);
-                else next.add(groupName);
-            }
-            return next;
-        });
+        toggleCollapsedGroupStore(groupName, isAlt, Object.keys(organizedTracks.groups));
     };
 
     const renderRow = (tid: string) => {
@@ -271,9 +265,20 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
     };
 
     return (
-        <div className="w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 flex flex-col shrink-0 overflow-y-auto custom-scroll">
+        <div
+            className="bg-black/80 backdrop-blur-sm border-r border-white/10 flex flex-col shrink-0 overflow-y-auto custom-scroll relative"
+            style={{ width: sidebarWidth }}
+        >
             <div className="h-6 flex items-center justify-between px-2 border-b border-white/5 text-[9px] text-gray-500 font-bold bg-black sticky top-0 z-10">
                 <span>Curves</span>
+                {/* Drag handle — pinned to the absolute right edge, runs full sidebar height. */}
+                <div
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-cyan-500/20"
+                    onMouseDown={handleSidebarResizeStart}
+                    title="Drag to resize sidebar"
+                >
+                    <div className="absolute right-0 top-0 h-full w-px bg-white/0 group-hover/resize:bg-cyan-400 transition-colors" />
+                </div>
                 <div className="flex gap-2">
                      <button 
                         onClick={() => setVisibleTracks([])}

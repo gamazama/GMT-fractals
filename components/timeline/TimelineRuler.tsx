@@ -3,7 +3,8 @@ import React, { useRef, useEffect } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { animationEngine } from '../../engine/AnimationEngine';
 import { getTimeGridSteps } from '../../utils/GraphUtils';
-import { TIMELINE_SIDEBAR_WIDTH, TIMELINE_RULER_HEIGHT } from '../../data/constants';
+import { TIMELINE_RULER_HEIGHT } from '../../data/constants';
+import { useSidebarResize } from '../../hooks/useSidebarResize';
 
 interface TimelineRulerProps {
     FRAME_WIDTH: number;
@@ -20,10 +21,10 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
     const currentFrame   = useAnimationStore((s) => s.currentFrame);
     const seek           = useAnimationStore((s) => s.seek);
     const setIsScrubbing = useAnimationStore((s) => s.setIsScrubbing);
+    const sidebarWidth   = useAnimationStore((s) => s.timelineSidebarWidth);
+    const handleSidebarResizeStart = useSidebarResize();
 
-    // The canvas should fill the visible timeline area (viewport - sidebar)
-    // We add a small buffer to prevent flickering at edges
-    const canvasWidth = Math.max(1, visibleWidth - TIMELINE_SIDEBAR_WIDTH);
+    const canvasWidth = Math.max(1, visibleWidth - sidebarWidth);
 
     useEffect(() => {
         const canvas = rulerRef.current;
@@ -162,11 +163,19 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
             style={{ height: TIMELINE_RULER_HEIGHT }}
         >
             {/* Fixed Sidebar Header */}
-            <div 
-                className="sticky left-0 z-30 w-[220px] bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 text-[9px] text-gray-500 font-bold"
-                style={{ width: TIMELINE_SIDEBAR_WIDTH }}
+            <div
+                className="sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 text-[9px] text-gray-500 font-bold relative"
+                style={{ width: sidebarWidth }}
             >
-                Tracks
+                <span>Tracks</span>
+                {/* Drag handle — 6px hit zone at the right edge, 1px visible bar */}
+                <div
+                    className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-40 group/resize hover:bg-cyan-500/20"
+                    onMouseDown={handleSidebarResizeStart}
+                    title="Drag to resize sidebar"
+                >
+                    <div className="absolute right-0 top-0 h-full w-px bg-white/0 group-hover/resize:bg-cyan-400 transition-colors" />
+                </div>
             </div>
             
             {/* 
