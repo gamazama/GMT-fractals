@@ -40,6 +40,7 @@ const emitResetAccum = () => {
 
 import { featureRegistry } from '../FeatureSystem';
 import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
+import { syncAudioClips } from './audioClipSync';
 import { modulationEngine } from '../features/modulation/ModulationEngine';
 import { AudioState } from '../features/audioMod';
 import { ModulationState } from '../features/modulation';
@@ -92,6 +93,7 @@ export const tick = (delta: number) => {
     const hasOscillators = storeState.animations.length > 0;
     const hasModulationRules = (storeState as any).modulation?.rules?.length > 0;
     const isAudioEnabled = (storeState as any).audio?.isEnabled ?? false;
+    const hasAudioClips = ((animStore as any).audioClips as (unknown | null)[] | undefined)?.some(c => !!c) ?? false;
 
     // The cleanup branch below relies on `activeTargetsRef.current` to know
     // which targets were modulated last frame so it can emit a baseline
@@ -102,7 +104,7 @@ export const tick = (delta: number) => {
     // through one more pass when prev-frame targets remain, then on the
     // tick after that everything legitimately is empty and we early-out.
     if (
-        !hasAnimations && !hasOscillators && !hasModulationRules && !isAudioEnabled
+        !hasAnimations && !hasOscillators && !hasModulationRules && !isAudioEnabled && !hasAudioClips
         && activeTargetsRef.current.size === 0
     ) {
         return; // Skip all animation processing
@@ -116,7 +118,13 @@ export const tick = (delta: number) => {
     
     // 2. Update Audio Engine Hardware
     if (audioSlice && audioSlice.isEnabled) {
-        audioAnalysisEngine.update(); 
+        audioAnalysisEngine.update();
+    }
+
+    // 2b. Sync each audio clip's deck playback to the timeline frame.
+    const audioClips = (animStore as { audioClips?: (import('../../store/animation/types').AudioClip | null)[] }).audioClips;
+    if (audioClips && audioClips.some(c => c)) {
+        syncAudioClips(audioClips, animStore.currentFrame, animStore.fps, animStore.isPlaying);
     }
 
     // 3. Reset Engine Buffer

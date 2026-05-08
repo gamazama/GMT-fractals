@@ -5,6 +5,7 @@ import { TimelineRuler } from './TimelineRuler';
 import { Track } from '../../types';
 import { TrackRow } from './TrackRow';
 import { TrackGroup } from './TrackGroup';
+import { AudioGroup } from './AudioStrip';
 import { SelectionTransformBar } from './SelectionTransformBar';
 import { useDopeSheetInteraction } from '../../hooks/useDopeSheetInteraction';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
@@ -396,8 +397,10 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
                 />
             )}
 
+            <AudioGroup frameWidth={frameWidth} sidebarWidth={sidebarWidth} />
+
             {/* ROOT SUMMARY ROW */}
-            <div 
+            <div
                 className="flex border-b border-white/5 bg-white/5 sticky top-6 z-20"
                 style={{ height: TIMELINE_GROUP_HEIGHT }}
             >

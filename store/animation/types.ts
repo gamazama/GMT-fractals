@@ -141,6 +141,40 @@ export interface UiSliceState {
     timelineSidebarWidth: number;
 }
 
+/** A single audio clip placed on the timeline. The `deckIndex` ties the clip
+ *  to one of the two AudioAnalysisEngine decks (the deck owns the actual
+ *  `<audio>` element + AudioContext source nodes for FFT analysis). The clip
+ *  holds the timeline placement: where it starts in frame-time, and how much
+ *  of the underlying audio file plays (trim range in seconds). */
+export interface AudioClip {
+    id: string;
+    deckIndex: 0 | 1;
+    fileName: string;
+    /** Full audio file duration in seconds. */
+    durationSeconds: number;
+    /** Timeline frame where the clip's first played sample lands. */
+    startFrame: number;
+    /** Seconds of audio to skip at the start of the file. */
+    trimStartSec: number;
+    /** Seconds of audio at which playback stops (≤ durationSeconds). */
+    trimEndSec: number;
+    /** Pre-decoded waveform peaks for visualisation. Each entry is the max
+     *  absolute sample amplitude (0..1) over a contiguous slice of the file
+     *  (uniform bucket size). 0..2048 entries typically. Computed on load
+     *  via decodeAudioData → AudioBuffer; not persisted. */
+    peaks?: number[];
+}
+
+export interface AudioClipsSliceState {
+    /** Indexed by deck: `audioClips[0]` is the deck-0 clip (or null), etc. */
+    audioClips: (AudioClip | null)[];
+}
+
+export interface AudioClipsSliceActions {
+    setAudioClip: (deckIndex: 0 | 1, clip: AudioClip | null) => void;
+    updateAudioClip: (deckIndex: 0 | 1, patch: Partial<AudioClip>) => void;
+}
+
 export interface UiSliceActions {
     /** Toggle a group's collapsed state. When `isAlt` is true and `allGroupNames`
      *  is supplied, solos the group (collapses all others). */
@@ -150,6 +184,6 @@ export interface UiSliceActions {
 }
 
 // --- COMPOSITE STORE TYPE ---
-export type AnimationStoreState = PlaybackSliceState & SelectionSliceState & SequenceSliceState & UiSliceState;
-export type AnimationStoreActions = PlaybackSliceActions & SelectionSliceActions & SequenceSliceActions & UiSliceActions;
+export type AnimationStoreState = PlaybackSliceState & SelectionSliceState & SequenceSliceState & UiSliceState & AudioClipsSliceState;
+export type AnimationStoreActions = PlaybackSliceActions & SelectionSliceActions & SequenceSliceActions & UiSliceActions & AudioClipsSliceActions;
 export type AnimationStore = AnimationStoreState & AnimationStoreActions;
