@@ -3,6 +3,7 @@ import { useAnimationStore } from '../../store/animationStore';
 import { audioAnalysisEngine } from '../../engine/features/audioMod/AudioAnalysisEngine';
 import { computeWaveformPeaks } from '../../utils/audioWaveform';
 import { AudioClip } from '../../store/animation/types';
+import { setAudioFile, clearAudioFile } from '../../engine/animation/audioFileCache';
 import { CloseIcon, UploadIcon } from '../Icons';
 
 const STRIP_HEIGHT = 48;
@@ -91,6 +92,7 @@ const EmptyDeckSlot: React.FC<{ deckIndex: 0 | 1; sidebarWidth: number }> = ({ d
         if (!file) return;
 
         audioAnalysisEngine.loadTrack(deckIndex, file);
+        setAudioFile(deckIndex, file);
 
         // Register an optimistic clip immediately so the strip renders with
         // the file name + a Decoding… overlay while peaks compute. Duration
@@ -209,6 +211,7 @@ const AudioStripInner: React.FC<AudioStripProps> = ({ clip, frameWidth, sidebarW
 
     const handleRemove = () => {
         audioAnalysisEngine.deactivateDeck(clip.deckIndex);
+        clearAudioFile(clip.deckIndex);
         setAudioClip(clip.deckIndex, null);
     };
 

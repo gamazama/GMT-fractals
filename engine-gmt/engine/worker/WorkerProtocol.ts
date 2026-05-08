@@ -70,7 +70,8 @@ export type MainToWorkerMessage =
     | { type: 'GET_RENDER_INFO'; id: string }
     | { type: 'SET_CONVERGENCE_NEEDED'; needed: boolean }
     // ─── Video Export ───
-    | { type: 'EXPORT_START'; config: VideoExportConfig; stream: WritableStream | null; dirHandle?: FileSystemDirectoryHandle }
+    | { type: 'EXPORT_START'; config: VideoExportConfig; stream: WritableStream | null; dirHandle?: FileSystemDirectoryHandle;
+        audio?: { pcm: Float32Array; sampleRate: number; numFrames: number; durationSec: number } }
     | { type: 'EXPORT_RENDER_FRAME'; frameIndex: number; time: number;
         camera: SerializedCamera; offset: SerializedOffset;
         renderState: Partial<EngineRenderState>;

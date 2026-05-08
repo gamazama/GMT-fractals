@@ -31,6 +31,7 @@ import type {
     RenderDialogRunner,
 } from '../../../../engine/plugins/RenderDialog';
 import { calcEtaRange } from '../exportHelpers';
+import { mixAudioClipsForExport } from '../../../../engine/animation/audioExportMix';
 
 // app-gmt's app-specific config bag — fed by the plugin's
 // `extraFormFields` slot and threaded into the runner via deps.extra.
@@ -419,7 +420,23 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
             };
 
             status.setStatusText(passPrefix + 'Initializing encoder...');
-            await engine.startExport(config, fileStream);
+
+            // Mix any loaded audio clips for the export window. Beauty pass only —
+            // alpha + depth passes produce auxiliary video files where audio is
+            // meaningless. Encoders can fail (e.g. browser without AAC) so we
+            // swallow + log and proceed without audio rather than block export.
+            let audioPayload: { pcm: Float32Array; sampleRate: number; numFrames: number; durationSec: number } | undefined;
+            if (pass === 'beauty') {
+                try {
+                    const clips = useAnimationStore.getState().audioClips;
+                    const mixed = await mixAudioClipsForExport(clips, cfg.fps, cfg.startFrame, cfg.endFrame);
+                    if (mixed) audioPayload = mixed;
+                } catch (audioErr) {
+                    console.warn('Audio mix failed; exporting silent video.', audioErr);
+                }
+            }
+
+            await engine.startExport(config, fileStream, undefined, audioPayload);
 
             // Focus-lock DOF only meaningful on the beauty pass.
             const totalFrames = Math.floor((cfg.endFrame - cfg.startFrame) / cfg.frameStep) + 1;

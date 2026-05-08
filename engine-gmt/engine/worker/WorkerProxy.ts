@@ -705,7 +705,8 @@ export class WorkerProxy implements AccumulationController {
     startExport(
         config: VideoExportConfig,
         stream: WritableStream | null,
-        dirHandle?: FileSystemDirectoryHandle
+        dirHandle?: FileSystemDirectoryHandle,
+        audio?: { pcm: Float32Array; sampleRate: number; numFrames: number; durationSec: number }
     ): Promise<void> {
         this._isExporting = true;
         return new Promise((resolve, reject) => {
@@ -728,9 +729,10 @@ export class WorkerProxy implements AccumulationController {
 
             const transfer: Transferable[] = [];
             if (transferStream) transfer.push(transferStream);
+            if (audio) transfer.push(audio.pcm.buffer);
             // FileSystemDirectoryHandle is structured-cloneable (since File System Access API landed
             // in workers), so it rides along in the message body without needing a transfer entry.
-            this.post({ type: 'EXPORT_START', config, stream: transferStream, dirHandle }, transfer);
+            this.post({ type: 'EXPORT_START', config, stream: transferStream, dirHandle, audio }, transfer);
 
             this._exportStartTimer = setTimeout(() => {
                 this._exportStartTimer = null;

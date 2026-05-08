@@ -30,6 +30,18 @@ interface ExportSession {
     encoder?: VideoEncoder;
     muxerChain?: Promise<void>;
 
+    // ─── Audio (video mode only — null when no clips on the timeline) ───
+    audioPacketSource?: Mediabunny.EncodedAudioPacketSource;
+    audioEncoder?: AudioEncoder;
+    /** PCM payload pending encode. Encoded once (chunked) right after the first
+     *  video frame triggers `output.start()`. */
+    audioPcm?: Float32Array;
+    audioSampleRate?: number;
+    audioNumFrames?: number;
+    /** Raised when audio encoding has flushed, so finish() can await it. */
+    audioFlushed?: Promise<void>;
+    audioCodec?: 'mp4a.40.2' | 'opus';
+
     // ─── Image-mode fields (unused when isImageMode === false) ───
     dirHandle?: FileSystemDirectoryHandle;
     /** Promise chain that serializes per-frame file writes so cancel/finish can await them. */
@@ -92,7 +104,12 @@ export class WorkerExporter {
 
     // ─── Start Export ────────────────────────────────────────────────
 
-    start(config: VideoExportConfig, stream: WritableStream | null, dirHandle?: FileSystemDirectoryHandle) {
+    start(
+        config: VideoExportConfig,
+        stream: WritableStream | null,
+        dirHandle?: FileSystemDirectoryHandle,
+        audio?: { pcm: Float32Array; sampleRate: number; numFrames: number; durationSec: number }
+    ) {
         if (this.session) {
             this.postMsg({ type: 'EXPORT_ERROR', message: 'Export already in progress' });
             return;
@@ -226,6 +243,32 @@ export class WorkerExporter {
                 avc: { format: formatDef.container === 'mp4' ? 'annexb' : 'avc' }
             };
             session.encoder.configure(encoderConfig);
+
+            // ─── Audio encoder (only when timeline has audio clips) ───
+            if (audio && audio.pcm.length > 0) {
+                const audioCodec: 'mp4a.40.2' | 'opus' = formatDef.container === 'webm' ? 'opus' : 'mp4a.40.2';
+                session.audioCodec = audioCodec;
+                session.audioPcm = audio.pcm;
+                session.audioSampleRate = audio.sampleRate;
+                session.audioNumFrames = audio.numFrames;
+                session.audioPacketSource = new Mediabunny.EncodedAudioPacketSource(
+                    audioCodec === 'opus' ? 'opus' : 'aac'
+                );
+
+                session.audioEncoder = new AudioEncoder({
+                    output: (chunk, meta) => this.handleEncodedAudioChunk(chunk, meta),
+                    error: (e) => {
+                        console.error('[WorkerExporter] Audio encoder error:', e);
+                        this.postMsg({ type: 'EXPORT_ERROR', message: e.message });
+                    }
+                });
+                session.audioEncoder.configure({
+                    codec: audioCodec,
+                    sampleRate: audio.sampleRate,
+                    numberOfChannels: 2,
+                    bitrate: 192_000,
+                });
+            }
         }
 
         this.session = session;
@@ -666,13 +709,89 @@ export class WorkerExporter {
                     sess.output!.addVideoTrack(sess.packetSource!, {
                         frameRate: sess.config.fps
                     });
+                    if (sess.audioPacketSource) {
+                        sess.output!.addAudioTrack(sess.audioPacketSource);
+                    }
                     await sess.output!.start();
+                    // Output is now started — kick off the audio encode pump.
+                    if (sess.audioEncoder && sess.audioPcm && sess.audioSampleRate) {
+                        sess.audioFlushed = this.encodeAudioPcm(
+                            sess.audioEncoder,
+                            sess.audioPcm,
+                            sess.audioSampleRate,
+                        );
+                    }
                 }
 
                 await sess.packetSource!.add(packet, stableMeta as EncodedVideoChunkMetadata | undefined);
             } catch (e) {
                 console.error('[WorkerExporter] Muxing error:', e);
                 this.cancel();
+            }
+        });
+    }
+
+    /** Feeds the interleaved-stereo PCM into the AudioEncoder in 1024-frame
+     *  chunks. Returns a promise that resolves after `encoder.flush()` so
+     *  finish() can await all audio packets being pushed to the muxer. */
+    private async encodeAudioPcm(
+        encoder: AudioEncoder,
+        pcm: Float32Array,
+        sampleRate: number,
+    ): Promise<void> {
+        const channels = 2;
+        const totalFrames = pcm.length / channels;
+        const chunkFrames = 1024;
+        // WebCodecs AudioData wants planar OR interleaved depending on `format`.
+        // We pass 'f32' (interleaved float32). Browsers accept this for AAC + Opus.
+        for (let offset = 0; offset < totalFrames; offset += chunkFrames) {
+            const frames = Math.min(chunkFrames, totalFrames - offset);
+            const slice = pcm.subarray(offset * channels, (offset + frames) * channels);
+            // AudioData requires a fresh buffer (it transfers / takes ownership).
+            const chunkPcm = new Float32Array(slice.length);
+            chunkPcm.set(slice);
+            const data = new AudioData({
+                format: 'f32',
+                sampleRate,
+                numberOfFrames: frames,
+                numberOfChannels: channels,
+                timestamp: Math.round((offset / sampleRate) * 1e6),
+                data: chunkPcm,
+            });
+            encoder.encode(data);
+            data.close();
+        }
+        await encoder.flush();
+    }
+
+    private handleEncodedAudioChunk(chunk: EncodedAudioChunk, meta: EncodedAudioChunkMetadata | undefined) {
+        if (!this.session) return;
+        const sess = this.session;
+        if (!sess.audioPacketSource) return;
+
+        const rawBuffer = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(rawBuffer);
+
+        const tsSec = chunk.timestamp / 1e6;
+        const durSec = (chunk.duration ?? 0) / 1e6;
+        const packet = new Mediabunny.EncodedPacket(rawBuffer, chunk.type, tsSec, durSec);
+
+        const stableMeta = meta?.decoderConfig
+            ? {
+                decoderConfig: {
+                    ...meta.decoderConfig,
+                    description: meta.decoderConfig.description
+                        ? new Uint8Array(meta.decoderConfig.description as any).slice()
+                        : undefined,
+                },
+            }
+            : undefined;
+
+        sess.muxerChain = (sess.muxerChain ?? Promise.resolve()).then(async () => {
+            try {
+                await sess.audioPacketSource!.add(packet, stableMeta as EncodedAudioChunkMetadata | undefined);
+            } catch (e) {
+                console.error('[WorkerExporter] Audio muxing error:', e);
             }
         });
     }
@@ -694,6 +813,12 @@ export class WorkerExporter {
 
             await sess.encoder!.flush();
             sess.encoder!.close();
+            // Wait for the audio encode pump (if any) to flush + drain into the
+            // muxer chain before finalizing the container.
+            if (sess.audioFlushed) {
+                await sess.audioFlushed;
+                sess.audioEncoder?.close();
+            }
             await sess.muxerChain;
             await sess.output!.finalize();
 
