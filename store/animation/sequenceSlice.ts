@@ -275,6 +275,56 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         });
     },
 
+    batchAddKeyframesRange: (startFrame, endFrame, updates, explicitInterpolation) => {
+        if (endFrame < startFrame || updates.length === 0) return;
+        set(state => {
+            const newTracks = { ...state.sequence.tracks };
+            let hasChanges = false;
+            const interp = explicitInterpolation || 'Linear';
+            const isAuto = explicitInterpolation === 'Bezier';
+
+            updates.forEach(({ trackId, value }) => {
+                if (!newTracks[trackId]) {
+                    newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
+                    hasChanges = true;
+                }
+                const track = newTracks[trackId];
+                const newKeyframes = [...track.keyframes];
+
+                for (let f = startFrame; f <= endFrame; f++) {
+                    const lastKey = newKeyframes.length > 0 ? newKeyframes[newKeyframes.length - 1] : null;
+                    const newKey: Keyframe = {
+                        id: nanoid(), frame: f, value, interpolation: interp,
+                        autoTangent: isAuto, brokenTangents: false,
+                    };
+                    if (!lastKey) {
+                        newKeyframes.push(newKey);
+                    } else if (f > lastKey.frame) {
+                        // Forward-append fast path — recording always lands here
+                        // since startFrame > lastFrameRecorded.current.
+                        newKeyframes.push(newKey);
+                    } else if (Math.abs(f - lastKey.frame) < 0.001) {
+                        newKey.id = lastKey.id;
+                        newKeyframes[newKeyframes.length - 1] = newKey;
+                    } else {
+                        // Out-of-order: filter + sort. Cold path — recording
+                        // shouldn't hit this.
+                        const filtered = newKeyframes.filter(k => Math.abs(k.frame - f) > 0.001);
+                        filtered.push(newKey);
+                        filtered.sort((a, b) => a.frame - b.frame);
+                        newKeyframes.length = 0;
+                        newKeyframes.push(...filtered);
+                    }
+                }
+
+                track.keyframes = newKeyframes;
+                hasChanges = true;
+            });
+
+            return hasChanges ? { sequence: { ...state.sequence, tracks: newTracks } } : state;
+        });
+    },
+
     removeKeyframe: (trackId, keyframeId) => {
         get().snapshot();
         set(state => {

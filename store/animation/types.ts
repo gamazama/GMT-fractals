@@ -108,6 +108,12 @@ export interface SequenceSliceActions {
     
     addKeyframe: (trackId: string, frame: number, value: number, interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
     batchAddKeyframes: (frame: number, updates: { trackId: string, value: number }[], interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
+    /** Recording-only fast path — writes the same per-track values at every
+     *  integer frame in `[startFrame, endFrame]` in a single store update,
+     *  so slow renders that skip frames don't leave gaps in the recorded
+     *  modulation curve. Avoids the N store updates / N re-renders that
+     *  calling `batchAddKeyframes` in a loop would produce. */
+    batchAddKeyframesRange: (startFrame: number, endFrame: number, updates: { trackId: string, value: number }[], interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
     removeKeyframe: (trackId: string, keyframeId: string) => void;
     updateKeyframe: (trackId: string, keyframeId: string, updates: Partial<Keyframe>) => void;
     updateKeyframes: (updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[]) => void;

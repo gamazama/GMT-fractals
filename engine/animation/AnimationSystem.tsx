@@ -169,11 +169,16 @@ export const tick = (delta: number) => {
     
     // Recording Check
     const currentFrame = Math.floor(animStore.currentFrame);
-    // We use the ref version of isRecordingModulation to avoid effect re-runs, 
+    // We use the ref version of isRecordingModulation to avoid effect re-runs,
     // but we must read fresh from store inside loop or use the ref passed from prop/store
     const isRec = useAnimationStore.getState().isRecordingModulation;
     const shouldRecord = isRec && currentFrame > lastFrameRecorded.current;
-    
+    // First gap frame to back-fill so slow renders don't leave holes between
+    // FFT samples — captures the same FFT for every integer frame between the
+    // last recorded one and now. lastFrameRecorded starts at -1 on arm, so the
+    // first record on a fresh session writes from frame 0 through currentFrame.
+    const recordingStartFrame = shouldRecord ? lastFrameRecorded.current + 1 : currentFrame;
+
     if (shouldRecord) lastFrameRecorded.current = currentFrame;
 
     // BATCH: Collect keys to record here, update store ONCE at end of frame
@@ -496,7 +501,7 @@ export const tick = (delta: number) => {
 
     // --- EXECUTE BATCH RECORDING ---
     if (keysToRecord.length > 0) {
-        animStore.batchAddKeyframes(currentFrame, keysToRecord, 'Linear');
+        animStore.batchAddKeyframesRange(recordingStartFrame, currentFrame, keysToRecord, 'Linear');
     }
 
     // Apply Julia Composite
