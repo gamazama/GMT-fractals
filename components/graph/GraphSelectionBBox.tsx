@@ -23,7 +23,7 @@ interface InitialKey {
     startRightTan?: BezierHandle;
 }
 
-type DragType = 'move' | 'scale_left' | 'scale_right' | 'scale_top' | 'scale_bottom';
+type DragType = 'scale_left' | 'scale_right' | 'scale_top' | 'scale_bottom';
 
 interface DragState {
     type: DragType;
@@ -36,14 +36,16 @@ interface DragState {
     initialKeys: InitialKey[];
 }
 
-/** Multi-keyframe transform handles for the Graph Editor.
+/** Multi-keyframe scale handles for the Graph Editor. Translation is already
+ *  handled by the key-drag path in useGraphInteraction (drag any selected key
+ *  to move the whole selection), so this only renders the visual outline plus
+ *  four edge handles for scaling.
  *
  *  Frame-axis: scales in time, anchored at the opposite edge — Bezier handle
  *  X scales with the same ratio so curve shape is preserved.
  *  Value-axis: scales in pixel space (works across multi-track selections with
  *  different value ranges); tangent Y scales by the same ratio. Hidden in
- *  normalised mode since the per-track inverse isn't a single equation.
- *  Center drag: translates frame + value together. */
+ *  normalised mode since the per-track inverse isn't a single equation. */
 export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
     sequence, selectedKeyframeIds, view, normalized, frameToCanvasPixel, v2p
 }) => {
@@ -98,8 +100,8 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
     // Latest-render values made available to the global mouse listener without
     // forcing the effect to re-run (and reattach the listeners) on every prop
     // change. Same propsRef pattern as useDopeSheetInteraction.
-    const latest = useRef({ view, normalized });
-    latest.current = { view, normalized };
+    const latest = useRef({ view });
+    latest.current = { view };
 
     const startDrag = (e: React.MouseEvent, type: DragType) => {
         if (!bounds) return;
@@ -123,21 +125,13 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
         const onMove = (e: MouseEvent) => {
             const ds = dragRef.current;
             if (!ds) return;
-            const { view: v, normalized: norm } = latest.current;
+            const v = latest.current.view;
 
-            const dx = e.clientX - ds.startClientX;
             const dy = e.clientY - ds.startClientY;
-            const dFrame = dx / v.scaleX;
+            const dFrame = (e.clientX - ds.startClientX) / v.scaleX;
             const updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[] = [];
 
-            if (ds.type === 'move') {
-                ds.initialKeys.forEach(k => {
-                    const patch: Partial<Keyframe> = { frame: Math.max(0, Math.round(k.startFrame + dFrame)) };
-                    if (!norm) patch.value = k.startValue + (-dy / v.scaleY);
-                    updates.push({ trackId: k.trackId, keyId: k.keyId, patch });
-                });
-            }
-            else if (ds.type === 'scale_left' || ds.type === 'scale_right') {
+            if (ds.type === 'scale_left' || ds.type === 'scale_right') {
                 const span = Math.max(1, ds.maxFrame - ds.minFrame);
                 const ratio = ds.type === 'scale_right'
                     ? Math.max(0.05, (span + dFrame) / span)
@@ -199,11 +193,9 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
             className="absolute pointer-events-none z-30"
             style={{ left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }}
         >
-            <div
-                className="absolute inset-1 border border-orange-500/50 bg-orange-500/10 rounded-sm cursor-grab active:cursor-grabbing hover:bg-orange-500/15 pointer-events-auto"
-                onMouseDown={(e) => startDrag(e, 'move')}
-                title="Drag to move selected keyframes"
-            />
+            {/* Visual outline only — translation is handled by clicking any
+                selected keyframe (useGraphInteraction's key-drag path). */}
+            <div className="absolute inset-1 border border-orange-500/50 rounded-sm" />
             <div
                 className="absolute top-0 bottom-0 left-0 w-3 cursor-ew-resize flex items-center justify-center pointer-events-auto group/lh"
                 onMouseDown={(e) => startDrag(e, 'scale_left')}

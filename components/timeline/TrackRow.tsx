@@ -1,5 +1,5 @@
 
-import React, { memo, useRef, useEffect, useCallback } from 'react';
+import React, { memo, useMemo, useRef, useEffect, useCallback } from 'react';
 import { AnimationSequence } from '../../types';
 import { useAnimationStore } from '../../store/animationStore';
 import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
@@ -122,13 +122,26 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
     );
 };
 
+/** True when every keyframe shares the same value (within epsilon) — i.e. the
+ *  track has no animation. Used to dim flat tracks in the timeline. Empty and
+ *  single-key tracks count as flat. */
+export const isFlatTrack = (keyframes: { value: number }[]): boolean => {
+    if (keyframes.length < 2) return true;
+    const v0 = keyframes[0].value;
+    for (let i = 1; i < keyframes.length; i++) {
+        if (Math.abs(keyframes[i].value - v0) > 1e-6) return false;
+    }
+    return true;
+};
+
 // Diamond component that registers with the tick system for dirty-state coloring
-const KeyframeDiamond = ({ tid, kid, frame, isSelected, interpolation }: {
+const KeyframeDiamond = ({ tid, kid, frame, isSelected, interpolation, isFlat }: {
     tid: string;
     kid: string;
     frame: number;
     isSelected: boolean;
     interpolation: string;
+    isFlat: boolean;
 }) => {
     const ref = useRef<HTMLDivElement>(null);
     const compositeKey = `${tid}::${kid}`;
@@ -143,11 +156,12 @@ const KeyframeDiamond = ({ tid, kid, frame, isSelected, interpolation }: {
     const shape = interpolation === 'Linear' ? 'rotate-45 rounded-sm'
         : interpolation === 'Step' ? 'rounded-none'
         : 'rounded-full';
+    const size = isFlat ? 'w-2 h-2' : 'w-3 h-3';
 
     return (
         <div
             ref={ref}
-            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 border transition-transform ${
+            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${size} border transition-transform ${
                 isSelected ? 'bg-white border-white scale-125 z-30'
                 : 'bg-cyan-900 border-cyan-400 group-hover/key:scale-125 group-hover/key:bg-cyan-400'
             } ${shape}`}
@@ -176,10 +190,12 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
 }) => {
     const handleContextMenu = useHelpContextMenu();
     const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
+    const track = sequence.tracks[tid];
+    const flat = useMemo(() => isFlatTrack(track?.keyframes ?? []), [track?.keyframes]);
 
     return (
         <div
-            className="flex border-b border-white/5 bg-transparent hover:bg-white/5"
+            className={`flex border-b border-white/5 bg-transparent hover:bg-white/5 ${flat ? 'opacity-50' : ''}`}
             style={{ height: 32 }}
             data-help-id="anim.tracks"
         >
@@ -243,6 +259,7 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                                 frame={k.frame}
                                 isSelected={isKeySelected}
                                 interpolation={k.interpolation}
+                                isFlat={flat}
                             />
                         </div>
                     );

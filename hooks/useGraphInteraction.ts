@@ -92,12 +92,23 @@ export const useGraphInteraction = (
     const softSelectInitialStateRef = useRef<KeyStateMap>({});
     
     // Updated to store initial handle state for Angle Locking
-    const dragHandleRef = useRef<{ 
-        trackId: string, 
-        keyId: string, 
-        side: 'left' | 'right', 
+    const dragHandleRef = useRef<{
+        trackId: string,
+        keyId: string,
+        side: 'left' | 'right',
         key: Keyframe,
-        initialHandle: { x: number, y: number } 
+        initialHandle: { x: number, y: number },
+        // Peer-keys' tangent state captured at mousedown so a single handle
+        // drag can scale every selected key's matching tangent by the same
+        // per-component ratio (multi-select multiplicative drag).
+        peers: {
+            trackId: string,
+            keyId: string,
+            initialSameSide: BezierHandle,
+            initialOtherSide?: BezierHandle,
+            tangentMode?: 'Aligned' | 'Unified',
+            brokenTangents: boolean,
+        }[]
     } | null>(null);
     
     const boxStartRef = useRef({ x: 0, y: 0 });
@@ -403,69 +414,58 @@ export const useGraphInteraction = (
         }
         else if (dragMode.current === 'handle') {
             if (!dragHandleRef.current) return;
-            const { trackId, keyId, side, initialHandle } = dragHandleRef.current;
-            
+            const { trackId, keyId, side, initialHandle, peers } = dragHandleRef.current;
+
             const track = props.sequence.tracks[trackId];
             if (!track) return;
             const currentKey = track.keyframes.find(k => k.id === keyId);
             if (!currentKey) return;
-            
+
             const kx = props.frameToCanvasPixel(currentKey.frame);
             const ky = props.v2p(currentKey.value, trackId);
-            
-            let vecX = mx - kx;
+
             const my = e.clientY - rect.top;
-            let vecY = my - ky;
-            
-            let frameDelta = vecX / props.view.scaleX;
-            let valDelta = -vecY / props.view.scaleY;
-            
+            let frameDelta = (mx - kx) / props.view.scaleX;
+            let valDelta = -(my - ky) / props.view.scaleY;
+
             if (props.normalized) {
                 const r = props.trackRanges[trackId];
                 if (r) valDelta *= r.span;
             }
-            
-            // --- Shift Key: Lock Angle (Project onto original vector) ---
+
+            // Shift: lock angle (project onto initial vector)
             if (e.shiftKey) {
-                // Initial handle vector (dx, dy)
-                const v0x = initialHandle.x;
-                const v0y = initialHandle.y;
-                
-                // Current proposed vector
-                const vx = frameDelta;
-                const vy = valDelta;
-                
-                // Magnitude of original vector
-                const len0 = Math.sqrt(v0x*v0x + v0y*v0y);
-                
+                const len0 = Math.hypot(initialHandle.x, initialHandle.y);
                 if (len0 > 0.0001) {
-                    // Normalize original
-                    const nx = v0x / len0;
-                    const ny = v0y / len0;
-                    
-                    // Dot product to project V onto N (Scalar projection)
-                    // P = (V . N)
-                    let projLen = (vx * nx) + (vy * ny);
-                    
-                    // New vector = N * projLen
+                    const nx = initialHandle.x / len0;
+                    const ny = initialHandle.y / len0;
+                    const projLen = (frameDelta * nx) + (valDelta * ny);
                     frameDelta = nx * projLen;
                     valDelta = ny * projLen;
                 }
             }
 
             const newHandle = { x: frameDelta, y: valDelta };
-            const patch: Partial<Keyframe> = {};
-            
-            // --- Ctrl Key: Break Tangents ---
-            const breakTangents = e.ctrlKey || currentKey.brokenTangents;
-            if (breakTangents !== currentKey.brokenTangents) {
-                patch.brokenTangents = breakTangents;
-            }
 
-            // Aligned (default): lock direction across the key, preserve each side's own length.
-            // Unified (opt-in via context menu): mirror direction AND length.
-            const unified = currentKey.tangentMode === 'Unified';
-            const mirror = (h: { x: number; y: number }, otherLen: number) => {
+            // Per-component ratio for peer scaling. Falls back to additive
+            // delta when the dragged handle started near zero (ratio undefined).
+            const initX = initialHandle.x;
+            const initY = initialHandle.y;
+            const useRatioX = Math.abs(initX) > 1e-6;
+            const useRatioY = Math.abs(initY) > 1e-6;
+            const ratioX = useRatioX ? newHandle.x / initX : 0;
+            const ratioY = useRatioY ? newHandle.y / initY : 0;
+            const dX = newHandle.x - initX;
+            const dY = newHandle.y - initY;
+
+            // Mirror helper: reflect a same-side tangent to the opposite side,
+            // preserving the existing other-side length under Aligned mode (or
+            // strict mirror under Unified).
+            const mirrorTan = (
+                h: { x: number; y: number },
+                otherLen: number,
+                unified: boolean
+            ) => {
                 if (unified) return { x: -h.x, y: -h.y };
                 const len = Math.hypot(h.x, h.y);
                 if (len < 1e-6) return { x: -h.x, y: -h.y };
@@ -473,21 +473,49 @@ export const useGraphInteraction = (
                 return { x: -h.x * s, y: -h.y * s };
             };
 
+            const updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[] = [];
+
+            // --- Dragged key ---
+            const draggedPatch: Partial<Keyframe> = { autoTangent: false };
+            const draggedBreak = e.ctrlKey || !!currentKey.brokenTangents;
+            if (draggedBreak !== !!currentKey.brokenTangents) draggedPatch.brokenTangents = draggedBreak;
+            const draggedUnified = currentKey.tangentMode === 'Unified';
+
             if (side === 'left') {
-                patch.leftTangent = newHandle;
-                if (!breakTangents && currentKey.rightTangent) {
+                draggedPatch.leftTangent = newHandle;
+                if (!draggedBreak && currentKey.rightTangent) {
                     const rLen = Math.hypot(currentKey.rightTangent.x, currentKey.rightTangent.y);
-                    patch.rightTangent = mirror(newHandle, rLen);
+                    draggedPatch.rightTangent = mirrorTan(newHandle, rLen, draggedUnified);
                 }
             } else {
-                patch.rightTangent = newHandle;
-                if (!breakTangents && currentKey.leftTangent) {
+                draggedPatch.rightTangent = newHandle;
+                if (!draggedBreak && currentKey.leftTangent) {
                     const lLen = Math.hypot(currentKey.leftTangent.x, currentKey.leftTangent.y);
-                    patch.leftTangent = mirror(newHandle, lLen);
+                    draggedPatch.leftTangent = mirrorTan(newHandle, lLen, draggedUnified);
                 }
             }
-            patch.autoTangent = false;
-            updateKeyframe(trackId, keyId, patch);
+            updates.push({ trackId, keyId, patch: draggedPatch });
+
+            // --- Peer keys ---
+            peers.forEach(p => {
+                const peerNew = {
+                    x: useRatioX ? p.initialSameSide.x * ratioX : p.initialSameSide.x + dX,
+                    y: useRatioY ? p.initialSameSide.y * ratioY : p.initialSameSide.y + dY,
+                };
+                const peerPatch: Partial<Keyframe> = { autoTangent: false };
+                if (side === 'left') peerPatch.leftTangent  = peerNew;
+                else                  peerPatch.rightTangent = peerNew;
+
+                if (!p.brokenTangents && p.initialOtherSide) {
+                    const otherLen = Math.hypot(p.initialOtherSide.x, p.initialOtherSide.y);
+                    const mirrored = mirrorTan(peerNew, otherLen, p.tangentMode === 'Unified');
+                    if (side === 'left') peerPatch.rightTangent = mirrored;
+                    else                  peerPatch.leftTangent  = mirrored;
+                }
+                updates.push({ trackId: p.trackId, keyId: p.keyId, patch: peerPatch });
+            });
+
+            updateKeyframes(updates);
             animationEngine.scrub(props.currentFrame);
         }
         else if (dragMode.current === 'box') {
@@ -622,18 +650,44 @@ export const useGraphInteraction = (
                 if (hit) {
                     if (hit.type === 'handle') {
                         dragMode.current = 'handle';
-                        
+
                         // Determine initial handle value for Angle Lock
                         let initH = { x: 0, y: 0 };
                         if (hit.side === 'left' && hit.key.leftTangent) initH = { ...hit.key.leftTangent };
                         else if (hit.side === 'right' && hit.key.rightTangent) initH = { ...hit.key.rightTangent };
 
-                        dragHandleRef.current = { 
-                            trackId: hit.trackId, 
-                            keyId: hit.keyId, 
-                            side: hit.side, 
+                        // Snapshot peer keys' tangents so the same multiplicative
+                        // ratio can be applied to every selected key's matching
+                        // side. Skip the dragged key itself and any peer that
+                        // doesn't have a matching-side tangent.
+                        const peers: NonNullable<typeof dragHandleRef.current>['peers'] = [];
+                        const draggedComposite = `${hit.trackId}::${hit.keyId}`;
+                        (props.selectedKeyframeIds as string[]).forEach(cid => {
+                            if (cid === draggedComposite) return;
+                            const [tid, kid] = cid.split('::');
+                            const t = props.sequence.tracks[tid];
+                            const k = t?.keyframes.find(kf => kf.id === kid);
+                            if (!k) return;
+                            const sameSide  = hit.side === 'left' ? k.leftTangent  : k.rightTangent;
+                            if (!sameSide) return;
+                            const otherSide = hit.side === 'left' ? k.rightTangent : k.leftTangent;
+                            peers.push({
+                                trackId: tid,
+                                keyId: kid,
+                                initialSameSide:  { ...sameSide },
+                                initialOtherSide: otherSide ? { ...otherSide } : undefined,
+                                tangentMode:      k.tangentMode,
+                                brokenTangents:   !!k.brokenTangents,
+                            });
+                        });
+
+                        dragHandleRef.current = {
+                            trackId: hit.trackId,
+                            keyId: hit.keyId,
+                            side: hit.side,
                             key: hit.key,
-                            initialHandle: initH
+                            initialHandle: initH,
+                            peers,
                         };
                         isDraggingRef.current = true;
                         snapshot();

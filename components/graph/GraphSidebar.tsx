@@ -10,6 +10,7 @@ import { groupTracks } from '../../utils/groupTracks';
 import { ContextMenuItem } from '../../types/help';
 import { useSidebarResize } from '../../hooks/useSidebarResize';
 import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
+import { isFlatTrack } from '../timeline/TrackRow';
 
 interface GraphSidebarProps {
     visibleTrackIds: string[];
@@ -221,11 +222,12 @@ export const GraphSidebar: React.FC<GraphSidebarProps> = ({ visibleTrackIds, set
         // Color depends on index in visible array to match GraphRenderer
         const visIdx = visibleTrackIds.indexOf(tid);
         const color = visIdx !== -1 ? TRACK_COLORS[visIdx % TRACK_COLORS.length] : '#555';
-        
+        const flat  = isFlatTrack(track.keyframes);
+
         return (
-            <div 
+            <div
                 key={tid}
-                className={`flex items-center justify-between px-3 py-1.5 cursor-pointer border-b border-white/5 transition-colors group ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                className={`flex items-center justify-between px-3 py-1.5 cursor-pointer border-b border-white/5 transition-colors group ${isSelected ? 'bg-white/10' : 'hover:bg-white/5'} ${flat ? 'opacity-50' : ''}`}
                 onClick={(e) => handleSelect(e, tid)}
                 onContextMenu={(e) => handleContextMenu(e, tid)}
             >
