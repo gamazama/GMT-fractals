@@ -41,6 +41,10 @@ interface ExportSession {
     /** Raised when audio encoding has flushed, so finish() can await it. */
     audioFlushed?: Promise<void>;
     audioCodec?: 'mp4a.40.2' | 'opus';
+    /** Audio analogue of `firstChunkOffsetMicros` — same encoder-priming /
+     *  Firefox-leading-latency normalization applied to the first audio chunk
+     *  so the muxed audio track starts at PTS 0 alongside video PTS 0. */
+    audioFirstChunkOffsetMicros?: number | null;
 
     // ─── Image-mode fields (unused when isImageMode === false) ───
     dirHandle?: FileSystemDirectoryHandle;
@@ -254,6 +258,7 @@ export class WorkerExporter {
                 session.audioPacketSource = new Mediabunny.EncodedAudioPacketSource(
                     audioCodec === 'opus' ? 'opus' : 'aac'
                 );
+                session.audioFirstChunkOffsetMicros = null;
 
                 session.audioEncoder = new AudioEncoder({
                     output: (chunk, meta) => this.handleEncodedAudioChunk(chunk, meta),
@@ -772,7 +777,13 @@ export class WorkerExporter {
         const rawBuffer = new Uint8Array(chunk.byteLength);
         chunk.copyTo(rawBuffer);
 
-        const tsSec = chunk.timestamp / 1e6;
+        // Same first-chunk-offset normalization the video path does — undoes
+        // encoder priming delay (AAC ~44ms) + Firefox's leading-latency offset
+        // so the audio track and video track both start at output PTS 0.
+        if (sess.audioFirstChunkOffsetMicros == null) {
+            sess.audioFirstChunkOffsetMicros = chunk.timestamp;
+        }
+        const tsSec = (chunk.timestamp - sess.audioFirstChunkOffsetMicros) / 1e6;
         const durSec = (chunk.duration ?? 0) / 1e6;
         const packet = new Mediabunny.EncodedPacket(rawBuffer, chunk.type, tsSec, durSec);
 

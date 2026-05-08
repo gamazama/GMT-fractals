@@ -23,8 +23,12 @@ export async function mixAudioClipsForExport(
     if (!hasAny) return null;
 
     const safeFps = Math.max(1, fps);
+    // Each rendered video frame occupies a `1/fps`-second slot, so the export
+    // covers from frame startFrame's start to frame endFrame's END — i.e.
+    // `(endFrame - startFrame + 1) / fps`. Without the +1 the audio mix is
+    // one frame short at the tail, which adds ~40ms of trailing-end mismatch.
     const exportStartSec = startFrame / safeFps;
-    const exportEndSec   = endFrame   / safeFps;
+    const exportEndSec   = (endFrame + 1) / safeFps;
     const durationSec    = Math.max(0, exportEndSec - exportStartSec);
     if (durationSec <= 0) return null;
 
