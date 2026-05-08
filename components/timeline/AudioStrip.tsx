@@ -61,41 +61,65 @@ const Waveform: React.FC<{ peaks: number[]; widthPx: number; trimRange: [number,
     return <canvas ref={canvasRef} style={{ width: widthPx, height: STRIP_HEIGHT - 16, display: 'block' }} />;
 };
 
+const waitForAudioMetadata = (deckIndex: 0 | 1, timeoutMs = 4000): Promise<number> => {
+    const start = performance.now();
+    return new Promise(resolve => {
+        const tick = () => {
+            const info = audioAnalysisEngine.getTrackInfo(deckIndex);
+            if (info.duration > 0 && Number.isFinite(info.duration)) {
+                resolve(info.duration);
+                return;
+            }
+            if (performance.now() - start > timeoutMs) {
+                resolve(0);
+                return;
+            }
+            setTimeout(tick, 50);
+        };
+        tick();
+    });
+};
+
 const EmptyDeckSlot: React.FC<{ deckIndex: 0 | 1; sidebarWidth: number }> = ({ deckIndex, sidebarWidth }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const setAudioClip = useAnimationStore(s => s.setAudioClip);
-    const fps          = useAnimationStore(s => s.fps);
+    const setAudioClip    = useAnimationStore(s => s.setAudioClip);
+    const updateAudioClip = useAnimationStore(s => s.updateAudioClip);
 
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         e.target.value = '';
         if (!file) return;
+
         audioAnalysisEngine.loadTrack(deckIndex, file);
+
+        // Register an optimistic clip immediately so the strip renders with
+        // the file name + a Decoding… overlay while peaks compute. Duration
+        // gets a placeholder (60s) until the deck reports its true length.
+        const id = `clip-${deckIndex}-${Date.now()}`;
+        setAudioClip(deckIndex, {
+            id, deckIndex,
+            fileName: file.name,
+            durationSeconds: 60,
+            startFrame: 0,
+            trimStartSec: 0,
+            trimEndSec: 60,
+        });
+
+        // Get the real duration from the underlying <audio> element ASAP so
+        // the strip's width matches reality even before the waveform decode
+        // finishes.
+        waitForAudioMetadata(deckIndex).then(dur => {
+            if (dur > 0) updateAudioClip(deckIndex, { durationSeconds: dur, trimEndSec: dur });
+        });
+
         try {
             const { peaks, durationSeconds } = await computeWaveformPeaks(file);
-            setAudioClip(deckIndex, {
-                id: `clip-${deckIndex}-${Date.now()}`,
-                deckIndex,
-                fileName: file.name,
-                durationSeconds,
-                startFrame: 0,
-                trimStartSec: 0,
-                trimEndSec: durationSeconds,
-                peaks,
-            });
+            updateAudioClip(deckIndex, { peaks, durationSeconds, trimEndSec: durationSeconds });
         } catch (err) {
             console.error('Audio decode failed', err);
-            const info = audioAnalysisEngine.getTrackInfo(deckIndex);
-            const dur  = info.duration > 0 ? info.duration : 60;
-            setAudioClip(deckIndex, {
-                id: `clip-${deckIndex}-${Date.now()}`,
-                deckIndex,
-                fileName: file.name,
-                durationSeconds: dur,
-                startFrame: 0,
-                trimStartSec: 0,
-                trimEndSec: dur,
-            });
+            // No peaks — strip stays without waveform but the clip is still
+            // playable + draggable. waitForAudioMetadata above keeps the
+            // duration honest.
         }
     };
 
@@ -207,26 +231,30 @@ const AudioStripInner: React.FC<AudioStripProps> = ({ clip, frameWidth, sidebarW
             </div>
             <div className="flex-1 relative overflow-visible">
                 <div
-                    className="absolute top-2 bg-purple-900/30 border border-purple-500/40 rounded cursor-grab active:cursor-grabbing"
+                    className="absolute top-2 bg-purple-900/30 border border-purple-500/40 rounded cursor-grab active:cursor-grabbing overflow-hidden"
                     style={{ left: leftPx, width: Math.max(8, widthPx), height: STRIP_HEIGHT - 16 }}
                     onMouseDown={startDrag('move')}
                     title="Drag to move clip"
                 >
-                    {clip.peaks && clip.peaks.length > 0 && (
+                    {clip.peaks && clip.peaks.length > 0 ? (
                         <Waveform
                             peaks={clip.peaks}
                             widthPx={Math.max(8, widthPx)}
                             trimRange={[clip.trimStartSec, clip.trimEndSec]}
                             durationSec={clip.durationSeconds}
                         />
+                    ) : (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-[9px] font-bold text-purple-300/70 tracking-wider animate-pulse">
+                                Decoding…
+                            </span>
+                        </div>
                     )}
-                    {/* Left trim handle */}
                     <div
                         className="absolute top-0 left-0 bottom-0 w-2 cursor-ew-resize bg-purple-400/40 hover:bg-white/60"
                         onMouseDown={startDrag('trim_left')}
                         title="Trim start"
                     />
-                    {/* Right trim handle */}
                     <div
                         className="absolute top-0 right-0 bottom-0 w-2 cursor-ew-resize bg-purple-400/40 hover:bg-white/60"
                         onMouseDown={startDrag('trim_right')}

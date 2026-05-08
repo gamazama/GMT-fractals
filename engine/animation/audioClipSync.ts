@@ -1,15 +1,15 @@
 import { audioAnalysisEngine } from '../features/audioMod/AudioAnalysisEngine';
 import { AudioClip } from '../../store/animation/types';
 
-/** Tolerance (seconds) before we re-seek the underlying `<audio>` element to
- *  match the timeline. Loose enough that the deck free-runs between
- *  corrections without us fighting its native playback rate. */
-const SYNC_TOLERANCE = 0.06;
+/** Tolerance for "the audio drifted enough that we should re-seek". 250ms is
+ *  past the threshold of conscious perception for most material — below that
+ *  we let the deck free-run so its native playback isn't constantly chopped
+ *  by seek calls (which produce audible clicks). */
+const LARGE_DRIFT_SEC = 0.25;
 
 /** Decks the timeline has actively engaged. We only ever pause / seek a deck
- *  we've previously started — otherwise the AudioPanel's manual play
- *  controls (or any other free-running deck use) get killed every animate
- *  tick. Cleared when the timeline stops driving that deck. */
+ *  we've previously started — otherwise the AudioPanel's manual play controls
+ *  (or any other free-running deck use) get killed every animate tick. */
 const ownedDecks = new Set<number>();
 
 let prevFrame: number | null   = null;
@@ -26,13 +26,16 @@ export function _resetAudioClipSync() {
 /** Play / pause / seek each loaded audio deck so its position matches the
  *  timeline. Called once per ANIMATE tick.
  *
- *  Semantics — the timeline is master only while playing or just-scrubbed:
- *  - isPlaying + in-range → ensure deck plays at the right offset; mark owned.
- *  - isPlaying + out-of-range → pause owned deck; out-of-range deck stays paused.
- *  - just paused (was playing) → pause owned deck; release ownership.
- *  - paused + currentFrame changed (scrub) → seek owned deck so resume picks
- *    up at the right place; non-owned decks are left alone so the AudioPanel's
- *    manual controls keep working. */
+ *  Smoothness: while the timeline is playing we DO NOT continuously re-seek
+ *  the deck — it free-runs at its native rate, which keeps it in sync with
+ *  the timeline (both advance in real wall-clock time). We only seek on
+ *  detectable user events:
+ *  - just resumed (paused → playing)
+ *  - just scrubbed (currentFrame jumped while playing or paused)
+ *  - large drift (>250ms) caught by an out-of-band correction
+ *
+ *  Decks the timeline never owned (i.e. user is driving via AudioPanel) are
+ *  left untouched. */
 export function syncAudioClips(
     clips: (AudioClip | null)[],
     currentFrame: number,
@@ -43,8 +46,15 @@ export function syncAudioClips(
     const safeFps = Math.max(1, fps);
 
     const wasPlaying   = prevPlaying;
-    const frameChanged = prevFrame !== null && prevFrame !== currentFrame;
-    const justPaused   = wasPlaying === true && !isPlaying;
+    const lastFrame    = prevFrame;
+    const justResumed  = wasPlaying === false && isPlaying;
+    const justPaused   = wasPlaying === true  && !isPlaying;
+    // A "scrub" is a frame jump bigger than what one tick would produce
+    // organically. At ~60Hz RAF and project fps in the 12-120 range, organic
+    // advances are < ~5 frames per tick; anything beyond that came from the
+    // user dragging the playhead.
+    const frameDelta   = lastFrame === null ? 0 : (currentFrame - lastFrame);
+    const justScrubbed = lastFrame !== null && Math.abs(frameDelta) > 5;
     prevFrame   = currentFrame;
     prevPlaying = isPlaying;
 
@@ -56,17 +66,20 @@ export function syncAudioClips(
 
         const t = ((currentFrame - clip.startFrame) / safeFps) + clip.trimStartSec;
         const inRange = t >= clip.trimStartSec - 1e-6 && t <= clip.trimEndSec + 1e-6;
+        const drift = Math.abs(info.currentTime - t);
 
         if (isPlaying) {
-            if (inRange) {
-                if (Math.abs(info.currentTime - t) > SYNC_TOLERANCE) {
-                    audioAnalysisEngine.seek(deckIndex, t);
+            if (!inRange) {
+                if (ownedDecks.has(deckIndex) && info.isPlaying) {
+                    audioAnalysisEngine.pause(deckIndex);
                 }
-                if (!info.isPlaying) audioAnalysisEngine.play(deckIndex);
-                ownedDecks.add(deckIndex);
-            } else if (ownedDecks.has(deckIndex) && info.isPlaying) {
-                audioAnalysisEngine.pause(deckIndex);
+                return;
             }
+            // Seek only on real events; let the deck free-run otherwise.
+            const shouldSeek = justResumed || justScrubbed || drift > LARGE_DRIFT_SEC;
+            if (shouldSeek) audioAnalysisEngine.seek(deckIndex, t);
+            if (!info.isPlaying) audioAnalysisEngine.play(deckIndex);
+            ownedDecks.add(deckIndex);
             return;
         }
 
@@ -76,11 +89,9 @@ export function syncAudioClips(
             ownedDecks.delete(deckIndex);
             return;
         }
-        if (frameChanged && ownedDecks.has(deckIndex) && inRange) {
-            if (Math.abs(info.currentTime - t) > SYNC_TOLERANCE) {
-                audioAnalysisEngine.seek(deckIndex, t);
-            }
+        if (justScrubbed && ownedDecks.has(deckIndex) && inRange) {
+            audioAnalysisEngine.seek(deckIndex, t);
         }
-        // Else: timeline isn't driving this deck right now — leave it alone.
+        // Else: timeline isn't driving this deck — leave it alone.
     });
 }
