@@ -70,9 +70,7 @@ const EmptyDeckSlot: React.FC<{ deckIndex: 0 | 1; sidebarWidth: number }> = ({ d
         const file = e.target.files?.[0];
         e.target.value = '';
         if (!file) return;
-        // Engine loads the file into the deck (creates AudioContext source for FFT).
         audioAnalysisEngine.loadTrack(deckIndex, file);
-        // Decode peaks for visualisation in parallel.
         try {
             const { peaks, durationSeconds } = await computeWaveformPeaks(file);
             setAudioClip(deckIndex, {
@@ -85,14 +83,8 @@ const EmptyDeckSlot: React.FC<{ deckIndex: 0 | 1; sidebarWidth: number }> = ({ d
                 trimEndSec: durationSeconds,
                 peaks,
             });
-            // Stop the deck's auto-loop until the timeline plays — we want sync to
-            // the timeline frame, not free-running playback.
-            audioAnalysisEngine.pause(deckIndex);
-            audioAnalysisEngine.seek(deckIndex, 0);
         } catch (err) {
             console.error('Audio decode failed', err);
-            // Even without peaks, register the clip so playback can sync — duration
-            // pulled from the deck once it's loaded.
             const info = audioAnalysisEngine.getTrackInfo(deckIndex);
             const dur  = info.duration > 0 ? info.duration : 60;
             setAudioClip(deckIndex, {
