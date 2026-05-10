@@ -69,7 +69,7 @@ const EMPTY_OVERRIDES: Set<string> = new Set();
 // per-tick writes make that cost grow linearly with recorded length —
 // recording slows down to a crawl after a couple hundred frames. Flushing in
 // chunks cuts re-renders to ~6/sec without changing the keyframe data.
-const RECORD_FLUSH_MS = 150;
+const RECORD_FLUSH_MS = 400;
 const recordBuffer: { startFrame: number, endFrame: number, updates: { trackId: string, value: number }[] }[] = [];
 let lastRecordFlushMs = 0;
 

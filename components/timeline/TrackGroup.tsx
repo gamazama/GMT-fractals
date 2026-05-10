@@ -53,25 +53,39 @@ interface TrackGroupProps {
     visibleGraphTracks?: string[];
     onToggleVisibility?: (tid: string) => void;
     onSelectAllKeys?: (tid: string, multi: boolean) => void;
+    /** Visible scroll-content extent in px — keyframe diamonds outside this
+     *  window are skipped at render time. */
+    visibleMinPx?: number;
+    visibleMaxPx?: number;
 }
 
 export const TrackGroup: React.FC<TrackGroupProps> = memo(({
     groupName, trackIds, collapsed, onToggle,
     sequence, frameWidth, selectedTrackIds, selectedKeyframeIds,
     onTrackSelect, onRemoveTrack, onAddKey, onKeyMouseDown, onGroupKeyMouseDown,
-    onStartTransform, visibleGraphTracks, onToggleVisibility, onSelectAllKeys
+    onStartTransform, visibleGraphTracks, onToggleVisibility, onSelectAllKeys,
+    visibleMinPx, visibleMaxPx
 }) => {
     const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
 
-    // Calculate group summary keyframes
+    // Group summary keyframes — restricted to the visible scroll viewport so
+    // long recordings (1000+ keys) don't pay layout/paint cost on every off-
+    // screen GroupDiamond.
     const groupKeyframes = useMemo(() => {
+        const buffer = 64;
+        const useViewport = visibleMinPx != null && visibleMaxPx != null && frameWidth > 0;
+        const minFrame = useViewport ? Math.max(0, (visibleMinPx! - buffer) / frameWidth) : -Infinity;
+        const maxFrame = useViewport ? (visibleMaxPx! + buffer) / frameWidth :  Infinity;
         const frameSet = new Set<number>();
         trackIds.forEach(tid => {
             const t = sequence.tracks[tid];
-            if(t) t.keyframes.forEach(k => frameSet.add(k.frame));
+            if (!t) return;
+            for (const k of t.keyframes) {
+                if (k.frame >= minFrame && k.frame <= maxFrame) frameSet.add(k.frame);
+            }
         });
-        return Array.from(frameSet).sort((a,b) => a-b);
-    }, [trackIds, sequence]);
+        return Array.from(frameSet).sort((a, b) => a - b);
+    }, [trackIds, sequence, frameWidth, visibleMinPx, visibleMaxPx]);
 
     // Group-local selection range: only selected keys whose track is in this group.
     // Reuses the global transform-bar mechanism (drags affect ALL selected keys, but the
@@ -148,6 +162,8 @@ export const TrackGroup: React.FC<TrackGroupProps> = memo(({
                     onRemove={() => onRemoveTrack(tid)}
                     onAddKey={(f) => onAddKey(tid, f)}
                     onKeyMouseDown={onKeyMouseDown}
+                    visibleMinPx={visibleMinPx}
+                    visibleMaxPx={visibleMaxPx}
                 />
             ))}
         </>

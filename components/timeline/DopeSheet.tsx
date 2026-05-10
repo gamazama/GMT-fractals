@@ -90,6 +90,14 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
     const contentRef = useRef<HTMLDivElement>(null);
     const lastSelectedTrackId = useRef<string | null>(null);
 
+    // Visible scroll-content extent in keyframe-area-local pixels. The sticky
+    // sidebar occupies the first `sidebarWidth` of the outer viewport, so the
+    // keyframe area's left-most visible x is `scrollLeft` and the right-most
+    // is `scrollLeft + visibleWidth - sidebarWidth`. Used by TrackRow /
+    // TrackGroup to skip rendering off-viewport diamonds.
+    const visibleMinPx = Math.max(0, scrollLeft);
+    const visibleMaxPx = scrollLeft + Math.max(0, visibleWidth - sidebarWidth);
+
     // Enforce scroll position sync immediately on mount/render to fix alignment issues
     useLayoutEffect(() => {
         if (scrollContainerRef.current) {
@@ -204,10 +212,17 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
     };
     
     const getRootKeyframes = () => {
-        const visibleTrackIds = (Object.values(sequence.tracks) as Track[])
-            .filter(t => !t.hidden)
-            .map(t => t.id);
-        return getGroupKeyframes(visibleTrackIds);
+        const buffer = 64;
+        const minFrame = frameWidth > 0 ? Math.max(0, (visibleMinPx - buffer) / frameWidth) : -Infinity;
+        const maxFrame = frameWidth > 0 ?           (visibleMaxPx + buffer) / frameWidth :  Infinity;
+        const frameSet = new Set<number>();
+        (Object.values(sequence.tracks) as Track[]).forEach(t => {
+            if (t.hidden) return;
+            for (const k of t.keyframes) {
+                if (k.frame >= minFrame && k.frame <= maxFrame) frameSet.add(k.frame);
+            }
+        });
+        return Array.from(frameSet).sort((a, b) => a - b);
     };
 
     const handleTrackSelect = (e: React.MouseEvent, tid: string) => {
@@ -434,7 +449,7 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
             </div>
 
             {Object.entries(organizedTracks.groups).map(([groupName, ids]) => (
-                <TrackGroup 
+                <TrackGroup
                     key={groupName}
                     groupName={groupName}
                     trackIds={ids}
@@ -453,9 +468,11 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
                     visibleGraphTracks={visibleGraphTracks}
                     onToggleVisibility={toggleVisibility}
                     onSelectAllKeys={selectAllKeysOnTrack}
+                    visibleMinPx={visibleMinPx}
+                    visibleMaxPx={visibleMaxPx}
                 />
             ))}
-            
+
             {organizedTracks.standalone.map(tid => (
                 <TrackRow
                     key={tid} tid={tid} sequence={sequence}
@@ -469,6 +486,8 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
                     onRemove={() => removeTrack(tid)}
                     onAddKey={(f) => wrapAddKey(tid, f)}
                     onKeyMouseDown={handleKeyMouseDown}
+                    visibleMinPx={visibleMinPx}
+                    visibleMaxPx={visibleMaxPx}
                 />
             ))}
             

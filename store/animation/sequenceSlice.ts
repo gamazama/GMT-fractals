@@ -212,65 +212,55 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     // Auto tangents. Don't merge these two without preserving both behaviours.
     batchAddKeyframes: (frame, updates, explicitInterpolation) => {
         set(state => {
-            // Shallow clone tracks object
             const newTracks = { ...state.sequence.tracks };
             let hasChanges = false;
-            
+
             updates.forEach(({ trackId, value }) => {
-                // Auto-create track if missing
                 if (!newTracks[trackId]) {
                     newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
                     hasChanges = true;
                 }
-                
-                const track = newTracks[trackId];
-                
-                // Deep clone keyframes only for affected tracks
-                const newKeyframes = [...track.keyframes];
 
-                // Optimization: Check the LAST keyframe.
-                // If we are recording forward, we just need to append or overwrite the last key.
+                const track = newTracks[trackId];
+                const newKeyframes = [...track.keyframes];
                 const lastKey = newKeyframes.length > 0 ? newKeyframes[newKeyframes.length - 1] : null;
 
-                const newKey: Keyframe = { 
-                    id: nanoid(), 
-                    frame, 
-                    value, 
-                    interpolation: explicitInterpolation || 'Linear', 
-                    autoTangent: explicitInterpolation === 'Bezier', 
-                    brokenTangents: false 
+                const newKey: Keyframe = {
+                    id: nanoid(),
+                    frame,
+                    value,
+                    interpolation: explicitInterpolation || 'Linear',
+                    autoTangent: explicitInterpolation === 'Bezier',
+                    brokenTangents: false,
                 };
 
+                let updated = newKeyframes;
                 if (lastKey) {
                     if (frame > lastKey.frame) {
-                        // Append (Fastest)
                         newKeyframes.push(newKey);
                     } else if (Math.abs(frame - lastKey.frame) < 0.001) {
-                        // Overwrite last key (Fast)
-                        // Use existing ID to prevent React list thrashing
+                        // Overwrite last key (use existing ID to prevent React list thrashing).
                         newKey.id = lastKey.id;
                         newKeyframes[newKeyframes.length - 1] = newKey;
                     } else {
-                        // Insert in middle (Slow - Standard Sort)
-                        // Filter out existing key at this frame
-                        const filtered = newKeyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
-                        filtered.push(newKey);
-                        filtered.sort((a,b) => a.frame - b.frame);
-                        
-                        // Replace array
-                        track.keyframes = filtered;
-                        hasChanges = true;
-                        return; // Done with this update
+                        // Insert in middle (cold path).
+                        updated = newKeyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
+                        updated.push(newKey);
+                        updated.sort((a, b) => a.frame - b.frame);
                     }
                 } else {
-                    // First key
                     newKeyframes.push(newKey);
                 }
 
-                track.keyframes = newKeyframes;
+                // Clone the track object so per-track ref subscriptions can
+                // detect a change. The previous code mutated `track.keyframes`
+                // in place, which made `state.sequence.tracks[tid] === prev`
+                // hold even after a write — silently breaking any
+                // narrow-selector subscription.
+                newTracks[trackId] = { ...track, keyframes: updated };
                 hasChanges = true;
             });
-            
+
             return hasChanges ? { sequence: { ...state.sequence, tracks: newTracks } } : state;
         });
     },
@@ -289,35 +279,30 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     hasChanges = true;
                 }
                 const track = newTracks[trackId];
-                const newKeyframes = [...track.keyframes];
+                const keys = [...track.keyframes];
 
                 for (let f = startFrame; f <= endFrame; f++) {
-                    const lastKey = newKeyframes.length > 0 ? newKeyframes[newKeyframes.length - 1] : null;
+                    const lastKey = keys.length > 0 ? keys[keys.length - 1] : null;
                     const newKey: Keyframe = {
                         id: nanoid(), frame: f, value, interpolation: interp,
                         autoTangent: isAuto, brokenTangents: false,
                     };
-                    if (!lastKey) {
-                        newKeyframes.push(newKey);
-                    } else if (f > lastKey.frame) {
-                        // Forward-append fast path — recording always lands here
-                        // since startFrame > lastFrameRecorded.current.
-                        newKeyframes.push(newKey);
+                    if (!lastKey || f > lastKey.frame) {
+                        keys.push(newKey);
                     } else if (Math.abs(f - lastKey.frame) < 0.001) {
                         newKey.id = lastKey.id;
-                        newKeyframes[newKeyframes.length - 1] = newKey;
+                        keys[keys.length - 1] = newKey;
                     } else {
-                        // Out-of-order: filter + sort. Cold path — recording
-                        // shouldn't hit this.
-                        const filtered = newKeyframes.filter(k => Math.abs(k.frame - f) > 0.001);
+                        // Cold path
+                        const filtered = keys.filter(k => Math.abs(k.frame - f) > 0.001);
                         filtered.push(newKey);
                         filtered.sort((a, b) => a.frame - b.frame);
-                        newKeyframes.length = 0;
-                        newKeyframes.push(...filtered);
+                        keys.length = 0;
+                        keys.push(...filtered);
                     }
                 }
 
-                track.keyframes = newKeyframes;
+                newTracks[trackId] = { ...track, keyframes: keys };
                 hasChanges = true;
             });
 

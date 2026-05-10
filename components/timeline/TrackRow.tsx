@@ -122,6 +122,28 @@ const LiveValueDisplay = ({ tid }: { tid: string }) => {
     );
 };
 
+/** First index in a frame-sorted keyframe array whose `frame >= target`. */
+const lowerBound = (keys: { frame: number }[], target: number): number => {
+    let lo = 0, hi = keys.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (keys[mid].frame < target) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+};
+
+/** First index in a frame-sorted keyframe array whose `frame > target`. */
+const upperBound = (keys: { frame: number }[], target: number): number => {
+    let lo = 0, hi = keys.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (keys[mid].frame <= target) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+};
+
 /** True when every keyframe shares the same value (within epsilon) — i.e. the
  *  track has no animation. Used to dim flat tracks in the timeline. Empty and
  *  single-key tracks count as flat. */
@@ -182,16 +204,40 @@ interface TrackRowProps {
     onRemove: () => void;
     onAddKey: (f: number) => void;
     onKeyMouseDown: (e: React.MouseEvent, tid: string, kid: string) => void;
+    /** Visible viewport extent in scroll-content pixels. The keyframe row only
+     *  renders diamonds whose canvas-x lands within this window — at long
+     *  recordings (1000+ frames) the off-viewport diamonds dominate
+     *  layout/paint cost otherwise. */
+    visibleMinPx?: number;
+    visibleMaxPx?: number;
 }
 
 export const TrackRow: React.FC<TrackRowProps> = memo(({
     tid, sequence, frameWidth, isSelected, isVisible, selectedKeys,
-    onSelect, onToggleVisibility, onSelectAllKeys, onRemove, onAddKey, onKeyMouseDown
+    onSelect, onToggleVisibility, onSelectAllKeys, onRemove, onAddKey, onKeyMouseDown,
+    visibleMinPx, visibleMaxPx
 }) => {
     const handleContextMenu = useHelpContextMenu();
     const sidebarWidth = useAnimationStore(s => s.timelineSidebarWidth);
     const track = sequence.tracks[tid];
     const flat = useMemo(() => isFlatTrack(track?.keyframes ?? []), [track?.keyframes]);
+
+    // Virtualization window — convert the parent's visible scroll-content
+    // pixel range into a frame range so we can binary-search the keyframe
+    // array. With sorted keyframes (recording forward-appends, addKeyframe
+    // sorts), this is O(log N) + O(visible) instead of O(N) per render.
+    const visibleSlice = useMemo(() => {
+        const keys = track?.keyframes ?? [];
+        if (keys.length === 0) return keys;
+        if (visibleMinPx == null || visibleMaxPx == null || frameWidth <= 0) return keys;
+        const buffer = 64;
+        const minFrame = Math.max(0, (visibleMinPx - buffer) / frameWidth);
+        const maxFrame = (visibleMaxPx + buffer) / frameWidth;
+        // Binary-search the sorted-by-frame array for the lo/hi bounds.
+        const lo = lowerBound(keys, minFrame);
+        const hi = upperBound(keys, maxFrame);
+        return keys.slice(lo, hi);
+    }, [track?.keyframes, frameWidth, visibleMinPx, visibleMaxPx]);
 
     return (
         <div
@@ -243,7 +289,7 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                 }}
             >
                 <div className="absolute inset-0 opacity-0 group-hover/track:opacity-5 bg-white pointer-events-none" />
-                {sequence.tracks[tid].keyframes.map((k: any) => {
+                {visibleSlice.map((k: any) => {
                     const isKeySelected = selectedKeys.includes(`${tid}::${k.id}`);
                     return (
                         <div
