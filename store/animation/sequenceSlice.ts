@@ -325,6 +325,65 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         });
     },
 
+    batchAddKeyframesMultiRange: (entries, explicitInterpolation) => {
+        if (entries.length === 0) return;
+        set(state => {
+            const newTracks = { ...state.sequence.tracks };
+            let hasChanges = false;
+            const interp = explicitInterpolation || 'Linear';
+            const isAuto = explicitInterpolation === 'Bezier';
+
+            // Group writes by track so each track is cloned + extended once.
+            const trackOps = new Map<string, { frame: number, value: number }[]>();
+            for (const entry of entries) {
+                for (const { trackId, value } of entry.updates) {
+                    let ops = trackOps.get(trackId);
+                    if (!ops) { ops = []; trackOps.set(trackId, ops); }
+                    for (let f = entry.startFrame; f <= entry.endFrame; f++) {
+                        ops.push({ frame: f, value });
+                    }
+                }
+            }
+
+            trackOps.forEach((ops, trackId) => {
+                if (!newTracks[trackId]) {
+                    newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
+                    hasChanges = true;
+                }
+                const track = newTracks[trackId];
+                const keys = [...track.keyframes];
+
+                for (const { frame, value } of ops) {
+                    const lastKey = keys.length > 0 ? keys[keys.length - 1] : null;
+                    const newKey: Keyframe = {
+                        id: nanoid(), frame, value, interpolation: interp,
+                        autoTangent: isAuto, brokenTangents: false,
+                    };
+                    if (!lastKey || frame > lastKey.frame) {
+                        keys.push(newKey);
+                    } else if (Math.abs(frame - lastKey.frame) < 0.001) {
+                        newKey.id = lastKey.id;
+                        keys[keys.length - 1] = newKey;
+                    } else {
+                        // Cold path — recording shouldn't hit this.
+                        const filtered = keys.filter(k => Math.abs(k.frame - frame) > 0.001);
+                        filtered.push(newKey);
+                        filtered.sort((a, b) => a.frame - b.frame);
+                        keys.length = 0;
+                        keys.push(...filtered);
+                    }
+                }
+
+                // Clone the track object too (not just its keyframes array) so
+                // per-track subscriptions can detect a change by ref equality.
+                newTracks[trackId] = { ...track, keyframes: keys };
+                hasChanges = true;
+            });
+
+            return hasChanges ? { sequence: { ...state.sequence, tracks: newTracks } } : state;
+        });
+    },
+
     removeKeyframe: (trackId, keyframeId) => {
         get().snapshot();
         set(state => {

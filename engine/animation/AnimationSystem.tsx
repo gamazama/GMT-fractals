@@ -63,6 +63,22 @@ const initialStaticValues = { current: {} as Record<string, number> };
 const prevIsRec = { current: false };
 const EMPTY_OVERRIDES: Set<string> = new Set();
 
+// Modulation recording flushes its keyframe writes to the store at this
+// interval rather than once per tick. Each store update re-renders the whole
+// timeline keyframe tree (DopeSheet → TrackRow → KeyframeDiamond × N), and
+// per-tick writes make that cost grow linearly with recorded length —
+// recording slows down to a crawl after a couple hundred frames. Flushing in
+// chunks cuts re-renders to ~6/sec without changing the keyframe data.
+const RECORD_FLUSH_MS = 150;
+const recordBuffer: { startFrame: number, endFrame: number, updates: { trackId: string, value: number }[] }[] = [];
+let lastRecordFlushMs = 0;
+
+function flushRecordBuffer() {
+    if (recordBuffer.length === 0) return;
+    useAnimationStore.getState().batchAddKeyframesMultiRange(recordBuffer, 'Linear');
+    recordBuffer.length = 0;
+}
+
 // Exported tick function for orchestrator pattern
 export const tick = (delta: number) => {
     const animStore = useAnimationStore.getState();
@@ -79,9 +95,13 @@ export const tick = (delta: number) => {
         if (isRecNow) {
             initialStaticValues.current = {};
             lastFrameRecorded.current = -1;
+            recordBuffer.length = 0;
+            lastRecordFlushMs = performance.now();
         } else {
-            // Recording just stopped — clear overrides so AnimationEngine
-            // .scrub stops skipping the recorded tracks during playback.
+            // Recording just stopped — flush any pending writes, then clear
+            // overrides so AnimationEngine.scrub stops skipping the recorded
+            // tracks during playback.
+            flushRecordBuffer();
             animationEngine.setOverriddenTracks(EMPTY_OVERRIDES);
         }
         prevIsRec.current = isRecNow;
@@ -499,9 +519,21 @@ export const tick = (delta: number) => {
         }
     });
 
-    // --- EXECUTE BATCH RECORDING ---
+    // --- BUFFER & THROTTLED FLUSH ---
+    // The keyframe writes themselves are cheap, but each store update
+    // re-renders every TrackRow + KeyframeDiamond — cost grows with recorded
+    // length. Buffer per-tick captures and flush every RECORD_FLUSH_MS so the
+    // visible re-render rate stays low regardless of how many keyframes have
+    // accumulated.
     if (keysToRecord.length > 0) {
-        animStore.batchAddKeyframesRange(recordingStartFrame, currentFrame, keysToRecord, 'Linear');
+        recordBuffer.push({ startFrame: recordingStartFrame, endFrame: currentFrame, updates: keysToRecord });
+    }
+    if (recordBuffer.length > 0) {
+        const now = performance.now();
+        if (now - lastRecordFlushMs >= RECORD_FLUSH_MS) {
+            flushRecordBuffer();
+            lastRecordFlushMs = now;
+        }
     }
 
     // Apply Julia Composite

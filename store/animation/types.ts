@@ -114,6 +114,12 @@ export interface SequenceSliceActions {
      *  modulation curve. Avoids the N store updates / N re-renders that
      *  calling `batchAddKeyframes` in a loop would produce. */
     batchAddKeyframesRange: (startFrame: number, endFrame: number, updates: { trackId: string, value: number }[], interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
+    /** Recording-throttle fast path — writes the contents of an entire
+     *  buffered tick batch (multiple [start,end] ranges, each with its own
+     *  per-track values) in a single store update. Used by the modulation
+     *  recorder to flush ~150ms of buffered FFT samples at a time so the
+     *  DopeSheet doesn't re-render once per tick. */
+    batchAddKeyframesMultiRange: (entries: { startFrame: number, endFrame: number, updates: { trackId: string, value: number }[] }[], interpolation?: 'Linear' | 'Step' | 'Bezier') => void;
     removeKeyframe: (trackId: string, keyframeId: string) => void;
     updateKeyframe: (trackId: string, keyframeId: string, updates: Partial<Keyframe>) => void;
     updateKeyframes: (updates: { trackId: string, keyId: string, patch: Partial<Keyframe> }[]) => void;
