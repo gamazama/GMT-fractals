@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-17 — Both diagnostic probes complete. Cost empirically located at `Timeline:Graph` polyline resampling (~7ms × 480 commits = 3.3s/scenario). Canvas GraphEditor is next.
+> 2026-05-17 — Canvas GraphEditor prompt + bench metric prompt drafted. Run bench metric first (<1d), then canvas (~1-2w). Both ready for fresh sessions.
 
 ## What this is
 
@@ -24,7 +24,11 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`06_SPIKE_FINDINGS.md`](./06_SPIKE_FINDINGS.md) | Output of the spike. **Diagnosis invalidated for the named consumer.** Read this before Phase 0 work. | shipped |
 | [`07_ENGINE_PROBE_PROMPT.md`](./07_ENGINE_PROBE_PROMPT.md) | Follow-up probe: locate the engineStore subscription that drives Slider re-renders at engine-tick rate. | shipped |
 | [`08_ENGINE_PROBE_FINDINGS.md`](./08_ENGINE_PROBE_FINDINGS.md) | Output of the engine-fanout probe. **Hypothesis invalidated; cost is in `Timeline:Graph` polyline resampling.** | shipped |
-| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Per-phase prompts and reports. **Original AnimationDocument-first plan is deprioritized; replaced by canvas GraphEditor work — see below.** | held / replaced |
+| [`09_CANVAS_GRAPH_PROMPT.md`](./09_CANVAS_GRAPH_PROMPT.md) | Canvas GraphEditor implementation: three-layer cache (per-track polyline / soft-selection mask / overlay). Front-of-queue work. | shipped |
+| [`10_BENCH_METRIC_PROMPT.md`](./10_BENCH_METRIC_PROMPT.md) | Add per-commit median ms column to bench output. Ship before canvas so the before/after comparison is unambiguous. | shipped |
+| `11_CANVAS_GRAPH_REPORT.md` | Output of the canvas GraphEditor work. | **pending fresh session** |
+| `12_BENCH_METRIC_REPORT.md` | Output of the bench improvement. | **pending fresh session** |
+| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** per probe results. | held / deferred |
 
 ## Current state
 
@@ -34,7 +38,8 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 [done]      Spec v2           03_SPEC.md          (9 open questions resolved)
 [done]      Spike             05_SPIKE_PROMPT → 06_SPIKE_FINDINGS  → diagnosis INVALIDATED for animation-store
 [done]      Engine probe      07_ENGINE_PROBE_PROMPT → 08_ENGINE_PROBE_FINDINGS  → hypothesis INVALIDATED; cost LOCATED in Timeline:Graph
-[NEXT]      Canvas GraphEd    plan + implement per-track polyline cache + soft-selection mask cache  (~1-2 weeks)
+[NEXT]      Bench metric      10_BENCH_METRIC_PROMPT → 12_BENCH_METRIC_REPORT  (<1 day; ship first)
+[THEN]      Canvas GraphEd    09_CANVAS_GRAPH_PROMPT → 11_CANVAS_GRAPH_REPORT  (~1-2 weeks)
 [deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case retracted; hygiene case stands; revisit after canvas ships)
 ```
 
@@ -47,6 +52,7 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | 2026-05-17 | Bench instrumentation patches landed on `dev` (`990f2e9`) | `animStoreNotifyCount` + fit-to-view seam available for all future probes |
 | 2026-05-17 | Engine-fanout probe returned: every profiled boundary commits 480× in dope-play; narrowing zero of four broad subs moved the count | **Probe hypothesis invalidated.** React fanout is not the cost — commit-count is a notification-rate proxy, not a work proxy. Cost is per-commit work in `Timeline:Graph` (~7ms × 480 = 3.3s/scenario), which is `GraphRenderer.drawGraph`'s per-redraw polyline + soft-selection resampling. Architecture for the fix already exists in `02_RATIONALE.md` §7 and `03_SPEC.md` §3.7. |
 | 2026-05-17 | AnimationDocument plan deferred | Two empirical probes show it solves no user-visible lag. Hygiene/correctness case unchanged but no longer justifies front-of-queue scheduling. Revisit after canvas ships and the load picture is re-measured. |
+| 2026-05-17 | Canvas GraphEditor + bench metric prompts drafted | `09_CANVAS_GRAPH_PROMPT.md` (1-2 weeks) targets the empirically-located cost. `10_BENCH_METRIC_PROMPT.md` (<1 day) makes future perf probes unambiguous. Ship metric first so canvas validation is clean. |
 
 ## Implementation roadmap
 
