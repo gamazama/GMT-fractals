@@ -57,6 +57,13 @@ import { evaluateTrackValue, calculateSoftFalloff } from './timelineUtils';
 import { isLogTrack } from '../engine/animation/logTrackRegistry';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 import { CacheCanvas, createCacheCanvas, getCacheCtx2D, CacheCtx2D } from './GraphRendererCache';
+import { traceKeyframeShape } from './keyframeShape';
+
+// Size chosen to match the inline-paint sizes drawGraph used before the
+// shared helper: Step squares + Bezier circles are 8×8; Linear diamonds are
+// 6×6 (diagonal = 3√2 ≈ 4.24). Pick by interpolation at the call site.
+const shapeSize = (interpolation: string | undefined): number =>
+    interpolation === 'Step' || interpolation === 'Bezier' ? 8 : 6;
 
 export interface BuildTrackPolylineArgs {
     track: Track;
@@ -261,14 +268,8 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
     // Track-default-coloured diamonds for every key. Selection-aware overrides
     // (selection rings, keySelectedColor fills, handle lines, soft-weight
     // tinting) happen in the per-render foreground pass on top of this cached
-    // layer. The diamond shape is identical to what drawGraph used to paint
-    // inline, but instead of save/translate/rotate/restore per diamond we
-    // build the rotated geometry directly as a Path2D-style path — three
-    // op-codes per diamond instead of seven, and zero context-state mutations.
+    // layer.
     ctx.fillStyle = color;
-    const dHalf = 4.24; // = 3 * sqrt(2); diamond radius matching the 6×6 rotated rect.
-    const stepHalf = 4; // Step interpolation: 8×8 axis-aligned square.
-    const bezierR = 4; // Bezier interpolation: circle radius.
     ctx.beginPath();
     for (let i = 0; i < keys.length; i++) {
         const k = keys[i];
@@ -276,31 +277,13 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
         const ky = v2p(k.value);
         // Conservative viewport cull — same predicate the per-render loop used.
         if (ky < RULER_HEIGHT - 10 || ky > canvasHeight + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > canvasWidth + 10) continue;
-        if (k.interpolation === 'Step') {
-            // Axis-aligned square.
-            ctx.rect(kx - stepHalf, ky - stepHalf, stepHalf * 2, stepHalf * 2);
-        } else if (k.interpolation === 'Bezier') {
-            // Circle. moveTo to start so the previous subpath doesn't connect.
-            ctx.moveTo(kx + bezierR, ky);
-            ctx.arc(kx, ky, bezierR, 0, Math.PI * 2);
-        } else {
-            // Linear: diamond (rotated 6×6 rect).
-            ctx.moveTo(kx, ky - dHalf);
-            ctx.lineTo(kx + dHalf, ky);
-            ctx.lineTo(kx, ky + dHalf);
-            ctx.lineTo(kx - dHalf, ky);
-            ctx.closePath();
-        }
+        traceKeyframeShape(ctx, kx, ky, k.interpolation, shapeSize(k.interpolation));
     }
     ctx.fill();
 
     ctx.restore();
     return canvas;
 };
-
-// Re-export so the cache's THEME background is reachable from the builder caller
-// without an extra import path.
-export const POLYLINE_THEME = { backgroundColor: THEME.backgroundColor };
 
 // ---------------------------------------------------------------------------
 // Soft-selection mask builder
@@ -399,20 +382,9 @@ export const buildSoftSelectionMask = (args: BuildSoftMaskArgs): CacheCanvas => 
             if (ky < RULER_HEIGHT - 10 || ky > canvasHeight + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > canvasWidth + 5) continue;
 
             ctx.fillStyle = `color-mix(in srgb, ${THEME.keyColor} ${Math.round(maxWeight * 100)}%, ${color})`;
-            if (k.interpolation === 'Step') {
-                ctx.fillRect(kx - 4, ky - 4, 8, 8);
-            } else if (k.interpolation === 'Bezier') {
-                ctx.beginPath(); ctx.arc(kx, ky, 4, 0, Math.PI * 2); ctx.fill();
-            } else {
-                const d = 4.24;
-                ctx.beginPath();
-                ctx.moveTo(kx, ky - d);
-                ctx.lineTo(kx + d, ky);
-                ctx.lineTo(kx, ky + d);
-                ctx.lineTo(kx - d, ky);
-                ctx.closePath();
-                ctx.fill();
-            }
+            ctx.beginPath();
+            traceKeyframeShape(ctx, kx, ky, k.interpolation, shapeSize(k.interpolation));
+            ctx.fill();
         }
     });
 

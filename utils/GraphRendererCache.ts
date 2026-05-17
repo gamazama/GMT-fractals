@@ -1,133 +1,40 @@
 /**
- * Per-track polyline and soft-selection mask caches for the GraphEditor.
+ * Per-track polyline cache and the soft-selection mask cache for the
+ * canvas GraphEditor. Both are thin wrappers around `RefViewKeyCache` /
+ * a single-entry equivalent in `utils/canvasCache.ts` — the shared primitives
+ * (CacheCanvas, createCacheCanvas, getCacheCtx2D, RefViewKeyCache) live there.
  *
  * `drawGraph` used to walk every visible track's keyframes on every redraw,
  * which during `graph-play` cost ~2 ms × 480 commits in the bench (see
  * docs/animation-refactor/08_ENGINE_PROBE_FINDINGS.md). The polyline shape
  * only changes when the track's keyframes change or the viewport zoom changes
- * — pan is a translation. The soft-selection mask only changes when the
- * selection set or soft-radius/type change. Both costs are now amortised
- * across redraws via off-screen canvas caches keyed by referential equality
- * on `keyframes` (clone-on-write writers in `sequenceSlice` already produce
- * a new array per change, so referential equality is the version token; no
- * separate version counter needed).
- *
- * OffscreenCanvas is preferred; HTMLCanvasElement is the fallback for
- * environments without OffscreenCanvas (jsdom, older Safari). Both are
- * acceptable CanvasImageSource arguments to drawImage.
+ * — pan is folded into viewKey. The soft-selection mask only changes when the
+ * selection set, soft radius/type, or viewport change. Both costs are now
+ * amortised across redraws via off-screen canvas caches keyed by referential
+ * equality on `keyframes` (clone-on-write writers in `sequenceSlice` produce
+ * a new array per change, so referential equality is the version token).
  */
 
 import type { Keyframe } from '../types';
+import type { CacheCanvas } from './canvasCache';
+import { RefViewKeyCache, roundView } from './canvasCache';
 
-/** Off-screen drawable. OffscreenCanvas when available, detached <canvas> otherwise. */
-export type CacheCanvas = OffscreenCanvas | HTMLCanvasElement;
-
-/** Common 2D context for off-screen drawing. The two underlying contexts diverge in a
- *  handful of edge cases but share every method this codebase paints with. */
-export type CacheCtx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
-
-const SUPPORTS_OFFSCREEN = typeof OffscreenCanvas !== 'undefined';
-
-export const createCacheCanvas = (width: number, height: number): CacheCanvas => {
-    const w = Math.max(1, Math.ceil(width));
-    const h = Math.max(1, Math.ceil(height));
-    if (SUPPORTS_OFFSCREEN) return new OffscreenCanvas(w, h);
-    const el = document.createElement('canvas');
-    el.width = w;
-    el.height = h;
-    return el;
-};
-
-export const getCacheCtx2D = (canvas: CacheCanvas): CacheCtx2D | null => {
-    // Both overloads return a 2D context with overlapping interfaces; the union widens
-    // by structural shape rather than nominal type.
-    return canvas.getContext('2d') as CacheCtx2D | null;
-};
+// Re-export the shared canvas primitives so callers that already imported them
+// from this module (GraphRendererBuilder) keep working without code changes.
+export type { CacheCanvas, CacheCtx2D, CachedCanvas } from './canvasCache';
+export { createCacheCanvas, getCacheCtx2D } from './canvasCache';
 
 // ---------------------------------------------------------------------------
 // PolylineCache — one entry per track, keyed by (keyframesRef, viewKey).
 // ---------------------------------------------------------------------------
 
-interface PolylineEntry {
-    /** Strong reference used as the version token (referential equality). The repo's
-     *  clone-on-write writers in sequenceSlice produce a new keyframes array per change
-     *  (see e.g. batchAddKeyframesMultiRange, updateKeyframe), so referential equality
-     *  is sufficient. A WeakRef would let GC reclaim old arrays sooner, but with
-     *  evictStale running per render the lifetime overhead is bounded by visible track
-     *  count and a strong ref keeps the cache typecheck-clean on ES2020. */
-    keyframesToken: Keyframe[];
-    viewKey: string;
-    canvas: CacheCanvas;
-    width: number;
-    height: number;
-}
+export type CachedPolyline = import('./canvasCache').CachedCanvas;
 
-export interface CachedPolyline {
-    canvas: CacheCanvas;
-    width: number;
-    height: number;
-}
-
-export class PolylineCache {
-    private entries = new Map<string, PolylineEntry>();
-    /** Diagnostics — exposed via window.__polylineCacheStats for bench probing.
-     *  Tracks why a get() missed so we can distinguish "track new" vs
-     *  "viewKey change" vs "keyframes ref change" in flight. */
-    stats = { hits: 0, missNoEntry: 0, missViewKey: 0, missKeysRef: 0, sets: 0, lastMissDetail: '' };
-
-    /** Returns the cached canvas if (trackId, keyframes ref, viewKey) all match. Else null. */
-    get(trackId: string, keyframes: Keyframe[], viewKey: string): CachedPolyline | null {
-        const e = this.entries.get(trackId);
-        if (!e) {
-            this.stats.missNoEntry += 1;
-            return null;
-        }
-        if (e.viewKey !== viewKey) {
-            this.stats.missViewKey += 1;
-            this.stats.lastMissDetail = `viewKey: ${e.viewKey} → ${viewKey}`;
-            return null;
-        }
-        if (e.keyframesToken !== keyframes) {
-            this.stats.missKeysRef += 1;
-            this.stats.lastMissDetail = `keysRef changed for ${trackId}`;
-            return null;
-        }
-        this.stats.hits += 1;
-        return { canvas: e.canvas, width: e.width, height: e.height };
-    }
-
-    set(trackId: string, keyframes: Keyframe[], viewKey: string, canvas: CacheCanvas, width: number, height: number): void {
-        this.stats.sets += 1;
-        this.entries.set(trackId, {
-            keyframesToken: keyframes,
-            viewKey,
-            canvas,
-            width,
-            height,
-        });
-    }
-
-    /** Drop entries for trackIds not in the visible set. Called once per render. */
-    evictStale(visibleTrackIds: Set<string>): void {
-        if (this.entries.size === 0) return;
-        for (const id of this.entries.keys()) {
-            if (!visibleTrackIds.has(id)) this.entries.delete(id);
-        }
-    }
-
-    /** Drop all entries. Use after viewport or layout changes that invalidate every cached canvas. */
-    clear(): void {
-        this.entries.clear();
-    }
-
-    /** Test-only: current entry count. */
-    size(): number {
-        return this.entries.size;
-    }
-}
+/** Per-track polyline + diamond cache. Token = the track's `Keyframe[]` ref. */
+export class PolylineCache extends RefViewKeyCache<Keyframe[]> {}
 
 // ---------------------------------------------------------------------------
-// SoftSelectionMaskCache — single entry, keyed by (selectedIdsHash, radius, type, viewScaleX).
+// SoftSelectionMaskCache — single entry, keyed by a composite string.
 // ---------------------------------------------------------------------------
 
 interface MaskEntry {
@@ -183,10 +90,7 @@ export const buildPolylineViewKey = (
     trackRangeMax: number,
 ): string => {
     // Round scales to 4 decimals to avoid float-jitter cache misses during continuous zoom.
-    // The renderer is pixel-quantised anyway, so 1e-4 differences in scale are imperceptible.
-    const sx = Math.round(viewScaleX * 1e4) / 1e4;
-    const sy = Math.round(viewScaleY * 1e4) / 1e4;
-    return `${sx}|${sy}|${normalized ? 1 : 0}|${trackRangeMin}|${trackRangeMax}`;
+    return `${roundView(viewScaleX)}|${roundView(viewScaleY)}|${normalized ? 1 : 0}|${trackRangeMin}|${trackRangeMax}`;
 };
 
 /** Build the soft-selection mask viewKey. */
@@ -196,7 +100,6 @@ export const buildMaskViewKey = (
     softType: unknown,
     viewScaleX: number,
 ): string => {
-    const sx = Math.round(viewScaleX * 1e4) / 1e4;
     const typeTag = typeof softType === 'string' ? softType : softType == null ? 'n' : 'o';
-    return `${hashSelectedIds(selectedIds)}|${softRadius}|${typeTag}|${sx}`;
+    return `${hashSelectedIds(selectedIds)}|${softRadius}|${typeTag}|${roundView(viewScaleX)}`;
 };

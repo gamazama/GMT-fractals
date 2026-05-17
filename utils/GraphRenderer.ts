@@ -4,6 +4,7 @@ import { AnimationSequence } from '../types';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 import { PolylineCache, SoftSelectionMaskCache, buildPolylineViewKey, buildMaskViewKey } from './GraphRendererCache';
 import { buildTrackPolyline, buildSoftSelectionMask } from './GraphRendererBuilder';
+import { traceKeyframeShape } from './keyframeShape';
 
 export const TRACK_COLORS = [
     '#22d3ee', '#a855f7', '#22c55e', '#f59e0b', '#ef4444', '#ec4899'
@@ -19,10 +20,8 @@ interface GraphRenderProps {
     view: GraphViewTransform;
     sequence: AnimationSequence;
     trackIds: string[];
-    currentFrame: number;
     durationFrames: number;
     selectedKeyframeIds: string[];
-    selectionBox: { x: number, y: number, w: number, h: number } | null;
     normalized: boolean;
     trackRanges: Record<string, { min: number, max: number, span: number }>;
     softSelectionEnabled: boolean;
@@ -95,8 +94,8 @@ const getLimitPattern = (ctx: CanvasRenderingContext2D) => {
  *  cache hits, 0 misses, 0 perf delta. */
 export const drawGraph = (props: GraphRenderProps) => {
     const {
-        ctx, width, height, view, sequence, trackIds, currentFrame, durationFrames,
-        selectedKeyframeIds, selectionBox, normalized, trackRanges,
+        ctx, width, height, view, sequence, trackIds, durationFrames,
+        selectedKeyframeIds, normalized, trackRanges,
         softSelectionEnabled, softSelectionRadius, softSelectionType, softInteraction, highlightedTracks
     } = props;
 
@@ -231,81 +230,88 @@ export const drawGraph = (props: GraphRenderProps) => {
     }
 
     // Pass 1: selection-aware overlays on top of the cached layer + soft mask.
-    // Iterates per-track but the inner loop is bounded by selectedKeyframeIds
-    // (typically <10 keys) — never by total visible-key count.
+    // Pre-bucket selectedKeyframeIds by trackId so the per-key lookup is a Map
+    // get instead of a track.keyframes.find — at heavy seed the old form ran
+    // O(T × S × N) (e.g. 9000 keys all selected on one track ≈ 81M find ops
+    // per repaint). Same fix as canvas DopeSheet's drawDopeSheetSelection;
+    // see docs/animation-refactor/16_CANVAS_DOPESHEET_REPORT.md surprise #5.
+    const selectedByTrack = new Map<string, string[]>();
+    for (const compositeId of selectedKeyframeIds) {
+        const sepIdx = compositeId.indexOf('::');
+        if (sepIdx < 0) continue;
+        const tid = compositeId.substring(0, sepIdx);
+        let arr = selectedByTrack.get(tid);
+        if (!arr) { arr = []; selectedByTrack.set(tid, arr); }
+        arr.push(compositeId.substring(sepIdx + 2));
+    }
+
+    ctx.globalAlpha = 1.0;
     trackIds.forEach((tid) => {
+        const kids = selectedByTrack.get(tid);
+        if (!kids) return;
         const track = sequence.tracks[tid];
         if (!track || track.type !== 'float') return;
         const keys = track.keyframes;
         if (keys.length === 0) return;
+        const keyById = new Map<string, typeof keys[number]>();
+        for (const k of keys) keyById.set(k.id, k);
 
-        {
-            ctx.globalAlpha = 1.0;
+        for (const kid of kids) {
+            const k = keyById.get(kid);
+            if (!k) continue;
+            const kx = frameToCanvasPixel(k.frame);
+            const ky = v2p(k.value, tid);
+            if (ky < graphTop - 10 || ky > height + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > width + 5) continue;
 
-            // Pass 2: selection-color override + selection ring + bezier handles.
-            // We iterate selectedKeyframeIds (bounded). Build a per-track lookup
-            // for the selected keys on this track. Empty in graph-play scenarios.
-            for (let si = 0; si < selectedKeyframeIds.length; si++) {
-                const compositeId = selectedKeyframeIds[si];
-                const sepIdx = compositeId.indexOf('::');
-                if (sepIdx < 0) continue;
-                if (compositeId.substring(0, sepIdx) !== tid) continue;
-                const kid = compositeId.substring(sepIdx + 2);
-                const k = keys.find(kk => kk.id === kid);
-                if (!k) continue;
-                const kx = frameToCanvasPixel(k.frame);
-                const ky = v2p(k.value, tid);
-                if (ky < graphTop - 10 || ky > height + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > width + 5) continue;
-
-                if (k.interpolation === 'Bezier') {
-                    ctx.strokeStyle = THEME.handleLineColor;
-                    ctx.lineWidth = 1;
-                    const range = normalized ? trackRanges[tid] : null;
-                    if (k.rightTangent) {
-                        const hxVal = k.frame + k.rightTangent.x;
-                        const hyVal = normalized && range ? getLocalY(k.value + k.rightTangent.y, tid) : k.value + k.rightTangent.y;
-                        const hx = frameToCanvasPixel(hxVal);
-                        const hy = valueToPixel(hyVal, view);
-                        ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(hx, hy); ctx.stroke();
-                        ctx.fillStyle = THEME.handleColor; ctx.beginPath(); ctx.arc(hx, hy, 3, 0, Math.PI * 2); ctx.fill();
-                    }
-                    if (k.leftTangent) {
-                        const hxVal = k.frame + k.leftTangent.x;
-                        const hyVal = normalized && range ? getLocalY(k.value + k.leftTangent.y, tid) : k.value + k.leftTangent.y;
-                        const hx = frameToCanvasPixel(hxVal);
-                        const hy = valueToPixel(hyVal, view);
-                        ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(hx, hy); ctx.stroke();
-                        ctx.fillStyle = THEME.handleColor; ctx.beginPath(); ctx.arc(hx, hy, 3, 0, Math.PI * 2); ctx.fill();
-                    }
-                }
-
-                ctx.fillStyle = THEME.keySelectedColor;
-                if (k.interpolation === 'Step') ctx.fillRect(kx - 4, ky - 4, 8, 8);
-                else if (k.interpolation === 'Bezier') { ctx.beginPath(); ctx.arc(kx, ky, 4, 0, Math.PI * 2); ctx.fill(); }
-                else { ctx.save(); ctx.translate(kx, ky); ctx.rotate(Math.PI / 4); ctx.fillRect(-3, -3, 6, 6); ctx.restore(); }
-
-                ctx.strokeStyle = '#fff';
+            if (k.interpolation === 'Bezier') {
+                ctx.strokeStyle = THEME.handleLineColor;
                 ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.arc(kx, ky, 6, 0, Math.PI * 2); ctx.stroke();
-
-                // Pass 3 (inline): soft-radius circle for the adjusting anchor key.
-                if (softSelectionEnabled && softInteraction.isAdjusting && softInteraction.anchorKey === compositeId) {
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([4, 4]);
-                    ctx.beginPath();
-                    const rPx = Math.abs(softSelectionRadius) * view.scaleX;
-                    ctx.arc(kx, ky, rPx, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    ctx.fillStyle = softSelectionRadius > 0 ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 100, 100, 0.1)';
-                    ctx.fill();
+                const range = normalized ? trackRanges[tid] : null;
+                if (k.rightTangent) {
+                    const hxVal = k.frame + k.rightTangent.x;
+                    const hyVal = normalized && range ? getLocalY(k.value + k.rightTangent.y, tid) : k.value + k.rightTangent.y;
+                    const hx = frameToCanvasPixel(hxVal);
+                    const hy = valueToPixel(hyVal, view);
+                    ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(hx, hy); ctx.stroke();
+                    ctx.fillStyle = THEME.handleColor; ctx.beginPath(); ctx.arc(hx, hy, 3, 0, Math.PI * 2); ctx.fill();
+                }
+                if (k.leftTangent) {
+                    const hxVal = k.frame + k.leftTangent.x;
+                    const hyVal = normalized && range ? getLocalY(k.value + k.leftTangent.y, tid) : k.value + k.leftTangent.y;
+                    const hx = frameToCanvasPixel(hxVal);
+                    const hy = valueToPixel(hyVal, view);
+                    ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(hx, hy); ctx.stroke();
+                    ctx.fillStyle = THEME.handleColor; ctx.beginPath(); ctx.arc(hx, hy, 3, 0, Math.PI * 2); ctx.fill();
                 }
             }
-            // Reset for next track
-            ctx.globalAlpha = 1.0;
+
+            ctx.fillStyle = THEME.keySelectedColor;
+            const selSize = k.interpolation === 'Step' || k.interpolation === 'Bezier' ? 8 : 6;
+            ctx.beginPath();
+            traceKeyframeShape(ctx, kx, ky, k.interpolation, selSize);
+            ctx.fill();
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(kx, ky, 6, 0, Math.PI * 2); ctx.stroke();
+
+            // Soft-radius circle for the adjusting anchor key. Rebuilt compositeId
+            // because softInteraction.anchorKey is keyed by the full "tid::kid" form.
+            if (softSelectionEnabled && softInteraction.isAdjusting && softInteraction.anchorKey === `${tid}::${kid}`) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                const rPx = Math.abs(softSelectionRadius) * view.scaleX;
+                ctx.arc(kx, ky, rPx, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = softSelectionRadius > 0 ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 100, 100, 0.1)';
+                ctx.fill();
+            }
         }
     });
+    ctx.globalAlpha = 1.0;
 
     // Drop polyline cache entries for tracks no longer visible. Cheap; visible
     // set is small (typically 1-12 tracks). Without this, a track that scrolls

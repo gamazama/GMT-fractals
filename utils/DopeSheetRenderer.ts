@@ -14,6 +14,7 @@ import {
 } from './DopeSheetRendererCache';
 import { buildTrackDiamonds, buildGroupDiamonds } from './DopeSheetRendererBuilder';
 import { isFlatTrack } from './dopeSheetTrackFlags';
+import { traceKeyframeShape } from './keyframeShape';
 
 /** Row in the dope-sheet's vertical stack. Either a group header row (collapsible)
  *  or a per-track keyframe row. */
@@ -194,31 +195,6 @@ export interface DrawDopeSheetSelectionArgs {
 
 const SELECTION_FILL = '#ffffff';
 const SELECTION_RING = '#ffffff';
-
-/** Trace a single keyframe's shape into the active path. Caller owns fill/stroke. */
-const traceKeyframeShape = (
-    ctx: CanvasRenderingContext2D,
-    kx: number,
-    cy: number,
-    interpolation: string | undefined,
-    size: number,
-): void => {
-    const half = size / 2;
-    if (interpolation === 'Step') {
-        ctx.rect(kx - half, cy - half, size, size);
-    } else if (interpolation === 'Bezier') {
-        // moveTo before arc so the path doesn't auto-connect to the previous subpath.
-        ctx.moveTo(kx + half, cy);
-        ctx.arc(kx, cy, half, 0, Math.PI * 2);
-    } else {
-        const diag = half * Math.SQRT2;
-        ctx.moveTo(kx, cy - diag);
-        ctx.lineTo(kx + diag, cy);
-        ctx.lineTo(kx, cy + diag);
-        ctx.lineTo(kx - diag, cy);
-        ctx.closePath();
-    }
-};
 
 export const drawDopeSheetSelection = (args: DrawDopeSheetSelectionArgs): void => {
     const { ctx, canvasWidth, rows, tracks, scaleX, panX, selectedKeyframeIds } = args;
