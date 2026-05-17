@@ -403,6 +403,23 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     updateKeyframes: (updates) => {
         set(state => {
             const newTracks = { ...state.sequence.tracks };
+            // First pass: clone touched tracks + their keyframes arrays so memoising
+            // consumers (e.g. GraphRenderer's polyline cache, keyed by keyframes
+            // array referential equality) invalidate correctly. Without this,
+            // dragging a key or a bezier handle mutates the array in place and
+            // the cached canvas goes stale until the array ref happens to change
+            // for some other reason.
+            const touchedTracks = new Set<string>();
+            updates.forEach(({ trackId }) => {
+                if (!touchedTracks.has(trackId) && newTracks[trackId]) {
+                    touchedTracks.add(trackId);
+                    newTracks[trackId] = {
+                        ...newTracks[trackId],
+                        keyframes: [...newTracks[trackId].keyframes],
+                    };
+                }
+            });
+            // Second pass: apply patches into the cloned arrays.
             updates.forEach(({ trackId, keyId, patch }) => {
                 const track = newTracks[trackId];
                 if (track) {
@@ -416,8 +433,9 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     }
                 }
             });
-            // Ensure proper sort after bulk update
-            Object.keys(newTracks).forEach(tid => {
+            // Sort touched tracks only (the cloned arrays). Untouched tracks keep
+            // their original references so other cache consumers don't invalidate.
+            touchedTracks.forEach(tid => {
                 newTracks[tid].keyframes.sort((a, b) => a.frame - b.frame);
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
@@ -465,6 +483,20 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         get().snapshot();
         set(state => {
             const newTracks = { ...state.sequence.tracks };
+            // Clone touched tracks + their keyframes arrays so memoising consumers
+            // (e.g. GraphRenderer's polyline cache) invalidate correctly via array
+            // referential equality. Same fix pattern as updateKeyframes.
+            const touchedTracks = new Set<string>();
+            state.selectedKeyframeIds.forEach(cid => {
+                const [tid] = cid.split('::');
+                if (!touchedTracks.has(tid) && newTracks[tid]) {
+                    touchedTracks.add(tid);
+                    newTracks[tid] = {
+                        ...newTracks[tid],
+                        keyframes: [...newTracks[tid].keyframes],
+                    };
+                }
+            });
             state.selectedKeyframeIds.forEach(cid => {
                 const [tid, kid] = cid.split('::');
                 const track = newTracks[tid];
@@ -472,7 +504,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     const idx = track.keyframes.findIndex(k => k.id === kid);
                     if (idx === -1) return;
                     const k = track.keyframes[idx];
-                    
+
                     if (mode === 'Split') {
                         track.keyframes[idx] = { ...k, brokenTangents: true, autoTangent: false, tangentMode: undefined };
                     } else if (mode === 'Unified' || mode === 'Aligned') {
@@ -532,23 +564,29 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         get().snapshot();
         set(state => {
             const newTracks = { ...state.sequence.tracks };
+            // Clone every track that has keyframes, clone its keyframes array, and
+            // replace each keyframe object with a fresh spread. The original
+            // implementation mutated keyframe.interpolation / leftTangent / rightTangent
+            // on the same objects held by memoising consumers (GraphRenderer's
+            // polyline cache) — stale curve renders until the user moves a key.
             Object.keys(newTracks).forEach(tid => {
                 const track = newTracks[tid];
                 if (track.keyframes.length === 0) return;
-                
+
                 const trackIsLog = isLogTrack(tid);
-                track.keyframes.forEach((k, i) => {
-                    k.interpolation = type;
-                    if (type === 'Bezier' && tangentMode) {
-                        const prev = track.keyframes[i-1];
-                        const next = track.keyframes[i+1];
+                const clonedKeys = track.keyframes.map(k => ({ ...k, interpolation: type }));
+                if (type === 'Bezier' && tangentMode) {
+                    clonedKeys.forEach((k, i) => {
+                        const prev = clonedKeys[i - 1];
+                        const next = clonedKeys[i + 1];
                         const { l, r } = AnimationMath.calculateTangents(k, prev, next, tangentMode, trackIsLog);
                         k.leftTangent = l;
                         k.rightTangent = r;
                         k.autoTangent = (tangentMode === 'Auto');
                         k.brokenTangents = false;
-                    }
-                });
+                    });
+                }
+                newTracks[tid] = { ...track, keyframes: clonedKeys };
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
         });
@@ -594,17 +632,32 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
             const newTracks = { ...state.sequence.tracks };
             const targetStart = atFrame !== undefined ? atFrame : currentFrame;
 
+            // Clone the tracks we'll modify (one clone per unique target track) so
+            // GraphRenderer's polyline cache invalidates by track-ref equality.
+            // Previously `track.keyframes = [...]` mutated the original track in
+            // place, which the cache happened to see via the new array ref — fragile.
+            const touchedTracks = new Set<string>();
+            clipboard.forEach(c => {
+                if (!touchedTracks.has(c.originalTrackId) && newTracks[c.originalTrackId]) {
+                    touchedTracks.add(c.originalTrackId);
+                    newTracks[c.originalTrackId] = {
+                        ...newTracks[c.originalTrackId],
+                        keyframes: [...newTracks[c.originalTrackId].keyframes],
+                    };
+                }
+            });
+
             clipboard.forEach(c => {
                 const track = newTracks[c.originalTrackId];
                 if (track) {
                     const f = targetStart + c.relativeFrame;
-                    const newKey: Keyframe = { 
-                        id: nanoid(), 
-                        frame: f, 
-                        value: c.value, 
-                        interpolation: c.interpolation, 
-                        leftTangent: c.leftTangent, 
-                        rightTangent: c.rightTangent, 
+                    const newKey: Keyframe = {
+                        id: nanoid(),
+                        frame: f,
+                        value: c.value,
+                        interpolation: c.interpolation,
+                        leftTangent: c.leftTangent,
+                        rightTangent: c.rightTangent,
                         autoTangent: false,
                         brokenTangents: false
                     };
@@ -645,19 +698,33 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
         set(s => {
             const newTracks = { ...s.sequence.tracks };
-            
+
+            // Clone tracks we'll modify (one clone per unique tid in the selection)
+            // so memoising consumers see a fresh track ref + fresh keyframes array.
+            const touchedTracks = new Set<string>();
+            s.selectedKeyframeIds.forEach(id => {
+                const [tid] = id.split('::');
+                if (!touchedTracks.has(tid) && newTracks[tid]) {
+                    touchedTracks.add(tid);
+                    newTracks[tid] = {
+                        ...newTracks[tid],
+                        keyframes: [...newTracks[tid].keyframes],
+                    };
+                }
+            });
+
             for(let i = 1; i <= times; i++) {
                 const offset = span * i;
-                
+
                 s.selectedKeyframeIds.forEach(id => {
                     const [tid, kid] = id.split('::');
                     const track = newTracks[tid];
                     if (!track) return;
-                    
+
                     const originalKey = track.keyframes.find(k => k.id === kid);
                     if (originalKey) {
                         const newFrame = originalKey.frame + offset;
-                        const newKey: Keyframe = { 
+                        const newKey: Keyframe = {
                             ...originalKey,
                             id: nanoid(),
                             frame: newFrame
@@ -666,9 +733,12 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     }
                 });
             }
-            
-            // Explicit cast to Track to ensure TS knows about keyframes property
-            Object.values(newTracks).forEach(t => (t as Track).keyframes.sort((a,b) => a.frame - b.frame));
+
+            // Sort touched tracks only (cloned arrays). Untouched tracks keep their
+            // original references — cache stays warm where it can.
+            touchedTracks.forEach(tid => {
+                newTracks[tid].keyframes.sort((a, b) => a.frame - b.frame);
+            });
             return { sequence: { ...s.sequence, tracks: newTracks } };
         });
     },

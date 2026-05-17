@@ -42,4 +42,23 @@ When the Rust port ships a phase touching our scope, capture the relevant patter
 
 ## Entries
 
-*(none yet — the spec is at v2 with all 9 open questions resolved; corrections begin when implementation reveals what v2 got wrong)*
+### 2026-05-17 — Canvas GraphEditor — `01_AUDIT.md` §10 was incomplete (in-place keyframe mutation bug class)
+
+**Change:** fixed `updateKeyframes`, `setTangents`, `setGlobalInterpolation`, `pasteKeyframes`, `loopSelection` in `store/animation/sequenceSlice.ts` to clone the touched track + keyframes array before mutating. Without this, GraphRenderer's polyline cache (which keys on keyframes-array referential equality) goes stale until the array ref happens to change for some other reason — visible to the user as "bezier handles don't update the curve until I move a keyframe."
+
+**Rationale:** the in-place mutation pattern was a latent footgun under React's shallow-equality / referential-equality memoisation; before the canvas cache landed, every render redrew everything so the bug was invisible. After the cache, it's a stale-render bug.
+
+**Discovered by:** user testing immediately after canvas merge.
+
+**Audit accuracy:**
+- `01_AUDIT.md` §10 #1 flagged `updateKeyframe` as in-place — **false alarm**; it correctly uses `.map()` to clone.
+- `01_AUDIT.md` §10 #2 flagged `updateKeyframes` — **TRUE**; was the immediate cause.
+- Audit MISSED: `setTangents` (line 482), `setGlobalInterpolation` (line 549, worst — also mutates individual keyframe objects), `pasteKeyframes` (line 629, assigns `.keyframes` on original track ref), `loopSelection` (line 683+689, same pattern as paste).
+
+**Cross-refs:**
+- Commit: (this commit)
+- Audit doc to update: `01_AUDIT.md` §10 should note the audit missed four writers with the same bug class. Leaving the audit as-is for historical accuracy and flagging the gap here.
+
+**Lesson for future cleanups:** "mutates in place" / "clones correctly" is not a per-method property — it's a per-pattern property and needs to be checked against EVERY write path that touches keyframe data. A grep for `track.keyframes[` and `track.keyframes =` catches the family.
+
+---
