@@ -10,7 +10,7 @@ import { groupTracks } from '../../utils/groupTracks';
 import { ContextMenuItem } from '../../types/help';
 import { useSidebarResize } from '../../hooks/useSidebarResize';
 import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
-import { isFlatTrack } from '../timeline/TrackRow';
+import { isFlatTrack } from '../../utils/dopeSheetTrackFlags';
 
 interface GraphSidebarProps {
     visibleTrackIds: string[];

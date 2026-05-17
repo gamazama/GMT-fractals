@@ -2,7 +2,6 @@
 import React, { useRef, useEffect, useMemo, useLayoutEffect } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
 import { TimelineRuler } from './TimelineRuler';
-import { Track } from '../../types';
 import { TrackRow } from './TrackRow';
 import { TrackGroup } from './TrackGroup';
 import { AudioGroup } from './AudioStrip';
@@ -27,6 +26,13 @@ interface DopeSheetProps {
     visibleGraphTracks: string[];
     setVisibleGraphTracks: (ids: string[]) => void;
 }
+
+/** Synthetic row id for the Root (Global) Summary aggregation row. Cyan-coloured;
+ *  rendered via the same canvas-group pipeline as ordinary groups, with the colour
+ *  overrides set in rowsLayout. */
+const ROOT_SUMMARY_ROW_ID = '__rootSummary__';
+const ROOT_SUMMARY_FILL = '#0891b2';   // cyan-600 — matches the previous DOM bg-cyan-600.
+const ROOT_SUMMARY_STROKE = '#67e8f9'; // cyan-300 — matches the previous DOM border-cyan-300.
 
 const PlayheadCursor = ({ frameWidth }: { frameWidth: number }) => {
     const currentFrame = useAnimationStore(s => s.currentFrame);
@@ -95,13 +101,6 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
     const globalSummaryRef = useRef<HTMLDivElement>(null);
     const lastSelectedTrackId = useRef<string | null>(null);
 
-    // Visible scroll-content extent in keyframe-area-local pixels — used by
-    // getRootKeyframes() to bound the Global Summary row's DOM diamonds to the
-    // viewport. The per-track and per-group diamond fields are now painted on
-    // the shared DopeSheetCanvas overlay and don't need this windowing.
-    const visibleMinPx = Math.max(0, scrollLeft);
-    const visibleMaxPx = scrollLeft + Math.max(0, visibleWidth - sidebarWidth);
-
     // Enforce scroll position sync immediately on mount/render to fix alignment issues
     useLayoutEffect(() => {
         if (scrollContainerRef.current) {
@@ -166,12 +165,33 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
         return order;
     }, [organizedTracks, collapsedGroups]);
 
-    // Row-stack layout for the DopeSheetCanvas overlay. Walks groups (header at
-    // GROUP_HEIGHT, then expanded child rows at TRACK_HEIGHT) and standalone tracks.
-    // Canvas paints diamonds at (frame*frameWidth, row.y + row.height/2).
+    // Row-stack layout for the DopeSheetCanvas overlay. First entry is the synthetic
+    // Root Summary row (cyan diamonds across every visible track's keyframe frames —
+    // see ROOT_SUMMARY_ROW_ID + cyan-* below). Then groups (header at GROUP_HEIGHT,
+    // expanded child rows at TRACK_HEIGHT) and standalone tracks. Canvas paints diamonds
+    // at (frame*frameWidth, row.y + row.height/2).
     const rowsLayout = useMemo<DopeSheetRowLayout[]>(() => {
         const rows: DopeSheetRowLayout[] = [];
         let y = 0;
+
+        // Root Summary — synthetic group row aggregating every visible track. Used to
+        // be a sticky DOM block with 9000 cyan diamonds; now paints through the same
+        // canvas pipeline as the rest of the dope sheet.
+        const visibleTrackIds: string[] = [];
+        for (const t of Object.values(sequence.tracks)) {
+            if (!t.hidden) visibleTrackIds.push(t.id);
+        }
+        rows.push({
+            kind: 'group',
+            id: ROOT_SUMMARY_ROW_ID,
+            trackIds: visibleTrackIds,
+            y,
+            height: TIMELINE_GROUP_HEIGHT,
+            fillColor: ROOT_SUMMARY_FILL,
+            strokeColor: ROOT_SUMMARY_STROKE,
+        });
+        y += TIMELINE_GROUP_HEIGHT;
+
         for (const [groupName, ids] of Object.entries(organizedTracks.groups)) {
             rows.push({ kind: 'group', id: groupName, trackIds: ids as string[], y, height: TIMELINE_GROUP_HEIGHT });
             y += TIMELINE_GROUP_HEIGHT;
@@ -187,7 +207,7 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
             y += TIMELINE_TRACK_HEIGHT;
         }
         return rows;
-    }, [organizedTracks, collapsedGroups]);
+    }, [organizedTracks, collapsedGroups, sequence.tracks]);
 
     const totalRowsHeight = useMemo(() => {
         if (rowsLayout.length === 0) return 0;
@@ -238,29 +258,6 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
         sequence,
         selectedTrackIds
     });
-
-    const getGroupKeyframes = (trackIds: string[]) => {
-        const frameSet = new Set<number>();
-        trackIds.forEach(tid => {
-            const t = sequence.tracks[tid];
-            if(t) t.keyframes.forEach(k => frameSet.add(k.frame));
-        });
-        return Array.from(frameSet).sort((a,b) => a-b);
-    };
-    
-    const getRootKeyframes = () => {
-        const buffer = 64;
-        const minFrame = frameWidth > 0 ? Math.max(0, (visibleMinPx - buffer) / frameWidth) : -Infinity;
-        const maxFrame = frameWidth > 0 ?           (visibleMaxPx + buffer) / frameWidth :  Infinity;
-        const frameSet = new Set<number>();
-        (Object.values(sequence.tracks) as Track[]).forEach(t => {
-            if (t.hidden) return;
-            for (const k of t.keyframes) {
-                if (k.frame >= minFrame && k.frame <= maxFrame) frameSet.add(k.frame);
-            }
-        });
-        return Array.from(frameSet).sort((a, b) => a - b);
-    };
 
     const handleTrackSelect = (e: React.MouseEvent, tid: string) => {
         const multi = e.ctrlKey || e.metaKey || e.shiftKey;
@@ -454,44 +451,10 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
 
             <AudioGroup frameWidth={frameWidth} sidebarWidth={sidebarWidth} />
 
-            {/* ROOT SUMMARY ROW */}
-            <div
-                ref={globalSummaryRef}
-                className="flex border-b border-white/5 bg-white/5 sticky top-6 z-20"
-                style={{ height: TIMELINE_GROUP_HEIGHT }}
-            >
-                <div
-                    className="sticky left-0 z-20 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 select-none"
-                    style={{ width: sidebarWidth }}
-                >
-                    <span className="text-[10px] font-bold text-cyan-400 pl-4">Global Summary</span>
-                </div>
-                <div className="flex-1 relative group/track">
-                    {getRootKeyframes().map(frame => (
-                        <div 
-                            key={frame}
-                            className="absolute top-1/2 -mt-1.5 w-3 h-3 bg-cyan-600 border border-cyan-300 rotate-45 cursor-grab hover:bg-white hover:border-white hover:scale-125 z-10 shadow-sm"
-                            style={{ left: `${frame * frameWidth - 6}px` }}
-                            onMouseDown={(e) => handleGroupKeyMouseDown(e, Object.keys(sequence.tracks), frame)}
-                            data-help-id="anim.keyframes"
-                        />
-                    ))}
-
-                    {/* SELECTION TRANSFORM BAR */}
-                    {selectionRange && (
-                        <SelectionTransformBar
-                            minFrame={selectionRange.min}
-                            maxFrame={selectionRange.max}
-                            frameWidth={frameWidth}
-                            onStart={startTransformSelection}
-                        />
-                    )}
-                </div>
-            </div>
-
             <div className="relative" ref={rowsContainerRef}>
-                {/* Canvas overlay paints every track + group diamond field. Sized to span
-                    the keyframe area only — sidebars stay DOM and sit at higher z-index. */}
+                {/* Canvas overlay paints every track + group diamond field, including the
+                    Root Summary synthetic row at y=0 (cyan). Sized to span the keyframe
+                    area only — sidebars stay DOM and sit at higher z-index. */}
                 <DopeSheetCanvas
                     sequence={sequence}
                     rows={rowsLayout}
@@ -506,6 +469,38 @@ const DopeSheetInner: React.FC<DopeSheetProps> = ({
                     onCanvasDoubleClick={(_e, frame, rowTrackId) => { if (rowTrackId) wrapAddKey(rowTrackId, frame); }}
                     onCanvasContextMenu={(e, frame) => onCanvasContextMenu(e, frame)}
                 />
+
+                {/* Root Summary row chrome — sidebar label + global SelectionTransformBar.
+                    Diamonds for this row are painted by the canvas above (cyan group row at
+                    y=0 in rowsLayout). The ref still exists for marquee y-offset lookup.
+                    NOTE: no `position` style here. Adding `relative` (or any positioning)
+                    would lift the wrapper into the positioned-z=auto stacking step alongside
+                    the canvas (absolute z:0), and tree order would put the wrapper on top —
+                    its hit area would swallow clicks on the flex-1 diamond region. Keeping
+                    it position:static lets the canvas (above in paint order) catch the click,
+                    matching the existing TrackGroup chrome pattern. */}
+                <div
+                    ref={globalSummaryRef}
+                    className="flex border-b border-white/5 bg-white/5"
+                    style={{ height: TIMELINE_GROUP_HEIGHT }}
+                >
+                    <div
+                        className="sticky left-0 z-30 bg-black/80 backdrop-blur-sm border-r border-white/10 shrink-0 flex items-center px-2 select-none"
+                        style={{ width: sidebarWidth }}
+                    >
+                        <span className="text-[10px] font-bold text-cyan-400 pl-4">Global Summary</span>
+                    </div>
+                    <div className="flex-1 relative group/track" style={{ pointerEvents: 'none' }}>
+                        {selectionRange && (
+                            <SelectionTransformBar
+                                minFrame={selectionRange.min}
+                                maxFrame={selectionRange.max}
+                                frameWidth={frameWidth}
+                                onStart={startTransformSelection}
+                            />
+                        )}
+                    </div>
+                </div>
 
                 {Object.entries(organizedTracks.groups).map(([groupName, ids]) => (
                     <TrackGroup

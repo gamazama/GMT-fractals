@@ -1,36 +1,13 @@
-import React, { memo, useMemo, useRef, useEffect } from 'react';
+import React, { memo, useMemo } from 'react';
 import { AnimationSequence } from '../../types';
 import { useAnimationStore } from '../../store/animationStore';
 import { useHelpContextMenu } from '../../hooks/useHelpContextMenu';
 import { TrashIcon, EyeIcon, SelectAllIcon } from '../Icons';
-
-export { isFlatTrack } from '../../utils/dopeSheetTrackFlags';
 import { isFlatTrack } from '../../utils/dopeSheetTrackFlags';
 
-// LiveValueDisplay registry. Populated when each row's value badge mounts; consumers
-// outside this file (e.g. a future shared RAF tick) can read the entries to push
-// updated text into the spans without going through React. Empty / unread on dev
-// at the moment of this writing — the previous TrackRow.tick() that read it was
-// dead code per docs/animation-refactor/15_DOPESHEET_PROBE_FINDINGS.md — but the
-// sidebar badge stays mounted so a re-wired live-value loop has an attach point.
-export const liveValueState = {
-    displays: new Map<string, HTMLSpanElement>(),
-};
-
-const LiveValueDisplay = ({ tid }: { tid: string }) => {
-    const ref = useRef<HTMLSpanElement>(null);
-
-    useEffect(() => {
-        if (ref.current) liveValueState.displays.set(tid, ref.current);
-        return () => { liveValueState.displays.delete(tid); };
-    }, [tid]);
-
-    return (
-        <span ref={ref} className="text-[9px] font-mono text-gray-600 w-12 text-right">
-            --
-        </span>
-    );
-};
+const LiveValueDisplay = () => (
+    <span className="text-[9px] font-mono text-gray-600 w-12 text-right">--</span>
+);
 
 interface TrackRowProps {
     tid: string;
@@ -82,7 +59,7 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({
                             <SelectAllIcon />
                         </button>
                     )}
-                    <LiveValueDisplay tid={tid} />
+                    <LiveValueDisplay />
                     {onToggleVisibility && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onToggleVisibility(tid); }}

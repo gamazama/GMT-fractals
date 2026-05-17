@@ -428,20 +428,16 @@ export const useDopeSheetInteraction = ({
                 const boxR = boxX + selectionBox.w;
                 const boxB = boxY + selectionBox.h;
 
-                // Resolve the row stack's actual contentRef-y origin at mouseup time
-                // (audio strip / global summary heights are dynamic — the hardcoded
-                // `RULER_HEIGHT + GROUP_HEIGHT = 48` assumption shifted the marquee
-                // hit-test by a row or two whenever audio was rendered). Both refs
-                // are optional fallbacks so callers without the canvas wiring still
-                // get the previous behaviour.
+                // Resolve the row stack's actual contentRef-y origin at mouseup time.
+                // The Root Summary now lives at y=0 inside rowsContainerRef (was a sticky
+                // sibling above it); globalSummaryRef points at that leading row, so the
+                // first regular group/track row starts at globalBottom.
                 const contentRect = contentRef.current.getBoundingClientRect();
-                const rowsTop = rowsContainerRef.current
-                    ? rowsContainerRef.current.getBoundingClientRect().top - contentRect.top
-                    : RULER_HEIGHT + GROUP_HEIGHT;
-
                 const globalTop = globalSummaryRef.current
                     ? globalSummaryRef.current.getBoundingClientRect().top - contentRect.top
-                    : RULER_HEIGHT;
+                    : (rowsContainerRef.current
+                        ? rowsContainerRef.current.getBoundingClientRect().top - contentRect.top
+                        : RULER_HEIGHT);
                 const globalBottom = globalTop + GROUP_HEIGHT;
 
                 if (boxB > globalTop && boxY < globalBottom) {
@@ -458,7 +454,7 @@ export const useDopeSheetInteraction = ({
                     });
                 }
 
-                let yOffset = rowsTop;
+                let yOffset = globalBottom;
                 const BUFFER = 4;
 
                 const checkTrack = (tid: string) => {

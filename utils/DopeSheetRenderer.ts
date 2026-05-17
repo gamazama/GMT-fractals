@@ -28,6 +28,13 @@ export interface DopeSheetRowLayout {
     y: number;
     /** Row height in CSS px (24 for group, 32 for track). */
     height: number;
+    /** Optional per-row colour overrides for `kind='group'`. Used by the Root
+     *  Summary synthetic row to render cyan-tinted diamonds instead of the
+     *  default group grey. Baked into the cached canvas — if a caller ever
+     *  changes colours at runtime for the same row id, evict that cache slot
+     *  first or include the colours in the viewKey. */
+    fillColor?: string;
+    strokeColor?: string;
 }
 
 /** Module-level caches — one pair shared across all DopeSheet mounts. Single mount
@@ -148,6 +155,8 @@ export const drawDopeSheetBack = (args: DrawDopeSheetBackArgs): void => {
                     rowHeight: row.height,
                     scaleX,
                     panX,
+                    fillColor: row.fillColor,
+                    strokeColor: row.strokeColor,
                 });
                 groupDiamondCache.set(row.id, childKeyframeTokens, viewKey, built, canvasWidth, row.height);
                 cached = { canvas: built, width: canvasWidth, height: row.height };

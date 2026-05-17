@@ -16,8 +16,6 @@ import { RefViewKeyCache, roundView } from './canvasCache';
 export type { CacheCanvas, CacheCtx2D, CachedCanvas } from './canvasCache';
 export { createCacheCanvas, getCacheCtx2D } from './canvasCache';
 
-export type CachedDiamondCanvas = import('./canvasCache').CachedCanvas;
-
 // ---------------------------------------------------------------------------
 // TrackDiamondCache — one entry per track row.
 // ---------------------------------------------------------------------------

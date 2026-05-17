@@ -28,8 +28,6 @@ export { createCacheCanvas, getCacheCtx2D } from './canvasCache';
 // PolylineCache — one entry per track, keyed by (keyframesRef, viewKey).
 // ---------------------------------------------------------------------------
 
-export type CachedPolyline = import('./canvasCache').CachedCanvas;
-
 /** Per-track polyline + diamond cache. Token = the track's `Keyframe[]` ref. */
 export class PolylineCache extends RefViewKeyCache<Keyframe[]> {}
 
