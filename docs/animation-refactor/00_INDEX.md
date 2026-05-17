@@ -54,7 +54,8 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 [done]      Shared canvas utils 17_SHARED_CANVAS_UTILS  → -220 LOC in caches, generic RefViewKeyCache<TToken>, mirror O(T×S×N) bug in Graph fixed by analogy
 [NEXT]      Timeline cleanup  18_TIMELINE_CLEANUP_PROMPT → 20_TIMELINE_CLEANUP_REPORT  (~1-2 days; pre-push)
 [THEN]      git push origin dev  (33+ commits accumulated since the canvas-graph work began)
-[QUEUED]    Offline mod bake  19_OFFLINE_MODULATION_BAKE_PROMPT (reserved; drafted after 18 lands)
+[QUEUED]    Offline mod bake  19_OFFLINE_MODULATION_BAKE_PROMPT (reserved; drafted after 18 lands) — UNBLOCKS the audio feature work below
+[AFTER 19]  Audio feature pass  sync-across-timeline, waveform render quality, audio cuts/trim, modulation-recording fidelity, audio export rendering — all touch surfaces that the bake will land first, so sequencing matters (per user 2026-05-17)
 [deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case fully retracted — canvas work resolved user-felt lag; hygiene case stands but no longer load-bearing)
 ```
 
