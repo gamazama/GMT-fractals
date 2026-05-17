@@ -175,6 +175,11 @@ export interface AudioClip {
      *  (uniform bucket size). 0..2048 entries typically. Computed on load
      *  via decodeAudioData → AudioBuffer; not persisted. */
     peaks?: number[];
+    /** Audio-time span of `peaks`. Diverges from `durationSeconds` when
+     *  `decodeAudioData` truncates a file whose Xing/Info header lies
+     *  (VBR MP3, some AACs) — `<audio>.duration` (playback authority)
+     *  stays accurate, `audioBuf.duration` does not. */
+    peaksDurationSeconds?: number;
 }
 
 export interface AudioClipsSliceState {

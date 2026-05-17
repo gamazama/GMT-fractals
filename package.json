@@ -24,6 +24,7 @@
     "smoke:anim-play": "tsx debug/smoke-anim-play.mts",
     "smoke:anim-orbit": "tsx debug/smoke-anim-orbit.mts",
     "smoke:anim-vec2": "tsx debug/smoke-anim-vec2.mts",
+    "smoke:audio-fps-remap": "tsx debug/smoke-audio-fps-remap.mts",
     "smoke:bc-drag": "tsx debug/smoke-bc-drag.mts",
     "smoke:binder-registry": "tsx debug/smoke-binder-registry.mts",
     "smoke:canvas-menu": "tsx debug/smoke-canvas-menu.mts",

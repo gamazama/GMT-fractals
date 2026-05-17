@@ -143,6 +143,10 @@ export const createPlaybackSlice: StateCreator<AnimationStore, [["zustand/subscr
                     durationFrames: Math.max(1, remap(s.sequence.durationFrames)),
                     tracks: newTracks,
                 },
+                // startFrame is frame-indexed (rescale); trimStartSec/trimEndSec
+                // are in seconds (leave alone). Without this remap, audio drifts
+                // by `(r - 1) * startFrame` frames relative to keyframes.
+                audioClips: s.audioClips.map(c => c ? { ...c, startFrame: remap(c.startFrame) } : null),
             };
         });
     },

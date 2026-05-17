@@ -31,7 +31,6 @@ import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksCon
 import type { StoreCallbacks } from '../components/contexts/StoreCallbacksContext';
 import { TimelineHost } from '../components/TimelineHost';
 import { EngineBridge } from '../components/EngineBridge';
-import { RenderLoopDriver } from '../engine/plugins/RenderLoop';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
 import { GalleryOverlay, SubmitGalleryOverlay, AdminQueueOverlay } from '../engine-gmt/gallery';
@@ -217,7 +216,6 @@ export const AppGmt: React.FC = () => {
                     </>
                 )}
                 <EngineBridge />
-                <RenderLoopDriver />
                 <DropZones />
 
                 {floatingPanels.map((p) => (

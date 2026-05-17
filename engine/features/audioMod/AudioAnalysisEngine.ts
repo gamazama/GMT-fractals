@@ -162,11 +162,50 @@ export class AudioAnalysisEngine {
         if (d) { d.stop(); d.isActive = false; }
     }
     public seek(deckIndex: 0 | 1, time: number) { this.decks[deckIndex]?.seek(time); }
-    
+
+    /** Current `<audio>.duration` for the deck. 0 if no deck or metadata
+     *  hasn't loaded yet. Prefer over `getTrackInfo(idx).duration` when only
+     *  the duration is needed — no allocation, no other-field reads. */
+    public getElementDuration(deckIndex: 0 | 1): number {
+        return this.decks[deckIndex]?.duration || 0;
+    }
+
+    /** Resolve with `<audio>.duration` once the deck's metadata has loaded
+     *  (via the element's `loadedmetadata` / `durationchange` events). Resolves
+     *  with `0` if no deck is loaded or the timeout elapses. Event-driven
+     *  replacement for the previous 50ms-poll. */
+    public waitForMetadata(deckIndex: 0 | 1, timeoutMs = 4000): Promise<number> {
+        const d = this.decks[deckIndex];
+        if (!d) return Promise.resolve(0);
+        if (d.duration > 0 && Number.isFinite(d.duration)) return Promise.resolve(d.duration);
+        return new Promise(resolve => {
+            let settled = false;
+            const el = d.element;
+            const settle = (val: number) => {
+                if (settled) return;
+                settled = true;
+                el.removeEventListener('loadedmetadata', onMeta);
+                el.removeEventListener('durationchange', onMeta);
+                clearTimeout(timer);
+                resolve(val);
+            };
+            const onMeta = () => {
+                const dur = d.duration;
+                if (dur > 0 && Number.isFinite(dur)) settle(dur);
+            };
+            el.addEventListener('loadedmetadata', onMeta);
+            el.addEventListener('durationchange', onMeta);
+            const timer = setTimeout(() => settle(0), timeoutMs);
+        });
+    }
+
     public getTrackInfo(deckIndex: 0 | 1) {
         const d = this.decks[deckIndex];
         return {
-            duration: d?.duration || 1,
+            // 0 (not 1) when metadata hasn't loaded — `|| 1` here made
+            // AudioStrip's waitForAudioMetadata false-resolve and lock
+            // the clip to a 1-s slice.
+            duration: d?.duration || 0,
             currentTime: d?.currentTime || 0,
             hasTrack: !!d?.sourceNode,
             fileName: d?.fileName || null,

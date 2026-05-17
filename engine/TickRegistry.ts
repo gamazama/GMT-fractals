@@ -86,13 +86,32 @@ export function registerTick(
     };
 }
 
-/**
- * Run all registered ticks in phase order.
- * Called once per frame from WorkerTickScene's useFrame, or from the default
- * RenderLoopDriver in engine/plugins/RenderLoop.
- */
+// Two RAF-driven tick drivers mounted in the same app (the historical
+// RenderLoopDriver + GmtRendererTickDriver footgun) call runTicks twice
+// per frame, making dt-based work advance at 2× wall-clock. The window
+// guard below suppresses the second call.
+let _warnedDoubleRun = false;
+const DOUBLE_RUN_WINDOW_MS = 1;
+
+/** Run all registered ticks in phase order. Called once per frame by the
+ *  active tick driver. */
 export function runTicks(delta: number): void {
-    _lastTickTime = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+    const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+    if (_lastTickTime !== 0 && now - _lastTickTime < DOUBLE_RUN_WINDOW_MS) {
+        if (import.meta.env.DEV && !_warnedDoubleRun) {
+            console.warn(
+                '[TickRegistry] runTicks() called twice within ' + DOUBLE_RUN_WINDOW_MS + 'ms — ' +
+                'two tick drivers are mounted simultaneously. The duplicate call is being ' +
+                'suppressed, but you should fix the wiring: only one of RenderLoopDriver / ' +
+                'GmtRendererTickDriver should be mounted at a time (the canonical driver runs ' +
+                'TickRegistry phases AND dispatches its renderer). Symptom: animation timeline ' +
+                'and modulation advance at 2× wall-clock.'
+            );
+            _warnedDoubleRun = true;
+        }
+        return;
+    }
+    _lastTickTime = now;
     if (_needsSort) {
         _entries.sort((a, b) => a.phase - b.phase);
         _needsSort = false;

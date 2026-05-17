@@ -18,7 +18,7 @@ interface DragState {
     startTrimEnd: number;
 }
 
-const Waveform: React.FC<{ peaks: number[]; widthPx: number; trimRange: [number, number]; durationSec: number }> = ({ peaks, widthPx, trimRange, durationSec }) => {
+const Waveform: React.FC<{ peaks: number[]; widthPx: number; trimRange: [number, number]; peaksDurationSec: number }> = ({ peaks, widthPx, trimRange, peaksDurationSec }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -44,18 +44,19 @@ const Waveform: React.FC<{ peaks: number[]; widthPx: number; trimRange: [number,
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, cssW, cssH);
 
-        if (peaks.length === 0 || durationSec <= 0) return;
+        if (peaks.length === 0 || peaksDurationSec <= 0) return;
 
-        // Map only the trimmed portion to the strip width.
-        const trimSpanSec = Math.max(1e-6, trimRange[1] - trimRange[0]);
-        const startBucket = (trimRange[0] / durationSec) * peaks.length;
-        const endBucket   = (trimRange[1] / durationSec) * peaks.length;
-        const bucketSpan  = endBucket - startBucket;
-
+        // peaksDurationSec is the audio-time span of the peaks array, which
+        // diverges from clip duration when decodeAudioData truncates a VBR MP3.
+        // Pixels past peaksDurationSec stay blank rather than stretching the
+        // decoded portion to fill the clip.
+        const trimSpan = Math.max(1e-6, trimRange[1] - trimRange[0]);
         const mid = cssH / 2;
         ctx.fillStyle = 'rgb(34 211 238 / 0.6)'; // cyan-400/60
         for (let x = 0; x < cssW; x++) {
-            const idx = startBucket + (x / cssW) * bucketSpan;
+            const audioTime = trimRange[0] + (x / cssW) * trimSpan;
+            if (audioTime >= peaksDurationSec) break;
+            const idx = (audioTime / peaksDurationSec) * peaks.length;
             const i0 = Math.floor(idx);
             const i1 = Math.min(peaks.length - 1, i0 + 1);
             const t = idx - i0;
@@ -66,28 +67,9 @@ const Waveform: React.FC<{ peaks: number[]; widthPx: number; trimRange: [number,
         // Mid-line
         ctx.fillStyle = 'rgb(34 211 238 / 0.25)';
         ctx.fillRect(0, mid - 0.5, cssW, 1);
-    }, [peaks, widthPx, trimRange[0], trimRange[1], durationSec]);
+    }, [peaks, widthPx, trimRange[0], trimRange[1], peaksDurationSec]);
 
     return <canvas ref={canvasRef} style={{ width: widthPx, height: STRIP_HEIGHT - 16, display: 'block' }} />;
-};
-
-const waitForAudioMetadata = (deckIndex: 0 | 1, timeoutMs = 4000): Promise<number> => {
-    const start = performance.now();
-    return new Promise(resolve => {
-        const tick = () => {
-            const info = audioAnalysisEngine.getTrackInfo(deckIndex);
-            if (info.duration > 0 && Number.isFinite(info.duration)) {
-                resolve(info.duration);
-                return;
-            }
-            if (performance.now() - start > timeoutMs) {
-                resolve(0);
-                return;
-            }
-            setTimeout(tick, 50);
-        };
-        tick();
-    });
 };
 
 const EmptyDeckSlot: React.FC<{ deckIndex: 0 | 1; sidebarWidth: number }> = ({ deckIndex, sidebarWidth }) => {
@@ -119,13 +101,23 @@ const EmptyDeckSlot: React.FC<{ deckIndex: 0 | 1; sidebarWidth: number }> = ({ d
         // Get the real duration from the underlying <audio> element ASAP so
         // the strip's width matches reality even before the waveform decode
         // finishes.
-        waitForAudioMetadata(deckIndex).then(dur => {
+        audioAnalysisEngine.waitForMetadata(deckIndex).then(dur => {
             if (dur > 0) updateAudioClip(deckIndex, { durationSeconds: dur, trimEndSec: dur });
         });
 
         try {
-            const { peaks, durationSeconds } = await computeWaveformPeaks(file);
-            updateAudioClip(deckIndex, { peaks, durationSeconds, trimEndSec: durationSeconds });
+            const { peaks, durationSeconds: bufDur } = await computeWaveformPeaks(file);
+            // `<audio>` is the playback authority; its decoder is lenient where
+            // Web Audio's `decodeAudioData` truncates (VBR MP3 / some AACs).
+            // Keep bufDur for the waveform's peak-to-time mapping only.
+            const liveDur = audioAnalysisEngine.getElementDuration(deckIndex);
+            const dur = liveDur > 0 ? liveDur : bufDur;
+            updateAudioClip(deckIndex, {
+                peaks,
+                durationSeconds: dur,
+                trimEndSec: dur,
+                peaksDurationSeconds: bufDur,
+            });
         } catch (err) {
             console.error('Audio decode failed', err);
             // No peaks — strip stays without waveform but the clip is still
@@ -253,7 +245,7 @@ const AudioStripInner: React.FC<AudioStripProps> = ({ clip, frameWidth, sidebarW
                             peaks={clip.peaks}
                             widthPx={Math.max(8, widthPx)}
                             trimRange={[clip.trimStartSec, clip.trimEndSec]}
-                            durationSec={clip.durationSeconds}
+                            peaksDurationSec={clip.peaksDurationSeconds ?? clip.durationSeconds}
                         />
                     ) : (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
