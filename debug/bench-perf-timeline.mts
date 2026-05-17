@@ -64,6 +64,11 @@ interface ProfilerBucket {
     totalActualMs: number;
     totalBaseMs: number;
     maxActualMs: number;
+    /** Median per-commit actualMs. Computed in snapshot() from per-commit
+     *  samples (capped at 1000) so the dominant per-commit cost sorts
+     *  to the top of the React attribution table — count alone tracks
+     *  notification rate, not work. */
+    medianMs: number;
 }
 
 interface RenderInfoDelta {
@@ -215,17 +220,19 @@ const initScript = `
 
     const accumNow = () => (window.__gmtProxy && window.__gmtProxy.accumulationCount) || 0;
 
+    const SAMPLE_CAP = 1000;
     const onRender = (id, _phase, actualDuration, baseDuration) => {
         if (!b.capturing) return;
         let bucket = b.profilers[id];
         if (!bucket) {
-            bucket = { count: 0, totalActualMs: 0, totalBaseMs: 0, maxActualMs: 0 };
+            bucket = { count: 0, totalActualMs: 0, totalBaseMs: 0, maxActualMs: 0, actualMsSamples: [] };
             b.profilers[id] = bucket;
         }
         bucket.count += 1;
         bucket.totalActualMs += actualDuration;
         bucket.totalBaseMs += baseDuration;
         if (actualDuration > bucket.maxActualMs) bucket.maxActualMs = actualDuration;
+        if (bucket.actualMsSamples.length < SAMPLE_CAP) bucket.actualMsSamples.push(actualDuration);
     };
 
     window.__bench = {
@@ -257,6 +264,26 @@ const initScript = `
             const estimatedBytes = b.workerPostSampleCount > 0
                 ? Math.round((b.workerPostBytesSampled / b.workerPostSampleCount) * b.workerPostCount)
                 : 0;
+            const profilersOut = Object.create(null);
+            for (const id of Object.keys(b.profilers)) {
+                const src = b.profilers[id];
+                const samples = src.actualMsSamples;
+                let medianMs = 0;
+                if (samples.length > 0) {
+                    const sorted = samples.slice().sort((a, b) => a - b);
+                    const n = sorted.length;
+                    medianMs = n % 2 === 0
+                        ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2
+                        : sorted[(n - 1) / 2];
+                }
+                profilersOut[id] = {
+                    count: src.count,
+                    totalActualMs: src.totalActualMs,
+                    totalBaseMs: src.totalBaseMs,
+                    maxActualMs: src.maxActualMs,
+                    medianMs,
+                };
+            }
             return {
                 durationMs: dur,
                 frameDts: b.frameDts.slice(),
@@ -273,7 +300,7 @@ const initScript = `
                 workerPostCount: b.workerPostCount,
                 workerPostBytes: estimatedBytes,
                 workerPostSampleCount: b.workerPostSampleCount,
-                profilers: { ...b.profilers },
+                profilers: profilersOut,
                 heapDeltaMb: (heapEnd - b.heapStart) / (1024 * 1024),
             };
         },
@@ -316,6 +343,7 @@ const mergeProfilers = (runs: ScenarioMetrics[]): Record<string, ProfilerBucket>
             totalActualMs: median(buckets.map(b => b?.totalActualMs ?? 0)),
             totalBaseMs: median(buckets.map(b => b?.totalBaseMs ?? 0)),
             maxActualMs: median(buckets.map(b => b?.maxActualMs ?? 0)),
+            medianMs: median(buckets.map(b => b?.medianMs ?? 0)),
         };
     }
     return merged;
@@ -826,11 +854,28 @@ async function main() {
         const hot = Object.entries(summary.profilers)
             .map(([id, b]) => ({ id, ...b }))
             .filter(b => b.totalActualMs > 0.05)
-            .sort((a, b) => b.totalActualMs - a.totalActualMs)
-            .slice(0, 3);
+            .sort((a, b) => b.medianMs - a.medianMs);
         if (hot.length > 0) {
-            const line = hot.map(h => `${h.id} ${h.totalActualMs.toFixed(1)}ms/${h.count}c`).join('  ');
-            console.log(`    react: ${line}`);
+            const idCol = Math.min(36, Math.max(...hot.map(h => h.id.length)) + 1);
+            console.log(`    React Profilers (${sc.name}, sorted by ms/commit):`);
+            console.log(
+                '      ' +
+                'Profiler'.padEnd(idCol) +
+                'commits'.padStart(9) +
+                'total ms'.padStart(11) +
+                'ms/commit'.padStart(12) +
+                'max ms'.padStart(10),
+            );
+            for (const h of hot) {
+                console.log(
+                    '      ' +
+                    h.id.padEnd(idCol) +
+                    String(h.count).padStart(9) +
+                    h.totalActualMs.toFixed(1).padStart(11) +
+                    h.medianMs.toFixed(2).padStart(12) +
+                    h.maxActualMs.toFixed(1).padStart(10),
+                );
+            }
         }
     }
 
