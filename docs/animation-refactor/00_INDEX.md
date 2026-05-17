@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-17 — Cleanup-before-push pass drafted (`18_TIMELINE_CLEANUP_PROMPT.md`): Root Summary → canvas + pre-canvas dead-code sweep + top-region structural. ~1-2 days. After this lands, `git push origin dev`. Next planned: offline modulation bake (`19`, reserved).
+> 2026-05-18 — Cleanup-before-push pass shipped (`20_TIMELINE_CLEANUP_REPORT.md`). Root Summary on canvas, dead-code sweep applied (net -27 LOC), Option-A top-region structural taken. Bench parity ±1 fps across all dope-* + graph-* at heavy seed. Ready to `git push origin dev` after manual interaction smoke. Audio fps-sync follow-on captured as `21_AUDIO_TIMELINE_SYNC_PROMPT.md`. Next planned: offline modulation bake (`19`, reserved).
 
 ## What this is
 
@@ -35,7 +35,8 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`17_SHARED_CANVAS_UTILS.md`](./17_SHARED_CANVAS_UTILS.md) | Shared canvas-cache utils + GraphEditor simplify pass report. `utils/canvasCache.ts` (generic `RefViewKeyCache<TToken>`) + `utils/keyframeShape.ts` (`traceKeyframeShape`). Both editor caches collapsed onto the shared base (-220 LOC across the two cache files). Mirror bug: GraphEditor's Pass 1 selection paint had the same O(T×S×N) anti-pattern as DopeSheet's Surprise #5; fixed by analogy. Net -84 LOC. | shipped |
 | [`18_TIMELINE_CLEANUP_PROMPT.md`](./18_TIMELINE_CLEANUP_PROMPT.md) | Pre-push cleanup: Root Summary → canvas (last DOM-diamond holdout), dead-code sweep across both editors + `timelineUtils.ts`, top-region structural pass to retire the marquee y-offset workaround. Net LOC delta should be negative. | shipped, ready |
 | `19_OFFLINE_MODULATION_BAKE_PROMPT.md` | Reserved — offline modulation bake (the deferred "every frame of modulation" feature from `02_RATIONALE.md` §9). Drafted after `18` lands. | reserved |
-| `20_TIMELINE_CLEANUP_REPORT.md` | Output of `18`. | pending fresh session |
+| [`20_TIMELINE_CLEANUP_REPORT.md`](./20_TIMELINE_CLEANUP_REPORT.md) | Output of `18`. **Net -27 LOC across 7 files; bench parity ±1 fps at heavy seed; Root Summary on canvas with cyan colour overrides; `liveValueState` + dead type aliases + re-export removed.** Option B (`TimelineRegions` wrapper) deferred — single-consumer ref-based y-resolution sufficed. Sticky on Root Summary declined per user decision; captured as revisitable. | shipped |
+| [`21_AUDIO_TIMELINE_SYNC_PROMPT.md`](./21_AUDIO_TIMELINE_SYNC_PROMPT.md) | Audio waveform + clip-cut positions don't track timeline fps (surfaced during `20_` review; explicitly out of scope of `18_`). Diagnosis + fix prompt for a dedicated session. ~0.5-1 day. | drafted |
 | `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** — perf rationale fully retracted (canvas work resolved all dope-* and graph-* lag at heavy seed); hygiene rationale stands but no longer load-bearing for user-felt smoothness. | held / deferred |
 
 ## Current state
@@ -52,9 +53,10 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 [done]      DopeSheet probe   13_DOPESHEET_PROBE_PROMPT → 15_DOPESHEET_PROBE_FINDINGS  → modified strong case; dope-select-track is the user-felt symptom
 [done]      Canvas DopeSheet  14_CANVAS_DOPESHEET_PROMPT → 16_CANVAS_DOPESHEET_REPORT  → all dope-* at or near vsync at heavy seed; longTaskMs → 0
 [done]      Shared canvas utils 17_SHARED_CANVAS_UTILS  → -220 LOC in caches, generic RefViewKeyCache<TToken>, mirror O(T×S×N) bug in Graph fixed by analogy
-[NEXT]      Timeline cleanup  18_TIMELINE_CLEANUP_PROMPT → 20_TIMELINE_CLEANUP_REPORT  (~1-2 days; pre-push)
-[THEN]      git push origin dev  (33+ commits accumulated since the canvas-graph work began)
+[done]      Timeline cleanup  18_TIMELINE_CLEANUP_PROMPT → 20_TIMELINE_CLEANUP_REPORT  → -27 LOC; bench ±1 fps parity; Option-A top-region taken; sticky-summary declined
+[NEXT]      git push origin dev  (33+ commits accumulated since the canvas-graph work began) — after manual interaction smoke
 [QUEUED]    Offline mod bake  19_OFFLINE_MODULATION_BAKE_PROMPT (reserved; drafted after 18 lands) — UNBLOCKS the audio feature work below
+[QUEUED]    Audio fps-sync   21_AUDIO_TIMELINE_SYNC_PROMPT  → diagnosis + fix for the seconds-to-frames drift surfaced during 20_ review
 [AFTER 19]  Audio feature pass  sync-across-timeline, waveform render quality, audio cuts/trim, modulation-recording fidelity, audio export rendering — all touch surfaces that the bake will land first, so sequencing matters (per user 2026-05-17)
 [deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case fully retracted — canvas work resolved user-felt lag; hygiene case stands but no longer load-bearing)
 ```
