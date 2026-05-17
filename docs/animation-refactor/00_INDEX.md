@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-17 — Canvas GraphEditor prompt + bench metric prompt drafted. Run bench metric first (<1d), then canvas (~1-2w). Both ready for fresh sessions.
+> 2026-05-17 — Canvas GraphEditor shipped. Worker FPS 22→43, main FPS 20→60 (vsync), main-thread blocking 1054ms→0 during graph-play with heavy seed. User-visible lag for graph playback **resolved**.
 
 ## What this is
 
@@ -26,9 +26,9 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`08_ENGINE_PROBE_FINDINGS.md`](./08_ENGINE_PROBE_FINDINGS.md) | Output of the engine-fanout probe. **Hypothesis invalidated; cost is in `Timeline:Graph` polyline resampling.** | shipped |
 | [`09_CANVAS_GRAPH_PROMPT.md`](./09_CANVAS_GRAPH_PROMPT.md) | Canvas GraphEditor implementation: three-layer cache (per-track polyline / soft-selection mask / overlay). Front-of-queue work. | shipped |
 | [`10_BENCH_METRIC_PROMPT.md`](./10_BENCH_METRIC_PROMPT.md) | Add per-commit median ms column to bench output. Ship before canvas so the before/after comparison is unambiguous. | shipped |
-| `11_CANVAS_GRAPH_REPORT.md` | Output of the canvas GraphEditor work. | **pending fresh session** |
-| `12_BENCH_METRIC_REPORT.md` | Output of the bench improvement. | **pending fresh session** |
-| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** per probe results. | held / deferred |
+| [`11_CANVAS_GRAPH_REPORT.md`](./11_CANVAS_GRAPH_REPORT.md) | Output of the canvas GraphEditor work. **User-visible graph-play lag resolved.** | shipped |
+| `12_BENCH_METRIC_REPORT.md` | Output of the bench improvement (committed inline as `f331a96`; no separate report doc). | n/a |
+| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** per probe results + canvas success. | held / deferred |
 
 ## Current state
 
@@ -38,9 +38,10 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 [done]      Spec v2           03_SPEC.md          (9 open questions resolved)
 [done]      Spike             05_SPIKE_PROMPT → 06_SPIKE_FINDINGS  → diagnosis INVALIDATED for animation-store
 [done]      Engine probe      07_ENGINE_PROBE_PROMPT → 08_ENGINE_PROBE_FINDINGS  → hypothesis INVALIDATED; cost LOCATED in Timeline:Graph
-[NEXT]      Bench metric      10_BENCH_METRIC_PROMPT → 12_BENCH_METRIC_REPORT  (<1 day; ship first)
-[THEN]      Canvas GraphEd    09_CANVAS_GRAPH_PROMPT → 11_CANVAS_GRAPH_REPORT  (~1-2 weeks)
-[deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case retracted; hygiene case stands; revisit after canvas ships)
+[done]      Bench metric      10_BENCH_METRIC_PROMPT → shipped as f331a96  (per-commit median ms column)
+[done]      Canvas GraphEd    09_CANVAS_GRAPH_PROMPT → 11_CANVAS_GRAPH_REPORT  → worker FPS 2×, main FPS 3×, main-thread blocking → 0
+[OPEN]      Decide next       canvas DopeSheet? + soft-selection bench scenario? + DPR? OR wait for next user-reported lag
+[deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case retracted; hygiene case stands)
 ```
 
 ### Outcomes log
@@ -53,6 +54,8 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | 2026-05-17 | Engine-fanout probe returned: every profiled boundary commits 480× in dope-play; narrowing zero of four broad subs moved the count | **Probe hypothesis invalidated.** React fanout is not the cost — commit-count is a notification-rate proxy, not a work proxy. Cost is per-commit work in `Timeline:Graph` (~7ms × 480 = 3.3s/scenario), which is `GraphRenderer.drawGraph`'s per-redraw polyline + soft-selection resampling. Architecture for the fix already exists in `02_RATIONALE.md` §7 and `03_SPEC.md` §3.7. |
 | 2026-05-17 | AnimationDocument plan deferred | Two empirical probes show it solves no user-visible lag. Hygiene/correctness case unchanged but no longer justifies front-of-queue scheduling. Revisit after canvas ships and the load picture is re-measured. |
 | 2026-05-17 | Canvas GraphEditor + bench metric prompts drafted | `09_CANVAS_GRAPH_PROMPT.md` (1-2 weeks) targets the empirically-located cost. `10_BENCH_METRIC_PROMPT.md` (<1 day) makes future perf probes unambiguous. Ship metric first so canvas validation is clean. |
+| 2026-05-17 | Bench metric shipped (`f331a96`) | Per-commit median ms now visible in the React attribution table; canvas work's validation is unambiguous. |
+| 2026-05-17 | Canvas GraphEditor shipped (`a9518c6` → `ad6b7a8`) | **User-visible graph-play lag resolved** with heavy (9000-key) seed: workerFps 22→43, mainFps 20→60 (vsync), longTasks 12→0, 1054ms→0 of main-thread blocking. As-written acceptance criterion (`Timeline:Graph` per-commit ms ≤1.5ms) NOT met — that metric measures React reconciliation, not canvas paint. Real fix lives in `workerFps`/`fpsP50`/longTasks. See `11_CANVAS_GRAPH_REPORT.md` "Surprises" §3 for why the metric framing was wrong. |
 
 ## Implementation roadmap
 
