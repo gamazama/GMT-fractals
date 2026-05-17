@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-17 — Spike returned negative for animation-store; engine-fanout probe drafted; Phase 0 held pending probe result.
+> 2026-05-17 — Both diagnostic probes complete. Cost empirically located at `Timeline:Graph` polyline resampling (~7ms × 480 commits = 3.3s/scenario). Canvas GraphEditor is next.
 
 ## What this is
 
@@ -23,19 +23,19 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`05_SPIKE_PROMPT.md`](./05_SPIKE_PROMPT.md) | Self-contained prompt for the diagnostic spike (validates the architectural diagnosis before Phase 0). | shipped |
 | [`06_SPIKE_FINDINGS.md`](./06_SPIKE_FINDINGS.md) | Output of the spike. **Diagnosis invalidated for the named consumer.** Read this before Phase 0 work. | shipped |
 | [`07_ENGINE_PROBE_PROMPT.md`](./07_ENGINE_PROBE_PROMPT.md) | Follow-up probe: locate the engineStore subscription that drives Slider re-renders at engine-tick rate. | shipped |
-| `08_ENGINE_PROBE_FINDINGS.md` | Output of the engine-fanout probe. | **pending fresh session** |
-| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Per-phase prompts and reports. One pair per implementation step from `03_SPEC.md` §10. **Held — see below.** | blocked on probe |
+| [`08_ENGINE_PROBE_FINDINGS.md`](./08_ENGINE_PROBE_FINDINGS.md) | Output of the engine-fanout probe. **Hypothesis invalidated; cost is in `Timeline:Graph` polyline resampling.** | shipped |
+| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Per-phase prompts and reports. **Original AnimationDocument-first plan is deprioritized; replaced by canvas GraphEditor work — see below.** | held / replaced |
 
 ## Current state
 
 ```
-[done]     Audit            01_AUDIT.md
-[done]     Rationale        02_RATIONALE.md
-[done]     Spec v2          03_SPEC.md          (9 open questions resolved)
-[done]     Spike            05_SPIKE_PROMPT → 06_SPIKE_FINDINGS  → diagnosis INVALIDATED for animation-store
-[queued]   Engine probe     07_ENGINE_PROBE_PROMPT → 08_ENGINE_PROBE_FINDINGS  (~1 day)
-[on hold]  Phase 0          PHASE_0_PROMPT.md   (held; resumes only after probe result + plan revision)
-[planned]  Phases 1-9       per 03_SPEC.md §10  (likely re-ordered per spike recommendation #2)
+[done]      Audit             01_AUDIT.md
+[done]      Rationale         02_RATIONALE.md
+[done]      Spec v2           03_SPEC.md          (9 open questions resolved)
+[done]      Spike             05_SPIKE_PROMPT → 06_SPIKE_FINDINGS  → diagnosis INVALIDATED for animation-store
+[done]      Engine probe      07_ENGINE_PROBE_PROMPT → 08_ENGINE_PROBE_FINDINGS  → hypothesis INVALIDATED; cost LOCATED in Timeline:Graph
+[NEXT]      Canvas GraphEd    plan + implement per-track polyline cache + soft-selection mask cache  (~1-2 weeks)
+[deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case retracted; hygiene case stands; revisit after canvas ships)
 ```
 
 ### Outcomes log
@@ -44,17 +44,27 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 |---|---|---|
 | 2026-05-10 | Spec v2 shipped after Q-walkthrough | 9 open questions resolved; module boundaries locked |
 | 2026-05-17 | Spike returned: per-track sub has no measurable effect on Slider re-renders or frame time | **Phase 0 held.** Diagnosis in `02_RATIONALE.md` is partly invalidated. `AnimationDocument` design itself remains sound; its perf-win case is much weaker than projected. Canvas-first reordering and engineStore narrowing become front-runners for solving the user-reported lag. |
-| 2026-05-17 | Engine-fanout probe drafted | Next action; locates the actual Slider re-render cause |
 | 2026-05-17 | Bench instrumentation patches landed on `dev` (`990f2e9`) | `animStoreNotifyCount` + fit-to-view seam available for all future probes |
+| 2026-05-17 | Engine-fanout probe returned: every profiled boundary commits 480× in dope-play; narrowing zero of four broad subs moved the count | **Probe hypothesis invalidated.** React fanout is not the cost — commit-count is a notification-rate proxy, not a work proxy. Cost is per-commit work in `Timeline:Graph` (~7ms × 480 = 3.3s/scenario), which is `GraphRenderer.drawGraph`'s per-redraw polyline + soft-selection resampling. Architecture for the fix already exists in `02_RATIONALE.md` §7 and `03_SPEC.md` §3.7. |
+| 2026-05-17 | AnimationDocument plan deferred | Two empirical probes show it solves no user-visible lag. Hygiene/correctness case unchanged but no longer justifies front-of-queue scheduling. Revisit after canvas ships and the load picture is re-measured. |
 
 ## Implementation roadmap
 
-**Status:** held. Per [`03_SPEC.md`](./03_SPEC.md) §10 + the original audit, the foundation work was scoped as ~33d across 10 phases. The spike result ([`06_SPIKE_FINDINGS.md`](./06_SPIKE_FINDINGS.md)) suggests this order may be wrong — specifically that canvas DopeSheet/GraphEditor work (originally late phases) is more leveraged for user-visible lag than the AnimationDocument foundation work (originally Phase 0-1). The engine-fanout probe ([`07_ENGINE_PROBE_PROMPT.md`](./07_ENGINE_PROBE_PROMPT.md)) will inform the final order.
+**Revised after both probes (2026-05-17):**
 
-Once the probe lands, this roadmap will be revised. The original phase table is preserved below for reference.
+The probes located the dominant user-visible cost precisely: `Timeline:Graph`'s per-redraw polyline + soft-selection resampling in `utils/GraphRenderer.drawGraph`. Neither the AnimationDocument refactor nor any narrow-subscription fix would touch this. The new front-of-queue work is the canvas GraphEditor implementation already sketched in [`02_RATIONALE.md`](./02_RATIONALE.md) §7 and [`03_SPEC.md`](./03_SPEC.md) §3.7.
+
+| # | Scope | Est. | Source |
+|---:|---|---:|---|
+| 1 | Canvas GraphEditor: per-track polyline cache (back layer) + soft-selection mask cache (mid layer) + overlay layer (front); per-track version counter; replace `GraphRenderer.drawGraph` per-redraw path | 1-2w | `02_RATIONALE.md` §7, `03_SPEC.md` §3.7, this probe's recommendation #1 |
+| 2 | Bench: add per-commit median ms derived column to React attribution table | <1d | `08_ENGINE_PROBE_FINDINGS.md` recommendation #3 |
+| 3 | Canvas DopeSheet (if user lag remains after #1) | 1-2w | `02_RATIONALE.md` §7 |
+| 4 | Re-measure lag picture after canvas work ships | 1d | post-canvas re-evaluation |
+
+After #4, decide whether the AnimationDocument refactor (originally `03_SPEC.md` §10's full plan) is still justified — on hygiene/correctness grounds, since the perf grounds were retracted. The spec itself remains sound; what changes is the priority.
 
 <details>
-<summary>Original phase plan (likely to be re-ordered)</summary>
+<summary>Deferred: original AnimationDocument-first phase plan (perf rationale retracted; preserved for reference)</summary>
 
 | Phase | Scope | Est. | Spec ref |
 |---:|---|---:|---|
