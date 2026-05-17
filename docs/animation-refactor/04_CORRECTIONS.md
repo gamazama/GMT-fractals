@@ -42,6 +42,27 @@ When the Rust port ships a phase touching our scope, capture the relevant patter
 
 ## Entries
 
+### 2026-05-17 — DopeSheet probe — three claims in `01_AUDIT.md` / probe prompt invalidated
+
+**Change:** `15_DOPESHEET_PROBE_FINDINGS.md` documents three audit / prompt claims that don't hold on current `dev`:
+
+1. **`TrackRow.tick` is dead code in dev.** The exported `tick` function in `TrackRow.tsx` still exists but is never imported (`GmtRendererTickDriver.tsx` references it in a commented-out phase-C-shell entry only). `01_AUDIT.md` §2's "TrackRow.tick walks every visible diamond per RAF" cost is **not present in dev**. Stable build is unverified; if `TrackRow.tick` is still wired there, the cost description applies to stable only.
+2. **`dope-zoom` mount/unmount churn is not present at the 9000-key heavy seed.** Zoom runs at vsync with 9 React commits over 4 s and zero long tasks. Either binary-search virtualisation is fast enough at the densities being tested, or wheel-zoom step sizes don't move many keys across the viewport boundary. If a future probe needs to validate this audit claim, use a denser seed (15000+ keys with smaller `frameWidth`).
+3. **`bench-perf-timeline.mts` heavy-seed flag is `--seed=heavy`**, not `--heavy` as `13_DOPESHEET_PROBE_PROMPT.md` suggested. Documented in the bench code at `bench-perf-timeline.mts:682`.
+
+**Rationale:** the audit was a snapshot at a point in time; the dev branch has moved. Future probes referencing audit claims should re-validate before instrumenting against them.
+
+**Discovered by:** dope-sheet probe (`9b647e4`).
+
+**Cross-refs:**
+- Probe findings: `15_DOPESHEET_PROBE_FINDINGS.md`.
+- Audit doc to (re-)examine: `01_AUDIT.md` §2 (DopeSheet cost description).
+- Prompt corrected inline: `14_CANVAS_DOPESHEET_PROMPT.md` §"Probe-driven amendments".
+
+**Lesson for future probes:** when the audit names a specific code path as load-bearing, the probe's first move should be a grep to confirm the path is still wired before instrumenting. The TrackRow.tick instrumentation in this probe was wasted effort — useful only as a regression detector going forward.
+
+---
+
 ### 2026-05-17 — Canvas GraphEditor — `01_AUDIT.md` §10 was incomplete (in-place keyframe mutation bug class)
 
 **Change:** fixed `updateKeyframes`, `setTangents`, `setGlobalInterpolation`, `pasteKeyframes`, `loopSelection` in `store/animation/sequenceSlice.ts` to clone the touched track + keyframes array before mutating. Without this, GraphRenderer's polyline cache (which keys on keyframes-array referential equality) goes stale until the array ref happens to change for some other reason — visible to the user as "bezier handles don't update the curve until I move a keyframe."

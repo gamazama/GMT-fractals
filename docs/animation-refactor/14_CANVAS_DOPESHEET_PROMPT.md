@@ -1,12 +1,33 @@
 # Canvas DopeSheet — implementation prompt
 
-**Purpose:** replace the DopeSheet's DOM-per-keyframe rendering and per-RAF imperative tick with a layered canvas that mirrors the architecture proved out by the canvas GraphEditor work. Targets the costs identified by [`15_DOPESHEET_PROBE_FINDINGS.md`](./15_DOPESHEET_PROBE_FINDINGS.md): mount/unmount churn during scroll/zoom, `TrackRow.tick` imperative cost, and the long-task budget overflow during scrub/play with many keyframes visible.
+**Purpose:** replace the DopeSheet's DOM-per-keyframe rendering with a layered canvas. Primary target per [`15_DOPESHEET_PROBE_FINDINGS.md`](./15_DOPESHEET_PROBE_FINDINGS.md): **the 137 ms × 6 tracks reconciliation freeze on `dope-select-track`** — clicking a track triggers a single DopeSheet render that reconciles ~9000 `<KeyframeDiamond>` DOM nodes. Secondary target: `dope-scrub`'s ~6050 ms of non-React main-thread time per 4 s scenario (most plausibly browser layout reflow from those same 9000 absolutely-positioned divs participating in PlayheadCursor's layout pass).
 
 **This is an implementation phase, not a probe.** Output is working code that lands on `dev`, plus a report.
 
-**Status:** **HELD** until [`13_DOPESHEET_PROBE_PROMPT.md`](./13_DOPESHEET_PROBE_PROMPT.md) returns "strong case" or "partial case → canvas". Do not start without that signal — the probe might surface that a smaller fix (TrackRow.tick replacement only, or engineStore narrowing in dopesheet-specific consumers) addresses most of the user-felt lag.
+**Status:** **READY.** [`15_DOPESHEET_PROBE_FINDINGS.md`](./15_DOPESHEET_PROBE_FINDINGS.md) returned "modified strong case" (2026-05-17) with two of the original three prompt hypotheses falsified — see "Probe-driven amendments" below for what this changes vs. the v1 prompt.
 
-**Estimated effort:** 1-2 weeks, similar to canvas GraphEditor. Possibly shorter if `15_DOPESHEET_PROBE_FINDINGS.md` shows the load shape is simpler than graph's (fewer code paths to migrate, no soft-selection mask), possibly longer if the interaction surface is broader (drag, marquee, transform bar, group-diamond aggregation, sticky sidebar coordination).
+**Estimated effort:** 1-2 weeks, similar to canvas GraphEditor.
+
+## Probe-driven amendments (2026-05-17)
+
+Read this section before reading the rest of the prompt. The probe invalidated three claims from this prompt's v1:
+
+1. **`TrackRow.tick` is already dead code in dev.** The exported `tick()` function still exists in `TrackRow.tsx` but is never imported anywhere. `GmtRendererTickDriver.tsx:57` has it in a Phase-C-shell comment but the registration is commented out. Step 6's "delete TrackRow.tick" item becomes bookkeeping (remove dead exports + module-level `diamondState` / `liveValueState` / `groupDiamondState` maps that nothing populates), not behavioural change.
+2. **Mount/unmount churn during `dope-zoom` is not present at the 9000-key heavy seed.** Zoom is at vsync with 9 React commits over 4 s. Either binary-search virtualisation is fast enough, or wheel-zoom doesn't shift enough keys across the viewport boundary per tick. The acceptance criterion that mentions "mount/unmount churn observable in React Profiler also drops" should be reframed: it's not currently a problem to drop. Leave the bullet for regression purposes (denser seeds may expose it), but don't expect a measurable gain there.
+3. **`dope-play` will only marginally improve.** Its 3245 ms of React work is the systemic anim-notification fanout documented in [`08_ENGINE_PROBE_FINDINGS.md`](./08_ENGINE_PROBE_FINDINGS.md), distributed across `Dock:right` (757 ms), `Item:widget:formula-params` (398 ms), `TopBarHost` (478 ms), `DomOverlays` (352 ms), etc. The DopeSheet itself is already `medianMs: 0` during play. Canvas DopeSheet drops `Timeline:DopeSheet`'s 22.6 ms total → ~0; ~3000 ms of unrelated React work remains. **Set user expectations accordingly when shipping.** The full fix for play smoothness lives in the deferred AnimationDocument refactor.
+
+Expected post-canvas bench delta (from `15_DOPESHEET_PROBE_FINDINGS.md` §"Decision"):
+
+| scenario | before | expected after |
+|---|---:|---:|
+| **dope-select-track workerFps** | **8** | **≥ 55** |
+| **dope-select-track DopeSheet medianMs** | **137** | **≤ 5** |
+| dope-scrub workerFps | 16 | ≥ 45 |
+| dope-scrub longTaskMs | 7034 | ≤ 1500 |
+| dope-play workerFps | 26 | 30–40 (small canvas win; main improvement awaits AnimationDocument) |
+| dope-zoom | vsync | vsync (unchanged) |
+
+If post-canvas `dope-scrub` still has > 3000 ms of long tasks, the residual is `AnimationSystem.tick` (which evaluates 9000 keyframes through binders per `eng.scrub`); next probe should instrument that. If < 1500 ms, the canvas refactor settled the unaccounted-cost question.
 
 ## Read first (in order)
 
@@ -146,11 +167,13 @@ The marquee selection in `useDopeSheetInteraction.ts:425-487` already iterates a
 
 ### Step 6 — Delete the old DOM tree (~0.5 day)
 
+Mostly bookkeeping after the probe — much of this is already unused on `dev`.
+
 Remove:
-- `KeyframeDiamond` component from `TrackRow.tsx`.
-- `GroupDiamond` component from `TrackGroup.tsx`.
-- Module-level `diamondState` and `groupDiamondState` maps.
-- `TrackRow.tsx`'s `tick()` function — diamond dirty-state moves to the mid-layer canvas (cheap to repaint on currentFrame change).
+- `KeyframeDiamond` component from `TrackRow.tsx` (still mounted by the JSX render path; replaced by canvas).
+- `GroupDiamond` component from `TrackGroup.tsx` (same).
+- Module-level `diamondState` and `groupDiamondState` maps in `TrackRow.tsx` (already orphaned in dev — `tick()` populates them but `tick()` is never called).
+- `TrackRow.tsx`'s `tick()` function — **already dead code in dev** per probe finding §"`__trackRowTickStats`". Confirm with one final grep before delete: `grep -rn "tick.*TrackRow\|TrackRow.*tick\|import.*tick.*from.*timeline" --include="*.ts" --include="*.tsx"` should produce no live import.
 - `TrackRow.tsx`'s `LiveValueDisplay` component — sidebar live-value moves to either (a) a shared RAF tick reading the doc, or (b) stays as-is in the sidebar DOM (sidebar isn't a perf problem; preserve).
 
 The `liveValueState` map can stay for the sidebar live-value text updates — that's a sidebar concern, not a keyframe-area concern.
@@ -186,15 +209,19 @@ The `liveValueState` map can stay for the sidebar live-value text updates — th
 
 ## Acceptance criteria
 
-- [ ] `dope-play` `workerFps` improves substantially vs. probe baseline (target: ≥30 % gain at heavy seed; canvas GraphEditor got +91 %, dope-sheet load shape may differ).
-- [ ] `dope-scrub` `longTaskTotalMs` drops to near-zero (target: <100 ms in a 4 s scenario, ideally 0).
-- [ ] `dope-zoom` `longTaskCount` drops; component mount/unmount churn observable in React Profiler also drops.
-- [ ] `__trackRowTickStats.diamondLoopMs` reads zero (the tick function is gone — confirm with a probe before declaring done).
-- [ ] All dope-sheet interactions function identically.
+Calibrated against `15_DOPESHEET_PROBE_FINDINGS.md` measured baselines.
+
+- [ ] **PRIMARY:** `dope-select-track` `Timeline:DopeSheet` median commit time drops from **137 ms** to **≤ 5 ms** (target: 25× improvement). `workerFps` rises from 8 to ≥ 55.
+- [ ] **SECONDARY:** `dope-scrub` `longTaskTotalMs` drops from **7034 ms** to **≤ 1500 ms**. `workerFps` rises from 16 to ≥ 45.
+- [ ] `dope-play` `workerFps` improves modestly (target: 26 → 30–40). Note in the report that the residual ~3000 ms is the systemic React fanout from `08_ENGINE_PROBE_FINDINGS.md`, unaddressable without AnimationDocument. **Do not over-promise on dope-play.**
+- [ ] `dope-zoom` remains at vsync (currently is — regression check, not target).
+- [ ] `dope-idle` remains at vsync.
+- [ ] `__trackRowTickStats.diamondLoopMs` reads zero (the tick function and its state maps are deleted — already dead in dev, this is confirming the deletion).
+- [ ] All dope-sheet interactions function identically (especially: selection click, marquee select, drag, transform bar, double-click-to-add-key, right-click context menu, group expand/collapse, sticky sidebar buttons).
 - [ ] No visible rendering regression at heavy seed.
 - [ ] Existing test suites pass.
 - [ ] New cache + integration tests added and pass.
-- [ ] `16_CANVAS_DOPESHEET_REPORT.md` written, including bench delta and any pattern reuses or deviations vs. canvas GraphEditor.
+- [ ] `16_CANVAS_DOPESHEET_REPORT.md` written, including bench delta against `dopesheet-probe-baseline.json` and any pattern reuses or deviations vs. canvas GraphEditor.
 
 ## Out of scope
 
@@ -238,6 +265,12 @@ Write `16_CANVAS_DOPESHEET_REPORT.md` adjacent to this prompt. Sections mirror `
 - [ ] `bench-perf-timeline` baseline at heavy seed captured to `debug/canvas-dopesheet-baseline.json`.
 - [ ] ~1 week clear schedule.
 
-## Why this is likely the biggest single perf win in the refactor
+## Why this is the biggest user-felt single win in the refactor
 
-The graph editor canvas work fixed one heavy painter. The dope sheet has multiple cost layers all firing per frame: DOM mount/unmount of hundreds of diamonds during scroll, per-RAF imperative loop over those diamonds for dirty-state, React reconciliation across the tree, plus the paint cost on top. Replacing the DOM with canvas collapses all four into one cheap canvas composite. If the probe confirms the load shape, this single implementation should produce a larger user-felt win than the canvas GraphEditor did — and the canvas GraphEditor already moved worker FPS from 22 to 43.
+The original framing (multiple cost layers all firing per frame) was partly wrong; the probe ([`15_DOPESHEET_PROBE_FINDINGS.md`](./15_DOPESHEET_PROBE_FINDINGS.md)) showed `TrackRow.tick` is dead code and zoom churn isn't present at this seed. But the actual finding is more dramatic in a different way:
+
+**Clicking a track currently freezes the app for ~137 ms.** That's a single React commit cycling through 9000 `<KeyframeDiamond>` reconciliations. With six tracks in the heavy seed, that's six freezes of ~137 ms each as the user navigates. It's the "the UI is unresponsive when I try to do anything" experience users feel viscerally.
+
+Canvas DopeSheet makes selection-state updates O(viewport pixels) instead of O(keyframe count). The expected post-canvas `dope-select-track` median is **≤ 5 ms** — a 25–30× improvement on the single most user-visible lag symptom in the app. The graph editor canvas got worker FPS from 22 to 43 on graph-play; this work gets `dope-select-track` from 8 to 55 fps. Different metric, larger absolute change in user feel.
+
+The follow-on (probably less dramatic but still real) is `dope-scrub` workerFps from 16 to 45 by removing the 6050 ms of unaccounted layout-or-keyframe-eval work that scales with diamond count. The probe couldn't isolate that cost between (a) browser layout reflow from 9000 absolutely-positioned divs participating in PlayheadCursor's layout pass and (b) `AnimationSystem.tick`'s per-frame keyframe binder evaluation. After canvas DopeSheet ships, the residual answers the question: if dope-scrub long-task time drops to <1500 ms, the layout was the cost. If it stays >3000 ms, AnimationSystem.tick is. Either way, the probe's outcome justifies starting here.

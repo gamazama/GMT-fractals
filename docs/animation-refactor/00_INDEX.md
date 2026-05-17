@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-17 — Canvas GraphEditor shipped + polyline-cache stale-render fix landed. Dope-sheet probe + canvas plan drafted; probe first (~1 day), then implementation (~1-2 weeks). Likely the biggest single perf win in the refactor.
+> 2026-05-17 — Dope-sheet probe returned "modified strong case." Primary target: dope-select-track 137 ms → ≤5 ms (clicking a track currently freezes the app for ~1 s per click; canvas eliminates the 9000-diamond reconciliation). Canvas DopeSheet ready to start.
 
 ## What this is
 
@@ -29,9 +29,9 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`11_CANVAS_GRAPH_REPORT.md`](./11_CANVAS_GRAPH_REPORT.md) | Output of the canvas GraphEditor work. **User-visible graph-play lag resolved.** | shipped |
 | `12_BENCH_METRIC_REPORT.md` | Output of the bench improvement (committed inline as `f331a96`; no separate report doc). | n/a |
 | [`13_DOPESHEET_PROBE_PROMPT.md`](./13_DOPESHEET_PROBE_PROMPT.md) | DopeSheet load probe: weigh DOM-per-keyframe / TrackRow.tick / mount-churn / React fanout against each other at heavy seed. | shipped |
-| [`14_CANVAS_DOPESHEET_PROMPT.md`](./14_CANVAS_DOPESHEET_PROMPT.md) | Canvas DopeSheet implementation: three-layer cache mirroring the GraphEditor work, sidebar stays DOM. **HELD until 13 returns "strong case."** | shipped (held) |
-| `15_DOPESHEET_PROBE_FINDINGS.md` | Output of dope-sheet probe. | **pending fresh session** |
-| `16_CANVAS_DOPESHEET_REPORT.md` | Output of canvas DopeSheet implementation. | pending (after 15) |
+| [`14_CANVAS_DOPESHEET_PROMPT.md`](./14_CANVAS_DOPESHEET_PROMPT.md) | Canvas DopeSheet implementation: three-layer cache mirroring the GraphEditor work, sidebar stays DOM. **Ready** — updated with probe-driven amendments (primary target now `dope-select-track`). | shipped, ready |
+| [`15_DOPESHEET_PROBE_FINDINGS.md`](./15_DOPESHEET_PROBE_FINDINGS.md) | Output of dope-sheet probe. **Modified strong case** — `dope-select-track` is catastrophic (137 ms × N selections); `dope-zoom` + `TrackRow.tick` hypotheses falsified; `dope-play` only partially recoverable (residual is systemic React fanout). | shipped |
+| `16_CANVAS_DOPESHEET_REPORT.md` | Output of canvas DopeSheet implementation. | pending fresh session |
 | `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** per probe results + canvas success. | held / deferred |
 
 ## Current state
@@ -45,9 +45,9 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 [done]      Bench metric      10_BENCH_METRIC_PROMPT → shipped as f331a96  (per-commit median ms column)
 [done]      Canvas GraphEd    09_CANVAS_GRAPH_PROMPT → 11_CANVAS_GRAPH_REPORT  → worker FPS 2×, main FPS 3×, main-thread blocking → 0
 [done]      Cache stale-fix   sequenceSlice in-place mutation → polyline cache invalidation correct (b667cfe)
-[NEXT]      DopeSheet probe   13_DOPESHEET_PROBE_PROMPT → 15_DOPESHEET_PROBE_FINDINGS  (~1 day)
-[THEN-if]   Canvas DopeSheet  14_CANVAS_DOPESHEET_PROMPT → 16_CANVAS_DOPESHEET_REPORT  (~1-2 weeks; gated on probe)
-[deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case retracted; hygiene case stands)
+[done]      DopeSheet probe   13_DOPESHEET_PROBE_PROMPT → 15_DOPESHEET_PROBE_FINDINGS  → modified strong case; dope-select-track is the user-felt symptom
+[NEXT]      Canvas DopeSheet  14_CANVAS_DOPESHEET_PROMPT → 16_CANVAS_DOPESHEET_REPORT  (~1-2 weeks)
+[deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case retracted; hygiene case + dope-play residual ~3000 ms stand; revisit after canvas DopeSheet ships)
 ```
 
 ### Outcomes log
@@ -64,6 +64,7 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | 2026-05-17 | Canvas GraphEditor shipped (`a9518c6` → `ad6b7a8`) | **User-visible graph-play lag resolved** with heavy (9000-key) seed: workerFps 22→43, mainFps 20→60 (vsync), longTasks 12→0, 1054ms→0 of main-thread blocking. As-written acceptance criterion (`Timeline:Graph` per-commit ms ≤1.5ms) NOT met — that metric measures React reconciliation, not canvas paint. Real fix lives in `workerFps`/`fpsP50`/longTasks. See `11_CANVAS_GRAPH_REPORT.md` "Surprises" §3 for why the metric framing was wrong. |
 | 2026-05-17 | Polyline-cache stale-render fix shipped (`b667cfe`) | User testing immediately after canvas merge revealed bezier handles + tangent edits didn't update the curve. Root cause: 5 writers in `sequenceSlice` mutated keyframes in place, so the cache (keyed on keyframes-array ref) saw stale data. Audit §10 predicted 2/5 of these; logged corrections + lesson in `04_CORRECTIONS.md`. |
 | 2026-05-17 | Dope-sheet probe + canvas implementation prompts drafted | `13_DOPESHEET_PROBE_PROMPT.md` (1 day) measures whether the dope-sheet load shape justifies a canvas rewrite. `14_CANVAS_DOPESHEET_PROMPT.md` (1-2 weeks) is held pending probe verdict. Probable: probe returns "strong case" — dope sheet has more cost layers than the graph editor (DOM mount/unmount + per-RAF imperative tick + React reconciliation + paint), and canvas collapses all four. |
+| 2026-05-17 | Dope-sheet probe shipped (`9b647e4`) — **modified strong case** | Two of three v1-prompt hypotheses falsified: `TrackRow.tick` is dead code in dev, `dope-zoom` is at vsync. Third (long tasks in scrub/play) confirmed but reattributed: most plausibly browser layout reflow from 9000 absolutely-positioned `<KeyframeDiamond>` divs. Surprise headline finding: `dope-select-track` triggers a single 137 ms DopeSheet render reconciling all 9000 diamonds — the "click a track and the app freezes" symptom. Probe expected post-canvas dope-select-track median: 137 ms → ≤5 ms (25-30× win). `dope-play` residual ~3000 ms is systemic React fanout (AnimDoc territory). Canvas DopeSheet prompt updated inline with probe-driven amendments. |
 
 ## Implementation roadmap
 
