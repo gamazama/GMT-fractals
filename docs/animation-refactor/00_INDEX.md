@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-10 — Spec v2 complete; spike pending in fresh session.
+> 2026-05-17 — Spike returned negative for animation-store; engine-fanout probe drafted; Phase 0 held pending probe result.
 
 ## What this is
 
@@ -21,23 +21,40 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`03_SPEC.md`](./03_SPEC.md) | Inter-module API spec. The contract Phase 0+ implements. Tests in §7 enforce it. | v2 |
 | [`04_CORRECTIONS.md`](./04_CORRECTIONS.md) | Running log of spec amendments (post-shipping changes with date + rationale). | living |
 | [`05_SPIKE_PROMPT.md`](./05_SPIKE_PROMPT.md) | Self-contained prompt for the diagnostic spike (validates the architectural diagnosis before Phase 0). | shipped |
-| `06_SPIKE_FINDINGS.md` | Output of the spike: confirmed / partial / invalidated + bench delta + recommendation. | **pending fresh session** |
-| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Per-phase prompts and reports. One pair per implementation step from `03_SPEC.md` §10. | starts after spike |
+| [`06_SPIKE_FINDINGS.md`](./06_SPIKE_FINDINGS.md) | Output of the spike. **Diagnosis invalidated for the named consumer.** Read this before Phase 0 work. | shipped |
+| [`07_ENGINE_PROBE_PROMPT.md`](./07_ENGINE_PROBE_PROMPT.md) | Follow-up probe: locate the engineStore subscription that drives Slider re-renders at engine-tick rate. | shipped |
+| `08_ENGINE_PROBE_FINDINGS.md` | Output of the engine-fanout probe. | **pending fresh session** |
+| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Per-phase prompts and reports. One pair per implementation step from `03_SPEC.md` §10. **Held — see below.** | blocked on probe |
 
 ## Current state
 
 ```
-[done]    Audit            01_AUDIT.md
-[done]    Rationale        02_RATIONALE.md
-[done]    Spec v2          03_SPEC.md          (9 open questions resolved)
-[pending] Spike            05_SPIKE_PROMPT.md  → 06_SPIKE_FINDINGS.md
-[locked]  Phase 0          PHASE_0_PROMPT.md   (types + tests scaffolding; ready to draft after spike)
-[planned] Phases 1-9       per 03_SPEC.md §10
+[done]     Audit            01_AUDIT.md
+[done]     Rationale        02_RATIONALE.md
+[done]     Spec v2          03_SPEC.md          (9 open questions resolved)
+[done]     Spike            05_SPIKE_PROMPT → 06_SPIKE_FINDINGS  → diagnosis INVALIDATED for animation-store
+[queued]   Engine probe     07_ENGINE_PROBE_PROMPT → 08_ENGINE_PROBE_FINDINGS  (~1 day)
+[on hold]  Phase 0          PHASE_0_PROMPT.md   (held; resumes only after probe result + plan revision)
+[planned]  Phases 1-9       per 03_SPEC.md §10  (likely re-ordered per spike recommendation #2)
 ```
+
+### Outcomes log
+
+| Date | Event | Effect on plan |
+|---|---|---|
+| 2026-05-10 | Spec v2 shipped after Q-walkthrough | 9 open questions resolved; module boundaries locked |
+| 2026-05-17 | Spike returned: per-track sub has no measurable effect on Slider re-renders or frame time | **Phase 0 held.** Diagnosis in `02_RATIONALE.md` is partly invalidated. `AnimationDocument` design itself remains sound; its perf-win case is much weaker than projected. Canvas-first reordering and engineStore narrowing become front-runners for solving the user-reported lag. |
+| 2026-05-17 | Engine-fanout probe drafted | Next action; locates the actual Slider re-render cause |
+| 2026-05-17 | Bench instrumentation patches landed on `dev` (`990f2e9`) | `animStoreNotifyCount` + fit-to-view seam available for all future probes |
 
 ## Implementation roadmap
 
-Per [`03_SPEC.md`](./03_SPEC.md) §10. Each phase = one fresh Claude session targeting one work unit. Estimates from the spec; actuals captured in each `PHASE_N_REPORT.md`.
+**Status:** held. Per [`03_SPEC.md`](./03_SPEC.md) §10 + the original audit, the foundation work was scoped as ~33d across 10 phases. The spike result ([`06_SPIKE_FINDINGS.md`](./06_SPIKE_FINDINGS.md)) suggests this order may be wrong — specifically that canvas DopeSheet/GraphEditor work (originally late phases) is more leveraged for user-visible lag than the AnimationDocument foundation work (originally Phase 0-1). The engine-fanout probe ([`07_ENGINE_PROBE_PROMPT.md`](./07_ENGINE_PROBE_PROMPT.md)) will inform the final order.
+
+Once the probe lands, this roadmap will be revised. The original phase table is preserved below for reference.
+
+<details>
+<summary>Original phase plan (likely to be re-ordered)</summary>
 
 | Phase | Scope | Est. | Spec ref |
 |---:|---|---:|---|
@@ -54,6 +71,8 @@ Per [`03_SPEC.md`](./03_SPEC.md) §10. Each phase = one fresh Claude session tar
 | | **Foundation total** | ~33d (6-7 weeks at sustainable pace) | |
 
 After Phase 9 the foundation is in place. Subsequent work (canvas DopeSheet, canvas GraphEditor, recording bake) is consumer-side and lands on top of stable APIs.
+
+</details>
 
 ## Working protocol
 
