@@ -79,7 +79,15 @@ const Timeline: React.FC<TimelineProps> = ({ onClose }) => {
     }, []);
     const [panelHeight, setPanelHeight] = useState(250);
     const [isResizing, setIsResizing] = useState(false);
-    const [frameWidth, setFrameWidth] = useState(8); 
+    const [frameWidth, setFrameWidth] = useState(8);
+    // Bench seam: let debug/bench-perf-timeline.mts force fit-to-window so
+    // TrackRow virtualisation doesn't clip most seeded keys. Sibling of
+    // __timelineSetMode above.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        (window as any).__timelineSetFrameWidth = setFrameWidth;
+        return () => { delete (window as any).__timelineSetFrameWidth; };
+    }, []);
     
     const [scrollLeft, setScrollLeft] = useState(0);
     const [viewportWidth, setViewportWidth] = useState(0);

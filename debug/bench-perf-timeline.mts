@@ -87,6 +87,7 @@ interface ScenarioMetrics {
     longTaskCount: number;
     longTaskTotalMs: number;
     storeNotifyCount: number;
+    animStoreNotifyCount: number;
     workerPostCount: number;
     workerPostBytes: number;
     heapDeltaMb: number;
@@ -111,6 +112,7 @@ const initScript = `
         longTaskCount: 0,
         longTaskMs: 0,
         storeNotifyCount: 0,
+        animStoreNotifyCount: 0,
         workerPostCount: 0,
         workerPostBytes: 0,
         workerPostBytesSampled: 0,
@@ -198,6 +200,19 @@ const initScript = `
         if (hookStore()) clearInterval(storeHookInterval);
     }, 50);
 
+    // Animation store is a separate Zustand store — measure its notifications
+    // independently so the per-track-sub spike can actually be evaluated.
+    let animStoreUnsub = null;
+    const hookAnimStore = () => {
+        const s = window.useAnimationStore;
+        if (!s || typeof s.subscribe !== 'function') return false;
+        animStoreUnsub = s.subscribe(() => { if (b.capturing) b.animStoreNotifyCount += 1; });
+        return true;
+    };
+    const animStoreHookInterval = setInterval(() => {
+        if (hookAnimStore()) clearInterval(animStoreHookInterval);
+    }, 50);
+
     const accumNow = () => (window.__gmtProxy && window.__gmtProxy.accumulationCount) || 0;
 
     const onRender = (id, _phase, actualDuration, baseDuration) => {
@@ -223,6 +238,7 @@ const initScript = `
             b.longTaskCount = 0;
             b.longTaskMs = 0;
             b.storeNotifyCount = 0;
+            b.animStoreNotifyCount = 0;
             b.workerPostCount = 0;
             b.workerPostBytes = 0;
             b.workerPostBytesSampled = 0;
@@ -253,6 +269,7 @@ const initScript = `
                 longTaskCount: b.longTaskCount,
                 longTaskMs: b.longTaskMs,
                 storeNotifyCount: b.storeNotifyCount,
+                animStoreNotifyCount: b.animStoreNotifyCount,
                 workerPostCount: b.workerPostCount,
                 workerPostBytes: estimatedBytes,
                 workerPostSampleCount: b.workerPostSampleCount,
@@ -314,6 +331,7 @@ const summarise = (runs: ScenarioMetrics[]): ScenarioMetrics => ({
     longTaskCount: median(runs.map(r => r.longTaskCount)),
     longTaskTotalMs: median(runs.map(r => r.longTaskTotalMs)),
     storeNotifyCount: median(runs.map(r => r.storeNotifyCount)),
+    animStoreNotifyCount: median(runs.map(r => r.animStoreNotifyCount)),
     workerPostCount: median(runs.map(r => r.workerPostCount)),
     workerPostBytes: median(runs.map(r => r.workerPostBytes)),
     heapDeltaMb: median(runs.map(r => r.heapDeltaMb)),
@@ -343,6 +361,7 @@ const snapshotToMetrics = (snap: any): ScenarioMetrics => {
         longTaskCount: snap.longTaskCount,
         longTaskTotalMs: snap.longTaskMs,
         storeNotifyCount: snap.storeNotifyCount,
+        animStoreNotifyCount: snap.animStoreNotifyCount,
         workerPostCount: snap.workerPostCount,
         workerPostBytes: snap.workerPostBytes,
         heapDeltaMb: snap.heapDeltaMb,
@@ -706,6 +725,27 @@ async function main() {
     const stats = await seedKeyframeStats(page);
     console.log(`[bench] seeded ${stats.trackCount} tracks / ${stats.keyframeCount} keyframes`);
 
+    // Fit timeline to viewport so virtualisation in TrackRow.visibleSlice
+    // and DopeSheet/TrackGroup doesn't clip most seeded keys out of the
+    // measured render path. Uses the bench seam exposed by Timeline.tsx.
+    await page.evaluate(({ duration, vw }) => {
+        const setFW = (window as any).__timelineSetFrameWidth;
+        if (typeof setFW !== 'function') {
+            console.warn('[bench] __timelineSetFrameWidth missing — TrackRow virtualisation will clip seeded keys');
+            return;
+        }
+        // Leave room for the sidebar (~256px) and a margin.
+        const usable = Math.max(400, vw - 320);
+        const fw = Math.max(0.5, usable / Math.max(1, duration));
+        setFW(fw);
+    }, { duration: seedDuration, vw: VIEWPORT.width });
+    await page.evaluate(`window.__bench.waitFrames(8)`);
+    const fwApplied = await page.evaluate(() => {
+        const setFW = (window as any).__timelineSetFrameWidth;
+        return typeof setFW === 'function';
+    });
+    console.log(`[bench] fit-to-view ${fwApplied ? 'applied' : 'SKIPPED (seam missing)'}`);
+
     // Warm-up.
     await page.evaluate(`window.__bench.waitFrames(${WARMUP_FRAMES})`);
 
@@ -825,8 +865,8 @@ async function main() {
 
     // ─── console summary ────────────────────────────────────────────
     console.log('\n══ SUMMARY (median across runs) ══');
-    console.log('scenario     | wkrFps  | mainFps p50 | mainFps p5 | longTasks (ms)  | store.notify | worker posts');
-    console.log('-------------|---------|-------------|------------|-----------------|--------------|-------------');
+    console.log('scenario     | wkrFps  | mainFps p50 | mainFps p5 | longTasks (ms)  | eng.notify | anim.notify | worker posts');
+    console.log('-------------|---------|-------------|------------|-----------------|------------|-------------|-------------');
     for (const r of results) {
         const m = r.median;
         const row =
@@ -835,7 +875,8 @@ async function main() {
             `${m.fpsP50.toFixed(1).padStart(11)} | ` +
             `${m.fpsP5.toFixed(1).padStart(10)} | ` +
             `${(m.longTaskCount + ' (' + m.longTaskTotalMs.toFixed(0) + ')').padStart(15)} | ` +
-            `${String(m.storeNotifyCount).padStart(12)} | ` +
+            `${String(m.storeNotifyCount).padStart(10)} | ` +
+            `${String(m.animStoreNotifyCount).padStart(11)} | ` +
             `${String(m.workerPostCount).padStart(12)}`;
         console.log(row);
     }
