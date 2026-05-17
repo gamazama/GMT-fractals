@@ -70,17 +70,34 @@ export interface CachedPolyline {
 
 export class PolylineCache {
     private entries = new Map<string, PolylineEntry>();
+    /** Diagnostics — exposed via window.__polylineCacheStats for bench probing.
+     *  Tracks why a get() missed so we can distinguish "track new" vs
+     *  "viewKey change" vs "keyframes ref change" in flight. */
+    stats = { hits: 0, missNoEntry: 0, missViewKey: 0, missKeysRef: 0, sets: 0, lastMissDetail: '' };
 
     /** Returns the cached canvas if (trackId, keyframes ref, viewKey) all match. Else null. */
     get(trackId: string, keyframes: Keyframe[], viewKey: string): CachedPolyline | null {
         const e = this.entries.get(trackId);
-        if (!e) return null;
-        if (e.viewKey !== viewKey) return null;
-        if (e.keyframesToken !== keyframes) return null;
+        if (!e) {
+            this.stats.missNoEntry += 1;
+            return null;
+        }
+        if (e.viewKey !== viewKey) {
+            this.stats.missViewKey += 1;
+            this.stats.lastMissDetail = `viewKey: ${e.viewKey} → ${viewKey}`;
+            return null;
+        }
+        if (e.keyframesToken !== keyframes) {
+            this.stats.missKeysRef += 1;
+            this.stats.lastMissDetail = `keysRef changed for ${trackId}`;
+            return null;
+        }
+        this.stats.hits += 1;
         return { canvas: e.canvas, width: e.width, height: e.height };
     }
 
     set(trackId: string, keyframes: Keyframe[], viewKey: string, canvas: CacheCanvas, width: number, height: number): void {
+        this.stats.sets += 1;
         this.entries.set(trackId, {
             keyframesToken: keyframes,
             viewKey,
