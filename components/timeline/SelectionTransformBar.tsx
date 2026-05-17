@@ -13,6 +13,9 @@ export const SelectionTransformBar: React.FC<SelectionTransformBarProps> = ({ mi
         style={{
             left: `${minFrame * frameWidth - 12}px`,
             width: `${(maxFrame - minFrame) * frameWidth + 24}px`,
+            // Re-enable pointer events — the row's flex-1 container disables them so
+            // empty cells fall through to the keyframe-area canvas hit-test.
+            pointerEvents: 'auto',
         }}
     >
         <div

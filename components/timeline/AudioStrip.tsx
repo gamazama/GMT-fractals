@@ -26,11 +26,20 @@ const Waveform: React.FC<{ peaks: number[]; widthPx: number; trimRange: [number,
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        const dpr = window.devicePixelRatio || 1;
         const cssW = Math.max(1, widthPx);
         const cssH = STRIP_HEIGHT - 16;
-        canvas.width  = cssW * dpr;
-        canvas.height = cssH * dpr;
+        // Browser canvas pixel-buffer limits (~32767 px on Firefox, ~65535 on Chrome).
+        // A multi-minute clip at high zoom + dpr=2 easily overflows on the width axis,
+        // and the resulting setTransform throws DOMException, killing the strip. Pin
+        // the device-pixel-ratio at whatever keeps the buffer within MAX_CANVAS_PX;
+        // visual fidelity loss on a 32k+ px waveform stretched to 1× is imperceptible.
+        const MAX_CANVAS_PX = 16384;
+        const requestedDpr = window.devicePixelRatio || 1;
+        const dprByWidth  = MAX_CANVAS_PX / cssW;
+        const dprByHeight = MAX_CANVAS_PX / cssH;
+        const dpr = Math.max(0.25, Math.min(requestedDpr, dprByWidth, dprByHeight));
+        canvas.width  = Math.max(1, Math.floor(cssW * dpr));
+        canvas.height = Math.max(1, Math.floor(cssH * dpr));
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, cssW, cssH);

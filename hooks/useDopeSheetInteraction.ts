@@ -9,6 +9,13 @@ interface DopeSheetInteractionProps {
     frameWidth: number;
     contentRef: React.RefObject<HTMLDivElement>;
     scrollContainerRef: React.RefObject<HTMLDivElement>;
+    /** Wrapper holding the group + track row stack (everything below the global summary).
+     *  Used at mouseup to translate marquee box coords into row-relative coords without
+     *  hard-coding the height of the audio strip / global summary that sit above it. */
+    rowsContainerRef: React.RefObject<HTMLDivElement>;
+    /** Sticky global-summary row. Used to compute its actual contentRef-y bounds for
+     *  the marquee's "select all keys at this frame" check. */
+    globalSummaryRef: React.RefObject<HTMLDivElement>;
     SIDEBAR_WIDTH: number;
     RULER_HEIGHT: number;
     GROUP_HEIGHT: number;
@@ -44,6 +51,8 @@ export const useDopeSheetInteraction = ({
     frameWidth,
     contentRef,
     scrollContainerRef,
+    rowsContainerRef,
+    globalSummaryRef,
     SIDEBAR_WIDTH,
     RULER_HEIGHT,
     GROUP_HEIGHT,
@@ -413,15 +422,28 @@ export const useDopeSheetInteraction = ({
             if (boxStartRef.current && selectionBox && contentRef.current) {
                 const newSelectedIds = new Set<string>();
                 const tracksInvolved = new Set<string>();
-                
+
                 const boxX = selectionBox.x;
                 const boxY = selectionBox.y;
                 const boxR = boxX + selectionBox.w;
                 const boxB = boxY + selectionBox.h;
 
-                const globalTop = RULER_HEIGHT;
-                const globalBottom = RULER_HEIGHT + GROUP_HEIGHT;
-                
+                // Resolve the row stack's actual contentRef-y origin at mouseup time
+                // (audio strip / global summary heights are dynamic — the hardcoded
+                // `RULER_HEIGHT + GROUP_HEIGHT = 48` assumption shifted the marquee
+                // hit-test by a row or two whenever audio was rendered). Both refs
+                // are optional fallbacks so callers without the canvas wiring still
+                // get the previous behaviour.
+                const contentRect = contentRef.current.getBoundingClientRect();
+                const rowsTop = rowsContainerRef.current
+                    ? rowsContainerRef.current.getBoundingClientRect().top - contentRect.top
+                    : RULER_HEIGHT + GROUP_HEIGHT;
+
+                const globalTop = globalSummaryRef.current
+                    ? globalSummaryRef.current.getBoundingClientRect().top - contentRect.top
+                    : RULER_HEIGHT;
+                const globalBottom = globalTop + GROUP_HEIGHT;
+
                 if (boxB > globalTop && boxY < globalBottom) {
                     const allTracks = Object.values(sequence.tracks) as Track[];
                     allTracks.forEach(track => {
@@ -436,7 +458,7 @@ export const useDopeSheetInteraction = ({
                     });
                 }
 
-                let yOffset = RULER_HEIGHT + GROUP_HEIGHT; 
+                let yOffset = rowsTop;
                 const BUFFER = 4;
 
                 const checkTrack = (tid: string) => {
