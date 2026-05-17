@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-17 — Dope-sheet probe returned "modified strong case." Primary target: dope-select-track 137 ms → ≤5 ms (clicking a track currently freezes the app for ~1 s per click; canvas eliminates the 9000-diamond reconciliation). Canvas DopeSheet ready to start.
+> 2026-05-17 — Canvas DopeSheet shipped + shared-utils cleanup landed. Heavy-seed worker FPS: dope-select-track 8→58.6, dope-scrub 16→59.8, dope-play 26→59.3; longTasks → 0 across all dope-*. Three pre-existing bugs surfaced + fixed during interaction smoke. Both canvas editors now share cache + shape primitives; identical O(T×S×N) selection-paint bug found in GraphEditor by analogy and fixed.
 
 ## What this is
 
@@ -29,10 +29,11 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`11_CANVAS_GRAPH_REPORT.md`](./11_CANVAS_GRAPH_REPORT.md) | Output of the canvas GraphEditor work. **User-visible graph-play lag resolved.** | shipped |
 | `12_BENCH_METRIC_REPORT.md` | Output of the bench improvement (committed inline as `f331a96`; no separate report doc). | n/a |
 | [`13_DOPESHEET_PROBE_PROMPT.md`](./13_DOPESHEET_PROBE_PROMPT.md) | DopeSheet load probe: weigh DOM-per-keyframe / TrackRow.tick / mount-churn / React fanout against each other at heavy seed. | shipped |
-| [`14_CANVAS_DOPESHEET_PROMPT.md`](./14_CANVAS_DOPESHEET_PROMPT.md) | Canvas DopeSheet implementation: three-layer cache mirroring the GraphEditor work, sidebar stays DOM. **Ready** — updated with probe-driven amendments (primary target now `dope-select-track`). | shipped, ready |
-| [`15_DOPESHEET_PROBE_FINDINGS.md`](./15_DOPESHEET_PROBE_FINDINGS.md) | Output of dope-sheet probe. **Modified strong case** — `dope-select-track` is catastrophic (137 ms × N selections); `dope-zoom` + `TrackRow.tick` hypotheses falsified; `dope-play` only partially recoverable (residual is systemic React fanout). | shipped |
-| `16_CANVAS_DOPESHEET_REPORT.md` | Output of canvas DopeSheet implementation. | pending fresh session |
-| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** per probe results + canvas success. | held / deferred |
+| [`14_CANVAS_DOPESHEET_PROMPT.md`](./14_CANVAS_DOPESHEET_PROMPT.md) | Canvas DopeSheet implementation prompt. | shipped |
+| [`15_DOPESHEET_PROBE_FINDINGS.md`](./15_DOPESHEET_PROBE_FINDINGS.md) | Output of dope-sheet probe. **Modified strong case**. | shipped |
+| [`16_CANVAS_DOPESHEET_REPORT.md`](./16_CANVAS_DOPESHEET_REPORT.md) | Output of canvas DopeSheet implementation. **`dope-select-track` 8 → 58.6 fps; `dope-scrub` 16 → 59.8; `dope-play` 26 → 59.3 (far above the 30-40 target — see Surprise #1); longTaskMs → 0 across all dope-* scenarios.** Three pre-existing bugs surfaced + fixed: AudioStrip canvas overflow, marquee y-offset misaligned by AudioGroup, shift-range select deselecting anchor. | shipped |
+| [`17_SHARED_CANVAS_UTILS.md`](./17_SHARED_CANVAS_UTILS.md) | Shared canvas-cache utils + GraphEditor simplify pass report. `utils/canvasCache.ts` (generic `RefViewKeyCache<TToken>`) + `utils/keyframeShape.ts` (`traceKeyframeShape`). Both editor caches collapsed onto the shared base (-220 LOC across the two cache files). Mirror bug: GraphEditor's Pass 1 selection paint had the same O(T×S×N) anti-pattern as DopeSheet's Surprise #5; fixed by analogy. Net -84 LOC. | shipped |
+| `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** — perf rationale fully retracted (canvas work resolved all dope-* and graph-* lag at heavy seed); hygiene rationale stands but no longer load-bearing for user-felt smoothness. | held / deferred |
 
 ## Current state
 
@@ -46,8 +47,10 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 [done]      Canvas GraphEd    09_CANVAS_GRAPH_PROMPT → 11_CANVAS_GRAPH_REPORT  → worker FPS 2×, main FPS 3×, main-thread blocking → 0
 [done]      Cache stale-fix   sequenceSlice in-place mutation → polyline cache invalidation correct (b667cfe)
 [done]      DopeSheet probe   13_DOPESHEET_PROBE_PROMPT → 15_DOPESHEET_PROBE_FINDINGS  → modified strong case; dope-select-track is the user-felt symptom
-[NEXT]      Canvas DopeSheet  14_CANVAS_DOPESHEET_PROMPT → 16_CANVAS_DOPESHEET_REPORT  (~1-2 weeks)
-[deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case retracted; hygiene case + dope-play residual ~3000 ms stand; revisit after canvas DopeSheet ships)
+[done]      Canvas DopeSheet  14_CANVAS_DOPESHEET_PROMPT → 16_CANVAS_DOPESHEET_REPORT  → all dope-* at or near vsync at heavy seed; longTaskMs → 0
+[done]      Shared canvas utils 17_SHARED_CANVAS_UTILS  → -220 LOC in caches, generic RefViewKeyCache<TToken>, mirror O(T×S×N) bug in Graph fixed by analogy
+[OPEN]      Decide next       (a) wait for next user-reported lag; (b) HiDPI/DPR pass across both editors; (c) Root Summary row port to canvas (~9 ms residual on dope-select-track); (d) re-evaluate AnimationDocument case
+[deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case fully retracted — canvas work resolved user-felt lag; hygiene case stands but no longer load-bearing)
 ```
 
 ### Outcomes log
@@ -65,6 +68,8 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | 2026-05-17 | Polyline-cache stale-render fix shipped (`b667cfe`) | User testing immediately after canvas merge revealed bezier handles + tangent edits didn't update the curve. Root cause: 5 writers in `sequenceSlice` mutated keyframes in place, so the cache (keyed on keyframes-array ref) saw stale data. Audit §10 predicted 2/5 of these; logged corrections + lesson in `04_CORRECTIONS.md`. |
 | 2026-05-17 | Dope-sheet probe + canvas implementation prompts drafted | `13_DOPESHEET_PROBE_PROMPT.md` (1 day) measures whether the dope-sheet load shape justifies a canvas rewrite. `14_CANVAS_DOPESHEET_PROMPT.md` (1-2 weeks) is held pending probe verdict. Probable: probe returns "strong case" — dope sheet has more cost layers than the graph editor (DOM mount/unmount + per-RAF imperative tick + React reconciliation + paint), and canvas collapses all four. |
 | 2026-05-17 | Dope-sheet probe shipped (`9b647e4`) — **modified strong case** | Two of three v1-prompt hypotheses falsified: `TrackRow.tick` is dead code in dev, `dope-zoom` is at vsync. Third (long tasks in scrub/play) confirmed but reattributed: most plausibly browser layout reflow from 9000 absolutely-positioned `<KeyframeDiamond>` divs. Surprise headline finding: `dope-select-track` triggers a single 137 ms DopeSheet render reconciling all 9000 diamonds — the "click a track and the app freezes" symptom. Probe expected post-canvas dope-select-track median: 137 ms → ≤5 ms (25-30× win). `dope-play` residual ~3000 ms is systemic React fanout (AnimDoc territory). Canvas DopeSheet prompt updated inline with probe-driven amendments. |
+| 2026-05-17 | Canvas DopeSheet shipped (`472444d` → `6d99271`) — **all primary + secondary targets met or exceeded** | `dope-select-track` worker FPS 8 → 58.6 (target ≥55, ✓). `dope-scrub` worker FPS 16 → 59.8 (target ≥45, ✓). `dope-scrub` longTaskMs 7034 → 0 (target ≤1500, far exceeded). `dope-play` worker FPS 26 → **59.3** (target 30-40 — **far exceeded**; Surprise #1: removing the 9000 diamond divs eliminated the browser layout-reflow choke that was the real cause of play stutter, not the React fanout we'd attributed it to). `Timeline:DopeSheet` per-commit ms 137 → ~9 (target ≤5; missed at 9 — residual is React reconciling sidebar + memos, not canvas paint). Three pre-existing bugs surfaced + fixed: AudioStrip canvas overflow on long clips at deep zoom, marquee y-offset bug when AudioGroup rendered, shift-range select deselecting anchor row. |
+| 2026-05-17 | Shared canvas utils + GraphEditor simplify shipped (`ad6d62b`) | `utils/canvasCache.ts` + `utils/keyframeShape.ts` extracted; `RefViewKeyCache<TToken>` subsumes Polyline / TrackDiamond / GroupDiamond caches. -220 LOC across the two cache files, net -84 LOC overall. Mirror bug found in `drawGraph` Pass 1: same O(T × S × N) `keys.find()` inside nested forEach as DopeSheet's Surprise #5, fixed by analogy (pre-bucket selectedKeyframeIds by trackId once, build per-track `Map<keyId, Keyframe>` for inner lookup). All bench scenarios ±1 fps of canvas-dopesheet-cleanup baseline; tests 28/28 graph + 41/41 dope. |
 
 ## Implementation roadmap
 

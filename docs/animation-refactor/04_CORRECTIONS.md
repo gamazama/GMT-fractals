@@ -42,6 +42,48 @@ When the Rust port ships a phase touching our scope, capture the relevant patter
 
 ## Entries
 
+### 2026-05-17 — Canvas DopeSheet — `02_RATIONALE.md` §1's "React fanout dominates dope-play" partly retracted
+
+**Change:** `16_CANVAS_DOPESHEET_REPORT.md` §Surprise #1 documents that canvas DopeSheet moved `dope-play` worker FPS from 26 to **59.3** — far above the 30-40 target the prompt set based on `08_ENGINE_PROBE_FINDINGS.md`'s "React fanout is the residual cost" framing. The React anim-notification fanout still exists at the same per-commit cost (`Dock:right` ~1.5 ms × 482 commits etc.), but with the 9000 DOM diamonds gone, the browser's layout/paint pipeline no longer chokes between React commits. The worker holds vsync despite the same React work happening.
+
+**Rationale:** the `08`-doc framed React fanout as the dominant residual cost. That was the right framing for *what could be optimised by narrowing subscriptions* — and remains correct on that axis. But it implicitly assumed React reconciliation was load-bearing for user-felt smoothness, which the canvas DopeSheet result falsifies: removing 9000 DOM elements unblocked vsync even with the same React work intact.
+
+**Implication for AnimationDocument:** the perf rationale for the deferred refactor is now further weakened. The remaining React fanout costs ~3 s of CPU per 4 s scenario, but at heavy seed that's spread thinly enough across vsync intervals that the user doesn't feel it. AnimationDocument's hygiene rationale still stands; the "if a user reports lag in a place canvas didn't touch" trigger from `02_RATIONALE.md` may take much longer to fire than projected.
+
+**Discovered by:** canvas DopeSheet implementation (`472444d`).
+
+**Cross-refs:**
+- Report: `16_CANVAS_DOPESHEET_REPORT.md` §Surprise #1.
+- Implicit confirmation of: `15_DOPESHEET_PROBE_FINDINGS.md` hypothesis-by-elimination (the unaccounted ~6050 ms of `dope-scrub` long-task time was browser layout reflow, as suspected).
+
+---
+
+### 2026-05-17 — Shared canvas utils — `drawGraph` Pass 1 had the O(T × S × N) bug pattern documented by DopeSheet Surprise #5
+
+**Change:** `17_SHARED_CANVAS_UTILS.md` documents that `utils/GraphRenderer.ts` Pass 1 (selection-aware overlay) had the same anti-pattern caught in the DopeSheet efficiency review:
+
+```ts
+trackIds.forEach(tid =>
+  selectedKeyframeIds.forEach(cid =>
+    keys.find(kk => kk.id === kid)  // O(N) inside O(T × S)
+  )
+)
+```
+
+At heavy seed (9000 keys all selected on one track) that's 81 M `find()` ops per repaint. Fixed by analogy from the DopeSheet fix: pre-bucket `selectedKeyframeIds` by `trackId` once, build per-track `Map<keyId, Keyframe>` for the inner lookup.
+
+**Rationale:** this code shipped in the canvas GraphEditor work (`09` / `11`) without being flagged at review. The DopeSheet review caught the equivalent pattern only because the heavy seed exposed it (9 ms / repaint × 480 repaints in dope-scrub was small enough to ignore in normal scenarios; only the canvas refactor's strict-perf review surfaced it). The Graph bug was less visible because `selectedKeyframeIds.length` is typically small in graph workflows, but the asymptote was identical.
+
+**Lesson for future canvas/cache work:** **any inner loop of the shape `for selected of N: keys.find(...)` is a footgun.** Codify in review checklist alongside the in-place-mutation grep from the earlier corrections entry.
+
+**Discovered by:** shared-utils cleanup pass (`ad6d62b`).
+
+**Cross-refs:**
+- Report: `17_SHARED_CANVAS_UTILS.md` §"Mirror bugs".
+- Sibling bug: `16_CANVAS_DOPESHEET_REPORT.md` §Surprise #5.
+
+---
+
 ### 2026-05-17 — DopeSheet probe — three claims in `01_AUDIT.md` / probe prompt invalidated
 
 **Change:** `15_DOPESHEET_PROBE_FINDINGS.md` documents three audit / prompt claims that don't hold on current `dev`:
