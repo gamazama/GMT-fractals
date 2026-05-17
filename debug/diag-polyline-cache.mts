@@ -37,6 +37,11 @@ try {
             s.sets = 0;
             s.lastMissDetail = '';
         }
+        const d = (window as any).__drawStats?.();
+        if (d) {
+            d.backCalls = 0;
+            d.overlayCalls = 0;
+        }
     });
     // Play for ~2s
     await page.evaluate(() => {
@@ -50,8 +55,11 @@ try {
         a.getState().pause();
     });
     const stats = await page.evaluate(() => (window as any).__polylineCacheStats?.());
+    const draws = await page.evaluate(() => (window as any).__drawStats?.());
     console.log('POLYLINE CACHE STATS after 2s graph-play:');
     console.log(JSON.stringify(stats, null, 2));
+    console.log('DRAW STATS:');
+    console.log(JSON.stringify(draws, null, 2));
 
     const env = await page.evaluate(() => {
         const a = (window as any).useAnimationStore;

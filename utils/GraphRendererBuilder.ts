@@ -53,7 +53,7 @@ import {
     valueToPixel,
     THEME,
 } from './GraphUtils';
-import { evaluateTrackValue } from './timelineUtils';
+import { evaluateTrackValue, calculateSoftFalloff } from './timelineUtils';
 import { isLogTrack } from '../engine/animation/logTrackRegistry';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 import { CacheCanvas, createCacheCanvas, getCacheCtx2D, CacheCtx2D } from './GraphRendererCache';
@@ -301,3 +301,121 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
 // Re-export so the cache's THEME background is reachable from the builder caller
 // without an extra import path.
 export const POLYLINE_THEME = { backgroundColor: THEME.backgroundColor };
+
+// ---------------------------------------------------------------------------
+// Soft-selection mask builder
+// ---------------------------------------------------------------------------
+
+export interface BuildSoftMaskArgs {
+    sequence: import('../types').AnimationSequence;
+    trackIds: string[];
+    selectedKeyframeIds: string[];
+    trackColors: readonly string[];
+    softSelectionRadius: number;
+    softSelectionType: unknown;
+    view: GraphViewTransform;
+    canvasWidth: number;
+    canvasHeight: number;
+    normalized: boolean;
+    trackRanges: Record<string, { min: number; max: number; span: number }>;
+}
+
+/** Pre-render the soft-selection-tint overlay for ALL visible tracks into one
+ *  transparent canvas. Replaces the per-render O(visible-keys × selected-keys)
+ *  loop in drawGraph with a single drawImage composite when soft selection is
+ *  active. The mask is cached by SoftSelectionMaskCache; rebuilds happen only
+ *  on changes to selection set, soft radius/type, or viewport (each of which
+ *  is a deliberate user action, not a per-frame thing).
+ *
+ *  trackColors is passed in (not imported from GraphRenderer) to avoid the
+ *  circular import builder ←→ renderer; the renderer is the only place that
+ *  defines TRACK_COLORS so it owns ordering. */
+export const buildSoftSelectionMask = (args: BuildSoftMaskArgs): CacheCanvas => {
+    const {
+        sequence, trackIds, selectedKeyframeIds, trackColors,
+        softSelectionRadius, softSelectionType,
+        view, canvasWidth, canvasHeight, normalized, trackRanges,
+    } = args;
+    const canvas = createCacheCanvas(canvasWidth, canvasHeight);
+    const ctx = getCacheCtx2D(canvas);
+    if (!ctx) return canvas;
+
+    // Pre-bucket selected ids by track so the per-key lookup doesn't rescan
+    // selectedKeyframeIds for every diamond.
+    const selectedByTrack = new Map<string, { id: string; frame: number }[]>();
+    for (const compositeId of selectedKeyframeIds) {
+        const sepIdx = compositeId.indexOf('::');
+        if (sepIdx < 0) continue;
+        const tid = compositeId.substring(0, sepIdx);
+        const kid = compositeId.substring(sepIdx + 2);
+        const track = sequence.tracks[tid];
+        if (!track) continue;
+        const k = track.keyframes.find(kk => kk.id === kid);
+        if (!k) continue;
+        let arr = selectedByTrack.get(tid);
+        if (!arr) { arr = []; selectedByTrack.set(tid, arr); }
+        arr.push({ id: kid, frame: k.frame });
+    }
+
+    const selectedSet = new Set(selectedKeyframeIds);
+    const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
+    const v2p = (val: number, tid: string) => {
+        if (normalized) {
+            const range = trackRanges[tid];
+            if (!range || !range.span) return valueToPixel(0.5, view);
+            return valueToPixel((val - range.min) / range.span, view);
+        }
+        return valueToPixel(val, view);
+    };
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(LEFT_GUTTER_WIDTH, RULER_HEIGHT, canvasWidth - LEFT_GUTTER_WIDTH, canvasHeight - RULER_HEIGHT);
+    ctx.clip();
+
+    trackIds.forEach((tid, idx) => {
+        const track = sequence.tracks[tid];
+        if (!track || track.type !== 'float') return;
+        const selectedOnTrack = selectedByTrack.get(tid);
+        if (!selectedOnTrack || selectedOnTrack.length === 0) return;
+        const color = trackColors[idx % trackColors.length];
+
+        for (const k of track.keyframes) {
+            const compositeId = `${tid}::${k.id}`;
+            if (selectedSet.has(compositeId)) continue;
+
+            let maxWeight = 0;
+            for (const sel of selectedOnTrack) {
+                const dist = Math.abs(k.frame - sel.frame);
+                if (dist < softSelectionRadius) {
+                    const w = calculateSoftFalloff(dist, softSelectionRadius, softSelectionType as never);
+                    if (w > maxWeight) maxWeight = w;
+                }
+            }
+            if (maxWeight <= 0) continue;
+
+            const kx = frameToCanvasPixel(k.frame);
+            const ky = v2p(k.value, tid);
+            if (ky < RULER_HEIGHT - 10 || ky > canvasHeight + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > canvasWidth + 5) continue;
+
+            ctx.fillStyle = `color-mix(in srgb, ${THEME.keyColor} ${Math.round(maxWeight * 100)}%, ${color})`;
+            if (k.interpolation === 'Step') {
+                ctx.fillRect(kx - 4, ky - 4, 8, 8);
+            } else if (k.interpolation === 'Bezier') {
+                ctx.beginPath(); ctx.arc(kx, ky, 4, 0, Math.PI * 2); ctx.fill();
+            } else {
+                const d = 4.24;
+                ctx.beginPath();
+                ctx.moveTo(kx, ky - d);
+                ctx.lineTo(kx + d, ky);
+                ctx.lineTo(kx, ky + d);
+                ctx.lineTo(kx - d, ky);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+    });
+
+    ctx.restore();
+    return canvas;
+};

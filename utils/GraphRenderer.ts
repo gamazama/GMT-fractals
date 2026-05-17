@@ -1,11 +1,9 @@
 
 import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, pixelToValue, getGridStep, getTimeGridSteps, THEME } from './GraphUtils';
-import { AnimationSequence, Track, Keyframe } from '../types';
-import { calculateSoftFalloff, evaluateTrackValue } from './timelineUtils';
-import { isLogTrack } from '../engine/animation/logTrackRegistry';
+import { AnimationSequence } from '../types';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
-import { PolylineCache, buildPolylineViewKey } from './GraphRendererCache';
-import { buildTrackPolyline } from './GraphRendererBuilder';
+import { PolylineCache, SoftSelectionMaskCache, buildPolylineViewKey, buildMaskViewKey } from './GraphRendererCache';
+import { buildTrackPolyline, buildSoftSelectionMask } from './GraphRendererBuilder';
 
 export const TRACK_COLORS = [
     '#22d3ee', '#a855f7', '#22c55e', '#f59e0b', '#ef4444', '#ec4899'
@@ -52,13 +50,7 @@ export interface GraphOverlayProps {
  *  Stale entries (track no longer visible) are evicted at the end of each drawGraph
  *  call via evictStale(visibleTrackIds). */
 const _polylineCache = new PolylineCache();
-// Diagnostics: expose cache stats so the bench / browser console can query
-// hit-rate during development. Removed once the cache is verified working.
-const _drawStats = { backCalls: 0, overlayCalls: 0 };
-if (typeof window !== 'undefined') {
-    (window as any).__polylineCacheStats = () => _polylineCache.stats;
-    (window as any).__drawStats = () => _drawStats;
-}
+const _softMaskCache = new SoftSelectionMaskCache();
 
 let _limitPattern: CanvasPattern | null = null;
 
@@ -89,30 +81,6 @@ const getLimitPattern = (ctx: CanvasRenderingContext2D) => {
     return _limitPattern;
 };
 
-const getSoftWeight = (targetKeyId: string, targetFrame: number, trackId: string, props: GraphRenderProps) => {
-    if (!props.softSelectionEnabled || props.softSelectionRadius <= 0) return 0;
-    
-    let maxWeight = 0;
-    
-    props.selectedKeyframeIds.forEach(id => {
-        const [tid, kid] = id.split('::');
-        if (tid !== trackId) return;
-        
-        const track = props.sequence.tracks[tid];
-        const sourceKey = track?.keyframes.find(k => k.id === kid);
-        
-        if (sourceKey) {
-            const dist = Math.abs(targetFrame - sourceKey.frame);
-            if (dist < props.softSelectionRadius) {
-                const weight = calculateSoftFalloff(dist, props.softSelectionRadius, props.softSelectionType);
-                if (weight > maxWeight) maxWeight = weight;
-            }
-        }
-    });
-    
-    return maxWeight;
-};
-
 /** Paint the back layer of the graph: background, grid, polylines (cached
  *  per track), unselected diamonds (cached), selection-aware overlays, ruler,
  *  gutter, value labels, and the duration-limit pattern. NOT the playhead;
@@ -126,10 +94,10 @@ const getSoftWeight = (targetKeyId: string, targetFrame: number, trackId: string
  *  even when the polyline cache hits 100% — measured during pause-2: 1056
  *  cache hits, 0 misses, 0 perf delta. */
 export const drawGraph = (props: GraphRenderProps) => {
-    const { 
+    const {
         ctx, width, height, view, sequence, trackIds, currentFrame, durationFrames,
         selectedKeyframeIds, selectionBox, normalized, trackRanges,
-        softSelectionEnabled, softSelectionRadius, softInteraction, highlightedTracks 
+        softSelectionEnabled, softSelectionRadius, softSelectionType, softInteraction, highlightedTracks
     } = props;
 
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
@@ -208,74 +176,71 @@ export const drawGraph = (props: GraphRenderProps) => {
     ctx.rect(LEFT_GUTTER_WIDTH, graphTop, width - LEFT_GUTTER_WIDTH, height - graphTop);
     ctx.clip();
 
+    // Pass 0: composite each track's cached polyline + diamonds canvas onto
+    // the main canvas at the per-track dim level. The cache hit-rate is 100%
+    // during graph-play (verified at pause-2); a cache miss only happens on
+    // sequence edit, viewport change, or track-selection change.
     trackIds.forEach((tid, idx) => {
         const track = sequence.tracks[tid];
         if (!track || track.type !== 'float') return;
-        
         const color = TRACK_COLORS[idx % TRACK_COLORS.length];
         const keys = track.keyframes;
+        if (keys.length === 0) return;
         const isHighlighted = highlightedTracks.has(tid);
-        
-        if (keys.length > 0) {
-            // Polyline + post-behavior tail come from the per-track cache. The cache
-            // canvas is rendered with the same pan/zoom as the main canvas, so a 1:1
-            // drawImage at (0, 0) composites correctly. Dimming for non-highlighted
-            // tracks is applied via globalAlpha at composite time (cache always
-            // renders at alpha=1.0).
-            const range = trackRanges[tid];
-            const bold = isHighlighted;
-            const viewKey = `${buildPolylineViewKey(view.scaleX, view.scaleY, normalized, range?.min ?? 0, range?.max ?? 0)}|p=${view.panX}|${view.panY}|b=${bold ? 1 : 0}`;
-            let cached = _polylineCache.get(tid, keys, viewKey);
-            if (!cached) {
-                const trackCanvas = buildTrackPolyline({
-                    track,
-                    view,
-                    canvasWidth: width,
-                    canvasHeight: height,
-                    normalized,
-                    range,
-                    color,
-                    bold,
-                });
-                _polylineCache.set(tid, keys, viewKey, trackCanvas, width, height);
-                cached = { canvas: trackCanvas, width, height };
-            }
-            const dim = isHighlighted || highlightedTracks.size === 0 ? 1.0 : 0.4;
-            ctx.globalAlpha = dim;
-            ctx.drawImage(cached.canvas as CanvasImageSource, 0, 0);
-            ctx.globalAlpha = 1.0;
+        const range = trackRanges[tid];
+        const bold = isHighlighted;
+        const viewKey = `${buildPolylineViewKey(view.scaleX, view.scaleY, normalized, range?.min ?? 0, range?.max ?? 0)}|p=${view.panX}|${view.panY}|b=${bold ? 1 : 0}`;
+        let cached = _polylineCache.get(tid, keys, viewKey);
+        if (!cached) {
+            const trackCanvas = buildTrackPolyline({
+                track, view, canvasWidth: width, canvasHeight: height,
+                normalized, range, color, bold,
+            });
+            _polylineCache.set(tid, keys, viewKey, trackCanvas, width, height);
+            cached = { canvas: trackCanvas, width, height };
+        }
+        const dim = isHighlighted || highlightedTracks.size === 0 ? 1.0 : 0.4;
+        ctx.globalAlpha = dim;
+        ctx.drawImage(cached.canvas as CanvasImageSource, 0, 0);
+        ctx.globalAlpha = 1.0;
+    });
 
-            // Selection-aware overrides on top of the cached default-coloured
-            // diamonds. Three bounded passes; each iterates the SELECTION set
-            // rather than every visible key.
-            //
-            //   1. Soft-weight diamond tint — only if soft selection is on AND
-            //      there's a selection. Iterates all visible keys (Step 4 will
-            //      replace this with a single composited mask layer).
-            //   2. Selection-color diamond + ring + bezier handles — iterates
-            //      selectedKeyframeIds (typically <10 keys).
-            //   3. Soft-radius circle for the dragging anchor key (max 1).
-            //
-            // The cached layer already drew unselected diamonds at track-default
-            // colour; these overrides paint over them where needed.
-            ctx.globalAlpha = 1.0;
+    // Soft-selection tint mask — single composite covering all tracks. Built
+    // once per (selection set, radius, type, viewport) tuple. When soft
+    // selection is off (the common case) nothing is composited; the cache is
+    // cleared so the canvas memory doesn't linger between sessions.
+    if (softSelectionEnabled && softSelectionRadius > 0 && selectedKeyframeIds.length > 0) {
+        const maskKey =
+            `${buildMaskViewKey(selectedKeyframeIds, softSelectionRadius, softSelectionType, view.scaleX)}` +
+            `|sy=${view.scaleY}|px=${view.panX}|py=${view.panY}|n=${normalized ? 1 : 0}`;
+        let maskCached = _softMaskCache.get(maskKey);
+        if (!maskCached) {
+            const maskCanvas = buildSoftSelectionMask({
+                sequence, trackIds, selectedKeyframeIds,
+                trackColors: TRACK_COLORS,
+                softSelectionRadius, softSelectionType,
+                view, canvasWidth: width, canvasHeight: height,
+                normalized, trackRanges,
+            });
+            _softMaskCache.set(maskKey, maskCanvas, width, height);
+            maskCached = { canvas: maskCanvas, width, height };
+        }
+        ctx.drawImage(maskCached.canvas as CanvasImageSource, 0, 0);
+    } else {
+        _softMaskCache.clear();
+    }
 
-            // Pass 1: soft-weight tinting (slow path; only when active).
-            if (softSelectionEnabled && softSelectionRadius > 0 && selectedKeyframeIds.length > 0) {
-                keys.forEach(k => {
-                    const kx = frameToCanvasPixel(k.frame);
-                    const ky = v2p(k.value, tid);
-                    if (ky < graphTop - 10 || ky > height + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > width + 5) return;
-                    const compositeId = `${tid}::${k.id}`;
-                    if (selectedKeyframeIds.includes(compositeId)) return;
-                    const weight = getSoftWeight(k.id, k.frame, tid, props);
-                    if (weight <= 0) return;
-                    ctx.fillStyle = `color-mix(in srgb, ${THEME.keyColor} ${Math.round(weight * 100)}%, ${color})`;
-                    if (k.interpolation === 'Step') ctx.fillRect(kx - 4, ky - 4, 8, 8);
-                    else if (k.interpolation === 'Bezier') { ctx.beginPath(); ctx.arc(kx, ky, 4, 0, Math.PI * 2); ctx.fill(); }
-                    else { ctx.save(); ctx.translate(kx, ky); ctx.rotate(Math.PI / 4); ctx.fillRect(-3, -3, 6, 6); ctx.restore(); }
-                });
-            }
+    // Pass 1: selection-aware overlays on top of the cached layer + soft mask.
+    // Iterates per-track but the inner loop is bounded by selectedKeyframeIds
+    // (typically <10 keys) — never by total visible-key count.
+    trackIds.forEach((tid) => {
+        const track = sequence.tracks[tid];
+        if (!track || track.type !== 'float') return;
+        const keys = track.keyframes;
+        if (keys.length === 0) return;
+
+        {
+            ctx.globalAlpha = 1.0;
 
             // Pass 2: selection-color override + selection ring + bezier handles.
             // We iterate selectedKeyframeIds (bounded). Build a per-track lookup
