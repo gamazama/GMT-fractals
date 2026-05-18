@@ -102,29 +102,124 @@ duration: d?.duration || 0,
 
 After the fix, `waitForAudioMetadata` correctly distinguishes "no metadata yet" (`0`) from "real duration" (`> 0`) and keeps polling until `<audio>.duration` is populated. The clip is initialized with the real value on the first successful poll, so a subsequent `computeWaveformPeaks` failure no longer leaves the clip in a 1-second stub state.
 
-## 5. Regression test
+## 3c. Root cause — bug 3: `computeWaveformPeaks` overrode `<audio>.duration` with a truncated `audioBuf.duration`
 
-Unit test on the slice action — boots the store, sets fps=60, loads a synthetic audio clip at `startFrame=120` (= 2.0 s wall), calls `setFps(30, 'match')`, asserts `audioClips[0].startFrame === 60` (= still 2.0 s wall at fps=30). Lives next to the existing slice tests if any; otherwise as a one-off `audioClipsSlice.fpsRemap.test.ts`.
+The Web Audio API (`AudioContext.decodeAudioData`) and the HTML5 `<audio>` element use different MP3 decoders. The `<audio>` element's decoder is lenient: it reads MP3 frames sequentially and plays everything it finds, regardless of what the container's Xing/Info header claims. `decodeAudioData` is strict: it trusts the header's sample-count field and stops decoding when it has produced that many samples.
 
-Manual smoke (acceptance criteria §1, §2, §4 from the prompt):
-1. Load audio clip at fps=60. Place a keyframe on any track at the clip's midpoint frame.
-2. `setFps(30, 'match')`. Keyframe and clip midpoint should remain aligned visually.
-3. `setFps(60, 'keep')` from baseline (no audio change expected — keyframes drift in wall-clock by design). Document this so the next investigator doesn't chase it.
+For files whose Xing header lies — VBR MP3 encoders that under-report, MPEG-2 Layer III at low sample rates, some AAC variants — `audioBuf.duration` is shorter (sometimes by half or more) than what `<audio>.duration` reports and what the file actually plays.
+
+`EmptyDeckSlot.handleFile` was treating `audioBuf.duration` as authoritative ([`AudioStrip.tsx:127-128`](../../components/timeline/AudioStrip.tsx#L127-L128)):
+
+```ts
+const { peaks, durationSeconds } = await computeWaveformPeaks(file);
+updateAudioClip(deckIndex, { peaks, durationSeconds, trimEndSec: durationSeconds });
+```
+
+That overwrote whatever `waitForAudioMetadata` had correctly set from `<audio>.duration`. The clip's playable range was capped at the truncated value; the deck's `<audio>` element happily continued playing the full file natively, but `audioClipSync` paused it at `trimEndSec` (the truncated duration).
+
+Concrete repro: `8d82b5_Super_Mario_Bros_Die_Sound_Effect.mp3` is a 128 kbps MPEG-2 Layer III mono file at 22.05 kHz. Frame size = `72 * 128000 / 22050` = 418 bytes; 107 frames in the file → 2.795 s. The browser plays it correctly. `decodeAudioData` for this file class consistently under-reports in Chromium.
+
+## 3d. Root cause — bug 4: two RAF drivers, doubled tick rate
+
+`app-gmt/AppGmt.tsx` mounted both `<RenderLoopDriver />` (engine-core's default RAF driver, intended for apps without their own loop) and `<GmtRendererTickDriver />` (GMT's R3F `useFrame` driver, which both runs `TickRegistry` phases *and* dispatches the worker frame).
+
+Each is an independent RAF loop. Each independently calls `TickRegistry.runTicks(dt)`. Both passed correct wall-clock `dt`. The `TickRegistry` had no defence against being called twice per frame, so every registered tick — `engine.animation` (timeline + LFOs + modulation), `snapshotDisplayCamera`, FPS counter, performance monitor, recording buffer flush — fired twice. Timeline `currentFrame` advanced at `2 × dt × fps` instead of `dt × fps`.
+
+User diagnostic captured this exactly: a 2.004 s window in which the timeline advanced 120.17 frames at fps=30 (expected 60.13), `speedMultiple = 1.998`.
+
+The audio deck plays at its native rate (real-time, governed by `<audio>.currentTime` + the AudioContext clock). `audioClipSync` measures "is the playhead in clip range?" via `t = (currentFrame - startFrame) / fps`. With timeline at 2× wall-clock, `t` reaches `trimEnd` after only half the audio has played — sync pauses the deck mid-file.
+
+The contract was already documented: [`engine/plugins/RenderLoop.tsx:4-9`](../../engine/plugins/RenderLoop.tsx#L4-L9) says "Apps with a custom render loop ... skip this plugin and call runTicks themselves." GMT has a custom render loop. Mounting both was a violation that nothing enforced.
+
+Why nobody caught it: every per-frame consumer in app-gmt was running at 2× wall-clock, but everything still *worked* — timelines played twice as fast, LFOs cycled twice as fast, but no consumer is hard-keyed against wall-clock seconds except audio. Audio is the canary; once the audio sync work brought a deck under timeline control, the discrepancy became audible.
+
+## 4c. Fix — bug 3: split clip duration source-of-truth
+
+`AudioClip` now carries two related but distinct fields:
+
+```ts
+// types.ts
+durationSeconds: number;        // <audio>.duration — the playable range, governs trim + sync
+peaksDurationSeconds?: number;  // audioBuf.duration — peaks-to-audio-time mapping only
+```
+
+`AudioStrip.tsx`'s `handleFile` reads `<audio>.duration` directly (via the new `audioAnalysisEngine.getElementDuration(deckIndex)` accessor) at the moment `computeWaveformPeaks` resolves, falls back to `audioBuf.duration` only if the element hasn't reported one yet:
+
+```ts
+const { peaks, durationSeconds: bufDur } = await computeWaveformPeaks(file);
+const liveDur = audioAnalysisEngine.getElementDuration(deckIndex);
+const dur = liveDur > 0 ? liveDur : bufDur;
+updateAudioClip(deckIndex, { peaks, durationSeconds: dur, trimEndSec: dur, peaksDurationSeconds: bufDur });
+```
+
+The `Waveform` component now takes `peaksDurationSec` (the `peaksDurationSeconds` field) instead of clip duration for its bucket-index mapping. For each pixel:
+
+```ts
+const audioTime = trimRange[0] + (x / cssW) * trimSpan;
+if (audioTime >= peaksDurationSec) break;
+const idx = (audioTime / peaksDurationSec) * peaks.length;
+```
+
+When the two durations agree (the common case), behaviour is identical. When they disagree (decode truncated), peaks render at their real audio-time positions and the un-decoded tail of the clip stays blank — visual feedback that the file decoded only partially, instead of stretching the truncated peaks across the full clip.
+
+## 4d. Fix — bug 4: drop the redundant driver + dedup guard
+
+Two-part fix:
+
+1. **Remove `<RenderLoopDriver />` from [`app-gmt/AppGmt.tsx`](../../app-gmt/AppGmt.tsx)**. `<GmtRendererTickDriver />` (mounted inside the R3F `<Canvas />` further down) is GMT's canonical tick driver — it owns `TickRegistry.runTicks(dt)` *and* dispatches the worker frame. Mounting the engine-core default alongside it was the source of the 2× advance.
+
+2. **Add a defence-in-depth guard in [`TickRegistry.runTicks`](../../engine/TickRegistry.ts)**:
+
+```ts
+const DOUBLE_RUN_WINDOW_MS = 1;
+let _warnedDoubleRun = false;
+
+export function runTicks(delta: number): void {
+    const now = performance.now();
+    if (_lastTickTime !== 0 && now - _lastTickTime < DOUBLE_RUN_WINDOW_MS) {
+        if (import.meta.env.DEV && !_warnedDoubleRun) {
+            console.warn('[TickRegistry] runTicks() called twice within 1ms — ...');
+            _warnedDoubleRun = true;
+        }
+        return;
+    }
+    _lastTickTime = now;
+    // ...sort + run entries
+}
+```
+
+If two tick drivers are ever mounted again — accidentally or in a new app — the duplicate call is suppressed and a single dev warning surfaces the wiring bug. The timeline no longer silently runs at 2× wall-clock as a result.
+
+## 4e. Follow-up refactors (from `simplify` pass)
+
+Two architectural improvements landed in the same commit:
+
+- **`AudioAnalysisEngine.waitForMetadata(deckIndex, timeoutMs?)`** — event-driven replacement for `AudioStrip.tsx`'s 50 ms-poll. Resolves on the deck's `loadedmetadata` / `durationchange` events; resolves with `0` on timeout. Local `waitForAudioMetadata` helper removed.
+- **`AudioAnalysisEngine.getElementDuration(deckIndex)`** — direct accessor for `<audio>.duration`. Avoids round-tripping through `getTrackInfo` (which allocates a full snapshot of unrelated fields) when only the duration is needed.
+
+## 5. Regression tests
+
+- **Bug 1** — [`debug/smoke-audio-fps-remap.mts`](../../debug/smoke-audio-fps-remap.mts) (`npm run smoke:audio-fps-remap`). Boots the page, seeds fps=60 with a keyframe + audio clip both at frame 120, runs `setFps(30, 'match')`, asserts `audioClips[0].startFrame === 60` alongside the keyframe at frame 60. Also asserts the round-trip 30→60 restores 120 and `'keep'` leaves `audioClips` alone. Verified to fail pre-fix (`audio startFrame expected 60, got 120`) and pass post-fix.
+- **Bug 2 / 3 / 4** — in-browser verified against `H:/GMT/assets/8d82b5_Super_Mario_Bros_Die_Sound_Effect.mp3` (a 2.795 s MPEG-2 Layer III 22.05 kHz mono MP3 — a file that surfaces all three by combining the strict-decode truncation + the placeholder-poll race + the dominant 2× tick rate). Post-fix, the full audio plays through and the playhead aligns with audible events.
+- **Bug 4 dev-time defence** — the new `[TickRegistry] runTicks() called twice within 1ms` warning fires on any future double-mount. The duplicate call is suppressed regardless, so timing is correct even if the warning is missed.
 
 ## 6. What survived (not bugs, don't chase)
 
 - **Internal sync at any single fps.** Every conversion in the audio pipeline uses the live `fps` from the store. At fps=30 with a freshly-loaded clip, the waveform pixel width, drag math, playback sync, and export mix all use the same `fps` value — no drift.
 - **`setFps('keep')` not remapping audio.** Consistent with the mode's contract: `'keep'` preserves frame indices for *everything*, accepting wall-clock drift. Keyframes don't move, durationFrames doesn't move, audio shouldn't either. Wall-clock alignment between keys + audio is preserved (both interpret frame indices via the new fps); only their wall-clock position on the timeline shifts together. The user opts into this when picking `'keep'`.
 - **`<audio>.loop = true`** in [`AudioAnalysisEngine.ts:14`](../../engine/features/audioMod/AudioAnalysisEngine.ts#L14). Native loop only kicks in if the timeline runs past the file's natural end *without* sync-tick pausing it — sync runs every animation frame, so this is theoretical. Not the symptom.
-- **Placeholder-then-replace duration** in [`AudioStrip.tsx:108-128`](../../components/timeline/AudioStrip.tsx#L108-L128). Optimistic 60-s placeholder gets replaced when `waitForAudioMetadata` resolves (typically <100 ms). Visual jump on initial load is brief and orthogonal to fps sync.
+- **Placeholder-then-replace duration** in [`AudioStrip.tsx`](../../components/timeline/AudioStrip.tsx). Optimistic 60-s placeholder gets replaced when metadata resolves (now event-driven via `waitForMetadata`, fires on `loadedmetadata` / `durationchange`). Visual jump on initial load is brief and orthogonal to fps sync.
 - **`audioWaveform.ts` sample truncation.** Up to `bucketSize − 1` samples (< 25 ms at 44.1 kHz / 1024 buckets) dropped from the tail. Sub-frame at any usable fps. Not chase-worthy.
 
 ## 7. Status
 
-- [x] Diagnosis (Part 1).
-- [x] Fix bug 1 (`setFps('match')` audio remap) at [`playbackSlice.ts:146-153`](../../store/animation/playbackSlice.ts#L146-L153) on branch `feature/audio-fps-sync`.
-- [x] Fix bug 2 (`getTrackInfo` `|| 1`) at [`AudioAnalysisEngine.ts:169`](../../engine/features/audioMod/AudioAnalysisEngine.ts#L169).
-- [x] Regression test (Part 3) — [`debug/smoke-audio-fps-remap.mts`](../../debug/smoke-audio-fps-remap.mts), `npm run smoke:audio-fps-remap`. Asserts: (a) `'match'` remaps `audioClips[0].startFrame` 120 → 60 alongside the keyframe at frame 120; (b) round-trip 30→60 restores 120; (c) `'keep'` leaves `audioClips` alone. Verified to fail pre-fix (`audio startFrame expected 60, got 120`) and pass post-fix.
-- [x] Typecheck clean (`npm run typecheck`).
-- [ ] Acceptance criteria from the prompt: visual peak/ruler alignment at fps ∈ {24, 25, 30, 60} — needs in-browser verification (out of scope for headless smoke; per `feedback_visual_smokes.md`, user does visual testing).
-- [ ] Bug-2 in-browser repro: load a short sound, confirm the clip width = `duration * fps * frameWidth`, the waveform spans the full clip, and playback covers the whole audio file rather than stopping at 1 s.
+- [x] Diagnosis (Part 1) — every seconds↔frames conversion site audited.
+- [x] **Bug 1** fix (`setFps('match')` audio remap) at [`playbackSlice.ts:146-153`](../../store/animation/playbackSlice.ts#L146-L153).
+- [x] **Bug 2** fix (`getTrackInfo` `|| 1`) at [`AudioAnalysisEngine.ts:169`](../../engine/features/audioMod/AudioAnalysisEngine.ts#L169).
+- [x] **Bug 3** fix (`<audio>.duration` source of truth, `peaksDurationSeconds` split) at [`AudioStrip.tsx:131-148`](../../components/timeline/AudioStrip.tsx) + [`types.ts`](../../store/animation/types.ts) + Waveform component.
+- [x] **Bug 4** fix (drop duplicate `<RenderLoopDriver />` mount + 1 ms dedup guard) at [`app-gmt/AppGmt.tsx`](../../app-gmt/AppGmt.tsx) + [`engine/TickRegistry.ts`](../../engine/TickRegistry.ts).
+- [x] Follow-up refactors (event-driven `waitForMetadata`, direct `getElementDuration` accessor) at [`AudioAnalysisEngine.ts`](../../engine/features/audioMod/AudioAnalysisEngine.ts).
+- [x] Regression smoke (`smoke:audio-fps-remap`).
+- [x] `npm run typecheck` clean.
+- [x] In-browser verified — Super Mario death sound MP3 plays full duration; timeline `speedMultiple` ≈ 1.000 post-fix (was 1.998).
+- [ ] **Re-bench animation perf numbers from `app-gmt/`** — bug 4 ran the GMT main app at 2× tick rate for an unknown duration. Any bench taken on it during that window reflects 2× state. Numbers in `project_appgmt_perf_bench.md` and `project_animation_refactor_spike.md` may need re-running.

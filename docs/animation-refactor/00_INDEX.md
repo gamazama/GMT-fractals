@@ -1,7 +1,7 @@
 # Animation Refactor — Index
 
 **One-line status (update on every commit to this directory):**
-> 2026-05-18 — Cleanup-before-push pass shipped (`20_TIMELINE_CLEANUP_REPORT.md`). Root Summary on canvas, dead-code sweep applied (net -27 LOC), Option-A top-region structural taken. Bench parity ±1 fps across all dope-* + graph-* at heavy seed. Ready to `git push origin dev` after manual interaction smoke. Audio fps-sync follow-on captured as `21_AUDIO_TIMELINE_SYNC_PROMPT.md`. Next planned: offline modulation bake (`19`, reserved).
+> 2026-05-18 — Audio fps-sync shipped (`22_AUDIO_TIMELINE_SYNC_REPORT.md`, commit `0814749`). Four compounding bugs fixed: `setFps('match')` audio-clip remap, `getTrackInfo` `|| 1` fallback, `<audio>.duration` source-of-truth vs strict-decoder truncation, and the dominant **app-gmt double-mounted RenderLoopDriver + GmtRendererTickDriver causing 2× tick rate** (impacts ALL prior app-gmt animation/perf benches — needs re-bench). Plus event-driven `waitForMetadata` and `getElementDuration` accessor refactors. Earlier: cleanup-before-push (`20_`), Root Summary on canvas, -27 LOC, bench ±1 fps. Next planned: offline modulation bake (`19`, reserved).
 
 ## What this is
 
@@ -36,7 +36,8 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 | [`18_TIMELINE_CLEANUP_PROMPT.md`](./18_TIMELINE_CLEANUP_PROMPT.md) | Pre-push cleanup: Root Summary → canvas (last DOM-diamond holdout), dead-code sweep across both editors + `timelineUtils.ts`, top-region structural pass to retire the marquee y-offset workaround. Net LOC delta should be negative. | shipped, ready |
 | `19_OFFLINE_MODULATION_BAKE_PROMPT.md` | Reserved — offline modulation bake (the deferred "every frame of modulation" feature from `02_RATIONALE.md` §9). Drafted after `18` lands. | reserved |
 | [`20_TIMELINE_CLEANUP_REPORT.md`](./20_TIMELINE_CLEANUP_REPORT.md) | Output of `18`. **Net -27 LOC across 7 files; bench parity ±1 fps at heavy seed; Root Summary on canvas with cyan colour overrides; `liveValueState` + dead type aliases + re-export removed.** Option B (`TimelineRegions` wrapper) deferred — single-consumer ref-based y-resolution sufficed. Sticky on Root Summary declined per user decision; captured as revisitable. | shipped |
-| [`21_AUDIO_TIMELINE_SYNC_PROMPT.md`](./21_AUDIO_TIMELINE_SYNC_PROMPT.md) | Audio waveform + clip-cut positions don't track timeline fps (surfaced during `20_` review; explicitly out of scope of `18_`). Diagnosis + fix prompt for a dedicated session. ~0.5-1 day. | drafted |
+| [`21_AUDIO_TIMELINE_SYNC_PROMPT.md`](./21_AUDIO_TIMELINE_SYNC_PROMPT.md) | Audio waveform + clip-cut positions don't track timeline fps (surfaced during `20_` review; explicitly out of scope of `18_`). Diagnosis + fix prompt for a dedicated session. ~0.5-1 day. | shipped |
+| [`22_AUDIO_TIMELINE_SYNC_REPORT.md`](./22_AUDIO_TIMELINE_SYNC_REPORT.md) | Output of `21`. **Four bugs fixed.** (1) `setFps('match')` skipped audio-clip remap; (2) `getTrackInfo` `\|\| 1` fallback false-resolved metadata polling; (3) `decodeAudioData`-truncated `audioBuf.duration` overrode `<audio>.duration` for VBR MP3 / MPEG-2 / some AAC; (4) **dominant cause** — `<RenderLoopDriver />` + `<GmtRendererTickDriver />` both mounted in `app-gmt`, `runTicks()` fired 2× per RAF → timeline + LFOs + modulation + audio sync ran at 2× wall-clock. Defence-in-depth dedup guard in `TickRegistry.runTicks` added. Bonus refactors: event-driven `waitForMetadata`, direct `getElementDuration` accessor. **Impacts all prior app-gmt animation/perf benches.** Smoke at `debug/smoke-audio-fps-remap.mts`. | shipped |
 | `PHASE_N_PROMPT.md` / `PHASE_N_REPORT.md` | Original AnimationDocument-first plan. **Deferred** — perf rationale fully retracted (canvas work resolved all dope-* and graph-* lag at heavy seed); hygiene rationale stands but no longer load-bearing for user-felt smoothness. | held / deferred |
 
 ## Current state
@@ -54,9 +55,9 @@ Read in numeric order on first pass. Reference docs are stable once shipped; pha
 [done]      Canvas DopeSheet  14_CANVAS_DOPESHEET_PROMPT → 16_CANVAS_DOPESHEET_REPORT  → all dope-* at or near vsync at heavy seed; longTaskMs → 0
 [done]      Shared canvas utils 17_SHARED_CANVAS_UTILS  → -220 LOC in caches, generic RefViewKeyCache<TToken>, mirror O(T×S×N) bug in Graph fixed by analogy
 [done]      Timeline cleanup  18_TIMELINE_CLEANUP_PROMPT → 20_TIMELINE_CLEANUP_REPORT  → -27 LOC; bench ±1 fps parity; Option-A top-region taken; sticky-summary declined
-[NEXT]      git push origin dev  (33+ commits accumulated since the canvas-graph work began) — after manual interaction smoke
+[done]      Audio fps-sync    21_AUDIO_TIMELINE_SYNC_PROMPT → 22_AUDIO_TIMELINE_SYNC_REPORT  → four bugs fixed, dominant cause was app-gmt double-mounted RAF drivers (2× tick rate) — re-bench all prior app-gmt animation/perf numbers
+[NEXT]      git push origin dev  (34+ commits accumulated since the canvas-graph work began) — after manual interaction smoke
 [QUEUED]    Offline mod bake  19_OFFLINE_MODULATION_BAKE_PROMPT (reserved; drafted after 18 lands) — UNBLOCKS the audio feature work below
-[QUEUED]    Audio fps-sync   21_AUDIO_TIMELINE_SYNC_PROMPT  → diagnosis + fix for the seconds-to-frames drift surfaced during 20_ review
 [AFTER 19]  Audio feature pass  sync-across-timeline, waveform render quality, audio cuts/trim, modulation-recording fidelity, audio export rendering — all touch surfaces that the bake will land first, so sequencing matters (per user 2026-05-17)
 [deferred]  AnimationDocument 03_SPEC.md / original Phase 0-9  (perf case fully retracted — canvas work resolved user-felt lag; hygiene case stands but no longer load-bearing)
 ```
