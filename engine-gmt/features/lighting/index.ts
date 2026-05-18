@@ -51,15 +51,32 @@ export interface LightingActions {
     duplicateLight: (index: number) => void;
 }
 
-/** Ensures all lights in the array have a stable `id`. Migrates legacy state that lacks IDs. */
-export function ensureLightIds(lights: LightParams[]): LightParams[] {
-    let mutated = false;
-    const out = lights.map(l => {
-        if (l.id) return l;
-        mutated = true;
-        return { ...l, id: generateLightId() };
-    });
-    return mutated ? out : lights;
+/**
+ * Backfills fields the TS interface requires but legacy formula defaults / GMF
+ * saves may omit (`id`, `type`, `position`, `rotation`). Returns the original
+ * reference when nothing needs filling, so `===` callers can short-circuit.
+ */
+function normalizeLight(l: LightParams): LightParams {
+    if (l.id && l.type && l.position && l.rotation) return l;
+    return {
+        ...l,
+        id: l.id ?? generateLightId(),
+        type: l.type ?? 'Point',
+        position: l.position ?? { x: 0, y: 0, z: 0 },
+        rotation: l.rotation ?? { x: 0, y: 0, z: 0 },
+    };
+}
+
+export function normalizeLights(lights: LightParams[]): LightParams[] {
+    let firstBadIdx = -1;
+    for (let i = 0; i < lights.length; i++) {
+        const l = lights[i];
+        if (!l.id || !l.type || !l.position || !l.rotation) { firstBadIdx = i; break; }
+    }
+    if (firstBadIdx === -1) return lights;
+    const out = lights.slice();
+    for (let i = firstBadIdx; i < out.length; i++) out[i] = normalizeLight(out[i]);
+    return out;
 }
 
 export const getLightFromSlice = (slice: LightingState | undefined, i: number): LightParams => {
@@ -72,7 +89,7 @@ export const getLightFromSlice = (slice: LightingState | undefined, i: number): 
             range: 0, intensityUnit: 'raw'
         };
     }
-    return slice.lights[i];
+    return normalizeLight(slice.lights[i]);
 };
 
 const DEFAULT_LIGHTS: LightParams[] = [

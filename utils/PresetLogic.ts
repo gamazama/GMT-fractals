@@ -8,7 +8,7 @@
  *   4. Apply animations + timeline
  *
  * Anything fractal-specific (cameraPos → sceneOffset absorption via
- * VirtualSpace, Fragmentarium-imported formula registration, ensureLightIds)
+ * VirtualSpace, Fragmentarium-imported formula registration, normalizeLights)
  * lived in the previous GMT version of this file. A future fractal plugin
  * re-installs those as preset middlewares.
  */

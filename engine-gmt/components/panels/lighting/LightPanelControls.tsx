@@ -191,7 +191,7 @@ const LightPanel = ({ state, actions }: { state: FractalState, actions: FractalA
       y: liveModulations[`${prefix}_rotY`] ?? currentLight.rotation.y,
       z: liveModulations[`${prefix}_rotZ`] ?? currentLight.rotation.z
   };
-  
+
   const mixedPosition = {
       x: liveModulations[`${prefix}_posX`] ?? currentLight.position.x,
       y: liveModulations[`${prefix}_posY`] ?? currentLight.position.y,

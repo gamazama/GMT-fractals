@@ -281,7 +281,9 @@ export const MandelTerrain: FractalDefinition = {
                 "shadowBias": 0.0001,
                 "lights": [
                     {
+                        "type": "Point",
                         "position": { "x": -0.77, "y": 1.82, "z": -0.49 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
                         "color": "#ffeedd",
                         "intensity": 2,
                         "falloff": 0,
@@ -291,7 +293,9 @@ export const MandelTerrain: FractalDefinition = {
                         "castShadow": true
                     },
                     {
+                        "type": "Point",
                         "position": { "x": -5, "y": 2, "z": -5 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
                         "color": "#4455aa",
                         "intensity": 1,
                         "falloff": 0,
@@ -301,7 +305,9 @@ export const MandelTerrain: FractalDefinition = {
                         "castShadow": false
                     },
                     {
+                        "type": "Point",
                         "position": { "x": 0, "y": 5, "z": -5 },
+                        "rotation": { "x": 0, "y": 0, "z": 0 },
                         "color": "#ffffff",
                         "intensity": 0.5,
                         "falloff": 0,

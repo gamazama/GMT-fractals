@@ -13,14 +13,28 @@
 
 import { presetFieldRegistry } from '../../utils/PresetFieldRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
+import { normalizeLights } from '../features/lighting';
 
+// Runs after applyPresetState, so this single handler covers both the legacy
+// top-level `p.lights` and the modern `features.lighting.lights` path —
+// normalizing either before any React render can read them.
 presetFieldRegistry.register({
     key: 'lights',
     serialize: () => undefined,
     deserialize: (p: any, _set: any, getStore: any) => {
-        if (!Array.isArray(p.lights) || p.lights.length === 0) return;
-        const setter = getStore()?.setLighting;
-        if (typeof setter === 'function') setter({ lights: p.lights });
+        const store = getStore?.();
+        const setter = store?.setLighting;
+        if (typeof setter !== 'function') return;
+
+        const legacy = Array.isArray(p.lights) && p.lights.length > 0 ? p.lights : null;
+        const current = Array.isArray(store?.lighting?.lights) ? store.lighting.lights : null;
+        const source = legacy ?? current;
+        if (!source) return;
+
+        const normalized = normalizeLights(source);
+        if (legacy || normalized !== current) {
+            setter({ lights: normalized });
+        }
     },
 });
 

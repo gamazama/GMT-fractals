@@ -56,10 +56,12 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
 
     // --- MATH HELPERS ---
 
+    const safeValue = value ?? { x: 0, y: 0, z: 0 };
+
     // 1. Get Current Light Direction Vector (from Euler)
     const getBaseVector = () => {
-        // Light default forward is (0,0,-1). 
-        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(value.x, value.y, value.z, 'YXZ'));
+        // Light default forward is (0,0,-1).
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(safeValue.x, safeValue.y, safeValue.z, 'YXZ'));
         return new THREE.Vector3(0, 0, -1).applyQuaternion(q);
     };
 
@@ -175,9 +177,9 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                 if(!sequence.tracks[idY]) addTrack(idY, `Light ${index+1} Yaw`);
                 if(!sequence.tracks[idZ]) addTrack(idZ, `Light ${index+1} Roll`); 
                 
-                addKeyframe(idX, currentFrame, value.x);
-                addKeyframe(idY, currentFrame, value.y);
-                addKeyframe(idZ, currentFrame, value.z);
+                addKeyframe(idX, currentFrame, safeValue.x);
+                addKeyframe(idY, currentFrame, safeValue.y);
+                addKeyframe(idZ, currentFrame, safeValue.z);
             }
             handleInteractionEnd();
         }
@@ -198,7 +200,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                 if (k) hasKey = true;
                 
                 if (!isPlaying) {
-                    const curr = i === 0 ? value.x : value.y;
+                    const curr = i === 0 ? safeValue.x : safeValue.y;
                     const target = k ? k.value : evaluateTrackValue(t.keyframes, currentFrame, i===0 || i===1); 
                     if (Math.abs(curr - target) > 0.001) isDirty = true;
                 }
@@ -221,7 +223,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
         } else {
             trackKeys.forEach((tid, i) => {
                 if (!sequence.tracks[tid]) addTrack(tid, i===0 ? `Light ${index+1} Pitch` : `Light ${index+1} Yaw`);
-                addKeyframe(tid, currentFrame, i===0 ? value.x : value.y);
+                addKeyframe(tid, currentFrame, i===0 ? safeValue.x : safeValue.y);
             });
         }
     };
@@ -283,11 +285,11 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                 <div className="flex-1 bg-black/40 rounded border border-white/10 flex items-center px-2 py-1">
                     <span className="text-[8px] text-gray-500 font-bold mr-2">Pitch</span>
                     <DraggableNumber 
-                        value={value.x * 180 / Math.PI} 
-                        onChange={(v) => onChange({ ...value, x: v * Math.PI / 180 })} 
+                        value={safeValue.x * 180 / Math.PI} 
+                        onChange={(v) => onChange({ ...safeValue, x: v * Math.PI / 180 })} 
                         step={1} 
                         min={-180} max={180}
-                        overrideText={(value.x * 180 / Math.PI).toFixed(1) + '°'}
+                        overrideText={(safeValue.x * 180 / Math.PI).toFixed(1) + '°'}
                         onDragStart={() => handleInteractionStart('param')}
                         onDragEnd={() => handleInteractionEnd()}
                     />
@@ -295,11 +297,11 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                 <div className="flex-1 bg-black/40 rounded border border-white/10 flex items-center px-2 py-1">
                     <span className="text-[8px] text-gray-500 font-bold mr-2">Yaw</span>
                     <DraggableNumber 
-                        value={value.y * 180 / Math.PI} 
-                        onChange={(v) => onChange({ ...value, y: v * Math.PI / 180 })} 
+                        value={safeValue.y * 180 / Math.PI} 
+                        onChange={(v) => onChange({ ...safeValue, y: v * Math.PI / 180 })} 
                         step={1} 
                         min={-180} max={180}
-                        overrideText={(value.y * 180 / Math.PI).toFixed(1) + '°'}
+                        overrideText={(safeValue.y * 180 / Math.PI).toFixed(1) + '°'}
                         onDragStart={() => handleInteractionStart('param')}
                         onDragEnd={() => handleInteractionEnd()}
                     />

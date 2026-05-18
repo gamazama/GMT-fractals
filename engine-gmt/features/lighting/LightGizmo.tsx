@@ -7,7 +7,7 @@ import { FeatureComponentProps } from '../../../components/registry/ComponentReg
 import * as THREE from 'three';
 import { SingleLightGizmo } from './components/SingleLightGizmo';
 import { getViewportCamera, getViewportCanvas, getDisplayCamera } from '../../engine/worker/ViewportRefs';
-import { ensureLightIds } from './index';
+import { normalizeLights } from './index';
 
 // Global ref to store gizmo refs for orchestrated updates
 const globalGizmoRefs = { current: {} as {[key: string]: { update: () => void; hide?: () => void }} };
@@ -18,8 +18,8 @@ export const tick = () => {
     const lights = useEngineStore.getState().lighting?.lights;
     if (!lights) return;
 
-    // Ensure all lights have stable IDs (handles legacy state, preset loads, formula changes)
-    const migrated = ensureLightIds(lights);
+    // Heal any legacy lights still missing id/type/position/rotation.
+    const migrated = normalizeLights(lights);
     if (migrated !== lights) {
         (useEngineStore.getState() as any).setLighting?.({ lights: migrated });
     }
