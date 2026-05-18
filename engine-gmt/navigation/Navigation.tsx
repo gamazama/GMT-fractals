@@ -109,6 +109,7 @@ import { FractalEvents } from '../engine/FractalEvents';
 import { CameraState, CameraMode, PreciseVector3 } from '../types';
 import { useInputController } from './useInputController';
 import { usePhysicsProbe } from './usePhysicsProbe';
+import { getCameraModifier, getCameraModifierFromEvent } from './modifiers';
 import { useAnimationStore } from '../../store/animationStore';
 import { captureCameraKeyFrame } from '../../engine/animation/cameraKeyRegistry';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
@@ -605,7 +606,7 @@ const Navigation: React.FC<NavigationProps> = ({
           const pivot = gestureActivePivotRef.current!;
 
           // Pure translation along cursor→pivot ray.
-          const dollySpeed = currentZoomSensitivity.current || 1.0;
+          const dollySpeed = (currentZoomSensitivity.current || 1.0) * getCameraModifierFromEvent(e);
           const f = Math.exp(e.deltaY * 0.0015 * dollySpeed);
           wOffset.subVectors(camera.position, pivot).multiplyScalar(f);
           camera.position.copy(pivot).add(wOffset);
@@ -762,7 +763,7 @@ const Navigation: React.FC<NavigationProps> = ({
           if (!orbitPivot) return;
           const gestureUp = gestureUpRef.current;
 
-          const rotSpeed = 1.0 / (fitScale || 1.0);
+          const rotSpeed = (1.0 / (fitScale || 1.0)) * getCameraModifierFromEvent(e);
           const H = el.clientHeight || 1;
           const thetaDelta = -2 * Math.PI * (dx / H) * rotSpeed;
           let   phiDelta   = -2 * Math.PI * (dy / H) * rotSpeed;
@@ -860,7 +861,7 @@ const Navigation: React.FC<NavigationProps> = ({
           const dy = e.clientY - lastY;
           lastY = e.clientY;
           if (dy === 0) return;
-          const dollySpeed = currentZoomSensitivity.current || 1.0;
+          const dollySpeed = (currentZoomSensitivity.current || 1.0) * getCameraModifierFromEvent(e);
           // Drag up (negative dy) → zoom in (factor < 1), matching scroll-wheel up.
           const f = Math.exp(dy * 0.005 * dollySpeed);
           // Lazy-init gesture pivot with a fresh Vector3 (not a scratch
@@ -1282,9 +1283,12 @@ const Navigation: React.FC<NavigationProps> = ({
           } else {
               orbitRef.current.enabled = !movementLocked && !isCameraLockedRef.current;
           }
-          orbitRef.current.zoomSpeed = currentZoomSensitivity.current;
-
-          orbitRef.current.rotateSpeed = 1.0 / (fitScale || 1.0);
+          // Drei reads these at event-fire time, so updating every frame lets
+          // the user toggle modifiers mid-drag.
+          const speedMod = getCameraModifier(moveState.current.boost, moveState.current.precise);
+          orbitRef.current.zoomSpeed = currentZoomSensitivity.current * speedMod;
+          orbitRef.current.rotateSpeed = (1.0 / (fitScale || 1.0)) * speedMod;
+          orbitRef.current.panSpeed = speedMod;
 
           // Q/E roll velocity application — gated on movementLocked too,
           // otherwise a held Q or E (or a tiny residual after release)
@@ -1293,10 +1297,27 @@ const Navigation: React.FC<NavigationProps> = ({
           // (interactionMode, isExporting, isBucketRendering, feature
           // interactionConfig.blockCamera) since selectMovementLock covers
           // all of them.
+          //
+          // Skip the manual update() when drei is already running its own
+          // per-frame update at priority -1 (active orbit drag). Both calls
+          // multiply _sphericalDelta by (1 - dampingFactor), so double-updating
+          // halves pointer-driven motion on Q/E frames → visible stagger.
+          // When drei is gated off (Q/E alone), we still need update() so
+          // lookAt(target) re-orients the camera with the rolled up vector.
           if (!movementLocked && Math.abs(inputRollVel.current) > 0.01) {
               const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
-              camera.up.applyAxisAngle(fwd, -inputRollVel.current * 2.0 * delta).normalize();
-              orbitRef.current.update();
+              const rollAngle = -inputRollVel.current * 2.0 * delta * speedMod;
+              camera.up.applyAxisAngle(fwd, rollAngle).normalize();
+              // During a custom-orbit gesture the pointermove handler resets
+              // camera.up to gestureUpRef every event (200-1000+ Hz). Roll
+              // the frozen up alongside camera.up so the per-event reset
+              // preserves accumulated roll instead of stripping it.
+              if (isCustomOrbitRef.current) {
+                  gestureUpRef.current.applyAxisAngle(fwd, rollAngle).normalize();
+              }
+              if (!orbitRef.current.enabled) {
+                  orbitRef.current.update();
+              }
           }
 
           // Per-frame pan absorb. drei owns pan: each pan-move shifts

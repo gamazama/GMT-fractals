@@ -1,6 +1,7 @@
 
 import * as THREE from 'three';
 import { FractalEvents } from '../FractalEvents';
+import { getCameraModifier } from '../../navigation/modifiers';
 
 export interface MoveInputState {
     forward: boolean;
@@ -12,6 +13,7 @@ export interface MoveInputState {
     rollLeft: boolean;
     rollRight: boolean;
     boost: boolean;
+    precise: boolean;
 }
 
 export interface JoystickInput {
@@ -121,14 +123,18 @@ export class CameraController {
         }
 
         // --- 2. ROTATIONAL MOVEMENT ---
-        
+
+        // Boost already factors into translational targetSpeed above; this
+        // applies the same modifier to roll so Q/E composes with shift/alt.
+        const rollMod = getCameraModifier(inputs.move.boost, inputs.move.precise);
+
         // Update Roll Momentum (affected by speed for consistent feel)
         const targetRoll = inputs.move.rollLeft ? 1 : (inputs.move.rollRight ? -1 : 0);
         const rollAccel = targetRoll !== 0 ? 1.0 : this.ROLL_SMOOTHING;
         const rollFactor = 1.0 - Math.exp(-rollAccel * delta);
         // Scale roll by current speed (minimum 0.1 for usability at low speeds)
-        const speedScale = Math.max(0.1, settings.baseSpeed);
-        
+        const speedScale = Math.max(0.1, settings.baseSpeed) * rollMod;
+
         this.rollVelocity += (targetRoll * speedScale - this.rollVelocity) * rollFactor;
         if (targetRoll === 0 && Math.abs(this.rollVelocity) < 0.001) this.rollVelocity = 0;
 

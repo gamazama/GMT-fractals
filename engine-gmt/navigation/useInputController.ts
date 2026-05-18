@@ -4,19 +4,25 @@ import { useThree, useFrame } from '@react-three/fiber';
 import { CameraMode } from '../types';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
+import { getCameraModifierFromEvent } from './modifiers';
+
+const emptyMoveState = () => ({
+    forward: false, backward: false, left: false, right: false,
+    up: false, down: false, rollLeft: false, rollRight: false,
+    boost: false, precise: false,
+});
 
 export const useInputController = (
-    mode: CameraMode, 
-    speed: number, 
+    mode: CameraMode,
+    speed: number,
     setSpeed: (v: number) => void,
     hudRefs?: Record<string, React.RefObject<HTMLElement | null>> // Optional 4th argument to handle UI exclusions
 ) => {
     const { gl } = useThree();
     const invertY = useFractalStore(s => s.invertY);
     const { isMobile: isMobileLayout } = useMobileLayout();
-    
-    // Input State
-    const moveState = useRef({ forward: false, backward: false, left: false, right: false, up: false, down: false, rollLeft: false, rollRight: false, boost: false });
+
+    const moveState = useRef(emptyMoveState());
     const isDraggingRef = useRef(false);
     const dragStart = useRef({ x: 0, y: 0 });
     const mousePos = useRef({ x: 0, y: 0 });
@@ -82,9 +88,12 @@ export const useInputController = (
                 case 'KeyE': moveState.current.rollRight = true; break;
                 case 'Space': moveState.current.up = true; break;
                 case 'KeyC': moveState.current.down = true; break;
-                case 'ShiftLeft': 
+                case 'ShiftLeft':
                 case 'ShiftRight':
                     moveState.current.boost = true; break;
+                case 'AltLeft':
+                case 'AltRight':
+                    moveState.current.precise = true; break;
                 default:
                     handled = false;
             }
@@ -104,9 +113,12 @@ export const useInputController = (
                 case 'KeyE': moveState.current.rollRight = false; break;
                 case 'Space': moveState.current.up = false; break;
                 case 'KeyC': moveState.current.down = false; break;
-                case 'ShiftLeft': 
+                case 'ShiftLeft':
                 case 'ShiftRight':
                     moveState.current.boost = false; break;
+                case 'AltLeft':
+                case 'AltRight':
+                    moveState.current.precise = false; break;
             }
         };
         
@@ -115,13 +127,17 @@ export const useInputController = (
             const movementLocked = selectMovementLock(state);
             if (movementLocked) return;
 
+            // Read from event rather than tracked keystate — wheel can fire
+            // before keydown is processed.
+            const mod = getCameraModifierFromEvent(e);
+
             const isOrtho = state.optics && Math.abs(state.optics.camType - 1.0) < 0.1;
 
             // ORTHO ZOOM: If in orthographic mode, scrolling MUST adjust orthoScale directly
             if (isOrtho) {
                 const dir = e.deltaY > 0 ? 1 : -1;
                 const current = state.optics.orthoScale;
-                const next = current * (1 + dir * 0.1); // 10% step for consistent zoom feel
+                const next = current * (1 + dir * 0.1 * mod);
                 state.setOptics({ orthoScale: Math.max(1e-10, Math.min(1000, next)) });
                 markActivity();
                 return;
@@ -134,9 +150,10 @@ export const useInputController = (
                 let step = 0.01;
                 if (current < 0.05) step = 0.005;
                 if (current > 0.1) step = 0.02;
+                step *= mod;
                 let next = Math.max(0.001, Math.min(1.0, current + (dir * step)));
                 speedRef.current = next;
-                setSpeed(next); 
+                setSpeed(next);
                 markActivity();
             }
             // ORBIT ZOOM: Just wake UI
@@ -146,10 +163,7 @@ export const useInputController = (
         };
 
         const handleBlur = () => {
-            moveState.current = { 
-                forward: false, backward: false, left: false, right: false, 
-                up: false, down: false, rollLeft: false, rollRight: false, boost: false 
-            };
+            moveState.current = emptyMoveState();
         };
 
         const handleJoyMove = (e: Event) => { joystickMove.current = (e as CustomEvent).detail; markActivity(); };
