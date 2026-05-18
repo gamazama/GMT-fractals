@@ -208,7 +208,8 @@ export interface EngineStoreState extends FeatureStateMap {
   
   cameraMode: CameraMode; 
   sceneOffset: PreciseVector3;
-  animations: AnimationParams[]; 
+  animations: AnimationParams[];
+  lfosEnabled: boolean;
   liveModulations: Partial<Record<LfoTarget, number>>;
   
   histogramData: Float32Array | null;
@@ -349,6 +350,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;
     setAnimations: (v: AnimationParams[]) => void;
+    setLfosEnabled: (v: boolean) => void;
     setLiveModulations: (v: Partial<Record<LfoTarget, number>>) => void;
     // Modular builder actions were removed with the graph system; if a
     // future plugin needs setGraph/setPipeline/refreshPipeline, it adds

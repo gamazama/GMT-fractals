@@ -24,7 +24,7 @@ import { nanoid } from 'nanoid';
 import { useEngineStore } from '../../../store/engineStore';
 import type { AnimationParams } from '../../../types';
 import Slider from '../../../components/Slider';
-import ToggleSwitch from '../../../components/ToggleSwitch';
+import { DotToggle } from '../../../components/DotToggle';
 import { DynamicList, DynamicListItem } from '../../../components/DynamicList';
 import { ParameterSelector } from '../../../components/ParameterSelector';
 import { WaveformPreview } from './WaveformPreview';
@@ -77,6 +77,8 @@ const fmtStrength = (v: number) => (Math.abs(v) < 0.1 ? v.toFixed(3) : v.toFixed
 export const LfoList: React.FC = () => {
     const animations = useEngineStore((s) => s.animations);
     const setAnimations = useEngineStore((s) => s.setAnimations);
+    const lfosEnabled = useEngineStore((s) => s.lfosEnabled);
+    const setLfosEnabled = useEngineStore((s) => s.setLfosEnabled);
     const advancedMode = useEngineStore((s) => s.advancedMode);
 
     const cfg = getLfoListConfig();
@@ -113,18 +115,33 @@ export const LfoList: React.FC = () => {
         setAnimations(animations.map((a) => (a.id === id ? { ...a, ...updates } : a)));
     };
 
+    // Per-LFO "active" — any LFO individually enabled.
     const hasActive = animations.some((a) => a.enabled);
+    // Master indicator: header tint reflects "globally on AND at least
+    // one LFO enabled". A globally-off panel still shows the rows but
+    // dims the body so the user knows nothing's firing.
+    const indicatorActive = lfosEnabled && hasActive;
 
     return (
         <DynamicList
             label="LFO Modulators"
             accent="purple"
-            isActive={hasActive}
+            isActive={indicatorActive}
             onAdd={addAnimation}
             addDisabled={animations.length >= cfg.maxLfos}
             addTitle={`Add LFO (Max ${cfg.maxLfos})`}
             data-help-id="lfo.system"
+            headerRight={
+                <DotToggle
+                    value={lfosEnabled}
+                    onChange={setLfosEnabled}
+                    accent="purple"
+                    variant="master"
+                    title={lfosEnabled ? 'Disable all LFOs' : 'Enable LFOs'}
+                />
+            }
         >
+            <div className={`flex flex-col gap-1 transition-opacity ${lfosEnabled ? '' : 'opacity-50'}`}>
             {animations.map((anim, idx) => {
                 const { min, max } = effectiveRange(anim);
                 return (
@@ -143,13 +160,12 @@ export const LfoList: React.FC = () => {
                         defaultExpanded
                         onRemove={() => removeAnimation(anim.id)}
                         actions={
-                            <div className="w-[60px]">
-                                <ToggleSwitch
-                                    value={anim.enabled}
-                                    onChange={(v) => updateAnimation(anim.id, { enabled: v })}
-                                    color="bg-purple-600"
-                                />
-                            </div>
+                            <DotToggle
+                                value={anim.enabled}
+                                onChange={(v) => updateAnimation(anim.id, { enabled: v })}
+                                accent="purple"
+                                title={anim.enabled ? 'Disable LFO' : 'Enable LFO'}
+                            />
                         }
                     >
                         {/* Body always renders when expanded — `enabled`
@@ -237,6 +253,7 @@ export const LfoList: React.FC = () => {
                     </DynamicListItem>
                 );
             })}
+            </div>
         </DynamicList>
     );
 };

@@ -110,7 +110,11 @@ export const tick = (delta: number) => {
     // OPTIMIZATION: Skip animation if nothing is animated or oscillating
     const trackCount = Object.keys(animStore.sequence.tracks).length;
     const hasAnimations = trackCount > 0;
-    const hasOscillators = storeState.animations.length > 0;
+    const lfosEnabled = storeState.lfosEnabled;
+    // hasOscillators gates the early-return guard below — when the LFO
+    // master is off a scene with N LFOs should still skip the per-frame
+    // work, since none of them contribute offsets.
+    const hasOscillators = storeState.animations.length > 0 && lfosEnabled;
     const hasModulationRules = (storeState as any).modulation?.rules?.length > 0;
     const isAudioEnabled = (storeState as any).audio?.isEnabled ?? false;
     const hasAudioClips = ((animStore as any).audioClips as (unknown | null)[] | undefined)?.some(c => !!c) ?? false;
@@ -163,11 +167,11 @@ export const tick = (delta: number) => {
     const oscDt = deterministic && animStore.isPlaying
         ? 1 / Math.max(1, animStore.fps)
         : delta;
-    modulationEngine.updateOscillators(animations, oscTime, oscDt);
+    modulationEngine.updateOscillators(animations, oscTime, oscDt, lfosEnabled);
 
     // 5. Process Modulation Rules
     if (modulationSlice && modulationSlice.rules) {
-         modulationEngine.update(modulationSlice.rules, delta);
+         modulationEngine.update(modulationSlice.rules, delta, isAudioEnabled, lfosEnabled);
     }
 
     // 6. Apply Results to Engine Uniforms (Bridge)

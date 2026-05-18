@@ -18,11 +18,13 @@ import { modulationEngine } from './ModulationEngine';
 
 export const applyModulationsAt = (time: number, dt: number): void => {
     const storeState = useEngineStore.getState();
+    const lfosEnabled = storeState.lfosEnabled;
+    const audioEnabled = (storeState as unknown as { audio?: { isEnabled?: boolean } }).audio?.isEnabled ?? false;
     modulationEngine.resetOffsets();
-    modulationEngine.updateOscillators(storeState.animations, time, dt);
+    modulationEngine.updateOscillators(storeState.animations, time, dt, lfosEnabled);
     const modSlice = (storeState as { modulation?: { rules?: unknown[] } }).modulation;
     if (modSlice?.rules?.length) {
-        modulationEngine.update(modSlice.rules as never[], dt);
+        modulationEngine.update(modSlice.rules as never[], dt, audioEnabled, lfosEnabled);
     }
     storeState.setLiveModulations({ ...modulationEngine.offsets });
 };

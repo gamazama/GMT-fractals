@@ -28,6 +28,7 @@ export interface Preset {
   // Arrays/Complex types not yet in DDFS
   lights?: LightParams[];
   animations?: AnimationParams[];
+  lfosEnabled?: boolean;
 
   // Animation System
   sequence?: AnimationSequence;

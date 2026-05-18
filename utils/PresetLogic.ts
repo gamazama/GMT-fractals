@@ -109,6 +109,9 @@ export const applyPresetState = (
     // Animations & timeline — generic
     if (p.sequence) useAnimationStore.getState().setSequence(p.sequence);
     (actions as unknown as EngineActions).setAnimations(p.animations || []);
+    // Global LFO master switch. Missing-key compat: presets predating
+    // this field default the master switch back to enabled.
+    (actions as unknown as EngineActions).setLfosEnabled(p.lfosEnabled ?? true);
 
     // Non-feature scene fields (cameraRot, targetDistance, savedCameras, …).
     // Registered by utils/defaultPresetFields.ts at boot; future apps/plugins

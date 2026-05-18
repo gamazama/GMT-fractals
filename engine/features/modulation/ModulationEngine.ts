@@ -27,7 +27,12 @@ class ModulationEngine {
         return this.ruleValues[id] || 0;
     }
     
-    public updateOscillators(animations: AnimationParams[], time: number, delta: number) {
+    public updateOscillators(animations: AnimationParams[], time: number, delta: number, lfosEnabled: boolean = true) {
+        // Global LFO master switch. When off, no LFO contributes to
+        // offsets AND no lfoValues are refreshed — so audio rules that
+        // happen to be sourced from an LFO see a stale value rather
+        // than a free-running oscillator.
+        if (!lfosEnabled) return;
         for (let i = 0; i < animations.length; i++) {
             const anim = animations[i];
             if (!anim.enabled) continue;
@@ -97,13 +102,19 @@ class ModulationEngine {
         }
     }
 
-    public update(rules: ModulationRule[], delta: number) {
+    public update(rules: ModulationRule[], delta: number, audioEnabled: boolean = true, lfosEnabled: boolean = true) {
         // Note: offsets buffer is cleared by AnimationSystem before calling this.
-        
+
         const audioData = audioAnalysisEngine.getRawData();
 
         for (const rule of rules) {
             if (!rule.enabled) continue;
+            // Without the global-source gates the rule reads the last
+            // cached signal (stale FFT buffer / frozen lfoValues) and
+            // the param hangs at its final modulated value instead of
+            // returning to base.
+            if (rule.source === 'audio' && !audioEnabled) continue;
+            if (rule.source.startsWith('lfo-') && !lfosEnabled) continue;
 
             let signal = 0;
 

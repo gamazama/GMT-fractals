@@ -4,6 +4,7 @@ import { useEngineStore } from '../../../store/engineStore';
 import { Knob } from '../../../components/Knob';
 import { ParameterSelector } from '../../../components/ParameterSelector';
 import { TrashIcon } from '../../../components/Icons';
+import { DotToggle } from '../../../components/DotToggle';
 import { FeatureComponentProps } from '../../../components/registry/ComponentRegistry';
 import { collectHelpIds } from '../../../utils/helpUtils';
 import { ModulationRule } from '../modulation/index';
@@ -67,9 +68,15 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
                         className="w-full"
                     />
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                     <button 
-                        onClick={() => removeModulation(rule.id)} 
+                <div className="flex items-center gap-1.5">
+                    <DotToggle
+                        value={rule.enabled}
+                        onChange={(v) => updateRule(rule.id, { enabled: v })}
+                        accent="cyan"
+                        title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                    />
+                    <button
+                        onClick={() => removeModulation(rule.id)}
                         className="p-2 text-red-500 hover:text-red-300 hover:bg-red-900/20 rounded border border-transparent hover:border-red-900/50 transition-colors"
                         title="Remove Rule"
                     >
@@ -106,7 +113,7 @@ export const AudioLinkControls: React.FC<Partial<FeatureComponentProps>> = () =>
             )}
 
             {/* Knobs Grid - Updated to 5 Cols to fit Smoothing */}
-            <div className="bg-black/30 rounded border border-white/10 p-3">
+            <div className={`bg-black/30 rounded border border-white/10 p-3 transition-opacity ${rule.enabled ? '' : 'opacity-50'}`}>
                  <div className="grid grid-cols-5 gap-1">
                     <div className="flex flex-col items-center">
                         <Knob 

@@ -101,6 +101,7 @@ const storeFactory: StateCreator<
     lastSavedHash: null,
 
     animations: [],
+    lfosEnabled: true,
     liveModulations: {},
 
     // ── Actions ──
@@ -243,6 +244,8 @@ const storeFactory: StateCreator<
         set({ animations: nextArr });
     },
 
+    setLfosEnabled: (v) => set({ lfosEnabled: v }),
+
     setLiveModulations: (v) => set({ liveModulations: v }),
 
     loadPreset: (p) => {
@@ -373,6 +376,7 @@ const storeFactory: StateCreator<
         }
 
         p.animations = s.animations;
+        p.lfosEnabled = s.lfosEnabled;
 
         try {
             // Imported eagerly at module bottom (line ~383) — no cycle,

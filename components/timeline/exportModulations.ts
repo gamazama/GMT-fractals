@@ -14,18 +14,20 @@ import { featureRegistry } from '../../engine/FeatureSystem';
 export function applyExportModulations(time: number, dt: number) {
     const storeState = useEngineStore.getState();
     const animations = storeState.animations;
+    const lfosEnabled = storeState.lfosEnabled;
+    const audioEnabled = (storeState as any).audio?.isEnabled ?? false;
 
     // 1. Reset
     modulationEngine.resetOffsets();
     engine.modulations = {};
 
     // 2. Update oscillators
-    modulationEngine.updateOscillators(animations, time, dt);
+    modulationEngine.updateOscillators(animations, time, dt, lfosEnabled);
 
     // 3. Apply modulation rules
     const modulationSlice = (storeState as any).modulation;
     if (modulationSlice && modulationSlice.rules) {
-        modulationEngine.update(modulationSlice.rules, dt);
+        modulationEngine.update(modulationSlice.rules, dt, audioEnabled, lfosEnabled);
     }
 
     // 4. Apply offsets to uniforms

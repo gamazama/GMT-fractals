@@ -8,6 +8,7 @@ import { collectHelpIds } from '../../../utils/helpUtils';
 import Slider from '../../../components/Slider';
 import { PlayIcon, PauseIcon, StopIcon, UploadIcon, PlusIcon, CloseIcon } from '../../../components/Icons';
 import { CollapsibleSection } from '../../../components/CollapsibleSection';
+import { DotToggle } from '../../../components/DotToggle';
 
 // --- DECK COMPONENT ---
 const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: string, onClose?: () => void, isActive: boolean }) => {
@@ -128,7 +129,11 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
 // --- COLLAPSED MODULATION LIST COMPONENT ---
 const AudioModulationList: React.FC = () => {
     const store = useEngineStore();
-    const { modulation, selectModulation, removeModulation } = store;
+    const { modulation, selectModulation, removeModulation, audio, setAudio } = store;
+    const updateRule = (id: string, enabled: boolean) => {
+        (store as any).updateModulation({ id, update: { enabled } });
+    };
+    const audioEnabled = audio?.isEnabled ?? false;
 
     // Show ALL modulation rules (audio + LFOs)
     const allRules = modulation.rules;
@@ -152,19 +157,30 @@ const AudioModulationList: React.FC = () => {
             labelColor="text-cyan-400"
             className="bg-black/30 border border-white/10 rounded mb-2 overflow-hidden"
             headerClassName="px-3 py-2 bg-white/5 hover:bg-white/10"
+            rightContent={
+                <DotToggle
+                    value={audioEnabled}
+                    onChange={(v) => setAudio({ isEnabled: v })}
+                    accent="cyan"
+                    variant="master"
+                    stopPropagation
+                    title={audioEnabled ? 'Disable audio modulation' : 'Enable audio modulation'}
+                />
+            }
         >
             <div className="max-h-32 overflow-y-auto custom-scroll">
                 {allRules.map((rule, index) => {
                     const isSelected = rule.id === selectedId;
                     const targetName = rule.target.split('.').pop() || 'Param';
                     const isAudio = rule.source === 'audio';
+                    const dim = !rule.enabled;
                     return (
                         <div
                             key={rule.id}
                             onClick={() => selectModulation(rule.id)}
                             className={`px-3 py-1.5 flex justify-between items-center cursor-pointer text-[10px] border-b border-white/5 last:border-0 transition-colors ${
                                 isSelected ? 'bg-cyan-900/30 text-cyan-300' : 'text-gray-400 hover:bg-white/5'
-                            }`}
+                            } ${dim ? 'opacity-50' : ''}`}
                         >
                             <div className="flex items-center gap-2">
                                 <span
@@ -174,7 +190,7 @@ const AudioModulationList: React.FC = () => {
                                 <span className="font-mono">{index + 1}. {targetName}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className={`text-[8px] px-1 rounded ${isAudio ? 'bg-purple-900/50 text-purple-300' : 'bg-green-900/50 text-green-300'}`}>
+                                <span className={`text-[8px] px-1 rounded ${dim ? 'bg-white/5 text-gray-500' : (isAudio ? 'bg-purple-900/50 text-purple-300' : 'bg-green-900/50 text-green-300')}`}>
                                     {getSourceLabel(rule.source)}
                                 </span>
                                 {isAudio && (
@@ -182,6 +198,14 @@ const AudioModulationList: React.FC = () => {
                                         {Math.round(rule.freqStart * 100)}-{Math.round(rule.freqEnd * 100)}%
                                     </span>
                                 )}
+                                <DotToggle
+                                    value={rule.enabled}
+                                    onChange={(v) => updateRule(rule.id, v)}
+                                    accent="cyan"
+                                    size="sm"
+                                    stopPropagation
+                                    title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                                />
                                 <button
                                     onClick={(e) => { e.stopPropagation(); removeModulation(rule.id); }}
                                     className="text-red-500/50 hover:text-red-400 px-1"
