@@ -170,6 +170,13 @@ const renderItem = (
                     key={`compilable-${item.id}-${index}`}
                     featureId={item.id}
                     helpId={item.helpId}
+                    compileParam={item.compileParam}
+                    runtimeToggleParam={item.runtimeToggleParam}
+                    compileSettingsParams={item.compileSettingsParams}
+                    runtimeGroup={item.runtimeGroup}
+                    runtimeExcludeParams={item.runtimeExcludeParams}
+                    label={item.label}
+                    compileMessage={item.compileMessage}
                 />
             );
             break;

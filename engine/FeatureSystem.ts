@@ -214,16 +214,7 @@ export interface FeatureDefinition {
     // --- Compilable Section UI ---
     // panelConfig: describes how to render this feature as a compilable section with compile/runtime split.
     // Used by CompilableFeatureSection component. If absent, feature uses default AutoFeaturePanel rendering.
-    panelConfig?: {
-        compileParam: string;               // compile gate param (onUpdate: 'compile')
-        runtimeToggleParam?: string;        // runtime on/off param (uniform-backed, instant toggle)
-        compileSettingsParams?: string[];    // compile-time params to show in settings sub-section
-        runtimeGroup?: string;              // groupFilter for runtime params
-        runtimeExcludeParams?: string[];    // params to hide from runtime section
-        label?: string;                     // section label (falls back to feature name)
-        compileMessage?: string;            // "Compiling X..." message
-        helpId?: string;                    // data-help-id for context help
-    };
+    panelConfig?: CompilablePanelConfig;
 
     // --- Engine Integration ---
     // engineConfig: declares a master enable/disable toggle for ShaderFactory to conditionally skip injection.
@@ -261,6 +252,24 @@ export interface FeatureDefinition {
     };
 
 
+}
+
+/** Configuration for rendering a feature as a <CompilableFeatureSection>.
+ *  Mirrored across three sites: FeatureDefinition.panelConfig (canonical
+ *  per-feature config), PanelItem 'compilable' variant override fields
+ *  (lets one feature appear as multiple compilable sections), and
+ *  CompilableFeatureSection props (final resolved values). */
+export interface CompilablePanelConfig {
+    compileParam: string;
+    runtimeToggleParam?: string;
+    compileSettingsParams?: string[];
+    runtimeGroup?: string;
+    runtimeExcludeParams?: string[];
+    label?: string;
+    /** Spinner message. Defaults to `Compiling ${label}...` when label is set,
+     *  otherwise "Compiling Shader...". */
+    compileMessage?: string;
+    helpId?: string;
 }
 
 /**

@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { featureRegistry } from '../engine/FeatureSystem';
+import { featureRegistry, CompilablePanelConfig } from '../engine/FeatureSystem';
 import { useEngineStore } from '../store/engineStore';
 import { FractalEvents } from '../engine/FractalEvents';
 import { AutoFeaturePanel } from './AutoFeaturePanel';
@@ -11,27 +11,9 @@ import { SectionLabel } from './SectionLabel';
 import { AlertIcon } from './Icons';
 import { warn, compileBar as compileBarClass } from '../data/theme';
 
-interface CompilableFeatureSectionProps {
+interface CompilableFeatureSectionProps extends Partial<CompilablePanelConfig> {
     /** Feature ID in the DDFS registry. Reads panelConfig if available. */
     featureId: string;
-
-    // --- Override props (take precedence over panelConfig) ---
-    /** Compile gate param name (onUpdate: 'compile') */
-    compileParam?: string;
-    /** Runtime on/off param (uniform-backed, instant toggle) */
-    runtimeToggleParam?: string;
-    /** Compile-time params to show in settings sub-section */
-    compileSettingsParams?: string[];
-    /** groupFilter for runtime params panel */
-    runtimeGroup?: string;
-    /** Params to exclude from runtime panel */
-    runtimeExcludeParams?: string[];
-    /** Section label (falls back to feature name) */
-    label?: string;
-    /** Message shown during compilation */
-    compileMessage?: string;
-    /** data-help-id */
-    helpId?: string;
 }
 
 /**
@@ -46,15 +28,22 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     const feature = featureRegistry.get(featureId);
     const pc = feature?.panelConfig;
 
-    // Resolve config: explicit props override panelConfig
-    const compileParam = props.compileParam ?? pc?.compileParam ?? '';
-    const runtimeToggleParam = props.runtimeToggleParam ?? pc?.runtimeToggleParam;
-    const compileSettingsParams = props.compileSettingsParams ?? pc?.compileSettingsParams;
-    const runtimeGroup = props.runtimeGroup ?? pc?.runtimeGroup;
-    const runtimeExcludeParams = props.runtimeExcludeParams ?? pc?.runtimeExcludeParams;
-    const label = props.label ?? pc?.label ?? feature?.name ?? featureId;
-    const compileMessage = props.compileMessage ?? pc?.compileMessage ?? 'Compiling Shader...';
-    const helpId = props.helpId ?? pc?.helpId;
+    // Resolve config: when caller supplies a compileParam they're declaring a
+    // distinct compilable section (e.g. geometry hosts both Hybrid Box and
+    // Burning Mode); the feature's own panelConfig must NOT bleed into that
+    // section's other fields, otherwise it'd inherit the wrong runtime toggle
+    // / compile settings and the section would silently mutate the wrong
+    // params. Per-field `??` fallback is only safe when no override exists.
+    const useOverride = props.compileParam !== undefined;
+    const src = useOverride ? props : { ...pc, ...props };
+    const compileParam = src.compileParam ?? '';
+    const runtimeToggleParam = src.runtimeToggleParam;
+    const compileSettingsParams = src.compileSettingsParams;
+    const runtimeGroup = src.runtimeGroup;
+    const runtimeExcludeParams = src.runtimeExcludeParams;
+    const label = src.label ?? feature?.name ?? featureId;
+    const compileMessage = src.compileMessage ?? `Compiling ${label}...`;
+    const helpId = src.helpId;
 
     // Granular per-feature subscription — see FeatureSection.tsx for
     // the rationale. Avoids re-rendering every CompilableFeatureSection

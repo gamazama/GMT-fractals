@@ -41,7 +41,16 @@ export const GmtPanels: PanelManifest = [
             { type: 'widget', id: 'formula-params' },
             { type: 'separator' },
             { type: 'feature', id: 'geometry', groupFilter: 'transform' },
-            { type: 'feature', id: 'geometry', groupFilter: 'burning' },
+            // Geometry's panelConfig is owned by the Hybrid Box entry below;
+            // this section overrides compileParam to expose Burning Mode
+            // (compile-only, no runtime uniform path) as its own toggle.
+            {
+                type: 'compilable',
+                id: 'geometry',
+                compileParam: 'burningEnabled',
+                runtimeGroup: 'burning',
+                label: 'Burning Mode',
+            },
             { type: 'separator' },
             {
                 type: 'feature',

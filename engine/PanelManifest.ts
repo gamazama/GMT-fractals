@@ -20,6 +20,7 @@
  */
 
 import type { DockZone, EngineStoreState } from '../types/store';
+import type { CompilablePanelConfig } from './FeatureSystem';
 // Type-only import. Importing the runtime binding here would evaluate
 // engineStore.ts during PanelManifest's module load, which freezes the
 // feature registry. PanelManifest is reachable from registry-touch
@@ -160,7 +161,7 @@ export type PanelItem =
           sections: PanelAccordionSection[];
           showIf?: ShowIfPredicate;
       })
-    | (PanelItemHelp & {
+    | (PanelItemHelp & Partial<CompilablePanelConfig> & {
           /** Renders the feature via <CompilableFeatureSection>: a
            *  compile/runtime-split UI that shows the compile-toggle
            *  status dot, runtime sliders, and an "is compiling"
@@ -169,7 +170,13 @@ export type PanelItem =
            *  Used for hybrid box, interlace, volumetric scatter — any
            *  feature with a compile-time switch alongside runtime
            *  params. Mirrors GMT's inline `<CompilableFeatureSection>`
-           *  usage in ScenePanel / FormulaPanel without bespoke JSX. */
+           *  usage in ScenePanel / FormulaPanel without bespoke JSX.
+           *
+           *  Override fields (from CompilablePanelConfig) let one feature
+           *  appear as multiple compilable sections in a panel — e.g.
+           *  geometry exposes both Hybrid Box and Burning Mode by passing
+           *  different compileParam values per entry. Any field set here
+           *  overrides the feature's own panelConfig for this section. */
           type: 'compilable';
           id: string;
           showIf?: ShowIfPredicate;
