@@ -70,6 +70,12 @@ export class RenderPipeline {
     // Skipped during bucket rendering (BucketRenderer manages its own).
     private static readonly VIEWPORT_CONVERGENCE_INTERVAL = 8;
     private _isBucketRendering: boolean = false;
+    // Per-GPU-bucket scissor rect (target-local pixels). When set, the main
+    // MRT render is clipped to this rect so the fragment shader only runs on
+    // bucket pixels — without this, the shader runs at full MRT size and
+    // discards everything outside the bucket, which is ~64× wasted work for a
+    // 512px bucket in a 4K image tile. Set/cleared by GmtBucketHost.
+    private _bucketScissor: { x: number; y: number; w: number; h: number } | null = null;
     // Gate the viewport convergence pass behind an explicit consumer flag.
     // The only consumer is RegionOverlay (engine-gmt/components/viewport/
     // RegionOverlay.tsx) which polls `convergenceValue` while a render-region
@@ -510,6 +516,10 @@ export class RenderPipeline {
         this._isBucketRendering = active;
     }
 
+    public setBucketScissor(rect: { x: number; y: number; w: number; h: number } | null) {
+        this._bucketScissor = rect;
+    }
+
 
     public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
@@ -548,8 +558,23 @@ export class RenderPipeline {
 
         // SINGLE render to MRT - outputs both color (location 0) and depth (location 1)
         renderer.setRenderTarget(writeTarget);
+
+        // Bucket scissor: clip fragment-shader execution to the active GPU
+        // bucket. Must be set AFTER setRenderTarget — three.js's setRenderTarget
+        // overwrites the GL scissor state with the target's stored values.
+        const scissor = this._bucketScissor;
+        const prevScissorTest = scissor ? renderer.getScissorTest() : false;
+        if (scissor) {
+            renderer.setScissor(scissor.x, scissor.y, scissor.w, scissor.h);
+            renderer.setScissorTest(true);
+        }
+
         if (scene && camera) {
             renderer.render(scene, camera);
+        }
+
+        if (scissor) {
+            renderer.setScissorTest(prevScissorTest);
         }
 
         renderer.setRenderTarget(currentTarget);

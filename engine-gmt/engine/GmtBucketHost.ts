@@ -120,7 +120,7 @@ export class GmtBucketHost implements BucketRenderHost {
         pixelOrigin?.set(tile.pixelX, tile.pixelY);
     }
 
-    public beginGpuBucket(uvRect: BucketUvRect, _pixelRect: { pixelX: number; pixelY: number; pixelW: number; pixelH: number }): void {
+    public beginGpuBucket(uvRect: BucketUvRect, pixelRect: { pixelX: number; pixelY: number; pixelW: number; pixelH: number }): void {
         if (!this.engine) return;
         const min = new THREE.Vector2(uvRect.minX, uvRect.minY);
         const max = new THREE.Vector2(uvRect.maxX, uvRect.maxY);
@@ -129,6 +129,18 @@ export class GmtBucketHost implements BucketRenderHost {
         this.currentBucketUv = uvRect;
         this.convergenceRequested = false;
         this.cachedConvergenceResult = null;
+
+        // Scissor the main MRT render to the bucket pixel rect — the shader's
+        // vUv-based discard is kept as a belt-and-braces fallback, but scissor
+        // is what actually prevents the fragment shader from running outside
+        // the bucket (the discard still costs a history fetch + MRT write per
+        // pixel, which dominated at large MRT sizes).
+        this.engine.pipeline.setBucketScissor({
+            x: pixelRect.pixelX,
+            y: pixelRect.pixelY,
+            w: pixelRect.pixelW,
+            h: pixelRect.pixelH,
+        });
     }
 
     public resetAccumulation(): void {
@@ -231,6 +243,7 @@ export class GmtBucketHost implements BucketRenderHost {
         if (!this.engine) return;
 
         this.engine.pipeline.setBucketRendering(false);
+        this.engine.pipeline.setBucketScissor(null);
 
         // Reset region uniforms to full screen.
         this.engine.materials.setUniform(Uniforms.RegionMin, new THREE.Vector2(0, 0));
