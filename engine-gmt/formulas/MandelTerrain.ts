@@ -105,11 +105,18 @@ export const MandelTerrain: FractalDefinition = {
             // shapes evaluate against the same plane the terrain is rendered on.
             // The outer-loop trap injection only fires once for self-contained formulas;
             // this inner loop is where the real orbit samples accumulate.
-            // Skip i=0 (z2 is the unperturbed sample point — without this guard
-            // every pixel's trap value collapses to its own distance to the trap
-            // shape, painting a visible Point/Plane projection through the
-            // origin).
-            if (i > 0) {
+            //
+            //  - Skip i=0: z2 is the unperturbed sample point; including it
+            //    contaminates every pixel with its own distance to the trap
+            //    shape, painting a Point/Plane projection through the origin.
+            //  - Respect uColorIter: when the user caps coloring at iter N,
+            //    stop accumulating beyond N so the trap freezes too — same
+            //    semantic the standard savedGeomTrap snapshot path applies
+            //    for non-self-contained formulas (de.ts). Hard-freezing here
+            //    rather than snapshotting works because the outer map()
+            //    mix(g_geomTrap, savedGeomTrap, ...) sees the already-capped
+            //    value and the mix becomes a no-op.
+            if (i > 0 && (uColorIter < 0.5 || float(i) <= uColorIter)) {
                 vec3 _zp = vec3(z2.x, 0.0, z2.y);
                 vec3 _d = _zp - uTrapCenter;
                 float _td;
