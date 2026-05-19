@@ -105,7 +105,11 @@ export const MandelTerrain: FractalDefinition = {
             // shapes evaluate against the same plane the terrain is rendered on.
             // The outer-loop trap injection only fires once for self-contained formulas;
             // this inner loop is where the real orbit samples accumulate.
-            {
+            // Skip i=0 (z2 is the unperturbed sample point — without this guard
+            // every pixel's trap value collapses to its own distance to the trap
+            // shape, painting a visible Point/Plane projection through the
+            // origin).
+            if (i > 0) {
                 vec3 _zp = vec3(z2.x, 0.0, z2.y);
                 vec3 _d = _zp - uTrapCenter;
                 float _td;

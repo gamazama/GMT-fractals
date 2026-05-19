@@ -123,8 +123,8 @@ export const MAPPING_MODES: MappingDefinition[] = [
     },
     {
         value: 14.0,
-        label: 'Geometric Trap',
-        description: 'Closest approach to a geometric shape (Point, Sphere, Cross, or Plane) — set shape in the Gradient panel trap section.',
+        label: 'Geometric Orbit Trap',
+        description: 'Closest approach to a geometric shape (Point, Sphere, Cross, or Plane) — set shape in the Geometric Orbit Trap section.',
         glsl: `v = logTrap(g_geomTrap);`
     }
 ];

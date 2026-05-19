@@ -59,7 +59,7 @@ export const ColoringFeature: FeatureDefinition = {
         layer2_hist:   { label: 'Histogram',                                                               helpId: 'grad.params'  },
         layer2_bottom: { label: 'Output',                                                                  helpId: 'grad.escape'  },
         noise:         { label: 'Noise',       description: 'High-frequency noise mixed into the surface colour.',  helpId: 'grad.noise'  },
-        trap_geom:     { label: 'Orbit Trap',  description: 'Geometric shape for orbit trap accumulation (pairs with Geometric Trap mapping mode).' },
+        trap_geom:     { label: 'Geometric Orbit Trap',  description: 'Geometric shape for orbit trap accumulation (pairs with Geometric Orbit Trap mapping mode).' },
     },
     customUI: [
         {
@@ -290,12 +290,12 @@ export const ColoringFeature: FeatureDefinition = {
             noReset: true
         },
 
-        // --- GEOMETRIC TRAP ---
+        // --- GEOMETRIC ORBIT TRAP ---
         trapEnabled: {
-            type: 'boolean', default: false, label: 'Orbit Trap', shortId: 'ten',
+            type: 'boolean', default: false, label: 'Geometric Orbit Trap', shortId: 'ten',
             group: 'trap_geom',
             onUpdate: 'compile',
-            description: 'Compiles per-iteration geometric trap distance into the shader. Select shape + mapping mode "Geometric Trap" to colour by trap distance.'
+            description: 'Compiles per-iteration geometric trap distance into the shader. Select shape + mapping mode "Geometric Orbit Trap" to colour by trap distance.'
         },
         trapShape: {
             type: 'float', default: 1.0, label: 'Shape', shortId: 'tsh',
@@ -349,8 +349,15 @@ export const ColoringFeature: FeatureDefinition = {
             // the same trap math through their own inner loop; the outer-loop fold below
             // only fires once for those.
             builder.addDefine('TRAP_ENABLED', '1');
+            // `if (i > 0)` skips iteration 0, where z is still the raw ray
+            // sample point (z == p). Without it, every pixel's trap value
+            // gets contaminated by its own distance to the trap shape — the
+            // user sees the trap geometry (Point → circle at origin, Plane
+            // → plane line) projected onto every surface regardless of
+            // formula. Matches the standard g_orbitTrap convention which
+            // also captures only post-formula state.
             builder.addHybridFold('', '', `
-                {
+                if (i > 0) {
                     vec3 _zp = z.xyz;
                     vec3 _d = _zp - uTrapCenter;
                     float _td;

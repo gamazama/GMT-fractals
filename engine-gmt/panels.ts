@@ -346,17 +346,19 @@ export const GmtPanels: PanelManifest = [
                 ],
             },
 
-            // Orbit Trap — own compilable section so the trapEnabled compile
-            // toggle goes through the CompileBar instead of the Engine panel.
-            // Pulled out of the gradient accordion because accordion sections
-            // have no compile machinery and stacking a CompilableFeatureSection
-            // inside would double-header. Visually sits below the accordion.
+            // Geometric Orbit Trap — own compilable section so the
+            // trapEnabled compile toggle goes through the CompileBar
+            // instead of the Engine panel. Renamed from "Orbit Trap" so it
+            // doesn't collide with the regular Orbit Trap mapping mode.
+            // Pulled out of the gradient accordion because accordion
+            // sections have no compile machinery and stacking a
+            // CompilableFeatureSection inside would double-header.
             {
                 type: 'compilable',
                 id: 'coloring',
                 compileParam: 'trapEnabled',
                 runtimeGroup: 'trap_geom',
-                label: 'Orbit Trap',
+                label: 'Geometric Orbit Trap',
                 helpId: 'grad.orbit-trap',
             },
         ],
