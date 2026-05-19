@@ -572,6 +572,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('system', {
         id: 'ui-mode-pref',
         type: 'custom',
+        when: () => useEngineStore.getState().advancedMode,
         component: UiModePreferenceMenuItem,
     });
 };

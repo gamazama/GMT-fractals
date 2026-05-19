@@ -5,19 +5,76 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 
-// UI mode preference — persisted across reloads so the user's
-// auto/mobile/desktop choice survives. Read once at slice init, written
-// from setUiModePreference. Single key, app-agnostic.
-const UI_MODE_PREF_KEY = 'gmt.uiModePreference';
+// User preferences persisted to localStorage. Read at slice init,
+// written from setters. All keys under the `gmt.` namespace.
+const LS = {
+    uiMode: 'gmt.uiModePreference',
+    showHints: 'gmt.showHints',
+    invertY: 'gmt.invertY',
+    advancedMode: 'gmt.advancedMode',
+    lockSceneOnSwitch: 'gmt.lockSceneOnSwitch',
+    exportIncludeScene: 'gmt.exportIncludeScene',
+    leftDockSize: 'gmt.leftDockSize',
+    rightDockSize: 'gmt.rightDockSize',
+    isLeftDockCollapsed: 'gmt.isLeftDockCollapsed',
+    isRightDockCollapsed: 'gmt.isRightDockCollapsed',
+    compositionOverlay: 'gmt.compositionOverlay',
+    compositionOverlaySettings: 'gmt.compositionOverlaySettings',
+} as const;
+
+function readBool(key: string, fallback: boolean): boolean {
+    try {
+        const v = localStorage.getItem(key);
+        if (v === '0' || v === 'false') return false;
+        if (v === '1' || v === 'true') return true;
+    } catch { /* SSR / private mode */ }
+    return fallback;
+}
+function writeBool(key: string, v: boolean): void {
+    try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* quota */ }
+}
+function readNumber(key: string, fallback: number): number {
+    try {
+        const v = localStorage.getItem(key);
+        if (v !== null) {
+            const n = Number(v);
+            if (Number.isFinite(n)) return n;
+        }
+    } catch { /* SSR / private mode */ }
+    return fallback;
+}
+function writeNumber(key: string, v: number): void {
+    try { localStorage.setItem(key, String(v)); } catch { /* quota */ }
+}
+function readJson<T>(key: string, fallback: T): T {
+    try {
+        const v = localStorage.getItem(key);
+        if (v !== null) return { ...fallback, ...(JSON.parse(v) as object) } as T;
+    } catch { /* SSR / malformed */ }
+    return fallback;
+}
+function writeJson(key: string, v: unknown): void {
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* quota */ }
+}
+
 function readUiModePreference(): UiModePreference {
     try {
-        const v = localStorage.getItem(UI_MODE_PREF_KEY);
+        const v = localStorage.getItem(LS.uiMode);
         if (v === 'auto' || v === 'mobile' || v === 'desktop') return v;
     } catch { /* SSR / private mode */ }
     return 'auto';
 }
 function writeUiModePreference(v: UiModePreference): void {
-    try { localStorage.setItem(UI_MODE_PREF_KEY, v); } catch { /* quota */ }
+    try { localStorage.setItem(LS.uiMode, v); } catch { /* quota */ }
+}
+
+const COMPOSITION_OVERLAY_TYPES = new Set(['none', 'grid', 'thirds', 'golden', 'spiral', 'center', 'diagonal', 'safearea']);
+function readCompositionOverlay(fallback: CompositionOverlayType): CompositionOverlayType {
+    try {
+        const v = localStorage.getItem(LS.compositionOverlay);
+        if (v && COMPOSITION_OVERLAY_TYPES.has(v)) return v as CompositionOverlayType;
+    } catch { /* SSR / private mode */ }
+    return fallback;
 }
 
 // Tutorial completion persistence — namespaced per app via
@@ -115,8 +172,8 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
 
     isUserInteracting: false,
 
-    advancedMode: false,
-    showHints: true,
+    advancedMode: readBool(LS.advancedMode, false),
+    showHints: readBool(LS.showHints, true),
     uiModePreference: readUiModePreference(),
     // Initialized from window at slice creation; a single global
     // resize listener in hooks/useMobileLayout.ts keeps these in sync.
@@ -125,14 +182,14 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     isPortrait: typeof window !== 'undefined'
         && window.innerHeight > window.innerWidth,
     mobileActiveMenu: null,
-    invertY: false,
+    invertY: readBool(LS.invertY, false),
 
     // resolutionMode + fixedResolution migrated to viewportSlice (Phase 2a).
 
     isBroadcastMode: getUrlParam('clean') || getUrlParam('broadcast'),
-    
-    lockSceneOnSwitch: false,
-    exportIncludeScene: false,
+
+    lockSceneOnSwitch: readBool(LS.lockSceneOnSwitch, false),
+    exportIncludeScene: readBool(LS.exportIncludeScene, false),
     
     isTimelineHovered: false,
     tabSwitchCount: 0,
@@ -141,8 +198,8 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     contextMenu: { visible: false, x: 0, y: 0, items: [], targetHelpIds: [] },
     
     // Composition overlay
-    compositionOverlay: 'none',
-    compositionOverlaySettings: {
+    compositionOverlay: readCompositionOverlay('none'),
+    compositionOverlaySettings: readJson(LS.compositionOverlaySettings, {
         opacity: 0.5,
         lineThickness: 1,
         showCenterMark: false,
@@ -157,14 +214,14 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
         spiralPositionY: 0.5,
         spiralScale: 1.0,
         spiralRatio: 1.618033988749895 // Golden ratio (phi) by default
-    },
+    }),
 
     // --- LAYOUT STATE ---
     panels: DEFAULT_PANELS,
-    leftDockSize: 320, // Width for Engine and Camera Manager panels
-    rightDockSize: 360, // Slightly wider to fit all tabs on one line
-    isLeftDockCollapsed: true, // Collapsed by default - panels will open it when initialized
-    isRightDockCollapsed: false,
+    leftDockSize: readNumber(LS.leftDockSize, 320), // Width for Engine and Camera Manager panels
+    rightDockSize: readNumber(LS.rightDockSize, 360), // Slightly wider to fit all tabs on one line
+    isLeftDockCollapsed: readBool(LS.isLeftDockCollapsed, true), // Collapsed by default - panels will open it when initialized
+    isRightDockCollapsed: readBool(LS.isRightDockCollapsed, false),
     draggingPanelId: null,
     dragSnapshot: null,
     
@@ -213,16 +270,16 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     setOpenLightPopupIndex: (index) => set({ openLightPopupIndex: index }),
     setShadowPanelOpen: (v) => set({ shadowPanelOpen: v }),
     setVpQualityOpen: (v) => set({ vpQualityOpen: v }),
-    setAdvancedMode: (v) => set({ advancedMode: v }),
-    setShowHints: (v) => set({ showHints: v }),
+    setAdvancedMode: (v) => { writeBool(LS.advancedMode, v); set({ advancedMode: v }); },
+    setShowHints: (v) => { writeBool(LS.showHints, v); set({ showHints: v }); },
     setUiModePreference: (v) => { writeUiModePreference(v); set({ uiModePreference: v }); },
     setMobileActiveMenu: (v) => set((s) => s.mobileActiveMenu === v ? s : { mobileActiveMenu: v }),
-    setInvertY: (v) => set({ invertY: v }),
+    setInvertY: (v) => { writeBool(LS.invertY, v); set({ invertY: v }); },
 
     // setResolutionMode / setFixedResolution migrated to viewportSlice (Phase 2a).
 
-    setLockSceneOnSwitch: (v) => set({ lockSceneOnSwitch: v }),
-    setExportIncludeScene: (v) => set({ exportIncludeScene: v }),
+    setLockSceneOnSwitch: (v) => { writeBool(LS.lockSceneOnSwitch, v); set({ lockSceneOnSwitch: v }); },
+    setExportIncludeScene: (v) => { writeBool(LS.exportIncludeScene, v); set({ exportIncludeScene: v }); },
     
     setIsTimelineHovered: (v) => set({ isTimelineHovered: v }),
     incrementTabSwitchCount: () => set(s => ({ tabSwitchCount: s.tabSwitchCount + 1 })),
@@ -354,8 +411,14 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
         return { panels, activeLeftTab: activeLeft, activeRightTab: activeRight };
     }),
 
-    setDockSize: (side, size) => set({ [side === 'left' ? 'leftDockSize' : 'rightDockSize']: size }),
-    setDockCollapsed: (side, collapsed) => set({ [side === 'left' ? 'isLeftDockCollapsed' : 'isRightDockCollapsed']: collapsed }),
+    setDockSize: (side, size) => {
+        writeNumber(side === 'left' ? LS.leftDockSize : LS.rightDockSize, size);
+        set({ [side === 'left' ? 'leftDockSize' : 'rightDockSize']: size });
+    },
+    setDockCollapsed: (side, collapsed) => {
+        writeBool(side === 'left' ? LS.isLeftDockCollapsed : LS.isRightDockCollapsed, collapsed);
+        set({ [side === 'left' ? 'isLeftDockCollapsed' : 'isRightDockCollapsed']: collapsed });
+    },
     
     setFloatPosition: (id, x, y) => set((state) => ({
         panels: { ...state.panels, [id]: { ...state.panels[id], floatPos: { x, y } } }
@@ -382,10 +445,15 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     dockTab: (tab) => get().movePanel(tab, 'right'),
     
     // Composition overlay
-    setCompositionOverlay: (type) => set({ compositionOverlay: type }),
-    setCompositionOverlaySettings: (settings) => set(state => ({
-        compositionOverlaySettings: { ...state.compositionOverlaySettings, ...settings }
-    })),
+    setCompositionOverlay: (type) => {
+        try { localStorage.setItem(LS.compositionOverlay, type); } catch { /* quota */ }
+        set({ compositionOverlay: type });
+    },
+    setCompositionOverlaySettings: (settings) => set(state => {
+        const merged = { ...state.compositionOverlaySettings, ...settings };
+        writeJson(LS.compositionOverlaySettings, merged);
+        return { compositionOverlaySettings: merged };
+    }),
 
     // --- TUTORIAL ACTIONS ---
     startTutorial: (lessonId) => set({
