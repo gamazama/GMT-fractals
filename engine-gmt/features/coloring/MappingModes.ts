@@ -125,7 +125,11 @@ export const MAPPING_MODES: MappingDefinition[] = [
         value: 14.0,
         label: 'Geometric Orbit Trap',
         description: 'Closest approach to a geometric shape (Point, Sphere, Cross, or Plane) — set shape in the Geometric Orbit Trap section.',
-        glsl: `v = logTrap(g_geomTrap);`
+        // Reads the side-channel `g_geomTrapFinal` written by map() at the
+        // ray-hit point. mapDist() (normals / shadows / AO) overwrites
+        // g_geomTrap with its own accumulation but never touches the Final
+        // variable, so the uColorIter cap survives all the post-map work.
+        glsl: `v = logTrap(g_geomTrapFinal);`
     }
 ];
 

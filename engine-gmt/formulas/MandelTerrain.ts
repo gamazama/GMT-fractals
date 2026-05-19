@@ -116,7 +116,16 @@ export const MandelTerrain: FractalDefinition = {
             //    rather than snapshotting works because the outer map()
             //    mix(g_geomTrap, savedGeomTrap, ...) sees the already-capped
             //    value and the mix becomes a no-op.
-            if (i > 0 && (uColorIter < 0.5 || float(i) <= uColorIter)) {
+            // No uColorIter gate here. The earlier inner cap (uColorIter or
+            // float i <= uColorIter) froze accumulation to inner iters 1..N
+            // which, for MandelTerrain c-plane orbit, sit at similar
+            // distances per pixel before the orbit gets close to the trap
+            // shape — savedGeomTrap then captured a visually-flat value.
+            // Accumulate the full inner-loop min and let the outer-loop
+            // snapshot in de.ts handle whatever capping is meaningful. For
+            // self-contained formulas the outer loop runs once so
+            // uColorIter has limited effect on this trap; acceptable.
+            if (i > 0) {
                 vec3 _zp = vec3(z2.x, 0.0, z2.y);
                 vec3 _d = _zp - uTrapCenter;
                 float _td;

@@ -339,24 +339,42 @@ export const ColoringFeature: FeatureDefinition = {
         // and before DE_MASTER (which writes it). Preambles come before both.
         builder.addPreamble('vec4 g_orbitTrap = vec4(1e10);');
         // Geometric trap accumulator — closest approach to the chosen shape, per iteration.
+        // Two variables: `g_geomTrap` accumulates inside map() and mapDist()
+        // (both reset it per call); `g_geomTrapFinal` holds the capped value
+        // map() writes at its end. mapDist (normals/shadows/AO) leaves
+        // g_geomTrapFinal untouched, so the colour sampler reads the value
+        // captured at the actual ray-hit map() call rather than whatever
+        // mapDist re-accumulated at offset positions.
         builder.addPreamble('float g_geomTrap = 1e10;');
+        builder.addPreamble('float g_geomTrapFinal = 1e10;');
         // Float accumulator used by some imported DEC formulas for orbit trap coloring
         builder.addPreamble('float escape = 0.0;');
 
-        // Inject per-iteration geometric trap distance when enabled.
+        // Geometric trap: pre-formula injection (here) accumulates samples
+        // with z BEFORE the formula step, with i=0 skipped to avoid
+        // raw-ray-sample contamination. The de.ts post-formula inline block
+        // (gated by TRAP_ENABLED) accumulates AFTER the formula step. Both
+        // fire each iter (i >= 1 for pre-formula); g_geomTrap is a `min`
+        // accumulator so additional candidates only refine the answer. The
+        // post-formula block exists because pre-formula injection misses
+        // iter 0's contribution: at iter=1's savedGeomTrap snapshot, the
+        // pre-formula path has 0 samples and uColorIter=1 would freeze the
+        // trap at 1e10. The post-formula block fills that gap.
+        //
+        // Self-contained formulas (MandelTerrain et al, marked with
+        // SELF_CONTAINED_SDE) run their entire fractal iteration inside the
+        // formula function and accumulate g_geomTrap from their inner loop
+        // using the formula's own coordinate system (e.g. MandelTerrain
+        // projects c-plane orbit to XZ with y=0). The outer-loop pre- and
+        // post-formula blocks would then fire at outer iter >= 1 using
+        // z.xyz from the post-formula state (3D scene-space with heightmap
+        // mixed in) — wrong coordinate system, contaminates the inner
+        // loop's clean min. Gate both outer blocks off for self-contained
+        // so the inner loop is the sole writer.
         if (state?.trapEnabled) {
-            // Gate for self-contained formulas (e.g. MandelTerrain) that need to thread
-            // the same trap math through their own inner loop; the outer-loop fold below
-            // only fires once for those.
             builder.addDefine('TRAP_ENABLED', '1');
-            // `if (i > 0)` skips iteration 0, where z is still the raw ray
-            // sample point (z == p). Without it, every pixel's trap value
-            // gets contaminated by its own distance to the trap shape — the
-            // user sees the trap geometry (Point → circle at origin, Plane
-            // → plane line) projected onto every surface regardless of
-            // formula. Matches the standard g_orbitTrap convention which
-            // also captures only post-formula state.
             builder.addHybridFold('', '', `
+#ifndef SELF_CONTAINED_SDE
                 if (i > 0) {
                     vec3 _zp = z.xyz;
                     vec3 _d = _zp - uTrapCenter;
@@ -368,6 +386,7 @@ export const ColoringFeature: FeatureDefinition = {
                     else _td = abs(dot(_zp, uTrapNormal) - uTrapOffset);
                     g_geomTrap = min(g_geomTrap, _td);
                 }
+#endif
             `);
         }
 

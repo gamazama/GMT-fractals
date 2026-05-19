@@ -99,6 +99,26 @@ vec4 map(vec3 p) {
         float r2 = dot(z.xyz, z.xyz);
         g_orbitTrap = min(g_orbitTrap, abs(vec4(z.xyz, r2)));
 
+        // Geometric trap — accumulates here (post-formula, pre-snapshot) so
+        // it shares z state + snapshot timing with g_orbitTrap above. The
+        // older addHybridFold position fired BEFORE the formula step and
+        // its skip-iter-0 guard left savedGeomTrap at 1e10 for low
+        // uColorIter, freezing the trap to a flat constant. Self-contained
+        // formulas thread their own trap math through their inner loop and
+        // gate this block off via SELF_CONTAINED_SDE (core_math.ts).
+#if defined(TRAP_ENABLED) && !defined(SELF_CONTAINED_SDE)
+        {
+            vec3 _d = z.xyz - uTrapCenter;
+            float _td;
+            int _ts = int(uTrapShape + 0.1);
+            if (_ts == 1)      _td = length(_d);
+            else if (_ts == 2) _td = abs(length(_d) - uTrapRadius);
+            else if (_ts == 3) _td = min(min(abs(_d.x), abs(_d.y)), abs(_d.z));
+            else               _td = abs(dot(z.xyz, uTrapNormal) - uTrapOffset);
+            g_geomTrap = min(g_geomTrap, _td);
+        }
+#endif
+
         // Color iteration snapshot. Direct if-assignment (rather than mix
         // with a 0/1 gate) lets fxc co-locate savedX with the running X
         // in the same register: with mix, savedX was both an operand and
@@ -146,6 +166,13 @@ vec4 map(vec3 p) {
     g_orbitTrap = mix(g_orbitTrap, savedOrbitTrap, useColorSnap);
     trap = mix(trap, savedTrap, useColorSnap);
     g_geomTrap = mix(g_geomTrap, savedGeomTrap, useColorSnap);
+
+    // Persist the capped geometric trap into g_geomTrapFinal so the colour
+    // sampler reads the value at the actual hit point. mapDist() (called
+    // later for normals / shadows / AO) resets g_geomTrap and re-accumulates
+    // it from a different position, which is why we need the side channel.
+    // Standard g_orbitTrap doesn't need this — mapDist never writes to it.
+    g_geomTrapFinal = g_geomTrap;
 
     // Color mode 8 = LLI (Last Length Iteration) decomposition — needs lastLength from escape check
     bool useLLI = (abs(uColorMode - 8.0) < 0.1) || (abs(uColorMode2 - 8.0) < 0.1);

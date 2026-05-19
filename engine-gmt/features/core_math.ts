@@ -162,9 +162,16 @@ export const CoreMathFeature: FeatureDefinition = {
 
         // 2. Analytic Opt-in: skip the pre-bailout distance check for formulas that
         //    manage their own iteration loop (selfContainedSDE).
+        //    SELF_CONTAINED_SDE also gates off the outer-loop geometric-trap
+        //    block in de.ts — these formulas run all fractal iterations
+        //    inside the formula body and thread the trap through their own
+        //    inner loop (see MandelTerrain's #ifdef TRAP_ENABLED block).
+        //    Accumulating in the outer loop too would either no-op or mix
+        //    coordinate systems (MandelTerrain projects c-plane to XZ).
         const def = registry.get(formula);
         if (def?.shader.selfContainedSDE) {
             builder.addDefine('SKIP_PRE_BAILOUT', '1');
+            builder.addDefine('SELF_CONTAINED_SDE', '1');
         }
 
         // 3. Generate Code
