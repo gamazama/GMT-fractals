@@ -229,7 +229,15 @@ export const GmtPanels: PanelManifest = [
                 helpId: 'shadows',
             },
 
-            { type: 'feature', id: 'lightSpheres' },
+            // Light Spheres — single compile-flagged boolean. Compilable
+            // surface so toggling goes through the CompileBar instead of
+            // routing to the Engine panel.
+            {
+                type: 'compilable',
+                id: 'lightSpheres',
+                compileParam: 'lightSpheres',
+                label: 'Light Spheres',
+            },
         ],
     },
 
@@ -325,16 +333,6 @@ export const GmtPanels: PanelManifest = [
                         ],
                     },
                     {
-                        id: 'orbit-trap',
-                        label: 'Orbit Trap',
-                        activePredicate: (s: any) => !!(s.coloring?.trapEnabled),
-                        closedBadge: 'off',
-                        defaultOpen: (s: any) => !!(s.coloring?.trapEnabled),
-                        items: [
-                            { type: 'feature', id: 'coloring', groupFilter: 'trap_geom' },
-                        ],
-                    },
-                    {
                         id: 'noise',
                         label: 'Noise',
                         activePredicate: (s: any) => (s.coloring?.layer3Strength ?? 0) > 0,
@@ -346,6 +344,20 @@ export const GmtPanels: PanelManifest = [
                         ],
                     },
                 ],
+            },
+
+            // Orbit Trap — own compilable section so the trapEnabled compile
+            // toggle goes through the CompileBar instead of the Engine panel.
+            // Pulled out of the gradient accordion because accordion sections
+            // have no compile machinery and stacking a CompilableFeatureSection
+            // inside would double-header. Visually sits below the accordion.
+            {
+                type: 'compilable',
+                id: 'coloring',
+                compileParam: 'trapEnabled',
+                runtimeGroup: 'trap_geom',
+                label: 'Orbit Trap',
+                helpId: 'grad.orbit-trap',
             },
         ],
     },
