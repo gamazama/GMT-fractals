@@ -290,10 +290,14 @@ export const GeometryFeature: FeatureDefinition = {
             onUpdate: 'compile', noReset: true
         },
         // Runtime instant-toggle (hidden — controlled by the section header
-        // once compiled). Defaults true so first compile lands with the
-        // effect visible at full strength.
+        // once compiled). Default matches burningEnabled (false) so a fresh
+        // scene or formula load shows the section as OFF, not as
+        // "on but uncompiled, asking for recompile" — which also wedged
+        // the toggle (val === isCompiled cleared pendingToggle while
+        // sliceState.burningRuntime was still true). Compile sets both
+        // gate + runtime in one atomic setter call (see handleCompile).
         burningRuntime: {
-            type: 'boolean', default: true, label: 'Burning Active', shortId: 'br',
+            type: 'boolean', default: false, label: 'Burning Active', shortId: 'br',
             uniform: 'uBurningRuntime', group: 'burning', hidden: true,
         },
         // Runtime mix amount — fades between original and abs() coordinates.
