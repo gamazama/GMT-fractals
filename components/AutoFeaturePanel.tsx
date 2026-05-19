@@ -29,7 +29,7 @@ import * as THREE from 'three';
 
 interface AutoFeaturePanelProps {
     featureId: string;
-    groupFilter?: string; 
+    groupFilter?: string;
     className?: string;
     isDisabled?: boolean;
     disabledParams?: string[];
@@ -38,9 +38,17 @@ interface AutoFeaturePanelProps {
     labelOverrides?: Record<string, string>; // Override labels for specific params by key
     variant?: 'default' | 'dense';
     // New Props for Engine Panel Interception
-    forcedState?: any; 
+    forcedState?: any;
     onChangeOverride?: (key: string, value: any) => void;
-    pendingChanges?: Record<string, any>; 
+    pendingChanges?: Record<string, any>;
+    /** Lift params whose `parentId` equals this id to root-level rendering,
+     *  as if they were declared without a parentId. Used by section
+     *  components that render the parent toggle in their own header
+     *  (e.g. CompilableFeatureSection rendering preRotEnabled in the
+     *  section header) — the parent's children need to appear in the
+     *  body instead of being filtered out as "not roots". Also lifts
+     *  customUI entries whose parentId matches. */
+    liftChildrenOf?: string;
 }
 
 /**
@@ -72,9 +80,9 @@ const getMapping = (config: ParamConfig) => {
     return undefined;
 };
 
-export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({ 
+export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], labelOverrides = {}, variant = 'default',
-    forcedState, onChangeOverride, pendingChanges
+    forcedState, onChangeOverride, pendingChanges, liftChildrenOf
 }) => {
     const feature = featureRegistry.get(featureId);
     // Use forcedState if provided (for Engine Panel pending changes), otherwise fallback to Store
@@ -101,19 +109,47 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     const handleUpdate = (key: string, value: any) => {
         if (isDisabled || disabledParams.includes(key)) return;
 
-        // Intercept for Engine Panel
+        const config = feature!.params[key];
+
+        // Decompose composed vec4/vec3/vec2 into the underlying scalar
+        // backers up front. Composed params are a pure UI aggregate over
+        // their `composeFrom` scalars; downstream consumers (override
+        // handlers, the feature setter, the Engine queue) should always
+        // see the scalar form so the store and shader uniforms stay
+        // consistent. Doing this before the route fork — instead of only
+        // on the direct setter path — was the bug behind "Local Rotation
+        // sliders don't move anything" when running inside a
+        // CompilableFeatureSection.
+        let updates: Record<string, any>;
+        if (config?.composeFrom && value && typeof value === 'object') {
+            const c = config.composeFrom;
+            updates = { [c[0]]: value.x, [c[1]]: value.y };
+            if ('z' in value && c[2]) updates[c[2]] = value.z;
+            if ('w' in value && c[3]) updates[c[3]] = value.w;
+        } else {
+            updates = { [key]: value };
+        }
+
+        // Intercept for Engine Panel / compilable section pending state.
+        // For composed params each scalar fires as its own override call;
+        // override implementations buffer/commit per key uniformly.
         if (onChangeOverride) {
-            onChangeOverride(key, value);
+            for (const [k, v] of Object.entries(updates)) {
+                onChangeOverride(k, v);
+            }
             return;
         }
 
-        const config = feature!.params[key];
-
-        // Route compile-time params to Engine Panel instead of updating store directly
+        // Route compile-time params to Engine Panel instead of updating store
+        // directly. Composed params don't carry `onUpdate: 'compile'` today,
+        // but the per-scalar dispatch handles it correctly if they ever do.
         if (config?.onUpdate === 'compile') {
-            // Open engine panel first, then emit after it has time to mount its listener
             useEngineStore.getState().movePanel('Engine', 'left');
-            setTimeout(() => FractalEvents.emit('engine_queue', { featureId, param: key, value }), 50);
+            setTimeout(() => {
+                for (const [k, v] of Object.entries(updates)) {
+                    FractalEvents.emit('engine_queue', { featureId, param: k, value: v });
+                }
+            }, 50);
             return;
         }
 
@@ -123,16 +159,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         }
         const setter = (actions as any)[setterName];
         if (setter) {
-            // Decompose composed vec4/vec3/vec2 back into individual scalar fields
-            if (config?.composeFrom && value && typeof value === 'object') {
-                const components = config.composeFrom;
-                const vals: Record<string, number> = { [components[0]]: value.x, [components[1]]: value.y };
-                if ('z' in value && components[2]) vals[components[2]] = value.z;
-                if ('w' in value && components[3]) vals[components[3]] = value.w;
-                setter(vals);
-            } else {
-                setter({ [key]: value });
-            }
+            // Single batched setter call — keeps composed updates atomic and
+            // avoids three back-to-back store re-renders for one slider drag.
+            setter(updates);
         }
     };
 
@@ -147,11 +176,11 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
         const setter = (actions as any)[setterName];
         if (setter) {
-            FractalEvents.emit('is_compiling', "Optimizing Shader...");
-            setTimeout(() => {
-                setter({ [confirming.key]: confirming.value });
-                setConfirming(null);
-            }, 50);
+            // is_compiling is emitted by CompileScheduler when the
+            // resulting config change triggers a rebuild — no optimistic
+            // UI emit needed.
+            setter({ [confirming.key]: confirming.value });
+            setConfirming(null);
         }
     };
 
@@ -496,8 +525,14 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     };
 
     const paramRoots = Object.keys(feature.params).filter(k => {
-        if (feature.params[k].parentId) return false;
-        
+        const p = feature.params[k];
+        // Children with a parentId are usually rendered nested by their
+        // parent's renderNode. `liftChildrenOf` opts them in as roots —
+        // used when the parent toggle is rendered elsewhere (e.g. as the
+        // section header) and its children need to surface in the body
+        // instead of being filtered away.
+        if (p.parentId && p.parentId !== liftChildrenOf) return false;
+
         // 1. Whitelist Check
         if (whitelistParams && whitelistParams.length > 0) {
             return whitelistParams.includes(k);
@@ -505,7 +540,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
         // 2. Group Check
         if (groupFilter) {
-            return feature.params[k].group === groupFilter;
+            return p.group === groupFilter;
         }
 
         return true;
@@ -619,8 +654,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     feature.customUI?.forEach((c, idx) => {
         // Prevent CustomUI leakage when using whitelist params (e.g. inserting single slider)
         if (whitelistParams && whitelistParams.length > 0) return;
-        // Skip entries handled by renderNode tree-nesting
-        if (c.parentId) return;
+        // Skip entries handled by renderNode tree-nesting — UNLESS the parent
+        // is being lifted (its toggle lives in the section header, so its
+        // customUI children also need to surface here at root).
+        if (c.parentId && c.parentId !== liftChildrenOf) return;
         if (groupFilter && c.group !== groupFilter) return;
         if (!checkParamActive(c.condition, sliceState, globalState)) return;
         const Component = componentRegistry.get(c.componentId);

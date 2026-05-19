@@ -19,7 +19,6 @@ import { kelvinToHex, COLOR_TEMPERATURE_PRESETS } from '../../../../utils/colorU
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { Popover } from '../../../../components/Popover';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
-import { FractalEvents } from '../../../../engine/FractalEvents';
 
 // Log-scale endpoints for the Light Radius slider — module-scope so the
 // Slider's customMapping closure doesn't allocate them per render.
@@ -389,8 +388,8 @@ export const LightSettingsPopup = ({ index, onClose }: { index: number; onClose?
                                 if (renderMode !== 1.0) updates.renderMode = 1.0;
                                 if (!ptAreaLights) updates.ptAreaLights = true;
                                 if (Object.keys(updates).length === 0) return;
-                                FractalEvents.emit('is_compiling', 'Enabling True Area Lights...');
-                                setTimeout(() => setLighting(updates), 50);
+                                // CompileScheduler emits is_compiling on rebuild boundary.
+                                setLighting(updates);
                             }}
                             className="px-2 py-0.5 bg-amber-500/30 hover:bg-amber-500/50 text-amber-100 text-[9px] font-bold rounded transition-colors w-full"
                             title="Switches to Path Tracing and compiles in True Area Lights support."

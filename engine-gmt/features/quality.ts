@@ -124,7 +124,6 @@ export const QualityFeature: FeatureDefinition = {
             helpId: 'quality.estimator',
             onUpdate: 'compile',
             noReset: true,
-            isAdvanced: true
         },
         fudgeFactor: {
             type: 'float', default: 1.0, label: 'Slice Optimization', shortId: 'ff', uniform: 'uFudgeFactor',

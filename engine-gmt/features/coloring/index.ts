@@ -345,6 +345,10 @@ export const ColoringFeature: FeatureDefinition = {
 
         // Inject per-iteration geometric trap distance when enabled.
         if (state?.trapEnabled) {
+            // Gate for self-contained formulas (e.g. MandelTerrain) that need to thread
+            // the same trap math through their own inner loop; the outer-loop fold below
+            // only fires once for those.
+            builder.addDefine('TRAP_ENABLED', '1');
             builder.addHybridFold('', '', `
                 {
                     vec3 _zp = z.xyz;

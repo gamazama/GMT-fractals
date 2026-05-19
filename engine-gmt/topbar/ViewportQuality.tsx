@@ -2,7 +2,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { Popover } from '../../components/Popover';
-import { FractalEvents } from '../engine/FractalEvents';
 import { useTutorAnchor, tutorAnchors } from '../../engine/plugins/Tutorial';
 import {
     ALL_SUBSYSTEMS,
@@ -113,29 +112,26 @@ export const ViewportQuality: React.FC = () => {
     const handleApply = () => {
         if (!hasPending) return;
 
-        FractalEvents.emit('is_compiling', 'Recompiling Shader...');
-
-        setTimeout(() => {
-            if (pendingSubsystems) {
-                if (pendingPreset) {
-                    applyScalabilityPreset(pendingPreset);
-                } else {
-                    for (const [subId, tier] of Object.entries(pendingSubsystems)) {
-                        setSubsystemTier(subId, tier);
-                    }
+        // CompileScheduler emits is_compiling when the resulting CONFIG
+        // change reaches it. No optimistic UI emit.
+        if (pendingSubsystems) {
+            if (pendingPreset) {
+                applyScalabilityPreset(pendingPreset);
+            } else {
+                for (const [subId, tier] of Object.entries(pendingSubsystems)) {
+                    setSubsystemTier(subId, tier);
                 }
             }
+        }
 
-            // Apply pending PT compile-time params via setLighting
-            if (pendingPTCompile && setLighting) {
-                setLighting(pendingPTCompile);
-            }
+        if (pendingPTCompile && setLighting) {
+            setLighting(pendingPTCompile);
+        }
 
-            setPendingSubsystems(null);
-            setPendingPreset(null);
-            setPendingPTCompile(null);
-            setIsOpen(false);
-        }, 50);
+        setPendingSubsystems(null);
+        setPendingPreset(null);
+        setPendingPTCompile(null);
+        setIsOpen(false);
     };
 
     // Determine which preset radio is active in the pending state

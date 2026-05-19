@@ -58,6 +58,8 @@ export const MandelTerrain: FractalDefinition = {
         float smoothVal = 0.0;
         float dist = 0.0;
         bool escaped = false;
+        // Captured iteration index at escape — survives loop scope for post-loop height math.
+        float iEsc = 0.0;
 
         // Local hard limit high enough for deep zooms but low enough to avoid compiler hangs
         const int MAX_FORMULA_ITER = 2000;
@@ -89,9 +91,32 @@ export const MandelTerrain: FractalDefinition = {
             z2 = vec2(x, y);
             
             m2 = dot(z2, z2);
-            
+
             // Standard Trap Tracking (for coloring)
             trapDist = min(trapDist, m2);
+
+            // Per-component orbit trap (modes 10/12/13 = Orbit X/Z/W).
+            // Project c-plane orbit z2 → XZ; leave Y at 1e10 so the per-component min
+            // for Y doesn't get clamped to zero (Y has no signal in 2D iteration).
+            g_orbitTrap = min(g_orbitTrap, vec4(abs(z2.x), 1.0e10, abs(z2.y), m2));
+
+#ifdef TRAP_ENABLED
+            // Geometric orbit trap — c-plane orbit projected to XZ (Y=0) so 3D trap
+            // shapes evaluate against the same plane the terrain is rendered on.
+            // The outer-loop trap injection only fires once for self-contained formulas;
+            // this inner loop is where the real orbit samples accumulate.
+            {
+                vec3 _zp = vec3(z2.x, 0.0, z2.y);
+                vec3 _d = _zp - uTrapCenter;
+                float _td;
+                int _ts = int(uTrapShape + 0.1);
+                if (_ts == 1) _td = length(_d);
+                else if (_ts == 2) _td = abs(length(_d) - uTrapRadius);
+                else if (_ts == 3) _td = min(min(abs(_d.x), abs(_d.y)), abs(_d.z));
+                else _td = abs(dot(_zp, uTrapNormal) - uTrapOffset);
+                g_geomTrap = min(g_geomTrap, _td);
+            }
+#endif
             
             // --- Trap Height Accumulation ---
             // Sum contributions. 
@@ -111,8 +136,9 @@ export const MandelTerrain: FractalDefinition = {
             
             // Use global Escape Threshold (usually squared radius)
             // Default escape is 4.0 (radius 2.0), but allowing it to grow helps decomposition
-            if (m2 > uEscapeThresh) { 
+            if (m2 > uEscapeThresh) {
                 escaped = true;
+                iEsc = float(i);
                 // Smooth Iteration Count
                 // Renormalize based on log of threshold to keep bands consistent
                 float threshLog = log2(uEscapeThresh); // usually 2.0 for 4.0
@@ -134,51 +160,64 @@ export const MandelTerrain: FractalDefinition = {
         
         // --- Heightmap Calculation ---
         float h = 0.0;
-        
+
         if (escaped) {
-            // 1. Base Terrain (Param A)
+            // 1. Base Terrain (Param A) — analytical DE spike.
             // 'dist' goes to 0.0 exactly at the boundary.
-            // FIXED: Use sqrt(dist * zoom) instead of sqrt(dist) * zoom to keep height
-            // proportional to feature width regardless of zoom level.
-            // This prevents "spikes" from growing uncontrollably deep in the set.
+            // sqrt(dist * zoom) keeps height proportional to feature width across zoom levels.
             h += sqrt(dist * zoom) * uParamA;
-            
-            // 2. Layer 2 Driven Ripples (Param C) - Driven by Gradient Brightness
-            if (abs(uParamC) > 0.001) {
-                // Compute Decomposition Angle for Mapping
-                float decomp = atan(z2.y, z2.x) * 0.15915 + 0.5;
-                
-                // Construct proxy result to feed coloring engine
-                // Components: x=dist, y=trap, z=iter, w=decomp
-                vec4 resProxy = vec4(0.0, trapDist, smoothVal, decomp);
-                
-                // Construct 3D pos proxy using the mapping position (consistent texture space)
-                vec3 pProxy = vec3(mapPos.x, 0.0, mapPos.y);
-                
-                // Get Mapping Value from Layer 2 Mode (e.g. Angle, Trap, Iterations)
-                float l2Val = getMappingValue(uColorMode2, pProxy, resProxy, vec3(0,1,0), uColorScale2);
-                
-                // Apply Twist 2 if active
-                if (abs(uColorTwist2) > 0.001) {
-                    float dOrig = length(pProxy);
-                    l2Val += dOrig * uColorTwist2;
-                }
-                
-                // Calculate Pattern Phase
-                float t2Raw = l2Val * uColorScale2 + uColorOffset2;
-                float t2 = fract(t2Raw);
-                
-                // Sample Gradient 2 for height (Whiteness = Height)
-                // SAFE HELPER: Using textureLod0 via math.ts
-                vec3 gCol = textureLod0(uGradientTexture2, vec2(t2, 0.5)).rgb;
-                float brightness = dot(gCol, vec3(0.299, 0.587, 0.114));
-                
-                // Apply Displacement
-                h += brightness * uParamC;
+
+            // 1b. Cosine-ledge terrain (Param E) — C¹-continuous wedding-cake terraces.
+            // Each iteration band contributes a smooth half-cosine ramp. The 0.1 scale
+            // brings paramE into the same visual range as paramA/paramC.
+            if (abs(uParamE) > 0.001) {
+                float lr = log2(max(sqrt(m2), 1.0e-20));
+                float lrT = 0.5 * log2(max(uEscapeThresh, 4.0));
+                float sy = clamp((lr - lrT) * 0.7071067811865476, 0.0, 1.0); // 1/sqrt(2)
+                float ps = 0.5 - 0.5 * cos(3.14159265358 * sy);
+                float ledge = 1.0 - (iEsc + ps) / max(float(maxIter), 1.0);
+                h += ledge * uParamE * 0.1;
             }
         } else {
             // Inside the set (The Lake)
-            h = 0.0; 
+            h = 0.0;
+        }
+
+        // 2. Layer 2 Driven Ripples (Param C) — applied to both escaped terrain
+        //    and the island. Inside the set, z2/trapDist reflect the trapped orbit's
+        //    final state, so coloring modes like Orbit Trap / Iterations give
+        //    meaningful surface texture on the island as well.
+        if (abs(uParamC) > 0.001) {
+            // Compute Decomposition Angle for Mapping
+            float decomp = atan(z2.y, z2.x) * 0.15915 + 0.5;
+
+            // Construct proxy result to feed coloring engine
+            // Components: x=dist, y=trap, z=iter, w=decomp
+            vec4 resProxy = vec4(0.0, trapDist, smoothVal, decomp);
+
+            // Construct 3D pos proxy using the mapping position (consistent texture space)
+            vec3 pProxy = vec3(mapPos.x, 0.0, mapPos.y);
+
+            // Get Mapping Value from Layer 2 Mode (e.g. Angle, Trap, Iterations)
+            float l2Val = getMappingValue(uColorMode2, pProxy, resProxy, vec3(0,1,0), uColorScale2);
+
+            // Apply Twist 2 if active
+            if (abs(uColorTwist2) > 0.001) {
+                float dOrig = length(pProxy);
+                l2Val += dOrig * uColorTwist2;
+            }
+
+            // Calculate Pattern Phase
+            float t2Raw = l2Val * uColorScale2 + uColorOffset2;
+            float t2 = fract(t2Raw);
+
+            // Sample Gradient 2 for height (Whiteness = Height)
+            // SAFE HELPER: Using textureLod0 via math.ts
+            vec3 gCol = textureLod0(uGradientTexture2, vec2(t2, 0.5)).rgb;
+            float brightness = dot(gCol, vec3(0.299, 0.587, 0.114));
+
+            // Apply Displacement
+            h += brightness * uParamC;
         }
         
         // 3. Orbit Trap Spikes (Param D)
@@ -187,9 +226,9 @@ export const MandelTerrain: FractalDefinition = {
         if (abs(uParamD) > 0.001) {
             h += trapHeightAccum * uParamD * zoom * 0.03;
         }
-        
+
         h = clamp(h, -50.0, 50.0);
-        
+
         // SDF Calculation (y is Up)
         float d = (z.y - h) * 0.5;
         
@@ -224,6 +263,7 @@ export const MandelTerrain: FractalDefinition = {
         { label: 'Height: Distance Estimator', id: 'paramA', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
         { label: 'Height: Layer 2 Gradient', id: 'paramC', min: -0.2, max: 0.2, step: 0.001, default: 0.0 },
         { label: 'Height: SmoothTrap', id: 'paramD', min: -5.0, max: 5.0, step: 0.01, default: 0.0 },
+        { label: 'Height: Ledge (cosine bands)', id: 'paramE', min: -2.0, max: 2.0, step: 0.01, default: 0.0 },
     ],
 
     defaultPreset: {
@@ -237,6 +277,7 @@ export const MandelTerrain: FractalDefinition = {
                 "paramB": 1,
                 "paramC": 0,
                 "paramD": 0,
+                "paramE": 0,
                 "vec2A": { "x": 0, "y": 0 }
             },
             "geometry": {

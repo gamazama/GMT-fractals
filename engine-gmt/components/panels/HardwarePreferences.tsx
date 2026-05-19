@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useEngineStore } from '../../../store/engineStore';
-import { FractalEvents } from '../../../engine/FractalEvents';
 import { detectHardwareProfileMainThread } from '../../../engine/HardwareDetection';
 import type { HardwareProfile } from '../../../types/viewport';
 import Dropdown from '../../../components/Dropdown';
@@ -35,13 +34,11 @@ export const HardwarePreferences: React.FC<HardwarePreferencesProps> = ({ onClos
 
     const handleApply = () => {
         if (!pending || !hardwareProfile) return;
-        FractalEvents.emit('is_compiling', 'Recompiling Shader...');
-        setTimeout(() => {
-            // setHardwareProfile flushes CONFIG internally
-            setHardwareProfile({ ...hardwareProfile, caps: pending });
-            setPending(null);
-            onClose();
-        }, 50);
+        // setHardwareProfile flushes CONFIG internally;
+        // CompileScheduler emits is_compiling on the rebuild boundary.
+        setHardwareProfile({ ...hardwareProfile, caps: pending });
+        setPending(null);
+        onClose();
     };
 
     const handleReset = () => {

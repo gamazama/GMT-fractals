@@ -105,24 +105,22 @@ export const EnginePanel: React.FC<EnginePanelProps> = ({ className = '' }) => {
     handleParamChangeRef.current = handleParamChange;
 
     const applyPendingChanges = () => {
-        FractalEvents.emit('is_compiling', "Compiling Shaders...");
-        
+        // CompileScheduler emits is_compiling when the resulting config
+        // changes reach it. No optimistic UI emit.
         const updatesByFeature: Record<string, any> = {};
-        
+
         Object.entries(pendingChanges).forEach(([key, value]) => {
             const [featId, param] = key.split('.');
             if (!updatesByFeature[featId]) updatesByFeature[featId] = {};
             updatesByFeature[featId][param] = value;
         });
-        
-        setTimeout(() => {
-             Object.entries(updatesByFeature).forEach(([featId, updates]) => {
-                 const setterName = `set${featId.charAt(0).toUpperCase() + featId.slice(1)}`;
-                 const action = (store as any)[setterName];
-                 if (action) action(updates);
-             });
-             setPendingChanges({});
-        }, 100);
+
+        Object.entries(updatesByFeature).forEach(([featId, updates]) => {
+            const setterName = `set${featId.charAt(0).toUpperCase() + featId.slice(1)}`;
+            const action = (store as any)[setterName];
+            if (action) action(updates);
+        });
+        setPendingChanges({});
     };
     
     const getMergedState = (featureId: string) => {

@@ -20,7 +20,7 @@
  */
 
 import type { DockZone, EngineStoreState } from '../types/store';
-import type { CompilablePanelConfig } from './FeatureSystem';
+import type { CompilablePanelConfig, CompileDropdownPanelConfig, RuntimePanelConfig } from './FeatureSystem';
 // Type-only import. Importing the runtime binding here would evaluate
 // engineStore.ts during PanelManifest's module load, which freezes the
 // feature registry. PanelManifest is reachable from registry-touch
@@ -179,6 +179,37 @@ export type PanelItem =
            *  overrides the feature's own panelConfig for this section. */
           type: 'compilable';
           id: string;
+          /** Optional state-driven label override. When provided, evaluated
+           *  each render and used in place of the static `label` field.
+           *  Lets a section name itself based on the current scene state
+           *  (e.g. "Julia" vs "Offset" depending on the active formula's
+           *  juliaType). Falls back to `label` when the function returns
+           *  undefined or empty. */
+          labelFn?: (state: EngineStoreState) => string | undefined;
+          showIf?: ShowIfPredicate;
+      })
+    | (PanelItemHelp & Partial<CompileDropdownPanelConfig> & {
+          /** Renders the feature via <CompileDropdownSection>: a
+           *  compile-only section with no boolean gate. The section is
+           *  always present; the body shows compile-flagged inputs
+           *  (typically dropdowns) and a Compile button that flushes
+           *  pending changes. Use when a feature has compile-time
+           *  variant selection but no meaningful "off" state — e.g.
+           *  Distance Estimator (estimator algorithm + distance metric). */
+          type: 'compile-dropdown';
+          id: string;
+          labelFn?: (state: EngineStoreState) => string | undefined;
+          showIf?: ShowIfPredicate;
+      })
+    | (PanelItemHelp & Partial<RuntimePanelConfig> & {
+          /** Renders the feature via <RuntimeSection>: a pure-runtime
+           *  collapsible. Header toggles a runtime param (no shader
+           *  rebuild); body shows runtime params filtered by group.
+           *  Use when a feature is gated by a runtime uniform with no
+           *  compile-time variants — e.g. Julia / Offset. */
+          type: 'runtime-section';
+          id: string;
+          labelFn?: (state: EngineStoreState) => string | undefined;
           showIf?: ShowIfPredicate;
       });
 

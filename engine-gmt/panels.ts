@@ -28,9 +28,11 @@ export const GmtPanels: PanelManifest = [
         showIf: (s) => (s as { formula?: string }).formula === 'Modular',
     },
 
-    // Formula — manifest-driven. FormulaParamsWidget handles the dynamic
-    // per-formula params (iterations + registry-driven scalar/vec controls);
-    // everything else is expressed as items so the layout lives here, not JSX.
+    // Formula — manifest-driven. Each formula-related capability gets its
+    // own section in the user's mental order. Geometry is one DDFS feature
+    // exposed as multiple panel surfaces (julia / local rotation / burning /
+    // hybrid box) so each user-visible concept has a dedicated section
+    // header without splitting the underlying feature module.
     {
         id: 'Formula',
         dock: 'right',
@@ -40,22 +42,18 @@ export const GmtPanels: PanelManifest = [
         items: [
             { type: 'widget', id: 'formula-params' },
             { type: 'separator' },
-            { type: 'feature', id: 'geometry', groupFilter: 'transform' },
-            // Geometry's panelConfig is owned by the Hybrid Box entry below;
-            // this section overrides compileParam to expose Burning Mode
-            // (compile-only, no runtime uniform path) as its own toggle.
+
+            // Julia / Offset — pure runtime (no compile gate). Visible only
+            // when the active formula (or interlace partner) declares a
+            // julia type. Label resolves dynamically from the formula's
+            // juliaType so the section reads "Julia" or "Offset" depending
+            // on which behavior the current formula implements.
             {
-                type: 'compilable',
+                type: 'runtime-section',
                 id: 'geometry',
-                compileParam: 'burningEnabled',
-                runtimeGroup: 'burning',
-                label: 'Burning Mode',
-            },
-            { type: 'separator' },
-            {
-                type: 'feature',
-                id: 'geometry',
-                groupFilter: 'julia',
+                runtimeToggleParam: 'juliaMode',
+                runtimeGroup: 'julia',
+                label: 'Julia / Offset',
                 helpId: 'julia.mode',
                 showIf: (s: any) => {
                     if (registry.get(s.formula)?.juliaType !== 'none') return true;
@@ -63,12 +61,67 @@ export const GmtPanels: PanelManifest = [
                     if (il?.interlaceCompiled && registry.get(il.interlaceFormula)?.juliaType !== 'none') return true;
                     return false;
                 },
+                labelFn: (s: any) => {
+                    const primary = registry.get(s.formula);
+                    if (primary?.juliaType === 'julia') return 'Julia';
+                    if (primary?.juliaType === 'offset') return 'Offset';
+                    const il = s.interlace;
+                    if (il?.interlaceCompiled) {
+                        const sec = registry.get(il.interlaceFormula);
+                        if (sec?.juliaType === 'julia') return 'Julia';
+                        if (sec?.juliaType === 'offset') return 'Offset';
+                    }
+                    return undefined;
+                },
             },
-            { type: 'separator' },
-            { type: 'compilable', id: 'geometry', helpId: 'hybrid.mode' },
-            { type: 'separator' },
+
+            // Local Rotation — compile gate (preRotMaster compiles the
+            // rotation matrix logic), runtime toggle (preRotEnabled hides
+            // the runtime sliders without recompiling).
+            {
+                type: 'compilable',
+                id: 'geometry',
+                compileParam: 'preRotMaster',
+                runtimeToggleParam: 'preRotEnabled',
+                runtimeGroup: 'transform',
+                label: 'Local Rotation',
+            },
+
+            // Burning Mode — compile-only (the abs() line is removed from
+            // DXBC entirely when off). No runtime params today; axis-abs
+            // options can drop into compileSettingsParams when wired.
+            {
+                type: 'compilable',
+                id: 'geometry',
+                compileParam: 'burningEnabled',
+                runtimeGroup: 'burning',
+                label: 'Burning Mode',
+            },
+
+            // Hybrid Box — uses geometry's feature panelConfig (hybridCompiled
+            // compile gate, hybridMode runtime toggle, fold-type compile
+            // settings, hybrid group runtime params). Explicit label so the
+            // section reads "Hybrid Box" rather than falling back to the
+            // feature's name ("Geometry").
+            { type: 'compilable', id: 'geometry', label: 'Hybrid Box', helpId: 'hybrid.mode' },
+
+            // Formula Interlace — uses interlace's feature panelConfig.
             { type: 'compilable', id: 'interlace' },
-            { type: 'separator' },
+
+            // Distance Estimator + Metric — compile-only dropdown section.
+            // Estimator is compile-flagged; metric is runtime. The section
+            // routes each param according to its own onUpdate flag.
+            {
+                type: 'compile-dropdown',
+                id: 'quality',
+                compileSettingsParams: ['estimator', 'distanceMetric'],
+                label: 'Distance Estimator',
+                helpId: 'quality.estimator',
+            },
+
+            // No separator before lfo-list — every section above ends with
+            // a built-in SectionDivider, so an explicit separator here would
+            // double-divider.
             { type: 'widget', id: 'lfo-list' },
         ],
     },
@@ -156,6 +209,23 @@ export const GmtPanels: PanelManifest = [
         items: [
             { type: 'widget', id: 'light-panel-controls' },
             { type: 'separator' },
+
+            // Shadows — compile gate (shadowsCompile compiles the shadow
+            // raymarching loop), runtime toggle (shadows hides at runtime
+            // without recompile), compile-settings for algorithm and
+            // stochastic-jitter (both compile-flagged). Section renders its
+            // own divider, so no explicit separator needed after it.
+            {
+                type: 'compilable',
+                id: 'lighting',
+                compileParam: 'shadowsCompile',
+                runtimeToggleParam: 'shadows',
+                compileSettingsParams: ['shadowAlgorithm', 'ptStochasticShadows'],
+                runtimeGroup: 'shadows',
+                label: 'Shadows',
+                helpId: 'shadows',
+            },
+
             { type: 'feature', id: 'lightSpheres' },
         ],
     },
@@ -294,16 +364,9 @@ export const GmtPanels: PanelManifest = [
 
             { type: 'separator' },
 
-            // Shadow quality — only when shadows are enabled at compile-time
-            // AND turned on at runtime.
-            {
-                type: 'feature',
-                id: 'lighting',
-                groupFilter: 'shadow_quality',
-                showIf: (s: any) => !!(s.lighting?.shadowsCompile && s.lighting?.shadows),
-            },
-
-            { type: 'separator' },
+            // Shadows section moved to the Light panel (compilable surface).
+            // The legacy `shadow_quality` groupFilter entry here matched no
+            // params (group never existed in the feature def).
 
             // Raymarching: max steps
             { type: 'feature', id: 'quality', whitelistParams: ['maxSteps'] },
@@ -324,14 +387,10 @@ export const GmtPanels: PanelManifest = [
                 whitelistParams: ['refinementSteps', 'detail', 'pixelThreshold', 'overstepTolerance'],
             },
 
-            { type: 'separator' },
-
-            // Distance metric + estimator
-            {
-                type: 'feature',
-                id: 'quality',
-                whitelistParams: ['distanceMetric', 'estimator'],
-            },
+            // Distance Estimator + Metric live in the Formula tab (compile-
+            // dropdown section). They're algorithm/metric choices about the
+            // formula, not runtime quality knobs, so the Formula tab is the
+            // right home.
         ],
     },
 

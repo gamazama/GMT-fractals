@@ -175,7 +175,7 @@ float mapDist(vec3 p) {
 
     vec4 z = vec4(p_fractal, uParamB);
     vec4 c = mix(z, vec4(uJulia, uParamA), step(0.5, uJuliaMode));
-    
+
     float dr = 1.0;
     // We still need 'trap' for formula signatures, but the compiler will DCE it since we don't return it.
     float trap = 1e10;

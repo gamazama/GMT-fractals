@@ -36,6 +36,9 @@ import { SectionLabel } from './SectionLabel';
 import { CollapsibleSection } from './CollapsibleSection';
 import { Accordion, AccordionSection } from './Accordion';
 import { CompilableFeatureSection } from './CompilableFeatureSection';
+import { RuntimeSection } from './RuntimeSection';
+import { CompileDropdownSection } from './CompileDropdownSection';
+import { SectionDivider } from './SectionLabel';
 import { useEngineStore } from '../store/engineStore';
 import { BenchProfiler } from '../engine-gmt/utils/BenchProfiler';
 
@@ -107,12 +110,10 @@ const renderItem = (
     let node: React.ReactNode;
     switch (item.type) {
         case 'separator':
-            return (
-                <div key={`sep-${index}`}>
-                    <div className="h-1.5 bg-neutral-800 rounded-b-lg" />
-                    <div className="h-2" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.08))' }} />
-                </div>
-            );
+            // Shared SectionDivider keeps the bespoke 1.5px bar + drop-
+            // gradient consistent with the dividers each section component
+            // (Runtime / Compilable / CompileDropdown) emits at its bottom.
+            return <div key={`sep-${index}`}><SectionDivider /></div>;
 
         case 'section':
             node = (
@@ -164,7 +165,8 @@ const renderItem = (
             break;
         }
 
-        case 'compilable':
+        case 'compilable': {
+            const dynamic = item.labelFn?.(state as never);
             node = (
                 <CompilableFeatureSection
                     key={`compilable-${item.id}-${index}`}
@@ -175,11 +177,45 @@ const renderItem = (
                     compileSettingsParams={item.compileSettingsParams}
                     runtimeGroup={item.runtimeGroup}
                     runtimeExcludeParams={item.runtimeExcludeParams}
-                    label={item.label}
+                    label={dynamic || item.label}
                     compileMessage={item.compileMessage}
                 />
             );
             break;
+        }
+
+        case 'compile-dropdown': {
+            const dynamic = item.labelFn?.(state as never);
+            node = (
+                <CompileDropdownSection
+                    key={`compile-dropdown-${item.id}-${index}`}
+                    featureId={item.id}
+                    helpId={item.helpId}
+                    compileSettingsParams={item.compileSettingsParams}
+                    runtimeGroup={item.runtimeGroup}
+                    runtimeExcludeParams={item.runtimeExcludeParams}
+                    label={dynamic || item.label}
+                    compileMessage={item.compileMessage}
+                />
+            );
+            break;
+        }
+
+        case 'runtime-section': {
+            const dynamic = item.labelFn?.(state as never);
+            node = (
+                <RuntimeSection
+                    key={`runtime-section-${item.id}-${index}`}
+                    featureId={item.id}
+                    helpId={item.helpId}
+                    runtimeToggleParam={item.runtimeToggleParam}
+                    runtimeGroup={item.runtimeGroup}
+                    runtimeExcludeParams={item.runtimeExcludeParams}
+                    label={dynamic || item.label}
+                />
+            );
+            break;
+        }
 
         default:
             return null;
@@ -187,7 +223,7 @@ const renderItem = (
     // Per-item BenchProfiler boundary for diagnosing per-RAF commits.
     // Tag includes type and id (where present) so the bench output can
     // attribute commits to a specific manifest item.
-    const itemTag = item.type === 'feature' || item.type === 'widget' || item.type === 'compilable'
+    const itemTag = item.type === 'feature' || item.type === 'widget' || item.type === 'compilable' || item.type === 'compile-dropdown' || item.type === 'runtime-section'
         ? `${item.type}:${(item as any).id}${(item as any).groupFilter ? `:${(item as any).groupFilter}` : ''}`
         : `${item.type}:${index}`;
     const wrapped = (

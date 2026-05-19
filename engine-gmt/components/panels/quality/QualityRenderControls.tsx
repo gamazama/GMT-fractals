@@ -27,7 +27,6 @@ import ToggleSwitch from '../../../../components/ToggleSwitch';
 import Dropdown from '../../../../components/Dropdown';
 import { AutoFeaturePanel } from '../../../../components/AutoFeaturePanel';
 import { ParentSection } from '../../../../components/ParentSection';
-import { FractalEvents } from '../../../../engine/FractalEvents';
 import type { LightingState } from '../../../features/lighting';
 import { SectionLabel } from '../../../../components/SectionLabel';
 import { NumberInput } from '../../../../components/NumberInput';
@@ -73,11 +72,10 @@ export const QualityRenderControls: React.FC = () => {
         return known ? s : 'Custom';
     }, [w, h]);
 
-    const handleModeSwitch = async (mode: 'Direct' | 'PathTracing') => {
+    const handleModeSwitch = (mode: 'Direct' | 'PathTracing') => {
         if (state.renderMode === mode) return;
         if (mode === 'PathTracing' && !ptEnabled) return;
-        FractalEvents.emit('is_compiling' as any, 'Switching Engine...' as any);
-        await new Promise((r) => setTimeout(r, 50));
+        // CompileScheduler emits is_compiling on the rebuild boundary.
         actions.setRenderMode(mode);
     };
 

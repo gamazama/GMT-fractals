@@ -4,7 +4,6 @@ import Slider from '../../../components/Slider';
 import ToggleSwitch from '../../../components/ToggleSwitch';
 import { GeometryState } from '../../features/geometry';
 import { FeatureComponentProps } from '../../../components/registry/ComponentRegistry';
-import { FractalEvents } from '../../../engine/FractalEvents';
 import { CloseIcon, AlertIcon } from '../../../components/Icons';
 import { SectionLabel } from '../../../components/SectionLabel';
 
@@ -17,14 +16,9 @@ export const HybridAdvancedLock: React.FC<FeatureComponentProps> = ({ sliceState
 
     const handleUnlock = (e: React.MouseEvent) => {
         e.stopPropagation();
-        // Trigger Loading UI
-        FractalEvents.emit('is_compiling', "Optimizing Shader...");
-        
-        // Defer actual switch to allow UI paint
-        setTimeout(() => {
-            setGeometry({ hybridComplex: true });
-            setShowDialog(false);
-        }, 50);
+        // CompileScheduler emits is_compiling on the rebuild boundary.
+        setGeometry({ hybridComplex: true });
+        setShowDialog(false);
     };
 
     const handleLockedClick = (e: React.MouseEvent) => {

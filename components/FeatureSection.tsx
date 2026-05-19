@@ -3,7 +3,6 @@ import React from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { featureRegistry } from '../engine/FeatureSystem';
 import ToggleSwitch from './ToggleSwitch';
-import { FractalEvents } from '../engine/FractalEvents';
 
 interface FeatureSectionProps {
     label: string;
@@ -19,11 +18,22 @@ interface FeatureSectionProps {
     enabled?: boolean;
     /** Override the auto-detected toggle handler */
     onToggle?: (val: boolean) => void;
+    /** Hide the header toggle switch entirely. Used by compile-dropdown
+     *  sections (e.g. Distance Estimator) which have no on/off state —
+     *  the section is always present, the body shows compile-flagged
+     *  inputs directly. */
+    hideToggle?: boolean;
+    /** Force the body open independently of `enabled`. Used by
+     *  CompilableFeatureSection so a compile-pending CompileBar stays
+     *  visible even when the user has just toggled the runtime off —
+     *  otherwise the body collapses and they can't click Recompile to
+     *  apply the change. The toggle still reflects `enabled` cleanly. */
+    forceBodyOpen?: boolean;
 }
 
 export const FeatureSection: React.FC<FeatureSectionProps> = ({
     label, featureId, toggleParam, children, description,
-    statusContent, headerClassName = '', enabled, onToggle,
+    statusContent, headerClassName = '', enabled, onToggle, hideToggle = false, forceBodyOpen = false,
 }) => {
     // Granular per-feature subscription. `useEngineStore()` no-selector
     // would re-render every FeatureSection on every store update —
@@ -46,16 +56,10 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
         if (onToggle) { onToggle(val); return; }
 
         if (setter && effectiveToggleParam) {
-            const isHeavy = feature?.engineConfig?.mode === 'compile';
-
-            if (isHeavy) {
-                FractalEvents.emit('is_compiling', "Updating Engine...");
-                setTimeout(() => {
-                    setter({ [effectiveToggleParam]: val });
-                }, 50);
-            } else {
-                setter({ [effectiveToggleParam]: val });
-            }
+            // CompileScheduler owns the spinner; toggling a compile-mode
+            // feature triggers a config change and the scheduler emits
+            // is_compiling with the correct label on the rebuild boundary.
+            setter({ [effectiveToggleParam]: val });
         }
     };
 
@@ -74,16 +78,19 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
                     {statusContent}
                 </div>
 
-                <div className="w-10" onClick={e => e.stopPropagation()}>
-                    <ToggleSwitch
-                        value={isEnabled}
-                        onChange={handleToggle}
-                    />
-                </div>
+                {!hideToggle && (
+                    <div className="w-10" onClick={e => e.stopPropagation()}>
+                        <ToggleSwitch
+                            value={isEnabled}
+                            onChange={handleToggle}
+                        />
+                    </div>
+                )}
             </div>
 
-            {/* Content */}
-            {isEnabled && (
+            {/* Content. Renders when the toggle is on OR the caller has
+                forced the body open (compile-pending case). */}
+            {(isEnabled || forceBodyOpen) && (
                 <div>
                     {description && (
                         <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{description}</p>

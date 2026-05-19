@@ -258,7 +258,12 @@ export interface FeatureDefinition {
  *  Mirrored across three sites: FeatureDefinition.panelConfig (canonical
  *  per-feature config), PanelItem 'compilable' variant override fields
  *  (lets one feature appear as multiple compilable sections), and
- *  CompilableFeatureSection props (final resolved values). */
+ *  CompilableFeatureSection props (final resolved values).
+ *
+ *  Pattern: boolean compile gate + optional compile-settings expand + optional
+ *  runtime body. Use when there is a meaningful "off / on" compile flag the
+ *  user toggles, with or without further sub-params. Examples: Hybrid Box,
+ *  Burning Mode, Local Rotation, Formula Interlace, Volumetric, Shadows. */
 export interface CompilablePanelConfig {
     compileParam: string;
     runtimeToggleParam?: string;
@@ -269,6 +274,42 @@ export interface CompilablePanelConfig {
     /** Spinner message. Defaults to `Compiling ${label}...` when label is set,
      *  otherwise "Compiling Shader...". */
     compileMessage?: string;
+    helpId?: string;
+}
+
+/** Configuration for rendering a feature as a <CompileDropdownSection>.
+ *  Pattern: one or more compile-flagged dropdowns/options with NO boolean
+ *  gate — the feature is "always on" in compile terms, the user picks an
+ *  algorithm or variant. Apply via an explicit Compile button when the
+ *  user changes a setting. Example: Distance Estimator (estimator + metric).
+ *
+ *  Distinct from CompilablePanelConfig because there is no on/off gate;
+ *  the section is always present. */
+export interface CompileDropdownPanelConfig {
+    /** Compile-flagged params displayed in the section body. Each one
+     *  generates a row; a single param renders compactly. */
+    compileSettingsParams: string[];
+    /** Optional runtime params shown alongside the dropdown(s). */
+    runtimeGroup?: string;
+    runtimeExcludeParams?: string[];
+    label?: string;
+    compileMessage?: string;
+    helpId?: string;
+}
+
+/** Configuration for rendering a feature as a <RuntimeSection>.
+ *  Pattern: pure runtime collapsible — toggle hides the body, no compile
+ *  mechanics whatsoever. Used for features whose effect is gated by a
+ *  runtime uniform (not a shader rebuild). Example: Julia / Offset. */
+export interface RuntimePanelConfig {
+    /** Boolean runtime param controlling the section's on/off state.
+     *  When off, the body is hidden. When omitted, the section is
+     *  always open (no toggle in the header). */
+    runtimeToggleParam?: string;
+    /** Restrict body params to this DDFS group. */
+    runtimeGroup?: string;
+    runtimeExcludeParams?: string[];
+    label?: string;
     helpId?: string;
 }
 

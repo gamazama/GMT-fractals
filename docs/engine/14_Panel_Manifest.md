@@ -64,11 +64,15 @@ PanelRouter resolves a panel's content in this order (richest first):
 
    ```ts
    type PanelItem =
-     | { type: 'feature',  id, groupFilter?, whitelistParams?, excludeParams?, className?, showIf? }
-     | { type: 'widget',   id, props?, showIf? }
-     | { type: 'section',  label, showIf? }
-     | { type: 'separator', showIf? }
-     | { type: 'collapsible', label, items, defaultOpen?, showIf? };
+     | { type: 'feature',          id, groupFilter?, whitelistParams?, excludeParams?, className?, showIf? }
+     | { type: 'widget',           id, props?, showIf? }
+     | { type: 'section',          label, showIf? }
+     | { type: 'separator',        showIf? }
+     | { type: 'collapsible',      label, items, defaultOpen?, showIf? }
+     | { type: 'accordion',        sections: PanelAccordionSection[], showIf? }
+     | { type: 'compilable',       id, ...Partial<CompilablePanelConfig>, showIf? }
+     | { type: 'compile-dropdown', id, ...Partial<CompileDropdownPanelConfig>, showIf? }
+     | { type: 'runtime-section',  id, ...Partial<RuntimePanelConfig>, showIf? };
    ```
 
    - **`feature`** renders `<AutoFeaturePanel>` for that feature. `groupFilter` shows only params with that DDFS group; `whitelistParams` shows only the listed keys; `excludeParams` skips them.
@@ -76,7 +80,16 @@ PanelRouter resolves a panel's content in this order (richest first):
    - **`section`** is a section-label header (`<SectionLabel>`).
    - **`separator`** is a thin divider line.
    - **`collapsible`** is a roll-up group with a clickable label; nested `items` can be any PanelItem (including more collapsibles).
+   - **`compilable`** renders `<CompilableFeatureSection>`: a boolean compile gate + optional compile-settings expand + optional runtime body. Used for features with a real on/off compile flag (Hybrid Box, Burning, Local Rotation, Interlace, Volumetric). Override fields let one feature appear as multiple compilable sections.
+   - **`compile-dropdown`** renders `<CompileDropdownSection>`: a compile-only section with NO boolean gate — typically one or more compile-flagged dropdowns plus an explicit Compile button. Used for Distance Estimator + Metric. Runtime-only params mixed into `compileSettingsParams` commit immediately; compile-flagged ones buffer for the Compile button.
+   - **`runtime-section`** renders `<RuntimeSection>`: pure-runtime collapsible — header toggle controls a runtime param; body shows runtime params filtered by group. No compile mechanics whatsoever. Used for Julia / Offset and similar runtime-uniform-only features.
    - **`showIf`** on any item is re-evaluated each render — same predicate model as panel-level `showIf`.
+
+### Compile-spinner contract
+
+The `is_compiling` spinner is owned by `engine-gmt/engine/CompileScheduler` — not by UI components. The scheduler emits when a shader rebuild is actually queued and clears on completion or error. UI handlers (toggles, dropdown changes, Compile buttons) simply call the feature's setter; the resulting CONFIG change reaches the worker and the scheduler picks it up. Optimistic UI-side emits caused spurious "Compiling…" flashes on runtime-only param changes — those have been removed.
+
+For *gated* compile flows (formula switch, scene load, hardware-profile change) where the spinner must visibly paint before any GPU-blocking work, use `store/CompileGate` (`compileGate.queue(message, work)`) — the spinner mounts, its render callback fires `flush()` after the browser paints, and the deferred work runs.
 
 3. **`features: [...]` + `widgets: {…}`** — shorthand. Compiles internally to an equivalent `items` list (`widgets.before` → leading widgets, each feature → a `feature` item, `widgets.between[id]` → widgets right after that feature, `widgets.after` → trailing widgets). Convenient for trivial panels.
 
