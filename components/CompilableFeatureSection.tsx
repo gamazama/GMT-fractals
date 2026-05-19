@@ -192,6 +192,20 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
         setPendingToggle(null);
     }, [setter, localPending, isCompiled, compileParam, runtimeToggleParam, hasPendingToggle, pendingToggle]);
 
+    // Unload — clear the compile gate (and runtime toggle if present) so
+    // the feature drops out of the shader entirely on the next compile.
+    // Distinct from the runtime toggle, which only flips a uniform.
+    // Direct action — no CompileBar buffering, because the icon click IS
+    // the explicit confirmation.
+    const handleUnload = useCallback(() => {
+        if (!setter) return;
+        const updates: Record<string, any> = { [compileParam]: false };
+        if (runtimeToggleParam) updates[runtimeToggleParam] = false;
+        setter(updates);
+        setLocalPending({});
+        setPendingToggle(null);
+    }, [setter, compileParam, runtimeToggleParam]);
+
     // Open engine panel and queue compile flag + any pending compile settings
     const handleOpenEngine = useCallback(() => {
         useEngineStore.getState().movePanel('Engine', 'left');
@@ -236,6 +250,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                 forceBodyOpen={needsCompile}
                 statusContent={statusDots}
                 headerClassName={isCompiled ? '' : 'bg-transparent'}
+                onUnload={isCompiled ? handleUnload : undefined}
             >
                 <div className="bg-white/[0.02]">
                     {/* CompileBar — the "compile question". Shown at the top of

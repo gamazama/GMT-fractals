@@ -29,11 +29,25 @@ interface FeatureSectionProps {
      *  otherwise the body collapses and they can't click Recompile to
      *  apply the change. The toggle still reflects `enabled` cleanly. */
     forceBodyOpen?: boolean;
+    /** Optional explicit "unload" action shown as a small icon button to
+     *  the left of the header toggle. CompilableFeatureSection wires this
+     *  to a setter that clears compileParam (+ runtimeToggleParam) so the
+     *  feature drops out of the shader entirely on the next compile —
+     *  distinct from the runtime toggle, which only flips a uniform. */
+    onUnload?: () => void;
 }
+
+/** Small eject-arrow icon for the unload-from-shader action. */
+const UnloadIcon: React.FC = () => (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="5 9 12 2 19 9" />
+        <line x1="5" y1="20" x2="19" y2="20" />
+    </svg>
+);
 
 export const FeatureSection: React.FC<FeatureSectionProps> = ({
     label, featureId, toggleParam, children, description,
-    statusContent, headerClassName = '', enabled, onToggle, hideToggle = false, forceBodyOpen = false,
+    statusContent, headerClassName = '', enabled, onToggle, hideToggle = false, forceBodyOpen = false, onUnload,
 }) => {
     // Granular per-feature subscription. `useEngineStore()` no-selector
     // would re-render every FeatureSection on every store update —
@@ -78,14 +92,25 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
                     {statusContent}
                 </div>
 
-                {!hideToggle && (
-                    <div className="w-10" onClick={e => e.stopPropagation()}>
-                        <ToggleSwitch
-                            value={isEnabled}
-                            onChange={handleToggle}
-                        />
-                    </div>
-                )}
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                    {onUnload && (
+                        <button
+                            onClick={onUnload}
+                            className="p-1 text-gray-500 hover:text-amber-400 transition-colors"
+                            title="Unload — recompile shader without this feature"
+                        >
+                            <UnloadIcon />
+                        </button>
+                    )}
+                    {!hideToggle && (
+                        <div className="w-10">
+                            <ToggleSwitch
+                                value={isEnabled}
+                                onChange={handleToggle}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Content. Renders when the toggle is on OR the caller has

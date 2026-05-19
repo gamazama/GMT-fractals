@@ -87,13 +87,16 @@ export const GmtPanels: PanelManifest = [
                 label: 'Local Rotation',
             },
 
-            // Burning Mode — compile-only (the abs() line is removed from
-            // DXBC entirely when off). No runtime params today; axis-abs
-            // options can drop into compileSettingsParams when wired.
+            // Burning Mode — compile-gated abs() line, with a runtime
+            // mix slider so the effect can be faded in/out without
+            // recompiling once it's been compiled in. Section toggle is
+            // instant runtime on/off via `burningRuntime`; unload icon
+            // removes burning from the shader entirely.
             {
                 type: 'compilable',
                 id: 'geometry',
                 compileParam: 'burningEnabled',
+                runtimeToggleParam: 'burningRuntime',
                 runtimeGroup: 'burning',
                 label: 'Burning Mode',
             },

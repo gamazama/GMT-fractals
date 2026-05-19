@@ -28,6 +28,8 @@ export interface GeometryState {
 
     // Global Modifiers
     burningEnabled: boolean;
+    burningRuntime: boolean;
+    burningMix: number;
 
     juliaMode: boolean;
     juliaX: number;
@@ -274,17 +276,33 @@ export const GeometryFeature: FeatureDefinition = {
         },
 
         // --- GLOBAL MODIFIERS ---
-        // Compile-gated: with the line removed from DXBC entirely (rather
-        // than runtime-predicated by uBurningEnabled), the per-iter abs+mix
-        // ALU disappears when burning is off. Toggle is a discrete checkbox
-        // so recompile-on-flip is acceptable per the engine's compile-toggle
-        // rules. Uniform `uBurningEnabled` is kept declared in ShaderBuilder
-        // because formulas like MandelTerrain still query it directly.
+        // Compile gate: with the burning line absent from DXBC when off,
+        // ALU cost vanishes for non-burning scenes. When compiled in, the
+        // inject emits a `mix(z, abs(z), uBurningRuntime * uBurningMix)`
+        // so the runtime toggle + mix slider can fade burning in/out
+        // without a recompile. Uniform `uBurningEnabled` is kept so
+        // formulas like MandelTerrain that bind their own compile-time
+        // burning logic continue to read it.
         burningEnabled: {
             type: 'boolean', default: false, label: 'Burning Mode', shortId: 'bm', group: 'burning',
             description: 'Applies absolute value to coordinates every iteration. Creates "Burning Ship" variations.',
             uniform: 'uBurningEnabled',
             onUpdate: 'compile', noReset: true
+        },
+        // Runtime instant-toggle (hidden — controlled by the section header
+        // once compiled). Defaults true so first compile lands with the
+        // effect visible at full strength.
+        burningRuntime: {
+            type: 'boolean', default: true, label: 'Burning Active', shortId: 'br',
+            uniform: 'uBurningRuntime', group: 'burning', hidden: true,
+        },
+        // Runtime mix amount — fades between original and abs() coordinates.
+        burningMix: {
+            type: 'float', default: 1.0, label: 'Mix', shortId: 'bmx',
+            uniform: 'uBurningMix', min: 0.0, max: 1.0, step: 0.01,
+            group: 'burning',
+            condition: { param: 'burningEnabled', bool: true },
+            description: 'Blend between original coordinates (0) and absolute-value coordinates (1).',
         },
 
         // --- HYBRID BOX RUNTIME PARAMS (visible when compiled AND active) ---
@@ -425,15 +443,17 @@ void formula_Hybrid(inout vec4 z, inout float dr, inout float trap, vec4 c) {}`)
         let hybridPreLoop = "";
         let hybridInLoop = "";
 
-        // --- BURNING MODE (Compile-gated) ---
-        // ANGLE/D3D11 predicates uniform if-branches, so the runtime mix()
-        // form ran abs(z.xyz) every iter regardless of toggle. Compile-gating
-        // drops the line from DXBC entirely when burning is off (default).
+        // --- BURNING MODE (Compile-gated, runtime mixable) ---
+        // Compile gate keeps the line out of DXBC entirely when burning is
+        // off. When compiled in, the runtime uniforms `uBurningRuntime`
+        // (0/1 instant toggle) and `uBurningMix` (0–1 slider) fade the
+        // effect without forcing another recompile. The ALU is one mix per
+        // iter — acceptable cost paid only when the feature is compiled.
         const formula = config.formula as any;
         const isSelfContainedSDE = registry.get(formula)?.shader.selfContainedSDE ?? false;
         const burningOn = state?.burningEnabled ?? false;
         if (!isSelfContainedSDE && burningOn) {
-            hybridInLoop += `z.xyz = abs(z.xyz);`;
+            hybridInLoop += `z.xyz = mix(z.xyz, abs(z.xyz), uBurningRuntime * uBurningMix);`;
         }
 
         if (hybridCompiled && !isSelfContainedSDE) {
