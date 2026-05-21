@@ -118,6 +118,10 @@ export const setSlice = <K extends AppSliceId>(
 // selector would create a fresh object every eval and defeat zustand's
 // reference-equality re-render gate, forcing the consumer component to
 // re-render on every store update.
+//
+// @invariant Module-frozen singleton fallback — using `?? {}` inline in
+//   the selector would create a fresh object every render and defeat
+//   zustand's reference-equality re-render gate.
 const EMPTY_LIVE_MODS: Readonly<Partial<Record<LfoTarget, number>>> = Object.freeze({});
 
 /**
@@ -162,6 +166,11 @@ export const subscribeSlice = <K extends AppSliceId>(
  * keyframe modulation actually drives the renderer (otherwise the
  * indicator on the param row "shows modulation" but the consumer
  * keeps reading the raw slice value — a recurring footgun).
+ */
+/**
+ * @invariant Scalars look up `featureId.key`; vec-shaped fields override
+ *   per axis via `featureId.key_x|y|z|w`. Returns the same slice
+ *   reference if nothing was touched (zustand-friendly).
  */
 export const applyLiveMod = <T extends Record<string, any>>(
     slice: T,

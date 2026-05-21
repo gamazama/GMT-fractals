@@ -140,6 +140,16 @@ export interface StateLibraryOptions<T> {
 
 /** Patches a state-library slice onto the engineStore. Idempotent —
  *  calling twice is a no-op (warns in dev). */
+/**
+ * @invariant Idempotency guard AND-checks `arrayKey` + `actions.add`
+ *   only. Two unchecked silent-failure scenarios:
+ *   (a) same `arrayKey`, different `actions.add` — re-install silently
+ *       clobbers `arrayKey: []` and wipes saved snapshots;
+ *   (b) different `arrayKey`, same `actions.add` — second install's
+ *       `addSnapshot` closure overrides the first, so the cameras
+ *       library's action silently redirects to the views library's
+ *       storage. GMT does not trip either today (followup q-064).
+ */
 export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void {
     const set = useEngineStore.setState as (partial: any) => void;
     const get = useEngineStore.getState as () => any;
@@ -227,6 +237,13 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
             return snap.id;
         },
 
+        /**
+         * @invariant `update` with no patch overwrites snapshot state with
+         *   current live state and awaits `captureThumbnail` inline —
+         *   rapid double-click of the Save button can race two captures
+         *   into the array; no de-dup guard. `activeIdKey` does NOT
+         *   change on update; selection survives overwrites.
+         */
         [actions.update]: async (id: string, patch?: Partial<StateSnapshot<T>>) => {
             const arr = readArray();
             const idx = arr.findIndex((s) => s.id === id);
@@ -255,6 +272,11 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
             if (get()[activeIdKey] === id) writeActive(null);
         },
 
+        /**
+         * @invariant Deep-clones via `JSON.parse(JSON.stringify(src))`,
+         *   inserts adjacent, AND re-applies — duplicating an inactive
+         *   snapshot makes it active and triggers apply (side effect).
+         */
         [actions.duplicate]: (id: string) => {
             const arr = readArray();
             const idx = arr.findIndex((s) => s.id === id);
@@ -294,6 +316,11 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
             writeArray(next);
         },
 
+        /**
+         * @invariant `slotIndex > arr.length` rejects with a warning
+         *   toast rather than appending out-of-order. `slotIndex <
+         *   arr.length` overwrites; `slotIndex === arr.length` appends.
+         */
         [actions.saveToSlot]: async (slotIndex: number) => {
             const arr = readArray();
             // Slots fill sequentially. Pressing Mod+5 with only 2 saved

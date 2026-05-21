@@ -64,9 +64,26 @@ const getSlots = (): (CameraSlot | null)[] => {
 
 const setSlots = (slots: (CameraSlot | null)[]) => {
     // Use raw set — slot state is UI meta, not a DDFS feature.
+    //
+    // @invariant Written via `(useEngineStore as any).setState` — the
+    //   `as any` cast bypasses TypeScript collision detection. A future
+    //   DDFS feature named `cameraSlots` would silently overwrite.
+    //   Keeping the unprefixed key is intentional (wire-format is
+    //   load-bearing for .gmf preset round-trip); a declare-merged
+    //   EngineState typing would compile-warn without changing wire
+    //   format.
     (useEngineStore as any).setState({ cameraSlots: slots });
 };
 
+/**
+ * @invariant `SLOT_COUNT = 10` but index 0 is unused; valid slots are
+ *   1..9. Both `saveSlot` and `recallSlot` reject `n < 1 || n >= SLOT_COUNT`.
+ * @invariant `saveSlot` / `recallSlot` return false silently with no
+ *   console warning when no adapter is registered — a missing
+ *   `camera.register()` call is hard to spot. `captureState()` and
+ *   `applyState()` also run inline without try/catch; a thrown adapter
+ *   propagates out of the shortcut handler.
+ */
 export const camera = {
     /** Adapter registration. Apps call this once at boot. */
     register(adapter: CameraAdapter) {
@@ -154,6 +171,11 @@ export const installCamera = (options: InstallCameraOptions = {}) => {
     }
 };
 
+/**
+ * @invariant Does NOT clear `cameraSlots` from the store — only nukes
+ *   shortcuts and the adapter. Data persists; re-install (or preset
+ *   load) recovers it unchanged (followup q-065).
+ */
 export const uninstallCamera = () => {
     for (let n = 1; n <= 9; n++) {
         shortcuts.unregister(`camera.save-slot-${n}`);

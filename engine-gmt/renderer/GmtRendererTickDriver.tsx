@@ -79,48 +79,63 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         setViewportCanvas(gl.domElement);
     }, [camera, gl]);
 
-    // Wait for worker boot + compile.
+    // Wait for worker boot + compile via event subscription.
+    //
+    // Previously a 300 × 100 ms poll: on boot failure it bailed silently
+    // after 30 s, leaving the splash frozen forever (no `onLoaded` →
+    // `isReady` stays false → fade-out gate never opens). The unbounded
+    // `while (proxy.isCompiling)` second loop had no timeout at all.
+    //
+    // The replacement subscribes to WORKER_BOOTED + IS_COMPILING:false
+    // and runs the readiness check on each tick. Boot failure is now
+    // surfaced through WORKER_BOOT_FAILED (handled by LoadingScreen),
+    // not by silently waiting out a timer.
     useEffect(() => {
-        let isMounted = true;
+        let finished = false;
 
-        const checkReady = async () => {
-            let attempts = 0;
-            while (!proxy.isBooted) {
-                if (!isMounted) return;
-                if (++attempts >= 300) {
-                    console.error('[GmtRendererTickDriver] Worker boot timeout after 30s');
-                    return;
-                }
-                await new Promise(r => setTimeout(r, 100));
+        const finalize = () => {
+            if (finished) return;
+            if (!proxy.isBooted) return;
+            // hasCompiledShader is a one-way latch — true once the first
+            // COMPILING:false arrives. Using it instead of `!isCompiling`
+            // avoids the race where the worker is between init and the
+            // first COMPILING:true (isCompiling momentarily false, but no
+            // compile has actually happened yet).
+            if (!proxy.hasCompiledShader) return;
+            if (proxy.isCompiling) return;
+
+            finished = true;
+
+            // Re-push viewport size — layout may have shifted during compile.
+            const s = sizeRef.current;
+            proxy.resizeWorker(s.width, s.height, s.dpr);
+
+            // Consume stashed teleport from applyPresetState — the exact
+            // payload computed during loadScene, not a re-read from the
+            // store (which may have drifted if orbit/physics ticks ran
+            // between mount and boot-ready).
+            const stashed = proxy.pendingTeleport;
+            if (stashed) {
+                proxy.pendingTeleport = null;
+                FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, stashed);
             }
-            while (proxy.isCompiling) {
-                if (!isMounted) return;
-                await new Promise(r => setTimeout(r, 100));
-            }
 
-            if (isMounted) {
-                // Re-push current viewport size after boot+compile to ensure
-                // correct dimensions. Layout may have changed during compile.
-                const s = sizeRef.current;
-                proxy.resizeWorker(s.width, s.height, s.dpr);
-
-                // Consume stashed teleport from applyPresetState — the exact
-                // payload computed during loadScene, not a re-read from the
-                // store (which may have drifted if orbit/physics ticks ran
-                // between mount and boot-ready).
-                const stashed = proxy.pendingTeleport;
-                if (stashed) {
-                    proxy.pendingTeleport = null;
-                    FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, stashed);
-                }
-
-                setIsReady(true);
-                if (onLoaded) onLoaded();
-            }
+            setIsReady(true);
+            if (onLoaded) onLoaded();
         };
 
-        checkReady();
-        return () => { isMounted = false; };
+        const unsubs = [
+            FractalEvents.on(FRACTAL_EVENTS.WORKER_BOOTED, finalize),
+            FractalEvents.on(FRACTAL_EVENTS.IS_COMPILING, (status) => {
+                if (status === false) finalize();
+            }),
+        ];
+
+        // Synchronous catch-up: events may have already fired before this
+        // effect runs (e.g. fast boot, StrictMode remount).
+        finalize();
+
+        return () => { unsubs.forEach((u) => u()); };
     }, []);
 
     // Handle resize (reacts to viewport size AND DPR changes).

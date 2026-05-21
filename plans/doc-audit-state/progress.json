@@ -1,0 +1,737 @@
+[
+  {
+    "id": "a01-boot-shell",
+    "action": "start",
+    "timestamp": "2026-05-19T19:56:29.495Z"
+  },
+  {
+    "id": "a01-boot-shell",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T19:58:40.321Z",
+    "files_covered": 6
+  },
+  {
+    "id": "a02-panels-layout",
+    "action": "start",
+    "timestamp": "2026-05-19T19:59:19.028Z"
+  },
+  {
+    "id": "a02-panels-layout",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:03:13.004Z",
+    "files_covered": 10
+  },
+  {
+    "id": "a03-tutorial",
+    "action": "start",
+    "timestamp": "2026-05-19T20:05:09.432Z"
+  },
+  {
+    "id": "a03-tutorial",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:09:17.557Z",
+    "files_covered": 15
+  },
+  {
+    "id": "e01-feature-system",
+    "action": "start",
+    "timestamp": "2026-05-19T20:12:08.058Z"
+  },
+  {
+    "id": "e01-feature-system",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:14:45.064Z",
+    "files_covered": 4,
+    "protocol_note": "02_Feature_Registry.md is aspirational; needs planner decision"
+  },
+  {
+    "id": "e02-tick-registry",
+    "action": "start",
+    "timestamp": "2026-05-19T20:19:40.160Z"
+  },
+  {
+    "id": "e02-tick-registry",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:21:26.464Z",
+    "files_covered": 2
+  },
+  {
+    "id": "e03-animation",
+    "action": "start",
+    "timestamp": "2026-05-19T20:28:09.854Z"
+  },
+  {
+    "id": "e03-animation",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:32:22.734Z",
+    "files_covered": 13
+  },
+  {
+    "id": "e04-shader-builder",
+    "action": "start",
+    "timestamp": "2026-05-19T20:34:09.845Z"
+  },
+  {
+    "id": "e04-shader-builder",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:37:39.790Z",
+    "files_covered": 5
+  },
+  {
+    "id": "e05-render-pipeline",
+    "action": "start",
+    "timestamp": "2026-05-19T20:40:09.697Z"
+  },
+  {
+    "id": "e05-render-pipeline",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:42:55.078Z",
+    "files_covered": 3
+  },
+  {
+    "id": "e06-adaptive-resolution",
+    "action": "start",
+    "timestamp": "2026-05-19T20:45:09.907Z"
+  },
+  {
+    "id": "e06-adaptive-resolution",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:48:28.694Z",
+    "files_covered": 7
+  },
+  {
+    "id": "e07-plugins-host",
+    "action": "start",
+    "timestamp": "2026-05-19T20:51:10.373Z"
+  },
+  {
+    "id": "e07-plugins-host",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T20:55:21.412Z",
+    "files_covered": 16
+  },
+  {
+    "id": "e08-shortcuts-undo",
+    "action": "start",
+    "timestamp": "2026-05-19T21:01:08.689Z"
+  },
+  {
+    "id": "e08-shortcuts-undo",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:03:28.322Z",
+    "files_covered": 2
+  },
+  {
+    "id": "e09-camera-plugin",
+    "action": "start",
+    "timestamp": "2026-05-19T21:06:11.781Z"
+  },
+  {
+    "id": "e09-camera-plugin",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:10:10.774Z",
+    "files_covered": 6
+  },
+  {
+    "id": "e10-engine-features",
+    "action": "start",
+    "timestamp": "2026-05-19T21:12:09.849Z"
+  },
+  {
+    "id": "e10-engine-features",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:16:23.176Z",
+    "files_covered": 18
+  },
+  {
+    "id": "e11-worker-contract",
+    "action": "start",
+    "timestamp": "2026-05-19T21:18:09.737Z"
+  },
+  {
+    "id": "e11-worker-contract",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:20:47.534Z",
+    "files_covered": 2
+  },
+  {
+    "id": "e12-mobile-layout",
+    "action": "start",
+    "timestamp": "2026-05-19T21:23:09.677Z"
+  },
+  {
+    "id": "e12-mobile-layout",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:26:14.729Z",
+    "files_covered": 5
+  },
+  {
+    "id": "e13-shared-ui",
+    "action": "start",
+    "timestamp": "2026-05-19T21:33:10.243Z"
+  },
+  {
+    "id": "e13-shared-ui",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:38:49.459Z",
+    "files_covered": 29
+  },
+  {
+    "id": "g01-renderer",
+    "action": "start",
+    "timestamp": "2026-05-19T21:41:10.655Z"
+  },
+  {
+    "id": "g01-renderer",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:46:18.107Z",
+    "files_covered": 15
+  },
+  {
+    "id": "g02-shader-pipeline",
+    "action": "start",
+    "timestamp": "2026-05-19T21:48:09.319Z"
+  },
+  {
+    "id": "g02-shader-pipeline",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:52:48.045Z",
+    "files_covered": 8
+  },
+  {
+    "id": "g03-formula-registry",
+    "action": "start",
+    "timestamp": "2026-05-19T21:55:11.045Z"
+  },
+  {
+    "id": "g03-formula-registry",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T21:59:44.906Z",
+    "files_covered": 56
+  },
+  {
+    "id": "g04-navigation",
+    "action": "start",
+    "timestamp": "2026-05-19T22:02:09.872Z"
+  },
+  {
+    "id": "g04-navigation",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T22:05:53.021Z",
+    "files_covered": 6
+  },
+  {
+    "id": "g05-engine-gmt-features",
+    "action": "start",
+    "timestamp": "2026-05-19T22:13:11.113Z"
+  },
+  {
+    "id": "g05-engine-gmt-features",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T22:19:16.835Z",
+    "files_covered": 29
+  },
+  {
+    "id": "g06-bucket-render",
+    "action": "start",
+    "timestamp": "2026-05-19T22:21:10.533Z"
+  },
+  {
+    "id": "g06-bucket-render",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T22:25:18.712Z",
+    "files_covered": 5
+  },
+  {
+    "id": "g07-mesh-export",
+    "action": "start",
+    "timestamp": "2026-05-19T22:27:08.551Z"
+  },
+  {
+    "id": "g07-mesh-export",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T22:32:44.131Z",
+    "files_covered": 23
+  },
+  {
+    "id": "g08-save-load-gmf",
+    "action": "start",
+    "timestamp": "2026-05-19T22:35:11.488Z"
+  },
+  {
+    "id": "g08-save-load-gmf",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T22:37:37.884Z",
+    "files_covered": 4
+  },
+  {
+    "id": "g09-modular-graph",
+    "action": "start",
+    "timestamp": "2026-05-19T22:40:10.697Z"
+  },
+  {
+    "id": "g09-modular-graph",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T22:43:01.123Z",
+    "files_covered": 2
+  },
+  {
+    "id": "g10-audio-fps-sync",
+    "action": "start",
+    "timestamp": "2026-05-19T22:49:09.244Z"
+  },
+  {
+    "id": "g10-audio-fps-sync",
+    "action": "survey_done",
+    "timestamp": "2026-05-19T22:51:07.861Z",
+    "files_covered": 3
+  },
+  {
+    "id": "d01-engine-docs-1",
+    "action": "start",
+    "timestamp": "2026-05-19T22:53:10.338Z"
+  },
+  {
+    "id": "d01-engine-docs-1",
+    "action": "summarized",
+    "timestamp": "2026-05-19T22:56:33.265Z",
+    "files_covered": 10
+  },
+  {
+    "id": "d02-engine-docs-2",
+    "action": "start",
+    "timestamp": "2026-05-19T22:59:10.172Z"
+  },
+  {
+    "id": "d02-engine-docs-2",
+    "action": "summarized",
+    "timestamp": "2026-05-19T23:05:06.383Z",
+    "files_covered": 10
+  },
+  {
+    "id": "d03-gmt-docs-1",
+    "action": "start",
+    "timestamp": "2026-05-19T23:07:10.235Z"
+  },
+  {
+    "id": "d03-gmt-docs-1",
+    "action": "summarized",
+    "timestamp": "2026-05-19T23:14:09.671Z",
+    "files_covered": 10
+  },
+  {
+    "id": "d04-gmt-docs-2",
+    "action": "start",
+    "timestamp": "2026-05-19T23:16:10.309Z"
+  },
+  {
+    "id": "d04-gmt-docs-2",
+    "action": "summarized",
+    "timestamp": "2026-05-19T23:20:50.499Z",
+    "files_covered": 9
+  },
+  {
+    "id": "d05-animation-refactor-1",
+    "action": "start",
+    "timestamp": "2026-05-19T23:27:11.551Z"
+  },
+  {
+    "id": "d05-animation-refactor-1",
+    "action": "summarized",
+    "timestamp": "2026-05-19T23:30:39.724Z",
+    "files_covered": 10
+  },
+  {
+    "id": "d06-animation-refactor-2",
+    "action": "start",
+    "timestamp": "2026-05-19T23:33:10.604Z"
+  },
+  {
+    "id": "d06-animation-refactor-2",
+    "action": "summarized",
+    "timestamp": "2026-05-19T23:36:38.882Z",
+    "files_covered": 10
+  },
+  {
+    "id": "d07-animation-refactor-3",
+    "action": "start",
+    "timestamp": "2026-05-19T23:39:10.168Z"
+  },
+  {
+    "id": "d07-animation-refactor-3",
+    "action": "summarized",
+    "timestamp": "2026-05-19T23:47:30.703Z",
+    "files_covered": 6
+  },
+  {
+    "id": "d08-archive-docs",
+    "action": "start",
+    "timestamp": "2026-05-19T23:50:10.293Z"
+  },
+  {
+    "id": "d08-archive-docs",
+    "action": "summarized",
+    "timestamp": "2026-05-19T23:54:10.648Z",
+    "files_covered": 10
+  },
+  {
+    "id": "d09-root-research-specs",
+    "action": "start",
+    "timestamp": "2026-05-19T23:56:11.385Z"
+  },
+  {
+    "id": "d09-root-research-specs",
+    "action": "summarized",
+    "timestamp": "2026-05-20T00:01:15.338Z",
+    "files_covered": 10
+  },
+  {
+    "id": "t01-fluid-toy",
+    "action": "start",
+    "timestamp": "2026-05-20T00:08:27.789Z"
+  },
+  {
+    "id": "t01-fluid-toy",
+    "action": "survey_done",
+    "timestamp": "2026-05-20T00:14:16.294Z",
+    "files_covered": 80
+  },
+  {
+    "id": "t02-fractal-toy",
+    "action": "start",
+    "timestamp": "2026-05-20T00:16:11.022Z"
+  },
+  {
+    "id": "t02-fractal-toy",
+    "action": "survey_done",
+    "timestamp": "2026-05-20T00:19:27.941Z",
+    "files_covered": 14
+  },
+  {
+    "id": "phase-1.5-sub-a",
+    "action": "gather_triage_done",
+    "timestamp": "2026-05-20T00:30:37.122Z",
+    "questions": {
+      "raw": 120,
+      "primary": 76,
+      "low": 43,
+      "duplicate": 1,
+      "pending": 119
+    }
+  },
+  {
+    "id": "q-001",
+    "action": "answered",
+    "timestamp": "2026-05-20T00:34:58.419Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-002",
+    "action": "answered",
+    "timestamp": "2026-05-20T00:39:13.892Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-003",
+    "action": "answered",
+    "timestamp": "2026-05-20T00:47:39.464Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-005",
+    "action": "answered",
+    "timestamp": "2026-05-20T00:51:34.261Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-006",
+    "action": "answered",
+    "timestamp": "2026-05-20T00:55:35.127Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-007",
+    "action": "answered",
+    "timestamp": "2026-05-20T00:59:08.980Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-008",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:02:27.875Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-009",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:06:45.033Z",
+    "files_consulted": 6
+  },
+  {
+    "id": "q-011",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:11:04.536Z",
+    "files_consulted": 7
+  },
+  {
+    "id": "q-013",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:15:15.747Z",
+    "files_consulted": 9
+  },
+  {
+    "id": "q-014",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:18:55.457Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-015",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:23:06.630Z",
+    "files_consulted": 6
+  },
+  {
+    "id": "q-016",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:31:25.785Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-018",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:34:57.213Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-019",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:39:00.389Z",
+    "files_consulted": 4,
+    "phase2_priority_finding": "production-only DuplicatePresetFieldError on app-gmt double-register"
+  },
+  {
+    "id": "q-020",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:43:18.883Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-021",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:46:29.907Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-022",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:50:46.611Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-025",
+    "action": "answered",
+    "timestamp": "2026-05-20T01:55:29.878Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-026",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:00:22.214Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-027",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:04:17.804Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-028",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:08:09.064Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-029",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:15:53.881Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-032",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:20:43.030Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-033",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:24:17.219Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-034",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:27:49.588Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-036",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:30:20.712Z",
+    "files_consulted": 0
+  },
+  {
+    "id": "q-037",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:34:19.040Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-038",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:37:51.638Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-040",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:42:24.379Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-041",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:45:59.378Z",
+    "files_consulted": 1
+  },
+  {
+    "id": "q-042",
+    "action": "answered",
+    "timestamp": "2026-05-20T02:49:52.975Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-043",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:00:06.505Z",
+    "files_consulted": 1
+  },
+  {
+    "id": "q-045",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:03:35.679Z",
+    "files_consulted": 1
+  },
+  {
+    "id": "q-046",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:08:07.744Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-052",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:12:09.319Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-053",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:15:37.894Z",
+    "files_consulted": 1
+  },
+  {
+    "id": "q-054",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:20:39.312Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-055",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:24:33.003Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-056",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:28:57.619Z",
+    "files_consulted": 3
+  },
+  {
+    "id": "q-060",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:32:34.403Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-061",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:37:07.743Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-062",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:47:31.910Z",
+    "files_consulted": 6,
+    "phase2_priority_finding": "g11-gmt-camera-manager subsystem gap: 608 lines uncovered"
+  },
+  {
+    "id": "q-064",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:51:59.293Z",
+    "files_consulted": 2,
+    "phase2_priority_finding": "StateLibrary collision check is HMR-only; future-library silent-data-loss risk"
+  },
+  {
+    "id": "q-065",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:56:02.362Z",
+    "files_consulted": 6
+  },
+  {
+    "id": "q-068",
+    "action": "answered",
+    "timestamp": "2026-05-20T03:59:44.112Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-069",
+    "action": "answered",
+    "timestamp": "2026-05-20T04:03:53.857Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-070",
+    "action": "answered",
+    "timestamp": "2026-05-20T04:08:56.460Z",
+    "files_consulted": 6
+  },
+  {
+    "id": "q-071",
+    "action": "answered",
+    "timestamp": "2026-05-20T04:13:26.045Z",
+    "files_consulted": 4
+  },
+  {
+    "id": "q-075",
+    "action": "answered",
+    "timestamp": "2026-05-20T04:17:31.570Z",
+    "files_consulted": 2
+  },
+  {
+    "id": "q-077",
+    "action": "answered",
+    "timestamp": "2026-05-20T04:22:27.943Z",
+    "files_consulted": 5
+  },
+  {
+    "id": "q-078",
+    "action": "answered",
+    "timestamp": "2026-05-20T04:27:01.815Z",
+    "files_consulted": 3
+  }
+]

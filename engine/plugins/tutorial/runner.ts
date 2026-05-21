@@ -82,6 +82,15 @@ export const TutorialRunner: React.FC = () => {
         const snapshots = new Map<string, any>();
         const expectedStepIndex = stepIndex;
 
+        /**
+         * @invariant Lock released via `queueMicrotask`. Same-tick passive
+         *   evaluators get one advance per change — intentional dedupe.
+         *   Concurrent listeners observe the pre-advance state once.
+         * @invariant Step-entry effect returns a NO-OP cleanup; transitions
+         *   are handled explicitly by the next step's entry or by the
+         *   deactivation effect. Relying on React-effect cleanup ordering
+         *   would break under strict-mode double-invocation.
+         */
         const safeAdvance = () => {
             if (advancingRef.current) return;
             const cur = useEngineStore.getState() as any;
@@ -141,6 +150,9 @@ export const TutorialRunner: React.FC = () => {
         if (!lesson || stepIndex < lesson.steps.length) return;
 
         const lastStep = lesson.steps[lesson.steps.length - 1];
+        // @invariant `autoStartLesson` chains via `completeTutorial()` +
+        //   `setTimeout(startTutorial(next), 300)`. Closing the tab inside
+        //   the 300 ms window silently breaks the chain.
         if (lastStep?.autoStartLesson != null) {
             const next = lastStep.autoStartLesson;
             completeTutorial();

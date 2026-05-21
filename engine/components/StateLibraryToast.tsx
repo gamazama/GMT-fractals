@@ -28,6 +28,13 @@ interface StateLibraryToastProps {
     arrayKey: string;
 }
 
+/**
+ * @invariant Returns null when no toast is pending — no internal timer;
+ *   the slice owns toast lifetime via `setTimeout`.
+ * @invariant `toastFieldKey(arrayKey)` is the only contract between
+ *   toast and slice. A typo in `arrayKey` at EITHER call site produces
+ *   a dead toast with no runtime error.
+ */
 export const StateLibraryToast: React.FC<StateLibraryToastProps> = ({ arrayKey }) => {
     const toast = useEngineStore((s) => (s as any)[toastFieldKey(arrayKey)] as StateLibrarySavedToast | null);
 

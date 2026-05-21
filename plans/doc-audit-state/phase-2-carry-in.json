@@ -1,0 +1,595 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-20T08:45:00Z",
+  "notes": "Phase 2 carry-in index. Aggregates cross-cutting signals from reviews 1-15 plus highest-value followups they cite. Module-doc writers MUST consult their subsystem's entries in `by_subsystem` before authoring. Categories: bug | subsystem-gap | doc-rewrite | cleanup | drift. Each item points back to a `_followups/q-NNN.md` (or a review) for full evidence.",
+  "by_subsystem": {
+    "a01-boot-shell": [
+      {
+        "question_id": "q-001",
+        "kind": "doc-rewrite",
+        "summary": "Four-stage boot chain across three files. README ambiguity ('step 7 with setTimeout' — correct WHERE setTimeout lives but wrong about WHAT triggers boot). Use q-001's chain as canonical.",
+        "target_file": "app-gmt/README.md (boot section)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-001.md"
+      },
+      {
+        "question_id": "q-002",
+        "kind": "drift",
+        "summary": "Three 'ready'-ish flags (`isHydrated`, `isReady`, `_isSceneReady`) lack a documented contract; `isHydrated` is a misnomer (LoadingScreen-only). Module doc must disambiguate.",
+        "target_file": "engine/hooks/useAppStartup.ts; app-gmt/LoadingScreen.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-002.md"
+      },
+      {
+        "question_id": "q-002",
+        "kind": "bug",
+        "summary": "Silent 30s timeout in GmtRendererTickDriver leaves splash stuck with no error UI when scene-ready never fires.",
+        "target_file": "engine-gmt/components/GmtRendererTickDriver.tsx:90-94",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-002.md"
+      },
+      {
+        "question_id": "q-002",
+        "kind": "cleanup",
+        "summary": "Dead parameter `_isSceneReady` on `useAppStartup` — flagged in BOTH q-001 and q-002 independently. Safe to remove.",
+        "target_file": "engine/hooks/useAppStartup.ts:53",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-001.md"
+      }
+    ],
+    "e01-feature-system": [
+      {
+        "question_id": "f-001",
+        "kind": "doc-rewrite",
+        "summary": "`02_Feature_Registry.md` is aspirational — describes `defineFeature`, lifecycle hooks, `ctx.read`, enum/string types, `cacheKey`, `useFeatureParam`, tab-dock auto-placement, none of which exist in code. Recommend: rewrite from survey + followups.",
+        "target_file": "docs/engine/02_Feature_Registry.md",
+        "evidence_ref": "plans/doc-audit-state/reviews/review-2026-05-19-1.md"
+      },
+      {
+        "question_id": "f-002",
+        "kind": "bug",
+        "summary": "Self-inconsistency: `FeatureSystem.getAll()` jsdoc says it throws on dependency cycle; implementation logs and falls back. Code-level inconsistency, not doc bug.",
+        "target_file": "engine/FeatureSystem.ts:443-447 vs :587-592",
+        "evidence_ref": "plans/doc-audit-state/protocol-feedback.json"
+      },
+      {
+        "question_id": "q-013",
+        "kind": "doc-rewrite",
+        "summary": "DDFS auto-wiring crosses 4 sites (PresetLogic, AnimationEngine, binderRegistry, historySlice). Load-bearing string conventions `set${FeatureId}` (actions) and `${featureId}.${paramKey}_<axis>` (track-ids) are NOT type-enforced. Module doc must call them out explicitly.",
+        "target_file": "docs/engine/02_Feature_Registry.md",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-013.md"
+      },
+      {
+        "question_id": "q-014",
+        "kind": "doc-rewrite",
+        "summary": "Two-registry boot pattern: `featureRegistry` + `presetFieldRegistry`, both frozen post-population. Currently undocumented except in registrar source comments.",
+        "target_file": "docs/engine/02_Feature_Registry.md",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-014.md"
+      },
+      {
+        "question_id": "q-019",
+        "kind": "bug",
+        "summary": "Production-only `DuplicatePresetFieldError` at app-gmt boot. Two registrars both register `cameraRot` etc.: side-effect import of `engine/plugins/camera/presetField.ts` (first) + `defaultPresetFields.registerDefaultPresetFields()` from `createFeatureSlice.ts:24` (second). DEV warns + replaces (HMR-safe); PROD throws and would crash boot.",
+        "target_file": "engine/plugins/camera/presetField.ts; store/createFeatureSlice.ts:24",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-019.md"
+      },
+      {
+        "question_id": "q-019",
+        "kind": "doc-rewrite",
+        "summary": "`presetFieldRegistry` full 5-method API + freeze semantics + 5-site consumer surface needs documenting in the feature-system module doc.",
+        "target_file": "utils/PresetFieldRegistry.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-019.md"
+      }
+    ],
+    "e03-animation": [
+      {
+        "question_id": "q-070",
+        "kind": "doc-rewrite",
+        "summary": "`AnimationParams` lives at `types/animation.ts:10-35`. `offsets` clearing is owned by TWO outside callers (`AnimationSystem.tick:155` live; `applyModulationsAt:23` export). Base-value composition lives ENTIRELY in `AnimationSystem.tick` (5 branches + 1 camera-as-offset-only); `ModulationEngine` is intentionally base-agnostic. `anim.baseValue` is vestigial in the engine (slice value is truth).",
+        "target_file": "docs/engine/04_Animation.md (or successor)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-070.md"
+      },
+      {
+        "question_id": "q-111",
+        "kind": "doc-rewrite",
+        "summary": "`isCameraLocked` vs `ignoreCamera` are NOT duplicates — they are dual (opposite outputs of the same flag set). Three independent consumers: Navigation, AnimationEngine, PauseControls. Worth a one-line note + a shared selector proposal (`selectCameraLocked` / `selectIgnoreCamera`).",
+        "target_file": "docs/engine/04_Animation.md",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-111.md"
+      }
+    ],
+    "e06-adaptive-resolution": [
+      {
+        "question_id": "review-#1",
+        "kind": "doc-rewrite",
+        "summary": "8+ break rows; primary public APIs (`useViewport()`, `viewport.onResize`, `<ViewportArea>`, `<PerformanceWarning>`) don't exist in code. Recommendation: rewrite.",
+        "target_file": "docs/engine/06_Adaptive_Resolution.md",
+        "evidence_ref": "plans/doc-audit-state/reviews/review-2026-05-19-2.md"
+      },
+      {
+        "question_id": "q-040",
+        "kind": "drift",
+        "summary": "Survey had WRONG field names for `ViewportAdaptiveConfig` (`graceMs`→`activityGraceMs`; `gateOnAccumOnly`→`engageOnAccumOnly`) and MISSED 6th field `minQuality` entirely. Phase 2 doc MUST use q-040's canonical 7-field roster, NOT the e06 survey guess.",
+        "target_file": "types/viewport.ts:21-52",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-040.md"
+      },
+      {
+        "question_id": "q-043",
+        "kind": "doc-rewrite",
+        "summary": "`mouseOverCanvas` is ref-based, not store-based — intentional design so pointer hover never triggers React reconciliation in the adaptive-resolution hot path. Doc-worthy invariant.",
+        "target_file": "engine/worker/ViewportRefs.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-043.md"
+      },
+      {
+        "question_id": "q-045",
+        "kind": "drift",
+        "summary": "`HardwareProfile` 4-field shape with enum semantics (`precisionMode` 0=High/1=Standard; `bufferPrecision` 0=Float32/1=HalfFloat16). `types/viewport.ts` is single source of truth for adaptive-res + hardware-caps surface (misnamed by scope). `supportsFloat32` and `caps.bufferPrecision` are redundant (drift risk).",
+        "target_file": "types/viewport.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-045.md"
+      },
+      {
+        "question_id": "q-046",
+        "kind": "drift",
+        "summary": "`CompositionOverlay` is a SHARED cross-app viewport overlay subsystem (engine-core uiSlice, shared controls, auto-mounted by ViewportFrame). NOT GMT-only — belongs in the viewport subsystem doc, not e09.",
+        "target_file": "engine/components/CompositionOverlay.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-046.md"
+      }
+    ],
+    "e07-plugins-host": [
+      {
+        "question_id": "review-#2",
+        "kind": "doc-rewrite",
+        "summary": "13 break-severity drift rows; calls out a CLOSED architectural decision (2026-04-22 nine-plugin lineup) that has been silently reversed. Recommendation: rewrite. Combined with e07's 'no uniform plugin contract' finding (each plugin invented its own state-capture pattern).",
+        "target_file": "docs/engine/07_Plugins_Host.md (or equivalent)",
+        "evidence_ref": "plans/doc-audit-state/reviews/review-2026-05-19-2.md"
+      },
+      {
+        "question_id": "q-052",
+        "kind": "drift",
+        "summary": "Surveyor invented an import path (`../../export/BucketRenderTypes`) that does not exist in the file. Other two imports verified as engine-core, not engine-gmt. Only `engine-gmt` token is an attribution comment on line 4.",
+        "target_file": "engine-gmt/components/panels/BucketRenderPanel.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-052.md"
+      },
+      {
+        "question_id": "q-053",
+        "kind": "drift",
+        "summary": "Surveyor framed `uninstallHelp` as a DOM leak; reality is a STATE leak across reinstall cycles (one-line fix). Also: `uninstallHelp` is never called anywhere — bug is doubly theoretical.",
+        "target_file": "engine/plugins/Help.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-053.md"
+      },
+      {
+        "question_id": "q-054",
+        "kind": "doc-rewrite",
+        "summary": "HIGHEST-VALUE FOLLOWUP of Sub-B run. Three-layer SceneIO loader pipeline: `File → loadSceneFile → loadScene → loadPreset`. `loadSceneFile` is pure parse; `loadScene` is the side-effect entry (compile gate + full-config flush + worker OFFSET_SET + CONFIG_DONE debounce skip). Calling `loadPreset` directly post-boot renders fallback sphere. Update `loadSceneFile` JSDoc to point at `loadScene`; mirror in `docs/engine/04_Core_Plugins.md`. Optional `loadSceneFromFile` convenience helper proposed.",
+        "target_file": "engine/plugins/SceneIO.tsx:174-197; docs/engine/04_Core_Plugins.md",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-054.md"
+      }
+    ],
+    "e08-shortcuts-undo": [
+      {
+        "question_id": "q-055",
+        "kind": "doc-rewrite",
+        "summary": "Cross-file references verified: `pushCameraTransaction` at `historySlice.ts:79+199`, `useShortcutScope('timeline-hover', isTimelineHovered)` at `components/Timeline.tsx:59`. Notes the `priority: 10` convention for hover-shadowed timeline shortcuts.",
+        "target_file": "store/slices/historySlice.ts; components/Timeline.tsx:59",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-055.md"
+      },
+      {
+        "question_id": "q-056",
+        "kind": "cleanup",
+        "summary": "Comment at `app-gmt/main.tsx:408-414` INVERTS the stable-sort tie-break direction ('engine-plugin shortcuts register first and would steal the binding' — registering first means LOSING ties). `priority: 10` on camera-undo is defensive, not necessary.",
+        "target_file": "app-gmt/main.tsx:408-414",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-056.md"
+      },
+      {
+        "question_id": "q-060",
+        "kind": "cleanup",
+        "summary": "Dead defensiveness: `typeof fn === 'function'` guard on undo/redo cannot fail — both are declared required in `SequenceSlice` interface.",
+        "target_file": "store/slices/sequenceSlice.ts (animation store undo)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-060.md"
+      }
+    ],
+    "e09-camera-plugin": [
+      {
+        "question_id": "f-003",
+        "kind": "subsystem-gap",
+        "summary": "e09 audited the StateLibrary primitive but its user-facing surface (`<StateLibraryPanel>`, `<StateLibraryToast>`, `<ActiveSnapshotFeatures>`) lives in adjacent files not claimed by any subsystem. Resolved by orphan-sweep prefix + Phase 1.6 design.",
+        "target_file": "components/StateLibraryPanel.tsx; engine/components/StateLibraryToast.tsx; components/ActiveSnapshotFeatures.tsx",
+        "evidence_ref": "plans/doc-audit-state/protocol-feedback.json"
+      },
+      {
+        "question_id": "q-061",
+        "kind": "subsystem-gap",
+        "summary": "Recommends NEW audit slice `e09b-state-library-ui` for three generic app-agnostic UI primitives keyed on `createStateLibrarySlice`'s public contract (`StateSnapshot<T>`, `toastFieldKey`, `activeIdKey` convention). Camera plugin is just ONE consumer.",
+        "target_file": "components/StateLibraryPanel.tsx; engine/components/StateLibraryToast.tsx; components/ActiveSnapshotFeatures.tsx; engine/store/createStateLibrarySlice.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-061.md"
+      },
+      {
+        "question_id": "q-062",
+        "kind": "subsystem-gap",
+        "summary": "Recommends NEW audit slice `g11-gmt-camera-manager` covering 592 uncovered lines: `engine-gmt/store/cameraSlice.ts` (310), `CameraManagerPanel.tsx` (154), `logic.ts` (128). Has a load-order invariant (`installGmtCameraSlice` before `CameraManagerPanel` first render) and 4 cross-subsystem boundaries (engine-core via `installStateLibrary`, g05 empty-stub, g04 sibling navigation, `engine-gmt/topbar.tsx` hand-wired Camera menu).",
+        "target_file": "engine-gmt/store/cameraSlice.ts; engine-gmt/features/camera_manager/{CameraManagerPanel.tsx,logic.ts,index.ts}",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-062.md"
+      },
+      {
+        "question_id": "q-064",
+        "kind": "bug",
+        "summary": "HMR-only / future-library landmine. `installStateLibrarySlice` collision guard at `createStateLibrarySlice.ts:150-154` AND-checks `arrayKey + actions.add`. Two unchecked scenarios: (1) same `arrayKey`/different `actions.add` clobbers saved snapshots; (2) different `arrayKey`/same `actions.add` silently routes one library's actions to the other library's data. Header comment mentions planned palettes / brush-presets libraries — both would trip scenario 2 if they reuse `addSnapshot`. ~6-line fix: two module-scope `Set<string>` registries for `arrayKey` and action names.",
+        "target_file": "engine/store/createStateLibrarySlice.ts:150-154",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-064.md"
+      }
+    ],
+    "e10-engine-features": [
+      {
+        "question_id": "q-068",
+        "kind": "drift",
+        "summary": "Claim that `componentRegistry` is host-app-owned was partially wrong — corrected by q-071. See q-071.",
+        "target_file": "components/registry/ComponentRegistry.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-071.md"
+      },
+      {
+        "question_id": "q-071",
+        "kind": "drift",
+        "summary": "Correction to q-068: `ComponentRegistry` class + singleton live at `components/registry/ComponentRegistry.tsx` (engine-owned). The host-app owns WHAT gets registered, not the registry itself. First case of followup-correcting-followup.",
+        "target_file": "components/registry/ComponentRegistry.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-071.md"
+      },
+      {
+        "question_id": "q-022",
+        "kind": "drift",
+        "summary": "`runTicks(delta)` is SECONDS, not ms. Two stale doc sites: `docs/engine/01_Architecture.md:83` ('deltaMs' wording) and `docs/engine/04_Core_Plugins.md:206` (synthetic `16.67` example).",
+        "target_file": "docs/engine/01_Architecture.md:83; docs/engine/04_Core_Plugins.md:206",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-022.md"
+      }
+    ],
+    "e12-mobile-layout": [
+      {
+        "question_id": "q-083",
+        "kind": "drift",
+        "summary": "Claim-graph verifier finding: six items the e12 survey flagged as 'outside the audit scope' are in fact claimed by other subsystems — e07 owns Menu/TopBar/mobileMenu/MobileMenuHost/topbar `when:`, e06 owns HardwareDetection, a01-via-q-001 owns useAppStartup. Module doc should cross-link, not flag as orphan.",
+        "target_file": "engine/components/Menu.tsx; engine/components/TopBar.tsx; engine-gmt/components/mobile/*",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-083.md"
+      }
+    ],
+    "e13-shared-ui": [
+      {
+        "question_id": "review-#4",
+        "kind": "doc-rewrite",
+        "summary": "Recommendation: rewrite (e13 survey returned this). `05_Shared_UI.md` is aspirational — multiple primitives listed don't exist as documented. 11 orphan-sweep candidate nominations from e13 alone.",
+        "target_file": "docs/engine/05_Shared_UI.md",
+        "evidence_ref": "plans/doc-audit-state/reviews/review-2026-05-20-4.md"
+      },
+      {
+        "question_id": "q-088",
+        "kind": "doc-rewrite",
+        "summary": "Knob vs Slider context coupling: Knob uses `useEngineStore` granular selectors; Slider uses `StoreCallbacksContext`. Mechanically a one-line migration. Same migration applies to Dock, DropZones, Vector*Input. Blockers: (a) verify every host memoises `storeCallbacks` (`useMemo`); (b) re-test fluid-toy max-depth-guard scar tissue. Document as project-wide convention with migration target.",
+        "target_file": "components/Knob.tsx:167-191; components/Slider.tsx; components/contexts/StoreCallbacksContext.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-088.md"
+      },
+      {
+        "question_id": "q-089",
+        "kind": "drift",
+        "summary": "`AutoFeaturePanel` (shared `components/`) imperatively calls `movePanel('Engine','left')` and emits `FractalEvents.emit('engine_queue', ...)` — both are GMT-app-only concepts. 50ms `setTimeout` is racing against EnginePanel mount. Recommends a `compileRouter` capability on the store, defaulted to GMT, overridable per app. Real 'primitives must not know about app shape' violation.",
+        "target_file": "components/AutoFeaturePanel.tsx:146-153; engine-gmt/components/panels/EnginePanel.tsx:53-55",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-089.md"
+      }
+    ],
+    "g01-renderer": [
+      {
+        "question_id": "q-093",
+        "kind": "drift",
+        "summary": "Three-fragility chain: `renderer.properties` (private Three API), `WEBGL_debug_shaders` extension dependency, defensive type-check for `fragmentShader` string vs WebGLShader object. Consumers are diagnostic only (`debug/bench-shader.mts`, `debug/inspect-state.mts`). Three minor bump silently degrades them. Add one paragraph to `docs/engine/20_Fragility_Audit.md` + Three-version pin reference.",
+        "target_file": "engine-gmt/engine/FractalEngine.ts (getCompiledFragmentShader / getTranslatedFragmentShader)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-093.md"
+      },
+      {
+        "question_id": "q-078",
+        "kind": "drift",
+        "summary": "`setEngineProxy` install pattern at `engine-gmt/renderer/install.ts:30+61` is out of g01 scope — likely a g06 gap.",
+        "target_file": "engine-gmt/renderer/install.ts:30,61",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-078.md"
+      }
+    ],
+    "g02-shader-pipeline": [
+      {
+        "question_id": "q-029",
+        "kind": "drift",
+        "summary": "Two silent uniform-name collision paths: base-vs-feature filter at `engine/UniformSchema.ts:77-83`, feature-vs-feature last-wins via `UNIFORM_DEFAULTS` reduce at `:85-88`. Undocumented naming convention (`uPT*`, `uLight*`, `uModular*` prefixes). Verbatim doc addendum proposed.",
+        "target_file": "engine/UniformSchema.ts:77-88",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-029.md"
+      },
+      {
+        "question_id": "q-032",
+        "kind": "doc-rewrite",
+        "summary": "17-position shader-assembly contract + variant-gate behaviour ('inject every feature regardless of enabled state'). Hard architectural anchor.",
+        "target_file": "engine-gmt/engine/ShaderBuilder.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-032.md"
+      },
+      {
+        "question_id": "q-097",
+        "kind": "drift",
+        "summary": "REFUTES survey recommendation. `21_Code_Review` flagged `UniformSchema.ts` as 'verbatim copy, convert to re-export'. q-097 proves the one-line import-path divergence (`./features` vs `../features`) is a PARAMETRISATION HOOK, not duplication — pulling out to a shared module would compose the wrong registry. Downgrade survey claim to 'parametrised by sibling features/ directory; cannot be re-exported without breaking pure-core vs GMT separation.'",
+        "target_file": "engine/UniformSchema.ts:5; engine-gmt/engine/UniformSchema.ts:5",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-097.md"
+      },
+      {
+        "question_id": "q-098",
+        "kind": "drift",
+        "summary": "`ConfigManager` 74-line delta is INTENTIONAL. Engine-gmt carries 4 GMT-specific couplings (`detectEngineProfile`, `FractalEvents`, batched compile log, lighting/Modular special cases) deliberately stripped from the engine extract. JSDoc on extracted file is canonical contract — do NOT back-port.",
+        "target_file": "engine/managers/ConfigManager.ts; engine-gmt/engine/managers/ConfigManager.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-098.md"
+      },
+      {
+        "question_id": "q-099",
+        "kind": "drift",
+        "summary": "Six concrete `docs/gmt/02_Rendering_Internals.md` (×3), `docs/specs/10_Shaped_Emission.md` (×2), `docs/gmt/43_Bucket_Render_Overhaul.md` (×1, also broken relative link) references drop the `engine-gmt/` prefix and would 404. Two CHANGELOG_DEV entries are correctly left alone (historical).",
+        "target_file": "docs/gmt/02_Rendering_Internals.md:142,237,735; docs/gmt/43_Bucket_Render_Overhaul.md:23; docs/specs/10_Shaped_Emission.md:161,227",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-099.md"
+      },
+      {
+        "question_id": "q-100",
+        "kind": "cleanup",
+        "summary": "Stale TODO comment in `engine-gmt/engine/ShaderConfig.ts:23-25` lags engine-core direction. `FeatureStateMap` IS implemented; unfinished work is intersecting it into `ShaderConfig`. Engine-core has moved past this model to per-app declaration merging. Rewrite comment to point at `07_Code_Health.md` Category 3 or match engine-core's 'augment via declaration merging' framing.",
+        "target_file": "engine-gmt/engine/ShaderConfig.ts:23-25",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-100.md"
+      },
+      {
+        "question_id": "q-101",
+        "kind": "drift",
+        "summary": "`pipelineRevision` required in engine-gmt; legacy engine still optional. The `[key: string]: any` index signature defeats strict checking — required typing is documentation more than enforcement. Discipline holds across all 4 observed call sites.",
+        "target_file": "engine-gmt/engine/ShaderConfig.ts vs engine/ShaderConfig.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-101.md"
+      },
+      {
+        "question_id": "q-102",
+        "kind": "drift",
+        "summary": "Real drift instance — five registered aliases (`HyperTorus`, `UberMenger`, `FoldingBrot`, `HyperbolicMandelbrot`, `RhombicIcosahedron`) are NOT in the hand-maintained `FormulaType` literal union. Stable branch already mitigates with `FormulaType = string` opaque tag — dev/engine-gmt fork has REGRESSED to literal union. Three SSoT options ranked.",
+        "target_file": "engine-gmt/types or similar (FormulaType union)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-102.md"
+      },
+      {
+        "question_id": "q-096",
+        "kind": "drift",
+        "summary": "ShaderBuilder class-name collision: `engine/ShaderBuilder.ts` (136L generic) vs `engine-gmt/engine/ShaderBuilder.ts` (634L GMT 17-position assembler). `21_Code_Review:168` recommends rename to `GmtShaderBuilder` — NOT done. `docs/gmt/08_File_Structure.md:20` points the path `engine/ShaderBuilder.ts` to the GMT-semantic description (silent path-vs-semantics mismatch). Recommends rename + cross-callouts; `RenderVariant` enum is the cleanest hand-off point at rename time.",
+        "target_file": "engine-gmt/engine/ShaderBuilder.ts; docs/gmt/08_File_Structure.md:20",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-096.md"
+      }
+    ],
+    "g03-formula-registry": [
+      {
+        "question_id": "q-102",
+        "kind": "drift",
+        "summary": "See g02 — `FormulaType` literal union drift affects formula-registry consumers.",
+        "target_file": "engine-gmt formula registration",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-102.md"
+      }
+    ],
+    "g04-navigation": [
+      {
+        "question_id": "q-107",
+        "kind": "cleanup",
+        "summary": "Pivot-reticle imperative DOM mutation is 'lifecycle-and-coordinate-system convenience, not perf'. Unification target: add a `canvasOverlay` slot to `HudOverlay` so both reticles render there. Low-risk consolidation when `HudOverlay` is next touched.",
+        "target_file": "engine-gmt/navigation/pivot-reticle (file TBD)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-107.md"
+      },
+      {
+        "question_id": "q-110",
+        "kind": "doc-rewrite",
+        "summary": "Navigation HUD deliberately ships without a hint overlay. `activeHint?`/`onDismissHint?` props are app-extension hooks; `_activeHint` rename signals intent. Wider tutorial/hint system lives in `engine/plugins/Tutorial.tsx` and is composed in by the app. Add 'navigation HUD does not render hints; apps mount their own widget alongside' rule to shared-UI doc.",
+        "target_file": "engine-gmt/navigation/HudOverlay.tsx",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-110.md"
+      }
+    ],
+    "g05-engine-gmt-features": [
+      {
+        "question_id": "q-062",
+        "kind": "subsystem-gap",
+        "summary": "See e09-camera-plugin — g05 only audits the 16-line `camera_manager/index.ts` (pure tab registration). Real implementation in `engine-gmt/store/cameraSlice.ts` (310 lines) and `CameraManagerPanel.tsx` are gaps. New slice `g11-gmt-camera-manager` recommended.",
+        "target_file": "engine-gmt/store/cameraSlice.ts; engine-gmt/features/camera_manager/*",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-062.md"
+      }
+    ],
+    "g06-bucket-render": [
+      {
+        "question_id": "q-092",
+        "kind": "cleanup",
+        "summary": "Three default sites agree byte-for-byte (FractalEngine seed, BucketRunner config cache, renderControlSlice seed). No drift today, but document redundancy. Cleanup-target: store doesn't seed `accumulation`; `samplesPerBucket` is typed optional but always set — type-tightening candidates.",
+        "target_file": "engine-gmt/store/renderControlSlice; engine-gmt/engine/FractalEngine.ts; BucketRunner config cache",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-092.md"
+      },
+      {
+        "question_id": "q-094",
+        "kind": "cleanup",
+        "summary": "`FractalEngine.checkHalfFloatAlphaSupport` is public but ZERO internal callers. Probe runs, logs to dev console, return value discarded. Main-thread `WorkerProxy` twin is hardcoded `true`. Three vestigial layers total — survey 'lying proxy' framing reframed as 'deliberate no-op with vestigial real-side probe'.",
+        "target_file": "engine-gmt/engine/FractalEngine.ts; engine-gmt/worker/WorkerProxy.ts",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-094.md"
+      },
+      {
+        "question_id": "q-095",
+        "kind": "cleanup",
+        "summary": "`ShaderBuilder.buildFragment` Main variant builds 18-entry `sections` array, derives `profile`/`totalSize` — but the `return` template literal never touches them. ~25 lines of dead computation per Main-variant build. Comment `// Section size profiling` suggests removed `console.log` left behind.",
+        "target_file": "engine-gmt/engine/ShaderBuilder.ts (buildFragment Main variant)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-095.md"
+      },
+      {
+        "question_id": "q-112",
+        "kind": "bug",
+        "summary": "Real production bug. `MAX_SKY_DISTANCE` (=50.0) vs hardcoded `< 1000` divergence in `WorkerDepthReadback.ts`. Auto-readback path uses `MAX_SKY_DISTANCE` (lines 75/80/126); focus-pick path uses `< 1000` (lines 151/169). Both filters answer same sky-vs-surface question on same sentinel. Click-to-focus on depth in `[50, 1000)` will set `dofFocus` while auto-readback would reject as sky. Unreachable for 42 shipped formulas; future large-worldspace formulas would silently break. Doc `docs/gmt/02_Rendering_Internals.md:664` already asserts agreement — code drift. One-line fix per site: `< 1000` → `< MAX_SKY_DISTANCE`.",
+        "target_file": "engine-gmt/engine/worker/WorkerDepthReadback.ts:151,169",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-112.md"
+      }
+    ],
+    "g07-mesh-export": [
+      {
+        "question_id": "review-#5",
+        "kind": "doc-rewrite",
+        "summary": "Break-severity drift: `30_Mesh_Export_Prototype.md` claims 'plain HTML + 8 ES2020 scripts' while doc 24 references `mesh-export/gpu/gpu-pipeline.ts` and `mesh-export/store/meshExportStore.ts` (direct contradiction). CPU SDF path described as primary; reality is GPU-only Newton. Recommendation: rewrite.",
+        "target_file": "docs/gmt/30_Mesh_Export_Prototype.md",
+        "evidence_ref": "plans/doc-audit-state/reviews/review-2026-05-20-5.md"
+      }
+    ],
+    "g08-save-load-gmf": [
+      {
+        "question_id": "review-#5",
+        "kind": "doc-rewrite",
+        "summary": "`05_Data_and_Export.md` doesn't reflect the engine-gmt fork's `FormulaFormat.ts` move + `installSceneIO` indirection. Recommend doc update to align with q-054's three-layer loader pipeline.",
+        "target_file": "docs/gmt/05_Data_and_Export.md",
+        "evidence_ref": "plans/doc-audit-state/reviews/review-2026-05-20-5.md"
+      }
+    ],
+    "g09-modular-graph": [
+      {
+        "question_id": "review-#5",
+        "kind": "doc-rewrite",
+        "summary": "Break-severity drift: `03_Modular_System.md` is silent on `GraphCompiler.updateModularUniforms` and the runtime/compile split. Recommendation: rewrite.",
+        "target_file": "docs/gmt/03_Modular_System.md",
+        "evidence_ref": "plans/doc-audit-state/reviews/review-2026-05-20-5.md"
+      }
+    ],
+    "render-pipeline": [
+      {
+        "question_id": "q-034",
+        "kind": "doc-rewrite",
+        "summary": "BloomPass composition: JS-bridge + GLSL-injection split — exact pattern Phase 2's render-pipeline module doc needs.",
+        "target_file": "engine-gmt/engine/RenderPipeline.ts; bloom shader chunks",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-034.md"
+      },
+      {
+        "question_id": "q-037",
+        "kind": "doc-rewrite",
+        "summary": "BloomPass two-site composition: JS uniform bridge + GLSL `+=` blend. No screen-blend, no Reinhard.",
+        "target_file": "engine-gmt bloom pipeline",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-037.md"
+      },
+      {
+        "question_id": "q-018",
+        "kind": "doc-rewrite",
+        "summary": "9-variant `PanelItem` union + `peekLiveStore()` pre-boot-freeze workaround + `applyPanelManifest` active-tab resolution rules. Load-bearing and undocumented outside source comments.",
+        "target_file": "engine/PanelManifest.ts (and consumers in a02)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-018.md"
+      }
+    ],
+    "uniform-schema": [
+      {
+        "question_id": "q-026",
+        "kind": "doc-rewrite",
+        "summary": "`backingOnly` enforcement at exactly ONE site. Symmetric opt-in contract: backing via flag, declaration via `builder.addUniform`. One-line JSDoc gap at `engine/UniformSchema.ts:19-21`.",
+        "target_file": "engine/UniformSchema.ts:19-21",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-026.md"
+      }
+    ],
+    "g10-audio-fps-sync": [
+      {
+        "question_id": "q-075",
+        "kind": "drift",
+        "summary": "Missing `timeupdate` plumbing — poll-based AudioPanel is load-bearing for play/pause icon truthfulness.",
+        "target_file": "AudioPanel (engine-gmt/components/AudioPanel.tsx or similar)",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-075.md"
+      },
+      {
+        "question_id": "q-077",
+        "kind": "drift",
+        "summary": "Documents docs/code drift in `docs/gmt/07_Code_Health.md:316-326`. 2026-03-13 Cat 3 audit claims `AudioSpectrum.tsx:20`, `AudioLinkControls.tsx:17`, `applyPreset` callsites converted from `@ts-ignore` to `@ts-expect-error`. Live files still have plain `(store as any)` casts — neither marker. `AudioPanel.tsx:134` uses same pattern but is missing from Cat 3 table.",
+        "target_file": "docs/gmt/07_Code_Health.md:316-326; AudioPanel.tsx:134; AudioSpectrum.tsx:20; AudioLinkControls.tsx:17",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-077.md"
+      }
+    ],
+    "e02-tick-registry": [
+      {
+        "question_id": "q-022",
+        "kind": "drift",
+        "summary": "`runTicks(delta)` is SECONDS not ms — see e10 entry for stale doc sites.",
+        "target_file": "docs/engine/01_Architecture.md:83",
+        "evidence_ref": "plans/doc-audit-state/survey/_followups/q-022.md"
+      }
+    ]
+  },
+  "cross_cutting": [
+    {
+      "theme": "engine vs engine-gmt fork divergence",
+      "kind": "doc-rewrite",
+      "summary": "Six followups in review #15's window (q-097..q-102) diagnose six distinct aspects of the same divergence pattern. Phase 2 should produce ONE consolidated cross-cutting doc (or section in `docs/engine/06_Code_Health.md`) rather than scattering across per-subsystem module docs. Canonical taxonomy: (1) parametrisation hooks that look like duplication (q-097 `UniformSchema` import-path — must NOT dedupe); (2) intentional coupling deltas in extracted modules (q-098 `ConfigManager` 74-line GMT-coupling — must NOT back-port JSDoc); (3) doc-path references dropping `engine-gmt/` prefix (q-099 — 6 sites); (4) stale TODOs in engine-gmt that engine-core has moved past (q-100 `FeatureStateMap`); (5) optional-vs-required type tightening unmigrated (q-101 `pipelineRevision`); (6) hand-maintained types drifting from runtime registrations (q-102 `FormulaType` regressed to literal union — stable uses `string` opaque tag). Canonical rule: 'engine/ stays generic; engine-gmt/ keeps GMT-specific behaviour; cross-fork claims must cite the exact path.' Anchors `feedback_duplicate_module_state.md` memory note with concrete examples.",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-20-15.md", "plans/doc-audit-state/survey/_followups/q-097.md", "plans/doc-audit-state/survey/_followups/q-098.md", "plans/doc-audit-state/survey/_followups/q-099.md", "plans/doc-audit-state/survey/_followups/q-100.md", "plans/doc-audit-state/survey/_followups/q-101.md", "plans/doc-audit-state/survey/_followups/q-102.md", "plans/doc-audit-state/survey/_followups/q-096.md"]
+    },
+    {
+      "theme": "no uniform plugin contract",
+      "kind": "doc-rewrite",
+      "summary": "e07's audit confirmed each plugin invented its own state-capture pattern: SceneIO module singletons, Menu queueMicrotask fanout, Hud insertion-counter ordering, RenderDialog generics, BucketRender controller interface. The `21_Code_Review_2026-04-25.md` 'plugin pattern not uniform' note materialises in survey form. Phase 2 cross-subsystem theme — not just doc-drift, a code-architecture finding that affects how engine plugins should be documented uniformly.",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-19-2.md"]
+    },
+    {
+      "theme": "DDFS auto-wiring + load-bearing string contracts",
+      "kind": "doc-rewrite",
+      "summary": "Two undocumented string contracts surfaced by Sub-B that Phase 2 module docs MUST call out explicitly because they are not type-enforced: (a) `set${FeatureId}` action-naming convention (q-013) — drives PresetLogic, AnimationEngine, binderRegistry, historySlice; (b) `${featureId}.${paramKey}_<axis>` track-id convention (q-013) — drives the modulation/keyframe pipeline; (c) two-registry boot pattern (`featureRegistry` + `presetFieldRegistry`, both frozen post-population, q-014). Belongs in feature-system module doc with concrete examples.",
+      "evidence_refs": ["plans/doc-audit-state/survey/_followups/q-013.md", "plans/doc-audit-state/survey/_followups/q-014.md", "plans/doc-audit-state/reviews/review-2026-05-20-9.md"]
+    },
+    {
+      "theme": "shared-UI primitives leak app-specific concepts",
+      "kind": "doc-rewrite",
+      "summary": "Two findings (q-088 + q-089) document a 'primitives must not know about app shape' violation in the shared `components/` tree. (a) Knob uses `useEngineStore` granular selectors while Slider uses `StoreCallbacksContext`; same migration applies to Dock, DropZones, Vector*Input — one-line fix once host memoisation is verified. (b) `AutoFeaturePanel` imperatively calls `movePanel('Engine','left')` and emits `FractalEvents.emit('engine_queue', ...)` — both GMT-app-only. Fix: `compileRouter` capability on the store. Phase 2 `docs/engine/05_Shared_UI.md` rewrite should fold both as a coherent migration story.",
+      "evidence_refs": ["plans/doc-audit-state/survey/_followups/q-088.md", "plans/doc-audit-state/survey/_followups/q-089.md", "plans/doc-audit-state/reviews/review-2026-05-20-14.md"]
+    },
+    {
+      "theme": "followup overrules survey on facts",
+      "kind": "doc-rewrite",
+      "summary": "Across the Sub-B run, ~7 correction cases emerged where the followup verified survey claims and found them wrong: q-019 (production bug not in survey), q-040 (wrong field names + missing field in survey), q-052 (phantom import in survey), q-053 (DOM-leak framing inverted; was state-leak), q-056 (inverted comment direction), q-060 (dead-defensiveness), q-061 (subsystem-boundary correction). Plus q-071 corrected q-068 (first followup-overrules-followup). Phase 2 contract: module-doc writer MUST consult `_followups/q-NNN.md` for any survey claim that overlaps a followup target — followups are the more reliable source.",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-20-12.md", "plans/doc-audit-state/reviews/review-2026-05-20-13.md", "plans/doc-audit-state/survey/_followups/q-040.md", "plans/doc-audit-state/survey/_followups/q-052.md", "plans/doc-audit-state/survey/_followups/q-053.md", "plans/doc-audit-state/survey/_followups/q-061.md", "plans/doc-audit-state/survey/_followups/q-071.md"]
+    },
+    {
+      "theme": "engine-gmt dead-code / cleanup pass",
+      "kind": "cleanup",
+      "summary": "~18-20 cumulative dead-code / dead-comment / dead-defensiveness items found by Sub-B. Concentration in engine-gmt suggests a dedicated 'engine-gmt cleanup pass' sub-task or section in `docs/engine/06_Code_Health.md` rather than scattering. Concrete items: q-094 (3-layer vestigial probe chain), q-095 (~25-line dead profile block per Main-variant build), q-092 (typed-optional-but-always-set + unseeded `accumulation`), q-060 (dead defensiveness), q-077 (TS-ignore drift), q-053 (`uninstallHelp` never called), q-056 (inverted comment).",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-20-14.md", "plans/doc-audit-state/survey/_followups/q-094.md", "plans/doc-audit-state/survey/_followups/q-095.md", "plans/doc-audit-state/survey/_followups/q-092.md"]
+    },
+    {
+      "theme": "docs/ existing-doc rewrite-vs-migrate disposition",
+      "kind": "doc-rewrite",
+      "summary": "Five+ aspirational/break-severity-drift existing docs are stacked for a planner-level disposition decision before Phase 2 begins: `docs/engine/02_Feature_Registry.md` (f-001/e01 — aspirational), `docs/engine/06_Adaptive_Resolution.md` (e06 — APIs don't exist), `docs/engine/07_*` (e07 — closed decision silently reversed), `docs/engine/05_Shared_UI.md` (e13 — aspirational), `docs/gmt/30_Mesh_Export_Prototype.md` (g07 — direct contradiction with doc 24), `docs/gmt/03_Modular_System.md` (g09 — silent on current pipeline), `docs/gmt/01_System_Architecture.md` (pre-extraction paths), `docs/gmt/07_Code_Health.md` (multiple MAY-BE-STALE items). Triage matrix from review #6: (a) structural mismatch = rewrite; (b) paths-only-wrong = migrate-target; (c) aspirational planning = preserve with 'STATUS: shipped — see [module doc]' pointer.",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-20-6.md", "plans/doc-audit-state/reviews/review-2026-05-20-7.md"]
+    },
+    {
+      "theme": "orphan-sweep worklist (Phase 1.6 input)",
+      "kind": "subsystem-gap",
+      "summary": "~34+ orphan-sweep candidate nominations across Phase 1 surveys (29 canonical + 5 lowercase pre-Edit-1 variants from g02/g04). Sub-class identified by review #5: 'cross-subsystem coupling notes' (e.g. g05's foreign-module nominations) may warrant separate triage from path-only orphans. Phase 1.6 design call: orphan-sweep BEFORE, ALONGSIDE, or AFTER Phase 2. Recommendation from review #7: alongside — writers absorb their subsystem's orphans during composition, separate sweep only for cross-subsystem-coupling entries.",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-20-5.md", "plans/doc-audit-state/reviews/review-2026-05-20-7.md"]
+    },
+    {
+      "theme": "d03 coverage.yaml entries lack blob_sha (post-hoc synthesis)",
+      "kind": "drift",
+      "summary": "d03-gmt-docs-1's 10 coverage entries were synthesized from disk after the original agent failed to report blob_sha. Phase 2's 'did the doc change since survey?' comparison should NOT trust those SHAs. Re-blob-sha at Phase 2 start or note in coverage.yaml comment.",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-20-6.md", "plans/doc-audit-state/reviews/review-2026-05-20-7.md"]
+    },
+    {
+      "theme": "docs-existing tier captures rationale layer that surveys don't",
+      "kind": "doc-rewrite",
+      "summary": "d01-d09 (docs-existing surveys) preserved 'why' signal that the gXX-/eXX- live-code surveys couldn't: full ShaderBuilder hook catalog (18 hooks × position × scope), requestShading/addShadingLogic deferred-generation pattern, Henyey-Greenstein + Beer-Lambert constants with paper attributions (Veach 1995, Heitz 2018 §3 eq.17), Firefox VideoEncoder quirk cluster, animation-refactor research arc, Fragmentarium importer V1→V2→V3 evolution, FractalShark deep-zoom perturbation architecture, v3-v4 catalog auto-pick rationale, dual-useEngineStore problem note. Phase 2 mandatory pre-read order per module doc: `survey/_docs/d0X-*.md` FIRST (rationale), THEN `survey/<sub>.md` (citations + drift), THEN code, THEN `_followups/q-NNN.md`.",
+      "evidence_refs": ["plans/doc-audit-state/reviews/review-2026-05-20-6.md", "plans/doc-audit-state/reviews/review-2026-05-20-7.md"]
+    }
+  ],
+  "new_subsystems_to_add": [
+    {
+      "proposed_id": "e09b-state-library-ui",
+      "rationale": "Three app-agnostic generic UI primitives (`StateLibraryPanel`, `StateLibraryToast`, `ActiveSnapshotFeatures`) keyed on `createStateLibrarySlice`'s public contract (`StateSnapshot<T>`, `toastFieldKey`, `activeIdKey` convention). Camera plugin is just ONE consumer; folding them into e09 conflates a UI surface with an engine-core slice. Recommend sibling slice to existing slice audit.",
+      "files_claimed_hint": [
+        "components/StateLibraryPanel.tsx",
+        "engine/components/StateLibraryToast.tsx",
+        "components/ActiveSnapshotFeatures.tsx",
+        "engine/store/createStateLibrarySlice.ts"
+      ],
+      "evidence_ref": "plans/doc-audit-state/survey/_followups/q-061.md"
+    },
+    {
+      "proposed_id": "g11-gmt-camera-manager",
+      "rationale": "592 uncovered lines that no existing g*/e* slice audits end-to-end. Has its own load-order invariant (`installGmtCameraSlice()` must run before `CameraManagerPanel` first render — `cameraSlice.ts:20-22`) and 4 cross-subsystem boundaries: engine-core via `installStateLibrary`, g05 via empty DDFS stub, g04 as sibling navigation subsystem, `engine-gmt/topbar.tsx` for hand-wired Camera menu. g05 references it by name only; e09 audits engine-core factory but not GMT's consumer of it.",
+      "files_claimed_hint": [
+        "engine-gmt/store/cameraSlice.ts",
+        "engine-gmt/features/camera_manager/CameraManagerPanel.tsx",
+        "engine-gmt/features/camera_manager/logic.ts",
+        "engine-gmt/features/camera_manager/index.ts"
+      ],
+      "evidence_ref": "plans/doc-audit-state/survey/_followups/q-062.md"
+    }
+  ],
+  "summary": {
+    "bugs": 5,
+    "subsystem_gaps": 5,
+    "doc_rewrites": 34,
+    "cleanups": 11,
+    "drifts": 19,
+    "cross_cutting_themes": 10
+  }
+}

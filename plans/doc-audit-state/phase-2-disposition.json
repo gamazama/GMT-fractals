@@ -1,0 +1,992 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-20T00:00:00Z",
+  "matrix_source": "review-2026-05-20-5",
+  "notes": "One entry per distinct existing dev/docs/* (or in-tree README) doc that the Phase 1 audit touched, either via a subsystem survey (e*/g*/a*/t*) with a Drift table, or via a docs-existing summary (d01-d09) with Preservable/MAY BE STALE blocks. Per user feedback, dev/docs/ files are read-only historical reference; 'migrate-target' and 'rewrite' dispositions both mean the Phase 2 writer produces a NEW module doc and leaves the old doc as historical pointer. Entries cite the evidence files Phase 2 should consult for preservable signal.",
+  "entries": [
+    {
+      "doc_path": "dev/docs/engine/01_Architecture.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": "e02-tick-registry",
+      "rationale": "Survey reports 8 drift rows, only 3 break-severity, all narrow (registerTick name/no-priority, deltaMs vs seconds, installRenderLoop unclear). The doc is a foundational architecture overview — five rules, three-tier model, opinions-NOT-held, GMT-as-senior-dependency framing — most of which is aspirational/decisional rather than API-current. The drift is localized to the render-loop section. New tick-registry module doc captures current API; old doc preserved as the architecture-rationale anchor.",
+      "preservable_signal": "Five design principles + rationale; three-tier model; 'opinions we're NOT holding' list; GMT-as-senior-dependency framing; rejection rationale for minimal core and opinionated engine; aspiration that GMT eventually ports as a plugin (d01 summary lines 38-46).",
+      "new_module_doc_path": "dev/docs/modules/engine/tick-registry.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e02-tick-registry.md",
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/02_Feature_Registry.md",
+      "disposition": "rewrite",
+      "covered_by_subsystem": "e01-feature-system",
+      "rationale": "Survey reports 21 drift rows with 8 break-severity covering the primary public API (no `defineFeature` export, no `enum`/`string` param types, `bool` vs `boolean` mismatch, no lifecycle hooks/ctx, no `cacheKey` field, no `useFeatureParam`, no `ui` field, `tabConfig` shape changed). Major aspirational gap — the doc describes a target API that doesn't ship. Per Phase 2 user direction, leave old doc as historical/aspirational reference and write new module doc against actual `FeatureSystem.ts` + `createFeatureSlice.ts` + `defineEnumParam.ts` + `typedSlices.ts`.",
+      "preservable_signal": "'One file per feature' aspiration; six auto-derivations enumerated; GMT audit findings that motivated strict enforcement (silent setter-name mismatch, per-leaf-subscription performance cliff, lint catching only 60% of isolation cases); per-stop gradient as future direction (d01 summary lines 48-57).",
+      "new_module_doc_path": "dev/docs/modules/engine/feature-system.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e01-feature-system.md",
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/03_Plugin_Contract.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; only summarised in d01. Captures the three-file plugin pattern, boot timeline (t=0..t=∞), and failure-mode table — heavy on decisional/aspirational content (dev-vs-prod severity philosophy, idempotency semantics, opt-out semantics). Doc 21 (Code Review) noted engine-gmt is a coupled domain layer NOT a clean plugin — this contract needs an engine-gmt coupling clarification but its core philosophy holds. New module doc on plugin contract should link back here for design rationale.",
+      "preservable_signal": "Boot timeline with explicit t=0..t=∞ stages; failure-mode table mapping each violation to its dev/prod behaviour; dev-vs-prod severity philosophy; aspiration that GMT itself ports as an 'apex reference' plugin (d01 summary lines 59-67).",
+      "new_module_doc_path": "dev/docs/modules/engine/plugin-contract.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md",
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/04_Core_Plugins.md",
+      "disposition": "rewrite",
+      "covered_by_subsystem": "e07-plugins-host",
+      "rationale": "Survey reports 13 drift rows, MOST break-severity, including fictional APIs (`installSceneIO({fields, registerField})`, `<SaveMenu/>`, `<LoadDropZone/>`, Ctrl+S/O bindings), entire undocumented subsystems (@engine/menu, @engine/help, @engine/hud, @engine/pwa-update, @engine/render-dialog, BucketRender, PauseControls), and reversed closed decisions (help-browser + PWA-update were declared app-specific but shipped as engine plugins). Survey explicit recommendation: REWRITE. Doc 21 'plugin pattern not uniform' note also lands here.",
+      "preservable_signal": "Camera adapter rationale (the three different camera shapes); screenshot-folding story as canonical 'no duplicate UX' example; rejected alternatives (auto-install everything, append-only slot registration); hotkey-choice rationale; `installModulation` → `installAnimation` rename candidate (d01 summary lines 69-79).",
+      "new_module_doc_path": "dev/docs/modules/engine/plugins-host.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e07-plugins-host.md",
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/05_Shared_UI.md",
+      "disposition": "rewrite",
+      "covered_by_subsystem": "e13-shared-ui",
+      "rationale": "Survey reports 16 drift rows, most break-severity. Doc describes aspirational opt-in-context primitive library (5 contexts: AnimationContext, UndoContext, ContextMenuContext, ShortcutContext, FeatureCompileContext) + `useFeatureParam` hook that don't exist. Actual code has single `StoreCallbacksContext` + direct-store imports in Slider/Knob/Vector*/Dock/AutoFeaturePanel. ColorPicker, TabBar, ContextMenu primitives named in doc don't match shipped components. Survey explicit recommendation: REWRITE. Doc will mislead anyone writing a new primitive.",
+      "preservable_signal": "Opt-in context pattern itself as a target design; AdvancedGradientEditor litmus-test framing; OKLab rationale from GMT retrospective ('colors washing out' until OKLab adopted); audit-gate aspiration ('before 1.0, grep every primitive for useEngineStore'); long-term Tailwind→CSS-variables direction (d01 summary lines 81-90).",
+      "new_module_doc_path": "dev/docs/modules/engine/shared-ui.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e13-shared-ui.md",
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/06_Undo_Transactions.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "e08-shortcuts-undo",
+      "rationale": "Survey reports 10 drift rows, mostly minor/info severity. One BREAK row is an internal-rationale inconsistency about who wins tie-breaks (doc says first-registered wins; Shortcuts.ts comment says last-registered wins) — affects narrative only since the priority-10 override makes the question moot. Survey explicit note: 'No Recommendation line needed — drift is small and contained.' The 2026-04-30 per-scope-stack revert is documented in the doc and matches code. Doc is among the most reconciled engine docs; new module doc captures shipped surface; old doc stays as supplementary reference.",
+      "preservable_signal": "Full unified-vs-per-scope migration story (the two structural failure modes); 'Ctrl+Z popped a camera move when the user meant to undo a slider tweak' bug class; rejected 'keep one stack, default unscoped to skip camera' alternative; F2b deferral rationale (d01 summary lines 92-102).",
+      "new_module_doc_path": "dev/docs/modules/engine/shortcuts-undo.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e08-shortcuts-undo.md",
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/07_Shortcuts.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit (e08 covers Undo + Shortcuts plugin but its drift table is rooted at doc 06). Per d01 summary, doc describes pluggable shortcut registry with Mod abstraction, scope stack, dev tooling — substantial aspirational content (`shortcuts.trace`/`lookup`, `smoke:audit-shortcuts` test, rebinding UI). Implementation status unclear from summary alone but flagged as 'whether registry fully implemented vs partially'. Best treated as design reference + canonical shortcut tables; new module doc on shortcuts plugin (if produced) points back.",
+      "preservable_signal": "Audit findings that motivated the registry (one big switch statement, can't disable during modal, can't rebind without fork, ad-hoc isTimelineHovered threading); scope-beats-priority rationale with timeline-hover Ctrl+Z example; range-inputs-not-ignored as preserved GMT good UX; rebinding-UI aspiration (d01 summary lines 104-113).",
+      "new_module_doc_path": "dev/docs/modules/engine/shortcuts.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/08_Animation.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "e03-animation",
+      "rationale": "Survey reports 17 drift rows but explicit recommendation is MINOR-EDITS. Two BREAK rows (`track.type !== 'float'` silently drops non-float tracks while doc promises step interpolation for bool/enum/string/image; log/Bezier interaction). Most rows are info/warn pointing at specific corrections (import paths, missing audio-clip-sync/scrub-hook coverage, missing render-popup section). Survey notes 'architecture sections of the doc are largely accurate; type signatures, public-API examples, and the binder-resolution table need targeted updates rather than a rewrite.' Per-scope stacks already captured in doc. Per user feedback dev/docs are read-only, so new module doc captures current shipped surface; old doc stays as supplementary reference.",
+      "preservable_signal": "Full rationale for log-value-space interpolation (linear lerp on julia.zoom 1→1e-30 collapses 99.999% of timeline); camera-pair linear-in-zoom math justification; DD-precision two-sum/Veltkamp-split rationale; Maya/Blender tangent-mode convention adoption; de Casteljau split rationale; FPS Keep/Match (DCC parity); deterministic playback motivation; F5/F6/F7/F12/F13 fragility lineage (d01 summary lines 115-133).",
+      "new_module_doc_path": "dev/docs/modules/engine/animation.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e03-animation.md",
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/09_Bridges_and_Derived.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by any subsystem audit; only summarised in d01. d01 flags this as 'one of the most aspirational engine docs — derive/bridge mechanisms likely partially or not built'. Tripartite coordination taxonomy (`dependsOn`/`derive`/`bridge`) is design rationale that explains how engine intends to escape GMT's ad-hoc patterns. Preserve as design reference; F7 fragility-audit entry already verified the cycle was imaginary, so the migration urgency dropped.",
+      "preservable_signal": "Tripartite coordination taxonomy as engine's stated alternative to GMT's ad-hoc patterns; F7 (animationStore↔fractalStore presumed cycle) as the canonical problem this design solves; two-mechanisms rationale; onChange-default flip; migration aspirations (AnimationSystem.tsx, EngineBridge.tsx, light-auto-focus) (d01 summary lines 135-144).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/10_Viewport.md",
+      "disposition": "rewrite",
+      "covered_by_subsystem": "e06-adaptive-resolution",
+      "rationale": "Survey reports 14+ drift rows with at least 8 break-severity covering primary public APIs (no `useViewport()`, no `viewport.setMode/setFixedResolution/setAdaptive` imperatives, no `viewport.onResize/onQualityChange/onModeChange` subscriptions, no `<ViewportArea canvasSlot>`, no `<PerformanceWarning>`+suggestion registry, no `viewport.*` namespace, no Custom mode, no environment plugin). Survey explicit recommendation: REWRITE. A few items match (algorithm unification, hold semantics, badge component). Doc describes a planned design that the code does not implement.",
+      "preservable_signal": "The 80/20 framing (size modes/DPR/adaptive shared; what 'reduce quality' means is app-specific); full audit-table classification methodology (GENERIC/SEMI-GENERIC/fractal-specific/app-specific); GMT vs toy-fluid duplication story as motivation; rejected alternatives (qualityFraction as enum, plugin-creates-canvas, plugin bakes mobile detection); 6-step extraction sequence; future `@engine/environment` plugin scope (d01 summary lines 146-158).",
+      "new_module_doc_path": "dev/docs/modules/engine/adaptive-resolution.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e06-adaptive-resolution.md",
+        "plans/doc-audit-state/survey/_docs/d01-engine-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/11_Plugin_Authoring.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d02 summary captures it. Doc 21 (Code Review) explicitly contradicts the 'uniform contract' framing — shipped plugins do NOT all follow the module-scope-registry + _rev + useSyncExternalStore + idempotent installX pattern (Camera/Undo/Viewport/Shortcuts use other shapes; survey e07 confirms each plugin invented its own contract). Doc needs reframing as 'slot-host plugin recipe' rather than 'universal plugin contract' but the seven rules + idempotency requirement + reference table remain useful for the slot-host subset. Preserve as design reference; cross-link from plugins-host module doc.",
+      "preservable_signal": "Seven plugin rules (R2 ties to F1 frozen-registry trap); idempotency requirement (two bundles must converge); `when: () => boolean` predicate over conditional registration; dev-only `window.__myThing` expose pattern; reference plugins table (TopBar/Menu/Hud/Help/Shortcuts) (d02 summary lines 37-56).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md",
+        "plans/doc-audit-state/survey/e07-plugins-host.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/11_TSAA.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit (e06 covers Adaptive Resolution but is rooted at doc 10). d02 summary explicitly flags 'Nothing stale — recent (post-2026-04-26 fix referenced inline) and detailed.' Unified TSAA+Adaptive Resolution protocol with AccumulationController/AdaptiveResolution split. Treat as canonical accumulating-renderer reference; touch only if Phase 2 wiring discovers drift.",
+      "preservable_signal": "Architectural split between protocol (AccumulationController) and algorithm (AdaptiveResolution-pure); initial-state push pattern for async-bootable renderers; deep-accumulation protection (accumThreshold = floor(sampleCap * 0.5)); fluid-toy two-scale decoupling; plumbing-pitfalls audit checklist; 5-step recipe for authoring a new accumulating renderer (d02 summary lines 60-81).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/12_App_Handles.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d02 summary explicitly flags 'Nothing stale.' Pattern doc for `defineAppHandles<T>` with usage matrix, dev-only globalThis expose, decision rationale for narrow handles vs grab-bag. Doc is current and useful — keep as-is.",
+      "preservable_signal": "Full decision matrix (when to use vs alternatives); useSnapshot semantics for high-frequency writes; rejection of grab-bag pattern; smoke-test access shape (d02 summary lines 85-105).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/13_Extracting_From_GMT.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d02 summary explicitly flags 'Nothing stale.' Cookbook with TSAA + pause-button worked example, three-question triage (STATE/BEHAVIOUR/UI), tree-placement table, 10-minute rule, 8-step checklist. Doc is current and useful — keep as-is.",
+      "preservable_signal": "Three triage questions; danger signs that mean a feature is NOT generic; tree placement table; rule of thumb for what stays in engine-gmt; 10-minute rule (d02 summary lines 109-127).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/14_Panel_Manifest.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "a02-panels-layout",
+      "rationale": "Survey reports 6 drift rows, NO break-severity. All warn/info. GMT's actual panels.ts uses `items: [...]` exclusively and never invokes the `features:` shorthand or `widgets: {before, after, between}` documented forms. Doc's spec is broader than GMT's adoption — primarily a gap, not contradictions. Doc is structurally correct; new app-panels module doc captures current GMT manifest pattern; old doc stays as full PanelDefinition contract reference.",
+      "preservable_signal": "Full PanelItem union types (9 types — feature, widget, section, separator, collapsible, accordion, compilable, compile-dropdown, runtime-section); compile-spinner contract (scheduler emits, NOT UI components — load-bearing); when-to-use items vs features shorthand decision list; GMT's 10-panel manifest example; migration deletions list (d02 summary lines 131-150).",
+      "new_module_doc_path": "dev/docs/modules/app-gmt/panels-layout.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/a02-panels-layout.md",
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/15_Camera_Manager_Extraction.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": "e09-camera-plugin",
+      "rationale": "Doc is explicitly self-marked 'Status: Research. No code changes yet — proposes the shape, next session implements.' Code DID ship: createStateLibrarySlice.ts, installStateLibrary.ts, viewLibrary.ts, StateLibraryPanel, StateLibraryToast all live; substantial divergence from proposed shape (two keys arrayKey+activeIdKey not single storeKey, async returning Promise<string>, explicit action-names map). Survey explicit recommendation: 'Mark doc 15 as historical research/proposal note in its status header, and create a new shipped-reference doc.' Doc captures load-bearing design rationale (four-block split, capture/apply callback shape, multiple-libraries-per-app insight, composition-overlays separation) that the new module doc should link back to.",
+      "preservable_signal": "Four-block split of CameraManagerPanel.tsx as analysis template; capture/apply callback shape; split of GMT-specific bits from generic bits; multiple-libraries-per-app design ('Views' + 'Color Palettes' + 'Brush Presets'); 'fluid-toy's snapshot is a fractal-config-plus-camera blob, NOT a camera' insight that drove StateLibrary naming; composition overlays separation as a design rule; shortcuts already generic (d02 summary lines 154-179).",
+      "new_module_doc_path": "dev/docs/modules/engine/camera-plugin.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e09-camera-plugin.md",
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/16_Type_Augmentation.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d02 summary explicitly flags 'Nothing stale.' Reference doc for declaration-merging engine store with app-specific DDFS slice keys + installStateLibrary dynamic keys. Two-target rule (AppFeatureSlices + FeatureStateMap), SliceFromParams helper, canonical pattern. Doc is current and useful — keep as-is.",
+      "preservable_signal": "Two-target table (AppFeatureSlices vs FeatureStateMap) — load-bearing rule; full storeTypes.ts canonical pattern; state-library augmentation pattern with literal-key duplication; rejected `declareStateLibrary` helper rationale; reference implementations (d02 summary lines 183-203).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/17_Mobile_Layout.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "e12-mobile-layout",
+      "rationale": "Survey reports 10 drift rows, 4 break-severity but the breaks are narrow (3-flag return shape; `100vh` vs `100dvh`/`100svh`; `MobileScrollIntro` primitive entirely missing from doc; adoption-checklist step 1 ordering). Survey explicit recommendation: 'minor-edits + add MobileScrollIntro section. Core architecture is correctly described.' Doc was self-marked 🚧 incomplete. New module doc captures shipped surface; old doc stays as supplementary reference.",
+      "preservable_signal": "Sibling-app adoption checklist (6 steps); topbar item culling via when:() => !isMobileSnapshot(); iOS sticky-positioning + safe-area-inset trick; touch-input cede rule (e.pointerType === 'touch' early-return to drei native); mobileMenu API surface design pattern; future `@engine/environment` plugin scope (d02 summary lines 207-231).",
+      "new_module_doc_path": "dev/docs/modules/engine/mobile-layout.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/e12-mobile-layout.md",
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/20_Fragility_Audit.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d02 summary explicitly flags 'Nothing stale — doc explicitly tracks status of every item.' Ground-truth doc for F1-F18 fragility findings with priority order + audit methodology. Living tracker; updated 2026-04-30 with F2b second-pass revert; cadence is 'before each major version bump, or after every third core plugin lands.' Preserve as-is — Phase 2 should leave this doc alone (it's the right shape for the role it plays).",
+      "preservable_signal": "ALL F1-F18 findings (the doc IS the preservable signal); fix-priority order summary; F14 audit checklist (run npm run orphans, diff every file in engine-gmt/engine/** against engine/**, grep for module-level let _foo); intentional-orphan registry three buckets (d02 summary lines 240-281).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/engine/21_Code_Review_2026-04-25.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d02 summary notes this is the original audit-of-record vs doc 20 as running status tracker. d02 summary explicitly says 'Keep both in Phase 2 — 21 is the historical what-an-outside-survey-saw-at-this-point-in-time snapshot, useful for re-audit cadence calibration.' Most B-findings folded into F16/F17/F18; preserve as historical snapshot.",
+      "preservable_signal": "Accurate-picture-of-current-state table; plugin-pattern-not-uniform table with per-plugin status; full F14 dual-tree diff table; engine-gmt coupling acknowledgment (35+ files import engineStore directly); onboarding gaps (README stale, port 3400 vs documented 5173, demo/README.md omits registerFeatures.ts, 18 of 28 smoke tests have no npm run script, package.json `name: gmt-fractal`, express in wrong section) (d02 summary lines 287-365).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d02-engine-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/01_System_Architecture.md",
+      "disposition": "rewrite",
+      "covered_by_subsystem": "g01-renderer",
+      "rationale": "Survey reports 12 drift rows with multiple break-severity covering core API changes (update→compute/render split; accumulation controlled by pipeline.setHold not binary; HISTOGRAM_REQUEST/RESULT renamed to HISTOGRAM_READBACK; ~15 worker protocol messages entirely unmentioned; two-stage compile / keepCurrent / Firefox parallel-compile disablement / generation counter / offset-guarded sync / pending-offset-sync atomic-absorb / restart Firefox cancel / spinner messaging / HDR vs LDR env-map / LinearSRGBColorSpace / deferred INIT+BOOT / setConvergenceNeeded ALL implemented but undocumented). Survey explicit recommendation: REWRITE. Doc predates the engine extraction. >10 rows, most of §3/§4 needs rewrite.",
+      "preservable_signal": "Full ShaderBuilder hook table (18 hooks × position × scope); requestShading + addShadingLogic deferred-generation pattern; satellite feature pattern (LightSpheres dependsOn lighting); panelConfig + CompilableFeatureSection two-level control; three-layer scalability pipeline (Authored / Tier Overrides / Hardware Caps); boot hydration sync main.tsx URL parse before ReactDOM.render; compileGate.queue routing; worker-mode gotchas catalog; atomic orbit-absorb pattern; silent absorb pattern; OrbitControls target reset rationale (d03 summary lines 17-43). Survey explicit note: '§1 (Engine-Bridge), §2 (DDFS), §5 (TickRegistry), §6 (Coordinate System), §7 (State) can stay as-is — narrative product overview.'",
+      "new_module_doc_path": "dev/docs/modules/engine-gmt/renderer.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/g01-renderer.md",
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/02_Rendering_Internals.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": "g02-shader-pipeline",
+      "rationale": "Survey reports 16 drift rows but MOST are 'OK' or 'Missing' (gaps) rather than contradictions. The 8 OK rows confirm rendering math/algorithms remain accurate. The 8 Missing rows note the doc never enumerated the ShaderBuilder API surface or ConfigManager/UniformManager internals — those need a NEW doc rather than fixing the existing one. Survey explicit recommendation: 'Recommendation is to document, not to fix code-side drift.' Existing doc is heavy on hard-won quirks (Schlick formulas, Volumetric MIS, PT bounce bias, warp coherence) that remain canonical reference.",
+      "preservable_signal": "Two-Schlick-formula rationale (per-light vs reflection throughput); fog color pre-linearization rationale; lean bounce tracer (traceSceneLean) emitted alongside traceScene for PT bounces; bounce bias biasEps = pixelSizeScale * length(p_ray); volumetric stochastic gate exp2(-7+4*uVolQuality); warp coherence load-bearing (small mixing constants 7.43/1.0 keep warps coherent); two-stage compile spec; Henyey-Greenstein phase function; Beer-Lambert; sphere-area-light MIS Veach 1995 power-heuristic (β=2); stochasticSeed must have per-pixel variation via blue noise (mandatory); PT bounces don't accumulate vol (design); bench harness flag list; three-layer bucket render lock; async convergence via gl.fenceSync; tile bloom/CA seam handling (d03 summary lines 45-87).",
+      "new_module_doc_path": "dev/docs/modules/engine-gmt/shader-pipeline.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/g02-shader-pipeline.md",
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/03_Modular_System.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "g09-modular-graph",
+      "rationale": "Survey reports 13 drift rows, all 'None' (matches), except one minor 'BFS vs DFS' wording inaccuracy and one optional packer-side overflow note. Survey explicit summary: 'Net: doc is highly accurate; only the BFS vs DFS wording is mildly inaccurate.' The two audited files (GraphCompiler.ts + graphAlg.ts) match doc verbatim including empty-graph fallback, v_start_d=1000.0, condition wrapping, getParam binding rules, output wiring, structural diff. New module doc captures current state; old doc stays as the canonical Modular System reference essentially unchanged.",
+      "preservable_signal": "Full node registry with GLSL semantics; conditional execution wraps node's GLSL in if((i-(i/cmod)*cmod)==crem); clientToFlow helper React Flow v11 gotcha; skipNextOnNodesDelete ref pattern; ghost-insert dropdown setTimeout(0) defer; Tab zoom/pan persistence via module-level persistedViewport; persistence shape (graph + pipeline); seven named preset bundles (d03 summary lines 89-115).",
+      "new_module_doc_path": "dev/docs/modules/engine-gmt/modular-graph.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/g09-modular-graph.md",
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/04_Animation_Engine.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit (e03 audits engine-side animation, not GMT-side). d03 summary lists this doc with file paths, store action names, and timeline component paths likely shifted post-extraction. Engine doc 08_Animation.md already cross-refs this as 'app-specific implementation.' Animation-refactor doc set (d05-d07) overlays the present-day understanding. Preserve as historical scope-split reference; new engine-gmt animation doc (if created) points back.",
+      "preservable_signal": "Bezier solver Newton-Raphson with 4 iterations; setTangents('Unified'|'Aligned') averaging logic; scaleHandles proportional scale; post-keyframe behaviors (Hold/Loop/PingPong/Continue/OffsetLoop); soft selection types (Linear/Dome/Pinpoint/S-Curve); TickRegistry ANIMATE phase order; overriddenTracks set (modulation/audio drives skips track); legacy lights.N.prop.axis auto-remap; track grouping centralized in utils/groupTracks.ts; useGraphInteraction.ts aspirational split (d03 summary lines 117-155).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/05_Data_and_Export.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "g08-save-load-gmf",
+      "rationale": "Survey reports 7 drift rows, no explicit recommendation but issues are localized: file paths shifted (utils/FormulaFormat.ts → engine-gmt/utils/FormulaFormat.ts), loadGMFScene scope narrowed (no longer registers formula or applies state — caller responsibility), PNG metadata key changed (FractalData → SceneData with legacy fallback), shaderMeta subfield missing from schema, Modular special case + unknown-formula JSON fallback + SceneIO plugin layer all undocumented. Architecture intact; doc updates targeted. New module doc captures current SceneIO + GMF + PNG flow; old doc stays as supplementary export-format reference.",
+      "preservable_signal": "GMF-as-primary-format rationale; full Firefox VideoEncoder quirks catalog (chunk.timestamp PTS reconstruct, chunk.duration hardcode to 1/fps, bitrateMode 'constant', latencyMode 'quality'); Firefox H264 31Mbps Cisco OpenH264 Level 4.0 ceiling; WebCodecs align=2 not 16; H264Converter REMOVED rationale; FileSystemWritableFileStream not transferable; file naming patterns table; VDB Tree_float_5_4_3 grid spec; bucket render convergence threshold meaning (0.1%/0.25%/0.5%/1.0%) (d03 summary lines 157-186).",
+      "new_module_doc_path": "dev/docs/modules/engine-gmt/save-load-gmf.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/g08-save-load-gmf.md",
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/06_Troubleshooting_and_Quirks.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d03 summary describes this as 'institutional memory of hard-won WebGL gotchas. Every section is a Preservable bullet.' Stale items are limited to file paths post-extraction. Phase 2 should leave this doc largely alone — its value is the accumulated quirk catalog, not the file-path indices.",
+      "preservable_signal": "Every gotcha is preservable — TDR shader complexity, WebGL render target leak post-export, Firefox VideoEncoder fps mismatch, Firefox bitrateMode under-run, Firefox H264 31Mbps cap, WebCodecs align=2, mediabunny native AVCC, mic HTTPS requirement, Z-fighting/banding/DOF picking/DOF screen-shaking causes, iOS HalfFloat16 black screen, mobile light gizmo offset getBoundingClientRect fix, mobile panel layout matchMedia, initial canvas low-res TWO causes, FPS GC pressure fix, bucket render black stripes scissor fix, canvasPixelSize read pitfall, bucket render corruption three-layer lock, Firefox ~50% lower FPS Bugzilla refs, HalfFloat16 readback Uint16Array, env sky load default fix, sample cap startup race fix, convergence stuck causes (d03 summary lines 194-231).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/07_Code_Health.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d03 summary describes as 'Technical debt tracker — completed refactors, any-type triage (5 categories, 452→320), ts-ignore audit, file complexity, error handling, camera state audit, store initialization races, shader magic numbers.' Phase 2 should preserve for the institutional knowledge bullets and use as a checklist input — many items may have flipped status since.",
+      "preservable_signal": "any-type 5-category triage (C1 browser API gaps leave, C2 fixed, C3 structural DDFS deferred, C4 leave, C5 mediabunny leave); FeatureStateMap aspiration; file complexity table; boot timing heuristic 50ms setTimeout fragility; shader magic numbers PRECISION_RATIO_HIGH/LOW/GGX_EPSILON/DIR_LIGHT_DIST/MAX_DIST candidates; store init race conditions RC-1..RC-5; institutional knowledge — error handling grade summary, camera state truth ownership, bundle optimization 630KB→484KB, 2026-04-12 cleanup -319 lines (d03 summary lines 248-281).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/08_File_Structure.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d03 summary flags it as 'MAY BE STALE: Heavily — many file paths reference root-level layout. Engine has been extracted to engine-gmt/ and dev/app-gmt/.' The file-to-role table remains useful as 'pre-extraction reference' — what moved where in the engine extraction. Preserve as historical snapshot; new engine-gmt file-structure doc (if created) supersedes for current layout.",
+      "preservable_signal": "File-to-role table as canonical pre-extraction reference; engine/codec/ subfolder rationale (halton.ts TAA jitter, VideoExportTypes.ts shared config); FullscreenQuad.ts createFullscreenPass() consolidation rationale; PWA registerType 'prompt' rationale (prevents silent stale-cache breakage); browser PWA support matrix; WIP prototypes (restir-gi, deep-zoom); standalone mesh export tool 6-phase pipeline (d03 summary lines 286-302).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/21_Frag_Importer_Current_Status.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d03 summary describes as status report on V3/V4 importer pipeline as of 2026-04-17. The fragmentarium_import subsystem is parked WIP (per d02 F14 intentional-orphan registry). Doc 26 V4 plan deferred per `project_doc_audit_phase2_path.md` context. Preserve as canonical importer status snapshot; new module doc (if produced) builds on top.",
+      "preservable_signal": "Harness honesty note (4 specific divergence points fixed); V4 fixes that delivered final numbers (DE → frag_DE rename, V4-owned _v4_orbitTrap copied to engine global, ambient define injection); g_orbitTrap shadow fix (regex .replace strips vec4 prefix); degree/radian handling (isDegrees) name+range heuristics; full-DE fallback when per-iteration extraction breaks; getDist generation paths (4 modes); known remaining issues (QuaternionJulia/LivingKIFS/BioCube/FoldcutToy/RecFold local-vars-in-getDist) (d03 summary lines 320-327).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/22_Frag_to_Native_Formula_Conversion.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d03 summary describes as step-by-step conversion guide developed during MixPinski 2026-03-08. Heavy on workflow checklist + worked-example case study. Preserve as the canonical hand-conversion recipe; new formula-authoring docs supersede the field reference parts.",
+      "preservable_signal": "9-step process (identify → analyze → map → write → rotation → custom DE → preset → register → test); Frag→GMT concept mapping table (uniforms→slots, MI→uIterations, orbitTrap→trap, float DE → in-place formula modifying z/dr/trap); param slot inventory (6 scalar + 3 vec2 + 3 vec3); paramB wired as z.w, paramA as c.w double-wiring; rotation optimization (pre-calc trig in preamble, Rodrigues in loop, abs(angle) > 0.001 guard); estimator selection table; preambleVars + usesSharedRotation requirement since 2026-04-03; shader object fields (function/loopBody/loopInit/preamble/getDist); MixPinski conversion case study (d03 summary lines 343-350).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d03-gmt-docs-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/23_Formula_Audit.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d04 summary describes as systematic audit of all 42 native formulas with phases 0-2 closed and phase 3 enhancements as LOW priority. Doc 24 records 2026-05-05 cutting-plane refactor that closed some Phase 3 items. Preserve as canonical per-formula audit log; no need to rewrite.",
+      "preservable_signal": "Fragmentarium reference-file cross-walk table; 'no reference available' classification for GMT originals; parameter-slot best-practices table; polyhedra audit table (preambleVars/usesSharedRotation/estimator status per formula); decision that Icosahedron/Octahedron/TruncatedIcosahedron should adopt cutting-plane getDist (d04 summary lines 34-49).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/24_Formula_Interlace_System.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d04 summary describes as architecture notes from 2026-04-03 session extended through 2026-05-05. Per memory `project_interlace_system.md` this is the canonical interlace architecture + preambleVars contract reference. Preserve as canonical interlace doc. Some stats (15+ formulas using usesSharedRotation, 5 mesh-export shader builders) may have grown but core architecture stable.",
+      "preservable_signal": "Full preambleVars contract and rewriter design intent (CRITICAL load-bearing GMT mechanic per memory); usesSharedRotation flag rationale; cutting-plane architecture (engine-owned globals + supportsCuttingPlane flag + pair-aware declaration logic + GSD+MengerSponge dust-bug history); composition-rules table for CP-aware × standard primary/secondary; Sierpinski tetrahedron face-normal fix; 1600/1600 native-interlace-sweep invariant + harness location (debug/native-interlace-sweep.mts); mesh-export GMF→Mesh data-flow (preset.features.coreMath[id] key path); three known-fragility callouts; N-formula hybrid generalization direction (d04 summary lines 56-77).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/25_Formula_Dev_Reference.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "g03-formula-registry",
+      "rationale": "Survey reports 13 drift rows, most 'KEEP'. Explicit recommendation: 'targeted patch rather than rewrite. Existing doc is comprehensive (898 lines) and accurate on the live fields. Drift is mostly gaps (newly added fields supportsCuttingPlane, tags, registry API surface) and one dead field (flags.coordinateMode). Net: ~3 BREAK rows, several EXTEND.' Per prior survey 'this is among the most accurate GMT docs'. New module doc may build on it; old doc stays as the primary formula-authoring reference.",
+      "preservable_signal": "Full execution-order diagram (preamble → map → loopInit → loop body w/ pre/post rotation → getDist); self-contained SDE pattern + coloring-modes contract table (modes 0/1/6/7/9 encoding); trap-must-be-positive caveat for logTrap; const-in-preamble GLSL ES 3.0 quirk; preamble-assembly-order quirk + loopInit workaround; paramA/paramB double-wiring quirk; complete uniform/built-in/shared-transform reference; parameter slot/type/mode tables; DE tracking patterns table; new-formula checklist; Catalan-solid fold techniques (d04 summary lines 88-109).",
+      "new_module_doc_path": "dev/docs/modules/engine-gmt/formula-registry.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/g03-formula-registry.md",
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/26_Formula_Workshop_V4_Plan.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d04 summary describes as V4 rewrite plan paused 2026-04-17. Explicitly aspirational with status entries that 'are 2026-04-17; current state presumably further along.' Per memory `project_doc_audit_phase2_path.md` the audit treats aspirational/research docs as preserve-with-pointer. Forward plan (§0.1: AI-skill primary path, N-formula hybrid as feature target) is canonical direction record.",
+      "preservable_signal": "Diagnosis: V3 per-iteration extraction's 7 regex bailout triggers + why wrong shape; why selfContainedSDE structurally matches Fragmentarium float DE shape; 'AST-parse pass count is not honest' lesson (494 verified-formulas claim was AST-only); honest measurement table (V3 vs V4 LOC + pass-count + feature-support tradeoffs); Phase A verification gate spec (parse, webglCompile, sampleFinite ≥56/64, sampleNonConstant > 1e-3, gradientFinite ≥48/64, renderNonDegenerate σ≥4 and ≤30% NaN); 64 deterministic sample positions + 4×4×4 axis-jittered grid; render-NaN-color-key; §0.1 forward plan (AI-skill primary, N-formula hybrid feature target, Mandelbulber architecture-parity finding); per-iter emitter coverage gaps; feature-compat trade-off rationale (interlace/hybrid/burning require outer-loop-runs-N-times); Mandelbulber2 canonical-source-pattern parallel (d04 summary lines 119-141).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/26b_Fragmentarium_Spec.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d04 summary describes as spec doc for Fragmentarium .frag preprocessor as canonical reference for V4 Stage 2. V4 is paused so 'status of ported vs planned items unclear.' Preserve as the canonical Fragmentarium semantics reference + V4 decision record.",
+      "preservable_signal": "Complete directive table with Fragmentarium semantics + V4 handling per row; complete uniform annotation table (slider variants, checkbox, color, floatColor, sampler2D); render-model classification table via #include; 8 explicit rejection categories with error-message templates; curated include-file subset list; V3-gaps analysis table; license rationale (GPL-3) + 'behavior not code' porting decision (d04 summary lines 161-168).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/27_Shader_Testing_Suite.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d04 summary describes as autonomous verification harness documentation. Mostly stable; some `test:render:matrix`/`test:render:perf` script names need verification against current package.json + interlace 1600/1600 invariant needs re-validation. Per memory `feedback_shader_testing_gates.md`, harnesses gate on webglCompile only — this is correctly documented. Treat as living reference; new modules don't supersede this.",
+      "preservable_signal": "7-gate spec and exact thresholds (≥56/64, ≥48/64, σ≥4, ≤30% NaN); harness-honesty enforcement rule (no simplified scaffolds; ShaderFactory is the only compile path); compile-only sweep matrix (42/42/42/1600 cases across baseline/hybrid/hybrid-adv/interlace); 'webglCompile is the single hard gate' rule for interlace sweeps; per-iter vs self-contained thumbnail divergence explainer; 3-root-cause clustering of first honest interlace sweep (vec4A undeclared / Phoenix prefix gap / identity-pair dupes); 3 lessons from native-interlace sweep (d04 summary lines 187-195).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/30_Mesh_Export_Prototype.md",
+      "disposition": "rewrite",
+      "covered_by_subsystem": "g07-mesh-export",
+      "rationale": "Survey reports 11 drift rows with MULTIPLE BREAK-LEVEL changes — the prototype's entire architecture is gone. Doc says 'plain HTML + 8 ES2020 scripts under public/mesh-export/'; reality is TypeScript React app at mesh-export/ with Zustand store, 23 files across algorithms/gpu/pipeline/preview/store/components. Shader composition moved into engine-gmt (ShaderFactory.generateMeshSDFLibrary). CPU Newton path no longer wired. Two orthogonal axes (estimator + distanceMetric) added. 'Escape Test' cavity-fill mode added. Survey rewrites every section. Doc 24 also references TS-flavored mesh-export paths contradicting this doc's framing.",
+      "preservable_signal": "6-phase pipeline overview and ordering; DE-type auto-detection rules (custom/ifs/power) + IFS iso-threshold trick; power-fractal escape sentinel; sign-compression technique (~3GB-at-2048³ rescue); block-sparse storage scheme + V8 2²⁴ entry limit workaround; GLB FLOAT VEC4 color decision (C4D compatibility); VDB binary format documentation (half-float density + optional vec3s color, byte-layout differences); memory-budget table at 20M vertices; smoothing-skip 5M threshold; shared sampling helpers + Z sub-slice averaging; known-limitations roadmap (d04 summary lines 220-229).",
+      "new_module_doc_path": "dev/docs/modules/mesh-export/index.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/g07-mesh-export.md",
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/43_Bucket_Render_Overhaul.md",
+      "disposition": "rewrite",
+      "covered_by_subsystem": "g06-bucket-render",
+      "rationale": "Survey reports 11 drift rows essentially all 'shipped but doc is still draft-plan shape.' Original ~485-line orchestrator BucketRenderer.ts is now 89-line shim; orchestration moved to engine/export/BucketRunner.ts; GMT work moved to engine-gmt/engine/GmtBucketHost.ts. WorkerExporter / WorkerHistogram / WorkerDepthReadback all outside doc's scope. Image-tile uniforms shipped. Bloom-from-viewport feasibility-feature now shipped. Async convergence polling, refine-view path, SSAA pixelSizeBase override all undocumented. Doc 44 confirms uniforms shipped but this doc still uses 'v1/v2' draft-plan labelling. Effectively a new module doc.",
+      "preservable_signal": "Two-distinct-concepts terminology (bucket = internal GPU tile vs image tile = output sub-PNG); seam-handling matrix (which sources are intrinsically seamless vs need fixes); UV-remap shader change with no-op defaults (forward-compatible rollout); blue-noise seam fix via pixel-origin offset + uFullOutputResolution; output-aspect-vs-canvas-aspect distinction (cam.aspect override during bucket render); camera basis stays full output aspect (vital for tile stitching); print-size presets at 300DPI; per-tile VRAM warning thresholds; v2 bloom-from-viewport sampling design (d04 summary lines 252-262).",
+      "new_module_doc_path": "dev/docs/modules/engine-gmt/bucket-render.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/g06-bucket-render.md",
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/gmt/44_Preview_Region_Plan.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Not covered by a subsystem audit; d04 summary explicitly flags 'Doc explicitly flags itself as historical; references to BUCKET_PREVIEW_START, BucketRenderer.startPreview, WorkerProxy.startPreviewRegion, canvas-floating HUD are obsolete.' Doc's header note confirms shipped form diverged from initial plan (uniform-only via PREVIEW_REGION_SET/CLEAR, no render lock). Preserve as historical-design record + click-to-zoom rationale; new bucket-render module doc should link to it for design history.",
+      "preservable_signal": "Header note (shipped form diverged from initial plan: uniform-only, no lock); click-to-zoom rationale (1:1 density pins size to one degree of freedom); edge-case handling (output ≤ viewport collapses to refine-view equivalent; non-square viewport/export framing rules); mid-preview output-dimension change → auto-exit policy (rationale: rendered pixels no longer represent current settings); image-tile reuse insight; HUD format; confirmed-decisions section (d04 summary lines 283-290).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d04-gmt-docs-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/00_INDEX.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Living roadmap and status doc for the multi-phase animation/modulation/recording/timeline refactor. Per d05 summary captures the outcomes log + revised roadmap + decision references. Per 25_HANDOFF the canvas-refactor track + audio fps-sync + modulation off-switches shipped; AnimationDocument 10-phase plan deferred. Per memory `feedback_existing_docs_readonly.md` dev/docs are read-only historical reference. Phase 2 should not modify this doc; new animation module docs (e.g. engine-gmt/animation.md) reference back to this set for refactor-rationale + bench-history context.",
+      "preservable_signal": "Full outcomes-log table; revised roadmap (canvas GraphEd → bench metric → canvas DopeSheet → re-measure); decision references quick-find (Q1-Q9); cross-coordination contract with gmt-rs; done-criteria checklist; deferred AnimationDocument 10-phase plan in details block (d05 summary lines 37-42).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/01_AUDIT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "30-entry-point inventory of existing animation/modulation surface. Per d05 summary it 'concludes the codebase has six entangled concerns where six clean modules would fit.' Per 06_SPIKE_FINDINGS and 15_DOPESHEET_PROBE_FINDINGS portions of the diagnosis were empirically invalidated (`TrackRow.tick` is dead code; React fanout is not the dominant cost) — captured in 04_CORRECTIONS. Preserve as the historical audit-of-record + module-decomposition design rationale.",
+      "preservable_signal": "§1 every writer enumeration with snapshot/no-snapshot disposition; §3a 16 distinct animationEngine.scrub call sites; §4b duplication audit (live vs export exportModulations.ts); §7 boot-order table per-app; §10 boundary cleanups list; §11 expanded refactor plan in 8 phases (d05 summary lines 44-47).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/02_RATIONALE.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Original refactor proposal with self-pushback. Per d05 summary the empirical motivation was retracted per 04_CORRECTIONS — design intent itself is sound but priority dropped. Preserve as the canonical AnimationDocument-architecture design proposal + DCC-pattern citation reference.",
+      "preservable_signal": "§1 ten-cost table with where + triggered-by columns; §3 target architecture ASCII diagram; §4 full AnimationDocument class signature + Patch types + DocSubscriber + methods; §4a Zustand-vs-Document boundary table; §7 three-canvas render API design; §9 modulation/audio/recording redesign (Arm/Play/Stop→Bake flow); §10 migration plan in 6 phases; §11 survives/dies list; §13 files-touched matrix (d05 summary lines 49-52).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/03_SPEC.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "v2 inter-module API spec with 9 open questions resolved. Per 25_HANDOFF still SOURCE OF TRUTH (amendments via 04_CORRECTIONS, not silent reinterpretation). §10 implementation order deferred but spec itself remains intended as canonical reference. Preserve as canonical spec.",
+      "preservable_signal": "P1-P9 design principles with rationale; §2 data ownership map; §3.1-3.9 full module API surfaces (AnimationDocument, Player, Engine, ModulationRuntime, AudioRuntime, Recorder, AppHistory, TrackProvider, Registries); §4 per-tick data flow + ANIMATE 6-step sequence; §4a singleton pattern decision (Pattern A vs B); §5 explicit boot order; §6 cross-module invariants I1-I10; §7 test strategy per-module; §8 Q1-Q9 resolved decisions with rationale; §8a type appendix (branded primitives) (d05 summary lines 54-58).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/04_CORRECTIONS.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Running log of post-shipping amendments to 03_SPEC. Per d05 summary: 'None stale — this is historical record by design; entries should accumulate, not get rewritten.' Bidirectional log with gmt-rs.",
+      "preservable_signal": "All four entries (Canvas-DopeSheet React-fanout retraction; shared canvas utils mirror-bug; DopeSheet probe invalidating three audit claims; in-place keyframe mutation bug class) + lessons learned (d05 summary lines 60-64).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/05_SPIKE_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Self-contained prompt for the diagnostic spike that gates Phase 0. Per d05 summary 'spike has shipped and findings have invalidated its diagnosis. Preserved for protocol design pattern (worktree + bench + falsifiable criteria).'",
+      "preservable_signal": "Pass criteria (falsifiability bar); partial-gain interpretation; fail criteria (alternative hypothesis); findings doc template; scope guards list; worktree + bench + falsifiable-criteria protocol pattern (d05 summary lines 67-70).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/06_SPIKE_FINDINGS.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Output of the spike: 'Diagnosis invalidated for the named consumer.' Architectural proposal in 02_RATIONALE remains internally consistent but its stated mechanism for user-reported lag is not supported by measurement. Empirical record — preserve verbatim.",
+      "preservable_signal": "Result line; methodology corrections (bench was measuring wrong axis; pass criteria couldn't fire); bench delta tables pre vs post vs probe2; 5 observed surprises (Sliders re-render rate independent of useTrackAnimation subs; TrackRow per-track sub bails correctly but parent still re-renders; dope-idle has zero animation-store writes; frame times vsync-pinned except *-play; Timeline:Graph is dominant cost at graph-play); recommendation for Phase 0 (d05 summary lines 73-76).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/07_ENGINE_PROBE_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Follow-up probe prompt to locate which engineStore subscription drives Slider re-renders. Per d05 summary 'probe completed and its hypothesis was invalidated. Pattern is preserved as a probe template.'",
+      "preservable_signal": "Hypothesis statement (three candidate mechanisms ranked); §Step 3 inventory table shape (selector / primitive-vs-reference / change frequency / writer location); §Step 4 instrumentation pattern (window.__probeCounts); §Step 5 narrowing edit family; §Step 6 pass/partial/fail criteria; pause-points design pattern (d05 summary lines 79-82).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/08_ENGINE_PROBE_FINDINGS.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Output of the engine-fanout probe: 'Hypothesis invalidated.' Established that commit-count metric is near-useless and Timeline:Graph polyline work is the actual cost. Redirect: canvas GraphEditor work becomes next concrete piece (since shipped).",
+      "preservable_signal": "Result line and redirect; chain (App → Dock:right → PanelRouter → FormulaParamsWidget → Sliders); bench delta tables Variant A/C/D (every variant null); 5 observed surprises about React-fanout axis exhaustion; recommendation (stop diagnostic probes on React-fanout axis; start canvas GraphEditor; defer AnimationDocument; add per-commit-median-ms bench column); probe code retention notes (d05 summary lines 85-88).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/09_CANVAS_GRAPH_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation prompt for the canvas GraphEditor. Per d05 summary 'work has shipped (a9518c6 → ad6b7a8 per 00_INDEX). Prompt is preserved as the design contract and as a template for future canvas work.'",
+      "preservable_signal": "Architecture ASCII diagram (3-canvas composition + invalidation triggers per layer); cache key contract (full per-cache key composition + rationale); implementation steps 1-6; acceptance criteria checklist; pause points; out-of-band concerns (DPR/HiDPI, OffscreenCanvas test env, pan precision) (d05 summary lines 91-94).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d05-animation-refactor-1.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/10_BENCH_METRIC_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation prompt to add per-commit medianMs to React-Profiler. Shipped per 12_BENCH_METRIC_REPORT. Preserved as bench-instrumentation rationale.",
+      "preservable_signal": "Rationale for why commit count alone misleads; 'metric trap' lesson reused throughout subsequent canvas work; pinned JSON shape extension contract (d06 summary lines 37-41).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/11_CANVAS_GRAPH_REPORT.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation report for canvas GraphEditor. Per d06 summary 'None — this is a foundational empirical finding; the follow-ons it lists are tracked by 16_, 17_, 20_ but the report itself remains the canonical record of what shipped.'",
+      "preservable_signal": "Metric-trap lesson (per-commit ms doesn't track user-felt smoothness; workerFps/longTasks do) — load-bearing finding reused by every subsequent canvas work; cache-key contract; 5 surprises; follow-ons list (DPR, pan-translation cache, GraphSidebar LiveValueDisplay collapse, AnimationDocument deferred, soft-selection bench scenario) (d06 summary lines 43-47).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/12_BENCH_METRIC_REPORT.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Tiny implementation report. Per d06 summary 'None — small report, ships exactly what 10_ specified.'",
+      "preservable_signal": "TimelineHost edges out Timeline:Graph in practice (2.70 vs 2.20 ms) — wrapping shell always slightly heavier; dope-select-track 7-commit table interpretation aid (d06 summary lines 50-52).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/13_DOPESHEET_PROBE_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Diagnostic protocol for measuring DopeSheet costs. Probe shipped; per d06 summary the prompt's --heavy flag was wrong (should be --seed=heavy) and strong-case rule didn't fit reality. Preserve as a probe template.",
+      "preservable_signal": "Decision-rule framework (strong/partial/weak case); four cost-bucket breakdown; metric-trap lesson restated for dopesheet; throwaway-instrumentation pattern for measuring non-React imperative cost (d06 summary lines 55-58).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/14_CANVAS_DOPESHEET_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation prompt for canvas DopeSheet. Per d06 summary shipped; Timeline:DopeSheet ≤ 5 ms/commit target landed at ~9 ms per 16_REPORT — not met but win is in worker/mainFps. Preserved as the design contract.",
+      "preservable_signal": "Explicit acceptance criteria calibrated against measured baselines (137 ms → ≤5 ms, 8 → ≥55 workerFps on select-track; 7034 ms → ≤1500 ms longTask on scrub); 'do not over-promise on dope-play' guidance; post-canvas residual hypothesis (d06 summary lines 61-64).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/15_DOPESHEET_PROBE_FINDINGS.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Empirical findings 2026-05-17. Per d06 summary, probe branch worktree torn down; instrumentation stripped. Foundational empirical record — preserve verbatim.",
+      "preservable_signal": "Bench numbers (baseline for any future refactor); the math (9000 KeyframeDiamonds × ~15 µs reconciliation each ≈ 135 ms); falsification of 01_AUDIT §2/§1 hypotheses on dev codebase (TrackRow.tick is dead code in dev — highly preservable as it amends the audit); three plausible attributions for 6050 ms residual; post-canvas expected-delta table reused verbatim in 14_; spec amendment that --seed=heavy is correct flag (d06 summary lines 67-71).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/16_CANVAS_DOPESHEET_REPORT.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation report — SHIPPED. Per d06 summary 'this is the canonical empirical record; some follow-ons have been actioned but the report retains historical accuracy.'",
+      "preservable_signal": "Surprise #1 (dope-play 26→59 confirmed unaccounted 6050 ms was browser layout reflow, not AnimationSystem.tick); Surprise #2 (boundary-measures-subtree explains residual ~9 ms); Surprise #3 (three pre-existing bugs fixed under this work — AudioStrip MAX_CANVAS_PX overflow, marquee yOffset hardcoded, shift-range track selection deselected anchor); Surprise #4 (clearRect placement); Surprise #5 (O(T×S×N) keyframes.find per selected key bug + bucket-by-track fix shape later mirrored in graph editor); Surprise #6 (hover affordances need canvas analog); full Follow-on items list (d06 summary lines 74-76).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/17_SHARED_CANVAS_UTILS.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation report for shared canvas utils + GraphEditor simplify pass — SHIPPED. Per d06 summary 'None — bench numbers fresh; the mirror-bug fix is forward-protective and not yet exercised by a graph-select-many scenario.'",
+      "preservable_signal": "Four deferred items (HiDPI/DPR, pan-translation tradeoff, clampDpr extraction premature with one caller in AudioStrip, duplicate value-grid paint); 'third canvas editor readiness' analysis; size-verification table (load-bearing for anyone touching the shape paths) (d06 summary lines 79-82).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/18_TIMELINE_CLEANUP_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Pre-push cleanup prompt — actioned per 20_REPORT. Preserve as design-pattern reference.",
+      "preservable_signal": "Specific grep patterns for cleanup sweeps; pause-point pattern (show 'would delete' list before deleting); 'tiny PR, removes more LOC than it adds' framing; rationale for premature-abstraction concern in Option A/B choice (d06 summary lines 85-88).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/20_TIMELINE_CLEANUP_REPORT.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation report — SHIPPED. Per d06 summary 'push-readiness final bullet Full UI interaction smoke was user's manual call — outcome not recorded here.'",
+      "preservable_signal": "Two intentional behaviour changes (sticky dropped, hidden-track click semantics tightened); 'what survived' list (interfaces kept as documented public surface, DIAMOND_THEME live, every timelineUtils.ts export verified with 2+ callers); push-readiness checklist (d06 summary lines 91-94).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d06-animation-refactor-2.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/21_AUDIO_TIMELINE_SYNC_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Pre-investigation prompt for an fps-sync bug. Per d07 summary the single-bug framing was wrong — four bugs landed per 22_REPORT. Prompt's hypothesis #1 was correct but only one of four contributing causes. Preserve as investigation-template + diagnostic-decomposition reference.",
+      "preservable_signal": "Branch name convention (feature/audio-fps-sync); repro recipe (load clip at fps=60, change to 30/24/25, observe drift); audit pattern (grep \\b60\\b, * fps, / fps, frameWidth, secondsPerFrame, framesPerSecond); memory pointer to project_audio_timeline_phase.md for seconds↔frames decisions (d07 summary lines 35-39).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d07-animation-refactor-3.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/22_AUDIO_TIMELINE_SYNC_REPORT.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "4-bug fix report — SHIPPED. Per memory `project_audio_fps_sync.md` this is the canonical record of the four-bug fix on feature/audio-fps-sync. Captures load-bearing TickRegistry contract enforcement (1ms DOUBLE_RUN_WINDOW_MS guard + dev-only _warnedDoubleRun warn). Preserve verbatim.",
+      "preservable_signal": "Wider impact of Bug 4 — every app-gmt animation/perf bench taken before commit 0814749 reflects 2×-tick state; Web Audio quirk Bug 3 (decodeAudioData strict, <audio> lenient — for VBR MP3 / MPEG-2 Layer III at low sample rates audioBuf.duration can be half or less of <audio>.duration); TickRegistry contract (apps with custom render loop skip <RenderLoopDriver/> and call runTicks themselves — now enforced by 1ms dedup guard); conversion site audit table (§2); regression smoke (debug/smoke-audio-fps-remap.mts); 'what survived' §6 (setFps('keep') correctness, <audio>.loop=true, audioWaveform.ts sub-frame sample truncation — not bugs); new DotToggle.tsx component pattern (d07 summary lines 44-63).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d07-animation-refactor-3.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/23_MODULATION_OFF_SWITCH_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Pre-push ship blocker prompt — all three gaps shipped per 24_REPORT. Preserve as decision record for the 'can the user turn it off?' ship-bar quality gate.",
+      "preservable_signal": "The 'can the user turn it off?' ship bar; state location decision (top-level vs slice) + migration path note; branch convention (feature/modulation-off-switch, based on dev HEAD after 0814749); locations cataloged (per-rule enabled at ModulationEngine.ts:33 LFO, :106 rule; rule list rows at AudioPanel.tsx:128-198) (d07 summary lines 80-84).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d07-animation-refactor-3.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/24_MODULATION_OFF_SWITCH_REPORT.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Implementation report — SHIPPED. Preserve as the canonical record of the modulation off-switch implementation + DotToggle component pattern.",
+      "preservable_signal": "2×2 test matrix (audio × LFO, on/off) confirmed live; save/load cycle preserves both masters + per-rule enables; DotToggle variant pattern (master saturated, item translucent) — UI standard worth reusing for future per-feature toggles; Preset.lfosEnabled migration (missing-key compat defaults to true) — pattern for future top-level booleans persisted into Preset; decision rationale for audio master toggle location (d07 summary lines 101-106).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d07-animation-refactor-3.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/25_NEXT_SESSION_HANDOFF.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Handoff doc 2026-05-18 — 'Push-ready' state. Per d07 summary push presumably happened by 2026-05-20; some architectural debt may have partially closed since. Preserve as session-opening template + architectural-debt baseline.",
+      "preservable_signal": "Architectural debt list — in-place keyframe mutation grep (5 writers fixed), 'for selected of N: keys.find()' antipattern footgun, recording lifecycle coordination (three uncoordinated booleans remain — Recorder state machine designed in 03_SPEC §3.6 unimplemented), HiDPI/DPR rendering across both canvas editors, AnimationSystem.tick instrumentation, re-bench app-gmt (2× tick-rate bug invalidates every bench before 0814749 — project_appgmt_perf_bench.md, project_animation_refactor_spike.md need re-running); session-opening prompts (minimal/with-phase/continued-canvas) paste-ready templates; session retrospective (d07 summary lines 121-129).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d07-animation-refactor-3.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/animation-refactor/PHASE_0_PROMPT.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Phase 0 of the AnimationDocument refactor — type definitions + test harness only, no behaviour. Per d07 summary and 25_HANDOFF Phase 0 was NOT started. AnimationDocument refactor deferred per 02_RATIONALE goals 'no longer urgent.' Preserve as canonical Phase 0 scaffolding spec for any future revival.",
+      "preservable_signal": "Full directory tree (Step 1) — Phase 0's deliverable shape; gmt-rs cross-reference (gmt-rs/crates/gmt-core/src/animation/track.rs, engine.rs, binder_registry.rs already shipped parallel types); branded-primitives unit test pattern (framesToTime(toFrame(60), 30) === toTimeSec(2)); 'no production code imports new modules yet' principle; scope guards (coherent-unit-per-phase) (d07 summary lines 156-161).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d07-animation-refactor-3.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/09_Mapping_Modes_Report.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc — per d08 summary classified Implemented/Reference Material with explicit README routing. Captures the Mapping Registry decoupling rationale + log2(log2(r)) NaN fix. Archive is curated; preserve as-is.",
+      "preservable_signal": "Rationale for if/else over switch (cross-driver portability call, not oversight); log2(log2(r)) Potential fix and why (log(log(r)) is NaN for 1 < r < e); 'modes register themselves; UI + shader follow' pattern as template for future registry-driven features (d08 summary lines 79-86).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/10_Shader_Architecture_Refactor.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc but per CLAUDE.md and d08 summary still LOAD-BEARING for current onboarding ('Shader composition, injection' row points here). The hook reference table remains authoritative. Preserve as-is; new shader-pipeline module docs should not delete this without updating the CLAUDE.md route.",
+      "preservable_signal": "Entire hook reference table — position numbers + when each hook fires (authoritative reference cited by CLAUDE.md); variant-aware stub pattern (features provide own safe stubs for non-Main variants); rationale for keeping Lighting monolithic; DDFS overhaul addendum (named object params, accumulative DE hooks, deferred shading, dependsOn) (d08 summary lines 130-138). Cross-cutting observation #6: doc 10's hook reference table is still load-bearing for CLAUDE.md and should not be moved/deleted without updating the CLAUDE.md route.",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/11_Fragmentarium_Conversion.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc with SUPERSEDED banner pointing to docs 21/22/25. Per d08 summary the importer pipeline, parser phases, generated-code structure, paramMap priority, rotation matrix generation are all obsolete. The 'do not duplicate' table + formula function signature + bit-flag encoding pattern + standard DE/smooth-iter formula + composeFrom rationale remain useful durable contracts.",
+      "preservable_signal": "'Do not duplicate' table (Fragmentarium ↔ GMT built-in uniform mapping) — durable contract; formula function signature; bit-flag encoding pattern for multi-boolean params; standard DE + smooth-iter formula; composeFrom rationale for vec3 UI (d08 summary lines 187-194).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/12_Vector_Uniform_Requirements.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc Implemented v0.8.5. Per d08 summary the specific shipped slot layout and five-phase plan are obsolete but the additive-not-replacement principle + per-axis-then-reconstruct pattern + capacity arithmetic are useful framing. Open questions (vec4? mat3/mat4?) remain useful prompts.",
+      "preservable_signal": "Capacity arithmetic (6 scalar + 3 vec2 + 3 vec3 = 21 values); backward-compat principle (scalars stay, vectors are additive); per-axis-animation-then-reconstruct pattern; open questions (vec4? mat3/mat4? per-component ranges?) as useful prompts if budget needs expanding (d08 summary lines 236-242).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/14_Fragmentarium_Examples_Analysis.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc Reference Material — V3 now handles all these patterns. Per d08 summary the 10-bucket pattern taxonomy + architectural reasons for unsupported patterns + iteration-counter-engine-owned invariant remain durable.",
+      "preservable_signal": "10-bucket taxonomy of .frag patterns and which are supportable; architectural reason providesColor and 2D formulas are unsupported (different renderer, not feature gap); init()-inlining rule; 'iteration counter is engine-owned' invariant — durable and explains why break/complex loop conditions never map cleanly; helper function catalogue (rotationMatrix3 etc.) — real Fragmentarium standard-library functions any importer must inject (d08 summary lines 294-303).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/19_GLSL_Parser_Integration_Summary.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc with SUPERSEDED banner — parser fully integrated in V3. Per d08 summary the f_ prefix convention + getDist signature + min(float, vec4) type-mismatch transformation + 'AST not regex' design principle remain durable.",
+      "preservable_signal": "f_ prefix convention for formula-local variables; getDist signature and f_z → z.xyz, f_i → iter rewrite; min(float, vec4) type-mismatch transformation (length(...) wrapping); 'AST not regex' as design principle for the importer (d08 summary lines 350-356).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/20_Fragmentarium_Importer_Formula_Analysis.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc — V2-era test matrix, SUPERSEDED banner cites docs/21. Per d08 summary the V2-implemented capability list (inherited by V3) + length() → getLength() rewrite rule + z.z-rename gotcha remain useful baselines.",
+      "preservable_signal": "Capability list (V2-implemented items that V3 inherited) — useful baseline of what the importer is expected to do; length() → getLength() rewrite rule and rationale (GMT's metric system); z.z-rename gotcha and placeholder-swap fix — concrete trap to avoid if anyone revisits rename logic (d08 summary lines 397-404).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/20_Fragmentarium_Importer_V2.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc V2 architecture writeup — top-of-file warning says V2 had 0% success rate at time of writing. Per d08 summary UNIFORM_MAP aliases + counter-is-engine-owned rule + f_ prefix convention + pattern-dispatch taxonomy + two named blocking bugs remain useful domain knowledge / historical context for V3 design decisions.",
+      "preservable_signal": "UNIFORM_MAP aliases — domain knowledge (Fragmentarium community naming conventions) any successor importer would need; 'counter is engine-owned, strip n++' rule; f_ prefix convention (echoed in doc 19; documented here with worked example); pattern-dispatch taxonomy; two named blocking bugs (computed uniforms after stripping; unresolved #include helpers) — important historical context for V3 design decisions (d08 summary lines 449-460).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/README.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Archive index/meta-doc. Per d08 summary 'Should still be correct as a navigation aid (it's a meta-doc), but if more archive entries are added later this list would need a refresh.'",
+      "preservable_signal": "Lineage V1 (regex) → V2 (AST) → V3 (current) — important when reading archived docs in context; signal that doc 10 is load-bearing even though archived (d08 summary lines 488-495).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/archive/context2.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Archive doc — project state snapshot March 2026 with banner routing to current docs. Per d08 summary feature catalogue is point-in-time; DDFS Migration Complete snapshot; code-health Completed bullets historical. The Lighting-as-DDFS-exception rationale + per-axis-then-reconstruct + rotation auto-detect regex remain durable design facts.",
+      "preservable_signal": "Lighting-as-DDFS-exception rationale; per-axis-then-reconstruct animation model for vec params; rotation-mode auto-detect regex (/\\brot(ation|ate)?\\b/i) and π/° text-input convention; path-tracer design facts (rim = bounce-0 only, firefly clamp, NEE/env-NEE/volumetric are compile-time); feature-registry catalogue as onboarding cross-reference (d08 summary lines 554-563).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d08-archive-docs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/BENCH_SHADER_HANDOFF.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Four-session shader-perf log. Per d09 summary file paths reference engine-gmt/ extraction layout (check current). Tier-1 uAreaLights now shipped per CHANGELOG. Per memory `feedback_angle_d3d11_optimizer.md` bench-verify audits and ANGLE-lowers-aggressively learnings — preserve verbatim as institutional knowledge. Per memory `feedback_no_compile_gate_realtime.md` sliders-stay-runtime is canonical.",
+      "preservable_signal": "Session-by-session wins table; stack-specific learnings (7 ANGLE/D3D11/fxc rules); four-step measure-first procedure; what DIDN'T work table (~25 attempts with reasons); GGX_EPSILON peak-crushing bug analysis (800,000× too dim at roughness=0.05); nested-array uniform NaN bug history (silent dim image masking earlier numbers); Patch 1-5 PT optimization sequence; veteran's 'diminishing returns' strategic note (foundational wins age well, next 30% needs architectural changes); production false-starts NOT to pursue (Manifold NEE, photon mapping, BDPT, Halton on ANGLE) (d09 summary lines 38-41).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/CHANGELOG_DEV.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": null,
+      "rationale": "Running dev log for v0.9.4 trunk. Per memory `feedback_changelog_style.md` and `feedback_existing_docs_readonly.md`, this is a chronological record that should not be rewritten — entries should accumulate. Phase 2 should leave this doc alone.",
+      "preservable_signal": "Entire changelog (audio-fps-remap fix details, true area lights phase landings, deep-zoom perturbation architecture, progressive-grid TSAA convergence, mobile detection + layout primitives shape, FPS Keep/Match semantics + 400ms history coalesce, per-scope undo split rationale, CompileProgressStore design, pointer-gesture store-bypass pattern, sample-cap-aware deep-accum gate, dual useEngineStore problem, v3-v4 catalog auto-pick, vec formula parameter pattern) (d09 summary lines 44-47).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/DOCS_INDEX.md",
+      "disposition": "migrate-target",
+      "covered_by_subsystem": null,
+      "rationale": "Master index for the gmt-engine docs tree. Per d09 summary 'This is the meta-doc that Phase 2 must update — doc list will need regeneration. Sub-doc paths assume current layout; if engine docs are renumbered or moved, every link breaks. Status 🚧 Evolving markers may now be Stable.' Per memory `feedback_existing_docs_readonly.md` dev/docs are read-only; new index lives at dev/docs/modules/ or dev/docs/INDEX.md as the canonical Phase 2 navigation entry-point. Old DOCS_INDEX should point to new index.",
+      "preservable_signal": "Engine/gmt partition rationale; reading paths (especially 'porting an app onto the engine' sequence); stability marker definitions (Stable/Evolving/Fragile/Experimental); doc style conventions (link format, normative-prefix rule, Decision blocks, archive policy); engine doc ToC ordering; fork-point commit reference (ece5c84) (d09 summary lines 50-53).",
+      "new_module_doc_path": "dev/docs/modules/INDEX.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/FEATURE_STATUS.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Post-phase-5 engine snapshot 2026-04-23 (commit b82dc18). Per d09 summary '~4 weeks of churn since.' Several 🔴 not-built items may now be ✅ (gesture-mode switcher, particle emitter, artist brush per commit a72d6eb per memory). Preserve as the Phase-2 baseline checkpoint reference — captures exact state at b82dc18.",
+      "preservable_signal": "Entire doc as Phase-2 baseline checkpoint — captures exact state of engine + toys at b82dc18, the reference point for 'what changed since extraction'; ~34-param porting gap between toy-fluid (reference) and fluid-toy (engine port); F12 fix details (UNDERSCORE form vec axis handling via shared writeVecAxis helper); F5/F6 known-broken items needing fix when first GMT port hits; headless-smoke coverage gap list (scrubbing, right-click menus, canvas gestures, topbar clicks, camera hotkeys, H hint toggle) (d09 summary lines 56-59).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/UI_PERF_HANDOFF.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "UI-perf framework session log 2026-05-03. Per d09 summary specific timing numbers reflect single-machine baseline; some open follow-up items may have been resolved. Bench framework + lessons remain canonical. Preserve as the bench-perf design + UI-perf institutional knowledge reference.",
+      "preservable_signal": "bench-perf framework design (12 profiler boundaries, RT/draw counters, sampled postMessage bytes, auto-diff with strict-zero on rtSwitch/readPx); recurring lesson on Zustand no-op set() flooding subscribers; convergence-pass-gate fix (RegionOverlay consumer flag); structural rtSwitch=1.5/render floor (Three.js internal + canvas bind); cameraInUse rename + playback/scrub widening rationale; 1278×718 fixed-resolution bug (CSS layout drift in getBoundingClientRect vs fixedResolution); PT compile time 10s+ UI-feedback note; bench harness 'fail-fast on console errors' pattern; dope-select-track 9000-keyframe DOM-diamond problem (d09 summary lines 63-65).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/VOLUMETRIC_HANDOFF.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Volumetric scatter optimization session 2026-05-03. Per memory `project_volumetric_optimization.md` this is the canonical record of the ~60% win. Per d09 summary references engine-gmt/ paths; uVolEnabled compile-gate sweep confirmed dead. Preserve as the bug-analysis institutional knowledge reference.",
+      "preservable_signal": "Real bug analysis — needNoise defaulting to 0.5 + uVolStepJitter=1.0 means _volSeed = mix(0.5, 0.5, 1.0) = 0.5 → gate hash depends only on d during nav → whole screen fires/skips together → bands. Lesson preserved verbatim: 'any feature whose body relies on stochasticSeed for spatial decorrelation needs a corresponding needNoise clause in ray.ts. The default 0.5 value is a footgun.' 'Didn't pan out' table (loop-invariant hoists neutral; stronger gate-hash mixing 2.4× slower; per-frame phase shift breaks design rule; B-set audit items reverted). Bench-harness extension flags. Open/deferred items (Beer-Lambert attenuation on shadow rays; unified σ with atmosphere fog) (d09 summary lines 68-70).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/research/hybrid-formula-architecture-comparison.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Research note 2026-04-17 feeding the docs/26 §0.1 forward-plan decision. Per d09 summary doc numbering references pre-split layout. Per memory the research informed V4 paused + N-formula hybrid as primary feature target. Preserve as the canonical research / design-comparison reference.",
+      "preservable_signal": "All citations to Mandelbulber2 source (formula/definition/abstract_fractal.h FRACTAL_CLASS macro; src/compute_fractal.cpp ~130 CPU outer loop with BoxFolding + SphericalFolding + FormulaCode — '1:1 architectural twin of GMT's interlace + hybrid-fold injection'; opencl/engines/compute_fractal.cl ~206-260 GPU outer loop with #define FORMULA_ITER_0 autogen + switch; src/hybrid_fractal_sequences.cpp CreateSequence precomputes seq.seqence[] of length maxN*5; autogenerated OpenCL formula files); architecture matrix table; retired-options list (Strategies I, B, F not recommended); sources URLs (Mandelbulber2, Fragmentarium, Fraktaler 3, KF2+, Visions of Chaos hybrid fractals blog) (d09 summary lines 74-77).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/research/v4-rethink-prompt.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Drop-in prompt for fresh Claude session to get independent architectural thinking on V3/V4 importer dilemma. Per d09 summary 'doesn't commit to anything; only constraint set is engine perf must not regress, compile times <2s, native formulas keep working unchanged, GPL-3 license lets you study Fragmentarium source.' Preserve as research-prompt + question framing reference.",
+      "preservable_signal": "Crisp problem statement (one-iter vs full-DE impedance); honest measurement table (V3 vs V4 LOC + pass-count + feature-support tradeoffs); 5 design questions; inner-loop injection candidate idea + its acknowledged gap (handles fold/burning/rotation but doesn't handle interlace which still needs synchronised step functions); required reading list (docs/25 §3.3a/§3.4, de.ts map() loop, formulas/JuliaMorph + MandelTerrain + KleinianMobius as native examples, Mandelbox.frag + QuaternionJulia.frag as Fragmentarium examples, docs/26 V4 plan, docs/21 status) (d09 summary lines 80-82).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/specs/10_Shaped_Emission.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Design spec for Spot Lights. Per d09 summary uniform type encoding 2.0 for Spot likely CONFLICTS with true area lights shipped 2026-05-03 (Sphere type used 2). Status: 'verify Spot ship at type=2 with Sphere=3, or did Sphere take 2 and Spot is deferred/re-numbered.' Per memory area lights shipped — spec needs reconcile but design rationale (full implementation roadmap, spotAttenuation helper GLSL, insertion-point pattern, sign-convention reasoning, explicit Not In Scope list) remains useful design reference.",
+      "preservable_signal": "Full implementation roadmap (12 files changed list); spotAttenuation() helper GLSL; insertion-point pattern (after att falloff, before radiance scaling, with if (spotAtt < 0.001) continue; early-out); sign-convention reasoning for dot(spotDir, toLight); UI ordering (cone sliders + reusing LightDirectionControl for Spot); explicit 'Not In Scope' list keeping IES/rect/projector deferrable (d09 summary lines 86-88).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "dev/docs/specs/fractal_pathtracing_research_2024_2026.md",
+      "disposition": "preserve-with-pointer",
+      "covered_by_subsystem": null,
+      "rationale": "Research notes with paper-level citations on SOTA fractal path tracing 2024-2026. Per d09 summary 'No header indicating last-update date; treat as snapshot of what was researched rather than what's planned now.' Whether GMT has adopted any of these is partially verifiable (blue noise shipped; acosFast/atan2Fast reverted neutral per BENCH_SHADER_HANDOFF). Preserve as the canonical research-and-citation reference for any future path-tracer work.",
+      "preservable_signal": "All citations and references (iquilezles.org articles, NVIDIA Research papers — ReSTIR SIGGRAPH 2020 / ReSTIR GI HPG 2021 / NRC / PSR, WebGPU spec at gpuweb.github.io, surma.dev/alain.xyz/diharaw.github.io/webgpufundamentals.org, SIGGRAPH 2023/2024 Advances in Real-Time Rendering, OpenVDB); over-relaxation formula (if prev_sdf + current_sdf < prev_step_size, you overshot); doubled-angle Mandelbulb identity (cos(2a) = 2cos²(a)-1, sin(2a) = 2 sin(a)cos(a), applied N times for power 2^N); Lipschitz step formula (step = sdf_value / L); SVGF auxiliary-buffer feature set (G-buffer prepass: normals/depth/albedo/velocity/IDs + variance from temporal moments + a-trous wavelet + disocclusion via plane-distance test); WebGPU perf numbers (TFjs 3×, Babylon 10×, 14k physics 16ms); four disocclusion-detection methods adapted for mesh-free fractal rendering; browser-support status table for WebGPU; impact-to-effort ranking planning artifact (d09 summary lines 92-95).",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/_docs/d09-root-research-specs.md"
+      ]
+    },
+    {
+      "doc_path": "app-gmt/README.md",
+      "disposition": "minor-edits",
+      "covered_by_subsystem": "a01-boot-shell",
+      "rationale": "Survey reports only 3 drift rows (1 warn, 2 info). README is largely correct; gaps are around boot timing detail (setTimeout vs useAppStartup hook) and file map omissions (HelpExtras.tsx, LoadingScreen.tsx, renderDialogExtras.tsx). Not a doc under dev/docs/ — it's a working README in the app directory. Per repo convention, README is NOT in the 'dev/docs/ are read-only' bucket so direct edits are appropriate. Either treat as new module doc target, or simply patch the file map and boot-step description in place.",
+      "preservable_signal": "Three-file plugin pattern reference per d09; per-app README is canonical 'I'm starting work' entry point per DOCS_INDEX. The README is the canonical app-gmt onboarding doc.",
+      "new_module_doc_path": "dev/docs/modules/app-gmt/boot-shell.md",
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/a01-boot-shell.md"
+      ]
+    },
+    {
+      "doc_path": "fluid-toy/README.md",
+      "disposition": "keep-as-is",
+      "covered_by_subsystem": "t01-fluid-toy",
+      "rationale": "Survey reports 7 drift rows but explicit recommendation: 'no doc updates required from this audit. README + CODE_MAP are unusually current and align with the code.' Only items needing follow-up are corollary (wheel idle timer + PresetGrid → resetFluid claim). Not a doc under dev/docs/; preserve in place as the canonical fluid-toy onboarding doc.",
+      "preservable_signal": "'Things that look weird but are deliberate' sections (boot-order, store-bypass, EMPTY_MODS, sync-in-feature, store-augmentation-next-to-install — all five confirmed in audit); useEngineSync.ts 'one line per feature' pattern; FluidToyApp thin (~200 lines) delegation pattern.",
+      "new_module_doc_path": null,
+      "evidence_refs": [
+        "plans/doc-audit-state/survey/t01-fluid-toy.md"
+      ]
+    }
+  ],
+  "summary": {
+    "rewrite": 7,
+    "migrate-target": 1,
+    "preserve-with-pointer": 51,
+    "minor-edits": 10,
+    "keep-as-is": 18,
+    "total": 87
+  }
+}

@@ -76,10 +76,19 @@ export class WorkerProxy implements AccumulationController {
     private _onWorkerFrame: (() => void) | null = null;
     private _onCrash: ((reason: string) => void) | null = null;
 
-    // Pending teleport (consumed by tick scene at boot)
+    /**
+     * @invariant Public mutable field — direct writes are the supported
+     *   API, not action dispatch. The real worker reads it at boot.
+     */
     pendingTeleport: CameraState | null = null;
 
-    /** Modulation offsets set by AnimationSystem */
+    /**
+     * Modulation offsets set by AnimationSystem.
+     *
+     * @invariant Public mutable field — `AnimationSystem` writes
+     *   `modulations` every frame; the real worker reads it on
+     *   `sendRenderTick`.
+     */
     modulations: Record<string, number> = {};
 
     // ─── Lifecycle ──────────────────────────────────────────────────────
@@ -101,6 +110,12 @@ export class WorkerProxy implements AccumulationController {
         _initialCamera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number }
     ) {}
 
+    /**
+     * @invariant Stub synthesises immediate `isBooted = true` and invokes
+     *   `onBooted` synchronously so generic UI doesn't spin forever on a
+     *   "compiling" indicator. Real subclasses replacing this method must
+     *   preserve the semantic if generic dev/ code waits on `onBooted`.
+     */
     bootWithConfig(
         _config: ShaderConfig,
         _initialCamera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number }
@@ -145,6 +160,11 @@ export class WorkerProxy implements AccumulationController {
     set dirty(v: boolean) { this._shadow.dirty = v; }
     get isPaused() { return this._shadow.isPaused; }
     set isPaused(v: boolean) { this._shadow.isPaused = v; }
+    /**
+     * @invariant Setters accept values but are silently dropped; getters
+     *   return hard false. UI code that toggles them on the stub loses
+     *   the write.
+     */
     get shouldSnapCamera() { return false; }
     set shouldSnapCamera(_v: boolean) {}
     get isGizmoInteracting() { return this._isGizmoInteracting; }
@@ -234,6 +254,12 @@ export class WorkerProxy implements AccumulationController {
 
     // ─── Export (inert — reject immediately) ───────────────────────────
 
+    /**
+     * @invariant Reject rather than no-op — callers must `.catch` or use
+     *   `try/await`, otherwise the rejection surfaces as an unhandled
+     *   promise. `cancelExport` flips `_isExporting = false` WITHOUT
+     *   rejecting in-flight promises.
+     */
     startExport(
         _config: unknown,
         _stream: WritableStream | null,
@@ -293,10 +319,22 @@ export class WorkerProxy implements AccumulationController {
 // the no-op fallback — same behavior as before the registry.
 let _proxy: WorkerProxy | null = null;
 
+/**
+ * @invariant Must run before any caller has captured a reference from
+ *   `getProxy()` — otherwise different consumers can capture different
+ *   references (stub vs real). Install at host-app boot.
+ */
 export function setProxy(proxy: WorkerProxy): void {
     _proxy = proxy;
 }
 
+/**
+ * @invariant `getProxy()` lazily creates a stub if no `setProxy()` has
+ *   fired — a forgotten install silently downgrades to no-op rather
+ *   than crashing. Symptoms: perpetual unbooted state, picks return
+ *   null, exports reject. `gpuInfo` returning the literal
+ *   `'Stub (no worker)'` is the useful tell.
+ */
 export function getProxy(): WorkerProxy {
     if (!_proxy) _proxy = new WorkerProxy();
     return _proxy;

@@ -35,9 +35,20 @@ void main() {
 }
 `;
 
+/**
+ * @invariant `writeIndex` semantics are inverted — the field points to the
+ *   NEXT target to write, so "previous frame" is the target OPPOSITE
+ *   `writeIndex`. `getPrevious*` helpers and `getOutputTexture()` invert
+ *   this; new callers must NOT assume `writeIndex == the just-written slot`.
+ */
 export class RenderPipeline {
     // MRT targets: texture[0] = Color, texture[1] = Depth
     // Double-buffered for temporal accumulation and async depth readback
+    //
+    // @deprecated-name "MRT" naming is historical — these are
+    //   single-attachment color-only targets. The header comment above
+    //   ("texture[0] = Color, texture[1] = Depth") describes an older
+    //   architecture that no longer exists.
     private mrtTargetA: THREE.WebGLRenderTarget | null = null;
     private mrtTargetB: THREE.WebGLRenderTarget | null = null;
     
@@ -139,7 +150,15 @@ export class RenderPipeline {
     // doesn't interfere with the live render loop.
     private _compileTarget: THREE.WebGLRenderTarget | null = null;
 
-    /** Get a render target for compile-time context (so Three.js generates matching program params) */
+    /**
+     * Get a render target for compile-time context (so Three.js generates
+     * matching program params).
+     *
+     * @invariant The compile target MUST mirror MRT float type. If live
+     *   target is HalfFloat and compile target is Float, Three.js program
+     *   param hashes diverge and async compile defeats its purpose. Lazy-
+     *   created after `mrtTargetA` exists — do not call before `initTargets()`.
+     */
     public getCompileTarget(): THREE.WebGLRenderTarget | null {
         if (!this._compileTarget && this.mrtTargetA) {
             this._compileTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -521,6 +540,15 @@ export class RenderPipeline {
     }
 
 
+    /**
+     * @invariant Bucket scissor must be set AFTER `setRenderTarget`. three.js
+     *   `setRenderTarget` overwrites GL scissor with the target's stored
+     *   values; any refactor that hoists `setScissor` will silently break
+     *   bucket rendering.
+     * @invariant `render()` is a no-op when `isHolding=true` OR `sampleCap`
+     *   is reached. `clearTargets` / `resetAccumulation` / `resize` still
+     *   function — the gate is only on the draw call.
+     */
     public render(renderer: THREE.WebGLRenderer, uniforms?: { [key: string]: THREE.IUniform }, scene?: THREE.Scene, camera?: THREE.Camera) {
         if (!this.mrtTargetA || !this.mrtTargetB) return;
         if (this.isHolding) return;

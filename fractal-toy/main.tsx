@@ -1,6 +1,8 @@
 /**
  * Fractal Toy — entry point.
  *
+ * @invariant Entry point — see fractal-toy.html (mounts this module).
+ *
  * Minimal raymarched-fractal add-on built on the engine. The nucleus
  * of the eventual full GMT port and the second live consumer of the
  * engine's plugin surface (alongside the Demo add-on and the future

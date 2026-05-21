@@ -74,6 +74,11 @@ const _globalBucket = (): Record<string, unknown> => {
     return g.__appHandles;
 };
 
+/**
+ * @invariant `globalThis.__appHandles[name]` is dev-only — gated by
+ *   `import.meta.env.DEV`. Production smoke tests cannot enumerate
+ *   handles.
+ */
 export function defineAppHandles<T>(name: string, initial: T): AppHandles<T> {
     const initialSnapshot = initial;
     const ref = { current: initial };

@@ -1,3 +1,28 @@
+/**
+ * Builds the Zustand slice from `featureRegistry`. Boot-time hot path:
+ * registers features → registers preset fields → freezes both
+ * registries → iterates `getAll()` to seed state + install one auto-
+ * setter per feature.
+ *
+ * @invariant Auto-setter name `set${FeatureId with capitalised first
+ *   letter}` is a load-bearing STRING convention with NO type
+ *   enforcement. Four downstream consumers derive the same name:
+ *   PresetLogic.applyPresetState, AnimationEngine.getBinder (case 4),
+ *   historySlice.beginParamTransaction, typedSlices.setSlice.
+ * @invariant Track-id convention `${featureId}.${paramKey}` (scalars)
+ *   and `${featureId}.${paramKey}_<axis>` (UNDERSCORE axes) is the
+ *   second load-bearing string contract. See engine/animation/
+ *   trackBinding.ts for the authoritative form.
+ * @invariant `image`-typed params are deliberately excluded from the
+ *   `config` event payload (data URLs can be many MB). Restored via
+ *   the `texture` event channel.
+ * @invariant The setter has NO `oldValue !== newValue` guard. Every
+ *   key in `updates` triggers the full sanitise + emit path; equality
+ *   short-circuiting lives downstream in `ConfigManager.areValuesEqual`.
+ * @invariant `onSet` extras only land for keys not present in the
+ *   user-provided `updates` — preset loads override defaults the
+ *   `onSet` would otherwise compute.
+ */
 
 import { StateCreator } from 'zustand';
 import * as THREE from 'three';

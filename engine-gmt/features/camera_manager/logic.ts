@@ -4,7 +4,14 @@ import { CameraUtils } from '../../utils/CameraUtils';
 import { getProxy } from '../../engine/worker/WorkerProxy';
 const engine = getProxy();
 
-// Helper to determine direction name
+/**
+ * Helper to determine direction name from a camera rotation quaternion.
+ *
+ * @invariant Threshold 0.98 on `dot(forward, ±cardinal-axis)` — used by
+ * `suggestCameraLabel` in `cameraSlice.ts:129` to auto-suggest "Front View" /
+ * "Top View" etc. when the camera is within ~11° of a cardinal axis. Returns
+ * `null` when no axis is dominant.
+ */
 export const getDirectionName = (rot: { x: number, y: number, z: number, w: number }): string | null => {
     const q = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
     const v = new THREE.Vector3(0, 0, -1).applyQuaternion(q); // Camera looks down -Z by default locally

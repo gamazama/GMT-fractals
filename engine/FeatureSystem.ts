@@ -1,3 +1,24 @@
+/**
+ * DDFS — Data-Driven Feature System core.
+ *
+ * Features declare identity + params + UI + optional shader injection
+ * as a plain `FeatureDefinition` literal; the engine derives state
+ * slices, setters, uniform definitions, and CONFIG events.
+ *
+ * @invariant `featureRegistry` is a module singleton — every importer
+ *   sees the same instance.
+ * @invariant `register()` is HMR-safe for same-object re-register;
+ *   different object with same id is dev-warn / prod-throw.
+ * @invariant After `freeze()` new registrations throw in dev, warn-
+ *   and-no-op in prod. Dev freeze captures the stack so a later
+ *   `FeatureRegistryFrozenError` points at the import that prematurely
+ *   triggered store construction.
+ * @invariant Dependency cycles do NOT throw — `getAll()` logs
+ *   `console.error` and falls back to registration order.
+ * @invariant `validateComponentRefs` is opt-in (not called from
+ *   `freeze()` — component registry is populated later). Soft-warns;
+ *   never throws.
+ */
 
 import { ShaderBuilder, RenderVariant } from './ShaderBuilder';
 import type { ShaderConfig } from './ShaderConfig';
@@ -440,7 +461,8 @@ class FeatureRegistry {
 
     /** Returns all features in dependency-safe order (topological sort).
      *  Features without dependencies maintain their registration order.
-     *  Throws if a dependency cycle is detected. */
+     *  On dependency cycle: logs `[FeatureRegistry] Dependency cycle detected...` to console.error
+     *  and falls back to registration order to avoid breaking the app. Does NOT throw. */
     public getAll() {
         if (this.sortedCache) return this.sortedCache;
         this.sortedCache = this.topologicalSort();
@@ -474,6 +496,10 @@ class FeatureRegistry {
             .filter(f => !!f.engineConfig);
     }
 
+    /**
+     * @invariant Per-feature dictionary entries are keyed by `shortId` ONLY.
+     *   Params without `shortId` are absent from preset aliases.
+     */
     public getDictionary() {
         const dict: any = {
             'formula': 'f',
@@ -508,6 +534,11 @@ class FeatureRegistry {
         return dict;
     }
 
+    /**
+     * @invariant GLSL type normalisation: `color` → `vec3`, `boolean` →
+     *   `float` (1.0/0.0), `image`/`gradient` → `sampler2D` with null
+     *   default. `extraUniforms` are appended unchanged.
+     */
     public getUniformDefinitions() {
         const defs: UniformDefinition[] = [];
         this.features.forEach(feat => {

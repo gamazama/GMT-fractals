@@ -54,7 +54,13 @@ export const tutorAnchors = {
         if (_byId.get(entry.id)?.size === 0) _byId.delete(entry.id);
         _notify();
     },
-    /** First-found entry for an id, preferring elements with non-zero rect. */
+    /**
+     * First-found entry for an id, preferring elements with non-zero rect.
+     *
+     * @invariant Prefers a visible (non-zero-rect) entry; falls back to
+     *   the first registered entry if all are zero-sized. Consumers
+     *   needing visibility-only must filter the result themselves.
+     */
     get(id: string): AnchorEntry | undefined {
         const set = _byId.get(id);
         if (!set) return undefined;

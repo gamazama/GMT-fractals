@@ -1,0 +1,62 @@
+[
+  {
+    "id": "f-001",
+    "raised_by": "e01-feature-system",
+    "raised_at": "2026-05-19T20:19:13.132Z",
+    "note": "02_Feature_Registry.md describes an idealised API (defineFeature, lifecycle hooks, ctx.read, enum/string types, cacheKey, useFeatureParam, tab-dock auto-placement) that almost none of which exists in current code. The drift is large enough that it reads as an aspirational design doc rather than an out-of-date reference. Worth flagging whether this subsystem should rewrite the doc to current code or treat the doc as the migration target.",
+    "status": "wont-fix",
+    "addressed_by": "review-2026-05-19-1",
+    "addressed_at": "2026-05-19T20:26:17.167Z",
+    "resolution": "Addressed by Edit 2 (survey shape now has Recommendation slot); planner decision deferred to Phase 2."
+  },
+  {
+    "id": "f-002",
+    "raised_by": "e01-feature-system",
+    "raised_at": "2026-05-19T20:19:13.132Z",
+    "note": "Self-inconsistency in code: getAll() jsdoc at FeatureSystem.ts:443-447 says it throws on dependency cycle, but the implementation at :587-592 logs and falls back. This is a code-level bug, not a doc bug. Should drift entries like this be tracked separately from doc drift?",
+    "status": "wont-fix",
+    "addressed_by": "review-2026-05-19-1",
+    "addressed_at": "2026-05-19T20:26:17.167Z",
+    "resolution": "Code bug, not protocol issue. Survey already captures in body; out-of-scope for loop protocol."
+  },
+  {
+    "id": "f-003",
+    "raised_by": "e09-camera-plugin",
+    "raised_at": "2026-05-19T21:10:10.774Z",
+    "note": "Subsystem partitions sometimes too narrow: e09 audited the StateLibrary primitive but its user-facing surface (<StateLibraryPanel>, <StateLibraryToast>, <ActiveSnapshotFeatures>) lives in adjacent files not claimed by any subsystem. Consider an orphan-sweep step OR letting surveys nominate adjacent files as claimable by their subsystem.",
+    "status": "addressed",
+    "addressed_by": "review-2026-05-19-3",
+    "addressed_at": "2026-05-19T21:30:56.640Z",
+    "resolution": "Edit 2: Open questions section now supports Orphan-sweep candidate: prefix. Formal orphan-sweep phase deferred to post-Phase-1 (when gap shape is visible)."
+  },
+  {
+    "id": "f-004",
+    "raised_by": "e12-mobile-layout",
+    "raised_at": "2026-05-19T21:26:14.729Z",
+    "note": "blob-sha.mjs accepts only one path argument (scripts/blob-sha.mjs:14-18) but the iteration brief phrases it as \"<path>\" per file, leading agents into a first-batch trap where they expect to pass multiple paths. Either clarify the brief (\"call once per file\") or extend the script to accept multiple args and emit a path:sha map.",
+    "status": "addressed",
+    "addressed_by": "review-2026-05-19-3",
+    "addressed_at": "2026-05-19T21:30:56.640Z",
+    "resolution": "Edit 1: blob-sha.mjs extended to multi-arg. Brief updated to show new usage. Single-arg backward-compatible."
+  },
+  {
+    "id": "f-005",
+    "opened_at": "2026-05-20T04:41:42.711Z",
+    "source": "q-083 agent",
+    "status": "addressed",
+    "addressed_by": "review-2026-05-20-14",
+    "addressed_at": "2026-05-20T07:25:00Z",
+    "summary": "Sub-B orchestrator brief tells agents to call record-coverage.mjs with --path/--blob-sha/etc flags, but the script reads a YAML entry from stdin and requires fields: path, blob_sha, bytes, lines, read_range, agent_run_id, agent_model, timestamp, confidence, summary_ref. Multiple agents have figured it out anyway but the brief is misleading — should switch to a stdin-YAML heredoc example. Confidence values: high|medium|low|partial (no \"full\").",
+    "resolution": "Primary observation (flag-vs-stdin interface) was in the orchestrator's spawn brief, not LOOP_PROMPT.md — orchestrator already updated per tick prompt; LOOP_PROMPT.md has no record-coverage references (grep returns zero). Secondary observation (confidence values) addressed by Edit 1: replaced stale `catalog`/`targeted` with valid `partial`/`high` at lines 142 and 342, with inline note about valid set {high, medium, low, partial}."
+  },
+  {
+    "id": "f-006",
+    "raised_by": "q-031-investigation",
+    "raised_at": "2026-05-20T09:08:00Z",
+    "note": "When the orchestrator passes \"context from sibling investigation q-XXX\" into a new investigation brief, it can anchor the agent on a wrong conclusion. q-030 found extraUniforms wasn't used for CamType (correct in that scope) and the orchestrator generalised that to \"NOT from a separate extraUniforms array\" in the q-031 brief. That generalisation turned out to be wrong — extraUniforms is the dominant path for lighting/env CDF uniforms. The investigator had to re-verify rather than trust the handed-down context. Either drop sibling-context handoff entirely, or mark it explicitly as tentative/scoped-to-prior-question so the next agent doesn't treat it as established fact.",
+    "status": "wont-fix",
+    "addressed_by": "review-2026-05-20-17",
+    "addressed_at": "2026-05-20T09:42:00Z",
+    "resolution": "Orchestrator behaviour issue, not a protocol gap — LOOP_PROMPT does not document sibling-context handoff; orchestrator added it freelance. Codifying \"tentative\" caveats would legitimise the pattern. Resolution: orchestrator stops the pattern. If a prior followup is genuinely load-bearing, pass its file path via target_hint so investigator reads source verbatim."
+  }
+]

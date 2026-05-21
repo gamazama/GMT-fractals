@@ -44,6 +44,11 @@ class ComponentRegistry {
     }
 }
 
+/**
+ * @invariant Module-singleton; no per-app instances, no test isolation.
+ *   `register()` warns and overwrites — last-registered wins. Plugin
+ *   load order matters; no namespacing.
+ */
 export const componentRegistry = new ComponentRegistry();
 
 // Pre-register CameraManager here (or do it in a features/index file if preferred)

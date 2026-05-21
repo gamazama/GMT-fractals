@@ -76,6 +76,12 @@ const toTitle = (s: string): string =>
  * });
  * ```
  */
+/**
+ * @invariant Synthesises a `type: 'float'` ParamConfig with `options[]`
+ *   of `{label, value: i, hint}`. There is NO string-typed enum
+ *   codepath in `ParamType`. Apps map the integer back to the canonical
+ *   string at the engine boundary via `fromIndex`.
+ */
 export const defineEnumParam = <Values extends readonly string[]>(
     values: Values,
     label: string,

@@ -360,6 +360,14 @@ export class WorkerExporter {
      * Run `config.samples` accumulation samples for the current pass and post-process the
      * result into `sess.exportTarget`. Reads the flipped 8-bit RGBA pixels into `sess.pixelBuffer`
      * and returns the accumulation target that holds the HDR result (for preview blit + focus-lock).
+     *
+     * @invariant `config.samples >= 1` required. Clears `accumA` then
+     *   writes to it at s=0. Bloom is applied on BEAUTY only — alpha
+     *   and depth passes write greyscale luminance to the alpha channel
+     *   and bloom would smear it.
+     * @invariant Pixel-buffer Y-flip is IN PLACE. For odd height,
+     *   `halfH = floor(h/2)` correctly leaves the middle row untouched
+     *   (it is its own mirror). Do not change to `ceil`.
      */
     private renderOnePass(sess: ExportSession): THREE.WebGLRenderTarget {
         // Clear accumulation ping-pong
@@ -478,6 +486,11 @@ export class WorkerExporter {
      * combine + encode into per-frame files (PNG RGBA, separate depth; or JPG-per-pass), and
      * write to the session's directory handle. Fire-and-forget write chain so frame-N's file
      * I/O overlaps with frame-N+1's GPU work; cancel/finish await the chain.
+     */
+    /**
+     * @invariant `uOutputPass` MUST be reset to 0 before the preview
+     *   blit, so the viewport always shows beauty even when the
+     *   rendered passes were alpha/depth.
      */
     private renderFrameImageSequence(sess: ExportSession, frameIndex: number) {
         const passes = sess.config.passes && sess.config.passes.length > 0
@@ -676,6 +689,13 @@ export class WorkerExporter {
 
     // ─── Encoded Chunk Handler ───────────────────────────────────────
 
+    /**
+     * @invariant First-chunk PTS normalization is PER-TRACK — video
+     *   and audio offsets are independent because audio enters the
+     *   encoder later and has its own priming delay. Duration is
+     *   hardcoded to `1/fps` because Firefox does not echo the source
+     *   `VideoFrame.duration`.
+     */
     private handleEncodedChunk(chunk: EncodedVideoChunk, meta: EncodedVideoChunkMetadata | undefined) {
         if (!this.session) return;
         const sess = this.session;
@@ -865,6 +885,11 @@ export class WorkerExporter {
 
     // ─── Cleanup ────────────────────────────────────────────────────
 
+    /**
+     * @invariant One-shot teardown — `if (!this.session) return` at the
+     *   top is what makes `cancel()` and `finish()` both safe to call.
+     *   Idempotent.
+     */
     private cleanup() {
         if (!this.session) return;
 

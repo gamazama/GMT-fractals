@@ -26,7 +26,9 @@ export const FRACTAL_EVENTS = {
     ENGINE_QUEUE: 'engine_queue',
     REGISTER_FORMULA: 'register_formula',
     RESET_HINTS: 'reset_hints',
-    CAMERA_SLOT_SAVED: 'camera_slot_saved'
+    CAMERA_SLOT_SAVED: 'camera_slot_saved',
+    WORKER_BOOTED: 'worker_booted',
+    WORKER_BOOT_FAILED: 'worker_boot_failed'
 } as const;
 
 type EventMap = {
@@ -53,6 +55,8 @@ type EventMap = {
     [FRACTAL_EVENTS.REGISTER_FORMULA]: { id: string; shader: { function: string; loopBody: string; loopInit?: string; getDist?: string; preamble?: string; selfContainedSDE?: boolean } };
     [FRACTAL_EVENTS.RESET_HINTS]: void;
     [FRACTAL_EVENTS.CAMERA_SLOT_SAVED]: { slot: number; label: string };
+    [FRACTAL_EVENTS.WORKER_BOOTED]: void;
+    [FRACTAL_EVENTS.WORKER_BOOT_FAILED]: { reason: string };
 };
 
 class FractalEventBus {

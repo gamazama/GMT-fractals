@@ -84,6 +84,14 @@ export interface ViewportFrameProps {
 const CONTROLS_OFFSET_Y = 40;
 const LAYOUT_PADDING = 12;
 
+/**
+ * @invariant Sole authoritative writer of `canvasPixelSize`. Mount-time
+ *   seed uses `getBoundingClientRect()` so consumers see non-zero size
+ *   before the first ResizeObserver callback.
+ * @invariant Fixed-mode inner container forces `boxSizing: content-box`
+ *   to defeat Tailwind preflight; without this the 1px outline shrinks
+ *   saved images by 2px per axis.
+ */
 export const ViewportFrame: React.FC<ViewportFrameProps> = ({
     children,
     showModeControls = true,

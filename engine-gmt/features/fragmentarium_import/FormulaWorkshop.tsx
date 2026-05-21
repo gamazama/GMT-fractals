@@ -405,6 +405,29 @@ function ParamTable({ mappings, onMappingChange }: ParamTableProps) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
+/**
+ * @invariant `PREVIEW_ID = 'frag_workshop_preview'` is reserved. Every Preview
+ * registers it (replacing the prior registration, not orphaning); on close
+ * the Workshop restores `previousFormulaRef`.
+ *
+ * @invariant Pipeline selector is `'auto' | 'v3' | 'v4'`. Effective pipeline
+ * resolves via `getRecommendedPipeline` (catalog auto-pick), defaulting to
+ * `'v4'` for unknown IDs (custom paste). The dice predicate filters out
+ * catalog entries with `recommended === 'none'` unless the user opts into
+ * "show broken". See ADR-0058.
+ *
+ * @invariant Re-edit lifecycle: when `editFormula` prop is set, the Workshop
+ * reads `registry.get(id)?.importSource` and rehydrates state from `glsl`,
+ * `selectedFunction`, `loopMode`, `mappings`. V3-imported formulas stamp
+ * `importSource`; V4-imported formulas OMIT it — re-editing a V4 formula is
+ * not currently supported because V4 has no per-param mapping UI. See
+ * ADR-0058 Consequences.
+ *
+ * @invariant Slot uniqueness is enforced at Import (V3 only). V4 skips this —
+ * slot assignment is internal to `processFormula`. Formula names are
+ * sanitised to valid GLSL identifiers via `rawName.replace(/[^a-zA-Z0-9_]/g, '')`
+ * (`v3/compat.ts:125`) — the formula name doubles as the emitted function name.
+ */
 export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula }) => {
     // ── State ──
     const [source, setSource]                             = useState(editFormula ? '' : DEFAULT_SCRIPT);

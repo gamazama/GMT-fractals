@@ -12,6 +12,14 @@ import React from 'react';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { SmartphoneRotateIcon } from '../../components/Icons';
 
+/**
+ * @invariant Consumes raw `isDeviceMobile`, NOT the preference-aware
+ *   `isMobile`. Force-Mobile-on-desktop must NOT trigger the rotate
+ *   prompt — telling a desktop user with a portrait window to rotate
+ *   is nonsensical. Asymmetric gating policy is load-bearing across
+ *   the three mobile-layout primitives (Gate / Intro / Shell). See
+ *   ADR-0038.
+ */
 export const LandscapeGate: React.FC = () => {
     // Real-device only: telling a desktop user with a portrait window
     // to "rotate your device" is nonsensical.

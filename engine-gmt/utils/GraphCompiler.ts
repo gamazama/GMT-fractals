@@ -1,3 +1,23 @@
+/**
+ * @module engine-gmt/utils/GraphCompiler
+ *
+ * Turns a Modular pipeline (topologically sorted `PipelineNode[]` + `GraphEdge[]`)
+ * into the GLSL body of `formula_Modular()`, and produces a matching flat
+ * `Float32Array` of per-frame parameter slots so that slider drags update
+ * uniforms WITHOUT a shader recompile.
+ *
+ * `compileGraph` and `updateModularUniforms` MUST allocate / pack
+ * `uModularParams` slots in lockstep — they share `buildInputsByTarget` +
+ * `buildLiveNodeIds`, walk `pipeline` in the same input order, apply identical
+ * skip predicates (`!liveNodeIds.has(node.id)`, `!node.enabled`), and treat
+ * `condition.active` as two leading slots ahead of the node's own params.
+ * See ADR-0050 for the slot-order parity contract.
+ *
+ * DCE walks BACKWARD from the synthetic `root-end` via `stack.pop()` (LIFO ⇒
+ * DFS). The two synthetic roots (`root-start`, `root-end`) are hard-coded
+ * string literals; see ADR-0051. `distOverride` window is `(-1.0, 999.0)`;
+ * `v_start_d = 1000.0` so non-SDF graphs naturally fall outside.
+ */
 
 import { GraphEdge, PipelineNode } from '../types';
 import { MAX_MODULAR_PARAMS } from '../../data/constants';
@@ -31,6 +51,28 @@ const buildLiveNodeIds = (inputsByTarget: Map<string, GraphEdge[]>): Set<string>
     return liveNodeIds;
 };
 
+/**
+ * Compile a Modular pipeline into the GLSL body of `formula_Modular()`.
+ *
+ * @invariant DCE walks BACKWARD from synthetic `root-end` via `stack.pop()`
+ * (LIFO ⇒ DFS, NOT BFS). Unreachable nodes produce no GLSL and consume no
+ * `uModularParams` slots. Empty active set → identity body.
+ *
+ * @invariant Disabled nodes still emit the propagation triple
+ * `v_<id>_p/_d/_dr` from `in1` (so downstream variable lookups resolve) but
+ * DO NOT call `def.glsl` and DO NOT consume `uModularParams` slots. The
+ * packer mirrors this skip predicate — see `updateModularUniforms`.
+ *
+ * @invariant The two synthetic roots are hard-coded string literals in THREE
+ * places: the DCE seed, the `varMap` pre-seed `varMap.set('root-start',
+ * 'v_start')`, and the output-edge `target === 'root-end'` lookup. Renaming
+ * requires touching all three (ADR-0051).
+ *
+ * @invariant `distOverride` window is `(-1.0, 999.0)`; `v_start_d` is seeded
+ * to `1000.0` so non-SDF graphs naturally fall outside and never override
+ * the iterative DE. SDF Primitive nodes write `< 999.0` to engage
+ * `distOverride`.
+ */
 export const compileGraph = (sortedNodes: PipelineNode[], edges: GraphEdge[]): string => {
     // Pre-index edges by target — used for both DCE and per-node input resolution.
     const inputsByTarget = buildInputsByTarget(edges);
@@ -159,6 +201,29 @@ ${body}
 // --- RUNTIME UPDATE HELPER ---
 // Applies the same DCE logic as compileGraph so that uniform slot indices match exactly.
 // Pass the graph edges so that dead (disconnected) nodes are skipped — just like the compiler does.
+/**
+ * Pack per-frame parameter values into the flat `uModularParams` array.
+ *
+ * @invariant Slot-order parity with `compileGraph` is LOAD-BEARING. Both share
+ * `buildInputsByTarget` + `buildLiveNodeIds`, walk `pipeline` in the same
+ * input order, apply identical skip predicates (`!liveNodeIds.has(node.id)`,
+ * `!node.enabled`), and treat `condition.active` as two leading slots (`cmod`
+ * then `crem`) ahead of the node's own params. Divergence silently misaligns
+ * sliders (ADR-0050).
+ *
+ * @invariant `getParam`-call order in each `NodeDefinition.glsl()` template
+ * MUST equal `def.inputs` declaration order. The compiler's `getParam`
+ * closure ignores the `key` argument when allocating slots — it just
+ * increments a counter on each unbound call. The packer iterates
+ * `def.inputs` in declaration order. The two only agree because every
+ * existing NodeDefinition author has, by convention, written `def.glsl()` to
+ * call `getParam('id')` in the same sequence as their `inputs:` array. NO
+ * assertion enforces this. See followup q-117.
+ *
+ * @invariant Param overflow degrades silently — compiler returns the GLSL
+ * literal `"0.0"`; packer's `setP` drops writes past `MAX_MODULAR_PARAMS`.
+ * No exception, no console warning.
+ */
 export const updateModularUniforms = (pipeline: PipelineNode[], edges: GraphEdge[], uniformArray: Float32Array) => {
     uniformArray.fill(0);
     let idx = 0;

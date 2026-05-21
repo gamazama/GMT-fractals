@@ -61,6 +61,25 @@ export class UniformManager {
         this.pipeline = pipeline;
     }
 
+    /**
+     * Single canonical per-frame uniform writeback. See ADR-0044.
+     *
+     * @invariant Step ordering is load-bearing: adaptive resize →
+     *   image-tile sync → camera basis → uPixelSizeBase → virtual-space
+     *   → time + env rotation → fog → lights → rotations.
+     *   `uPixelSizeBase` derivation needs the POST-adaptive viewportY
+     *   value; lights need `uCameraPosition` zeroed first; virtual-
+     *   space update needs `uSceneOffsetHigh/Low` value handles wired
+     *   before `updateShaderUniforms` runs.
+     * @invariant `runtimeState.adaptiveSuppressed` (bucket dialog or
+     *   export in flight) hard-forces full res. Without it, the FBO
+     *   resizes mid-export and briefly displays the cleared buffer.
+     * @invariant `uLightDir[i]` stores direction TOWARD the light —
+     *   negated and normalized before write. Every shader consumer
+     *   (NdotL, shadows, volumetrics) uses it without per-consumer
+     *   negation. Reversing the convention forces touch-ups in every
+     *   chunk.
+     */
     public syncFrame(
         camera: THREE.Camera,
         state: any,

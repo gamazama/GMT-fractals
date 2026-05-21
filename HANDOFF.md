@@ -4,6 +4,30 @@
 **Origin:** Forked from stable at `h:/GMT/workspace-gmt/stable/` (was `h:/GMT/gmt-0.8.5/`, kept as `upstream` remote)
 **Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03.** **PT reflection quality (env MIS + IS + Sobol) shipped 2026-05-05** — see entry below.
 
+**📋 2026-05-20 — Doc audit + documentation migration:**
+
+Three-phase audit (Phase 1: 28 subsystem surveys + 9 docs-existing summaries; Phase 1.5: 120 open-question follow-ups, 119 answered; Phase 2: 35 module docs authored across two parallel sessions) followed by a same-day migration after observing the docs were trending toward "write-only" state-shaped files.
+
+**Migration outcome (current canonical doc surface):**
+
+- **Source-file JSDoc** — ~95 invariant + per-export blocks across ~60 source files. Trust this first; surfaced on IDE hover.
+- **ADRs at `docs/adr/`** — 58 dated, append-only decision records (0001-0058). Each: Context / Decision / Consequences. Cited from source via `@see docs/adr/NNNN-*.md`.
+- **Policy docs at `docs/policy/`** — 5 prescriptive cross-cuts: `engine-fork-rules.md`, `ddfs-string-contract.md`, `ddfs-auto-wiring.md`, `shared-ui-coupling-rules.md`, `uniform-plugin-contract.md`.
+- **CLAUDE.md** — rewritten "Read Docs Before Coding" table to point at source JSDoc + ADRs + policy as the three canonical layers. Pre-extraction `docs/engine/*` retained as legacy reference but explicitly demoted (JSDoc + ADRs take precedence where they disagree).
+- **`docs/modules/`** — pruned to 3 sibling-app overviews (fluid-toy / fractal-toy / mesh-export) + 2 auto-generated indexes (`bugs.md`, `backlog.md`).
+- **Archive at `docs/audit-2026-05-20/archive/`** — 31 archived module docs for traceability (not canonical).
+
+**Bug findings** (3 fixed same-day, 2 queued):
+- ✅ q-112 — `WorkerDepthReadback` focus-pick hardcoded `< 1000` → fixed to `< MAX_SKY_DISTANCE`
+- ✅ f-002 — `FeatureSystem.getAll()` JSDoc corrected (said "throws" but impl falls back)
+- ✅ q-019 — investigated: NOT a real bug (followup misread code)
+- 🟡 q-002 — `GmtRendererTickDriver:90-94` 30s silent splash timeout (needs UX decision; in `bugs.md`)
+- 🟡 q-064 — `StateLibrary` action-name collision (HMR-only landmine; in `bugs.md`)
+
+**Coverage gap (honest)**: audit reached 63% file coverage (527/837), not "every file." 310 uncovered: ~70 claimed-via-glob but never recorded in `coverage.yaml` (post-processing failure) + ~219 truly unclaimed (mostly `components/*`, `engine-gmt/components/*`, `utils/*`, `engine-gmt/gallery/*`, `data/help/*`). 8-file sample found 5 load-bearing with hidden invariants — closure pass deferred; tracked in `docs/modules/backlog.md`.
+
+**Tooling at `plans/doc-audit-state/scripts/`**: `verify-doc.mjs`, `extract-bugs.mjs`, `extract-backlog.mjs`, `reconcile-coverage.mjs`, `coverage-check.mjs`, `blob-sha.mjs`, `build-inventory.mjs`, `record-coverage.mjs`.
+
 **📋 2026-05-05 — Cutting-plane DE promoted to engine-level estimator (option 5):**
 
 Code in `engine-gmt/types/fractal.ts` + `engine-gmt/features/quality.ts` + `engine-gmt/features/core_math.ts` + `engine-gmt/engine/SDFShaderBuilder.ts` + the 5 cutting-plane formulas. Full architecture writeup in `docs/gmt/24_Formula_Interlace_System.md` ("Cutting-Plane Estimator (2026-05-05)" section).

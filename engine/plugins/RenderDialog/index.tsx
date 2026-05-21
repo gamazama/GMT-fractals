@@ -50,6 +50,11 @@ export type {
 const BASE_WIDTH  = 320;
 const BASE_HEIGHT = 460;
 
+/**
+ * @invariant Installs via `registerRenderPopup`, NOT topbar or menu —
+ *   the Timeline toolbar's Render button reads `getRenderPopup()` and
+ *   hides itself when nothing is registered.
+ */
 export const installRenderDialog = <TExtra = Record<string, unknown>>(
     options: InstallRenderDialogOptions<TExtra>,
 ): void => {
@@ -111,6 +116,11 @@ function RenderDialogShell<TExtra>(
     // scale linearly). Apps that override `defaults.bitrate` keep
     // their default until the user resizes — same behaviour as
     // fluid-toy / app-gmt.
+    //
+    // @invariant Bitrate auto-recommend overwrites user input on every
+    //   `cfg.width`/`cfg.height` change — `Math.round(40 * (w*h) /
+    //   (1920*1080))` Mbps. A user edit to bitrate survives only until
+    //   the next resolution edit.
     useEffect(() => {
         const target = cfg.width * cfg.height;
         const ref    = 1920 * 1080;

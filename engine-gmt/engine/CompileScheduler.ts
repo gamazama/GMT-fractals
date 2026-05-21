@@ -57,6 +57,21 @@ export class CompileScheduler {
     /** Most recent compile duration in seconds. */
     lastDuration = 0;
 
+    /**
+     * @invariant `generation` protects POST-async-yield code only —
+     *   synchronous portions of `perform()` can still race with rapid
+     *   CONFIG bursts. `hasCompiledShader` and `lastCompiledFormula` are
+     *   set BEFORE the first async yield so a concurrent `perform()`
+     *   sees updated state.
+     * @invariant `lastCompiledFormula` includes the interlace formula
+     *   id when `interlaceCompiled` is true — formula-switch detection
+     *   must include BOTH halves of the hybrid id, otherwise an
+     *   interlace-only change skips recompile.
+     * @invariant `keepCurrent` strategy skips modular uniform sync
+     *   during the async swap (would zero+refill the array and corrupt
+     *   the still-rendering old shader's slot mapping). Modular sync
+     *   runs AFTER `swapFullMaterial`. See ADR-0040.
+     */
     private generation = 0;
     private timer: ReturnType<typeof setTimeout> | null = null;
     /** Lazy-init scratch scene used for off-thread compileAsync. */

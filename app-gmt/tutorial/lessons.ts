@@ -10,6 +10,12 @@
  *     in stable.
  */
 
+/**
+ * @invariant `seedMandelbulb` reads from `registry`, which must already be
+ *   populated. Two paths populate it before tutorials are reachable (eager
+ *   top-level statement in engine-gmt/formulas/index + the app-gmt boot).
+ *   Followup q-011.
+ */
 import { registry } from '../../engine-gmt/engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import type { TutorialLesson } from '../../engine/plugins/Tutorial';
@@ -162,7 +168,10 @@ const lesson2: TutorialLesson = {
     title: "It's Time to Fly",
     subtitle: 'Navigation & camera controls',
     onStart: (store: Store) => asOneEdit(store, () => {
-        // Only reset if NOT chaining from lesson 1 (julia is active = came from lesson 1).
+        // @invariant Detects "chained from lesson 1" by checking
+        //   `formula === 'Mandelbulb' && geometry?.juliaMode` rather than an
+        //   explicit chain token. Refactoring lesson 1's terminal state could
+        //   silently break the no-reseed-on-chain behaviour.
         const fromLesson1 = store.formula === 'Mandelbulb' && store.geometry?.juliaMode;
         if (!fromLesson1) seedMandelbulb(store);
         if (store.cameraMode !== 'Orbit') store.setCameraMode('Orbit');

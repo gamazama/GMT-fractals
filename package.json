@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "orphans": "knip --reporter compact",
+    "health": "node plans/doc-audit-state/scripts/extract-health.mjs",
     "orphans:strict": "knip --reporter compact --no-progress",
     "smoke:boot": "tsx debug/smoke-boot.mts",
     "smoke:interact": "tsx debug/smoke-interact.mts",

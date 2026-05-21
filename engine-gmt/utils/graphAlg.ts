@@ -38,6 +38,15 @@ export const hasCycle = (nodes: GraphNode[], edges: {source: string, target: str
 /**
  * Sorts graph nodes topologically.
  * Used to convert a Graph into a Linear Pipeline for the legacy shader engine.
+ *
+ * @invariant Does NOT detect cycles — passing a cyclic graph yields a partial
+ * pipeline (nodes inside the cycle drop out because their in-degree never
+ * reaches 0). The store is expected to call `hasCycle()` before `addEdge`
+ * commits.
+ * @invariant Tie-break is alphabetical (`queue.sort()` each pop), so compile
+ * order is deterministic across runs.
+ * @invariant `nodes.find(n => n.id === u)` inside the loop is O(N²);
+ * acceptable at current preset counts (< ~50 nodes).
  */
 export const topologicalSort = (nodes: GraphNode[], edges: {source: string, target: string}[]): PipelineNode[] => {
     const adj: Record<string, string[]> = {};
@@ -111,6 +120,14 @@ export const pipelineToGraph = (pipeline: PipelineNode[]): FractalGraph => {
 /**
  * Deep equality check for Pipeline structure.
  * Ignores visual positions, checks only logic impacting the shader.
+ *
+ * @invariant Recompile-trigger diff. Compares id/type/enabled,
+ * `JSON.stringify(bindings ?? {})`, and `condition.active`. `condition.mod` /
+ * `condition.rem` and `node.params` values are deliberately excluded so
+ * retuning sliders does NOT trigger a recompile.
+ * @invariant Two semantically equivalent `bindings` objects whose keys were
+ * inserted in different orders compare unequal and spuriously recompile
+ * (`JSON.stringify` is order-sensitive).
  */
 export const isStructureEqual = (a: PipelineNode[], b: PipelineNode[]) => {
     if (a.length !== b.length) return false;

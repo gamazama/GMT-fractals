@@ -46,6 +46,10 @@ interface Migration {
     apply: (preset: any) => any;
 }
 
+/**
+ * @invariant Module-scope state; the first `apply` or `list` after any
+ *   `registerMigration` re-sorts in place.
+ */
 const _migrations: Migration[] = [];
 let _sorted = false;
 
@@ -72,6 +76,12 @@ export const listMigrations = (): ReadonlyArray<Migration> => {
  * Returns the mutated preset with `version` retagged to the highest
  * applied migration version (or the preset's existing version if no
  * migrations ran).
+ */
+/**
+ * @invariant `m.apply` throws are caught and logged; the migration
+ *   chain continues with the unchanged preset. Returning falsy is
+ *   treated as "no change", not "void output":
+ *   `preset = m.apply(preset) ?? preset`.
  */
 export const applyMigrations = (preset: any): any => {
     if (!preset) return preset;

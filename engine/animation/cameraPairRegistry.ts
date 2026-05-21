@@ -222,6 +222,11 @@ function panProgress(
 // hold them indefinitely.
 
 interface DDCacheEntry { frame: number; sequence: AnimationSequence; hi: number; lo: number; }
+/**
+ * @invariant Per-frame cache invalidated by BOTH frame equality AND
+ *   sequence reference equality — Zustand swaps the sequence ref on
+ *   every keyframe write, giving free invalidation.
+ */
 const ddCache = new Map<string, DDCacheEntry>();
 
 const ddCacheKey = (zoomTrackId: string, axis: number) => `${zoomTrackId}::${axis}`;
@@ -328,6 +333,11 @@ function evaluateLoAt(loKeys: readonly Keyframe[], frame: number): number {
  *  formula. Returns `undefined` when the formula doesn't apply (no
  *  pair, missing keyframes), so the caller can fall through to the
  *  standard per-track interpolation. */
+/**
+ * @invariant Even with no panLow registered (`lo=0`), routing through
+ *   `evaluateDDPairAxis` is what guarantees hi/lo coherence at deep
+ *   zoom — the DD lerp is unconditional.
+ */
 export function evaluatePairedTrack(
     trackId: string,
     frame: number,

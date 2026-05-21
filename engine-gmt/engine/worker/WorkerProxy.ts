@@ -49,7 +49,15 @@ export class WorkerProxy implements AccumulationController {
      * and rendered image during fly mode.
      */
     private _localOffset = { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
-    /** When true, FRAME_READY won't overwrite _localOffset until the worker catches up. */
+    /**
+     * When true, FRAME_READY won't overwrite _localOffset until the worker catches up.
+     *
+     * @invariant Drift-converged clear ONLY — no timeout fallback. A
+     *   previous 2s auto-clear caused an F15 fly-mode bug where stale
+     *   FRAME_READY data overwrote a fresh teleport. The guard clears
+     *   when the worker's reported offset converges within 0.001 of the
+     *   set value. See ADR-0042.
+     */
     private _offsetGuarded = false;
     private _onCompiling: ((status: boolean | string) => void) | null = null;
     private _onCompileTime: ((duration: number) => void) | null = null;
@@ -271,6 +279,7 @@ export class WorkerProxy implements AccumulationController {
                 // Notify listeners — used to push deferred state (uniforms, camera)
                 // that was set in the store before the worker engine existed.
                 if (this._onBootedCallback) this._onBootedCallback();
+                FractalEvents.emit(FRACTAL_EVENTS.WORKER_BOOTED, undefined);
                 break;
             case 'GPU_INFO':
                 this._gpuInfo = msg.info;
@@ -296,6 +305,14 @@ export class WorkerProxy implements AccumulationController {
                 break;
             case 'ERROR':
                 console.error('[WorkerProxy] Worker error:', msg.message);
+                // If the worker reports an error before BOOTED arrives, this
+                // is a boot failure — surface it so the splash can stop
+                // pretending to load and show the user what went wrong.
+                if (!this._shadow.isBooted) {
+                    FractalEvents.emit(FRACTAL_EVENTS.WORKER_BOOT_FAILED, {
+                        reason: msg.message || 'unknown worker error'
+                    });
+                }
                 break;
 
             // ─── Video Export ───
@@ -395,6 +412,7 @@ export class WorkerProxy implements AccumulationController {
 
     private _handleWorkerCrash(reason: string) {
         console.error(`[WorkerProxy] Worker crashed: ${reason}. Terminating worker.`);
+        const wasBooted = this._shadow.isBooted;
         if (this._worker) {
             this._worker.terminate();
             this._worker = null;
@@ -421,6 +439,12 @@ export class WorkerProxy implements AccumulationController {
         if (this._exportFrameDone) { this._exportFrameDone = null; }
         if (this._exportError) { this._exportError = null; }
         if (this._onCrash) this._onCrash(reason);
+        // If the worker died before it ever booted, this is a boot
+        // failure — splash subscribes to surface it as an error panel
+        // instead of waiting forever for `isBooted`.
+        if (!wasBooted) {
+            FractalEvents.emit(FRACTAL_EVENTS.WORKER_BOOT_FAILED, { reason });
+        }
     }
 
     /** Terminate the worker */
@@ -468,6 +492,12 @@ export class WorkerProxy implements AccumulationController {
     private _bootSent = false;
     get bootSent() { return this._bootSent; }
 
+    /**
+     * @invariant Automatically `restart()`s when `_bootSent` is already
+     *   true — the sole way to cancel a Firefox synchronous-compile
+     *   pipeline mid-flight. Requires `_container` and `_lastInitArgs`
+     *   to have been stashed during the first init. See ADR-0041.
+     */
     bootWithConfig(config: ShaderConfig, initialCamera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number }) {
         // If a boot was already sent (worker is likely compiling — especially on Firefox
         // where the synchronous compile blocks the worker from sending BOOTED back),
@@ -661,6 +691,15 @@ export class WorkerProxy implements AccumulationController {
     setConvergenceNeeded(needed: boolean) {
         this.post({ type: 'SET_CONVERGENCE_NEEDED', needed } as any);
     }
+    /**
+     * @invariant Permanent stub returning `true`. Main thread cannot
+     *   probe a worker's GL context. The real probe lives in the
+     *   worker's `FractalEngine.checkHalfFloatAlphaSupport()` but has
+     *   no live consumer today (per q-094) — three vestigial layers
+     *   total. Correct fix when a quality-feature path wants the truth
+     *   is to publish a one-shot capability message from worker→main
+     *   on boot (e.g. extend `GPU_INFO`), then cache it main-side.
+     */
     checkHalfFloatAlphaSupport() { return true; }
 
     // ─── Worker communication ────────────────────────────────────────────

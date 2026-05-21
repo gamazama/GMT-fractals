@@ -27,8 +27,9 @@ import { useEngineStore } from '../../store/engineStore';
 let _installed = false;
 
 export interface InstallTutorialOptions {
-    /** localStorage namespace for completion persistence. Default 'gmt'
-     *  (matches existing key) — change for non-GMT apps. */
+    /** localStorage namespace for completion persistence. Default
+     *  `'gmt-tutorials'` (suffix appended by setTutorialStorageKey).
+     *  Change for non-GMT apps. */
     storageKey?: string;
 }
 
@@ -41,6 +42,9 @@ export function installTutorial(options: InstallTutorialOptions = {}): void {
         // Re-key the completion persistence and reload from the new key
         // so a freshly-namespaced app picks up its own history.
         setTutorialStorageKey(`${options.storageKey}-tutorials`, (completed) => {
+            // @todo Typed mutator for tutorialCompleted exists only as
+            //   completeTutorial; remove this `as any` cast when uiSlice
+            //   exposes a typed setter (q-012).
             useEngineStore.setState({ tutorialCompleted: completed } as any);
         });
     }

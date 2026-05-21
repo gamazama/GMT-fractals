@@ -143,6 +143,20 @@ export function getAdaptiveGrace(stillFps: number): number {
     return Math.max(100, Math.min(3000, 2000 / Math.max(1, stillFps)));
 }
 
+/**
+ * @invariant `state.scale` is bounded `[1.0, 1 / max(0.01, minQuality)]`
+ *   on every smart-mode assignment.
+ * @invariant `gateOnAccumOnly` disables BOTH the `isInteracting`
+ *   activity write AND the `(isInteracting || !mouseOverCanvas)`
+ *   clauses of `activitySignal`. Used by fluid-toy whose accumulator
+ *   is not invalidated by unrelated UI drags.
+ * @invariant `holdUntilMs` only blocks downscale — comparison is
+ *   strict `nextScale > state.scale`; upscale is always permitted
+ *   during hold.
+ * @invariant `fullResAccum` resets to 0 whenever `scale > 1.001` —
+ *   deep-accum protection only re-arms after sustained full-res
+ *   render.
+ */
 export function tickAdaptiveResolution(
     state: AdaptiveResolutionState,
     input: AdaptiveResolutionInput,

@@ -44,6 +44,10 @@ const TopBarDivider: React.FC = () => (
 // `when:` predicate for topbar items that should hide on mobile.
 // Reactive: TopBarHost subscribes to the relevant store fields and
 // re-evaluates predicates on every store update that affects them.
+//
+// @note Non-reactive `getState()` read — safe only inside `when:`
+//   callbacks that TopBarHost re-evaluates on relevant store updates.
+//   Inside React render, use `useMobileLayout()` instead.
 const desktopOnly = () => !isMobileSnapshot();
 
 // Shared pill-button styling for option-grid menu items (UI Layout,
@@ -193,8 +197,19 @@ export interface GmtTopbarOptions {
     resetCamera?: () => void;
 }
 
+/**
+ * @invariant One-shot side-effect. MUST be called AFTER `installTopBar`,
+ *   `installMenu`, `installCamera`, and `installBucketRender` have
+ *   installed their slots; this function only populates them.
+ *   Engine-core defaults (project-name, FPS, adaptive) are unregistered
+ *   here and re-registered into the left slot.
+ */
 export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     const {
+        // @drift The log reads "Camera Manager panel not registered yet" but
+        //   the component is registered at engine-gmt/features/ui.tsx:175.
+        //   The accurate message is "openCameraManager callback not wired by
+        //   host app". Followup q-005.
         openCameraManager = () => console.info('[gmt] Camera Manager panel not registered yet'),
         openFormulaWorkshop = () => console.info('[gmt] Formula Workshop not yet ported'),
         resetCamera = () => {

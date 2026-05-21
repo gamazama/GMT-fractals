@@ -149,10 +149,25 @@ export const CoreMathFeature: FeatureDefinition = {
         vec4B: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 B', shortId: 'v4b', uniform: 'uVec4B', min: -10, max: 10, step: 0.001, group: 'params' },
         vec4C: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 C', shortId: 'v4c', uniform: 'uVec4C', min: -10, max: 10, step: 0.001, group: 'params' }
     },
+    /**
+     * @invariant The cutting-plane preamble globals (`cp_dmin/cp_scale/cp_trap`)
+     * declared via `builder.addPreamble(CP_PREAMBLE)` MUST be kept in sync
+     * with `engine/SDFShaderBuilder.ts`'s mirror — mesh-export coupling.
+     * `addPreamble` dedupes by exact string, so identical declarations from
+     * multiple call paths are safe; drift in the literal text breaks mesh
+     * export silently. See ADR-0052 (and the inline MIRROR comment at line 107).
+     *
+     * @invariant Modular special-casing: when `formula === 'Modular'`,
+     * CoreMath adds the `PIPELINE_REV` define (forces recompile on graph
+     * structural edits), declares `uModularParams[MAX_MODULAR_PARAMS]`, calls
+     * `compileGraph(pipeline, graph.edges)` to produce `formula_Modular()`,
+     * and installs a `distOverride` short-circuit hook so SDF Primitive
+     * nodes can break the iteration loop with `distOverride < 999.0`.
+     */
     inject: (builder, config) => {
         const formula = config.formula as FormulaType;
         const quality = config.quality as QualityState;
-        
+
         // 1. Modular pipeline revision (forces recompile when graph changes)
         if (formula === 'Modular') {
             builder.addDefine('PIPELINE_REV', (config.pipelineRevision || 0).toString());

@@ -8,6 +8,11 @@
  * their own well-typed fields (formula, pipeline, graph, etc.) without
  * the engine needing to know about them.
  */
+/**
+ * @invariant `[key: string]: any` index signature defeats typo detection —
+ *   `config.fromula` does NOT error. Apps that widen via declaration
+ *   merging restore typo safety on their own well-typed fields.
+ */
 export interface ShaderConfig {
     // --- Structural (engine-level) ---
     /** Opaque identifier for the active shader variant. Apps assign meaning. */

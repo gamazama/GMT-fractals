@@ -162,6 +162,12 @@ const subscribe = (fn: () => void) => {
 // host-mount counter is module-local — it tracks render-tree presence,
 // which is a Menu plugin implementation detail, not user state.
 
+/**
+ * @invariant Counter, not boolean — two `MobileMenuHost` mounts in the
+ *   same render tree (StrictMode dev double-mount) increment/decrement
+ *   symmetrically; one bool would false-clear on the second mount's
+ *   cleanup.
+ */
 let _hostMounts = 0;
 const _hostListeners = new Set<() => void>();
 const _bumpHostMount = (delta: 1 | -1) => {
@@ -240,6 +246,13 @@ export const menu = {
 
 let _installed = false;
 let _unsubStore: (() => void) | null = null;
+/**
+ * @invariant `queueMicrotask(_notify)` defer is load-bearing — Zustand
+ *   fires subscribers synchronously during `setState`; immediate
+ *   `_notify` calls `setState` on MenuAnchor's `useSyncExternalStore`
+ *   while React is still committing, triggering "Cannot update a
+ *   component while rendering" warning.
+ */
 export const installMenu = () => {
     if (_installed) return;
     _installed = true;

@@ -47,6 +47,12 @@ export const ViewportQuality: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Local pending state for batching (changes staged until Apply)
+    //
+    // @invariant Two distinct paths for PT params. Runtime params
+    //   (`ptBounces`, `ptGIStrength`) push through `setLighting`
+    //   instantly. Compile-time params (`ptNEEAllLights`, `ptEnvNEE`)
+    //   stay in `pendingPTCompile` until Apply, then the compile pipeline
+    //   rebuilds.
     const [pendingSubsystems, setPendingSubsystems] = useState<Record<string, number> | null>(null);
     const [pendingPreset, setPendingPreset] = useState<string | null>(null);
     // Pending compile-time PT params (NEE toggles require recompile)

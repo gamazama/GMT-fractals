@@ -69,6 +69,12 @@ export const getRenderScaleSource = (): RenderScaleSource | null => _renderScale
  *  interactionDownsample *immediately* on drag start — not at the next
  *  reportFps sample window (which is throttled to ~500ms). Keeps UI
  *  responsive during scrub gestures. */
+/**
+ * @invariant Idempotent on subscription wiring (via `_installed` flag)
+ *   but `setAdaptiveConfig` runs every call — a second
+ *   `installViewport({ targetFps: 60 })` WILL apply the config without
+ *   double-subscribing.
+ */
 export const installViewport = (options?: Partial<ViewportAdaptiveConfig>) => {
     if (options) useEngineStore.getState().setAdaptiveConfig(options);
     if (_installed) return;
@@ -120,7 +126,11 @@ export const viewport = {
     /** Hold the adaptive loop at its current quality for the next
      *  durationMs (defaults to adaptiveConfig.graceMs). Call after
      *  events the user expects full quality for: loading a preset,
-     *  starting an accumulation, finishing a compile. */
+     *  starting an accumulation, finishing a compile.
+     *
+     *  @note Default holdMs is `adaptiveConfig.activityGraceMs * 4`. The
+     *    inline comment that still says "graceMs" is a stale
+     *    source-comment, not the public API name (followup q-041). */
     holdAdaptive(durationMs?: number): void {
         useEngineStore.getState().holdAdaptive(durationMs);
     },

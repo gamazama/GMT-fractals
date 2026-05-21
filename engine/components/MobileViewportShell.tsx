@@ -34,6 +34,13 @@ const MOBILE_STYLE: React.CSSProperties = {
 };
 const DESKTOP_STYLE: React.CSSProperties = {};
 
+/**
+ * @invariant Mobile branch uses `100dvh` (dynamic — tracks live
+ *   viewport including keyboard open/close). `vh` would leave a black
+ *   band after the mobile keyboard dismisses. Mobile branch applies
+ *   `env(safe-area-inset-*)` padding on all four edges via the frozen
+ *   `MOBILE_STYLE` object; desktop branch uses an empty style.
+ */
 export const MobileViewportShell: React.FC<MobileViewportShellProps> = ({ children, className = '' }) => {
     // Use `isDeviceMobile` (raw device flag) — the sticky+dvh trick is
     // meant to handle iOS address bar / Android keyboard. Force Mobile

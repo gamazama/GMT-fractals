@@ -4,7 +4,10 @@ import { AudioClip } from '../../store/animation/types';
 /** A frame-jump bigger than this fraction of a timeline-second is treated as a
  *  user scrub. Slow renders advance the timeline in chunks too — at 25Hz RAF
  *  that's 40ms per tick, well under 0.5s — so naturally-paced ticks never
- *  trip this even when the GPU is struggling. */
+ *  trip this even when the GPU is struggling.
+ *
+ *  @invariant 0.5s threshold is calibrated against a 25Hz RAF (~40ms/tick).
+ *    If ANIMATE ticks slower than ~2Hz, false scrub-seeks will appear. */
 const SCRUB_JUMP_SEC = 0.5;
 
 const ownedDecks = new Set<number>();
@@ -33,6 +36,16 @@ export function _resetAudioClipSync() {
  *  Brief render stalls produce 5-frame jumps — that's about 0.2s at 25fps,
  *  well under the scrub threshold, so they don't trigger seeks. Deck free-runs
  *  through them, timeline catches up on the next render. */
+/**
+ * @invariant Module globals (`prevFrame`, `prevPlaying`, `ownedDecks`)
+ *   persist across HMR. Tests must call `_resetAudioClipSync()` between
+ *   cases.
+ * @invariant Out-of-range during play only pauses an owned deck
+ *   (`ownedDecks.has(deckIndex)`) — prevents pausing decks the timeline
+ *   never claimed from the AudioMod UI.
+ * @invariant Out-of-range during pause clears deck ownership — future
+ *   plays from the AudioMod UI are not reclaimed.
+ */
 export function syncAudioClips(
     clips: (AudioClip | null)[],
     currentFrame: number,

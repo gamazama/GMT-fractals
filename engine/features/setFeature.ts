@@ -53,6 +53,15 @@ export const defineFeature = <P extends Record<string, ParamConfig>>(
     def: Omit<FeatureDefinition, 'params'> & { params: P },
 ): typeof def => def;
 
+/**
+ * @invariant Setter naming is a load-bearing string convention:
+ *   `'set' + capitalized feature.id` (e.g. `setAudio`, `setPostEffects`).
+ *   Not type-enforced. A boot-order bug where `setFeature()` runs before
+ *   the feature's slice has been registered into the store will hit the
+ *   dev-only `console.warn` at line ~68 — silent in production. The same
+ *   convention is consumed by store auto-wiring and by
+ *   `CompilableFeatureSection`. See q-013 carry-in.
+ */
 const setterName = (id: string): string =>
     `set${id.charAt(0).toUpperCase()}${id.slice(1)}`;
 

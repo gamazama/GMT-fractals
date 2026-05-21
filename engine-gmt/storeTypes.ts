@@ -14,6 +14,11 @@
  * Import this file once from the app entry BEFORE the store is touched.
  * The smoke harness imports it via `_smoke-bootstrap.ts`. Mirrors
  * `fluid-toy/storeTypes.ts` for its own feature set.
+ *
+ * @invariant Pure declaration-merging — no runtime exports. MUST be
+ *   imported once before the store is constructed so feature slices
+ *   typecheck on `useEngineStore((s) => s.optics)` etc. The single
+ *   runtime augmentation is `FeatureCustomActions` for LightingActions.
  */
 
 import type { OpticsState } from './features/optics';

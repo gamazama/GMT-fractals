@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-20T00:00:00.000Z",
+  "entries_to_add_to_subsystems_json": [
+    {
+      "id": "e09b-state-library-ui",
+      "tier": "engine-core",
+      "area": "StateLibrary UI primitives (panel, toast, active-snapshot features footer)",
+      "files_claimed": [
+        {
+          "path": "components/StateLibraryPanel.tsx",
+          "lines": 311,
+          "blob_sha": "3105613bf938deef4d5988690b46366ec0bd7ca4"
+        },
+        {
+          "path": "engine/components/StateLibraryToast.tsx",
+          "lines": 52,
+          "blob_sha": "8ce55de3560e206526d2aceebdd3552e81d66d32"
+        },
+        {
+          "path": "components/ActiveSnapshotFeatures.tsx",
+          "lines": 97,
+          "blob_sha": "6a6277b6125524d2202a8091f29a261e985c8272"
+        }
+      ],
+      "target_doc": "dev/docs/modules/engine/state-library-ui.md",
+      "action": "create",
+      "priority": "primary",
+      "status": "pending",
+      "existing_doc_ref": null,
+      "evidence_ref": "plans/doc-audit-state/survey/_followups/q-061.md",
+      "rationale": "Generic, app-agnostic UI primitives keyed on the createStateLibrarySlice contract (StateSnapshot<T>, toastFieldKey, activeIdKey convention). The slice itself is covered by e09-camera-plugin, but these three render-layer components are not folded into that subsystem (camera plugin is just one consumer). Surfaced by followup q-061; not covered by e09 or any other audit slice. components/StateLibraryPanel.tsx lives under the app components root rather than engine/components/, but it is the same contract surface so it is included here (followup q-061 explicitly groups all three together)."
+    },
+    {
+      "id": "g11-gmt-camera-manager",
+      "tier": "engine-gmt",
+      "area": "GMT CameraManager: cameraSlice consumer of installStateLibrary + CameraManagerPanel + getDirectionName helper",
+      "files_claimed": [
+        {
+          "path": "engine-gmt/store/cameraSlice.ts",
+          "lines": 310,
+          "blob_sha": "daf23caa86cc20a0aa40ca05f642e6db250bf1c5"
+        },
+        {
+          "path": "engine-gmt/features/camera_manager/CameraManagerPanel.tsx",
+          "lines": 154,
+          "blob_sha": "6347e3c22d1a5cb3de58987501120ab43f507870"
+        },
+        {
+          "path": "engine-gmt/features/camera_manager/logic.ts",
+          "lines": 128,
+          "blob_sha": "079bf647e31f37712b3f28a489efde2fedd51232"
+        },
+        {
+          "path": "engine-gmt/features/camera_manager/index.ts",
+          "lines": 16,
+          "blob_sha": "7f2ef2b6af6ed8f3d277c601e688ec1b1ca4aa33"
+        }
+      ],
+      "target_doc": "dev/docs/modules/engine-gmt/camera-manager.md",
+      "action": "create",
+      "priority": "primary",
+      "status": "pending",
+      "existing_doc_ref": null,
+      "evidence_ref": "plans/doc-audit-state/survey/_followups/q-062.md",
+      "rationale": "GMT CameraManager subsystem (cameraSlice + CameraManagerPanel + logic + feature index) totalling 608 uncovered lines (310+154+128+16). Load-bearing install-order invariant: installGmtCameraSlice() must run before any render of CameraManagerPanel (cameraSlice.ts:20-22 header). Four-way cross-subsystem boundaries: (1) e09-camera-plugin (installStateLibrary<SavedCameraPayload> factory contract handoff), (2) g05-engine-gmt-features (DDFS CameraManagerFeature is intentionally a tab-only stub with empty params), (3) g04-navigation (sibling input layer, not this saved-camera library), (4) engine-gmt/topbar.tsx (menu: null opts out of auto-menu; Camera menu wired by hand). The 16-line index.ts is re-listed for completeness per followup q-062 recommendation; it was previously claimed by g05-engine-gmt-features as part of engine-gmt/features/camera_manager/* glob, so integration should flag the overlap for the orchestrator. Surfaced by followup q-062."
+    }
+  ]
+}

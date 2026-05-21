@@ -40,6 +40,22 @@ import { WebcamFeature }       from '../../engine/features/webcam';
 import { DebugToolsFeature }   from '../../engine/features/debug_tools';
 
 // --- REGISTER FEATURES ---
+/**
+ * Boot-time registration entry — populates `featureRegistry` with 20 GMT-local
+ * features + 6 engine-core features (imported by module identity).
+ *
+ * @invariant Registration ORDER matters. `LightSpheresFeature` MUST register
+ * after `LightingFeature` (lighting declares the uniform arrays light_spheres
+ * consumes); `LightSpheresFeature.dependsOn = ['lighting']` enforces it at
+ * the FeatureSystem level.
+ *
+ * @invariant Engine-core features are imported BY MODULE IDENTITY from
+ * `engine/features/*` — re-registration of the same ref short-circuits at
+ * FeatureSystem (`existing === def`). Carrying GMT copies historically
+ * produced 6 "Replacing definition" warnings AND broke `uToneMapping`
+ * declaration order during post-pass compile. See ADR-0054 and the 26-34
+ * line historical comment block above.
+ */
 export const registerFeatures = () => {
     // Core
     featureRegistry.register(CoreMathFeature);

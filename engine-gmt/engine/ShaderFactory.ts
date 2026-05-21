@@ -6,6 +6,13 @@ import { LightingState } from '../features/lighting';
 import type { ShaderConfig } from './ShaderConfig';
 export type { ShaderConfig } from './ShaderConfig';
 
+/**
+ * @invariant `buildShader` calls `feat.inject()` for EVERY registered
+ *   feature regardless of enabled state. Features that have a
+ *   `toggleParam` MUST defensively emit empty stubs when disabled, or
+ *   other code that references their functions (`calculateShading`,
+ *   miss handler, post-process) will fail GL compile. See ADR-0043.
+ */
 export class ShaderFactory {
     
     public static generateFragmentShader(config: ShaderConfig): string {

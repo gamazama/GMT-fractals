@@ -64,6 +64,11 @@ export class ShaderBuilder {
      * 'materialLogic', 'missHandler', 'volumeBody', 'integrator', etc., then
      * its assembler composes them into the full raymarching shader at build.
      */
+    /**
+     * @invariant Multi-valued; does NOT dedup. Repeat `addSection(name, code)`
+     *   with identical strings accumulates duplicates (unlike `addHeader` /
+     *   `addPreamble` / `addFunction` which dedup on exact-duplicate string).
+     */
     addSection(name: string, code: string) {
         if (!this.sections.has(name)) this.sections.set(name, []);
         this.sections.get(name)!.push(code);
@@ -89,7 +94,14 @@ export class ShaderBuilder {
         return out.join('\n');
     }
 
-    /** Render uniform declarations block. */
+    /**
+     * Render uniform declarations block.
+     *
+     * @invariant Honors `UniformDefinition.arraySize` only — `precision`
+     *   and `comment` fields are silently dropped. (See
+     *   `engine/UniformSchema.ts` for the consumer that DOES enforce
+     *   `backingOnly`.)
+     */
     buildUniformsBlock(): string {
         const out: string[] = [];
         this.uniforms.forEach((info, name) => {

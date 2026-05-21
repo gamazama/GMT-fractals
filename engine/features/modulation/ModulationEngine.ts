@@ -1,4 +1,22 @@
-
+/**
+ * ModulationEngine — LFO + rule-driven signal pipeline.
+ *
+ * @invariant LFO master switch (`lfosEnabled === false`) gates BOTH writes
+ *   AND reads. `updateOscillators` returns early at line ~35 (no
+ *   `lfoValues` refresh); the rule-side gate inside `update()` must also
+ *   skip LFO-sourced rules, or they read stale cached `lfoValues` and
+ *   hang at their final modulated value.
+ * @invariant LFO phase is unit-period (0..1), NOT radians. See line ~40:
+ *   `((time / period) + phase) % 1`. Noise samples at `time / period`
+ *   (no phase added). Larger `period` = slower wiggle.
+ * @invariant `offsets` buffer is APPENDED to inside `update()`, never
+ *   cleared. Caller (AnimationSystem live path, `applyModulationsAt`
+ *   export path) MUST call `resetOffsets()` before `update()`, or rules
+ *   accumulate across frames.
+ * @invariant Two rules targeting the same param ACCUMULATE into
+ *   `offsets[target]`; `gain * signal + offset` is added to whatever
+ *   was there.
+ */
 import { ModulationRule } from './index';
 import { audioAnalysisEngine } from '../audioMod/AudioAnalysisEngine';
 import { AnimationParams } from '../../../types';

@@ -40,6 +40,17 @@ function initHistogramResources() {
     });
 }
 
+/**
+ * @invariant Color source path silently no-ops (posts `Float32Array(0)`)
+ *   when `pipeline.getOutputTexture()` is null. Main-thread consumer
+ *   must handle this.
+ * @invariant Per-call `histogramPass.mesh.material` swap — the module-
+ *   singleton assumption breaks if a future geometry-and-color side-
+ *   by-side UI ran two histograms concurrently from the same worker.
+ * @invariant Geometry source path MUST zero `uCameraPosition`.
+ *   `virtualSpace.updateShaderUniforms` has already written the
+ *   high/low offset split.
+ */
 export function handleHistogramReadback(
     id: string,
     source: 'geometry' | 'color',

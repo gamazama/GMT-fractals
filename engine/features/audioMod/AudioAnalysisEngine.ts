@@ -1,4 +1,18 @@
-
+/**
+ * AudioAnalysisEngine — lazy WebAudio graph + 2-deck mixer + analyser tap.
+ *
+ * @invariant `init()` is idempotent — short-circuits on second call.
+ *   Every public entry point (`connectMicrophone` / `connectSystemAudio` /
+ *   `loadTrack`) calls it first.
+ * @invariant Mic is connected to the analyser ONLY — NOT to
+ *   `AudioContext.destination` — to prevent feedback. System-audio
+ *   capture is connected to BOTH analyser and destination so the user
+ *   hears it. Loading a track also disables an active mic; connecting
+ *   the mic only PAUSES decks (asymmetric).
+ * @invariant `getTrackInfo().duration` returns 0 (NOT 1) when metadata
+ *   has not yet loaded. The `|| 1` fallback used to lock AudioStrip
+ *   clips to 1-second slices; do not reintroduce it.
+ */
 import { ModulationRule } from '../modulation/index';
 
 class Deck {

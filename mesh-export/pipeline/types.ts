@@ -68,6 +68,8 @@ export interface MeshPipelineResult {
   mesh: MeshWithColors | null;
   baseName: string;
   smoothingSkipped?: boolean;
+  /** True when Newton projection ran to completion; false when `useNewton` was off OR the GPU path threw and the soft-fail catch swallowed the error. */
+  newtonApplied: boolean;
   timings: PipelineTimings | null;
   useNarrowBand: boolean;
   gl: WebGL2RenderingContext | null;

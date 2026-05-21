@@ -92,6 +92,24 @@ export interface StateLibraryPanelProps<T> {
     className?: string;
 }
 
+/**
+ * @invariant Only the drag-handle child is draggable; the row itself is
+ *   NOT. Without this split, row click would race against the HTML5
+ *   drag-start and frequently swallow the click. Drag handlers
+ *   `stopPropagation` on `dragStart`.
+ * @invariant Slot-shortcut hint is hardcoded to the first 9 rows. Rows
+ *   at index >= 9 render no `Ctrl+N` hint regardless of how many
+ *   snapshots exist. Matches the slice's `count: 9` default.
+ * @invariant `isModified` is consulted ONLY for the active row —
+ *   non-active rows never render the modified marker even if dirty.
+ *   The cyan highlight already identifies which row is "live"; the
+ *   asterisk only adds value there.
+ * @invariant Delete fires immediately — no confirmation dialog. UX
+ *   safety is offloaded to the slice's undo hooks.
+ * @invariant Rename submits on Enter or blur; Escape clears `editId`
+ *   without firing `onRename` — cancel semantics are key-driven, not
+ *   button-driven.
+ */
 export function StateLibraryPanel<T>({
     snapshots,
     activeId,

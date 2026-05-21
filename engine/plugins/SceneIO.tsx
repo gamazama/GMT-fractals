@@ -83,6 +83,17 @@ const defaultFileStem = (): string => {
     return name.replace(/\s+/g, '-').toLowerCase();
 };
 
+/**
+ * @invariant Captures option values into `_getCanvas` / `_parseScene` /
+ *   `_serializeScene` / `_fileExtension` / `_snapshotAnchor` BEFORE the
+ *   `_installed` short-circuit. Reinstall updates captured deps even
+ *   though registration is skipped — this DELIBERATELY breaks
+ *   "install* is idempotent" for the captured-deps half of state.
+ * @invariant PNG/JPG export menu items + SnapshotButton are gated on
+ *   `_getCanvas` AT install time. Registering `getCanvas` AFTER install
+ *   will not back-fill these items — apps must uninstall + reinstall,
+ *   or pass `getCanvas` up-front.
+ */
 export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     if (options.getCanvas) _getCanvas = options.getCanvas;
     if (options.parseScene) _parseScene = options.parseScene;
@@ -187,6 +198,14 @@ export const uninstallSceneIO = () => {
  * this so a missing parser argument can never silently downgrade a
  * GMF load to plain JSON (which was a real footgun before this was
  * the only entry point).
+ */
+/**
+ * @invariant Pure decoder only — returns a parsed Preset but does NOT
+ *   apply it. Callers MUST follow with
+ *   `useEngineStore.getState().loadScene({ preset })` — calling
+ *   `loadPreset` directly skips the compile gate, post-boot config
+ *   flush, worker `OFFSET_SET`, and `CONFIG_DONE` debounce-skip,
+ *   causing post-boot scenes to render as fallback sphere.
  */
 export const loadSceneFile = async (file: File): Promise<Preset | null> => {
     const parser: SceneParser = _parseScene ?? parseSceneJson;

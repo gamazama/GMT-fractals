@@ -10,13 +10,14 @@
  */
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { LoadingRendererCPU } from '../engine-gmt/engine/LoadingRendererCPU';
+import { LoadingRendererCPU } from './LoadingRendererCPU';
 import { useEngineStore } from '../store/engineStore';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { ChevronDown, UploadIcon, CubeIcon, NetworkIcon } from '../components/Icons';
 import { loadSceneFile } from '../engine/plugins/SceneIO';
 import type { Preset } from '../types';
 import { useCompileProgress, selectProgress } from '../store/CompileProgressStore';
+import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
 const GMT_NAMES = [
     'Generative Math Tracer', 'GPU Manifold Tracer', 'GPU Mandelorus Tracer',
@@ -67,11 +68,33 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     const [opacity, setOpacity] = useState(1);
     const [isVisible, setIsVisible] = useState(true);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [bootError, setBootError] = useState<string | null>(null);
+    const bootErrorRef = useRef<string | null>(null);
+    useEffect(() => { bootErrorRef.current = bootError; }, [bootError]);
     useEffect(() => { isMenuOpenRef.current = isMenuOpen; }, [isMenuOpen]);
+
+    // Surface worker boot failures. Previously the splash sat at the
+    // post-bar state forever waiting on `isReady`, which never flipped
+    // because GmtRendererTickDriver was polling a `proxy.isBooted` that
+    // would never become true. WorkerProxy now emits this event from
+    // both _handleWorkerCrash (worker thread died) and the 'ERROR'
+    // message handler (worker reported an error before BOOTED arrived).
+    useEffect(() => {
+        const off = FractalEvents.on(FRACTAL_EVENTS.WORKER_BOOT_FAILED, ({ reason }) => {
+            setBootError(reason);
+        });
+        return off;
+    }, []);
 
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [subtitle] = useState(pickRandomName);
 
+    /**
+     * @invariant `hasBootedRef` is a one-way latch. Once a boot has fired
+     *   this component never auto-boots again. Formula-switch and file-load
+     *   paths force a reboot only when this latch is set
+     *   (see handleSelectFormula / handleFile).
+     */
     const triggerBoot = () => {
         if (!hasBootedRef.current) {
             hasBootedRef.current = true;
@@ -137,7 +160,11 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
             }
             if (rendererRef.current) rendererRef.current.render(time, p / 100.0);
 
-            if (isReadyRef.current && cp.phase === 'done' && !menuOpen) {
+            // @invariant Double-gated fade: `isReady` (worker output) AND
+            // `cp.phase === 'done'` (compile bar hit 100%). Both required so
+            // fast compiles don't snap the bar from 73% → gone.
+            // bootError holds the splash open on a failure panel — never fade.
+            if (isReadyRef.current && cp.phase === 'done' && !menuOpen && !bootErrorRef.current) {
                 if (rendererRef.current) { rendererRef.current.dispose(); rendererRef.current = null; }
                 setOpacity(0);
                 setTimeout(() => { setIsVisible(false); onFinished(); }, 800);
@@ -155,6 +182,40 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     useEffect(() => { if (isHydrated) triggerBoot(); }, [isHydrated]);
 
     if (!isVisible) return null;
+
+    if (bootError) {
+        return (
+            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black" style={{ opacity }}>
+                <div className="text-center mb-8 relative animate-fade-in-up z-10">
+                    <h1 className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] mb-2">
+                        G<span className="text-red-400">M</span>T
+                    </h1>
+                    <div className="text-xs text-red-400/80 font-mono uppercase tracking-[0.4em]">Engine failed to start</div>
+                </div>
+
+                <div className="relative z-10 w-[500px] max-w-[90vw] bg-gray-900/80 border border-red-500/40 rounded-xl p-5 shadow-[0_0_50px_rgba(239,68,68,0.15)] backdrop-blur-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-red-400/80 mb-2">Reason</div>
+                    <div className="font-mono text-xs text-gray-200 whitespace-pre-wrap break-words max-h-[180px] overflow-auto">
+                        {bootError}
+                    </div>
+                </div>
+
+                <div className="mt-6 flex gap-2 z-20">
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 text-xs font-bold rounded border border-cyan-500/40 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/40 hover:text-white transition-colors"
+                    >
+                        Reload
+                    </button>
+                </div>
+
+                <div className="mt-4 max-w-[500px] text-center text-[10px] font-mono text-gray-500 px-4">
+                    If reloading doesn't help, the most common causes are WebGL2 / OffscreenCanvas being disabled,
+                    a lost GPU context, or a shader-compile failure for the current formula.
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black transition-opacity duration-1000" style={{ opacity }}>

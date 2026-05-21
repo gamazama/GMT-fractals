@@ -37,6 +37,18 @@ export class WorkerDepthReadback {
      * Called once per rendered frame (after the display blit).
      * Checks the async fence from the previous readback, issues a new one every 3rd frame,
      * and resolves any pending focus pick.
+     *
+     * @invariant Async readback reads from `pipeline.getPreviousRenderTarget()`,
+     *   NOT the current one — reading the in-flight render target would
+     *   race the active render.
+     * @invariant PBO size depends on float format — 8 bytes for half-
+     *   float (RGBA + HALF_FLOAT), 16 bytes for float (RGBA + FLOAT).
+     *   Mismatched sizes silently corrupt the readback.
+     * @invariant Depth is read from the alpha channel of the
+     *   accumulation RT. Anything else in alpha (e.g. coverage during
+     *   alpha-pass export) would clobber `engine.lastMeasuredDistance`.
+     *   The export path explicitly skips the probe during alpha export;
+     *   this tick path does NOT gate on `uOutputPass`.
      */
     tick(
         engine: FractalEngine,
@@ -148,11 +160,18 @@ export class WorkerDepthReadback {
             const px = Math.min(Math.max(Math.floor((x + 1) * 0.5 * w), 0), w - 1);
             const py = Math.min(Math.max(Math.floor((y + 1) * 0.5 * h), 0), h - 1);
             const dist = depthData[(py * w + px) * 4 + 3];
-            postMsg({ type: 'FOCUS_RESULT', id, distance: (dist > 0 && dist < 1000) ? dist : -1 });
+            postMsg({ type: 'FOCUS_RESULT', id, distance: (dist > 0 && dist < MAX_SKY_DISTANCE) ? dist : -1 });
             this._focusPickState = { phase: 'ready', width: w, height: h, depthData };
         }
     }
 
+    /**
+     * @invariant Focus-pick state machine has THREE phases: `pending`
+     *   (set here) → on the next tick the entire depth buffer is
+     *   snapshotted, the clicked pixel is read, `FOCUS_RESULT` is
+     *   posted, state → `ready` → subsequent `sampleFocusPick` calls
+     *   read from the cached snapshot until `endFocusPick` clears it.
+     */
     startFocusPick(id: string, x: number, y: number): void {
         this._focusPickState = { phase: 'pending', id, x, y };
     }
@@ -166,7 +185,7 @@ export class WorkerDepthReadback {
         const px = Math.min(Math.max(Math.floor((x + 1) * 0.5 * sw), 0), sw - 1);
         const py = Math.min(Math.max(Math.floor((y + 1) * 0.5 * sh), 0), sh - 1);
         const dist = depthData[(py * sw + px) * 4 + 3];
-        postMsg({ type: 'FOCUS_RESULT', id, distance: (dist > 0 && dist < 1000) ? dist : -1 });
+        postMsg({ type: 'FOCUS_RESULT', id, distance: (dist > 0 && dist < MAX_SKY_DISTANCE) ? dist : -1 });
     }
 
     endFocusPick(): void {

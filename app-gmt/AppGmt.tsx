@@ -99,6 +99,9 @@ export const AppGmt: React.FC = () => {
     // re-execute even when their own selectors had stable values. Profile-
     // verified hot path; see `docs/UI_PERF_HANDOFF.md`.
     //
+    // @perf Granular selectors only. A single `useEngineStore()` here
+    //   re-renders every child on unrelated store mutations.
+    //
     // Action functions on the store are stable references created at slice
     // init, so handlers read them via `useEngineStore.getState().<action>`
     // at call time — no subscription needed.
@@ -190,6 +193,11 @@ export const AppGmt: React.FC = () => {
     // diverged from the store's sceneOffset (read by timelineUtils
     // .getLiveValue) — making the Key Cam dirty check always fire and
     // the button always render red after any navigation.
+    /**
+     * @invariant Delegates to the store action — never inline-mutates
+     *   cameraSlice. The store action keeps `engine.virtualSpace.state`
+     *   and the Key Cam dirty check in lockstep via OFFSET_SET.
+     */
     const setSceneOffset = (v: any) => {
         (useEngineStore.getState() as any).setSceneOffset(v);
     };

@@ -1,3 +1,15 @@
+/**
+ * @module engine-gmt/engine/NodeRegistry
+ *
+ * Singleton NodeRegistry mapping Modular-graph node id → NodeDefinition.
+ *
+ * The 25 node definitions are registered from `engine-gmt/data/nodes/definitions.ts`
+ * (owned by g09-modular-graph, NOT this module). `engine-gmt/utils/GraphCompiler.ts`
+ * performs a bare side-effect import of `'../data/nodes/definitions'` so any
+ * compile path triggers registration.
+ *
+ * See ADR-0049 (two independent registries: FractalRegistry + NodeRegistry).
+ */
 
 import { NodeType } from '../types';
 

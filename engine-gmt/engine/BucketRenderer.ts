@@ -57,6 +57,12 @@ export class BucketRenderer {
         this.runner.stop();
     }
 
+    /**
+     * @invariant Ignores the `_gl` argument — the renderer is sourced
+     *   from the host's engine ref. Signature kept for pre-extraction
+     *   compatibility (FractalEngine, renderWorker, handleRenderTick
+     *   call this with their renderer).
+     */
     public update(_gl: THREE.WebGLRenderer, config: BucketRenderConfig): void {
         if (config) this.runner.updateConfig(config);
         this.runner.update();

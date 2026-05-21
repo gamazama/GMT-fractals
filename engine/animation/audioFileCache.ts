@@ -1,7 +1,10 @@
 /** Per-deck cache of the underlying audio File. The animation store's
  *  AudioClip carries metadata + waveform peaks that are structured-cloneable;
  *  the File itself is only needed transiently (to re-decode for export, or
- *  re-compute peaks). Module-level singleton — lifetime = page lifetime. */
+ *  re-compute peaks). Module-level singleton — lifetime = page lifetime.
+ *
+ *  @invariant Map is typed `0 | 1` only — three or more decks would require
+ *    the registry to be refactored. */
 
 const cache = new Map<0 | 1, File>();
 

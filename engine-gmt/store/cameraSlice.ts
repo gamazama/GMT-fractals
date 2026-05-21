@@ -73,7 +73,13 @@ const captureCameraState = (): SavedCameraPayload => {
     };
 };
 
-/** Apply: push a saved snapshot into GMT's live camera state. */
+/**
+ * Apply: push a saved snapshot into GMT's live camera state.
+ *
+ * @invariant Emits `CAMERA_TRANSITION` FIRST, then `setStates` the three
+ * camera fields, then probes for `setOptics`, then `engine.resetAccumulation()`.
+ * Order matters — event listeners may pre-warm shaders before the store flip.
+ */
 const applyCameraState = (state: SavedCameraPayload): void => {
     FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TRANSITION, state as CameraState);
     useEngineStore.setState({
@@ -86,10 +92,16 @@ const applyCameraState = (state: SavedCameraPayload): void => {
     (engine as any).resetAccumulation?.();
 };
 
-/** Modified marker — compares live sceneOffset+rotation+optics to a
- *  snapshot. Tolerances mirror the original implementation in
- *  CameraManagerPanel.tsx. Exported so the panel can render an
- *  up-to-date dirty marker as the user navigates. */
+/**
+ * Modified marker — compares live sceneOffset+rotation+optics to a
+ * snapshot. Tolerances mirror the original implementation in
+ * CameraManagerPanel.tsx. Exported so the panel can render an
+ * up-to-date dirty marker as the user navigates.
+ *
+ * @invariant Tolerances: position L1 ≤ 0.0001 (sums high+low parts),
+ * rotation quaternion L1 ≤ 0.001, optics `camType` ±0.1, `orthoScale` ±0.01,
+ * `camFov` ±0.1.
+ */
 export const isCameraModified = (snap: SavedCameraPayload): boolean => {
     const live = useEngineStore.getState() as any;
     const so = live.sceneOffset;
@@ -195,6 +207,29 @@ const resetToFormulaDefault = (): void => {
     FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, resetState as any);
 };
 
+/**
+ * One-shot installer — patches the engine store with GMT-specific camera
+ * helpers and composes the engine-core `installStateLibrary<T>` factory
+ * with GMT capture/apply/isModified/suggestLabel/captureThumbnail/onReset.
+ *
+ * @invariant Load-order critical. Must run BEFORE any component reads
+ * `s.savedCameras.length`. `CameraManagerPanel` reads `s.savedCameras`
+ * directly and would crash on `undefined.length` otherwise.
+ * `app-gmt/main.tsx:107` satisfies this by calling `installGmtCameraSlice()`
+ * immediately after `registerGmtUi()`; there is NO runtime guard.
+ *
+ * @invariant Opts out of the auto-generated topbar menu via `menu: null` —
+ * `engine-gmt/topbar.tsx:271-348` wires the Camera menu by hand (Undo Move,
+ * Redo Move, Reset Position, View Manager, Camera Slots 1-9). Slot 1-9 click
+ * handlers route to the SAME `savedCameras[slotIndex]` + `selectCamera` /
+ * `saveToSlot` actions the `Mod+1..9` / `1..9` slot shortcuts hit, so menu
+ * clicks and hotkeys agree by construction. See ADR-0057.
+ *
+ * @invariant Wraps engine-core history-slice's `undoCamera` / `redoCamera`
+ * so each call also fires `CAMERA_TELEPORT` to warp the R3F camera to the
+ * restored pose synchronously after the diff applies. Engine-core's history
+ * slice is synchronous.
+ */
 export const installGmtCameraSlice = (): void => {
     const set = useEngineStore.setState as (partial: any) => void;
     const get = useEngineStore.getState as () => any;

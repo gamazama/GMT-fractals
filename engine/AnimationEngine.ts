@@ -1,3 +1,10 @@
+/**
+ * @module engine/AnimationEngine
+ *
+ * @invariant `tick()` / `scrub()` are silent no-ops until
+ *   `connect(animStore, fractalStore)` has been called — apps that skip
+ *   `bindStoreToEngine()` see no playback rather than a crash.
+ */
 
 import { Track, Keyframe } from '../types';
 import { solveBezierY } from './BezierMath';
@@ -71,6 +78,11 @@ export class AnimationEngine {
         };
     }
 
+    /**
+     * @invariant `binderRegistry.lookup` wins over `this.binders` per-id
+     *   cache; checked first so a binder registered AFTER a DDFS-derived
+     *   lookup still takes effect.
+     */
     private getBinder(id: string): ValueSetter {
         // Explicit registration wins — checked BEFORE the per-id cache
         // so that registering a custom binder AFTER a previous lookup
@@ -276,6 +288,15 @@ export class AnimationEngine {
         this.scrub(nextFrame);
     }
 
+    /**
+     * @invariant Non-float tracks (`track.type !== 'float'`) are silently
+     *   dropped — bool/enum/string/image tracks get no step/interpolation
+     *   behaviour from the engine.
+     * @invariant `ignoreCamera = isPlaying && isRecording && recordCamera`
+     *   skips ALL `camera.*` tracks in record-camera mode; `camera.position`
+     *   and `camera.offset` are also hardcoded-skipped unconditionally
+     *   (legacy carve-out).
+     */
     public scrub(frame: number) {
         if (!this.animStore) return;
         const state = this.animStore.getState();
@@ -325,6 +346,13 @@ export class AnimationEngine {
         for (const h of this.postScrubHooks) h(ctx);
     }
 
+    /**
+     * @invariant Bezier is NOT applied on log tracks. Tangent y-values
+     *   live in absolute value-space; reinterpreting under log would
+     *   silently change the curve shape. Log tracks evaluate as
+     *   linear-in-log regardless of stored interpolation type.
+     *   See engine/animation/logTrackRegistry.ts:22-26.
+     */
     private interpolate(track: Track, frame: number): number {
         const keys = track.keyframes;
         if (keys.length === 0) return 0;

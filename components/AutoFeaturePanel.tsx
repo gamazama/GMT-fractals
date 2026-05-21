@@ -1,3 +1,26 @@
+/**
+ * DDFS panel renderer. Walks `feature.params` and emits the right
+ * input primitive per type. The connecting layer between the feature
+ * registry and the actual store-bound UI.
+ *
+ * @invariant Composed-vec decomposition (`config.composeFrom`) MUST
+ *   run BEFORE the `onChangeOverride` fork (lines 114-122). Moving
+ *   decomposition below the override fork breaks "Local Rotation"
+ *   vec3 sliders inside `CompilableFeatureSection` (regression noted
+ *   in the inline bug-fix comment).
+ * @invariant `onUpdate: 'compile'` default route is HARDCODED to the
+ *   GMT app — calls `movePanel('Engine', 'left')` and emits
+ *   `'engine_queue'` on FractalEvents (lines 147-153). Non-GMT
+ *   hosts (fluid-toy, fractal-toy, demo) silently break their layout
+ *   if a feature surfaces compile-mode params here. Followup q-089.
+ * @invariant `forcedState` flows through props only; child panels
+ *   inside `CompilableFeatureSection` still read live store for
+ *   condition evaluation (lines 96-98) — compile-settings params
+ *   that depend on each other can mismatch.
+ * @invariant `data-help-id` is set on every rendered control
+ *   (line 492). `collectHelpIds` walks this attribute; do not
+ *   strip it.
+ */
 
 import React, { useMemo, useState, Suspense } from 'react';
 import { featureRegistry, ParamConfig, ParamCondition, CustomUIConfig, GroupConfig } from '../engine/FeatureSystem';

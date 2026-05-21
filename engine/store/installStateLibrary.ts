@@ -97,6 +97,11 @@ const defaultSlotOpts = (
  *  free, anchored next to the menu button. Apps that opt out (menu:
  *  null, e.g. GMT, which builds its Camera menu by hand) can still
  *  mount <StateLibraryToast arrayKey={...} /> wherever they want. */
+/**
+ * @invariant Toast topbar slot is auto-mounted only when `opts.menu` is
+ *   non-null. Apps passing `menu: null` (e.g. app-gmt's hand-wired
+ *   Camera menu) must mount `<StateLibraryToast arrayKey>` themselves.
+ */
 export function installStateLibrary<T>(opts: InstallStateLibraryOptions<T>): void {
     installStateLibrarySlice<T>(opts);
 
@@ -137,6 +142,9 @@ function registerSlotShortcuts<T>(
 
     const idPrefix = opts.actions.saveToSlot;
 
+    // @invariant Read action functions at fire time, not install time —
+    //   robust against ordering between `installStateLibrary` and the
+    //   underlying slice install.
     for (let n = 1; n <= count; n++) {
         const slotIndex = n - 1;
         shortcuts.register({

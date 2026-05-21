@@ -75,6 +75,13 @@ export class GmtBucketHost implements BucketRenderHost {
         return this.engine?.renderer ?? null;
     }
 
+    /**
+     * @invariant Aspect override (`cam.aspect = outputW/outputH`)
+     *   requires `UniformManager.syncFrame` to SKIP the `cam.aspect`
+     *   re-sync while `state.isBucketRendering` is true.
+     * @invariant `uFullOutputResolution` is seeded ONCE here and held
+     *   constant across image tiles; only reset in `endRender`.
+     */
     public beginRender(outputW: number, outputH: number): void {
         if (!this.engine) return;
         const gl = this.engine.renderer;
@@ -120,6 +127,16 @@ export class GmtBucketHost implements BucketRenderHost {
         pixelOrigin?.set(tile.pixelX, tile.pixelY);
     }
 
+    /**
+     * @invariant Writes `RegionMin`/`RegionMax` on materials, caches
+     *   the bucket UV for convergence polling, and applies a pipeline
+     *   SCISSOR over the bucket pixel rect. The shader has a vUv-based
+     *   discard too, but scissor is the actual perf-saving mechanism —
+     *   the discard still costs a history fetch + MRT write per pixel.
+     * @invariant Convergence state is per-GPU-bucket (not per-image-
+     *   tile): `convergenceRequested` and `cachedConvergenceResult`
+     *   reset every call here.
+     */
     public beginGpuBucket(uvRect: BucketUvRect, pixelRect: { pixelX: number; pixelY: number; pixelW: number; pixelH: number }): void {
         if (!this.engine) return;
         const min = new THREE.Vector2(uvRect.minX, uvRect.minY);
@@ -149,6 +166,11 @@ export class GmtBucketHost implements BucketRenderHost {
         this.engine?.pipeline.resetAccumulation();
     }
 
+    /**
+     * @invariant `config.convergenceThreshold` is a PERCENT — host
+     *   divides by 100 inside. Callers passing raw 0-1 would silently
+     *   never converge.
+     */
     public isCurrentBucketConverged(_frameCount: number, config: BucketRenderConfig): boolean {
         if (!this.engine) return false;
         const gl = this.engine.renderer;
@@ -182,6 +204,13 @@ export class GmtBucketHost implements BucketRenderHost {
         return this.engine?.pipeline.getOutputTexture() ?? null;
     }
 
+    /**
+     * @invariant Bloom resolution branches on `fullOutput > originalSize`
+     *   (output-upscaled), NOT on whether tiling is active.
+     *   `exportMaterial.uEncodeOutput = 1.0` is mandatory for the bucket
+     *   readback path — the export material's shader has both encoded
+     *   and unencoded branches.
+     */
     public getReadbackMaterial(
         composite: THREE.Texture,
         tileSize: BucketSize2D,
@@ -216,6 +245,11 @@ export class GmtBucketHost implements BucketRenderHost {
         return exportMat;
     }
 
+    /**
+     * @invariant Must call `gl.getContext().flush()` — three.js doesn't
+     *   always flush after a single render to the default framebuffer;
+     *   removing the flush can leave the canvas blank on Refine View.
+     */
     public onTileBlitToScreen(composite: THREE.Texture): void {
         // Refine View: blit the post-processed composite to the canvas using
         // displayMaterial. The bucket render panel auto-switches the viewport
@@ -239,6 +273,13 @@ export class GmtBucketHost implements BucketRenderHost {
         gl.getContext().flush();
     }
 
+    /**
+     * @invariant Pipeline scissor AND region uniforms must BOTH be
+     *   reset here — otherwise the next viewport frame's region mask
+     *   discards everything outside the last bucket.
+     *   `savedPixelSizeBase_` must be cleared (while >0 it forces
+     *   `FractalEngine.compute()` to override `uPixelSizeBase`).
+     */
     public endRender(): void {
         if (!this.engine) return;
 

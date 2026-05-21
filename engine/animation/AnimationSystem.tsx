@@ -79,6 +79,14 @@ function flushRecordBuffer() {
     recordBuffer.length = 0;
 }
 
+/**
+ * @invariant Cleanup pass blocks the early-return: while
+ *   `activeTargetsRef.current.size > 0` the tick still runs one pass to
+ *   clear the previous frame's stale uniforms and emit baselines.
+ * @invariant Uniforms flow via `FractalEvents.emit(FRACTAL_EVENTS.UNIFORM,
+ *   …)` NOT `engine.setUniform` — engine-core's WorkerProxy is a stub;
+ *   only hosts with a real bridge receive them.
+ */
 // Exported tick function for orchestrator pattern
 export const tick = (delta: number) => {
     const animStore = useAnimationStore.getState();

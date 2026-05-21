@@ -142,6 +142,24 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
     return out;
 };
 
+/**
+ * Parse a GMF string into a FractalDefinition. Falls back to JSON FractalDefinition
+ * if no `<Metadata>` tag is present.
+ *
+ * @invariant Tag extraction uses non-greedy `<TAG>...</TAG>` regex. A shader
+ * body containing a literal `</Shader_Function>` (e.g. inside a GLSL
+ * line-comment) will truncate early — latent fragility, no current bug hits
+ * it. Modular formulas (`metadata.id === 'Modular'`) are explicitly allowed
+ * to ship with empty `Shader_Function` / `Shader_Loop`; their GLSL is rebuilt
+ * from the preset's pipeline at load time.
+ *
+ * @invariant `shaderMeta` is the sole survival path for non-GLSL shader
+ * fields. Only `preambleVars` and `usesSharedRotation` are stashed/restored.
+ * A future field added to the runtime shader object will be silently dropped
+ * on save unless added to both the stash (generateGMF) and the restore paths.
+ *
+ * See ADR-0052 (GMF as two-tier HTML-style container).
+ */
 export const parseGMF = (content: string): FractalDefinition => {
     const extract = (tag: string) => {
         // Match content between tags, non-greedy
@@ -207,7 +225,13 @@ export const parseGMF = (content: string): FractalDefinition => {
 // the full scene preset (camera, lights, features, etc.) as JSON.
 // The formula metadata and shader blocks remain identical to v1 for compatibility.
 
-/** Detect whether a string is GMF format (vs plain JSON) */
+/**
+ * Detect whether a string is GMF format (vs plain JSON).
+ *
+ * @invariant Strict prefix check on `trimStart()` — content must start with
+ * `'<!--'` or `'<Metadata>'`. A leading UTF-8 BOM or stray container tag
+ * will misclassify as JSON. Used as the dispatch predicate by `loadGMFScene`.
+ */
 export const isGMFFormat = (content: string): boolean => {
     const trimmed = content.trimStart();
     return trimmed.startsWith('<!--') || trimmed.startsWith('<Metadata>');
@@ -217,6 +241,13 @@ export const isGMFFormat = (content: string): boolean => {
  * Save a full scene as GMF string.
  * Embeds the formula definition (shader + metadata) AND the full scene preset.
  * The scene preset lives in a separate <Scene> block after the shader blocks.
+ *
+ * @invariant Silently downgrades to plain `JSON.stringify(preset)` when
+ * `registry.get(preset.formula)` returns undefined — NO log, NO telemetry.
+ * Forks that need telemetry on unknown formulas at save-time must wrap this.
+ *
+ * @invariant The formula payload embeds `def.defaultPreset` (NOT the live
+ * preset); the current preset is appended in `<Scene>`. See ADR-0053.
  */
 export const saveGMFScene = (preset: Preset): string => {
     const def = registry.get(preset.formula);
@@ -241,7 +272,15 @@ export const saveGMFScene = (preset: Preset): string => {
  *   - Scene GMF (v2): has <Scene> block → extracts both formula def + scene preset
  *   - Formula-only GMF (v1): no <Scene> block → uses defaultPreset from metadata
  *   - Legacy JSON: plain JSON preset (backward compatibility)
- * Does NOT register the formula — caller should check registry and register if needed.
+ *
+ * @invariant Does NOT register the formula — caller (System Menu / drag-drop
+ * handler) checks registry and registers if needed. Callers that apply the
+ * returned `preset` without first ensuring the formula is registered will
+ * fail at compile (no formula → empty shader → black screen). See ADR-0053.
+ *
+ * @invariant v1 formula-only GMF (no `<Scene>` block) synthesises a preset
+ * from `def.defaultPreset` falling back to `{ formula: def.id }`. Legacy JSON
+ * path returns `{ preset }` with no `def`.
  */
 export const loadGMFScene = (content: string): { def?: FractalDefinition, preset: Preset } => {
     if (isGMFFormat(content)) {

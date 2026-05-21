@@ -72,7 +72,13 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
         }
     }, [isContextMenuOpen, hoveredLight]);
 
-    // Sync active light popup ref for gizmo range circle + store for tutorial trigger
+    // Sync active light popup ref for gizmo range circle + store for tutorial trigger.
+    //
+    // @invariant Module-mutable singleton — bypasses the store on purpose
+    //   so per-frame gizmo reads don't trigger React renders. If a future
+    //   "edit light from dock panel" interaction wants the same gizmo
+    //   highlight, `LightPanelControls` must also write here.
+    //   Source: features/lighting/utils/GizmoMath.
     useEffect(() => {
         const idx = hoveredLight ?? activeMenuIndex ?? -1;
         activeLightPopup.index = idx;

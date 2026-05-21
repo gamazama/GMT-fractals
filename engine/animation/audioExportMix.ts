@@ -9,9 +9,14 @@ export interface MixedAudio {
     durationSec: number;
 }
 
-/** Decode each loaded audio clip's source File, slice to the trim range,
- *  position at startFrame, sum into an interleaved stereo buffer covering the
- *  export's frame range. Returns null when no clips have a cached file. */
+/**
+ * Decode each loaded audio clip's source File, slice to the trim range,
+ * position at startFrame, sum into an interleaved stereo buffer covering
+ * the export's frame range. Returns null when no clips have a cached file.
+ *
+ * @invariant The export window uses INCLUSIVE end (`(endFrame+1)/fps`) —
+ *   without the +1 the audio mix is one frame short (~40ms at 25fps).
+ */
 export async function mixAudioClipsForExport(
     clips: (AudioClip | null)[],
     fps: number,
@@ -70,6 +75,9 @@ export async function mixAudioClipsForExport(
             // Source sample range. For each output sample, resample from the
             // closest source sample (linear interpolation) — adequate for
             // typical 44.1k → 48k conversions.
+            //
+            // @invariant Linear-interpolation resample only — no anti-alias
+            //   lowpass for large rate ratios.
             const ch0 = buf.getChannelData(0);
             const ch1 = srcChannels > 1 ? buf.getChannelData(1) : ch0;
 
@@ -95,6 +103,9 @@ export async function mixAudioClipsForExport(
     }
 
     // Hard-clip in case multiple clips overlap.
+    //
+    // @invariant Hard-clipping with no per-clip gain — overlapping clips at
+    //   full gain distort. `AudioClip` has no gain field.
     for (let i = 0; i < pcm.length; i++) {
         if (pcm[i] > 1)  pcm[i] = 1;
         else if (pcm[i] < -1) pcm[i] = -1;

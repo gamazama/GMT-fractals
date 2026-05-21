@@ -50,6 +50,10 @@ interface UseAppStartupOptions {
     estimateBootCompileMs?: (state: any) => number;
 }
 
+/**
+ * @deprecated The leading-underscore `_isSceneReady` param is unused —
+ *   flagged for removal.
+ */
 export const useAppStartup = (_isSceneReady: boolean, options?: UseAppStartupOptions) => {
     const opts = options;
     const [startupMode] = useState<'default' | 'url'>(() => {
@@ -60,6 +64,15 @@ export const useAppStartup = (_isSceneReady: boolean, options?: UseAppStartupOpt
     const bootRequestedRef = useRef(false);
     const hydratedRef = useRef(false);
 
+    /**
+     * @invariant Re-entrancy guard: `bootRequestedRef` blocks double-fire
+     *   unless `force=true`. Formula switches + file loads pass force=true.
+     * @invariant 50 ms `setTimeout` yields a React tick so any in-flight
+     *   `loadScene` writes settle before the worker reads `ShaderConfig`.
+     *   DO NOT remove without revisiting LoadingScreen's
+     *   `handleSelectFormula → bootEngineRef.current(true)` race.
+     * @see app-gmt/LoadingScreen.tsx [isHydrated] effect for the trigger.
+     */
     const bootEngine = useCallback((force?: boolean) => {
         if (!opts) return; // No-op when caller provides no boot wiring.
         if (!force) {
