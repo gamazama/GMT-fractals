@@ -107,7 +107,9 @@ export interface EngineRenderState {
     adaptiveSuppressed: boolean;
 }
 
-// Precompute 2048 jitter values using Halton sequence for faster access
+// Precompute 2048 jitter values using Halton sequence for faster access.
+// @invariant Module-scope, shared across all FractalEngine instances —
+//   safe because it is READ-ONLY.
 const PRECOMPUTED_JITTER: THREE.Vector2[] = [];
 for (let i = 1; i <= 2048; i++) {
     const jX = halton(i, 2) * 2.0 - 1.0;
@@ -115,6 +117,12 @@ for (let i = 1; i <= 2048; i++) {
     PRECOMPUTED_JITTER.push(new THREE.Vector2(jX, jY));
 }
 
+/**
+ * @invariant `engine.renderer` and `engine.pipeline` are NULL on the main
+ *   thread under worker mode. Code MUST guard via `engine.isBooted` or
+ *   use the shadow state on `WorkerProxy`. Matches the "What NOT to Do"
+ *   rule in `CLAUDE.md` / `docs/gmt/01_System_Architecture.md`.
+ */
 export class FractalEngine {
     public materials: MaterialController;
     public sceneCtrl: SceneController;
@@ -221,7 +229,7 @@ export class FractalEngine {
         this.materials.setGradient([
             { id: '1', position: 0.0, color: '#000000' },
             { id: '2', position: 1.0, color: '#ffffff' }
-        ], 1);
+        ], 'uGradientTexture');
         
         this.bindEvents();
         this.isBooted = false;
@@ -328,11 +336,17 @@ export class FractalEngine {
         this.materials.loadTexture(type, dataUrl);
     }
 
-    public resetAccumulation() { 
+    /**
+     * @invariant Deliberately does NOT set `dirty = true` — would
+     *   infinite-loop with `update()`. The `dirty` flag is for "config
+     *   changed, recompile" semantics; accumulation reset is a separate
+     *   concern (RenderPipeline.reset on the next render).
+     */
+    public resetAccumulation() {
         // NOTE: Removed setting 'this.dirty = true' because it was causing an infinite loop
         // in the update() method where accumulation was constantly being reset
-        this.markInteraction(); 
-        this.pipeline?.resetAccumulation(); 
+        this.markInteraction();
+        this.pipeline?.resetAccumulation();
     }
     public setPreviewSampleCap(n: number) { this.pipeline?.setSampleCap(n); }
     
@@ -947,6 +961,12 @@ export class FractalEngine {
 // Lazy singleton — allows future replacement with WorkerProxy for off-thread rendering
 let _engine: FractalEngine | null = null;
 
+/**
+ * @invariant `getEngine()` is lazy, BUT the bottom-of-module
+ *   `export const engine = getEngine()` forces construction on import.
+ *   New code should prefer `getEngine()` rather than importing `engine`
+ *   directly so test harnesses can swap the singleton.
+ */
 export function getEngine(): FractalEngine {
     if (!_engine) {
         _engine = new FractalEngine();

@@ -1,10 +1,28 @@
+/**
+ * useMobileLayout — mobile-detection state + hooks for the engine.
+ *
+ * @invariant Importing this module IS the install step — no
+ *   `installMobile()` plugin exists. The module-level resize listener
+ *   at lines ~25-37 is installed at first import inside
+ *   `if (typeof window !== 'undefined')`. If no module ever imports
+ *   this file, the engine store's `isDeviceMobile` / `isPortrait` flags
+ *   stay at whatever the slice initializer seeded.
+ * @invariant The 768px breakpoint lives in `engine/HardwareDetection.ts`
+ *   (`isMobileViewport`); this module imports it. q-083 fixed.
+ * @invariant Orientation uses strict `innerHeight > innerWidth`
+ *   (line ~10). A square viewport counts as LANDSCAPE and will NOT
+ *   trigger `LandscapeGate`.
+ * @invariant Resize listener is never removed (intentional — module-
+ *   level singleton lives for app lifetime, see the inline comment at
+ *   lines ~35-37). Under Vite HMR each module re-evaluation leaks one
+ *   extra listener for the dev session; bounded by the inequality
+ *   guard at line ~30, wiped on full reload. No production impact.
+ *   See q-086.
+ */
 
 import { useEngineStore } from '../store/engineStore';
+import { isMobileViewport } from '../engine/HardwareDetection';
 import type { UiModePreference } from '../types';
-
-const detectIsMobileDevice = (): boolean =>
-    typeof window !== 'undefined' &&
-    (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768);
 
 const detectIsPortrait = (): boolean =>
     typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
@@ -24,7 +42,7 @@ const resolveIsMobile = (pref: UiModePreference, isDeviceMobile: boolean): boole
 // 768px breakpoint or flip orientation is a no-op.
 if (typeof window !== 'undefined') {
     const sync = () => {
-        const isDeviceMobile = detectIsMobileDevice();
+        const isDeviceMobile = isMobileViewport();
         const isPortrait = detectIsPortrait();
         const s = useEngineStore.getState();
         if (s.isDeviceMobile !== isDeviceMobile || s.isPortrait !== isPortrait) {
@@ -41,6 +59,12 @@ if (typeof window !== 'undefined') {
  * predicates (e.g. menu/topbar `when:` callbacks) where hooks aren't
  * available. Reads from the store, which is kept in sync by the
  * module-level resize listener above.
+ *
+ * @invariant Non-reactive — reads `useEngineStore.getState()` without
+ *   subscribing. Safe inside menu/topbar `when:` predicates re-evaluated
+ *   by the host on every relevant store update. UNSAFE inside React
+ *   renders: relies on snapshot, will not re-render on preference /
+ *   device flips. Use `useMobileLayout()` inside components.
  */
 export const isMobileSnapshot = (): boolean => {
     const { uiModePreference, isDeviceMobile } = useEngineStore.getState();

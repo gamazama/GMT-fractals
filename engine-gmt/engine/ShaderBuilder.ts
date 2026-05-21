@@ -126,7 +126,16 @@ export class ShaderBuilder {
         this.headers.push(code);
     }
 
-    // Adds global code at global scope, before functions (e.g. for pre-calculation)
+    /**
+     * Adds global code at global scope, before functions (e.g. for pre-calculation).
+     *
+     * @invariant Dedupes by string-equality (`includes(code)`). Two
+     *   features emitting semantically identical but TEXTUALLY different
+     *   strings BOTH inject → duplicate function definitions → GL
+     *   compile error. Convention: each feature emits a single canonical
+     *   chunk constant, not a per-call template. Same rule applies to
+     *   `addFunction`, `addPostDEFunction`, `addIntegrator`.
+     */
     addPreamble(code: string) {
         if (!this.preambles.includes(code)) {
             this.preambles.push(code);
@@ -299,8 +308,16 @@ vec3 sampleMiss(vec3 ro, vec3 rd, float roughness) {
         return out;
     }
 
-    // Returns a GLSL library (no #version, no void main) for the mesh SDF pass.
-    // The GPU pipeline wraps this with #version 300 es + pass-specific uniforms + void main.
+    /**
+     * Returns a GLSL library (no #version, no void main) for the mesh SDF pass.
+     * The GPU pipeline wraps this with #version 300 es + pass-specific uniforms + void main.
+     *
+     * @invariant Emits no `#version`, no `void main` — Mesh variant
+     *   returns a GLSL LIBRARY, not a complete shader. Callers (mesh-
+     *   export `gpu-pipeline.ts`) wrap it. Reached via either
+     *   `variant === 'Mesh'` on `buildFragment` or
+     *   `ShaderFactory.generateMeshSDFLibrary`.
+     */
     buildMeshSDFLibrary(): string {
         // Build feature-injected uniforms (interlace params etc.) from addUniform() calls
         let injectedUniforms = '';
@@ -572,33 +589,6 @@ void main() {
         const mainGLSL = getFragmentMainGLSL(isPathTracing, this.maxLights, this.compositeLogic.join('\n'));
         const rayGLSL = getRayGLSL(this.renderMode);
         const postGLSL = getPostGLSL(this.postProcessLogic.join('\n'));
-
-        // Section size profiling — log where the bytes are
-        const sections: [string, string][] = [
-            ['Defines',     defines],
-            ['Uniforms',    uniforms],
-            ['Headers',     headers],
-            ['Math',        math],
-            ['BlueNoise',   BLUE_NOISE],
-            ['Coloring',    COLORING],
-            ['Preambles',   preambles],
-            ['Formulas',    userFunctions],
-            ['DE',          de],
-            ['PostDE',      postDEFunctions],
-            ['MatEval',     materialEval],
-            ['MissHandler', missHandler],
-            ['Ray',         rayGLSL],
-            ['Trace',       traceGLSL],
-            ['TraceLean',   traceLeanGLSL],
-            ['Integrators', integrators],
-            ['Post',        postGLSL],
-            ['Main',        mainGLSL],
-        ];
-        const profile = sections
-            .filter(([, s]) => s.length > 0)
-            .map(([name, s]) => `${name}: ${(s.length / 1024).toFixed(1)}kb`)
-            .join(' | ');
-        const totalSize = sections.reduce((sum, [, s]) => sum + s.length, 0);
 
         return `
 ${defines}

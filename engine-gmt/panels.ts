@@ -16,6 +16,18 @@
 import type { PanelManifest } from '../engine/PanelManifest';
 import { registry } from './engine/FractalRegistry';
 
+/**
+ * @invariant `order` is logical (10/20/30…) with deliberate gaps so
+ *   inserts don't renumber. Dock sorts by order within a dock; ties
+ *   at the same order resolve in undefined registration sequence.
+ * @invariant `items: [...]` is used everywhere — GMT does not use the
+ *   `features:` shorthand because every panel needs at least one of
+ *   groupFilter / whitelistParams / compilable / accordion / conditional.
+ *   Sibling apps (fluid-toy, fractal-toy) DO use the shorthand.
+ * @invariant Camera Manager: `id: 'Camera Manager'` is the canonical
+ *   PanelId used by cameraSlice; `label: 'View Manager'` is the
+ *   user-visible string. The two diverge intentionally.
+ */
 export const GmtPanels: PanelManifest = [
     // Graph (Modular-only) sits at order 1 so it slots between Formula
     // and Scene when visible. `component` path — FlowEditor owns its
@@ -450,12 +462,6 @@ export const GmtPanels: PanelManifest = [
         helpId: 'panel.engine',
     },
 
-    // Camera Manager — bespoke saved-camera library UI. Opens as a
-    // floating panel on demand via the Camera menu → "Camera Manager"
-    // item (see engine-gmt/topbar.tsx).
-    //
-    // `dock: 'float'` + `isCore: false` = hidden from dock tab bars;
-    // only appears when the topbar action calls `togglePanel(..., true)`.
     // View Manager — saved-view library + cardinal/preset toolbar +
     // composition guides. Lives in the (hidden-by-default) left dock
     // so the right dock stays focused on authoring tabs. Opens via

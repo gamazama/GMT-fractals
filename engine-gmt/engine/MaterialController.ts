@@ -257,6 +257,10 @@ export class MaterialController {
      * Two-stage compile: Stage 1 — Generate and apply a preview shader with lighting stubs.
      * This compiles in <1s on Windows/Chrome (fxc DCEs all formula copies from lighting paths).
      * Returns true if a new preview shader was actually generated.
+     *
+     * @invariant Returns FALSE when lighting is already off (preview == full).
+     *   CompileScheduler drops to single-stage in that case — there is no
+     *   preview material to swap to.
      */
     public compilePreview(config: ShaderConfig): boolean {
         this.storedConfig = config;
@@ -344,6 +348,11 @@ export class MaterialController {
     /**
      * Two-stage compile: Swap the async-compiled full material into the active slot.
      * Called after renderer.compileAsync() resolves.
+     *
+     * @invariant Disposes the OLD material before reassigning
+     *   `materialDirect` / `materialPT`. Anything that cached a reference
+     *   to the old material (outside the `mainMaterial` getter) is at
+     *   risk. The scheduler reassigns the mesh via `sceneCtrl.setMaterial`.
      */
     public swapFullMaterial(fullMat: THREE.ShaderMaterial): void {
         const checksum = (fullMat as any)._gmtChecksum as string;
@@ -382,6 +391,18 @@ export class MaterialController {
         return this.mainUniforms[key]?.value;
     }
 
+    /**
+     * @invariant Propagates to FOUR uniform maps (`mainUniforms`,
+     *   `histogramUniforms`, `displayMaterial.uniforms`,
+     *   `exportMaterial.uniforms`) and handles plain-object fallbacks for
+     *   `postMessage`-stripped THREE types — Vector3 arriving as
+     *   `{x,y,z}`, Matrix3/Matrix4 arriving as `{elements:[…]}`. New
+     *   uniform types must add fallback paths or worker→main writes
+     *   silently no-op.
+     * @invariant Skips when the target uniform map lacks the key —
+     *   adding a new uniform to `mainUniforms` does not automatically
+     *   reach display/export materials unless they share refs.
+     */
     public setUniform(key: string, value: any) {
         let valToAssign = value;
 
@@ -548,14 +569,16 @@ export class MaterialController {
         this.setUniform(Uniforms.EnvCDFMipBias, 0.0);
     }
     
-    public setGradient(stops: GradientStop[] | GradientConfig, layer: 1 | 2 | 3) {
+    /**
+     * Imperative gradient upload. Pass the uniform name directly so new
+     * DDFS gradient layers don't need a new branch here. DDFS-registered
+     * gradient params (`type: 'gradient'` + `uniform: '…'`) are routed
+     * automatically by {@link syncConfigUniforms} — this helper is only
+     * needed for non-DDFS imperative uploads (e.g. boot seeding).
+     */
+    public setGradient(stops: GradientStop[] | GradientConfig, uniformName: string) {
         const buffer = generateGradientTextureBuffer(stops);
-        
-        let name: string = 'uGradientTexture';
-        if (layer === 2) name = 'uGradientTexture2';
-        if (layer === 3) name = 'uEnvGradient';
-        
-        this.setUniform(name, { isGradientBuffer: true, buffer });
+        this.setUniform(uniformName, { isGradientBuffer: true, buffer });
     }
     
     public syncModularUniforms(pipeline: any[], edges: any[] = []) {

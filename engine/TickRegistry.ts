@@ -15,9 +15,33 @@
  * Navigation's useFrame stays separate at R3F priority 0 (runs before
  * this registry) because it handles camera physics tied to React hooks/refs.
  *
+ * @invariant Singleton, single-instance. Module-scope state means two engine
+ *   boots in the same JS realm would share one tick list. The multi-engine
+ *   shape is NOT supported — fork the worker instead. See ADR-0004.
+ * @invariant delta is SECONDS, not milliseconds. Every caller passes seconds
+ *   (RenderLoopDriver divides by 1000; GmtRendererTickDriver uses R3F useFrame
+ *   delta which is already seconds). A future driver passing ms would silently
+ *   break every time-dependent tick. See ADR-0002.
+ * @invariant Exactly one tick driver per realm. The double-run guard at
+ *   DOUBLE_RUN_WINDOW_MS=1 catches the historical RenderLoopDriver +
+ *   GmtRendererTickDriver footgun, but is NOT a defence against a future
+ *   cross-context driver (e.g. worker-side RAF) landing on staggered timing.
+ *   See ADR-0003.
+ * @invariant Phases run in numeric order via stable Array.sort comparing
+ *   `phase` only. Within a phase, registration order is preserved.
+ *   See ADR-0001.
+ * @invariant Throws-on-cycle is NOT honored: `getAll()` returns registration
+ *   order on cycle and logs to console.error. JSDoc was corrected 2026-05-20
+ *   (f-002).
+ *
  * Usage:
  *   registerTick('myTick', TICK_PHASE.OVERLAY, (delta) => { ... });
  *   // In useFrame: runTicks(delta);
+ *
+ * @see docs/adr/0001-tick-phases-as-numeric-constants.md
+ * @see docs/adr/0002-tick-delta-in-seconds.md
+ * @see docs/adr/0003-single-driver-double-run-guard.md
+ * @see docs/adr/0004-tickregistry-singleton-scope.md
  */
 
 export const TICK_PHASE = {
@@ -47,8 +71,15 @@ let _warnedNoTicks = false;
 
 /**
  * Register a tick function into a phase.
- * Duplicate names are silently ignored (safe for HMR re-execution).
- * Returns an unregister function for cleanup.
+ *
+ * Duplicate names are silently ignored (safe for HMR re-execution) — the
+ * returned disposer is a no-op in that case. Caller code that relies on the
+ * disposer to clean up something else (e.g. close over an external listener)
+ * will silently fail on the duplicate path; current consumers don't depend on
+ * this, but future ones must be aware.
+ *
+ * Returns an unregister function for cleanup. Capture-by-reference + indexOf
+ * removal means unregister order does not matter.
  */
 export function registerTick(
     name: string,
@@ -68,7 +99,7 @@ export function registerTick(
                         'has never been called. Animations, overlays, and timeline will not ' +
                         'update. Mount <RenderLoopDriver /> from engine/plugins/RenderLoop ' +
                         '(or call runTicks(dt) every frame yourself). See ' +
-                        'docs/01_Architecture.md § render-loop.'
+                        'docs/engine/01_Architecture.md § The render-loop contract.'
                     );
                     _warnedNoTicks = true;
                 }

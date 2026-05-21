@@ -76,6 +76,12 @@ export const RedoButton: React.FC = () => {
 
 // ── Install ─────────────────────────────────────────────────────────────
 
+/**
+ * @invariant `uninstallShortcuts()` clears the shortcut registry but
+ *   does NOT reset Undo's `_installed` flag. A subsequent
+ *   `installUndo()` after a bare `uninstallShortcuts()` is a no-op —
+ *   the five Undo bindings never come back. Call `uninstallUndo()` FIRST.
+ */
 let _installed = false;
 
 export interface InstallUndoOptions {
@@ -85,6 +91,12 @@ export interface InstallUndoOptions {
     hideShortcuts?: boolean;
 }
 
+/**
+ * @invariant `Mod+Shift+Z` is registered unconditionally despite the
+ *   'Redo (Mac)' label — on Win/Linux it expands to `Ctrl+Shift+Z` and
+ *   fires the engine-core redo. App-gmt's camera-undo binding at
+ *   `priority:10` shadows it intentionally.
+ */
 export const installUndo = (options: InstallUndoOptions = {}) => {
     if (_installed) return;
     _installed = true;
@@ -112,7 +124,7 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
         shortcuts.register({
             id: 'redo.global.shift',
             key: 'Mod+Shift+Z',
-            description: 'Redo (Mac)',
+            description: 'Redo',
             category: 'Edit',
             handler: () => { useEngineStore.getState().redo('param'); },
         });
@@ -129,8 +141,7 @@ export const installUndo = (options: InstallUndoOptions = {}) => {
         // is fine: the animation store's slice files don't import back
         // into engine-core, so there's no cycle.
         const animUndo = (action: 'undo' | 'redo') => {
-            const fn = (useAnimationStore.getState() as any)[action];
-            if (typeof fn === 'function') fn();
+            useAnimationStore.getState()[action]();
         };
         shortcuts.register({
             id: 'undo.animation',

@@ -96,9 +96,6 @@ export interface FractalDefinition {
     parameters: (FractalParameter | null)[];
     description?: string;
     defaultPreset: Partial<Preset>;
-    flags?: {
-        coordinateMode?: 'Unified' | 'DataAware';
-    };
     /** Present on runtime-imported formulas. Enables re-editing in the Workshop. */
     importSource?: {
         glsl: string;

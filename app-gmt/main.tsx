@@ -407,11 +407,11 @@ shortcuts.register({
 //
 // Priority override: engine-core's Undo plugin also binds `Mod+Shift+Z`
 // as the Mac-redo alias (`redo.global.shift`). Both register at scope
-// 'global', priority 0, so the resolver tie-breaks on insertion order
-// — engine-plugin shortcuts register first and would steal the binding.
-// Setting priority 10 here lets the camera-undo win cleanly. GMT's UX
-// contract is "Ctrl+Shift+Z is camera-undo, full stop"; the Mac-redo
-// alias is intentionally suppressed here. Mod+Y still does redo.
+// 'global', priority 0; the resolver tiebreak is most-recently-registered
+// wins (engine/plugins/Shortcuts.ts:190-197), so camera-undo would already
+// win on registration order. `priority: 10` here is defensive — it pins
+// GMT's UX contract "Ctrl+Shift+Z is camera-undo, full stop" even if
+// registration order ever flips. Mod+Y still does redo.
 shortcuts.register({
     id: 'gmt.undoCameraMove',
     key: 'Ctrl+Shift+Z',

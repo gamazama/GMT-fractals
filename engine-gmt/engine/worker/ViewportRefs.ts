@@ -10,13 +10,7 @@
  *
  * Single source of truth lives in engine-core; this file just re-exports.
  */
-export {
-    setViewportCamera,
-    setViewportCanvas,
-    getViewportCamera,
-    getViewportCanvas,
-    snapshotDisplayCamera,
-    getDisplayCamera,
-    setMouseOverCanvas,
-    isMouseOverCanvas,
-} from '../../../engine/worker/ViewportRefs';
+// `export *` (not selective named re-exports) so new symbols added to
+// engine-core propagate automatically. K5: previously selective, which
+// silently dropped new exports.
+export * from '../../../engine/worker/ViewportRefs';

@@ -44,7 +44,14 @@ export interface ShortcutDef {
     when?: () => boolean;
     /** Call preventDefault + stopPropagation after firing. Default true. */
     consume?: boolean;
-    /** Fire even when an <input>/<textarea>/contenteditable has focus. Default false. */
+    /**
+     * Fire even when an <input>/<textarea>/contenteditable has focus.
+     * Default false.
+     *
+     * @invariant The name reads as the INVERSE of its semantics —
+     *   default `false` MEANS the input guard IS applied.
+     *   `ignoreInputs: true` bypasses the guard.
+     */
     ignoreInputs?: boolean;
 }
 
@@ -180,6 +187,13 @@ const isInputFocused = (selector: string): boolean => {
     return el.matches(selector);
 };
 
+/**
+ * @invariant Tiebreak rule: most-recently-registered wins within the
+ *   same scope-score + priority. Stable sort + Map insertion order
+ *   means later registrations end up later in the matches array and
+ *   win the head slot. (NB: docs/engine/06_Undo_Transactions.md:116
+ *   still inverts this; that doc is pre-audit reference and append-only.)
+ */
 const resolve = (normalized: string): ShortcutDef | null => {
     // Highest-index scope wins; priority breaks ties; most-recently-registered
     // wins within same priority.
@@ -214,6 +228,12 @@ export interface InstallShortcutsOptions {
     ignoreSelector?: string;
 }
 
+/**
+ * @invariant Idempotent via `_installed` guard — options passed on a
+ *   SECOND call are silently dropped. A second
+ *   `installShortcuts({domRoot: customRoot})` after a first bare call
+ *   leaves the listener on `window` with no warning.
+ */
 export const installShortcuts = (options: InstallShortcutsOptions = {}) => {
     if (_installed) return;
     _installed = true;
