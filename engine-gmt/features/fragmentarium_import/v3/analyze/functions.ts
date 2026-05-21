@@ -44,6 +44,35 @@ function getReturnType(func: FunctionNode): string {
     }
 }
 
+/**
+ * Trim trailing trivia (whitespace, line/block comments) that the glsl-parser
+ * attaches to the closing `}` token of a function body. Without this, `generate(func.body)`
+ * yields text that ends with arbitrary post-function content (e.g. trailing preset comments),
+ * which breaks any consumer that relies on `body.endsWith('}')`.
+ *
+ * Truncates after the brace-depth-balanced closing of the outermost block. Handles
+ * `}` characters that may appear inside `//` or  comments within the body.
+ */
+function trimBodyTrivia(body: string): string {
+    let depth = 0;
+    let inLineComment = false;
+    let inBlockComment = false;
+    for (let i = 0; i < body.length; i++) {
+        const c = body[i];
+        const n = body[i + 1];
+        if (inLineComment) { if (c === '\n') inLineComment = false; continue; }
+        if (inBlockComment) { if (c === '*' && n === '/') { inBlockComment = false; i++; } continue; }
+        if (c === '/' && n === '/') { inLineComment = true; i++; continue; }
+        if (c === '/' && n === '*') { inBlockComment = true; i++; continue; }
+        if (c === '{') depth++;
+        else if (c === '}') {
+            depth--;
+            if (depth === 0) return body.slice(0, i + 1);
+        }
+    }
+    return body;
+}
+
 function extractParameters(func: FunctionNode): FunctionParameter[] {
     const params: FunctionParameter[] = [];
     if (func.prototype?.parameters) {
@@ -227,7 +256,7 @@ export function extractFunctions(
             name,
             returnType: getReturnType(func),
             parameters: extractParameters(func),
-            body: generate(func.body),
+            body: trimBodyTrivia(generate(func.body)),
             raw: generate(func),
             loop,
             usedParams: findUsedParamNames(func, paramNames),
@@ -256,7 +285,7 @@ export function extractInitFunction(cleanedSource: string): { body: string; raw:
         if (stmt.type !== 'function') continue;
         const func = stmt as FunctionNode;
         if (getFunctionName(func) === 'init') {
-            return { body: generate(func.body), raw: generate(func) };
+            return { body: trimBodyTrivia(generate(func.body)), raw: generate(func) };
         }
     }
     return null;

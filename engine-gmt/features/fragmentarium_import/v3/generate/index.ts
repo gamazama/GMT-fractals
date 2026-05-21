@@ -322,9 +322,13 @@ export function generateFormula(
     for (const gd of analysis.globals.uninitialized) {
         helpersCode += `${gd.type} ${gd.name};\n`;
     }
-    // Literal-initialized globals at global scope (helpers may reference these)
+    // Literal-initialized globals at global scope (helpers may reference these).
+    // Apply the rename map to the init expression so references to slotted/baked
+    // uniforms (e.g. `splititer1` → `u_splititer1`) resolve. Without this, raw
+    // Fragmentarium uniform names leak into global scope and fail to compile.
     for (const gd of analysis.globals.literalInit) {
-        helpersCode += `${gd.type} ${gd.name} = ${gd.expression};\n`;
+        const expr = applyRenameToExpression(gd.expression, renameMap);
+        helpersCode += `${gd.type} ${gd.name} = ${expr};\n`;
     }
     // Computed globals declared at global scope (uninitialized, assigned in formula body)
     for (const cg of analysis.globals.computed) {
@@ -350,15 +354,22 @@ export function generateFormula(
     // ── Uniform declarations ──
     let uniformsCode = generateUniformDeclarations(params);
 
-    // Inject common Fragmentarium math defines when the formula uses them
-    // (normally provided by MathUtils.frag #include, but not in our builtin subset)
+    // Inject common Fragmentarium math defines + runtime-global aliases when the
+    // formula uses them. Math defines (Phi/TWO_PI/M_PI) are normally provided by
+    // MathUtils.frag #include; runtime globals (time/iGlobalTime) are Fragmentarium
+    // engine-supplied uniforms — GMT exposes the equivalent as `uTime`.
     const allFormulaCode = helpersCode + '\n' + deFunc.body;
-    const FRAG_MATH_DEFINES: Array<[RegExp, string]> = [
+    const FRAG_MATH_DEFINES: Array<[RegExp, string, RegExp?]> = [
         [/\bPhi\b/, '#define Phi 1.61803398874989'],
         [/\bTWO_PI\b/, '#define TWO_PI 6.28318530717959'],
+        [/\bM_PI\b/, '#define M_PI 3.14159265358979'],
+        // Runtime-global aliases — guard against frags that declare their own
+        // local `time` to avoid colliding with the #define replacement.
+        [/\btime\b/, '#define time uTime', /\b(?:uniform|float|int)\s+time\b/],
+        [/\biGlobalTime\b/, '#define iGlobalTime uTime'],
     ];
-    for (const [pattern, define] of FRAG_MATH_DEFINES) {
-        if (pattern.test(allFormulaCode)) {
+    for (const [pattern, define, guard] of FRAG_MATH_DEFINES) {
+        if (pattern.test(allFormulaCode) && !(guard && guard.test(allFormulaCode))) {
             uniformsCode = define + '\n' + uniformsCode;
         }
     }

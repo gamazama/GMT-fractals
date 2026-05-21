@@ -58,9 +58,11 @@ export function generateInitCode(
     // 1. Literal-initialized globals → per-pixel (reset each iteration)
     // These are declared at file scope; here we re-assign to reset each call.
     // Skip globals whose names are re-declared in the loop body or as the loop counter.
+    // Apply rename so references to slotted/baked uniforms resolve (e.g. `time` → `uParamA`).
     for (const gd of analysis.globals.literalInit) {
         if (loopDeclaredVars?.has(gd.name)) continue;
-        perPixelLines.push(`    ${gd.name} = ${gd.expression};`);
+        const renamedExpr = applyRenameToExpression(gd.expression, renameMap);
+        perPixelLines.push(`    ${gd.name} = ${renamedExpr};`);
     }
 
     // 2. Computed globals → classify by dependency
