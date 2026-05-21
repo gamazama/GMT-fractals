@@ -2,6 +2,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { PanelRouter } from '../PanelRouter';
+import { ScrollSpaceReserver } from '../ScrollSpaceReserver';
 import { BenchProfiler } from '../../engine-gmt/utils/BenchProfiler';
 import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
@@ -177,7 +178,19 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             <div className={`flex-1 overflow-y-auto py-2 relative ${isMobile ? 'mobile-scroll' : 'custom-scroll'}`}>
                 {activeTabId ? (
                      <BenchProfiler id={`Dock:${side}/PanelRouter:${activeTabId}`}>
-                        <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />
+                        {/* `ScrollSpaceReserver` keyed by activeTabId so it
+                            resets its measured max-height on tab switch:
+                            different panels are very different heights and
+                            we don't want a tall panel's max to be reserved
+                            after switching to a shorter one. Within a
+                            single panel, the reserver keeps total height
+                            stable so toggling a feature off doesn't shift
+                            content below upward — the freed space appears
+                            as an empty bottom spacer instead, which is
+                            GC'd once it scrolls out of view. */}
+                        <ScrollSpaceReserver key={activeTabId}>
+                            <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />
+                        </ScrollSpaceReserver>
                      </BenchProfiler>
                 ) : (
                     <div className="flex h-full items-center justify-center text-gray-700 text-xs italic">
