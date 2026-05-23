@@ -5,25 +5,11 @@
  * client-safe — Row Level Security on the Supabase side enforces that the
  * anon role can only read approved gallery items.
  */
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { getSupabase, supabaseEnabled } from '../supabase';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+export const galleryEnabled = supabaseEnabled;
 
-export const galleryEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-
-let _client: SupabaseClient | null = null;
-function client(): SupabaseClient {
-  if (!galleryEnabled) {
-    throw new Error('Gallery: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set');
-  }
-  if (!_client) {
-    _client = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
-      auth: { persistSession: false },
-    });
-  }
-  return _client;
-}
+const client = getSupabase;
 
 export interface GalleryItem {
   id: string;

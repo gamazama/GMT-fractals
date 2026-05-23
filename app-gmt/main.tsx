@@ -56,6 +56,7 @@ import {
 import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { installGallery } from '../engine-gmt/gallery';
+import { installAuth } from '../engine-gmt/auth';
 import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
 import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
 import { GMT_LESSONS } from './tutorial/lessons';
@@ -223,6 +224,11 @@ menu.registerItem('file', {
 // Registers a "Browse Online Gallery" item in the File menu. The overlay
 // component is mounted in AppGmt.tsx as <GalleryOverlay />.
 installGallery();
+
+// Supabase Auth — Phase 2B. Mounts the topbar profile chip (right slot) and
+// gates the gallery's Submit menu item on signed-in status. Auth overlay +
+// AccountPanel are mounted by AppGmt.tsx near the other full-screen UIs.
+installAuth();
 
 installModulation();
 // GMT's LFO defaults: a fresh LFO targets coreMath.paramA (the first

@@ -15,11 +15,10 @@
 import React from 'react';
 import { menu } from '../../engine/plugins/Menu';
 import { useGalleryStore } from './galleryStore';
-import { getSubmitToken } from './submitGalleryItem';
 import { SubmitGalleryModal } from './SubmitGalleryModal';
+import { useAuthStore } from '../auth/authStore';
 
 export { GalleryPage as GalleryOverlay } from './GalleryPage';
-export { AdminQueueOverlay } from './AdminQueue';
 
 /**
  * Mounts the submit modal driven by galleryStore.isSubmitOpen.
@@ -45,13 +44,6 @@ const SubmitIcon: React.FC = () => (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 5v14" />
         <path d="M5 12l7-7 7 7" />
-    </svg>
-);
-
-const AdminIcon: React.FC = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 11l3 3L22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
     </svg>
 );
 
@@ -81,33 +73,26 @@ export const installGallery = (options: InstallGalleryOptions = {}) => {
         },
     });
 
-    // "Submit to Gallery" — visible only when the admin submit token is
-    // configured in localStorage. Phase 2A admin gate; replaced with a
-    // signed-in user check in Phase 2B.
+    // "Submit to Gallery" — visible to any signed-in user. Phase 2B: the
+    // server-side gate is the JWT + tier-based slot cap; the UI just shows
+    // the entry once you're signed in. Unauthed users see no entry (they
+    // need the sign-in CTA elsewhere first).
     menu.registerItem(options.menuId ?? 'file', {
         id: 'submit-gallery',
         type: 'button',
         label: 'Submit to Gallery',
         icon: <SubmitIcon />,
         order: (options.order ?? 25) + 0.5,
-        when: () => !!getSubmitToken(),
+        when: () => useAuthStore.getState().status === 'authed',
         onSelect: () => {
             useGalleryStore.getState().openSubmit();
         },
     });
 
-    // "Gallery Admin" — moderation queue. Same admin gate as Submit.
-    menu.registerItem(options.menuId ?? 'file', {
-        id: 'admin-gallery',
-        type: 'button',
-        label: 'Gallery Admin',
-        icon: <AdminIcon />,
-        order: (options.order ?? 25) + 0.6,
-        when: () => !!getSubmitToken(),
-        onSelect: () => {
-            useGalleryStore.getState().openAdmin();
-        },
-    });
+    // Admin moderation has moved out of the open-source GMT app entirely.
+    // The standalone admin site at backend/admin/ (Cloudflare Pages +
+    // Cloudflare Access) handles approve / reject / delete via the same
+    // moderate-gallery-item Edge Function. See plan 44 §1.11.
 };
 
 export const uninstallGallery = (menuId = 'file') => {

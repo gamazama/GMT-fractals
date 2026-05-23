@@ -1,22 +1,24 @@
 /**
  * Submit the current scene to the gallery via the submit-gallery-item
- * Edge Function. Phase 2A: admin-only via a localStorage submit token.
+ * Edge Function. Phase 2B: signed-in user, JWT-authenticated.
  *
  * Flow:
  *   1. Capture PNG from the worker via proxy.captureSnapshot()
  *   2. Transcode PNG → JPEG @ q=0.85, max width 2048
  *   3. Serialize the live preset to GMF text
- *   4. POST multipart to the Edge Function
+ *   4. POST multipart to the Edge Function with Authorization: Bearer <jwt>
  *
- * Returns the inserted row metadata (id, slug, image_url, status) on success.
+ * Returns the inserted row metadata. Throws SubmitError with `code` populated
+ * for known server-side rejection reasons (SLOT_CAP_REACHED → trigger upgrade
+ * modal in the caller).
  */
 import { useEngineStore } from '../../store/engineStore';
 import { getProxy } from '../../engine-gmt';
 import { saveGMFScene } from '../utils/FormulaFormat';
+import { useAuthStore } from '../auth/authStore';
 
-// Hardcoded — the function URL is public, the gate is the SUBMIT_TOKEN.
+// Hardcoded — function URL is public; auth is the JWT in the Authorization header.
 const SUBMIT_URL = 'https://ehoacsxzeruhajosexzb.supabase.co/functions/v1/submit-gallery-item';
-const TOKEN_KEY = 'gmt_submit_token';
 
 export interface SubmitInput {
     slug: string;
@@ -24,8 +26,7 @@ export interface SubmitInput {
     description?: string;
     formula: string;
     tags?: string[];
-    author?: string;
-    featured?: boolean;
+    visibility?: 'public' | 'private';
 }
 
 export interface SubmitResult {
@@ -33,30 +34,25 @@ export interface SubmitResult {
     slug: string;
     image_url: string;
     thumbnail_url: string;
-    status: string;
+    sky_url: string | null;
+    status: 'pending' | 'approved' | 'rejected';
+    visibility: 'public' | 'private';
+    /** True when the server auto-suffixed the slug to avoid a collision. */
+    slugChanged: boolean;
+    finalSlug: string;
 }
 
-export function getSubmitToken(): string | null {
-    try {
-        return localStorage.getItem(TOKEN_KEY);
-    } catch {
-        return null;
-    }
+export interface SubmitErrorDetail {
+    /** Server-supplied machine code (e.g. SLOT_CAP_REACHED). May be undefined. */
+    code?: string;
+    /** Server-supplied extra context (e.g. { cap, current, tier, verified }). */
+    [key: string]: unknown;
 }
 
-export function setSubmitToken(token: string): void {
-    try {
-        localStorage.setItem(TOKEN_KEY, token);
-    } catch {
-        // localStorage unavailable (private mode, etc.) — best-effort
-    }
-}
-
-export function clearSubmitToken(): void {
-    try {
-        localStorage.removeItem(TOKEN_KEY);
-    } catch {
-        // ignore
+export class SubmitError extends Error {
+    constructor(message: string, public status: number, public detail: SubmitErrorDetail = {}) {
+        super(message);
+        this.name = 'SubmitError';
     }
 }
 
@@ -142,9 +138,9 @@ async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
 }
 
 export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResult> {
-    const token = getSubmitToken();
+    const token = useAuthStore.getState().getAccessToken();
     if (!token) {
-        throw new Error('No admin submit token. Run localStorage.setItem("gmt_submit_token", "<token>") in DevTools.');
+        throw new SubmitError('You must be signed in to submit a scene.', 401);
     }
 
     const jpg = await captureJpegSnapshot();
@@ -168,9 +164,10 @@ export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResul
         }
         console.warn('[gallery-submit] GMF too large — top preset fields by size:',
             Object.entries(breakdown).sort((a, b) => b[1] - a[1]).slice(0, 10));
-        throw new Error(
+        throw new SubmitError(
             `Scene is too large to submit (${(gmf.length / 1024).toFixed(0)} KB; max ${GMF_MAX / 1024} KB). ` +
-            `See console for which preset field is responsible.`
+            `See console for which preset field is responsible.`,
+            413,
         );
     }
 
@@ -187,24 +184,25 @@ export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResul
     if (input.description) form.append('description', input.description);
     form.append('formula', input.formula);
     if (input.tags && input.tags.length > 0) form.append('tags', input.tags.join(','));
-    if (input.author) form.append('author', input.author);
-    if (input.featured) form.append('featured', '1');
+    form.append('visibility', input.visibility ?? 'public');
 
     const res = await fetch(SUBMIT_URL, {
         method: 'POST',
         body: form,
-        headers: { 'X-Submit-Token': token },
+        headers: { 'Authorization': `Bearer ${token}` },
     });
 
     if (!res.ok) {
         let msg = `Submit failed (${res.status})`;
+        let detail: SubmitErrorDetail = {};
         try {
             const body = await res.json();
             if (body?.error) msg = body.error;
+            detail = body;
         } catch {
             // non-JSON response — keep default msg
         }
-        throw new Error(msg);
+        throw new SubmitError(msg, res.status, detail);
     }
 
     return (await res.json()) as SubmitResult;

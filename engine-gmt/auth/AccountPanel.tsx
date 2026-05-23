@@ -1,0 +1,367 @@
+/**
+ * AccountPanel — account settings modal for signed-in users.
+ *
+ * Two modes driven by authStore.status:
+ *   - 'needs-profile' — first-time setup flow (force username pick).
+ *                       Modal cannot be closed until profile is created.
+ *   - 'authed'        — normal edit: display name, bio, sign-out, delete account.
+ *
+ * Mounts via authStore.isAccountPanelOpen; also auto-mounts when
+ * status='needs-profile' regardless of open flag — there's no way to
+ * proceed in the app without picking a username.
+ */
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { getSupabase } from '../supabase';
+import { useAuthStore } from './authStore';
+
+const USERNAME_RE = /^[a-z0-9](?:[a-z0-9_-]{1,22}[a-z0-9])?$/;
+const RESERVED_USERNAMES = new Set([
+    'admin', 'administrator', 'root', 'api', 'www', 'mod', 'moderator',
+    'support', 'help', 'gmt', 'gmt-fractals', 'staff', 'official', 'system',
+]);
+
+export const AccountPanel: React.FC = () => {
+    const status              = useAuthStore((s) => s.status);
+    const user                = useAuthStore((s) => s.user);
+    const profile             = useAuthStore((s) => s.profile);
+    const isOpen              = useAuthStore((s) => s.isAccountPanelOpen);
+    const closeAccountPanel   = useAuthStore((s) => s.closeAccountPanel);
+    const refreshProfile      = useAuthStore((s) => s.refreshProfile);
+
+    const setupMode = status === 'needs-profile';
+    const visible = isOpen || setupMode;
+
+    // Setup-mode state (only used when no profile yet)
+    const [username, setUsername]             = useState('');
+    const [setupDisplayName, setSetupDisplayName] = useState('');
+    const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved'>('idle');
+
+    // Edit-mode state (only used when profile exists)
+    const [editDisplayName, setEditDisplayName] = useState('');
+    const [editBio, setEditBio]                 = useState('');
+
+    const [busy, setBusy]   = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [saved, setSaved] = useState(false);
+    const [confirmDelete, setConfirmDelete] = useState(false);
+
+    // Hydrate edit fields from profile when opening
+    useEffect(() => {
+        if (!visible) return;
+        if (profile) {
+            setEditDisplayName(profile.display_name);
+            setEditBio(profile.bio ?? '');
+        }
+        if (setupMode && user) {
+            const emailLocal = (user.email ?? '').split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '');
+            setUsername(emailLocal.slice(0, 24));
+            setSetupDisplayName(user.user_metadata?.full_name ?? user.user_metadata?.name ?? '');
+        }
+        setError(null);
+        setSaved(false);
+        setConfirmDelete(false);
+    }, [visible, profile, setupMode, user]);
+
+    // Debounced username availability check (setup mode only)
+    useEffect(() => {
+        if (!setupMode || username.length === 0) {
+            setUsernameStatus('idle');
+            return;
+        }
+        if (RESERVED_USERNAMES.has(username.toLowerCase())) {
+            setUsernameStatus('reserved');
+            return;
+        }
+        if (!USERNAME_RE.test(username)) {
+            setUsernameStatus('invalid');
+            return;
+        }
+        setUsernameStatus('checking');
+        const handle = setTimeout(async () => {
+            try {
+                const { data } = await getSupabase()
+                    .from('profiles')
+                    .select('id')
+                    .eq('username', username.toLowerCase())
+                    .maybeSingle();
+                setUsernameStatus(data ? 'taken' : 'available');
+            } catch {
+                setUsernameStatus('idle');
+            }
+        }, 350);
+        return () => clearTimeout(handle);
+    }, [username, setupMode]);
+
+    useEffect(() => {
+        if (!visible || setupMode) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { e.stopPropagation(); closeAccountPanel(); }
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [visible, setupMode, closeAccountPanel]);
+
+    if (!visible) return null;
+
+    const createProfile = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (usernameStatus !== 'available' || !user) return;
+        setBusy(true);
+        setError(null);
+        try {
+            const { error } = await getSupabase().from('profiles').insert({
+                id: user.id,
+                username: username.toLowerCase(),
+                display_name: setupDisplayName.trim() || username.toLowerCase(),
+            });
+            if (error) throw error;
+            await refreshProfile();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const saveEdits = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!profile) return;
+        setBusy(true);
+        setError(null);
+        setSaved(false);
+        try {
+            const { error } = await getSupabase()
+                .from('profiles')
+                .update({
+                    display_name: editDisplayName.trim() || profile.username,
+                    bio: editBio.trim().length > 0 ? editBio.trim() : null,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', profile.id);
+            if (error) throw error;
+            await refreshProfile();
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const signOut = async () => {
+        setBusy(true);
+        try {
+            await getSupabase().auth.signOut();
+            closeAccountPanel();
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const deleteAccount = async () => {
+        if (!profile) return;
+        setBusy(true);
+        setError(null);
+        try {
+            // Delete the profile row; cascade-deletes related items via the
+            // schema's FK on_delete behaviour. The auth.users entry itself
+            // requires service_role to delete — for v1 that's a separate
+            // admin task. Tracked in plan 44.
+            const { error: pErr } = await getSupabase().from('profiles').delete().eq('id', profile.id);
+            if (pErr) throw pErr;
+            await getSupabase().auth.signOut();
+            closeAccountPanel();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const usernameMsg = () => {
+        switch (usernameStatus) {
+            case 'checking':  return <span className="text-gray-500">checking…</span>;
+            case 'available': return <span className="text-green-400">available</span>;
+            case 'taken':     return <span className="text-red-400">taken</span>;
+            case 'invalid':   return <span className="text-red-400">3–24 chars, a–z 0–9 _ -</span>;
+            case 'reserved':  return <span className="text-red-400">reserved name</span>;
+            default:          return null;
+        }
+    };
+
+    return createPortal(
+        <div
+            className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onKeyDown={(e) => e.stopPropagation()}
+            onKeyUp={(e) => e.stopPropagation()}
+            onKeyPress={(e) => e.stopPropagation()}
+        >
+            <div className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto">
+                <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                    <h2 className="text-sm font-bold text-white">
+                        {setupMode ? 'Pick a username' : 'Account'}
+                    </h2>
+                    {!setupMode && (
+                        <button onClick={closeAccountPanel} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+                    )}
+                </header>
+
+                {error && (
+                    <div className="m-4 p-3 rounded bg-red-500/10 border border-red-500/30 text-[10px] text-red-300">{error}</div>
+                )}
+
+                {setupMode && (
+                    <form onSubmit={createProfile} className="p-4 space-y-3">
+                        <div className="text-[10px] text-gray-400 leading-relaxed">
+                            You're signed in as <span className="font-mono text-cyan-300">{user?.email}</span>.
+                            Pick a username so your submissions can be attributed to you.
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider flex items-center justify-between mb-1">
+                                <span>Username <span className="text-red-400">*</span></span>
+                                <span className="font-normal normal-case">{usernameMsg()}</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={username}
+                                autoFocus
+                                onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                                disabled={busy}
+                                maxLength={24}
+                                className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white font-mono outline-none focus:border-cyan-500"
+                                placeholder="alice_42"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Display name</label>
+                            <input
+                                type="text"
+                                value={setupDisplayName}
+                                onChange={(e) => setSetupDisplayName(e.target.value)}
+                                disabled={busy}
+                                maxLength={60}
+                                className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                                placeholder={username || 'Optional'}
+                            />
+                            <div className="text-[9px] text-gray-600 mt-1">Optional — defaults to your username</div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={busy || usernameStatus !== 'available'}
+                            className="w-full py-2 rounded text-[11px] font-bold bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            {busy ? 'Creating profile…' : 'Continue'}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={signOut}
+                            disabled={busy}
+                            className="w-full text-center text-[10px] text-gray-500 hover:text-white"
+                        >
+                            Cancel and sign out
+                        </button>
+                    </form>
+                )}
+
+                {!setupMode && profile && (
+                    <div className="p-4 space-y-4">
+                        <form onSubmit={saveEdits} className="space-y-3">
+                            <div>
+                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Email</label>
+                                <div className="text-xs text-gray-400 font-mono">{user?.email}</div>
+                            </div>
+
+                            <div>
+                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Username</label>
+                                <div className="text-xs text-cyan-300 font-mono">@{profile.username}</div>
+                                <div className="text-[9px] text-gray-600 mt-1">Cannot be changed</div>
+                            </div>
+
+                            <div>
+                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Display name</label>
+                                <input
+                                    type="text"
+                                    value={editDisplayName}
+                                    onChange={(e) => setEditDisplayName(e.target.value)}
+                                    disabled={busy}
+                                    maxLength={60}
+                                    className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block mb-1">Bio</label>
+                                <textarea
+                                    value={editBio}
+                                    onChange={(e) => setEditBio(e.target.value)}
+                                    disabled={busy}
+                                    maxLength={280}
+                                    rows={2}
+                                    className="w-full bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500 resize-none"
+                                    placeholder="A line or two about yourself"
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={busy}
+                                className="w-full py-2 rounded text-[11px] font-bold bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40 disabled:opacity-30"
+                            >
+                                {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save changes'}
+                            </button>
+                        </form>
+
+                        <div className="border-t border-white/5 pt-4 space-y-2">
+                            <button
+                                onClick={signOut}
+                                disabled={busy}
+                                className="w-full py-2 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                            >
+                                Sign out
+                            </button>
+
+                            {!confirmDelete ? (
+                                <button
+                                    onClick={() => setConfirmDelete(true)}
+                                    disabled={busy}
+                                    className="w-full py-2 rounded text-[10px] text-red-400 hover:text-red-300"
+                                >
+                                    Delete account
+                                </button>
+                            ) : (
+                                <div className="p-3 rounded bg-red-500/10 border border-red-500/30 space-y-2">
+                                    <div className="text-[10px] text-red-300 leading-relaxed">
+                                        This deletes your profile and removes your submissions from the gallery. Cannot be undone.
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setConfirmDelete(false)}
+                                            disabled={busy}
+                                            className="flex-1 py-1.5 rounded text-[10px] bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 border border-white/10"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={deleteAccount}
+                                            disabled={busy}
+                                            className="flex-1 py-1.5 rounded text-[10px] bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40"
+                                        >
+                                            Delete forever
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>,
+        document.body,
+    );
+};
