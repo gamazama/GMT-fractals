@@ -1,11 +1,19 @@
 /**
  * createStateLibrarySlice — generic factory for "saved snapshots" state
- * libraries (cameras, views, color palettes, brush presets, …).
+ * libraries where the app has a single global "active" slot and the
+ * library captures / recalls snapshots of it (cameras, views, transport
+ * states).
  *
  * The library doesn't care what state shape `T` is. The app provides
  * capture/apply callbacks that read its current state and push it back;
  * the library handles the bookkeeping (array, active id, drag-reorder,
  * slot shortcuts, modified marker).
+ *
+ * Scope note: this is NOT a fit for asset-pool libraries — gradients,
+ * materials, brushes, palettes, sub-graphs, anything reused across many
+ * consumers. Those have no single "active" slot; apply needs a target
+ * handle; modified/slot semantics don't translate. They need their own
+ * primitive.
  *
  * Typical install pattern (mirrors GMT's existing installGmtCameraSlice):
  *
@@ -20,11 +28,26 @@
  *   });
  *
  * Multiple libraries per app are supported — instantiate once per
- * concept (cameras, views, palettes) with different keys + actions.
+ * single-active-slot concept (cameras, views) with different keys +
+ * actions.
  *
  * Persistence and undo are deliberately app-side. The library does
  * not read/write localStorage, GMF, or the engine-core history slice;
- * apps wrap the actions if they need that behavior.
+ * apps wrap the actions if they need that behavior. Libraries are
+ * therefore session-only unless the app opts in.
+ *
+ * Gotchas when adding a second library alongside an existing one:
+ *   - Hotkey slots are opt-in via SlotShortcutOptions. If two
+ *     libraries both want slot shortcuts, pick distinct keys —
+ *     GMT cameras own 1..9 and Mod+1..9.
+ *   - Saved-state types live in BOTH dev/types/store.ts and
+ *     dev/engine-gmt/types/store.ts (engine-split duplication).
+ *     Add new SavedX types to both or the engine side breaks.
+ *   - Provide a domain-correct captureThumbnail. The camera slice
+ *     uses a viewport snapshot; non-spatial libraries should render
+ *     their own artifact (e.g. a transport-state strip).
+ *   - onReset is optional. Pass undefined if the library has no
+ *     "reset to formula default" concept.
  */
 
 import { useEngineStore } from '../../store/engineStore';

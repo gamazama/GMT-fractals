@@ -20,6 +20,13 @@
  * Until installGmtCameraSlice() runs, CameraManagerPanel crashes on
  * `savedCameras.length` (which is undefined). app-gmt/main.tsx calls
  * this right after registerGmtUi().
+ *
+ * Reference implementation for adding new single-active-slot libraries
+ * (saved views, transport states — anything where the app has one
+ * canonical "current" instance to capture/recall): mirror this file's
+ * structure and consult createStateLibrarySlice.ts for the factory
+ * contract. Asset-pool libraries (gradients, materials, brushes) are
+ * out of scope for this factory.
  */
 
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
