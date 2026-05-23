@@ -22,6 +22,9 @@ export interface BucketRenderConfig {
     convergenceThreshold: number;    // Per-bucket convergence threshold (host-interpreted)
     accumulation: boolean;           // Whether the host's pipeline accumulates samples
     samplesPerBucket?: number;       // If set, hard cap on samples per bucket
+    /** When false, the saved PNG skips the iTXt FractalData chunk — i.e.
+     *  scene metadata is NOT embedded in the file. Defaults to true. */
+    includeGmfData?: boolean;
 }
 
 export interface BucketImageTile {

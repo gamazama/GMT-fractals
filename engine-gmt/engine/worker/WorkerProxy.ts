@@ -898,7 +898,11 @@ export class WorkerProxy implements AccumulationController {
         canvas.toBlob(async (blob) => {
             if (!blob) return;
             try {
-                const taggedBlob = await injectMetadata(blob, "FractalData", presetJson);
+                // Empty presetJson = caller (BucketRunner) opted out of
+                // embedding scene metadata for this render.
+                const taggedBlob = presetJson
+                    ? await injectMetadata(blob, "FractalData", presetJson)
+                    : blob;
                 const url = URL.createObjectURL(taggedBlob);
                 const link = document.createElement('a');
                 link.download = filename;

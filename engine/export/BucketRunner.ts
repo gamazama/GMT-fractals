@@ -499,7 +499,11 @@ export class BucketRunner {
     private saveImage(readbackMat: THREE.ShaderMaterial): void {
         const result = this.readCompositePixels(readbackMat);
         if (!result) return;
-        const presetStr = this.exportData?.metadataJson ?? '{}';
+        // includeGmfData defaults to true; empty presetStr signals the
+        // consumer (WorkerProxy) to skip iTXt injection.
+        const presetStr = this.config.includeGmfData === false
+            ? ''
+            : (this.exportData?.metadataJson ?? '{}');
         const filename = this.buildTileFilename();
 
         // Worker context: emit pixel data, main thread handles DOM save.
@@ -528,7 +532,9 @@ export class BucketRunner {
         canvas.toBlob(async (blob) => {
             if (!blob) return;
             try {
-                const tagged = await injectMetadata(blob, 'FractalData', presetStr);
+                const tagged = presetStr
+                    ? await injectMetadata(blob, 'FractalData', presetStr)
+                    : blob;
                 const url = URL.createObjectURL(tagged);
                 const link = document.createElement('a');
                 link.download = filename;

@@ -66,9 +66,23 @@ interface BucketRenderPanelProps {
     align?: 'center' | 'start' | 'end';
 }
 
+const INCLUDE_GMF_STORAGE_KEY = 'gmt-bucket-include-gmf';
+
 const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align = 'center' }) => {
     const state = useEngineStore();
     const [progress, setProgress] = useState(0);
+
+    // Include-GMF toggle for the export. Persisted to localStorage so the
+    // curator's preference survives across popover opens. Defaults ON to
+    // preserve the pre-toggle behaviour (PNGs carry the scene blob).
+    const [includeGmf, setIncludeGmf] = useState<boolean>(() => {
+        try { return localStorage.getItem(INCLUDE_GMF_STORAGE_KEY) !== '0'; }
+        catch { return true; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem(INCLUDE_GMF_STORAGE_KEY, includeGmf ? '1' : '0'); }
+        catch { /* localStorage unavailable; fine */ }
+    }, [includeGmf]);
     const [tileInfo, setTileInfo] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
     const [elapsed, setElapsed] = useState(0);
     const renderStartRef = useRef<number>(0);
@@ -405,6 +419,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
             convergenceThreshold: state.convergenceThreshold,
             accumulation: state.accumulation,
             samplesPerBucket: state.samplesPerBucket,
+            includeGmfData: includeGmf,
         });
     });
 
@@ -472,25 +487,39 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
     return (
         <Popover width="w-72" align={align}>
             <div className="relative space-y-2.5" data-help-id="bucket.render">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High Quality Render</span>
-                    {state.previewRegion && supportsPreview && (
-                        <button
-                            type="button"
-                            onClick={() => {
-                                controller.clearPreviewRegion?.();
-                                state.setPreviewRegion(null);
-                                if (state.interactionMode === 'selecting_preview') {
-                                    state.setInteractionMode('none');
-                                }
-                            }}
-                            className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-fuchsia-400/60 bg-fuchsia-900/40 text-fuchsia-200 hover:bg-fuchsia-800/50 transition-colors flex items-center gap-1"
-                            title="Exit Preview Region (Esc)"
+                    <div className="flex items-center gap-2">
+                        {state.previewRegion && supportsPreview && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    controller.clearPreviewRegion?.();
+                                    state.setPreviewRegion(null);
+                                    if (state.interactionMode === 'selecting_preview') {
+                                        state.setInteractionMode('none');
+                                    }
+                                }}
+                                className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-fuchsia-400/60 bg-fuchsia-900/40 text-fuchsia-200 hover:bg-fuchsia-800/50 transition-colors flex items-center gap-1"
+                                title="Exit Preview Region (Esc)"
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
+                                Exit Preview
+                            </button>
+                        )}
+                        <label
+                            className="flex items-center gap-1 text-[9px] text-gray-400 hover:text-gray-200 cursor-pointer select-none"
+                            title="Embed scene data (GMF) in the exported PNG's iTXt chunk"
                         >
-                            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
-                            Exit Preview
-                        </button>
-                    )}
+                            <input
+                                type="checkbox"
+                                checked={includeGmf}
+                                onChange={(e) => setIncludeGmf(e.target.checked)}
+                                className="accent-cyan-500 w-3 h-3"
+                            />
+                            include GMF
+                        </label>
+                    </div>
                 </div>
 
                 {state.previewRegion && supportsPreview && (() => {
@@ -665,10 +694,11 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                             value={state.bucketSize}
                             onChange={state.setBucketSize}
                             options={[
-                                { label: '64', value: 64 },
-                                { label: '128', value: 128 },
-                                { label: '256', value: 256 },
-                                { label: '512', value: 512 },
+                                { label: '128',  value: 128  },
+                                { label: '256',  value: 256  },
+                                { label: '512',  value: 512  },
+                                { label: '1024', value: 1024 },
+                                { label: '2048', value: 2048 },
                             ]}
                         />
                         <Hint text="Smaller = less memory, larger = faster per-bucket cost." />
