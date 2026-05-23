@@ -28,12 +28,24 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     // 'fit' = object-contain into the pane; '100' = native-resolution with
     // overflow-auto on the parent so the user can scroll to see pixels.
     const [zoomMode, setZoomMode] = useState<'fit' | '100'>('fit');
+    const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
     // Reset img-loaded + zoom state when the displayed item changes (prev/next).
     useEffect(() => {
         setImgLoaded(false);
         setZoomMode('fit');
+        setCopyState('idle');
     }, [item.id]);
+
+    const copyImageLink = async () => {
+        try {
+            await navigator.clipboard.writeText(item.image_url);
+            setCopyState('copied');
+        } catch {
+            setCopyState('failed');
+        }
+        setTimeout(() => setCopyState('idle'), 1800);
+    };
 
     // Prev/next within current view
     const index = useMemo(() => items.findIndex(i => i.id === item.id), [items, item.id]);
@@ -198,14 +210,28 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                             >
                                 {loading ? 'Loading scene…' : '▶ Open in GMT'}
                             </button>
-                            <a
-                                href={item.image_url}
-                                download={`${item.slug}.${item.image_format ?? 'jpg'}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="block w-full py-2 px-3 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border border-white/10 text-center no-underline"
-                            >
-                                ↓ Download image
-                            </a>
+                            <div className="grid grid-cols-2 gap-2">
+                                <a
+                                    href={item.image_url}
+                                    download={`${item.slug}.${item.image_format ?? 'jpg'}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="block py-2 px-3 rounded text-[11px] font-bold bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border border-white/10 text-center no-underline"
+                                >
+                                    ↓ Download
+                                </a>
+                                <button
+                                    onClick={copyImageLink}
+                                    className={`py-2 px-3 rounded text-[11px] font-bold border transition-colors ${
+                                        copyState === 'copied'
+                                            ? 'bg-green-500/15 border-green-500/40 text-green-300'
+                                            : copyState === 'failed'
+                                                ? 'bg-red-500/15 border-red-500/40 text-red-300'
+                                                : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border-white/10'
+                                    }`}
+                                >
+                                    {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Failed' : '🔗 Copy link'}
+                                </button>
+                            </div>
                         </div>
 
                         <div className="text-[9px] text-gray-600 leading-relaxed pt-1">

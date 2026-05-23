@@ -6,6 +6,7 @@ import { galleryEnabled, GalleryItem } from './GalleryClient';
 import { loadGalleryScene } from './loadGalleryScene';
 import { GalleryTile } from './GalleryTile';
 import { Lightbox } from './Lightbox';
+import { useAuthStore } from '../auth/authStore';
 
 export const GalleryPage: React.FC = () => {
   const isOpen       = useGalleryStore(s => s.isOpen);
@@ -13,6 +14,7 @@ export const GalleryPage: React.FC = () => {
   const filter       = useGalleryStore(s => s.filter);
 
   const { items, loading, error } = useGalleryItems({ ...filter, limit: 60 });
+  const currentUserId = useAuthStore(s => s.profile?.id ?? null);
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
   const [loadingItem, setLoadingItem]   = useState<GalleryItem | null>(null);
   const [loadError, setLoadError]       = useState<string | null>(null);
@@ -57,8 +59,16 @@ export const GalleryPage: React.FC = () => {
     }
   };
 
-  const featured = items.filter(i => i.featured);
-  const rest     = items.filter(i => !i.featured);
+  // Three-way split: featured public, regular public, owner's-own private.
+  // RLS gives a signed-in owner approved+public items + their own approved+
+  // private items in the same response; we group client-side so private
+  // entries live in a separate section instead of mixing with everyone's
+  // public work.
+  const featured = items.filter(i => i.visibility === 'public' && i.featured);
+  const rest     = items.filter(i => i.visibility === 'public' && !i.featured);
+  const myPrivate = currentUserId
+    ? items.filter(i => i.visibility === 'private' && i.user_id === currentUserId)
+    : [];
 
   return createPortal(
     <>
@@ -120,6 +130,24 @@ export const GalleryPage: React.FC = () => {
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {rest.map(item => (
+                  <GalleryTile
+                    key={item.id}
+                    item={item}
+                    onClick={() => openLightbox(item)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {myPrivate.length > 0 && (
+            <section className="mt-8 pt-6 border-t border-white/10">
+              <div className="flex items-baseline gap-2 mb-2">
+                <h2 className="text-[10px] font-bold text-purple-300 uppercase tracking-wider">My Private Scenes</h2>
+                <span className="text-[9px] text-gray-500">only visible to you</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {myPrivate.map(item => (
                   <GalleryTile
                     key={item.id}
                     item={item}
