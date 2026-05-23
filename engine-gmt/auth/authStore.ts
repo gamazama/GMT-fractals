@@ -22,6 +22,7 @@ export interface Profile {
     display_name: string;
     bio: string | null;
     tier: 'free' | 'creator' | 'pro' | 'studio';
+    watermark_enabled: boolean;
     created_at: string;
     updated_at: string;
 }

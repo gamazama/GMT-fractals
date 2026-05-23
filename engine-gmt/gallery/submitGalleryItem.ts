@@ -120,7 +120,7 @@ async function extractSkyJpeg(
 }
 
 /** Capture the live worker canvas as a JPEG blob, resized to <= maxWidth. */
-async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
+export async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
     const proxy = getProxy();
     const pngBlob = await proxy.captureSnapshot();
     if (!pngBlob) throw new Error('Renderer not ready — try again once the scene is rendering');
@@ -137,13 +137,51 @@ async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
     return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
 }
 
-export async function submitGalleryItem(input: SubmitInput): Promise<SubmitResult> {
+/**
+ * Bake an author-signature watermark into a JPEG blob.
+ *
+ * Standard preset (Phase 2B): bottom-right, white text with subtle black
+ * shadow, ~1.2% of image height, opacity 0.7, label = "gmt-fractals.com/u/<user>".
+ * Re-encodes the canvas as JPEG so the watermark survives downloads.
+ */
+export async function bakeSignature(jpgBlob: Blob, username: string): Promise<Blob> {
+    const bmp = await createImageBitmap(jpgBlob);
+    const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not create 2D context for signature bake');
+    ctx.drawImage(bmp, 0, 0);
+
+    const text     = `gmt-fractals.com/u/${username}`;
+    const fontSize = Math.max(10, Math.min(28, Math.round(bmp.height * 0.012)));
+    const padding  = Math.max(8, Math.round(fontSize * 0.9));
+
+    ctx.font          = `${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.fillStyle     = 'rgba(255,255,255,0.78)';
+    ctx.shadowColor   = 'rgba(0,0,0,0.65)';
+    ctx.shadowBlur    = 2;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    ctx.textBaseline  = 'bottom';
+    ctx.textAlign     = 'right';
+    ctx.fillText(text, bmp.width - padding, bmp.height - padding);
+
+    return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+}
+
+export interface SubmitOptions {
+    /** Pre-built JPEG to upload as the display image. Lets the caller
+     *  show a preview (with watermark applied) before submitting and
+     *  reuse the same bytes here. If omitted, a fresh snapshot is captured. */
+    jpgBlob?: Blob;
+}
+
+export async function submitGalleryItem(input: SubmitInput, opts: SubmitOptions = {}): Promise<SubmitResult> {
     const token = useAuthStore.getState().getAccessToken();
     if (!token) {
         throw new SubmitError('You must be signed in to submit a scene.', 401);
     }
 
-    const jpg = await captureJpegSnapshot();
+    const jpg = opts.jpgBlob ?? await captureJpegSnapshot();
     const rawPreset = useEngineStore.getState().getPreset({ includeScene: true });
 
     // Externalize env map: remove the (potentially MB-sized) base64 envMapData

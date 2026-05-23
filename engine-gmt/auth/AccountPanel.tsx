@@ -38,8 +38,9 @@ export const AccountPanel: React.FC = () => {
     const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'reserved'>('idle');
 
     // Edit-mode state (only used when profile exists)
-    const [editDisplayName, setEditDisplayName] = useState('');
-    const [editBio, setEditBio]                 = useState('');
+    const [editDisplayName, setEditDisplayName]       = useState('');
+    const [editBio, setEditBio]                       = useState('');
+    const [editWatermarkEnabled, setEditWatermark]    = useState(true);
 
     const [busy, setBusy]   = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,7 @@ export const AccountPanel: React.FC = () => {
         if (profile) {
             setEditDisplayName(profile.display_name);
             setEditBio(profile.bio ?? '');
+            setEditWatermark(profile.watermark_enabled);
         }
         if (setupMode && user) {
             const emailLocal = (user.email ?? '').split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -136,6 +138,7 @@ export const AccountPanel: React.FC = () => {
                 .update({
                     display_name: editDisplayName.trim() || profile.username,
                     bio: editBio.trim().length > 0 ? editBio.trim() : null,
+                    watermark_enabled: editWatermarkEnabled,
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', profile.id);
@@ -307,6 +310,23 @@ export const AccountPanel: React.FC = () => {
                                     placeholder="A line or two about yourself"
                                 />
                             </div>
+
+                            <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
+                                <input
+                                    type="checkbox"
+                                    checked={editWatermarkEnabled}
+                                    onChange={(e) => setEditWatermark(e.target.checked)}
+                                    disabled={busy}
+                                    className="accent-cyan-500 mt-0.5"
+                                />
+                                <div className="flex-1 -mt-0.5">
+                                    <div className="text-[10px] text-gray-300">Bake author signature into gallery submissions</div>
+                                    <div className="text-[9px] text-gray-600 mt-0.5 leading-relaxed">
+                                        Adds <code className="text-cyan-400">gmt-fractals.com/u/@{profile.username}</code> in the bottom corner of your submitted images.
+                                        You can override per-submission in the Submit dialog.
+                                    </div>
+                                </div>
+                            </label>
 
                             <button
                                 type="submit"

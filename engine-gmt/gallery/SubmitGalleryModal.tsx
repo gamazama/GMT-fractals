@@ -1,7 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEngineStore } from '../../store/engineStore';
-import { submitGalleryItem, SubmitError, SubmitResult } from './submitGalleryItem';
+import {
+    submitGalleryItem, SubmitError, SubmitResult,
+    captureJpegSnapshot, bakeSignature,
+} from './submitGalleryItem';
 import { useAuthStore } from '../auth/authStore';
 import { useGalleryStore } from './galleryStore';
 
@@ -39,6 +42,14 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
     const [slotCapHit, setSlotCapHit]   = useState<null | { cap: number; current: number; tier: string; verified: boolean }>(null);
     const [result, setResult]           = useState<SubmitResult | null>(null);
 
+    // Capture pipeline: base snapshot captured on open, final blob =
+    // base ± signature bake. Both reset on close.
+    const [baseJpg, setBaseJpg]         = useState<Blob | null>(null);
+    const [finalJpg, setFinalJpg]       = useState<Blob | null>(null);
+    const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
+    const [captureError, setCaptureError] = useState<string | null>(null);
+    const [bakeWatermark, setBakeWatermark] = useState(true);
+
     const slugTouchedRef = useRef(false);
 
     useEffect(() => {
@@ -51,8 +62,59 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
         setError(null);
         setSlotCapHit(null);
         setResult(null);
+        setBaseJpg(null);
+        setFinalJpg(null);
+        setCaptureError(null);
+        setBakeWatermark(profile?.watermark_enabled ?? true);
         slugTouchedRef.current = false;
-    }, [open, projectName]);
+    }, [open, projectName, profile?.watermark_enabled]);
+
+    // Capture the worker frame as soon as the modal opens so users see what
+    // they're about to submit. Re-bake happens via a separate effect when
+    // the watermark toggle flips.
+    useEffect(() => {
+        if (!open || authStatus !== 'authed' || !profile) return;
+        let cancelled = false;
+        setCaptureError(null);
+        captureJpegSnapshot()
+            .then((blob) => { if (!cancelled) setBaseJpg(blob); })
+            .catch((err) => {
+                if (!cancelled) setCaptureError(err instanceof Error ? err.message : String(err));
+            });
+        return () => { cancelled = true; };
+    }, [open, authStatus, profile]);
+
+    // Recompute the final blob whenever the base or the watermark toggle
+    // changes. Re-bakes the JPEG on a few ms of CPU per change — cheap.
+    useEffect(() => {
+        if (!baseJpg || !profile) {
+            setFinalJpg(null);
+            return;
+        }
+        let cancelled = false;
+        const apply = bakeWatermark
+            ? bakeSignature(baseJpg, profile.username)
+            : Promise.resolve(baseJpg);
+        apply
+            .then((blob) => { if (!cancelled) setFinalJpg(blob); })
+            .catch((err) => {
+                console.warn('[submit-modal] bake failed, falling back to unbaked:', err);
+                if (!cancelled) setFinalJpg(baseJpg);
+            });
+        return () => { cancelled = true; };
+    }, [baseJpg, bakeWatermark, profile]);
+
+    // Manage preview object URL lifecycle — revoke the old one whenever
+    // we have a new finalJpg, and on unmount.
+    useEffect(() => {
+        if (!finalJpg) {
+            setPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(finalJpg);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [finalJpg]);
 
     useEffect(() => {
         if (!slugTouchedRef.current) setSlug(slugify(title));
@@ -77,7 +139,8 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
     const titleValid = title.trim().length >= 3 && title.trim().length <= 100;
     const tagsArr    = tags.split(',').map(t => t.trim()).filter(Boolean);
     const tagsValid  = tagsArr.length <= 8 && tagsArr.every(t => /^[a-z0-9][a-z0-9-]{0,23}$/.test(t));
-    const canSubmit  = signedIn && slugValid && titleValid && tagsValid && !submitting && !result;
+    const previewReady = !!finalJpg;
+    const canSubmit  = signedIn && slugValid && titleValid && tagsValid && previewReady && !submitting && !result;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -93,7 +156,7 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                 formula,
                 tags: tagsArr.length > 0 ? tagsArr : undefined,
                 visibility,
-            });
+            }, { jpgBlob: finalJpg! });
             setResult(res);
             // Invalidate browse query so the next gallery open shows the new
             // row immediately (and reflects it in any already-open gallery view).
@@ -177,6 +240,38 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                     <form className="p-4 space-y-3" onSubmit={handleSubmit}>
                         <div className="text-[9px] text-gray-500">
                             Submitting as <span className="text-cyan-300 font-mono">@{profile!.username}</span>
+                        </div>
+
+                        {/* Preview — shows the exact bytes that will be uploaded,
+                            updates live when the watermark toggle changes. */}
+                        <div>
+                            <label className="text-[9px] text-gray-500 font-bold block mb-1 uppercase tracking-wider">Preview</label>
+                            <div className="aspect-[4/3] bg-black/40 border border-white/10 rounded overflow-hidden flex items-center justify-center">
+                                {captureError ? (
+                                    <div className="text-[10px] text-red-300 text-center px-4 leading-relaxed">{captureError}</div>
+                                ) : previewUrl ? (
+                                    <img
+                                        src={previewUrl}
+                                        alt="Submission preview"
+                                        className="w-full h-full object-contain"
+                                    />
+                                ) : (
+                                    <div className="text-[10px] text-gray-500">Capturing scene…</div>
+                                )}
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer select-none mt-2">
+                                <input
+                                    type="checkbox"
+                                    checked={bakeWatermark}
+                                    onChange={(e) => setBakeWatermark(e.target.checked)}
+                                    disabled={!!result || submitting}
+                                    className="accent-cyan-500"
+                                />
+                                <span className="text-[10px] text-gray-300">
+                                    Bake author signature into image
+                                    <span className="text-gray-600"> · <code className="text-cyan-400">gmt-fractals.com/u/@{profile!.username}</code></span>
+                                </span>
+                            </label>
                         </div>
 
                         <div>
