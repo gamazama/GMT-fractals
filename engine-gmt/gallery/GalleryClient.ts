@@ -96,25 +96,35 @@ export async function listMySubmissions(userId: string): Promise<GalleryItem[]> 
 
 /** Owner-side delete of a submission. RLS allows users to delete their
  *  own rows. R2 objects are NOT cleaned up — admin queue can do that, or
- *  cleanup happens periodically. */
+ *  cleanup happens periodically. .select() forces a return so we can
+ *  detect RLS no-ops (rows affected = 0). */
 export async function deleteMySubmission(id: string, userId: string): Promise<void> {
-  const { error } = await client()
+  const { data, error } = await client()
     .from('gallery_items')
     .delete()
     .eq('id', id)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .select('id');
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('No rows deleted — check that the owner RLS policies are in place.');
+  }
 }
 
 /** Owner-side visibility update — flips public↔private. Owner can also
- *  patch title / description / tags via RLS. */
+ *  patch title / description / tags via RLS. .select() forces a return
+ *  so RLS no-ops surface as an error instead of silent success. */
 export async function updateMyVisibility(id: string, userId: string, visibility: 'public' | 'private'): Promise<void> {
-  const { error } = await client()
+  const { data, error } = await client()
     .from('gallery_items')
     .update({ visibility })
     .eq('id', id)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .select('id');
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('No rows updated — check that the owner RLS policies are in place.');
+  }
 }
 
 export async function getGalleryItem(slug: string): Promise<GalleryItem | null> {
