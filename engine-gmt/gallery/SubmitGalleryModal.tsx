@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useEngineStore } from '../../store/engineStore';
 import {
     submitGalleryItem, SubmitError, SubmitResult,
-    captureJpegSnapshot, bakeSignature,
+    captureJpegSnapshot, bakeSignature, transcodeToJpeg,
 } from './submitGalleryItem';
 import { useAuthStore, watermarkTextFor } from '../auth/authStore';
 import { useGalleryStore } from './galleryStore';
@@ -69,20 +69,26 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
         slugTouchedRef.current = false;
     }, [open, projectName, profile?.watermark_enabled]);
 
-    // Capture the worker frame as soon as the modal opens so users see what
-    // they're about to submit. Re-bake happens via a separate effect when
-    // the watermark toggle flips.
+    // Capture pipeline:
+    //   - If openSubmitWith(source) preset a source blob (bucket render
+    //     completion), transcode it to JPEG sized for the gallery.
+    //   - Otherwise capture a fresh worker snapshot.
+    // Re-bake happens via a separate effect when the watermark toggle flips.
+    const submitSource = useGalleryStore((s) => s.submitSource);
     useEffect(() => {
         if (!open || authStatus !== 'authed' || !profile) return;
         let cancelled = false;
         setCaptureError(null);
-        captureJpegSnapshot()
+        const promise = submitSource
+            ? transcodeToJpeg(submitSource)
+            : captureJpegSnapshot();
+        promise
             .then((blob) => { if (!cancelled) setBaseJpg(blob); })
             .catch((err) => {
                 if (!cancelled) setCaptureError(err instanceof Error ? err.message : String(err));
             });
         return () => { cancelled = true; };
-    }, [open, authStatus, profile]);
+    }, [open, authStatus, profile, submitSource]);
 
     // Recompute the final blob whenever the base or the watermark toggle
     // changes. Re-bakes the JPEG on a few ms of CPU per change — cheap.

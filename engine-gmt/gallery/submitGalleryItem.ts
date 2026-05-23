@@ -124,8 +124,16 @@ export async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
     const proxy = getProxy();
     const pngBlob = await proxy.captureSnapshot();
     if (!pngBlob) throw new Error('Renderer not ready — try again once the scene is rendering');
+    return transcodeToJpeg(pngBlob, maxWidth);
+}
 
-    const bmp = await createImageBitmap(pngBlob);
+/**
+ * Decode an arbitrary image blob (PNG / JPEG / WebP) and re-encode it as a
+ * JPEG sized to maxWidth. Used by both captureJpegSnapshot (live snapshot)
+ * and the bucket-render → gallery flow (PNG-from-disk → JPEG).
+ */
+export async function transcodeToJpeg(source: Blob, maxWidth = 2048, quality = 0.85): Promise<Blob> {
+    const bmp = await createImageBitmap(source);
     const scale = Math.min(1, maxWidth / bmp.width);
     const w = Math.round(bmp.width * scale);
     const h = Math.round(bmp.height * scale);
@@ -134,7 +142,7 @@ export async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Could not create 2D context for JPEG transcode');
     ctx.drawImage(bmp, 0, 0, w, h);
-    return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+    return canvas.convertToBlob({ type: 'image/jpeg', quality });
 }
 
 /**

@@ -905,6 +905,15 @@ export class WorkerProxy implements AccumulationController {
                 link.href = url;
                 link.click();
                 URL.revokeObjectURL(url);
+                // Notify listeners that a completed render is available —
+                // the gallery plugin uses this to offer a "submit to gallery"
+                // prompt with the rendered image as the source blob.
+                FractalEvents.emit(FRACTAL_EVENTS.BUCKET_RENDER_COMPLETE, {
+                    blob: taggedBlob,
+                    filename,
+                    width,
+                    height,
+                });
             } catch (e) {
                 console.error("Failed to inject metadata", e);
                 const link = document.createElement('a');

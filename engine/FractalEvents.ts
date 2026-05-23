@@ -21,6 +21,7 @@ export const FRACTAL_EVENTS = {
     COMPILE_ESTIMATE: 'compile_estimate',
     BUCKET_STATUS: 'bucket_status',
     BUCKET_IMAGE: 'bucket_image',
+    BUCKET_RENDER_COMPLETE: 'bucket_render_complete',
     TRACK_FOCUS: 'track_focus',
     TEXTURE: 'texture',
     ENGINE_QUEUE: 'engine_queue',
@@ -50,6 +51,11 @@ type EventMap = {
     [FRACTAL_EVENTS.COMPILE_ESTIMATE]: number;
     [FRACTAL_EVENTS.BUCKET_STATUS]: { isRendering: boolean; progress: number; totalBuckets?: number; currentBucket?: number };
     [FRACTAL_EVENTS.BUCKET_IMAGE]: { pixels: Uint8ClampedArray; width: number; height: number; presetJson: string; filename: string };
+    /** Fires on the main thread after a bucket render has been encoded to
+     *  a PNG blob and downloaded. Gallery plugin listens to offer a
+     *  "submit this hi-res render?" prompt. The blob carries the embedded
+     *  GMF metadata exactly as the saved file. */
+    [FRACTAL_EVENTS.BUCKET_RENDER_COMPLETE]: { blob: Blob; filename: string; width: number; height: number };
     [FRACTAL_EVENTS.TRACK_FOCUS]: string;
     [FRACTAL_EVENTS.TEXTURE]: { textureType: 'color' | 'env'; dataUrl: string | null };
     [FRACTAL_EVENTS.ENGINE_QUEUE]: { featureId: string; param: string; value: any };

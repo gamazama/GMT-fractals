@@ -22,10 +22,18 @@ interface GalleryStore {
   // Monotonic counter — bumped after successful submit / approve / delete
   // to invalidate the cached browse query and force useGalleryItems to refetch.
   refreshTick: number;
+  /** Pre-built image source for the submit modal. When set, the modal uses
+   *  this PNG/JPEG instead of capturing a fresh viewport snapshot. Used by
+   *  the bucket-render-complete prompt to submit the rendered image. */
+  submitSource: Blob | null;
 
   openGallery: () => void;
   closeGallery: () => void;
   openSubmit: () => void;
+  /** Open the submit modal preset to a specific source blob (e.g. a bucket
+   *  render output). Modal converts to JPEG if needed via its existing
+   *  capture/transcode path. */
+  openSubmitWith: (source: Blob) => void;
   closeSubmit: () => void;
   setFilter: (filter: GalleryFilter) => void;
   bumpRefresh: () => void;
@@ -37,6 +45,7 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   filter: {},
   prevPaused: null,
   refreshTick: 0,
+  submitSource: null,
 
   openGallery: () => {
     if (get().isOpen) return;
@@ -54,8 +63,9 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
     }
   },
 
-  openSubmit: () => set({ isSubmitOpen: true }),
-  closeSubmit: () => set({ isSubmitOpen: false }),
+  openSubmit: () => set({ isSubmitOpen: true, submitSource: null }),
+  openSubmitWith: (source) => set({ isSubmitOpen: true, submitSource: source }),
+  closeSubmit: () => set({ isSubmitOpen: false, submitSource: null }),
 
   setFilter: (filter) => set({ filter }),
   bumpRefresh: () => set((s) => ({ refreshTick: s.refreshTick + 1 })),
