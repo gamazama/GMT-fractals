@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { listGallery, GalleryItem, ListGalleryOpts } from './GalleryClient';
+import { useGalleryStore } from './galleryStore';
 
 interface UseGalleryItemsResult {
   items: GalleryItem[];
@@ -15,6 +16,9 @@ export function useGalleryItems(opts: ListGalleryOpts): UseGalleryItemsResult {
   // Stringify so the dep is stable when the parent re-renders with the same
   // logical filter object.
   const key = JSON.stringify(opts);
+
+  // Bumped after submit/approve/delete to force a refetch without reload.
+  const refreshTick = useGalleryStore((s) => s.refreshTick);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +38,7 @@ export function useGalleryItems(opts: ListGalleryOpts): UseGalleryItemsResult {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, refreshTick]);
 
   return { items, loading, error };
 }

@@ -19,12 +19,16 @@ interface GalleryStore {
   filter: GalleryFilter;
   // Snapshot of engine pause state at open time so we can restore on close.
   prevPaused: boolean | null;
+  // Monotonic counter — bumped after successful submit / approve / delete
+  // to invalidate the cached browse query and force useGalleryItems to refetch.
+  refreshTick: number;
 
   openGallery: () => void;
   closeGallery: () => void;
   openSubmit: () => void;
   closeSubmit: () => void;
   setFilter: (filter: GalleryFilter) => void;
+  bumpRefresh: () => void;
 }
 
 export const useGalleryStore = create<GalleryStore>((set, get) => ({
@@ -32,6 +36,7 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   isSubmitOpen: false,
   filter: {},
   prevPaused: null,
+  refreshTick: 0,
 
   openGallery: () => {
     if (get().isOpen) return;
@@ -53,4 +58,5 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   closeSubmit: () => set({ isSubmitOpen: false }),
 
   setFilter: (filter) => set({ filter }),
+  bumpRefresh: () => set((s) => ({ refreshTick: s.refreshTick + 1 })),
 }));

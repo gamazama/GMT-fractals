@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useEngineStore } from '../../store/engineStore';
 import { submitGalleryItem, SubmitError, SubmitResult } from './submitGalleryItem';
 import { useAuthStore } from '../auth/authStore';
+import { useGalleryStore } from './galleryStore';
 
 interface Props {
     open: boolean;
@@ -94,6 +95,9 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                 visibility,
             });
             setResult(res);
+            // Invalidate browse query so the next gallery open shows the new
+            // row immediately (and reflects it in any already-open gallery view).
+            useGalleryStore.getState().bumpRefresh();
         } catch (err) {
             if (err instanceof SubmitError && err.detail?.code === 'SLOT_CAP_REACHED') {
                 setSlotCapHit({
