@@ -1,6 +1,6 @@
 # gmt-engine — Code Health Worklists
 
-_Auto-regenerated: 2026-05-21T15:18:53.889Z_
+_Auto-regenerated: 2026-05-23T15:49:51.571Z_
 
 Six pools of actionable code-health work. Each has a paste-ready session-starter prompt.
 Pick a pool, paste the prompt into a fresh session, work for ~30-90 min, report back.
@@ -20,7 +20,7 @@ Pick a pool, paste the prompt into a fresh session, work for ~30-90 min, report 
 
 ## Pool 1 — Routine cleanup
 
-_Count: 91 + 75 secondary | Source: docs/modules/backlog.md | Last regen: 2026-05-21T15:18:53.889Z_
+_Count: 91 + 75 secondary | Source: docs/modules/backlog.md | Last regen: 2026-05-23T15:49:51.571Z_
 
 Auto-extracted from module docs' "Known Issues" sections + Phase 1 surveys' orphan-sweep candidates. Each entry is file:line-cited and tagged by type (`cleanup` / `drift` / `dead-code` / `doc-rewrite-target` / `unused` / `vestigial`).
 
@@ -50,7 +50,7 @@ Auto-extracted from module docs' "Known Issues" sections + Phase 1 surveys' orph
 
 ## Pool 2 — Production bugs
 
-_Count: 2 | Source: docs/modules/bugs.md | Last regen: 2026-05-21T15:18:53.889Z_
+_Count: 2 | Source: docs/modules/bugs.md | Last regen: 2026-05-23T15:49:51.571Z_
 
 Production bugs surfaced by audit, tagged with `@bug PRODUCTION:` in source. Each typically needs a small design decision before code fix.
 
@@ -73,7 +73,7 @@ Production bugs surfaced by audit, tagged with `@bug PRODUCTION:` in source. Eac
 
 ## Pool 3 — Stale doc rewrites
 
-_Count: 8 | Source: plans/doc-audit-state/phase-2-disposition.json | Last regen: 2026-05-21T15:18:53.889Z_
+_Count: 8 | Source: plans/doc-audit-state/phase-2-disposition.json | Last regen: 2026-05-23T15:49:51.571Z_
 
 Pre-extraction docs in `docs/engine/*` and `docs/gmt/*` that the audit's disposition matrix classified as `rewrite` or `migrate-target`. These docs no longer match current code (e.g. aspirational APIs that don't exist, wrong path references, removed features). Rewriting them is its own work stream — not bug-fix, not cleanup.
 
@@ -93,9 +93,9 @@ Pre-extraction docs in `docs/engine/*` and `docs/gmt/*` that the audit's disposi
 
 ## Pool 4 — Coverage gap closure
 
-_Count: 219 + 70 secondary | Source: plans/doc-audit-state/scripts/reconcile-coverage.mjs | Last regen: 2026-05-21T15:18:53.889Z_
+_Count: 219 + 70 secondary | Source: plans/doc-audit-state/scripts/reconcile-coverage.mjs | Last regen: 2026-05-23T15:49:51.571Z_
 
-Files no Phase 1 subsystem ever audited. Sample of 8 found 5 with hidden invariants — gap is real but unevenly distributed. Larger areas: `components/*` (40), `engine-gmt/components/*` (25), `utils/*` (23), `engine-gmt/gallery/*` (12), `data/help/*` (17). See `plans/doc-audit-state/coverage-sample-report.md` for prior sample findings.
+Files no Phase 1 subsystem ever audited. Sample of 8 found 5 with hidden invariants — gap is real but unevenly distributed. Larger areas: `components/*` (40), `engine-gmt/components/*` (25), `utils/*` (23), `engine-gmt/gallery/*` (12), `data/help/*` (17). See `docs/audit-2026-05-20/state/coverage-sample-report.md` for prior sample findings.
 
 **Session-starter prompt:**
 
@@ -116,7 +116,7 @@ Files no Phase 1 subsystem ever audited. Sample of 8 found 5 with hidden invaria
 
 ## Pool 5 — Fragility audit follow-through
 
-_Count: 18 | Source: docs/engine/20_Fragility_Audit.md | Last regen: 2026-05-21T15:18:53.889Z | note: pre-audit tracker — status mixed; per-entry re-audit needed before action_
+_Count: 18 | Source: docs/engine/20_Fragility_Audit.md | Last regen: 2026-05-23T15:49:51.571Z | note: pre-audit tracker — status mixed; per-entry re-audit needed before action_
 
 The engine's own pre-extraction tracker (F1-F18). Status mixed — some addressed during the extraction, some still open. Per-entry status hasn't been re-audited since the 2026-05-20 doc audit.
 
@@ -139,7 +139,7 @@ The engine's own pre-extraction tracker (F1-F18). Status mixed — some addresse
 
 ## Pool 6 — Refactor recommendations
 
-_Count: 5 | Source: HEALTH.md (inline list under Pool 6) | Last regen: 2026-05-21T15:18:53.889Z | note: WorkerProxy<TRenderState>, drop cameraSlots as any, relocate LoadingRenderer*, relocate ViewportRefs.ts, split PreviewCanvas.tsx_
+_Count: 5 | Source: HEALTH.md (inline list under Pool 6) | Last regen: 2026-05-23T15:49:51.571Z | note: WorkerProxy<TRenderState>, drop cameraSlots as any, relocate LoadingRenderer*, relocate ViewportRefs.ts, split PreviewCanvas.tsx_
 
 Structural changes surfaced by the audit's Sub-B summary. Each is hours of work; pick ONE per session.
 

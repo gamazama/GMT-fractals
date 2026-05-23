@@ -67,7 +67,7 @@ The repo carries two parallel source trees of "engine" code: `engine/` is the GM
 
 The two trees do not have a 1:1 file mapping. Some files exist in both (and must stay in sync, sometimes via a shim, sometimes deliberately diverged); some exist only in `engine-gmt/` (GMT-specific surface area with no plausible non-GMT use); and the `types/` directory has its own divergence story (the dev/engine-gmt fork has *regressed* to a literal union for `FormulaType` that the stable branch already collapsed to an opaque `string` tag — see `plans/doc-audit-state/survey/_followups/q-102.md`).
 
-This document is the canonical reference subsystem-doc writers cite instead of re-deriving the rules: §"Catalog of fork pairs" enumerates every observed pair and labels it by pattern; §"Rules for new fork-pair work" is prescriptive (which pattern to pick when adding a new fork-pair); §"Invariants" is the must-hold list; §"Known issues / drift to fix" pulls open work items from `plans/doc-audit-state/phase-2-carry-in.json`.
+This document is the canonical reference subsystem-doc writers cite instead of re-deriving the rules: §"Catalog of fork pairs" enumerates every observed pair and labels it by pattern; §"Rules for new fork-pair work" is prescriptive (which pattern to pick when adding a new fork-pair); §"Invariants" is the must-hold list; §"Known issues / drift to fix" pulls open work items from `docs/audit-2026-05-20/state/phase-2-carry-in.json`.
 
 ## Catalog of fork pairs
 
@@ -193,7 +193,7 @@ R10. **When promoting a Pattern B genericized fork to Pattern A (shim) — i.e. 
 
 ## Known issues / drift to fix
 
-Drawn from `plans/doc-audit-state/phase-2-carry-in.json` (the cross-cutting "engine vs engine-gmt fork divergence" theme) and the six followups q-096 through q-102.
+Drawn from `docs/audit-2026-05-20/state/phase-2-carry-in.json` (the cross-cutting "engine vs engine-gmt fork divergence" theme) and the six followups q-096 through q-102.
 
 | # | Issue | Pattern | Category | Reference |
 |---|---|---|---|---|
