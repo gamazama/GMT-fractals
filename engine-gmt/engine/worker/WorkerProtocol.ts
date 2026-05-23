@@ -105,7 +105,7 @@ export type WorkerToMainMessage =
     | { type: 'SHADER_CODE'; code: string }
     | { type: 'SNAPSHOT_RESULT'; id: string; blob: Blob }
     | { type: 'ENV_MAP_RESULT'; id: string; blob: Blob | null }
-    | { type: 'BOOTED'; gpuInfo?: string }
+    | { type: 'BOOTED'; gpuInfo?: string; halfFloatAlphaSupport?: boolean }
     | { type: 'PICK_RESULT'; id: string; position: [number, number, number] | null }
     | { type: 'FOCUS_RESULT'; id: string; distance: number }
     | { type: 'HISTOGRAM_RESULT'; id: string; data: Float32Array }

@@ -62,6 +62,7 @@ export class WorkerProxy implements AccumulationController {
     };
     private _localOffset: SerializedOffset = { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
     private _gpuInfo = '';
+    private _halfFloatAlphaSupport = true;
     private _lastGeneratedFrag = '';
     private _isBucketRendering = false;
     private _isExporting = false;
@@ -226,7 +227,14 @@ export class WorkerProxy implements AccumulationController {
     }
     getCompiledFragmentShader(): Promise<string | null> { return Promise.resolve(null); }
     getTranslatedFragmentShader(): Promise<string | null> { return Promise.resolve(null); }
-    checkHalfFloatAlphaSupport() { return true; }
+
+    /**
+     * Returns the cached half-float-alpha capability published by a real
+     * worker on boot. The engine-core stub has no worker so it returns the
+     * default (`true`) — subclasses with a real worker mirror the probe via
+     * the BOOTED payload (see `engine-gmt/engine/worker/WorkerProxy.ts`).
+     */
+    checkHalfFloatAlphaSupport(): boolean { return this._halfFloatAlphaSupport; }
 
     // ─── Worker communication (no-op in stub) ──────────────────────────
 

@@ -58,6 +58,11 @@ export class RenderPipeline {
     public frameCount: number = 0;
     public accumulationCount: number = 0; // Public for UI monitoring
     private sampleCap: number = 0; // 0 = Infinite
+
+    // Cached half-float-alpha capability probe. Some mobile GPUs report
+    // HALF_FLOAT support but fail framebuffer-completeness when alpha is
+    // attached. When false, initTargets/resize drop to FloatType.
+    private _halfFloatAlphaSupport: boolean | null = null;
     
     public lastCompleteDuration: number = 0;
     private startTime: number = 0;
@@ -214,8 +219,11 @@ export class RenderPipeline {
         
         // Clear buffer before reading to detect failures
         buffer.fill(0);
-        
-        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+
+        // Match the actual target type, not the requested precision —
+        // initTargets may have dropped to FloatType when the half-float-alpha
+        // probe failed (checkHalfFloatAlphaSupport).
+        const useHalfFloat = target.texture.type === THREE.HalfFloatType;
         
         try {
             if (useHalfFloat) {
@@ -244,8 +252,53 @@ export class RenderPipeline {
         }
     }
     
+    /**
+     * Probe HALF_FLOAT alpha framebuffer completeness on a throwaway GL
+     * context. Cached after first call. Worker-side: pipeline lives in the
+     * render worker, so this runs in the worker's GL realm.
+     *
+     * @see docs/adr — extends q-094 fix: half-float fallback for mobile GPUs.
+     */
+    public checkHalfFloatAlphaSupport(): boolean {
+        if (this._halfFloatAlphaSupport !== null) return this._halfFloatAlphaSupport;
+        try {
+            const testCanvas = (typeof document !== 'undefined')
+                ? document.createElement('canvas')
+                : new OffscreenCanvas(1, 1);
+            testCanvas.width = 1;
+            testCanvas.height = 1;
+            let gl = testCanvas.getContext('webgl2') as WebGL2RenderingContext | null;
+            let halfFloatType: number;
+            if (gl) {
+                halfFloatType = gl.HALF_FLOAT;
+            } else {
+                const gl1 = testCanvas.getContext('webgl') as WebGLRenderingContext | null;
+                gl = gl1 as any;
+                if (!gl) { this._halfFloatAlphaSupport = false; return false; }
+                const ext = gl.getExtension('OES_texture_half_float');
+                if (!ext) { this._halfFloatAlphaSupport = false; return false; }
+                halfFloatType = ext.HALF_FLOAT_OES;
+            }
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, halfFloatType, null);
+            const fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+            const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+            gl.deleteFramebuffer(fbo);
+            gl.deleteTexture(tex);
+            this._halfFloatAlphaSupport = ok;
+            return ok;
+        } catch {
+            this._halfFloatAlphaSupport = false;
+            return false;
+        }
+    }
+
     private initTargets(width: number, height: number) {
-        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+        const wantsHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+        const useHalfFloat = wantsHalfFloat && this.checkHalfFloatAlphaSupport();
         const floatType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
         
         // Single render target (color only) - no MRT needed
@@ -314,7 +367,8 @@ export class RenderPipeline {
     }
     
     public resize(width: number, height: number) {
-        const useHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+        const wantsHalfFloat = (this._qualityState?.bufferPrecision ?? 0) > 0.5;
+        const useHalfFloat = wantsHalfFloat && this.checkHalfFloatAlphaSupport();
         const currentType = this.mrtTargetA?.texture.type;
         const desiredType = useHalfFloat ? THREE.HalfFloatType : THREE.FloatType;
         

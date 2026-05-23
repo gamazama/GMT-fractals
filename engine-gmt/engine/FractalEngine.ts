@@ -903,58 +903,14 @@ export class FractalEngine {
 
     /**
      * Check if the GPU supports HalfFloat16 textures with alpha channel.
-     * Some mobile GPUs don't properly support alpha in half-float render targets.
+     * Delegates to `RenderPipeline.checkHalfFloatAlphaSupport()` (single
+     * source of truth, cached). Worker-side: result is also published to
+     * main via the `BOOTED` payload so `WorkerProxy` can mirror it.
      */
     public checkHalfFloatAlphaSupport(): boolean {
-        // Create a temporary canvas to test WebGL capabilities
-        try {
-            // Use OffscreenCanvas in worker contexts, DOM canvas otherwise
-            const testCanvas = (typeof document !== 'undefined')
-                ? document.createElement('canvas')
-                : new OffscreenCanvas(1, 1);
-            testCanvas.width = 1;
-            testCanvas.height = 1;
-            
-            // Try WebGL2 first (Three.js uses WebGL2 by default)
-            let gl = testCanvas.getContext('webgl2') as WebGL2RenderingContext | null;
-            let halfFloatType: number;
-
-            if (gl) {
-                // WebGL2 has built-in HalfFloat support
-                halfFloatType = gl.HALF_FLOAT;
-            } else {
-                // Fallback to WebGL1 with extension
-                const gl1 = testCanvas.getContext('webgl') as WebGLRenderingContext | null;
-                gl = gl1 as any;
-                if (!gl) return false;
-                
-                const halfFloatExt = gl.getExtension('OES_texture_half_float');
-                if (!halfFloatExt) return false;
-                halfFloatType = halfFloatExt.HALF_FLOAT_OES;
-            }
-
-            // Try to create a half-float render target with alpha
-            const texture = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, halfFloatType, null);
-
-            const framebuffer = gl.createFramebuffer();
-            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-
-            const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
-            const isComplete = status === gl.FRAMEBUFFER_COMPLETE;
-
-            // Cleanup
-            gl.deleteFramebuffer(framebuffer);
-            gl.deleteTexture(texture);
-
-            if (import.meta.env.DEV) console.log(`[GMT] HalfFloat16 Alpha Support: ${isComplete ? 'YES' : 'NO'}`);
-            return isComplete;
-        } catch (e) {
-            console.warn('[GMT] HalfFloat alpha support check failed:', e);
-            return false;
-        }
+        const supported = this.pipeline.checkHalfFloatAlphaSupport();
+        if (import.meta.env.DEV) console.log(`[GMT] HalfFloat16 Alpha Support: ${supported ? 'YES' : 'NO'}`);
+        return supported;
     }
 }
 
