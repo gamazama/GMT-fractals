@@ -38,6 +38,24 @@ presetFieldRegistry.register({
     },
 });
 
+// Path-tracer / direct integrator toggle. The lighting DDFS feature owns
+// the shader-facing float (`lighting.renderMode`: 0|1) and applyPresetState
+// writes it via setLighting. The top-bar PT toggle, however, reads the
+// engine-core string (`store.renderMode`: 'Direct'|'PathTracing') which has
+// no preset deserializer — so loaded scenes render path-traced but the
+// toggle stays dim and needs two clicks to disable. Route the load through
+// setRenderMode so the bindings.ts subscription stays the sole bridge.
+presetFieldRegistry.register({
+    key: 'renderMode',
+    serialize: () => undefined,
+    deserialize: (p: any, _set: any, getStore: any) => {
+        const feature = p?.features?.lighting?.renderMode;
+        if (feature === undefined) return;
+        const store = getStore?.();
+        store?.setRenderMode?.(feature >= 0.5 ? 'PathTracing' : 'Direct');
+    },
+});
+
 // Modular formula's node-graph pipeline. Without this, applyPresetState
 // silently drops pipeline + graph on load — the worker keeps the default
 // JULIA_REPEATER pipeline and the loaded scene renders blank (or the
