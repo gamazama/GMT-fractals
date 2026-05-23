@@ -25,7 +25,17 @@ const slugify = (s: string): string =>
 
 export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
     const projectName  = useEngineStore((s) => s.projectSettings.name);
-    const formula      = useEngineStore((s) => s.formula);
+    const primaryFormula = useEngineStore((s) => s.formula);
+    // Interlace state lives on the engine store as a DDFS feature slice;
+    // when interlaceCompiled + interlaceFormula are set the active scene
+    // is a hybrid of the primary + the secondary formula, and the
+    // submission should attribute both.
+    const interlaceCompiled  = useEngineStore((s) => (s as any).interlace?.interlaceCompiled as boolean | undefined);
+    const interlaceSecondary = useEngineStore((s) => (s as any).interlace?.interlaceFormula  as string  | undefined);
+
+    const formula = (interlaceCompiled && interlaceSecondary)
+        ? `${primaryFormula} + ${interlaceSecondary}`
+        : primaryFormula;
 
     const authStatus       = useAuthStore((s) => s.status);
     const profile          = useAuthStore((s) => s.profile);

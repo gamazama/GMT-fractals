@@ -27,9 +27,12 @@ export const AccountPanelHost: React.FC = () => <AccountPanel />;
 let _installed = false;
 
 export interface InstallAuthOptions {
-    /** Topbar slot for the profile chip. Default 'right'. */
+    /** Topbar slot for the profile chip. Default 'left' — placed right
+     *  after GmtLogo (order -10) so the auth state is visible at a glance
+     *  without scanning the whole topbar. */
     slot?: 'left' | 'center' | 'right';
-    /** Order within the slot. Default 60 — places it after Help (40). */
+    /** Order within the slot. Default 0 — sits between the logo and the
+     *  first divider (which is at order 1 in registerGmtTopbar). */
     order?: number;
 }
 
@@ -39,8 +42,8 @@ export const installAuth = (options: InstallAuthOptions = {}) => {
 
     topbar.register({
         id: 'auth-widget',
-        slot: options.slot ?? 'right',
-        order: options.order ?? 60,
+        slot: options.slot ?? 'left',
+        order: options.order ?? 0,
         component: AuthTopbarWidget,
     });
 };

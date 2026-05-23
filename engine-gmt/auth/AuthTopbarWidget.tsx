@@ -1,14 +1,27 @@
 /**
- * Topbar widget — "Sign in" when unauthed, profile chip with dropdown
- * when signed in. Mounted by installAuth() into the topbar's right slot.
+ * Topbar widget — minimal avatar circle. Sits after the GmtLogo on the
+ * left side of the topbar.
+ *
+ * Signed out → person glyph; click opens AuthOverlay.
+ * Signed in  → initial in a gradient circle; click opens a Popover with
+ *              account header, "Account…", and "Sign out". Styling matches
+ *              the engine's Menu plugin dropdowns (bg-black/95 + p-1 items).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from './authStore';
 import { getSupabase } from '../supabase';
 
+const PersonIcon: React.FC = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+    </svg>
+);
+
 export const AuthTopbarWidget: React.FC = () => {
     const status            = useAuthStore((s) => s.status);
     const profile           = useAuthStore((s) => s.profile);
+    const user              = useAuthStore((s) => s.user);
     const isAdmin           = useAuthStore((s) => s.isAdmin);
     const openAuthModal     = useAuthStore((s) => s.openAuthModal);
     const openAccountPanel  = useAuthStore((s) => s.openAccountPanel);
@@ -26,18 +39,21 @@ export const AuthTopbarWidget: React.FC = () => {
     }, [open]);
 
     if (status === 'loading') {
-        return <div className="w-16 h-7 bg-white/[0.03] rounded animate-pulse" />;
+        return <div className="w-7 h-7 bg-white/[0.03] rounded-full animate-pulse" />;
     }
 
+    // Signed out (or pre-profile): single click opens the auth flow. No
+    // dropdown — there's nothing to choose from. needs-profile is hidden
+    // because AccountPanel auto-mounts forcing the username pick.
     if (status === 'unauthed' || status === 'needs-profile') {
-        // needs-profile shows nothing because AccountPanel auto-mounts forcing setup
         if (status === 'needs-profile') return null;
         return (
             <button
                 onClick={openAuthModal}
-                className="px-3 py-1.5 rounded text-[11px] font-bold bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 border border-cyan-500/40"
+                title="Sign in"
+                className="w-7 h-7 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-cyan-500/40 text-gray-400 hover:text-cyan-300 flex items-center justify-center transition-colors"
             >
-                Sign in
+                <PersonIcon />
             </button>
         );
     }
@@ -50,47 +66,64 @@ export const AuthTopbarWidget: React.FC = () => {
         <div className="relative" ref={ref}>
             <button
                 onClick={() => setOpen((v) => !v)}
-                className={`flex items-center gap-2 px-2 py-1 rounded transition-colors ${open ? 'bg-white/10' : 'hover:bg-white/[0.06]'}`}
+                title={`@${profile.username}`}
+                className={`w-7 h-7 rounded-full border flex items-center justify-center text-[11px] font-bold text-white transition-colors ${
+                    open
+                        ? 'bg-cyan-500/30 border-cyan-500/60'
+                        : 'bg-gradient-to-br from-cyan-500/40 to-purple-500/40 border-white/15 hover:border-cyan-500/60'
+                }`}
             >
-                <span className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/40 to-purple-500/40 border border-white/10 flex items-center justify-center text-[11px] font-bold text-white">
-                    {initial}
-                </span>
-                <span className="text-[11px] text-gray-300 max-w-[100px] truncate hidden sm:inline">
-                    @{profile.username}
-                </span>
+                {initial}
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-[#121212] border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] z-50 p-1">
+                <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-full left-0 mt-2 w-56 bg-black/95 border border-white/15 rounded-lg shadow-2xl z-50 p-1"
+                >
+                    {/* Account header — name + handle + tier hint */}
                     <div className="px-2 py-1.5 border-b border-white/5 mb-1">
                         <div className="text-[11px] font-bold text-white truncate">{profile.display_name}</div>
                         <div className="text-[9px] text-gray-500 truncate font-mono">@{profile.username}</div>
+                        {user?.email && (
+                            <div className="text-[9px] text-gray-600 truncate mt-0.5">{user.email}</div>
+                        )}
                     </div>
 
-                    <button
+                    <MenuButton
+                        label="Account…"
                         onClick={() => { setOpen(false); openAccountPanel(); }}
-                        className="w-full text-left px-2 py-1.5 rounded text-[11px] text-gray-300 hover:bg-white/5 hover:text-white"
-                    >
-                        Account
-                    </button>
+                    />
 
                     {isAdmin && (
-                        <div className="px-2 py-1.5 text-[9px] text-amber-400 font-bold uppercase tracking-wider">
+                        <div className="px-2 py-1 text-[9px] text-amber-400 font-bold uppercase tracking-wider">
                             Admin · use backend/admin
                         </div>
                     )}
 
-                    <button
+                    <div className="h-px bg-white/5 my-1" />
+
+                    <MenuButton
+                        label="Sign out"
+                        muted
                         onClick={async () => {
                             setOpen(false);
                             await getSupabase().auth.signOut();
                         }}
-                        className="w-full text-left px-2 py-1.5 rounded text-[11px] text-gray-400 hover:bg-white/5 hover:text-white border-t border-white/5 mt-1"
-                    >
-                        Sign out
-                    </button>
+                    />
                 </div>
             )}
         </div>
     );
 };
+
+const MenuButton: React.FC<{ label: string; onClick: () => void; muted?: boolean }> = ({ label, onClick, muted }) => (
+    <button
+        onClick={onClick}
+        className={`w-full text-left px-2 py-1.5 rounded text-[11px] font-bold transition-colors ${
+            muted ? 'text-gray-400 hover:text-white hover:bg-white/5' : 'text-gray-200 hover:text-white hover:bg-white/5'
+        }`}
+    >
+        {label}
+    </button>
+);
