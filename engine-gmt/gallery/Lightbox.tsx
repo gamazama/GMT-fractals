@@ -52,8 +52,9 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     const prevItem = index > 0 ? items[index - 1] : null;
     const nextItem = index >= 0 && index < items.length - 1 ? items[index + 1] : null;
 
-    // Other items by same author (excluding the current item)
-    const moreFromAuthor = useMemo(() => {
+    // Other items by same uploader (excluding the current item). user_id
+    // is the correct key — display_name can change, but user_id is stable.
+    const moreFromUploader = useMemo(() => {
         if (!item.user_id) return [];
         return items.filter(i => i.user_id === item.user_id && i.id !== item.id).slice(0, 6);
     }, [items, item]);
@@ -171,7 +172,19 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                         <div>
                             <h2 className="text-base font-bold text-white leading-tight">{item.title}</h2>
                             <div className="mt-1 flex items-center gap-2 flex-wrap text-[10px] text-gray-400">
-                                {item.author && <span>by <span className="text-cyan-300">@{item.author}</span></span>}
+                                {/* @username is the immutable handle; author/display_name
+                                    is the friendly label that hangs alongside. */}
+                                {(item.username || item.author) && (
+                                    <span>
+                                        by{' '}
+                                        {item.username
+                                            ? <span className="text-cyan-300">@{item.username}</span>
+                                            : <span className="text-gray-300">{item.author}</span>}
+                                        {item.username && item.author && item.author !== item.username && (
+                                            <span className="text-gray-500"> · {item.author}</span>
+                                        )}
+                                    </span>
+                                )}
                                 <span className="text-gray-600">·</span>
                                 <span>{item.formula}</span>
                                 <span className="text-gray-600">·</span>
@@ -240,13 +253,13 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                             <kbd className="font-mono"> Esc</kbd> close
                         </div>
 
-                        {moreFromAuthor.length > 0 && (
+                        {moreFromUploader.length > 0 && (
                             <div className="border-t border-white/5 pt-4">
                                 <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                                    More from <span className="text-cyan-300">@{item.author}</span>
+                                    More from <span className="text-cyan-300">@{item.username ?? '…'}</span>
                                 </div>
                                 <div className="grid grid-cols-3 gap-1.5">
-                                    {moreFromAuthor.map(m => (
+                                    {moreFromUploader.map(m => (
                                         <button
                                             key={m.id}
                                             onClick={() => onNavigate(m)}

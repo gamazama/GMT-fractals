@@ -81,9 +81,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
         const supabase = getSupabase();
         try {
+            // is_admin is a security-definer rpc — bypasses RLS so the
+            // admins table can stay locked down to owners-only without
+            // breaking the client check. Mirrors the server-side check.
             const [profileRes, adminRes] = await Promise.all([
                 supabase.from('profiles').select('*').eq('id', sess.user.id).maybeSingle(),
-                supabase.from('admins').select('user_id').eq('user_id', sess.user.id).maybeSingle(),
+                supabase.rpc('is_admin', { uid: sess.user.id }),
             ]);
             if (profileRes.error) console.warn('[auth] profile lookup error:', profileRes.error);
             if (adminRes.error)   console.warn('[auth] admin lookup error:',   adminRes.error);

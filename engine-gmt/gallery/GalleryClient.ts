@@ -27,6 +27,10 @@ export interface GalleryItem {
   featured: boolean;
   created_at: string;
   author: string | null;
+  /** Immutable @handle for the uploader. Use this for bylines + profile
+   *  links instead of `author` (which is the editable display_name and can
+   *  be impersonated). Null for pre-2B curated rows. */
+  username: string | null;
   image_format: 'jpg' | 'png';
   /** Externalized env-map URL. Loader injects this into
    *  preset.materials.envMapData before applying so the scene's sky comes
@@ -50,7 +54,7 @@ export interface GalleryItem {
 // loads light — the click-to-open path re-queries the single row with
 // gmf_data via getGalleryItem.
 const LIST_COLUMNS =
-  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format,sky_url,user_id,visibility,status';
+  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,username,image_format,sky_url,user_id,visibility,status';
 
 export interface ListGalleryOpts {
   limit?: number;

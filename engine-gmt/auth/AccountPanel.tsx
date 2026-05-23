@@ -188,12 +188,23 @@ export const AccountPanel: React.FC = () => {
         setBusy(true);
         setError(null);
         try {
-            // Delete the profile row; cascade-deletes related items via the
-            // schema's FK on_delete behaviour. The auth.users entry itself
-            // requires service_role to delete — for v1 that's a separate
-            // admin task. Tracked in plan 44.
-            const { error: pErr } = await getSupabase().from('profiles').delete().eq('id', profile.id);
+            // Delete the profile row. The "users delete own profile" RLS
+            // policy gates this; .select('id') forces a return so an
+            // RLS-blocked no-op surfaces as an error instead of pretending
+            // success. The FK on gallery_items.user_id is on delete set null,
+            // so the user's submissions stay (orphaned to user_id=null).
+            // The auth.users row itself requires service_role to delete —
+            // user can sign in again and ensureProfile would recreate.
+            // Full account erasure is a post-launch Edge Function (plan 45 H4).
+            const { data, error: pErr } = await getSupabase()
+                .from('profiles')
+                .delete()
+                .eq('id', profile.id)
+                .select('id');
             if (pErr) throw pErr;
+            if (!data || data.length === 0) {
+                throw new Error('Account deletion blocked. Check RLS: needs "users delete own profile" policy.');
+            }
             await getSupabase().auth.signOut();
             closeAccountPanel();
         } catch (err) {
