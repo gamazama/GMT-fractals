@@ -25,9 +25,15 @@ interface Props {
 
 export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onClose, onLoadScene, onNavigate }) => {
     const [imgLoaded, setImgLoaded] = useState(false);
+    // 'fit' = object-contain into the pane; '100' = native-resolution with
+    // overflow-auto on the parent so the user can scroll to see pixels.
+    const [zoomMode, setZoomMode] = useState<'fit' | '100'>('fit');
 
-    // Reset img-loaded state when the displayed item changes (prev/next).
-    useEffect(() => { setImgLoaded(false); }, [item.id]);
+    // Reset img-loaded + zoom state when the displayed item changes (prev/next).
+    useEffect(() => {
+        setImgLoaded(false);
+        setZoomMode('fit');
+    }, [item.id]);
 
     // Prev/next within current view
     const index = useMemo(() => items.findIndex(i => i.id === item.id), [items, item.id]);
@@ -44,14 +50,18 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     // also fire. Arrows + Enter only act while this lightbox is mounted.
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape')    { e.stopPropagation(); onClose(); }
+            if (e.key === 'Escape') {
+                // In zoomed mode, Esc first drops back to fit; second Esc closes.
+                if (zoomMode === '100') { e.stopPropagation(); setZoomMode('fit'); }
+                else                    { e.stopPropagation(); onClose(); }
+            }
             else if (e.key === 'ArrowLeft'  && prevItem) { e.stopPropagation(); onNavigate(prevItem); }
             else if (e.key === 'ArrowRight' && nextItem) { e.stopPropagation(); onNavigate(nextItem); }
             else if (e.key === 'Enter' && !loading)      { e.stopPropagation(); onLoadScene(item); }
         };
         window.addEventListener('keydown', onKey, true);
         return () => window.removeEventListener('keydown', onKey, true);
-    }, [item, prevItem, nextItem, loading, onClose, onLoadScene, onNavigate]);
+    }, [item, prevItem, nextItem, loading, zoomMode, onClose, onLoadScene, onNavigate]);
 
     const formatRelative = (iso: string): string => {
         const now    = Date.now();
@@ -91,10 +101,14 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                 className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Image pane */}
-                <div className="flex-1 relative bg-black/40 flex items-center justify-center min-h-0">
+                {/* Image pane — fit mode centres + contains; 100 mode scrolls. */}
+                <div
+                    className={`flex-1 relative bg-black/40 min-h-0 ${
+                        zoomMode === 'fit' ? 'flex items-center justify-center overflow-hidden' : 'overflow-auto'
+                    }`}
+                >
                     {!imgLoaded && (
-                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-gray-500">
+                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-gray-500 pointer-events-none">
                             loading image…
                         </div>
                     )}
@@ -102,11 +116,24 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                         src={item.image_url}
                         alt={item.title}
                         onLoad={() => setImgLoaded(true)}
-                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                        onClick={() => setZoomMode(zoomMode === 'fit' ? '100' : 'fit')}
+                        className={`transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'} ${
+                            zoomMode === 'fit'
+                                ? 'max-w-full max-h-full object-contain cursor-zoom-in'
+                                : 'max-w-none cursor-zoom-out'
+                        }`}
+                        style={zoomMode === '100' ? { width: 'auto', height: 'auto' } : undefined}
                     />
 
-                    {/* Prev/next arrows overlay — only when there's somewhere to go */}
-                    {prevItem && (
+                    {/* Zoom pill */}
+                    {imgLoaded && (
+                        <div className="absolute top-2 left-2 px-2 py-0.5 text-[9px] font-bold bg-black/60 border border-white/10 rounded text-gray-300 pointer-events-none">
+                            {zoomMode === 'fit' ? 'Fit · click to zoom' : '100% · click to fit'}
+                        </div>
+                    )}
+
+                    {/* Prev/next arrows — hidden in 100% mode so the image isn't crowded */}
+                    {zoomMode === 'fit' && prevItem && (
                         <button
                             onClick={() => onNavigate(prevItem)}
                             className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/10 text-gray-300 hover:text-white flex items-center justify-center text-lg leading-none"
@@ -115,7 +142,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                             ‹
                         </button>
                     )}
-                    {nextItem && (
+                    {zoomMode === 'fit' && nextItem && (
                         <button
                             onClick={() => onNavigate(nextItem)}
                             className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/10 text-gray-300 hover:text-white flex items-center justify-center text-lg leading-none"
