@@ -16,6 +16,7 @@ interface GalleryFilter {
 interface GalleryStore {
   isOpen: boolean;
   isSubmitOpen: boolean;
+  isMySubsOpen: boolean;
   filter: GalleryFilter;
   // Snapshot of engine pause state at open time so we can restore on close.
   prevPaused: boolean | null;
@@ -35,6 +36,8 @@ interface GalleryStore {
    *  capture/transcode path. */
   openSubmitWith: (source: Blob) => void;
   closeSubmit: () => void;
+  openMySubmissions: () => void;
+  closeMySubmissions: () => void;
   setFilter: (filter: GalleryFilter) => void;
   bumpRefresh: () => void;
 }
@@ -42,6 +45,7 @@ interface GalleryStore {
 export const useGalleryStore = create<GalleryStore>((set, get) => ({
   isOpen: false,
   isSubmitOpen: false,
+  isMySubsOpen: false,
   filter: {},
   prevPaused: null,
   refreshTick: 0,
@@ -66,6 +70,9 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   openSubmit: () => set({ isSubmitOpen: true, submitSource: null }),
   openSubmitWith: (source) => set({ isSubmitOpen: true, submitSource: source }),
   closeSubmit: () => set({ isSubmitOpen: false, submitSource: null }),
+
+  openMySubmissions: () => set({ isMySubsOpen: true }),
+  closeMySubmissions: () => set({ isMySubsOpen: false }),
 
   setFilter: (filter) => set({ filter }),
   bumpRefresh: () => set((s) => ({ refreshTick: s.refreshTick + 1 })),

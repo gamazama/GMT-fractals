@@ -10,9 +10,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from './authStore';
 import { getSupabase } from '../supabase';
+import { useGalleryStore } from '../gallery/galleryStore';
 
 const PersonIcon: React.FC = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
         <circle cx="12" cy="7" r="4" />
     </svg>
@@ -38,8 +39,18 @@ export const AuthTopbarWidget: React.FC = () => {
         return () => document.removeEventListener('mousedown', onDocClick);
     }, [open]);
 
+    // Styling tokens match the ViewportQuality topbar button for visual
+    // consistency: cyan border + cyan-900/20 bg + cyan-300 text, hover
+    // bumps to cyan-900/40. Circle is sized to align with the other
+    // left-slot pill-shaped controls.
+    const CHIP_BASE =
+        'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ' +
+        'border transition-colors';
+    const CHIP_IDLE  = 'bg-cyan-900/20 border-cyan-500/20 text-cyan-300 hover:bg-cyan-900/40';
+    const CHIP_OPEN  = 'bg-cyan-900/40 border-cyan-500/40 text-cyan-200';
+
     if (status === 'loading') {
-        return <div className="w-7 h-7 bg-white/[0.03] rounded-full animate-pulse" />;
+        return <div className={`${CHIP_BASE} bg-white/[0.03] border-white/10 animate-pulse`} />;
     }
 
     // Signed out (or pre-profile): single click opens the auth flow. No
@@ -51,7 +62,7 @@ export const AuthTopbarWidget: React.FC = () => {
             <button
                 onClick={openAuthModal}
                 title="Sign in"
-                className="w-7 h-7 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-cyan-500/40 text-gray-400 hover:text-cyan-300 flex items-center justify-center transition-colors"
+                className={`${CHIP_BASE} ${CHIP_IDLE}`}
             >
                 <PersonIcon />
             </button>
@@ -67,11 +78,7 @@ export const AuthTopbarWidget: React.FC = () => {
             <button
                 onClick={() => setOpen((v) => !v)}
                 title={`@${profile.username}`}
-                className={`w-7 h-7 rounded-full border flex items-center justify-center text-[11px] font-bold text-white transition-colors ${
-                    open
-                        ? 'bg-cyan-500/30 border-cyan-500/60'
-                        : 'bg-gradient-to-br from-cyan-500/40 to-purple-500/40 border-white/15 hover:border-cyan-500/60'
-                }`}
+                className={`${CHIP_BASE} ${open ? CHIP_OPEN : CHIP_IDLE}`}
             >
                 {initial}
             </button>
@@ -90,6 +97,10 @@ export const AuthTopbarWidget: React.FC = () => {
                         )}
                     </div>
 
+                    <MenuButton
+                        label="My submissions…"
+                        onClick={() => { setOpen(false); useGalleryStore.getState().openMySubmissions(); }}
+                    />
                     <MenuButton
                         label="Account…"
                         onClick={() => { setOpen(false); openAccountPanel(); }}

@@ -20,6 +20,7 @@ import { useAuthStore } from '../auth/authStore';
 
 export { GalleryPage as GalleryOverlay } from './GalleryPage';
 export { BucketRenderResultModal as BucketRenderResultOverlay } from './BucketRenderResultModal';
+export { MySubmissionsOverlay } from './MySubmissionsOverlay';
 
 /**
  * Mounts the submit modal driven by galleryStore.isSubmitOpen.

@@ -33,7 +33,7 @@ import { TimelineHost } from '../components/TimelineHost';
 import { EngineBridge } from '../components/EngineBridge';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
-import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay } from '../engine-gmt/gallery';
+import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
@@ -378,6 +378,7 @@ export const AppGmt: React.FC = () => {
                 <HelpOverlay />
                 <GalleryOverlay />
                 <SubmitGalleryOverlay />
+                <MySubmissionsOverlay />
                 <BucketRenderResultOverlay />
                 <AuthOverlayHost />
                 <AccountPanelHost />

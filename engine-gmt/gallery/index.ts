@@ -1,4 +1,4 @@
-export { installGallery, uninstallGallery, GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay } from './installGallery';
+export { installGallery, uninstallGallery, GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from './installGallery';
 export type { InstallGalleryOptions } from './installGallery';
 export { useGalleryStore } from './galleryStore';
 export type { GalleryItem } from './GalleryClient';

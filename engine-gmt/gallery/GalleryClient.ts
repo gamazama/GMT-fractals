@@ -35,6 +35,9 @@ export interface GalleryItem {
   user_id: string | null;
   /** 'public' | 'private'. Phase 2B added visibility per-submission. */
   visibility: 'public' | 'private';
+  /** Moderation status. Browse query only returns 'approved'; owner-side
+   *  My Submissions surfaces all three. */
+  status: 'pending' | 'approved' | 'rejected';
   /** Only populated when the item is fetched individually via getGalleryItem.
    *  The listGallery query intentionally excludes this column so browse pages
    *  don't drag scene-blob bytes for every tile. */
@@ -45,7 +48,7 @@ export interface GalleryItem {
 // loads light — the click-to-open path re-queries the single row with
 // gmf_data via getGalleryItem.
 const LIST_COLUMNS =
-  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format,sky_url,user_id,visibility';
+  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format,sky_url,user_id,visibility,status';
 
 export interface ListGalleryOpts {
   limit?: number;
@@ -73,6 +76,45 @@ export async function listGallery(opts: ListGalleryOpts = {}): Promise<GalleryIt
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as unknown as GalleryItem[];
+}
+
+/**
+ * List the signed-in user's OWN submissions (any status, any visibility).
+ * Uses the engine-gmt store's current session implicitly via the shared
+ * supabase client — RLS allows owners to read all of their rows including
+ * pending / rejected (see "owner reads own pending" policy in plan 41 §5.1).
+ */
+export async function listMySubmissions(userId: string): Promise<GalleryItem[]> {
+  const { data, error } = await client()
+    .from('gallery_items')
+    .select(LIST_COLUMNS)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as GalleryItem[];
+}
+
+/** Owner-side delete of a submission. RLS allows users to delete their
+ *  own rows. R2 objects are NOT cleaned up — admin queue can do that, or
+ *  cleanup happens periodically. */
+export async function deleteMySubmission(id: string, userId: string): Promise<void> {
+  const { error } = await client()
+    .from('gallery_items')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+/** Owner-side visibility update — flips public↔private. Owner can also
+ *  patch title / description / tags via RLS. */
+export async function updateMyVisibility(id: string, userId: string, visibility: 'public' | 'private'): Promise<void> {
+  const { error } = await client()
+    .from('gallery_items')
+    .update({ visibility })
+    .eq('id', id)
+    .eq('user_id', userId);
+  if (error) throw error;
 }
 
 export async function getGalleryItem(slug: string): Promise<GalleryItem | null> {
