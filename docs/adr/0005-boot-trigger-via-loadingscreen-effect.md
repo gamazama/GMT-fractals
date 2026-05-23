@@ -4,6 +4,8 @@
 **Status:** Accepted
 **Scope:** `app-gmt/main.tsx`, `app-gmt/LoadingScreen.tsx`, `hooks/useAppStartup.ts`
 
+> **Update 2026-05-23 (symbol renames; decision unchanged):** `isHydrated` was renamed to `isStartupReady` across the boot chain (the flag's actual semantics are "useAppStartup's mount effect ran" — not "store hydrated", which happens synchronously in `main.tsx`). The unused `_isSceneReady` parameter on `useAppStartup` was removed. The 30s silent timeout in `GmtRendererTickDriver` mentioned under Consequences was replaced with event-driven `WORKER_BOOTED` / `IS_COMPILING:false` subscriptions and a new `WORKER_BOOT_FAILED` error surface. The decision recorded below — boot trigger lives in `LoadingScreen`'s effect, gated by the mount-ready signal from `useAppStartup` — still stands; only names and the failure path changed.
+
 ## Context
 
 Worker boot was originally chained behind a top-level

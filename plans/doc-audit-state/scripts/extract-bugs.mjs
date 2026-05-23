@@ -85,6 +85,11 @@ function extractKnownIssuesBlock(text) {
 
 function isBugEntry(line) {
   if (!/^\s*[-*]\s/.test(line)) return false;
+  // Drop entries already annotated as fixed/verified by a cleanup session.
+  // Mirrors extract-backlog.mjs's filter — cleanup sessions tag entries with
+  // `(FIXED 2026-...)`, `VERIFIED CLEAN 2026-...`, etc. per CLAUDE.md
+  // "Verifying backlog / bug entries"; this regen drops them automatically.
+  if (/\b(FIXED|VERIFIED CLEAN|VERIFIED DONE|RESOLVED)\b[_\s—\-]*(20\d{2}-\d{2}-\d{2})?/i.test(line)) return false;
   if (/\bproduction\s+bug\b/i.test(line)) return true;
   if (/^\s*[-*]\s+\*\*bug:?\*\*/i.test(line)) return true;
   if (/^\s*[-*]\s+\[bug\]/i.test(line)) return true;

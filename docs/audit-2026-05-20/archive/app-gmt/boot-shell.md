@@ -166,11 +166,7 @@ The fade-out is double-gated: `isReady` (worker has produced output) AND `cp.pha
 
 ## Known issues / Phase 2 carry-in
 
-### PRODUCTION BUG: silent 30s timeout in GmtRendererTickDriver
-
-`engine-gmt/renderer/GmtRendererTickDriver.tsx:90-94` polls `proxy.isBooted` up to 300 times at 100ms intervals. If the worker never boots — and there is no error path that surfaces this — the loop logs a single `console.error('[GmtRendererTickDriver] Worker boot timeout after 30s')` and returns without ever calling `onLoaded()`. `isReady` stays `false` forever; the LoadingScreen's fade-out gate (`app-gmt/LoadingScreen.tsx:140`) never fires; the splash is stuck with no error UI. `CompileProgressStore` may still reach `phase === 'done'` independently, but the `isReady &&` clause blocks fade-out. The user sees a frozen progress bar.
-
-This is reachable in production. Fix should either surface an error-state branch through the LoadingScreen or fail loudly. Evidence: `plans/doc-audit-state/survey/_followups/q-002.md`.
+- **Production bug:** silent 30s timeout in `engine-gmt/renderer/GmtRendererTickDriver.tsx:90-94` polled `proxy.isBooted` up to 300 times at 100ms intervals. If the worker never booted, the loop logged a single `console.error('[GmtRendererTickDriver] Worker boot timeout after 30s')` and returned without ever calling `onLoaded()` — `isReady` stayed false forever, the LoadingScreen's fade-out gate never fired, the splash was stuck with no error UI. Reachable in production. Evidence: `plans/doc-audit-state/survey/_followups/q-002.md`. **(FIXED 2026-05-23)** Polling loop replaced with `WORKER_BOOTED` + `IS_COMPILING:false` event subscriptions; the 30s and unbounded waits are gone. New `WORKER_BOOT_FAILED` event (emitted by `WorkerProxy._handleWorkerCrash` when not yet booted, and from the `'ERROR'` message handler pre-boot) surfaces failures to `LoadingScreen`, which renders an "Engine failed to start" panel with the reason + Reload button.
 
 ### Drift: README's "step 7 with setTimeout" framing
 

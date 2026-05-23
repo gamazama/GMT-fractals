@@ -28,7 +28,8 @@ export const FRACTAL_EVENTS = {
     RESET_HINTS: 'reset_hints',
     CAMERA_SLOT_SAVED: 'camera_slot_saved',
     WORKER_BOOTED: 'worker_booted',
-    WORKER_BOOT_FAILED: 'worker_boot_failed'
+    WORKER_BOOT_FAILED: 'worker_boot_failed',
+    COMPILE_FAILED: 'compile_failed'
 } as const;
 
 type EventMap = {
@@ -57,6 +58,7 @@ type EventMap = {
     [FRACTAL_EVENTS.CAMERA_SLOT_SAVED]: { slot: number; label: string };
     [FRACTAL_EVENTS.WORKER_BOOTED]: void;
     [FRACTAL_EVENTS.WORKER_BOOT_FAILED]: { reason: string };
+    [FRACTAL_EVENTS.COMPILE_FAILED]: { reason: string };
 };
 
 class FractalEventBus {

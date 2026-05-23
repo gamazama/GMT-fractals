@@ -145,7 +145,7 @@ export const AppGmt: React.FC = () => {
         (state: any) => estimateCompileTime(state),
         [],
     );
-    const { startupMode, bootEngine, isHydrated } = useAppStartup(isSceneReady, {
+    const { startupMode, bootEngine, isStartupReady } = useAppStartup({
         bootRenderer, pushOffset, isBootedOrRequested, estimateBootCompileMs,
     });
     const handleSceneReady = useCallback(() => setIsSceneReady(true), []);
@@ -214,7 +214,7 @@ export const AppGmt: React.FC = () => {
                         onFinished={handleLoadingFinished}
                         startupMode={startupMode}
                         bootEngine={bootEngine}
-                        isHydrated={isHydrated}
+                        isStartupReady={isStartupReady}
                     />
                 )}
                 {!loadingVisible && (

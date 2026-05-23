@@ -51,16 +51,20 @@ interface UseAppStartupOptions {
 }
 
 /**
- * @deprecated The leading-underscore `_isSceneReady` param is unused —
- *   flagged for removal.
+ * `isStartupReady` (formerly `isHydrated`) — the rising edge that triggers
+ * boot from LoadingScreen. Named for what it actually signals: the
+ * mount-effect ran, hardware detection applied, mobile preset overrides
+ * applied, store is safe to read. The store itself is hydrated synchronously
+ * by the app's main.tsx before React renders — this flag is "post-mount
+ * setup done."
  */
-export const useAppStartup = (_isSceneReady: boolean, options?: UseAppStartupOptions) => {
+export const useAppStartup = (options?: UseAppStartupOptions) => {
     const opts = options;
     const [startupMode] = useState<'default' | 'url'>(() => {
         if (typeof window === 'undefined') return 'default';
         return window.location.hash.startsWith('#s=') ? 'url' : 'default';
     });
-    const [isHydrated, setIsHydrated] = useState(false);
+    const [isStartupReady, setIsStartupReady] = useState(false);
     const bootRequestedRef = useRef(false);
     const hydratedRef = useRef(false);
 
@@ -169,9 +173,10 @@ export const useAppStartup = (_isSceneReady: boolean, options?: UseAppStartupOpt
 
         // Caller (e.g. app-gmt/main.tsx) hydrates the store synchronously
         // at module load before React renders. By the time this effect
-        // runs we are already hydrated.
-        setIsHydrated(true);
+        // runs we are already hydrated — flip the rising-edge signal that
+        // LoadingScreen watches to trigger boot.
+        setIsStartupReady(true);
     }, []);
 
-    return { startupMode, bootEngine, isHydrated };
+    return { startupMode, bootEngine, isStartupReady };
 };

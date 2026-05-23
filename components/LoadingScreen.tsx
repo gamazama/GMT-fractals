@@ -13,14 +13,14 @@ interface LoadingScreenProps {
   onFinished: () => void;
   startupMode: 'default' | 'url';
   bootEngine: (force?: boolean) => void;
-  isHydrated: boolean;
+  isStartupReady: boolean;
 }
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   isReady,
   onFinished,
   bootEngine,
-  isHydrated,
+  isStartupReady,
 }) => {
   const [opacity, setOpacity] = useState(1);
   const [isVisible, setIsVisible] = useState(true);
@@ -28,11 +28,11 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
 
   // Trigger engine boot as soon as the store is hydrated.
   useEffect(() => {
-    if (isHydrated && !hasBootedRef.current) {
+    if (isStartupReady && !hasBootedRef.current) {
       hasBootedRef.current = true;
       bootEngine();
     }
-  }, [isHydrated, bootEngine]);
+  }, [isStartupReady, bootEngine]);
 
   // Fade out once the scene is ready.
   useEffect(() => {
@@ -53,7 +53,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
       style={{ opacity }}
     >
       <div className="text-white text-sm font-mono tracking-widest opacity-60">
-        {isHydrated ? 'Booting…' : 'Loading…'}
+        {isStartupReady ? 'Booting…' : 'Loading…'}
       </div>
     </div>
   );

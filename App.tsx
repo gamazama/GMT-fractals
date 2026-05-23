@@ -50,7 +50,7 @@ const App: React.FC = () => {
       reticle: reticleRef,
   }), []);
 
-  const { startupMode, bootEngine, isHydrated } = useAppStartup(isSceneReady);
+  const { startupMode, bootEngine, isStartupReady } = useAppStartup();
   const { isMobile, isPortrait } = useMobileLayout();
   useGlobalContextMenu();
 
@@ -100,7 +100,7 @@ const App: React.FC = () => {
             onFinished={handleLoadingFinished}
             startupMode={startupMode}
             bootEngine={bootEngine}
-            isHydrated={isHydrated}
+            isStartupReady={isStartupReady}
         />
 
         {isCurrentlyMobile && isPortrait && !isLoadingVisible && !isBroadcast && (

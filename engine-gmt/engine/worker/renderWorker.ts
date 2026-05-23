@@ -161,7 +161,17 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     // Set up display scene for blitting
     initDisplayScene();
 
-    // Bridge engine events back to main thread
+    // Bridge engine events back to main thread.
+    //
+    // COMPILE_FAILED subscription must register BEFORE IS_COMPILING so that on
+    // a compile failure (where CompileScheduler emits both) the ERROR
+    // postMessage reaches the main thread before BOOTED (gated below on
+    // !hasSentBooted + IS_COMPILING:false). WorkerProxy's ERROR handler only
+    // promotes to WORKER_BOOT_FAILED while !isBooted, so order matters.
+    FractalEvents.on(FRACTAL_EVENTS.COMPILE_FAILED, ({ reason }) => {
+        postMsg({ type: 'ERROR', message: `Shader compile failed: ${reason}` });
+    });
+
     let hasSentBooted = false;
     FractalEvents.on(FRACTAL_EVENTS.IS_COMPILING, (status) => {
         postMsg({ type: 'COMPILING', status });
@@ -173,7 +183,13 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
                 const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
                 if (debugInfo) gpuInfo = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
             } catch {}
-            postMsg({ type: 'BOOTED', gpuInfo });
+            // Probe HALF_FLOAT-alpha framebuffer completeness once per worker
+            // and publish to main so the proxy can mirror the truth. Used by
+            // RenderPipeline.initTargets to fall back to FloatType on mobile
+            // GPUs that report half-float support but fail FBO completeness.
+            let halfFloatAlphaSupport: boolean | undefined;
+            try { halfFloatAlphaSupport = engine?.checkHalfFloatAlphaSupport(); } catch {}
+            postMsg({ type: 'BOOTED', gpuInfo, halfFloatAlphaSupport });
         }
     });
     FractalEvents.on(FRACTAL_EVENTS.COMPILE_TIME, (duration) => {

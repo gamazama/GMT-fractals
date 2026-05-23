@@ -122,6 +122,16 @@ export class CompileScheduler {
                 await this.perform();
             } catch (e) {
                 console.error('[CompileScheduler] performCompilation failed:', e);
+                // Surface to main thread BEFORE the IS_COMPILING:false below.
+                // renderWorker forwards COMPILE_FAILED as a postMessage ERROR,
+                // and WorkerProxy converts ERROR → WORKER_BOOT_FAILED while
+                // !isBooted. The first IS_COMPILING:false is what gates the
+                // BOOTED postMessage in renderWorker, so emitting COMPILE_FAILED
+                // first means ERROR reaches the main thread before BOOTED.
+                const reason = e instanceof Error
+                    ? `${e.message}\n${e.stack ?? ''}`
+                    : String(e);
+                FractalEvents.emit(FRACTAL_EVENTS.COMPILE_FAILED, { reason });
                 this.isCompiling = false;
                 FractalEvents.emit(FRACTAL_EVENTS.IS_COMPILING, false);
             }

@@ -41,10 +41,10 @@ interface LoadingScreenProps {
     onFinished: () => void;
     startupMode: 'default' | 'url';
     bootEngine: (force?: boolean) => void;
-    isHydrated: boolean;
+    isStartupReady: boolean;
 }
 
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinished, startupMode, bootEngine, isHydrated }) => {
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinished, startupMode, bootEngine, isStartupReady }) => {
     const fgCanvasRef = useRef<HTMLCanvasElement>(null);
     const rendererRef = useRef<LoadingRendererCPU | null>(null);
 
@@ -145,7 +145,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
 
         // rAF loop is purely a view — drives the bar from
         // CompileProgressStore and the CPU Julia spinner from elapsed
-        // time. Boot is triggered separately by the `[isHydrated]`
+        // time. Boot is triggered separately by the `[isStartupReady]`
         // effect. Fade-out gates on `isReady && phase === 'done'`.
         let frameId = 0;
         const loop = (time: number) => {
@@ -179,7 +179,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
         };
     }, []);
 
-    useEffect(() => { if (isHydrated) triggerBoot(); }, [isHydrated]);
+    useEffect(() => { if (isStartupReady) triggerBoot(); }, [isStartupReady]);
 
     if (!isVisible) return null;
 

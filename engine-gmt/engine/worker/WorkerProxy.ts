@@ -72,6 +72,10 @@ export class WorkerProxy implements AccumulationController {
     private _pendingUniformsSnapshot: Map<string, (u: Record<string, any> | null) => void> = new Map();
     private _pendingRenderInfo: Map<string, (info: any | null) => void> = new Map();
     private _gpuInfo: string = '';
+    // Cached half-float-alpha capability published by the worker on BOOTED.
+    // Defaults to true; falls back to false only if the probe explicitly
+    // reports failure. Exposed via checkHalfFloatAlphaSupport().
+    private _halfFloatAlphaSupport: boolean = true;
     private _lastGeneratedFrag: string = '';
     private _onWorkerFrame: (() => void) | null = null;
     private _pendingTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -276,6 +280,9 @@ export class WorkerProxy implements AccumulationController {
             case 'BOOTED':
                 this._shadow.isBooted = true;
                 if (msg.gpuInfo) this._gpuInfo = msg.gpuInfo;
+                if (typeof msg.halfFloatAlphaSupport === 'boolean') {
+                    this._halfFloatAlphaSupport = msg.halfFloatAlphaSupport;
+                }
                 // Notify listeners — used to push deferred state (uniforms, camera)
                 // that was set in the store before the worker engine existed.
                 if (this._onBootedCallback) this._onBootedCallback();
@@ -692,15 +699,15 @@ export class WorkerProxy implements AccumulationController {
         this.post({ type: 'SET_CONVERGENCE_NEEDED', needed } as any);
     }
     /**
-     * @invariant Permanent stub returning `true`. Main thread cannot
-     *   probe a worker's GL context. The real probe lives in the
-     *   worker's `FractalEngine.checkHalfFloatAlphaSupport()` but has
-     *   no live consumer today (per q-094) — three vestigial layers
-     *   total. Correct fix when a quality-feature path wants the truth
-     *   is to publish a one-shot capability message from worker→main
-     *   on boot (e.g. extend `GPU_INFO`), then cache it main-side.
+     * Returns the worker's half-float-alpha capability. The worker probes
+     * `FractalEngine.checkHalfFloatAlphaSupport()` on boot and ships the
+     * result in the `BOOTED` payload; this getter returns the cached value.
+     * Defaults to `true` until BOOTED arrives — callers that need a strict
+     * answer should wait for `WORKER_BOOTED`. The real fallback is enforced
+     * worker-side in `RenderPipeline.initTargets`, so a main-side miss is
+     * informational only.
      */
-    checkHalfFloatAlphaSupport() { return true; }
+    checkHalfFloatAlphaSupport(): boolean { return this._halfFloatAlphaSupport; }
 
     // ─── Worker communication ────────────────────────────────────────────
 
