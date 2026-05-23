@@ -7,6 +7,8 @@
  */
 import { getSupabase, supabaseEnabled } from '../supabase';
 
+const FUNCTION_BASE = 'https://ehoacsxzeruhajosexzb.supabase.co/functions/v1';
+
 export const galleryEnabled = supabaseEnabled;
 
 const client = getSupabase;
@@ -94,20 +96,26 @@ export async function listMySubmissions(userId: string): Promise<GalleryItem[]> 
   return (data ?? []) as unknown as GalleryItem[];
 }
 
-/** Owner-side delete of a submission. RLS allows users to delete their
- *  own rows. R2 objects are NOT cleaned up — admin queue can do that, or
- *  cleanup happens periodically. .select() forces a return so we can
- *  detect RLS no-ops (rows affected = 0). */
-export async function deleteMySubmission(id: string, userId: string): Promise<void> {
-  const { data, error } = await client()
-    .from('gallery_items')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', userId)
-    .select('id');
-  if (error) throw error;
-  if (!data || data.length === 0) {
-    throw new Error('No rows deleted — check that the owner RLS policies are in place.');
+/** Owner-side delete of a submission. Routes through the
+ *  delete-my-submission Edge Function which handles BOTH the DB row
+ *  and the R2 object cleanup (scenes/thumbs/skies) under one
+ *  ownership-checked transaction. */
+export async function deleteMySubmission(id: string, _userId: string): Promise<void> {
+  const { data: { session } } = await client().auth.getSession();
+  if (!session) throw new Error('Not signed in');
+
+  const res = await fetch(`${FUNCTION_BASE}/delete-my-submission`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) {
+    let msg = `Delete failed (${res.status})`;
+    try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+    throw new Error(msg);
   }
 }
 
