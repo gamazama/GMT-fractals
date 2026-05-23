@@ -128,7 +128,7 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
                         username: username.toLowerCase(),
                         display_name: displayName.trim() || username.toLowerCase(),
                     },
-                    emailRedirectTo: window.location.origin,
+                    emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
                 },
             });
             if (error) throw error;
@@ -146,7 +146,7 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
         try {
             const { error } = await getSupabase().auth.signInWithOAuth({
                 provider: 'google',
-                options: { redirectTo: window.location.origin },
+                options: { redirectTo: `${window.location.origin}${window.location.pathname}` },
             });
             if (error) throw error;
             // Redirect happens; nothing else to do here.
@@ -162,7 +162,7 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
         setError(null);
         try {
             const { error } = await getSupabase().auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}?reset=true`,
+                redirectTo: `${window.location.origin}${window.location.pathname}?reset=true`,
             });
             if (error) throw error;
             setMode('reset-sent');

@@ -71,22 +71,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             return;
         }
         const supabase = getSupabase();
-        const [{ data: profile }, { data: adminRow }] = await Promise.all([
-            supabase.from('profiles').select('*').eq('id', sess.user.id).maybeSingle(),
-            supabase.from('admins').select('user_id').eq('user_id', sess.user.id).maybeSingle(),
-        ]);
-        if (profile) {
-            set({
-                profile: profile as Profile,
-                isAdmin: !!adminRow,
-                status: 'authed',
-            });
-        } else {
-            set({
-                profile: null,
-                isAdmin: false,
-                status: 'needs-profile',
-            });
+        try {
+            const [profileRes, adminRes] = await Promise.all([
+                supabase.from('profiles').select('*').eq('id', sess.user.id).maybeSingle(),
+                supabase.from('admins').select('user_id').eq('user_id', sess.user.id).maybeSingle(),
+            ]);
+            if (profileRes.error) console.warn('[auth] profile lookup error:', profileRes.error);
+            if (adminRes.error)   console.warn('[auth] admin lookup error:',   adminRes.error);
+
+            if (profileRes.data) {
+                set({
+                    profile: profileRes.data as Profile,
+                    isAdmin: !!adminRes.data,
+                    status: 'authed',
+                });
+            } else {
+                set({
+                    profile: null,
+                    isAdmin: false,
+                    status: 'needs-profile',
+                });
+            }
+        } catch (err) {
+            console.warn('[auth] refreshProfile crashed — falling through to unauthed:', err);
+            set({ profile: null, isAdmin: false, status: 'unauthed' });
         }
     },
 
@@ -103,13 +111,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 if (supabaseEnabled) {
     const supabase = getSupabase();
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-        useAuthStore.setState({ session, user: session?.user ?? null });
-        await useAuthStore.getState().refreshProfile();
-    });
+    const hydrate = async (label: string, session: Session | null) => {
+        try {
+            useAuthStore.setState({ session, user: session?.user ?? null });
+            await useAuthStore.getState().refreshProfile();
+        } catch (err) {
+            console.warn(`[auth] ${label} handler failed — forcing unauthed:`, err);
+            useAuthStore.setState({
+                status: 'unauthed',
+                session: null,
+                user: null,
+                profile: null,
+                isAdmin: false,
+            });
+        }
+    };
 
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-        useAuthStore.setState({ session, user: session?.user ?? null });
-        await useAuthStore.getState().refreshProfile();
+    // Failsafe: if neither getSession nor onAuthStateChange resolves within
+    // 8 s, drop out of 'loading' so the UI doesn't hang on a stuck client.
+    const failsafe = setTimeout(() => {
+        if (useAuthStore.getState().status === 'loading') {
+            console.warn('[auth] bootstrap timed out — falling through to unauthed');
+            useAuthStore.setState({
+                status: 'unauthed',
+                session: null,
+                user: null,
+                profile: null,
+                isAdmin: false,
+            });
+        }
+    }, 8000);
+
+    supabase.auth.getSession()
+        .then(({ data: { session }, error }) => {
+            if (error) console.warn('[auth] getSession error:', error);
+            clearTimeout(failsafe);
+            return hydrate('getSession', session);
+        })
+        .catch((err) => {
+            console.warn('[auth] getSession threw:', err);
+            clearTimeout(failsafe);
+            useAuthStore.setState({ status: 'unauthed' });
+        });
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+        clearTimeout(failsafe);
+        void hydrate('onAuthStateChange', session);
     });
 }
