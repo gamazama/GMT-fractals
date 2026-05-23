@@ -5,7 +5,7 @@ import {
     submitGalleryItem, SubmitError, SubmitResult,
     captureJpegSnapshot, bakeSignature,
 } from './submitGalleryItem';
-import { useAuthStore } from '../auth/authStore';
+import { useAuthStore, watermarkTextFor } from '../auth/authStore';
 import { useGalleryStore } from './galleryStore';
 
 interface Props {
@@ -93,7 +93,7 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
         }
         let cancelled = false;
         const apply = bakeWatermark
-            ? bakeSignature(baseJpg, profile.username)
+            ? bakeSignature(baseJpg, watermarkTextFor(profile))
             : Promise.resolve(baseJpg);
         apply
             .then((blob) => { if (!cancelled) setFinalJpg(blob); })
@@ -269,7 +269,7 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                 />
                                 <span className="text-[10px] text-gray-300">
                                     Bake author signature into image
-                                    <span className="text-gray-600"> · <code className="text-cyan-400">gmt-fractals.com/u/@{profile!.username}</code></span>
+                                    <span className="text-gray-600"> · <code className="text-cyan-400">{watermarkTextFor(profile!)}</code></span>
                                 </span>
                             </label>
                         </div>

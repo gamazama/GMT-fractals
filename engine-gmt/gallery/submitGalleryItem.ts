@@ -138,20 +138,22 @@ export async function captureJpegSnapshot(maxWidth = 2048): Promise<Blob> {
 }
 
 /**
- * Bake an author-signature watermark into a JPEG blob.
+ * Bake a text watermark into a JPEG blob.
  *
  * Standard preset (Phase 2B): bottom-right, white text with subtle black
- * shadow, ~1.2% of image height, opacity 0.7, label = "gmt-fractals.com/u/<user>".
+ * shadow, ~1.2% of image height, opacity 0.78. Caller passes the text —
+ * use `watermarkTextFor(profile)` from the auth store to resolve the
+ * user's preference (default = `gmt-fractals.com/u/@<username>`).
+ *
  * Re-encodes the canvas as JPEG so the watermark survives downloads.
  */
-export async function bakeSignature(jpgBlob: Blob, username: string): Promise<Blob> {
+export async function bakeSignature(jpgBlob: Blob, text: string): Promise<Blob> {
     const bmp = await createImageBitmap(jpgBlob);
     const canvas = new OffscreenCanvas(bmp.width, bmp.height);
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Could not create 2D context for signature bake');
     ctx.drawImage(bmp, 0, 0);
 
-    const text     = `gmt-fractals.com/u/${username}`;
     const fontSize = Math.max(10, Math.min(28, Math.round(bmp.height * 0.012)));
     const padding  = Math.max(8, Math.round(fontSize * 0.9));
 

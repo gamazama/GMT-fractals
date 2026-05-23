@@ -41,6 +41,8 @@ export const AccountPanel: React.FC = () => {
     const [editDisplayName, setEditDisplayName]       = useState('');
     const [editBio, setEditBio]                       = useState('');
     const [editWatermarkEnabled, setEditWatermark]    = useState(true);
+    const [watermarkMode, setWatermarkMode]           = useState<'username' | 'platform' | 'custom'>('username');
+    const [watermarkCustom, setWatermarkCustom]       = useState('');
 
     const [busy, setBusy]   = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -54,6 +56,20 @@ export const AccountPanel: React.FC = () => {
             setEditDisplayName(profile.display_name);
             setEditBio(profile.bio ?? '');
             setEditWatermark(profile.watermark_enabled);
+            // Hydrate watermark mode from existing text — NULL = default
+            // username URL, the literal "gmt-fractals.com" = platform mode,
+            // anything else = custom.
+            const txt = profile.watermark_text;
+            if (txt === null || txt === undefined) {
+                setWatermarkMode('username');
+                setWatermarkCustom('');
+            } else if (txt === 'gmt-fractals.com') {
+                setWatermarkMode('platform');
+                setWatermarkCustom('');
+            } else {
+                setWatermarkMode('custom');
+                setWatermarkCustom(txt);
+            }
         }
         if (setupMode && user) {
             const emailLocal = (user.email ?? '').split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -139,6 +155,10 @@ export const AccountPanel: React.FC = () => {
                     display_name: editDisplayName.trim() || profile.username,
                     bio: editBio.trim().length > 0 ? editBio.trim() : null,
                     watermark_enabled: editWatermarkEnabled,
+                    watermark_text:
+                        watermarkMode === 'username' ? null
+                        : watermarkMode === 'platform' ? 'gmt-fractals.com'
+                        : (watermarkCustom.trim() || null),
                     updated_at: new Date().toISOString(),
                 })
                 .eq('id', profile.id);
@@ -311,22 +331,57 @@ export const AccountPanel: React.FC = () => {
                                 />
                             </div>
 
-                            <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
-                                <input
-                                    type="checkbox"
-                                    checked={editWatermarkEnabled}
-                                    onChange={(e) => setEditWatermark(e.target.checked)}
-                                    disabled={busy}
-                                    className="accent-cyan-500 mt-0.5"
-                                />
-                                <div className="flex-1 -mt-0.5">
-                                    <div className="text-[10px] text-gray-300">Bake author signature into gallery submissions</div>
-                                    <div className="text-[9px] text-gray-600 mt-0.5 leading-relaxed">
-                                        Adds <code className="text-cyan-400">gmt-fractals.com/u/@{profile.username}</code> in the bottom corner of your submitted images.
-                                        You can override per-submission in the Submit dialog.
+                            <div className="border-t border-white/5 pt-3">
+                                <label className="flex items-start gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={editWatermarkEnabled}
+                                        onChange={(e) => setEditWatermark(e.target.checked)}
+                                        disabled={busy}
+                                        className="accent-cyan-500 mt-0.5"
+                                    />
+                                    <div className="flex-1 -mt-0.5">
+                                        <div className="text-[10px] text-gray-300">Bake author signature into gallery submissions</div>
+                                        <div className="text-[9px] text-gray-600 mt-0.5 leading-relaxed">
+                                            Adds a small line of text in the bottom corner of your submitted images. You can override per-submission in the Submit dialog.
+                                        </div>
                                     </div>
-                                </div>
-                            </label>
+                                </label>
+
+                                {editWatermarkEnabled && (
+                                    <div className="mt-3 ml-6 space-y-1.5">
+                                        <WatermarkChoice
+                                            checked={watermarkMode === 'username'}
+                                            onSelect={() => setWatermarkMode('username')}
+                                            label={`Your URL · gmt-fractals.com/u/@${profile.username}`}
+                                            disabled={busy}
+                                        />
+                                        <WatermarkChoice
+                                            checked={watermarkMode === 'platform'}
+                                            onSelect={() => setWatermarkMode('platform')}
+                                            label="Just the site · gmt-fractals.com"
+                                            disabled={busy}
+                                        />
+                                        <WatermarkChoice
+                                            checked={watermarkMode === 'custom'}
+                                            onSelect={() => setWatermarkMode('custom')}
+                                            label="Custom text"
+                                            disabled={busy}
+                                        />
+                                        {watermarkMode === 'custom' && (
+                                            <input
+                                                type="text"
+                                                value={watermarkCustom}
+                                                onChange={(e) => setWatermarkCustom(e.target.value)}
+                                                disabled={busy}
+                                                maxLength={80}
+                                                placeholder="e.g. © Alice 2026"
+                                                className="w-full mt-1 bg-gray-950 border border-white/10 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-cyan-500"
+                                            />
+                                        )}
+                                    </div>
+                                )}
+                            </div>
 
                             <button
                                 type="submit"
@@ -385,3 +440,21 @@ export const AccountPanel: React.FC = () => {
         document.body,
     );
 };
+
+const WatermarkChoice: React.FC<{
+    checked: boolean;
+    onSelect: () => void;
+    label: string;
+    disabled: boolean;
+}> = ({ checked, onSelect, label, disabled }) => (
+    <label className={`flex items-center gap-2 cursor-pointer select-none ${disabled ? 'opacity-50' : ''}`}>
+        <input
+            type="radio"
+            checked={checked}
+            onChange={onSelect}
+            disabled={disabled}
+            className="accent-cyan-500"
+        />
+        <span className="text-[10px] text-gray-300">{label}</span>
+    </label>
+);

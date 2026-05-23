@@ -23,8 +23,16 @@ export interface Profile {
     bio: string | null;
     tier: 'free' | 'creator' | 'pro' | 'studio';
     watermark_enabled: boolean;
+    /** Custom text for the signature bake. NULL = use the default
+     *  `gmt-fractals.com/u/@<username>` pattern. */
+    watermark_text: string | null;
     created_at: string;
     updated_at: string;
+}
+
+/** Resolve the watermark text the bake function should use. */
+export function watermarkTextFor(profile: Profile): string {
+    return profile.watermark_text ?? `gmt-fractals.com/u/@${profile.username}`;
 }
 
 interface AuthState {
