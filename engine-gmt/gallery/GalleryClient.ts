@@ -30,6 +30,11 @@ export interface GalleryItem {
    *  preset.materials.envMapData before applying so the scene's sky comes
    *  back without storing megabytes of base64 inside gmf_data. */
   sky_url: string | null;
+  /** uuid of the uploader's profile, or null for pre-2B curated rows. Used
+   *  by the lightbox's "More from @user" strip. */
+  user_id: string | null;
+  /** 'public' | 'private'. Phase 2B added visibility per-submission. */
+  visibility: 'public' | 'private';
   /** Only populated when the item is fetched individually via getGalleryItem.
    *  The listGallery query intentionally excludes this column so browse pages
    *  don't drag scene-blob bytes for every tile. */
@@ -40,7 +45,7 @@ export interface GalleryItem {
 // loads light — the click-to-open path re-queries the single row with
 // gmf_data via getGalleryItem.
 const LIST_COLUMNS =
-  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format,sky_url';
+  'id,slug,title,description,formula,image_url,thumbnail_url,width,height,tags,featured,created_at,author,image_format,sky_url,user_id,visibility';
 
 export interface ListGalleryOpts {
   limit?: number;
