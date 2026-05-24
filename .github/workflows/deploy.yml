@@ -30,6 +30,9 @@ jobs:
         run: npm install
 
       - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
       # Only the matching branch's deploy step runs. keep_files: true means
