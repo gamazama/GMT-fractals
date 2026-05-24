@@ -102,6 +102,51 @@
     }
     .footer a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted currentColor; }
     .footer a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* SW update bar — hidden until the script flips data-state. */
+    #sw-bar {
+      position: fixed;
+      top: 0;
+      inset-inline: 0;
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.85);
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+    #sw-bar[data-state='checking'],
+    #sw-bar[data-state='updating'],
+    #sw-bar[data-state='ready'],
+    #sw-bar[data-state='offer-reset'] { display: flex; }
+    #sw-bar[data-state='updating']    { color: rgb(252 211 77); border-bottom-color: rgba(252,211,77,0.3); }
+    #sw-bar[data-state='ready']       { color: rgb(110 231 183); border-bottom-color: rgba(110,231,183,0.3); }
+    #sw-bar[data-state='offer-reset'] { color: rgb(252 211 77); border-bottom-color: rgba(252,211,77,0.3); }
+    #sw-bar .dot {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse { 50% { opacity: 0.3; } }
+    #sw-bar button {
+      background: transparent;
+      border: 1px solid currentColor;
+      color: inherit;
+      padding: 0.2rem 0.6rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #sw-bar button:hover { background: rgba(255,255,255,0.06); }
   </style>
 </head>
 <body>
@@ -147,23 +192,110 @@
     </div>
   </div>
 
-  <!-- Stale-cache rescue for users who installed /dev/ as a PWA when
-       this URL was the engine demo (now at /dev/demo.html). The old
-       service worker is still serving the cached JS-bootstrapped page;
-       the new SW for the same scope is downloaded but waits in the
-       'installed' state because vite-plugin-pwa is set to
-       registerType: 'prompt' and this static page has no React UI to
-       host the Update pill. Force-update + skip-waiting on every visit
-       so old PWA users get unstuck without having to close all tabs. -->
+  <!-- SW status bar — see the script below for full lifecycle reasoning. -->
+  <div id="sw-bar" aria-live="polite" data-state="idle">
+    <span class="dot" aria-hidden="true"></span>
+    <span id="sw-bar-text">Checking for updates…</span>
+    <button id="sw-bar-action" type="button" hidden>Reset</button>
+  </div>
+
+  <!-- Stale-cache rescue for users who installed /dev/ as a PWA when this
+       URL was the engine demo (now at /dev/demo.html). The old service
+       worker is still cached and may serve the wrong page; the new SW for
+       the same scope is downloaded but waits in 'installed' state because
+       vite-plugin-pwa uses registerType: 'prompt' — and this static page
+       has no React UI to host the Update pill.
+
+       This script:
+       1. Forces an update check on every visit.
+       2. Auto-applies any waiting SW (skipWaiting + reload on controller change).
+       3. Listens for NEW waiting workers that appear later (the initial
+          getRegistrations may find no waiting SW because the update is
+          still installing — without the updatefound listener we'd miss it).
+       4. After ~5s with no progress, surfaces a manual "Reset" button that
+          unregisters all SWs, clears caches, and reloads. Last-resort
+          escape hatch when the auto-apply path can't take control. -->
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((reg) => {
-          reg.update().catch(() => {});
-          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        });
+    (function() {
+      if (!('serviceWorker' in navigator)) return;
+
+      const bar    = document.getElementById('sw-bar');
+      const text   = document.getElementById('sw-bar-text');
+      const action = document.getElementById('sw-bar-action');
+      const setState = (state, msg) => {
+        bar.setAttribute('data-state', state);
+        if (msg) text.textContent = msg;
+      };
+
+      let reloadedOnce = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloadedOnce) return;
+        reloadedOnce = true;
+        setState('ready', 'Updated — reloading…');
+        setTimeout(() => window.location.reload(), 400);
       });
-    }
+
+      const applyWaiting = (reg) => {
+        if (reg.waiting) {
+          setState('updating', 'Applying update…');
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+      };
+
+      // Wire 'updatefound' on a registration: catches NEW SWs installed
+      // after the initial scan (e.g. update() resolves async).
+      const watchRegistration = (reg) => {
+        applyWaiting(reg);
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          setState('checking', 'Update found — installing…');
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed' && reg.waiting) applyWaiting(reg);
+          });
+        });
+      };
+
+      const resetEverything = async () => {
+        setState('updating', 'Resetting…');
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k).catch(() => {})));
+          }
+        } catch (e) { /* best-effort */ }
+        window.location.reload();
+      };
+
+      action.addEventListener('click', resetEverything);
+
+      // Boot sequence.
+      setState('checking', 'Checking for updates…');
+      navigator.serviceWorker.getRegistrations().then(async (regs) => {
+        if (regs.length === 0) {
+          bar.removeAttribute('data-state');
+          return;
+        }
+        regs.forEach(watchRegistration);
+        // Trigger update checks in parallel.
+        await Promise.all(regs.map((r) => r.update().catch(() => {})));
+        // If nothing's pending after the update check, hide the bar.
+        const hasPending = regs.some((r) => r.installing || r.waiting);
+        if (!hasPending) {
+          bar.removeAttribute('data-state');
+        }
+      });
+
+      // After 5s of no progress, offer the nuclear option.
+      setTimeout(() => {
+        if (bar.getAttribute('data-state') === 'checking' || bar.getAttribute('data-state') === 'updating') {
+          setState('offer-reset', 'Update is stuck — try a full reset:');
+          action.hidden = false;
+        }
+      }, 5000);
+    })();
   </script>
 </body>
 </html>
