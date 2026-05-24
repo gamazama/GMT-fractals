@@ -21,6 +21,7 @@ import { installHud } from './engine/plugins/Hud';
 import { installModulation } from './engine/animation/modulationTick';
 import { installModulationUI, setLfoListConfig } from './engine/components/modulation';
 import { installRenderDialog } from './engine/plugins/RenderDialog';
+import { installPwaUpdate } from './engine/plugins/PwaUpdate';
 
 // Boots the engine's UI registry (AutoFeaturePanel + built-in widgets).
 registerUI();
@@ -44,6 +45,11 @@ installModulation();
 installModulationUI();
 installRenderDialog({ runner: demoRenderRunner, showSamplesPerFrame: false, disableDiskMode: true });
 // __SHOWCASE_END__
+
+// PWA update pill — same Update banner the sibling apps mount so users
+// don't get stranded on stale bundles. Not inside the SHOWCASE block
+// because it's deployment plumbing, not a feature being showcased.
+installPwaUpdate();
 
 // A fresh LFO defaults to demo.position_x — gives the user a visible
 // wiggle the moment they hit "Add LFO".
