@@ -97,12 +97,15 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
     // We clone to avoid mutating the original definition during delete
     const { shader, ...meta } = def;
 
-    // Preserve shader metadata that isn't GLSL code but is needed for
-    // interlace (preambleVars, usesSharedRotation). These live on the shader
-    // object but don't map to a GLSL block, so we stash them in Metadata.
+    // Preserve shader metadata that isn't GLSL code but is needed at load time
+    // (interlace, cutting-plane DE, etc). These live on the shader object but
+    // don't map to a GLSL block, so we stash them in Metadata.
+    // Auto-detection in parseGMF covers most missing flags for legacy files,
+    // but stashing keeps the round-trip explicit and survives obfuscation.
     const shaderMeta: Record<string, any> = {};
     if (shader.preambleVars?.length) shaderMeta.preambleVars = shader.preambleVars;
     if (shader.usesSharedRotation) shaderMeta.usesSharedRotation = true;
+    if (shader.supportsCuttingPlane) shaderMeta.supportsCuttingPlane = true;
 
     const metadata = {
         ...meta,
@@ -153,10 +156,12 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
  * to ship with empty `Shader_Function` / `Shader_Loop`; their GLSL is rebuilt
  * from the preset's pipeline at load time.
  *
- * @invariant `shaderMeta` is the sole survival path for non-GLSL shader
- * fields. Only `preambleVars` and `usesSharedRotation` are stashed/restored.
- * A future field added to the runtime shader object will be silently dropped
- * on save unless added to both the stash (generateGMF) and the restore paths.
+ * @invariant `shaderMeta` is the survival path for non-GLSL shader fields.
+ * `preambleVars`, `usesSharedRotation`, and `supportsCuttingPlane` are
+ * stashed/restored. A future field added to the runtime shader object will
+ * be silently dropped on save unless added to both the stash (generateGMF)
+ * and the restore paths — OR derivable from the shader body (like the cp_*
+ * auto-detect below, which self-heals legacy files retroactively).
  *
  * See ADR-0052 (GMF as two-tier HTML-style container).
  */
@@ -209,7 +214,17 @@ export const parseGMF = (content: string): FractalDefinition => {
     if (metadata.shaderMeta) {
         if (metadata.shaderMeta.preambleVars) shader.preambleVars = metadata.shaderMeta.preambleVars;
         if (metadata.shaderMeta.usesSharedRotation) shader.usesSharedRotation = true;
+        if (metadata.shaderMeta.supportsCuttingPlane) shader.supportsCuttingPlane = true;
         delete metadata.shaderMeta;
+    }
+
+    // Auto-detect supportsCuttingPlane from the shader body: any formula that
+    // references the engine-provided cp_* accumulators needs CP_PREAMBLE_GLOBALS
+    // declared upstream, regardless of whether the flag was stashed at save time.
+    // Self-heals legacy GMF files written before the flag existed in shaderMeta.
+    if (!shader.supportsCuttingPlane) {
+        const body = `${shader.function} ${shader.loopBody} ${shader.preamble || ''} ${shader.loopInit || ''}`;
+        if (/\bcp_(dmin|scale|trap)\b/.test(body)) shader.supportsCuttingPlane = true;
     }
 
     return {
