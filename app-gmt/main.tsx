@@ -26,7 +26,7 @@ import ReactDOM from 'react-dom/client';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
 import { registerGmtUi } from '../engine-gmt/features/ui';
-import { installGmtCameraSlice } from '../engine-gmt/store/cameraSlice';
+import { installGmtCameraSlice, flushCameraToStore } from '../engine-gmt/store/cameraSlice';
 import { installGmtModularSlice } from '../engine-gmt/store/modularSlice';
 import { installViewport, viewport, setRenderScaleSource } from '../engine/plugins/Viewport';
 import { installTopBar } from '../engine/plugins/TopBar';
@@ -179,6 +179,13 @@ installSceneIO({
 
     // Tutorial anchor — Lesson 2 + 4 next-steps highlight the snapshot button.
     snapshotAnchor: 'snapshot-btn',
+
+    // R3F camera state is debounced into the store every 100 ms by
+    // Navigation.tsx. Without this flush, a save fired mid-movement (or
+    // within 100 ms of stopping) would capture the previous pose. Mirror
+    // of the saved-camera-slot capture path, which has always read the
+    // engine directly via CameraUtils.
+    onBeforeSerialize: flushCameraToStore,
 
     // GMT scene files are GMF: a wrapper carrying both the formula's
     // shader source AND the scene preset. The custom parser extracts

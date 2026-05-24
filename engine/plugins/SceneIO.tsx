@@ -64,6 +64,13 @@ export interface InstallSceneIOOptions {
      *  Apps with tutorials that need to highlight the snapshot affordance
      *  pass an id (e.g. GMT uses 'snapshot-btn'). Default: no anchor. */
     snapshotAnchor?: string;
+    /** Synchronous flush invoked immediately before `getPreset()` runs on
+     *  any save path (`saveScene`, `saveScenePng`). Apps whose canonical
+     *  state lives outside the store between debounce ticks (e.g. GMT's
+     *  R3F camera, flushed every 100 ms) register a flush here so a save
+     *  triggered mid-movement reflects the live view rather than the last
+     *  debounced sample. */
+    onBeforeSerialize?: () => void;
 }
 
 let _installed = false;
@@ -72,6 +79,7 @@ let _parseScene: SceneParser | undefined;
 let _serializeScene: SceneSerializer | undefined;
 let _fileExtension: string = 'json';
 let _snapshotAnchor: string | undefined;
+let _onBeforeSerialize: (() => void) | undefined;
 
 /** Pick the registered serializer, falling back to engine-core's plain
  *  JSON. Single source of truth — every save path routes through this. */
@@ -100,6 +108,7 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     if (options.serializeScene) _serializeScene = options.serializeScene;
     if (options.fileExtension) _fileExtension = options.fileExtension;
     if (options.snapshotAnchor) _snapshotAnchor = options.snapshotAnchor;
+    if (options.onBeforeSerialize) _onBeforeSerialize = options.onBeforeSerialize;
     if (_installed) return;
     _installed = true;
 
@@ -179,6 +188,7 @@ export const uninstallSceneIO = () => {
     _serializeScene = undefined;
     _fileExtension = 'json';
     _snapshotAnchor = undefined;
+    _onBeforeSerialize = undefined;
     _installed = false;
 };
 
@@ -224,6 +234,7 @@ export const loadSceneFile = async (file: File): Promise<Preset | null> => {
  *   (extension defaults to 'json', GMT installs with 'gmf').
  */
 export const saveScene = (filename?: string): void => {
+    _onBeforeSerialize?.();
     const preset = useEngineStore.getState().getPreset({ includeScene: true });
     const text = activeSerializer()(preset);
     const blob = new Blob([text], { type: 'application/json' });
@@ -272,6 +283,7 @@ export const saveScenePng = async (filename?: string): Promise<void> => {
         console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
         return;
     }
+    _onBeforeSerialize?.();
     const preset = useEngineStore.getState().getPreset({ includeScene: true });
     const blob = await snapshotSceneToPng(canvas, preset, activeSerializer());
     downloadBlob(blob, filename ?? `${defaultFileStem()}.png`);

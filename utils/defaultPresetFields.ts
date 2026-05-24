@@ -75,11 +75,13 @@ export const registerDefaultPresetFields = () => {
     });
 
     // ── Saved camera library ─────────────────────────────────────────────
-    // NOTE: historically loaded-only (getPreset never serialized it). Preserving
-    // that asymmetry for now — fixing it is a separate decision, not F3 scope.
+    // activeCameraId is intentionally ephemeral — only the library roundtrips.
     presetFieldRegistry.register({
         key: 'savedCameras',
-        serialize: () => undefined,
+        serialize: (s) => {
+            const list = (s as any).savedCameras;
+            return Array.isArray(list) && list.length > 0 ? list : undefined;
+        },
         deserialize: (p, set) => {
             if (p.savedCameras && Array.isArray(p.savedCameras) && p.savedCameras.length > 0) {
                 set({

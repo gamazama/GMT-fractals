@@ -31,6 +31,7 @@
 
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { getProxy } from '../engine/worker/WorkerProxy';
+import { getViewportCamera } from '../engine/worker/ViewportRefs';
 import { registry } from '../engine/FractalRegistry';
 import { VirtualSpace } from '../engine/PrecisionMath';
 import { CameraUtils } from '../utils/CameraUtils';
@@ -97,6 +98,41 @@ const applyCameraState = (state: SavedCameraPayload): void => {
     const setOptics = getSetOptics(useEngineStore.getState());
     if (setOptics && state.optics) setOptics(state.optics);
     (engine as any).resetAccumulation?.();
+};
+
+/**
+ * Flush the live R3F camera back into the store synchronously, mirroring
+ * the Navigation.tsx debounce body without waiting 100 ms. Used by the
+ * SceneIO save path so a GMF saved mid-movement reflects what the user
+ * is actually looking at, not the last debounced sample.
+ *
+ * Reads everything fresh (no captured frame-loop refs) so it's safe to
+ * call from anywhere — menu handlers, share-link builders, tests.
+ */
+export const flushCameraToStore = (): void => {
+    const cam = getViewportCamera() || (engine as any).activeCamera;
+    if (!cam) return;
+
+    const e = engine as any;
+    let dist = e.lastMeasuredDistance;
+    if (dist <= 0 || dist >= 1000.0) {
+        dist = (useEngineStore.getState() as any).targetDistance || 3.5;
+    }
+
+    const so = e.sceneOffset;
+    const normalizedOffset = {
+        x: so.x, y: so.y, z: so.z,
+        xL: (so.xL ?? 0) + cam.position.x,
+        yL: (so.yL ?? 0) + cam.position.y,
+        zL: (so.zL ?? 0) + cam.position.z,
+    };
+    VirtualSpace.normalize(normalizedOffset);
+
+    useEngineStore.setState({
+        cameraRot: { x: cam.quaternion.x, y: cam.quaternion.y, z: cam.quaternion.z, w: cam.quaternion.w },
+        sceneOffset: normalizedOffset,
+        targetDistance: dist,
+    } as any);
 };
 
 /**
