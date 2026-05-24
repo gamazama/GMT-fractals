@@ -35,6 +35,7 @@ import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
 import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
+import { FeedbackOverlay } from '../engine-gmt/feedback';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
@@ -382,6 +383,7 @@ export const AppGmt: React.FC = () => {
                 <BucketRenderResultOverlay />
                 <AuthOverlayHost />
                 <AccountPanelHost />
+                <FeedbackOverlay />
 
                 <TutorialRunner />
                 <TutorialOverlay />

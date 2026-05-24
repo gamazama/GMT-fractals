@@ -46,9 +46,14 @@ export const ProjectName: React.FC = () => {
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={commit}
                 onKeyDown={(e) => {
+                    // Stop key events bubbling to the global navigation
+                    // listener — without this, Space is consumed as Fly-mode
+                    // "up" thrust and never lands in the input.
+                    e.stopPropagation();
                     if (e.key === 'Enter') commit();
                     if (e.key === 'Escape') { setDraft(name); setEditing(false); }
                 }}
+                onKeyUp={(e) => e.stopPropagation()}
                 className="text-xs font-semibold text-white bg-black/60 border border-cyan-500/40 rounded px-2 py-1 outline-none"
                 style={{ width: Math.max(80, draft.length * 8 + 24) }}
             />

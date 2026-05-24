@@ -12,6 +12,20 @@ const emptyMoveState = () => ({
     boost: false, precise: false,
 });
 
+/**
+ * True when `el` is (or sits inside) an editable surface where keys
+ * — especially Space — must NOT be consumed as Fly-mode navigation.
+ * Covers <input>, <textarea>, contenteditable, and CodeMirror gutters.
+ */
+const isTypingTarget = (el: HTMLElement | null): boolean => {
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+    if (el.isContentEditable) return true;
+    if (typeof el.closest === 'function' && el.closest('.cm-editor')) return true;
+    return false;
+};
+
 export const useInputController = (
     mode: CameraMode,
     speed: number,
@@ -65,8 +79,12 @@ export const useInputController = (
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            const t = e.target as HTMLElement;
-            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.cm-editor')) return;
+            // Check BOTH the event target and document.activeElement.
+            // e.target can be document.body in some edge cases (portaled
+            // modals, fast re-renders) even when an input has focus — without
+            // the activeElement check, Space gets consumed as Fly-mode "up"
+            // thrust instead of landing in the input.
+            if (isTypingTarget(e.target as HTMLElement) || isTypingTarget(document.activeElement as HTMLElement | null)) return;
             if ((e.ctrlKey || e.metaKey) && (e.key === 'w' || e.code === 'KeyW')) e.preventDefault();
 
             // Prevent Spacebar scrolling (only when not in a text editor)
@@ -102,8 +120,12 @@ export const useInputController = (
         
         const handleKeyUp = (e: KeyboardEvent) => {
             if (e.key === 'Alt') e.preventDefault();
-            const t = e.target as HTMLElement;
-            if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.closest?.('.cm-editor')) return;
+            // Check BOTH the event target and document.activeElement.
+            // e.target can be document.body in some edge cases (portaled
+            // modals, fast re-renders) even when an input has focus — without
+            // the activeElement check, Space gets consumed as Fly-mode "up"
+            // thrust instead of landing in the input.
+            if (isTypingTarget(e.target as HTMLElement) || isTypingTarget(document.activeElement as HTMLElement | null)) return;
             switch(e.code) {
                 case 'KeyW': moveState.current.forward = false; break;
                 case 'KeyS': moveState.current.backward = false; break;

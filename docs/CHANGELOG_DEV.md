@@ -1,6 +1,15 @@
-# GMT Development Changelog (v0.9.4 dev)
+# GMT Development Changelog (v0.9.5 dev)
 
-Chronological log of significant changes during the v0.9.4 development cycle (engine-extraction trunk; merges to `main` once stable).
+Chronological log of significant changes during the v0.9.5 development cycle (engine-extraction trunk; merges to `main` once stable).
+
+## 2026-05-24
+
+### Send Feedback from the Help menu
+
+**User-facing**
+- New **Send Feedback** item in the `?` menu. Pick a category (bug report, feature request, support), write a message, optionally include an email for a reply. Anonymous works too — but if you want me to write back, leave an address or sign in first.
+- An **Include current scene** checkbox attaches your live `.gmf` (sky and other heavy data stripped) so bug reports come with a reproducible scene. Capped at 200 KB after stripping.
+- Limit of 5 submissions per hour per browser to keep the inbox sane.
 
 ## 2026-05-18
 

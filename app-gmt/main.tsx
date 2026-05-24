@@ -57,6 +57,7 @@ import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { installGallery } from '../engine-gmt/gallery';
 import { installAuth } from '../engine-gmt/auth';
+import { feedbackMenuItem } from '../engine-gmt/feedback';
 import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
 import { installTutorial, registerLessons } from '../engine/plugins/Tutorial';
 import { GMT_LESSONS } from './tutorial/lessons';
@@ -264,6 +265,7 @@ registerLessons(GMT_LESSONS);
 
 installHelp({
     tutorials: { label: 'Tutorials' },
+    extraItems: [feedbackMenuItem()],
     support: {
         label: 'Support GMT',
         modalTitle: 'Support GMT',
