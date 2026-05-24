@@ -2,16 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useGalleryStore } from './galleryStore';
 import { useGalleryItems } from './useGalleryItems';
-import { galleryEnabled, GalleryItem } from './GalleryClient';
+import { galleryEnabled, GalleryItem, getGalleryItem } from './GalleryClient';
 import { loadGalleryScene } from './loadGalleryScene';
 import { GalleryTile } from './GalleryTile';
 import { Lightbox } from './Lightbox';
 import { useAuthStore } from '../auth/authStore';
 
 export const GalleryPage: React.FC = () => {
-  const isOpen       = useGalleryStore(s => s.isOpen);
-  const closeGallery = useGalleryStore(s => s.closeGallery);
-  const filter       = useGalleryStore(s => s.filter);
+  const isOpen              = useGalleryStore(s => s.isOpen);
+  const closeGallery        = useGalleryStore(s => s.closeGallery);
+  const filter              = useGalleryStore(s => s.filter);
+  const pendingSlug         = useGalleryStore(s => s.pendingLightboxSlug);
+  const clearPendingLightbox = useGalleryStore(s => s.clearPendingLightbox);
 
   const { items, loading, error } = useGalleryItems({ ...filter, limit: 60 });
   const currentUserId = useAuthStore(s => s.profile?.id ?? null);
@@ -29,6 +31,30 @@ export const GalleryPage: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, closeGallery, selectedItem]);
+
+  // Deep-link resolution. If something (typically the boot-time URL handler
+  // in app-gmt) queued a slug via openGalleryAtSlug(), fetch that single
+  // item directly and pop it into the lightbox. Cleared either way so a
+  // page refresh doesn't keep retrying a 404.
+  useEffect(() => {
+    if (!isOpen || !pendingSlug) return;
+    let cancelled = false;
+    getGalleryItem(pendingSlug).then((item) => {
+      if (cancelled) return;
+      if (item) {
+        setSelectedItem(item);
+        setLoadError(null);
+      } else {
+        setLoadError(`Couldn't find a public gallery scene with slug "${pendingSlug}".`);
+      }
+      clearPendingLightbox();
+    }).catch((err) => {
+      if (cancelled) return;
+      setLoadError(err instanceof Error ? err.message : String(err));
+      clearPendingLightbox();
+    });
+    return () => { cancelled = true; };
+  }, [isOpen, pendingSlug, clearPendingLightbox]);
 
   if (!isOpen) return null;
 

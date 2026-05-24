@@ -27,9 +27,17 @@ interface GalleryStore {
    *  this PNG/JPEG instead of capturing a fresh viewport snapshot. Used by
    *  the bucket-render-complete prompt to submit the rendered image. */
   submitSource: Blob | null;
+  /** Deep-link target — when set, GalleryPage fetches the matching item by
+   *  slug and opens its lightbox once the overlay is mounted. Cleared after
+   *  the lightbox opens (or the fetch fails) so refreshing doesn't reopen. */
+  pendingLightboxSlug: string | null;
 
   openGallery: () => void;
   closeGallery: () => void;
+  /** Open the gallery overlay AND queue a lightbox open for `slug`. Used by
+   *  the `?gallery=<slug>` URL handler and any future share-link UI. */
+  openGalleryAtSlug: (slug: string) => void;
+  clearPendingLightbox: () => void;
   openSubmit: () => void;
   /** Open the submit modal preset to a specific source blob (e.g. a bucket
    *  render output). Modal converts to JPEG if needed via its existing
@@ -50,6 +58,7 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   prevPaused: null,
   refreshTick: 0,
   submitSource: null,
+  pendingLightboxSlug: null,
 
   openGallery: () => {
     if (get().isOpen) return;
@@ -61,11 +70,22 @@ export const useGalleryStore = create<GalleryStore>((set, get) => ({
   closeGallery: () => {
     if (!get().isOpen) return;
     const { prevPaused } = get();
-    set({ isOpen: false, prevPaused: null });
+    set({ isOpen: false, prevPaused: null, pendingLightboxSlug: null });
     if (prevPaused !== null) {
       (useEngineStore.getState() as any).setIsPaused?.(prevPaused);
     }
   },
+
+  openGalleryAtSlug: (slug) => {
+    set({ pendingLightboxSlug: slug });
+    if (!get().isOpen) {
+      const s = useEngineStore.getState() as any;
+      set({ isOpen: true, prevPaused: s.isPaused ?? false });
+      s.setIsPaused?.(true);
+    }
+  },
+
+  clearPendingLightbox: () => set({ pendingLightboxSlug: null }),
 
   openSubmit: () => set({ isSubmitOpen: true, submitSource: null }),
   openSubmitWith: (source) => set({ isSubmitOpen: true, submitSource: source }),

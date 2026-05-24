@@ -56,6 +56,7 @@ import {
 import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHelp } from '../engine/plugins/Help';
 import { installGallery } from '../engine-gmt/gallery';
+import { useGalleryStore } from '../engine-gmt/gallery/galleryStore';
 import { installAuth } from '../engine-gmt/auth';
 import { feedbackMenuItem } from '../engine-gmt/feedback';
 import { SupportGmtBody, AboutGmtBody } from './HelpExtras';
@@ -489,6 +490,24 @@ if (typeof window !== 'undefined') {
     (window as any).__fractalEvents = FractalEvents;
     (window as any).__fractalEventNames = FRACTAL_EVENTS;
     (window as any).__fractalRegistry = registry;
+}
+
+// Deep-link parse — if the page was opened with `?gallery=<slug>` (typically
+// from the landing site or a shared link), queue the lightbox open before
+// React mounts so the gallery overlay pops the right item on first paint.
+// The slug is wiped from the URL after handoff so a manual refresh drops
+// the user back to a clean viewport instead of re-opening the gallery.
+try {
+    const params = new URLSearchParams(window.location.search);
+    const gallerySlug = params.get('gallery');
+    if (gallerySlug) {
+        useGalleryStore.getState().openGalleryAtSlug(gallerySlug);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('gallery');
+        window.history.replaceState({}, '', url.toString());
+    }
+} catch (err) {
+    console.warn('[app-gmt] gallery deep-link parse failed', err);
 }
 
 const rootElement = document.getElementById('root');

@@ -28,13 +28,15 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     // 'fit' = object-contain into the pane; '100' = native-resolution with
     // overflow-auto on the parent so the user can scroll to see pixels.
     const [zoomMode, setZoomMode] = useState<'fit' | '100'>('fit');
-    const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+    const [copyState,  setCopyState]  = useState<'idle' | 'copied' | 'failed'>('idle');
+    const [shareState, setShareState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
     // Reset img-loaded + zoom state when the displayed item changes (prev/next).
     useEffect(() => {
         setImgLoaded(false);
         setZoomMode('fit');
         setCopyState('idle');
+        setShareState('idle');
     }, [item.id]);
 
     const copyImageLink = async () => {
@@ -45,6 +47,26 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
             setCopyState('failed');
         }
         setTimeout(() => setCopyState('idle'), 1800);
+    };
+
+    // Build a deep-link to THIS app's URL with ?gallery=<slug>. We keep
+    // origin + pathname so the link stays inside whichever build the user
+    // is on (prod app.gmt-fractals.com or the GH Pages dev URL). The
+    // boot-time handler in app-gmt/main.tsx queues the lightbox open and
+    // wipes the param so refreshes don't re-trigger.
+    const buildShareUrl = (): string => {
+        const base = `${window.location.origin}${window.location.pathname}`;
+        return `${base}?gallery=${encodeURIComponent(item.slug)}`;
+    };
+
+    const copyShareLink = async () => {
+        try {
+            await navigator.clipboard.writeText(buildShareUrl());
+            setShareState('copied');
+        } catch {
+            setShareState('failed');
+        }
+        setTimeout(() => setShareState('idle'), 1800);
     };
 
     // Prev/next within current view
@@ -223,6 +245,19 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                             >
                                 {loading ? 'Loading scene…' : '▶ Open in GMT'}
                             </button>
+                            <button
+                                onClick={copyShareLink}
+                                className={`w-full py-2 px-3 rounded text-[11px] font-bold border transition-colors ${
+                                    shareState === 'copied'
+                                        ? 'bg-green-500/15 border-green-500/40 text-green-300'
+                                        : shareState === 'failed'
+                                            ? 'bg-red-500/15 border-red-500/40 text-red-300'
+                                            : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border-white/10'
+                                }`}
+                                title="Copy a link that opens GMT with this scene in the lightbox"
+                            >
+                                {shareState === 'copied' ? 'Share link copied!' : shareState === 'failed' ? 'Copy failed' : '↗ Copy share link'}
+                            </button>
                             <div className="grid grid-cols-2 gap-2">
                                 <a
                                     href={item.image_url}
@@ -234,6 +269,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                 </a>
                                 <button
                                     onClick={copyImageLink}
+                                    title="Copy the direct URL to the watermarked JPG"
                                     className={`py-2 px-3 rounded text-[11px] font-bold border transition-colors ${
                                         copyState === 'copied'
                                             ? 'bg-green-500/15 border-green-500/40 text-green-300'
@@ -242,7 +278,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                                 : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border-white/10'
                                     }`}
                                 >
-                                    {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Failed' : '🔗 Copy link'}
+                                    {copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Failed' : '🖼 Copy image URL'}
                                 </button>
                             </div>
                         </div>
