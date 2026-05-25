@@ -106,6 +106,7 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
     if (shader.preambleVars?.length) shaderMeta.preambleVars = shader.preambleVars;
     if (shader.usesSharedRotation) shaderMeta.usesSharedRotation = true;
     if (shader.supportsCuttingPlane) shaderMeta.supportsCuttingPlane = true;
+    if (shader.selfContainedSDE) shaderMeta.selfContainedSDE = true;
 
     const metadata = {
         ...meta,
@@ -215,6 +216,7 @@ export const parseGMF = (content: string): FractalDefinition => {
         if (metadata.shaderMeta.preambleVars) shader.preambleVars = metadata.shaderMeta.preambleVars;
         if (metadata.shaderMeta.usesSharedRotation) shader.usesSharedRotation = true;
         if (metadata.shaderMeta.supportsCuttingPlane) shader.supportsCuttingPlane = true;
+        if (metadata.shaderMeta.selfContainedSDE) shader.selfContainedSDE = true;
         delete metadata.shaderMeta;
     }
 
