@@ -26,6 +26,12 @@ float ks_d       = 0.0;
 float ks_d2      = 0.0;
 float ks_de_prev = 1e10;
 float ks_de_curr = 1e10;
+// Convergence-iter signal for non-escaping smoothIter (see getDist below).
+// ks_iConv: -log2(DF) proxy iteration captured the first time the DE drops
+// below threshold. ks_deAtConv: DE value at that capture point, used for
+// fractional refinement.
+float ks_iConv    = -1.0;
+float ks_deAtConv = 1e10;
 
 // Domain-repeat helper: wraps x periodically into [s, s+a)
 vec2 km_wrap(vec2 x, vec2 a, vec2 s) {
@@ -33,16 +39,18 @@ vec2 km_wrap(vec2 x, vec2 a, vec2 s) {
     return (x - a * floor(x / a)) + s;
 }`,
 
-        preambleVars: ['ks_DF', 'ks_d', 'ks_d2', 'ks_de_prev', 'ks_de_curr'],
+        preambleVars: ['ks_DF', 'ks_d', 'ks_d2', 'ks_de_prev', 'ks_de_curr', 'ks_iConv', 'ks_deAtConv'],
 
         // loopInit runs once before the iteration loop, after z = vec4(p_fractal, uParamB).
         // Applies the one-time coordinate transforms that must bracket the full iteration sequence.
         loopInit: `
-ks_DF      = 1.0;
-ks_d       = 0.0;
-ks_d2      = 0.0;
-ks_de_prev = 1e10;
-ks_de_curr = 1e10;
+ks_DF       = 1.0;
+ks_d        = 0.0;
+ks_d2       = 0.0;
+ks_de_prev  = 1e10;
+ks_de_curr  = 1e10;
+ks_iConv    = -1.0;
+ks_deAtConv = 1e10;
 
 // Scale and translate into Kleinian space
 z.xyz /= uParamC;
@@ -105,7 +113,10 @@ void formula_KleinianMobius(inout vec4 z, inout float dr, inout float trap, vec4
     }
 
     // Möbius sphere inversion — core of the Kleinian group action
-    float ir = 1.0 / max(dot(z.xyz, z.xyz), 1e-10);
+    // 1e-6 floor (raised from 1e-10) reduces per-pixel divergence in the
+    // inversion-zero zone where adjacent pixels' tiny dot(z,z) differences
+    // would otherwise amplify into geometric slicing.
+    float ir = 1.0 / max(dot(z.xyz, z.xyz), 1e-6);
     z.xyz *= -ir;
     z.x    = -b - z.x;
     z.y    =  a + z.y;
@@ -117,6 +128,15 @@ void formula_KleinianMobius(inout vec4 z, inout float dr, inout float trap, vec4
     // preventing the overshoot that caused slicing artifacts in earlier versions.
     ks_de_prev = ks_de_curr;
     ks_de_curr = min(min(z.y, uParamA - z.y), uParamE) / max(ks_DF, 2.0);
+
+    // Convergence-iter capture: first iteration where DE drops below threshold.
+    // -log2(ks_DF) acts as an iter-like proxy because each Möbius inversion near
+    // the limit set contributes ~constant log-factor. Adjacent pixels reach the
+    // threshold at different iterations → real per-pixel banding for iter modes.
+    if (ks_iConv < 0.0 && ks_de_curr < uParamE * 0.5) {
+        ks_iConv    = clamp(-log2(max(ks_DF, 1e-30)), 0.0, float(uIterations));
+        ks_deAtConv = ks_de_curr;
+    }
 
     // Orbit trap: min distance to origin (positive, works with logTrap)
     trap = min(trap, length(z.xyz));
@@ -138,9 +158,20 @@ void formula_KleinianMobius(inout vec4 z, inout float dr, inout float trap, vec4
 
     de *= uParamC;  // rescale from Kleinian space back to world space
 
-    // iter = outer loop count (always reaches uIterations for the Kleinian,
-    // which has no escape; coloring mode 1 will use the HYBRID FIX automatically).
-    return vec2(abs(de), iter);
+    // Smoothiter via convergence iteration. Non-escaping Kleinian limit sets
+    // have no escape radius — log(DF) alone is near-flat for visible pixels
+    // (all converge near unity). Instead, capture the iteration at which the
+    // DE first drops sub-threshold; this varies per pixel and gives modes 1/7/9
+    // genuine banding. Fractional part from log(uParamE / deAtConv) smooths it.
+    // Background / never-converged rays fall back to scaled -log2(DF).
+    float smoothIter;
+    if (ks_iConv > 0.0) {
+        float frac = clamp(log2(uParamE / max(ks_deAtConv, 1e-30)) * 0.25, 0.0, 1.0);
+        smoothIter = clamp(ks_iConv + frac, 0.0, float(uIterations) - 2.0);
+    } else {
+        smoothIter = clamp(-log2(max(ks_DF, 1e-30)) * 0.1, 0.0, float(uIterations) - 2.0);
+    }
+    return vec2(abs(de), smoothIter);
 `,
     },
 

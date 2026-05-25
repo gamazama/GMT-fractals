@@ -25,22 +25,30 @@ float kj_d       = 0.0;
 float kj_d2      = 0.0;
 float kj_de_prev = 1e10;
 float kj_de_curr = 1e10;
+// Convergence-iter signal for non-escaping smoothIter (see getDist below).
+// kj_iConv: -log2(DF) proxy iteration captured the first time the DE drops
+// below threshold. kj_deAtConv: DE value at that capture, used for fractional
+// refinement.
+float kj_iConv    = -1.0;
+float kj_deAtConv = 1e10;
 
 vec2 kj_wrap(vec2 x, vec2 a, vec2 s) {
     x -= s;
     return (x - a * floor(x / a)) + s;
 }`,
 
-        preambleVars: ['kj_DF', 'kj_d', 'kj_d2', 'kj_de_prev', 'kj_de_curr'],
+        preambleVars: ['kj_DF', 'kj_d', 'kj_d2', 'kj_de_prev', 'kj_de_curr', 'kj_iConv', 'kj_deAtConv'],
 
         // Scale + sphere inversion before the iteration loop.
         // Sphere inversion is always active in this variant (no toggle).
         loopInit: `
-kj_DF      = 1.0;
-kj_d       = 0.0;
-kj_d2      = 0.0;
-kj_de_prev = 1e10;
-kj_de_curr = 1e10;
+kj_DF       = 1.0;
+kj_d        = 0.0;
+kj_d2       = 0.0;
+kj_de_prev  = 1e10;
+kj_de_curr  = 1e10;
+kj_iConv    = -1.0;
+kj_deAtConv = 1e10;
 
 z.xyz /= uParamC;
 
@@ -102,7 +110,10 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
     }
 
     // Möbius sphere inversion — core Kleinian group action
-    float inv  = 1.0 / max(dot(z.xyz, z.xyz), 1e-10);
+    // 1e-6 floor (raised from 1e-10) reduces per-pixel divergence in the
+    // inversion-zero zone where adjacent pixels' tiny dot(z,z) differences
+    // would otherwise amplify into geometric slicing.
+    float inv  = 1.0 / max(dot(z.xyz, z.xyz), 1e-6);
     z.xyz *= -inv;
     z.x    = -b - z.x;
     z.y    =  a + z.y;
@@ -112,6 +123,15 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
     // being dragged down by transient early iterations.
     kj_de_prev = kj_de_curr;
     kj_de_curr = min(min(z.y, uParamA - z.y), uParamE) / max(kj_DF, 2.0);
+
+    // Convergence-iter capture: first iteration where DE drops below threshold.
+    // -log2(kj_DF) acts as an iter-like proxy because each Möbius inversion near
+    // the limit set contributes ~constant log-factor. Adjacent pixels reach the
+    // threshold at different iterations → real per-pixel banding for iter modes.
+    if (kj_iConv < 0.0 && kj_de_curr < uParamE * 0.5) {
+        kj_iConv    = clamp(-log2(max(kj_DF, 1e-30)), 0.0, float(uIterations));
+        kj_deAtConv = kj_de_curr;
+    }
 
     // Orbit trap: min distance to origin (positive, works with logTrap coloring)
     trap = min(trap, length(z.xyz));
@@ -128,7 +148,21 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
     de = de * kj_d2 / max(uVec4A.w + kj_d * de, 1e-10);
 
     de *= uParamC;  // rescale from Kleinian space back to world space
-    return vec2(abs(de), iter);
+
+    // Smoothiter via convergence iteration. Non-escaping Kleinian limit sets
+    // have no escape radius — log(DF) alone is near-flat for visible pixels
+    // (all converge near unity). Instead, capture the iteration at which the
+    // DE first drops sub-threshold; this varies per pixel and gives modes 1/7/9
+    // genuine banding. Fractional part from log(uParamE / deAtConv) smooths it.
+    // Background / never-converged rays fall back to scaled -log2(DF).
+    float smoothIter;
+    if (kj_iConv > 0.0) {
+        float frac = clamp(log2(uParamE / max(kj_deAtConv, 1e-30)) * 0.25, 0.0, 1.0);
+        smoothIter = clamp(kj_iConv + frac, 0.0, float(uIterations) - 2.0);
+    } else {
+        smoothIter = clamp(-log2(max(kj_DF, 1e-30)) * 0.1, 0.0, float(uIterations) - 2.0);
+    }
+    return vec2(abs(de), smoothIter);
 `,
     },
 

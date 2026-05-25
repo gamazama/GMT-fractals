@@ -6,7 +6,7 @@ export const PseudoKleinian: FractalDefinition = {
     name: 'Pseudo Kleinian',
     shortDescription: 'Kleinian variation with a "Magic Factor" that warps the inversion logic.',
     description: 'A modification of the Kleinian group formula. Now supports linear shifting and twisting.',
-    
+
     shader: {
         function: `
     void formula_PseudoKleinian(inout vec4 z, inout float dr, inout float trap, vec4 c) {
