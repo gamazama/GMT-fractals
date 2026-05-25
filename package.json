@@ -16,6 +16,8 @@
     "test:frag:v": "tsx debug/test-frag-importer.mts --verbose",
     "test:frag:scan": "tsx debug/scan-frag-parse.mts",
     "test:frag:integration": "tsx debug/test-frag-integration.mts --discover",
+    "test:compat": "tsx debug/test-compat.mts",
+    "test:compat:write": "tsx debug/test-compat.mts --write",
     "smoke:boot": "tsx debug/smoke-boot.mts",
     "smoke:interact": "tsx debug/smoke-interact.mts",
     "smoke:screenshot": "tsx debug/smoke-screenshot.mts",

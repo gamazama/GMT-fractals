@@ -251,6 +251,23 @@ export interface FeatureDefinition {
     // The registry enforces this order via topological sort in getAll().
     dependsOn?: string[];
 
+    // --- Compatibility requirements (capability protocol) ---
+    // Read by `evaluateCompat()` to decide if this feature is enabled given the
+    // current primary/secondary formula. Token strings are app-defined; GMT uses
+    // the closed `Capability` union in engine-gmt/types/capabilities.ts. Apps
+    // declaring requires here should use `[...] satisfies Capability[]` for
+    // type safety at the declaration site.
+    //   - primary:   ALL tokens must be in primary.capabilities
+    //   - secondary: ALL tokens must be in secondary.capabilities (when secondary set)
+    //   - pair:      each token must be in primary OR secondary capabilities
+    //   - rejects:   feature is disabled if any matching token IS present
+    requires?: {
+        primary?: string[];
+        secondary?: string[];
+        pair?: string[];
+        rejects?: { primary?: string[]; secondary?: string[] };
+    };
+
     // --- Shader Injection ---
     // inject(): injects GLSL into the RAYMARCHING shader (main render pass).
     // Consumed by engine/ShaderFactory.ts. Use for SDFs, lighting, material effects.

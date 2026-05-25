@@ -2,6 +2,7 @@ import { FormulaType, CameraMode, PreciseVector3, CameraState } from './common';
 import { LightParams } from './graphics';
 import { AnimationParams, AnimationSequence } from './animation';
 import { FractalGraph, PipelineNode } from './graph';
+import type { CapabilitySet } from './capabilities';
 
 export interface Preset {
   version?: number;
@@ -92,6 +93,12 @@ export interface FractalDefinition {
          *  When true, engine declares those globals + initializes them in loopInit. When estimator
          *  is set to "Cutting Plane" (5), engine's getDist returns vec2(abs(cp_dmin), cp_trap). */
         supportsCuttingPlane?: boolean;
+        /** Capability tokens declared by this formula. Read by evaluateCompat() for
+         *  feature gating. Populated by FractalRegistry.register() via deriveLegacy()
+         *  when not declared explicitly — P1 migrates the natives to explicit
+         *  declarations using the classification at dev/plans/capability-protocol-p1-classification.md.
+         *  @see dev/docs/gmt/35_Capability_Protocol.md */
+        capabilities?: CapabilitySet;
     };
     parameters: (FractalParameter | null)[];
     description?: string;

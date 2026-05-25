@@ -13,6 +13,7 @@
  */
 
 import { FractalDefinition, FormulaType } from '../types';
+import { deriveLegacy } from './compat/deriveLegacy';
 
 class FractalRegistry {
     private definitions: Map<string, FractalDefinition> = new Map();
@@ -22,8 +23,18 @@ class FractalRegistry {
      *
      * @invariant No membership check — replacement is silent. Re-registering
      * the same id silently overwrites the prior definition.
+     * @invariant `def.shader.capabilities` is populated via `deriveLegacy()`
+     * when not explicitly declared, and frozen to prevent downstream mutation.
+     * P1 migrates native formulas to explicit declarations; P8 removes the
+     * shim (see dev/plans/capability-protocol.md).
      */
     public register(def: FractalDefinition) {
+        if (!def.shader.capabilities) {
+            // Mutate in place — the def object is the canonical one consumers
+            // hold references to via .get(). Wrapping in a new object would
+            // break identity-equality used elsewhere (e.g. featureRegistry HMR).
+            (def.shader as { capabilities?: ReadonlySet<string> }).capabilities = deriveLegacy(def);
+        }
         this.definitions.set(def.id, def);
     }
 
