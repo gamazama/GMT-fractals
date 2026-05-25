@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const JuliaMorph: FractalDefinition = {
     id: 'JuliaMorph',
@@ -156,7 +157,8 @@ export const JuliaMorph: FractalDefinition = {
         loopBody: `formula_JuliaMorph(z, dr, trap, c); break;`,
         getDist: `
             return vec2(z.z, z.w);
-        `
+        `,
+        capabilities: new Set(['shape:self-contained', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

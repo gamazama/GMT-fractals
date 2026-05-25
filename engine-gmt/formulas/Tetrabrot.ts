@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Tetrabrot: FractalDefinition = {
     id: 'Tetrabrot',
@@ -40,7 +41,8 @@ export const Tetrabrot: FractalDefinition = {
         z = tetraSquare(z) + c;
         trap = min(trap, dot(z,z));
     }`,
-        loopBody: `formula_Tetrabrot(z, dr, trap, c);`
+        loopBody: `formula_Tetrabrot(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

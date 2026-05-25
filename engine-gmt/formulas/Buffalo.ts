@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Buffalo: FractalDefinition = {
     id: 'Buffalo',
@@ -42,6 +43,7 @@ export const Buffalo: FractalDefinition = {
         loopBody: `formula_Buffalo(z, dr, trap, c);`,
         loopInit: `gmt_precalcRodrigues(uVec3C);`,
         usesSharedRotation: true,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

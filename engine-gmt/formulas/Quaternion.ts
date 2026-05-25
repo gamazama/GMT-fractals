@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Quaternion: FractalDefinition = {
     id: 'Quaternion',
@@ -86,7 +87,8 @@ export const Quaternion: FractalDefinition = {
             }
             // Re-derive c after inversion (position changed)
             c = mix(vec4(z.xyz, uParamB), vec4(uJulia, uParamA), step(0.5, uJuliaMode));
-        }`
+        }`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

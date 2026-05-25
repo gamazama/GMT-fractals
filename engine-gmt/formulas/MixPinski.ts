@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 // MixPinski — Darkbeam's 4D Sierpinski-Menger hybrid
 // Original: darkbeam_MixPinski.frag (M3D code, rewritten by Darkbeam 16/04/20)
@@ -90,7 +91,8 @@ export const MixPinski: FractalDefinition = {
             float r4d = max(max(max(abs(z.x), abs(z.y)), abs(z.z)), abs(z.w));
             float d = (r4d - 1.0) / max(abs(dr), 1e-10);
             return vec2(d, iter);
-        `
+        `,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

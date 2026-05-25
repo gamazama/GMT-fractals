@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Appell: FractalDefinition = {
     id: 'Appell',
@@ -66,7 +67,8 @@ export const Appell: FractalDefinition = {
         
         trap = min(trap, r);
     }`,
-        loopBody: `formula_Appell(z, dr, trap, c);`
+        loopBody: `formula_Appell(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

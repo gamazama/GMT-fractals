@@ -1,4 +1,5 @@
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const MandelBolic: FractalDefinition = {
     id: 'MandelBolic',
@@ -46,7 +47,8 @@ export const MandelBolic: FractalDefinition = {
             z.xyz = vec3(nx, ny, nz);
             trap = min(trap, length(z.xyz) * uParamF);
         }`,
-        loopBody: `formula_MandelBolic(z, dr, trap, c);`
+        loopBody: `formula_MandelBolic(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

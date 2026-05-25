@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const PseudoKleinian: FractalDefinition = {
     id: 'PseudoKleinian',
@@ -37,7 +38,8 @@ export const PseudoKleinian: FractalDefinition = {
         z.xyz = q;
         trap = min(trap, lensq);
     }`,
-        loopBody: `formula_PseudoKleinian(z, dr, trap, c);`
+        loopBody: `formula_PseudoKleinian(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

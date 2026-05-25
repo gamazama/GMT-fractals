@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 // Pseudo Kleinian 06 — Scale 1 JuliaBox + Thingy DE + sphere inversion
 // By Knighty & Theli-at (Fragmentarium PseudoKleinian06---.frag)
@@ -62,7 +63,8 @@ export const PseudoKleinian06: FractalDefinition = {
         d = jkk_r2 * d / (uVec2B.y + jkk_r * d);
     }
     return vec2(d, iter);
-`
+`,
+        capabilities: new Set(['shape:per-iteration', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

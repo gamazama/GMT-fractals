@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Borromean: FractalDefinition = {
     id: 'Borromean',
@@ -58,7 +59,8 @@ export const Borromean: FractalDefinition = {
         
         trap = min(trap, dot(z.xyz, z.xyz));
     }`,
-        loopBody: `formula_Borromean(z, dr, trap, c);`
+        loopBody: `formula_Borromean(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

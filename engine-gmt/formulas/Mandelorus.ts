@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Mandelorus: FractalDefinition = {
     id: 'Mandelorus',
@@ -106,7 +107,8 @@ export const Mandelorus: FractalDefinition = {
             // Trap: Use cross-section magnitude
             trap = min(trap, r2);
         }`,
-        loopBody: `formula_Mandelorus(z, dr, trap, c);`
+        loopBody: `formula_Mandelorus(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

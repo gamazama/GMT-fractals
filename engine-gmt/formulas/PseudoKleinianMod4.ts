@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const PseudoKleinianMod4: FractalDefinition = {
     id: 'PseudoKleinianMod4',
@@ -86,6 +87,7 @@ export const PseudoKleinianMod4: FractalDefinition = {
     return vec2(d, iter);
 `,
         preambleVars: ['pk4_posNeg'],
+        capabilities: new Set(['shape:per-iteration', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

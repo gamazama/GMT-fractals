@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const MengerAdvanced: FractalDefinition = {
     id: 'MengerAdvanced',
@@ -81,6 +82,7 @@ export const MengerAdvanced: FractalDefinition = {
     }`,
         loopBody: `formula_MengerAdvanced(z, dr, trap, c);`,
         supportsCuttingPlane: true,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

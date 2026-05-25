@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const AmazingSurface: FractalDefinition = {
     id: 'AmazingSurface',
@@ -62,7 +63,8 @@ export const AmazingSurface: FractalDefinition = {
             // Use 'r' which comes from DE_MASTER (respects Distance Metric)
             float thickness = uParamF;
             return vec2((r - thickness) / dr, iter);
-        `
+        `,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const MarbleMarcher: FractalDefinition = {
     id: 'MarbleMarcher',
@@ -79,7 +80,8 @@ export const MarbleMarcher: FractalDefinition = {
         getDist: `
             float limit = 6.0;
             return vec2((r - limit) / dr, iter);
-        `
+        `,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

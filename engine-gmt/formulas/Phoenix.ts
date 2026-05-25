@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Phoenix: FractalDefinition = {
     id: 'Phoenix',
@@ -117,7 +118,8 @@ export const Phoenix: FractalDefinition = {
         vec4 z_prev2 = vec4(0.0);
         float dr_prev2 = 0.0;
         `,
-        preambleVars: ['z_prev', 'dr_prev', 'z_prev2', 'dr_prev2']
+        preambleVars: ['z_prev', 'dr_prev', 'z_prev2', 'dr_prev2'],
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

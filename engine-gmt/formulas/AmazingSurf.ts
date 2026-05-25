@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const AmazingSurf: FractalDefinition = {
     id: 'AmazingSurf',
@@ -33,7 +34,8 @@ export const AmazingSurf: FractalDefinition = {
         z.xyz = z3;
         trap = min(trap, abs(z3.z));
     }`,
-        loopBody: `formula_AmazingSurf(z, dr, trap, c);`
+        loopBody: `formula_AmazingSurf(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

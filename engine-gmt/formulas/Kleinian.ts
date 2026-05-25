@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Kleinian: FractalDefinition = {
     id: 'Kleinian',
@@ -26,7 +27,8 @@ export const Kleinian: FractalDefinition = {
         z.xyz = z3;
         trap = min(trap, r2);
     }`,
-        loopBody: `formula_Kleinian(z, dr, trap, c);`
+        loopBody: `formula_Kleinian(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

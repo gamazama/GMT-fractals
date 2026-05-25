@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const TruncatedIcosahedron: FractalDefinition = {
     id: 'TruncatedIcosahedron',
@@ -76,6 +77,7 @@ export const TruncatedIcosahedron: FractalDefinition = {
     }`,
         usesSharedRotation: true,
         supportsCuttingPlane: true,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'iter:shared-rotation', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

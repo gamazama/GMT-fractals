@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const MandelTerrain: FractalDefinition = {
     id: 'MandelTerrain',
@@ -274,7 +275,8 @@ export const MandelTerrain: FractalDefinition = {
         getDist: `
             // Standard return
             return vec2(r, dr);
-        `
+        `,
+        capabilities: new Set(['shape:self-contained', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

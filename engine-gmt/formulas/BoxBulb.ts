@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const BoxBulb: FractalDefinition = {
     id: 'BoxBulb',
@@ -47,7 +48,8 @@ export const BoxBulb: FractalDefinition = {
         z.xyz = z3 + c.xyz;
         trap = min(trap, length(z.xyz));
     }`,
-        loopBody: `formula_BoxBulb(z, dr, trap, c);`
+        loopBody: `formula_BoxBulb(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

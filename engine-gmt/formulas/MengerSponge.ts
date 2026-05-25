@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const MengerSponge: FractalDefinition = {
     id: 'MengerSponge',
@@ -63,6 +64,7 @@ export const MengerSponge: FractalDefinition = {
     }`,
         loopBody: `formula_MengerSponge(z, dr, trap, c);`,
         supportsCuttingPlane: true,
+        capabilities: new Set(['shape:per-iteration', 'estimator:cutting-plane', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

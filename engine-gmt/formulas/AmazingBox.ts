@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const AmazingBox: FractalDefinition = {
     id: 'AmazingBox',
@@ -33,7 +34,8 @@ export const AmazingBox: FractalDefinition = {
         dr = dr * abs(uParamA) + 1.0;
         trap = min(trap, abs(z.x));
     }`,
-        loopBody: `formula_AmazingBox(z, dr, trap, c);`
+        loopBody: `formula_AmazingBox(z, dr, trap, c);`,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

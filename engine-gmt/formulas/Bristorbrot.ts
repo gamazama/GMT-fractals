@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const Bristorbrot: FractalDefinition = {
     id: 'Bristorbrot',
@@ -50,7 +51,8 @@ export const Bristorbrot: FractalDefinition = {
         mat2 rotZ = mat2(cD, -sD, sD, cD);
         `,
         loopBody: `formula_Bristorbrot(z, dr, trap, c, rotX, rotZ);`,
-        preambleVars: ['rotX', 'rotZ']
+        preambleVars: ['rotX', 'rotZ'],
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

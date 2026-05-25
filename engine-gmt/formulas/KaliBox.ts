@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 export const KaliBox: FractalDefinition = {
     id: 'KaliBox',
@@ -67,7 +68,8 @@ export const KaliBox: FractalDefinition = {
         getDist: `
             float absScalem1 = abs(uParamA - 1.0);
             return vec2((r - absScalem1) / dr, iter);
-        `
+        `,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [

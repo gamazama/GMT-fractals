@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 
 // Based on Jos Leys' Kleinian shader (Shadertoy) — adapted to GMT native per-iteration formula.
 // Key difference from KleinianMobius: the Y-reflection includes a Z component (Rot Z),
@@ -25,30 +26,28 @@ float kj_d       = 0.0;
 float kj_d2      = 0.0;
 float kj_de_prev = 1e10;
 float kj_de_curr = 1e10;
-// Convergence-iter signal for non-escaping smoothIter (see getDist below).
-// kj_iConv: -log2(DF) proxy iteration captured the first time the DE drops
-// below threshold. kj_deAtConv: DE value at that capture, used for fractional
-// refinement.
-float kj_iConv    = -1.0;
-float kj_deAtConv = 1e10;
+// Y-reflection threshold-crossing counter for non-escaping smoothIter
+// (see getDist). Pixels at different sides of the Kleinian limit-set
+// boundary cross the reflection branch at different iterations, giving
+// real per-pixel banding for iter coloring modes.
+float kj_xings = 0.0;
 
 vec2 kj_wrap(vec2 x, vec2 a, vec2 s) {
     x -= s;
     return (x - a * floor(x / a)) + s;
 }`,
 
-        preambleVars: ['kj_DF', 'kj_d', 'kj_d2', 'kj_de_prev', 'kj_de_curr', 'kj_iConv', 'kj_deAtConv'],
+        preambleVars: ['kj_DF', 'kj_d', 'kj_d2', 'kj_de_prev', 'kj_de_curr', 'kj_xings'],
 
         // Scale + sphere inversion before the iteration loop.
         // Sphere inversion is always active in this variant (no toggle).
         loopInit: `
-kj_DF       = 1.0;
-kj_d        = 0.0;
-kj_d2       = 0.0;
-kj_de_prev  = 1e10;
-kj_de_curr  = 1e10;
-kj_iConv    = -1.0;
-kj_deAtConv = 1e10;
+kj_DF      = 1.0;
+kj_d       = 0.0;
+kj_d2      = 0.0;
+kj_de_prev = 1e10;
+kj_de_curr = 1e10;
+kj_xings   = 0.0;
 
 z.xyz /= uParamC;
 
@@ -164,6 +163,7 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
     }
     return vec2(abs(de), smoothIter);
 `,
+        capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
     },
 
     parameters: [
