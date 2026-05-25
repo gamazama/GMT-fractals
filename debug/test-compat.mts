@@ -29,14 +29,17 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-// Side-effect imports — register all GMT features and formulas BEFORE
-// importing the registries. This mirrors the boot order in app-gmt.
-import '../engine-gmt/features/index';
+// Formulas register at module-import time (side effect of importing the
+// barrel). Features register via an explicit registerFeatures() call —
+// mirrors boot order in app-gmt.
 import '../engine-gmt/formulas/index';
+import { registerFeatures } from '../engine-gmt/features/index';
 
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { evaluateCompat } from '../engine-gmt/engine/compat';
 import type { Capability } from '../engine-gmt/types/capabilities';
+
+registerFeatures();
 
 // Resolve snapshot path relative to this file
 const __filename = fileURLToPath(import.meta.url);

@@ -17,12 +17,10 @@ import type { Capability } from '../../types/capabilities';
 export function deriveLegacy(def: FractalDefinition): Set<Capability> {
   const caps = new Set<Capability>();
 
-  // Modular is a node-graph formula; its capabilities are graph-dependent.
-  // We tag the shape only — features that reject Modular use rejects.primary.
-  if (def.id === 'Modular') {
-    caps.add('shape:modular');
-    return caps;
-  }
+  // P2 removed the hardcoded Modular branch — Modular.ts now declares
+  // shape:modular explicitly in its shader.capabilities. The shim only
+  // runs when capabilities is undefined, so this code path no longer
+  // fires for Modular. Kept for V3/V4 Workshop imports until P5/P6.
 
   // Shape: per-iteration is the default; self-contained is opt-in.
   if (def.shader.selfContainedSDE) {

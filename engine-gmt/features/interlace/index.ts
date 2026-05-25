@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { FeatureDefinition } from '../../engine/FeatureSystem';
 import { registry } from '../../engine/FractalRegistry';
 import type { FormulaType } from '../../types';
+import type { Capability } from '../../types/capabilities';
 import {
     rewriteFormulaFunction,
     rewriteLoopBody,
@@ -120,6 +121,18 @@ export const InterlaceFeature: FeatureDefinition = {
     name: 'Formula Interlace',
     category: 'Formulas',
     dependsOn: ['coreMath', 'geometry'],
+    // Interlace rewrites the secondary's GLSL and injects it into the
+    // primary's loop body. Neither side can be Modular (no GLSL to rewrite)
+    // or self-contained (formula owns its full loop, no insertion point).
+    // Mirror of the inject() early-returns at lines 322-333; protocol now
+    // drives UI gating once consumers adopt evaluateCompat (P3) and the
+    // secondary picker (P4).
+    requires: {
+        rejects: {
+            primary: ['shape:self-contained', 'shape:modular'] satisfies Capability[],
+            secondary: ['shape:self-contained', 'shape:modular'] satisfies Capability[],
+        },
+    },
 
     engineConfig: {
         toggleParam: 'interlaceCompiled',

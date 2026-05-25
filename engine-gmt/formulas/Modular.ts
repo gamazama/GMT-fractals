@@ -1,5 +1,6 @@
 
 import { FractalDefinition } from '../types';
+import type { Capability } from '../types/capabilities';
 import { JULIA_REPEATER_PIPELINE } from '../data/initialPipelines';
 
 export const Modular: FractalDefinition = {
@@ -8,13 +9,17 @@ export const Modular: FractalDefinition = {
     shortDescription: 'Construct custom fractal equations using a Node Graph.',
     description: 'Construct your own fractal equation by chaining operations together. Combine folds, rotations, and logic via the Graph tab.',
     juliaType: 'julia',
-    
+
     shader: {
-        // Placeholders: The ShaderFactory intercepts 'Modular' ID 
+        // Placeholders: The ShaderFactory intercepts 'Modular' ID
         // and injects the dynamically compiled Graph code.
         function: ``,
         loopBody: ``,
-        getDist: ``
+        getDist: ``,
+        // Graph-compiled — capabilities determined by node graph at runtime;
+        // declared here only for shape-token presence. Features that can't
+        // compose with Modular reject 'shape:modular' explicitly.
+        capabilities: new Set(['shape:modular'] satisfies Capability[]),
     },
 
     parameters: [
