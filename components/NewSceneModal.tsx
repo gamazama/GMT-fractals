@@ -22,6 +22,7 @@ import { getGalleryItem, type GalleryItem } from '../engine-gmt/gallery/GalleryC
 import { loadGMFScene } from '../engine-gmt/utils/FormulaFormat';
 import { extractMetadata } from '../utils/pngMetadata';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { useAnimationStore } from '../store/animationStore';
 import type { FormulaType, FractalDefinition } from '../engine-gmt/types';
 
 interface GeometryState {
@@ -98,6 +99,29 @@ const SHADING_GROUP_FEATURES: Record<keyof ShadingGroups, string[]> = {
     color: ['coloring', 'colorGrading', 'postEffects'],
 };
 
+/** Pick a uniformly random formula def from the registry, excluding Modular
+ *  (graph-compiled, no formula params), Workshop launcher, anything in
+ *  `exclude`, and anything that matches a shape token in `rejectShapes`.
+ *  Returns undefined if no candidates qualify. Used by the wizard's dice. */
+function pickRandomNative(opts: {
+    exclude?: Set<string>;
+    rejectShapes?: Array<'shape:self-contained' | 'shape:modular'>;
+} = {}): FractalDefinition | undefined {
+    const exclude = opts.exclude ?? new Set();
+    const rejectShapes = opts.rejectShapes ?? [];
+    const candidates = registry.getAll().filter(def => {
+        if (def.id === 'Modular') return false;
+        if (exclude.has(def.id)) return false;
+        const caps = def.shader.capabilities;
+        for (const tok of rejectShapes) {
+            if (caps?.has(tok)) return false;
+        }
+        return true;
+    });
+    if (candidates.length === 0) return undefined;
+    return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 /** Fetch + parse a gallery item's full preset. Mirrors loadGalleryScene's
  *  fetch path (Phase 2 gmf_data column → Phase 1 PNG iTXt fallback) but
  *  skips the engine apply — we just want the data. Also returns the
@@ -151,6 +175,9 @@ export const NewSceneModal: React.FC = () => {
     const [interlaceOpen, setInterlaceOpen] = useState(false);
     const [shading, setShading] = useState<ShadingState>(SHADING_DEFAULTS);
     const [shadingOpen, setShadingOpen] = useState(false);
+    // Dirty-state confirm — when Create is clicked on a scene with unsaved
+    // changes, intercept with an inline confirmation. Cleared on modal open.
+    const [confirmDiscard, setConfirmDiscard] = useState(false);
 
     useEffect(() => {
         if (newSceneOpen) {
@@ -163,6 +190,7 @@ export const NewSceneModal: React.FC = () => {
             setInterlaceOpen(false);
             setShading(SHADING_DEFAULTS);
             setShadingOpen(false);
+            setConfirmDiscard(false);
         }
     }, [newSceneOpen, currentFormula]);
 
@@ -398,9 +426,100 @@ export const NewSceneModal: React.FC = () => {
             targetPreset.lights = sourceLights;
         }
 
+        // New scene starts with a clean slate: empty saved-cameras library,
+        // empty animation sequence + LFO array. lights[] travels from the
+        // base preset (formula default or scene) unless overridden by the
+        // shading copy's lighting group.
+        targetPreset.savedCameras = [];
+        targetPreset.animations = [];
+        targetPreset.sequence = { durationFrames: 0, tracks: {} };
+        targetPreset.duration = 0;
+
         loadScene({ preset: targetPreset });
+        // Reset animation runtime state (the loadScene path applies
+        // sequence + duration via setSequence, but doesn't touch currentFrame
+        // or isPlaying). Stop any in-flight playback and rewind.
+        try {
+            useAnimationStore.setState({ currentFrame: 0, isPlaying: false });
+        } catch { /* animationStore not available — non-fatal */ }
         closeNewScene();
     }, [pickedFormula, formulaScenePreset, geometry, interlace, shading, hybridBoxDisabled, interlaceDisabled, loadScene, closeNewScene]);
+
+    // ── Dice: full random scene composition ──────────────────────────────────
+    // Picks a random primary formula, copies shading from a different random
+    // formula, and ~50% of the time interleaves with another random valid
+    // secondary. Bypasses the wizard's local state — builds the preset
+    // directly and commits.
+    const SHADING_FEATURE_IDS_RANDOM = [
+        'lighting', 'materials', 'atmosphere', 'ao', 'reflections',
+        'volumetric', 'coloring', 'colorGrading', 'postEffects',
+    ] as const;
+    const doDiceCreate = useCallback(() => {
+        const primaryDef = pickRandomNative();
+        if (!primaryDef) {
+            console.warn('[NewSceneModal] no formulas available for dice');
+            return;
+        }
+        const shadingDef = pickRandomNative({ exclude: new Set([primaryDef.id]) });
+
+        // Build base preset from primary formula
+        const targetPreset: any = JSON.parse(JSON.stringify(primaryDef.defaultPreset ?? {}));
+        targetPreset.formula = primaryDef.id;
+        targetPreset.name = 'Untitled Scene';
+        targetPreset.version = 0;
+        targetPreset.savedCameras = [];
+        targetPreset.animations = [];
+        targetPreset.sequence = { durationFrames: 0, tracks: {} };
+        targetPreset.duration = 0;
+
+        // Shading — copy ALL groups from random source (no per-group opt-out
+        // on dice; the user chose chaos).
+        if (shadingDef) {
+            const sourceFeatures = (shadingDef.defaultPreset?.features ?? {}) as Record<string, any>;
+            const sourceLights = Array.isArray(shadingDef.defaultPreset?.lights)
+                ? shadingDef.defaultPreset.lights
+                : undefined;
+            const existingFeatures = (targetPreset.features ?? {}) as Record<string, any>;
+            targetPreset.features = { ...existingFeatures };
+            for (const featId of SHADING_FEATURE_IDS_RANDOM) {
+                if (sourceFeatures[featId]) {
+                    targetPreset.features[featId] = sourceFeatures[featId];
+                }
+            }
+            if (sourceLights) targetPreset.lights = sourceLights;
+        }
+
+        // Interlace — ~50% chance, only when primary supports it (not
+        // self-contained or modular). Secondary must also support it.
+        const primaryCaps = primaryDef.shader.capabilities;
+        const primaryCanInterlace =
+            !primaryCaps?.has('shape:self-contained') &&
+            !primaryCaps?.has('shape:modular');
+        if (primaryCanInterlace && Math.random() < 0.5) {
+            const secondaryDef = pickRandomNative({
+                exclude: new Set([primaryDef.id, ...(shadingDef ? [shadingDef.id] : [])]),
+                rejectShapes: ['shape:self-contained', 'shape:modular'],
+            });
+            if (secondaryDef) {
+                const existingFeatures = (targetPreset.features ?? {}) as Record<string, any>;
+                targetPreset.features = {
+                    ...existingFeatures,
+                    interlace: {
+                        ...(existingFeatures.interlace ?? {}),
+                        interlaceCompiled: true,
+                        interlaceEnabled: true,
+                        interlaceFormula: secondaryDef.id,
+                    },
+                };
+            }
+        }
+
+        loadScene({ preset: targetPreset });
+        try {
+            useAnimationStore.setState({ currentFrame: 0, isPlaying: false });
+        } catch { /* non-fatal */ }
+        closeNewScene();
+    }, [loadScene, closeNewScene]);
 
     // Create button gating: requires a formula, and any in-flight async
     // scene extractions (Formula or Shading) must have finished without error.
@@ -414,6 +533,33 @@ export const NewSceneModal: React.FC = () => {
         }
         return true;
     }, [pickedFormula, formulaSceneState, shading.source]);
+
+    // Dirty check — Create on a dirty scene first asks for confirmation so
+    // users don't discard unsaved work by accident. `paramUndoStack` grows
+    // when the user changes any param since the last load/save; loadPreset
+    // calls resetParamHistory which clears it, so the check below is "since
+    // last load/save".
+    const isSceneDirty = useEngineStore(s => ((s as any).paramUndoStack as unknown[] | undefined)?.length ? true : false);
+    // Tracks which Create variant was requested when the discard-confirm
+    // modal pops up, so the eventual "Discard & Create" button resumes the
+    // right action.
+    const [pendingAction, setPendingAction] = useState<'create' | 'dice'>('create');
+    const handleCreateClicked = useCallback(() => {
+        if (isSceneDirty) {
+            setPendingAction('create');
+            setConfirmDiscard(true);
+            return;
+        }
+        handleCreate();
+    }, [isSceneDirty, handleCreate]);
+    const handleDiceClicked = useCallback(() => {
+        if (isSceneDirty) {
+            setPendingAction('dice');
+            setConfirmDiscard(true);
+            return;
+        }
+        doDiceCreate();
+    }, [isSceneDirty, doDiceCreate]);
 
     if (!newSceneOpen) return null;
 
@@ -530,7 +676,14 @@ export const NewSceneModal: React.FC = () => {
                         Cancel
                     </button>
                     <button
-                        onClick={handleCreate}
+                        onClick={handleDiceClicked}
+                        title="Surprise me — random formula, shading, and maybe interlace"
+                        className="px-2 py-1 text-[12px] font-bold bg-neutral-800 hover:bg-neutral-700 text-cyan-300 rounded transition-colors"
+                    >
+                        🎲
+                    </button>
+                    <button
+                        onClick={handleCreateClicked}
                         disabled={!canCreate}
                         className="px-3 py-1 text-[10px] font-bold bg-cyan-600 hover:bg-cyan-500 disabled:bg-neutral-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded transition-colors"
                     >
@@ -538,6 +691,47 @@ export const NewSceneModal: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Discard-changes confirmation. Shown only when the current scene
+             *  has uncommitted param changes (paramUndoStack non-empty). User
+             *  can cancel and save first via File → Save, or discard and
+             *  proceed. We don't offer a Save-from-here button — keeps the
+             *  flow shallow and avoids re-implementing the existing save UI. */}
+            {confirmDiscard && (
+                <div
+                    className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-6"
+                    onClick={(e) => { if (e.target === e.currentTarget) setConfirmDiscard(false); }}
+                >
+                    <div className="bg-neutral-900 border border-amber-500/30 rounded-md shadow-2xl w-[420px] p-4 space-y-3">
+                        <h3 className="text-[12px] font-bold text-amber-400">
+                            Discard current scene?
+                        </h3>
+                        <p className="text-[11px] text-gray-300 leading-snug">
+                            The current scene has unsaved changes. Creating a new scene
+                            will discard them. Save first via <span className="text-gray-400">File → Save Scene</span> if you want to keep them.
+                        </p>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                                onClick={() => setConfirmDiscard(false)}
+                                className="px-3 py-1 text-[10px] font-medium text-gray-300 hover:bg-white/5 rounded transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setConfirmDiscard(false);
+                                    if (pendingAction === 'dice') doDiceCreate();
+                                    else handleCreate();
+                                    setPendingAction('create');
+                                }}
+                                className="px-3 py-1 text-[10px] font-bold bg-amber-600 hover:bg-amber-500 text-white rounded transition-colors"
+                            >
+                                Discard &amp; Create
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
