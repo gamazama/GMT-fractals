@@ -44,6 +44,7 @@
 
 import type { FractalDefinition } from '../../../../types/fractal';
 import type { FormulaAnalysis, GeneratedFormula, Result, DeFunction } from '../types';
+import { deriveImportCapabilities } from './capabilities';
 import { assignSlots } from './slots';
 import { buildRenameMap, applyRenames } from './rename';
 import { sanitizeId } from './wrapper';
@@ -861,19 +862,25 @@ ${indent(bodyLines.join('\n'), 4)}
         (defaultPreset.features as any).coreMath.iterations = iterParam.defaultValue;
     }
 
+    const perIterFunction = fixIntFloatArithmetic(functionGlsl).replace(/\r/g, '');
+    const perIterLoopBody = `${formulaName_GLSL}(z, dr, trap, c);`;
+    const perIterShaderGlsl = {
+        preamble,
+        loopInit,
+        function: perIterFunction,
+        loopBody: perIterLoopBody,
+        getDist,
+    };
     const definition: FractalDefinition = {
         id: safeId2 as any,
         name: formulaName,
         description: analysis.preprocessed.info,
         shader: {
-            preamble,
+            ...perIterShaderGlsl,
             preambleVars: preambleVars.length > 0 ? preambleVars : undefined,
-            loopInit,
-            function: fixIntFloatArithmetic(functionGlsl).replace(/\r/g, ''),
-            loopBody: `${formulaName_GLSL}(z, dr, trap, c);`,
-            getDist,
             // Intentionally omit selfContainedSDE — engine runs its outer loop
             // normally, driving per-iteration composability with features.
+            capabilities: deriveImportCapabilities(perIterShaderGlsl, 'per-iteration'),
         },
         parameters: uiParams,
         defaultPreset,

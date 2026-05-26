@@ -28,6 +28,7 @@
 
 import { parse } from '@shaderfrog/glsl-parser';
 import type { FractalDefinition } from '../../../../types/fractal';
+import { deriveImportCapabilities } from './capabilities';
 import type { FormulaAnalysis, GeneratedFormula, Result } from '../types';
 import { assignSlots } from './slots';
 import { buildRenameMap, applyRenames } from './rename';
@@ -280,18 +281,22 @@ export function emitSelfContained(
 
     // 7. Assemble FractalDefinition
     const safeId = sanitizeId(formulaId);
+    const shaderGlsl = {
+        preamble,
+        loopInit,
+        function: functionGlsl,
+        loopBody: wrapper.loopBody,
+        getDist: wrapper.getDist,
+    };
     const definition: FractalDefinition = {
         id: safeId as any,
         name: formulaName,
         description: analysis.preprocessed.info,
         shader: {
-            preamble,
+            ...shaderGlsl,
             preambleVars: preambleVars.length > 0 ? preambleVars : undefined,
-            loopInit,
-            function: functionGlsl,
-            loopBody: wrapper.loopBody,
-            getDist: wrapper.getDist,
             selfContainedSDE: true,
+            capabilities: deriveImportCapabilities(shaderGlsl, 'self-contained'),
         },
         parameters: fracParams,
         defaultPreset,
