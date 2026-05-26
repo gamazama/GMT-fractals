@@ -2,12 +2,13 @@
  * New Scene wizard — single-screen composer for starting fresh.
  *
  * Triggered from the File menu's "New Scene" item. Lets the user pick a
- * formula and (in future iterations) optional setup (geometry, interlace
- * secondary, shading copy). Commits via engineStore.loadScene routing
- * through the existing compile gate.
+ * formula plus optional Geometry / Interlace / Shading layers, then commits
+ * via engineStore.loadScene routing through the existing compile gate.
  *
- * Build status: SHELL milestone — Formula section only. Geometry, Interlace,
- * Shading sections come in follow-ups per dev/plans/new-scene-spec.md.
+ * Both Formula and Shading sections accept either a registered formula OR
+ * a gallery scene (curated + my-submissions) as their source — scenes get
+ * fetched + parsed on click and their full preset travels through. The
+ * dice button bypasses the form and rolls a fresh random composition.
  *
  * @see dev/plans/new-scene-spec.md
  */
@@ -98,6 +99,11 @@ const SHADING_GROUP_FEATURES: Record<keyof ShadingGroups, string[]> = {
     atmosphere: ['atmosphere', 'volumetric'],
     color: ['coloring', 'colorGrading', 'postEffects'],
 };
+
+/** Flat list of every shading feature id — used by the dice path which copies
+ *  all groups unconditionally. Derived from SHADING_GROUP_FEATURES so the two
+ *  stay in sync automatically. */
+const ALL_SHADING_FEATURE_IDS: readonly string[] = Object.values(SHADING_GROUP_FEATURES).flat();
 
 /** Pick a uniformly random formula def from the registry, excluding Modular
  *  (graph-compiled, no formula params), Workshop launcher, anything in
@@ -362,8 +368,7 @@ export const NewSceneModal: React.FC = () => {
         // the compile picks up shading-side compile-flagged toggles in the
         // same pass.
         const shadingOverrides: Record<string, any> = {};
-        let sourceLights: any[] | undefined = undefined;
-
+        let sourceLights: any[] | undefined;
         let sourceFeatures: Record<string, any> | undefined;
         let sourceAllLights: any[] | undefined;
         if (shading.source) {
@@ -450,10 +455,6 @@ export const NewSceneModal: React.FC = () => {
     // formula, and ~50% of the time interleaves with another random valid
     // secondary. Bypasses the wizard's local state — builds the preset
     // directly and commits.
-    const SHADING_FEATURE_IDS_RANDOM = [
-        'lighting', 'materials', 'atmosphere', 'ao', 'reflections',
-        'volumetric', 'coloring', 'colorGrading', 'postEffects',
-    ] as const;
     const doDiceCreate = useCallback(() => {
         const primaryDef = pickRandomNative();
         if (!primaryDef) {
@@ -481,7 +482,7 @@ export const NewSceneModal: React.FC = () => {
                 : undefined;
             const existingFeatures = (targetPreset.features ?? {}) as Record<string, any>;
             targetPreset.features = { ...existingFeatures };
-            for (const featId of SHADING_FEATURE_IDS_RANDOM) {
+            for (const featId of ALL_SHADING_FEATURE_IDS) {
                 if (sourceFeatures[featId]) {
                     targetPreset.features[featId] = sourceFeatures[featId];
                 }
@@ -581,7 +582,7 @@ export const NewSceneModal: React.FC = () => {
                     </button>
                 </div>
 
-                {/* Body — composer sections (more sections to come) */}
+                {/* Body — composer sections */}
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                     <section>
                         <div className="flex items-center justify-between mb-2">
@@ -933,7 +934,7 @@ const ShadingSection: React.FC<ShadingSectionProps> = ({
                                 <span className="text-[10px] text-gray-300">
                                     {state.source.kind === 'scene' && state.source.isLoading
                                         ? `Loading ${state.source.label}…`
-                                        : `Source: ${state.source.kind === 'formula' ? state.source.label : state.source.label}`}
+                                        : `Source: ${state.source.label}`}
                                 </span>
                                 <button
                                     onClick={() => setState(s => ({ ...s, source: undefined }))}
