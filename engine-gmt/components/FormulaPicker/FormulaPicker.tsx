@@ -30,7 +30,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import { registry } from '../../engine/FractalRegistry';
 import type { FormulaType } from '../../types';
-import { CheckIcon, CloseIcon, CubeIcon, NetworkIcon, CodeIcon } from '../../../components/Icons';
+import { CheckIcon, CloseIcon, CubeIcon, DiceIcon, NetworkIcon, CodeIcon } from '../../../components/Icons';
 import { LazyThumbnail } from './LazyThumbnail';
 import { useRenderPause } from './useRenderPause';
 import {
@@ -225,10 +225,12 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                 const name = def.name.toLowerCase();
                 const idLow = def.id.toLowerCase();
                 const cat = FORMULA_TO_CATEGORY.get(def.id) ?? '';
+                const desc = (def.description ?? '').toLowerCase();
                 let score = 0;
                 if (name.startsWith(q)) score += 100;
                 else if (name.includes(q)) score += 60;
                 if (idLow.includes(q)) score += 40;
+                if (desc.includes(q)) score += 25;
                 if (cat.includes(q)) score += 10;
                 if (score > 0) scored.push({ id: def.id, score });
             }
@@ -513,16 +515,40 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             searching, activeCat, stepIndex, commitId, openSearchWithChar,
         ]);
 
+        // ── Random pick ──────────────────────────────────────────────────────
+        // Pool is every registered formula except the Modular graph-editor
+        // entry and anything the caller disabled. Drawn from the registry
+        // (not the current pane) so the dice can surface formulas from
+        // categories the user isn't currently viewing.
+        const pickRandom = useCallback(() => {
+            const pool: string[] = [];
+            for (const def of registry.getAll()) {
+                if (def.id === 'Modular') continue;
+                if (disabledIds?.has(def.id)) continue;
+                pool.push(def.id);
+            }
+            if (pool.length === 0) return;
+            const pick = pool[Math.floor(Math.random() * pool.length)];
+            // Switch to the cat containing the pick so the card is visible
+            // after commit. Matters for the wizard variant where the picker
+            // stays open — the existing focusedIndex / scrollIntoView
+            // effects then chain off the updated `value` prop to scroll the
+            // card into view. No-op when the cat is already active.
+            const containing = cats.find(
+                c => (c.kind === 'native' || c.kind === 'custom') && c.items.includes(pick),
+            );
+            if (containing && containing.id !== activeCat) {
+                setActiveCat(containing.id);
+                setQuery('');
+            }
+            commitId(pick);
+        }, [disabledIds, commitId, cats, activeCat]);
+
         // ── Imperative ref ───────────────────────────────────────────────────
         useImperativeHandle(ref, () => ({
             focusSearch: () => { setSearchVisible(true); searchRef.current?.focus(); },
-            selectRandom: () => {
-                const enabled = paneItems.filter(id => !disabledIds?.has(id));
-                if (enabled.length === 0) return;
-                const pick = enabled[Math.floor(Math.random() * enabled.length)];
-                commitId(pick);
-            },
-        }), [paneItems, disabledIds, commitId]);
+            selectRandom: pickRandom,
+        }), [pickRandom]);
 
         // ── Body ─────────────────────────────────────────────────────────────
         const body = (
@@ -556,6 +582,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                 activeCatObj={activeCatObj ?? null}
                 viewMode={viewMode}
                 onViewMode={updateViewMode}
+                onPickRandom={pickRandom}
                 searchVisible={searchVisible}
                 onToggleSearch={() => {
                     setSearchVisible(v => {
@@ -781,6 +808,7 @@ interface PickerBodyProps {
     isSceneGroupActive: boolean;
     viewMode: 'grid' | 'list';
     onViewMode: (v: 'grid' | 'list') => void;
+    onPickRandom: () => void;
     searchVisible: boolean;
     onToggleSearch: () => void;
     searching: boolean;
@@ -820,6 +848,14 @@ function PickerBody(p: PickerBodyProps) {
                     )}
                 </div>
                 <div className="flex items-center gap-1">
+                    <button
+                        onClick={p.onPickRandom}
+                        aria-label="Pick a random formula"
+                        title="Pick a random formula"
+                        className="px-1.5 py-1 rounded border text-gray-500 hover:text-cyan-300 hover:border-cyan-500/40 bg-black/40 border-white/10 transition-colors flex items-center justify-center"
+                    >
+                        <DiceIcon />
+                    </button>
                     <button
                         onClick={p.onToggleSearch}
                         aria-label="Toggle search"
