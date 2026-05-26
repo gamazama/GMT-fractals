@@ -4,6 +4,16 @@ Chronological log of significant changes during the v0.9.5 development cycle (en
 
 ## 2026-05-26
 
+### Audio + Drawing panels moved to the left dock
+
+**User-facing**
+- Toggling **Enable Audio Reactivity** or **Drawing Mode** in the system menu now reveals the Audio / Drawing panel on the **left** dock (was right). Same flow as the Engine Config panel: the dock surfaces and the tab activates automatically.
+- Right dock stays focused on authoring panels (Formula / Scene / Shader / Gradient / Quality / Light); left dock gathers the modal tools that overlay them (Engine Config, View Manager, Graph, Audio, Drawing).
+
+**Where**
+- Manifest: [`engine-gmt/panels.ts`](../engine-gmt/panels.ts) — Audio + Drawing changed to `dock: 'left'`.
+- Reveal: [`engine-gmt/topbar.tsx`](../engine-gmt/topbar.tsx) — `onToggle` for menu-bound features now calls `togglePanel('Audio' | 'Drawing', true)` after activating.
+
 ### Unified formula picker
 
 **User-facing**

@@ -449,8 +449,8 @@ export const GmtPanels: PanelManifest = [
     // and the collapsible ModulationList of all active bindings.
     {
         id: 'Audio',
-        dock: 'right',
-        order: 70,
+        dock: 'left',
+        order: 30,
         component: 'panel-audio',
         showIf: 'audio.isEnabled',
         helpId: 'panel.audio',
@@ -459,8 +459,8 @@ export const GmtPanels: PanelManifest = [
     // Drawing — visible only while drawing mode is on.
     {
         id: 'Drawing',
-        dock: 'right',
-        order: 80,
+        dock: 'left',
+        order: 40,
         component: 'panel-drawing',
         showIf: 'drawing.enabled',
         helpId: 'panel.drawing',

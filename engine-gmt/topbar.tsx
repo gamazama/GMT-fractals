@@ -465,6 +465,18 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
                 const cur = !!slice?.[feat.toggleParam];
                 const setter = s[`set${feat.id.charAt(0).toUpperCase()}${feat.id.slice(1)}`];
                 if (typeof setter === 'function') setter({ [feat.toggleParam]: !cur });
+                // When activating a feature that owns a dedicated panel
+                // (Audio, Drawing), surface its panel on the left dock —
+                // same pattern as the Engine Config reveal above. Other
+                // menuConfig features (webcam overlay, etc.) don't have
+                // panels, so this map intentionally only covers the two.
+                if (!cur) {
+                    const panelId =
+                        feat.id === 'audio'   ? 'Audio'   :
+                        feat.id === 'drawing' ? 'Drawing' :
+                        null;
+                    if (panelId) s.togglePanel?.(panelId, true);
+                }
             },
         });
     });
