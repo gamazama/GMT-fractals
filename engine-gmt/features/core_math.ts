@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { FeatureDefinition } from '../engine/FeatureSystem';
 import { registry } from '../engine/FractalRegistry';
+import { pairHasCapability } from '../engine/compat';
 import { MAX_MODULAR_PARAMS } from '../../data/constants';
 import { compileGraph } from '../utils/GraphCompiler';
 import { FormulaType } from '../types';
@@ -198,11 +199,17 @@ export const CoreMathFeature: FeatureDefinition = {
         // Without this check, interlacing a non-CP primary (e.g. Mandelbulb) with a
         // CP-aware secondary (e.g. MengerSponge) would emit cp_* writes from the
         // secondary's body without the corresponding engine-side declarations.
+        // Single source of truth via the capability protocol — see
+        // engine-gmt/engine/compat/pairHasCapability.ts. SDFShaderBuilder's local
+        // pairSupportsCP helper delegates to the same function; the two-file
+        // mirror flagged in ADR-0052 is collapsed.
         const interlaceState = config.interlace as InterlaceState | undefined;
         const interlaceDef = interlaceState?.interlaceCompiled && interlaceState.interlaceFormula
             ? registry.get(interlaceState.interlaceFormula as FormulaType)
             : undefined;
-        const pairSupportsCuttingPlane = !!def?.shader.supportsCuttingPlane || !!interlaceDef?.shader.supportsCuttingPlane;
+        const pairSupportsCuttingPlane = def
+            ? pairHasCapability(def, interlaceDef, 'estimator:cutting-plane')
+            : false;
 
         // Generate optimized getDist based on Quality Settings
         // Default to 0 (Analytic) if missing

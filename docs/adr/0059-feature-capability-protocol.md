@@ -95,7 +95,7 @@ Phases per [dev/plans/capability-protocol.md](../../plans/capability-protocol.md
 - **P3**: AutoFeaturePanel + Engine panel + CompilableFeatureSection consume `evaluateCompat`.
 - **P4**: interlace dropdown filters via protocol (closes the bug where self-contained formulas appear).
 - **P5/P6**: V4/V3 Workshop emitters declare capabilities.
-- **P7**: CP mirror collapse via `pairHasCapability` (closes ADR-0052 debt).
+- **P7**: CP mirror collapse via `pairHasCapability` (collapses the inline two-file MIRROR comment in `SDFShaderBuilder.ts` ↔ `core_math.ts`).
 - **P8**: remove shim, deprecate the four legacy `shader.*` flags.
 
 ## See also
@@ -104,5 +104,4 @@ Phases per [dev/plans/capability-protocol.md](../../plans/capability-protocol.md
 - [dev/plans/capability-protocol-p1-classification.md](../../plans/capability-protocol-p1-classification.md) — per-formula capability classification
 - [dev/plans/capability-protocol-latent-fixes.md](../../plans/capability-protocol-latent-fixes.md) — pre-P0 latent issue fixes
 - [dev/docs/gmt/35_Capability_Protocol.md](../gmt/35_Capability_Protocol.md) — reference doc (vocabulary, examples, semantics)
-- [ADR-0052](./0052-cutting-plane-cross-formula-pairing.md) — CP mirror coupling resolved by P7
 - [ADR-0048](./0048-formula-type-literal-union-vs-registry.md) — FormulaType / registry drift

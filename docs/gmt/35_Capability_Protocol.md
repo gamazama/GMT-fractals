@@ -211,5 +211,4 @@ The harness:
 - [dev/plans/capability-protocol-p1-classification.md](../../plans/capability-protocol-p1-classification.md) — per-formula classification of the three new tokens
 - [dev/plans/capability-protocol-latent-fixes.md](../../plans/capability-protocol-latent-fixes.md) — pre-P0 latent issue fixes
 - [ADR-0059](../adr/0059-feature-capability-protocol.md) — decision record
-- [ADR-0052](../adr/0052-cutting-plane-cross-formula-pairing.md) — CP mirror coupling (resolved in P7)
 - `docs/research/v4-rethink-prompt.md` — context on why V3 imports silently corrupt

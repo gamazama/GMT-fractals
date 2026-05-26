@@ -17,17 +17,23 @@ import {
   buildInterlaceLoopGLSL,
   INTERLACE_UNIFORM_NAMES,
 } from '../features/interlace/glslRewriter';
+import { pairHasCapability } from './compat';
 
 // ============================================================================
 // Cutting-plane DE shared accumulators
 // ============================================================================
-// Engine-provided globals for formulas with shader.supportsCuttingPlane.
-// Declared at top-level alongside the formula's preamble. Initialized in
-// buildIterationLoop. When estimator===5, getDist returns abs(cp_dmin).
+// Engine-provided globals for formulas with the `estimator:cutting-plane`
+// capability. Declared at top-level alongside the formula's preamble.
+// Initialized in buildIterationLoop. When estimator===5, getDist returns
+// abs(cp_dmin).
 //
-// MIRROR: keep in sync with `CP_PREAMBLE` / `CP_INIT` in `features/core_math.ts`.
-// Both code paths (mesh export here, main render there) must produce the same
-// shape of cp_* declarations + initialization for parity.
+// MIRROR: keep the GLSL string contents of CP_PREAMBLE_GLOBALS / CP_INIT in
+// sync with `CP_PREAMBLE` / `CP_INIT` in `features/core_math.ts`. The DECISION
+// of when to emit them (pair-aware) is now single-sourced via the capability
+// protocol's pairHasCapability — see pairSupportsCP below. P7 of the
+// capability-protocol initiative collapses the per-file decision logic;
+// only the GLSL string content remains duplicated and that's acceptable
+// (mesh-export and main-render embed it differently anyway).
 const CP_PREAMBLE_GLOBALS = `
 // --- Cutting-plane DE accumulators (engine-provided) ---
 float cp_dmin;
@@ -200,9 +206,12 @@ function buildInterlaceGLSL(interlace: MeshInterlaceConfig): { preamble: string;
 }
 
 /** True when the primary OR interlace secondary supports cutting-plane DE.
- *  Either side writing to cp_* requires engine-side declarations + init. */
+ *  Either side writing to cp_* requires engine-side declarations + init.
+ *  Delegates to the canonical capability-protocol helper so this mesh-export
+ *  path and the main-render path in core_math.ts share one source of truth
+ *  (resolves the two-file mirror flagged in ADR-0052). */
 function pairSupportsCP(def: FractalDefinition, interlace?: MeshInterlaceConfig): boolean {
-  return !!def.shader.supportsCuttingPlane || !!interlace?.definition.shader.supportsCuttingPlane;
+  return pairHasCapability(def, interlace?.definition, 'estimator:cutting-plane');
 }
 
 /** Build the common formula iteration block */
