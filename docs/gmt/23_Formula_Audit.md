@@ -212,6 +212,24 @@ All polyhedra formulas follow a consistent pattern: icosahedral/octahedral symme
 
 ---
 
+## New Formulas Audit (2026-05-26)
+
+### SineJulia3D — OK
+
+Port of amoser's "Sine Fractal 3D" Shadertoy (2026, CC-BY-NC-SA 3.0). Family: 3D extension of complex `s·sin(z)+c`, with `y` playing the imaginary role via `sinh/cosh`. Discussion thread: fractalforums.org topic 5591 (Pupukuusikko developed an independent DE on the same thread).
+
+| Aspect | Status |
+|---|---|
+| `preambleVars` | ✅ (2 vars: `sj_dz2`, `sj_cWrap`) |
+| `getDist` | ✅ Custom: `0.25 · scale · inverseSqrt(max(dz²))` (amoser's closed form) |
+| Estimator | N/A — overridden by custom `getDist` |
+| `usesSharedRotation` | No (own per-axis rotation in `loopInit`, matching amoser exactly) |
+| Pre-iter transforms | Sphere inversion + 3-axis rotation in `loopInit` |
+| Bailout sensitivity | Default preset uses `escape: 1e10`; sinh-driven z growth blows past standard bailout otherwise |
+| Interlace / Hybrid | Available (`shape:per-iteration`) but DE won't combine cleanly; treat as solo |
+
+Scope of port: formula + DE + framing transforms only. The Shadertoy's shading stack (Minnaert diffuse, mini-probe GI, screen-space SSS, halation, ACES, FXAA/QCAA) is NOT ported — that's deferred for a separate material/post-pass pass.
+
 ## Formulas NOT Needing Changes
 
 These are correct, well-described, and already use good parameter patterns:

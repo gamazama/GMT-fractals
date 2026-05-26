@@ -2,6 +2,30 @@
 
 Chronological log of significant changes during the v0.9.5 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-05-26
+
+### New formula: Sine Julia 3D
+
+**User-facing**
+- New formula in the gallery (Featured row and Hybrids & Experiments category): **Sine Julia 3D**. Julia sets of a 3D extension of `s·sin(z)+c` — `y` plays the imaginary role through `sinh/cosh`. Many parameter combinations produce Kleinian-like limit-set forms.
+- Four parameters: **Scale**, **Inv. Center** (sphere-inversion center, π-scaled vec3), **Inv. Radius**, **Pre-Rotation** (per-axis xy/yz/xz angles, applied once before iteration).
+- Default preset uses Julia mode on with C at the origin; wiggle Julia X/Y/Z and the inversion center to find the interesting shapes. Default 12 iterations.
+
+**Attribution**
+- Formula + distance estimator are ported from amoser's "Sine Fractal 3D" Shadertoy (2026), CC-BY-NC-SA 3.0 (Shadertoy default). Family discussion thread: [fractalforums.org topic 5591](https://fractalforums.org/index.php?topic=5591.0), where Pupukuusikko developed an independent DE on the same family.
+- This port covers the formula, the DE (`0.25 · scale · inverseSqrt(max(dz²))`), and the framing transforms (sphere inversion + per-axis rotation). The Shadertoy's shading stack (Minnaert diffuse, screen-space SSS, mini-probe GI, halation, ACES, FXAA/QCAA) is **not** ported — GMT renders this through its standard lighting pipeline.
+
+**Implementation**
+- New [`engine-gmt/formulas/SineJulia3D.ts`](../engine-gmt/formulas/SineJulia3D.ts). Per-iter body computes `z' = scale · vec3(sin(x)cosh(y), cos(x)sinh(y)cos(z), sin(z)cosh(y)) + c` then multiplies a running `dz²` by amoser's closed-form `S = scale²(sinh²y(2+A−B) + A+B)/3` with `max(S, 0.5)` to guard against inversion overshoot. `dr` carries `sqrt(max(dz²))` across iters; custom `getDist` returns `0.25 · scale / dr`. `preambleVars` lists `sj_dz2`, `sj_cWrap` for interlace correctness.
+- Sphere inversion and 3-axis per-plane rotation run once in `loopInit`, matching amoser exactly. The Julia constant is wrapped into `[-π, π]` once via `mod`.
+- Registered in [`types/common.ts`](../engine-gmt/types/common.ts) (FormulaType union), [`formulas/index.ts`](../engine-gmt/formulas/index.ts) (loading-screen list, Featured row after Claude), [`formulas/categories.ts`](../engine-gmt/formulas/categories.ts) (Hybrids & Experiments).
+- Audit entry: [docs/gmt/23_Formula_Audit.md](gmt/23_Formula_Audit.md#new-formulas-audit-2026-05-26).
+
+**Caveats**
+- Default preset uses `escape: 1e10` so the loop always runs all 12 iterations — sinh-driven z growth would otherwise trip the standard bailout. Lowering `coloring.escape` will produce degenerate geometry.
+- Capability is `shape:per-iteration` so Hybrid and Interlace will be available in the UI, but the custom DE doesn't combine cleanly with other formulas — treat as solo.
+- Amoser's 13 named parameter presets are not ported; the zero-defaults reproduce his first preset. Importing the rest is a mechanical follow-up.
+
 ## 2026-05-24
 
 ### Send Feedback from the Help menu

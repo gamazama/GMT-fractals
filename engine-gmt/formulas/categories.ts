@@ -89,7 +89,8 @@ export const PREDEFINED_CATEGORIES = [
             'JuliaMorph',
             'MandelTerrain',
             'MandelBolic',
-            'Claude'
+            'Claude',
+            'SineJulia3D',
         ]
     },
     {
