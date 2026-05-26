@@ -194,13 +194,13 @@ The harness:
 2. Invokes `evaluateCompat` for each formula as primary (no secondary, all features considered enabled), filters to `status !== 'ok'` rows, and serializes them as JSONL sorted by `(formulaId, featureId)`.
 3. Diffs against the committed snapshot. Exits non-zero on drift, showing the first 5 differing lines.
 
-**Snapshot scope is intentionally narrow for P0**: per-formula without secondary. P2 (when features start declaring `requires`) and P4 (interlace dropdown fix) extend it.
+**Snapshot scope**: per-formula × no-secondary, covering BOTH feature-level requires AND section-level requires declared in `panels.ts` compilable items. Section-level rows carry a `sectionKey` field (the compileParam, or label fallback) to distinguish them from feature-level rows when one feature has multiple compilable sections.
 
 **No shader compile check**: real shader-compile coverage requires WebGL infrastructure (the queued port of stable's `test:baseline`/`test:hybrid`/`test:interlace` harnesses). The structural check is a cheap proxy — catches missing shader fields and malformed capability declarations.
 
 ## Open / future
 
-- **Per-pair snapshot** (P4 or later): extend the harness to snapshot `(primary, secondary)` matrix for interlace cases.
+- **Per-pair snapshot**: extend the harness to snapshot `(primary, secondary)` matrix for interlace cases (currently only primary-side is covered).
 - **Shader-compile regression net**: port of stable's headless harnesses. Tracked separately from this protocol.
 - **`tabConfig.condition`**: existing but unused field on `FeatureTabConfig` (engine/FeatureSystem.ts:159). P8 either wires it via `evaluateCompat` or removes it.
 - **Sunsetting legacy flags**: P8 removes `shader.{selfContainedSDE, usesSharedRotation, supportsCuttingPlane}` from `FractalDefinition` once all consumers read from `capabilities`. GMF format stash also pivots to capability set.

@@ -1,3 +1,7 @@
+{"formulaId":"JuliaMorph","featureId":"geometry","sectionKey":"Hybrid Box","status":"disabled","reasons":["rejected by primary capability: shape:self-contained"]}
+{"formulaId":"JuliaMorph","featureId":"geometry","sectionKey":"preRotMaster","status":"disabled","reasons":["rejected by primary capability: shape:self-contained"]}
 {"formulaId":"JuliaMorph","featureId":"interlace","status":"disabled","reasons":["rejected by primary capability: shape:self-contained"]}
+{"formulaId":"MandelTerrain","featureId":"geometry","sectionKey":"Hybrid Box","status":"disabled","reasons":["rejected by primary capability: shape:self-contained"]}
+{"formulaId":"MandelTerrain","featureId":"geometry","sectionKey":"preRotMaster","status":"disabled","reasons":["rejected by primary capability: shape:self-contained"]}
 {"formulaId":"MandelTerrain","featureId":"interlace","status":"disabled","reasons":["rejected by primary capability: shape:self-contained"]}
 {"formulaId":"Modular","featureId":"interlace","status":"disabled","reasons":["rejected by primary capability: shape:modular"]}
