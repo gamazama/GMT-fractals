@@ -41,7 +41,17 @@ import type { SceneGroup, SceneItem } from './sceneGroups';
  *  the next page. */
 const CURATED_PAGE_SIZE = 24;
 
-export function useSceneGroups(): SceneGroup[] {
+export interface UseSceneGroupsOptions {
+    /** Override the default per-item onSelect. Receives the underlying
+     *  GalleryItem (with `gmf_data` pre-fetched via the owner-scoped helper
+     *  for non-approved my-submission rows). Default — when omitted — is
+     *  `loadGalleryScene(item)`: the full scene load path used by the main
+     *  formula picker. Wizards override to repurpose the scene browse for
+     *  e.g. shading-source extraction. */
+    onPick?: (item: GalleryItem) => void | Promise<void>;
+}
+
+export function useSceneGroups(opts: UseSceneGroupsOptions = {}): SceneGroup[] {
     const profile = useAuthStore(s => s.profile);
 
     const [curated, setCurated] = useState<GalleryItem[]>([]);
@@ -121,7 +131,24 @@ export function useSceneGroups(): SceneGroup[] {
         return () => { cancelled = true; };
     }, [profile?.id]);
 
+    const pickHandler = opts.onPick;
     return useMemo<SceneGroup[]>(() => {
+        // Default path: full scene load via loadGalleryScene. Override path:
+        // call caller's onPick with the fetched GalleryItem. The pre-fetch
+        // of gmf_data for non-approved my-submission rows applies to BOTH
+        // paths — without it, downstream code would see gmf_data: null.
+        const pickCurated = (item: GalleryItem) => pickHandler
+            ? pickHandler(item)
+            : loadGalleryScene(item);
+        const pickMySub = async (item: GalleryItem) => {
+            let effective = item;
+            if (!item.gmf_data && profile?.id) {
+                const gmf = await getMySubmissionData(item.id, profile.id);
+                effective = { ...item, gmf_data: gmf };
+            }
+            return pickHandler ? pickHandler(effective) : loadGalleryScene(effective);
+        };
+
         const curatedGroup: SceneGroup = {
             id: 'curated',
             name: 'Curated Gallery',
@@ -136,7 +163,7 @@ export function useSceneGroups(): SceneGroup[] {
                 name: item.title,
                 description: item.description ?? undefined,
                 thumbnailUrl: item.thumbnail_url,
-                onSelect: () => loadGalleryScene(item),
+                onSelect: () => pickCurated(item),
             })),
         };
 
@@ -160,17 +187,7 @@ export function useSceneGroups(): SceneGroup[] {
                     : item.visibility === 'private'
                         ? { text: 'private', className: 'bg-purple-500/20 text-purple-300' }
                         : undefined,
-                onSelect: async () => {
-                    // For pending / rejected rows, `getGalleryItem` (used
-                    // inside loadGalleryScene) won't return the row because
-                    // it filters `status = 'approved'`. Pre-fetch via the
-                    // owner-scoped helper and inject before delegating.
-                    if (!item.gmf_data && profile?.id) {
-                        const gmf = await getMySubmissionData(item.id, profile.id);
-                        return loadGalleryScene({ ...item, gmf_data: gmf });
-                    }
-                    return loadGalleryScene(item);
-                },
+                onSelect: () => pickMySub(item),
             })),
         };
 
@@ -180,5 +197,6 @@ export function useSceneGroups(): SceneGroup[] {
         loadMoreCurated,
         submissions, submissionsLoading, submissionsError,
         profile?.id,
+        pickHandler,
     ]);
 }
