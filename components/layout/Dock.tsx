@@ -187,10 +187,22 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                             stable so toggling a feature off doesn't shift
                             content below upward — the freed space appears
                             as an empty bottom spacer instead, which is
-                            GC'd once it scrolls out of view. */}
-                        <ScrollSpaceReserver key={activeTabId}>
-                            <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />
-                        </ScrollSpaceReserver>
+                            GC'd once it scrolls out of view.
+                            Bespoke `component:` panels (FlowEditor, etc.)
+                            own their own layout and need to fill the dock
+                            height — the reserver's auto-measured wrapper
+                            would collapse them to 0 px, which leaves
+                            ReactFlow's nodes stuck at `visibility:hidden`
+                            (it never gets a non-zero container to measure
+                            against). Bypass the reserver in that case. */}
+                        {(() => {
+                            const def = getPanelDefinition(activeTabId);
+                            const isBespoke = !!def?.component;
+                            const router = <PanelRouter activeTab={activeTabId} state={useEngineStore.getState()} actions={useEngineStore.getState() as any} onSwitchTab={togglePanel as any} />;
+                            return isBespoke
+                                ? <div className="h-full">{router}</div>
+                                : <ScrollSpaceReserver key={activeTabId}>{router}</ScrollSpaceReserver>;
+                        })()}
                      </BenchProfiler>
                 ) : (
                     <div className="flex h-full items-center justify-center text-gray-700 text-xs italic">
