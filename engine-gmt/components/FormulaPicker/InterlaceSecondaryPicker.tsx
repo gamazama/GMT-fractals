@@ -23,6 +23,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { registry } from '../../engine/FractalRegistry';
 import type { Capability } from '../../types/capabilities';
 import { FormulaPicker } from './FormulaPicker';
+import { NO_SPECIAL_ENTRIES } from './pickerCategories';
 import { ChevronDown } from '../../../components/Icons';
 
 const REJECTED_CAPS: Capability[] = ['shape:self-contained', 'shape:modular'];
@@ -31,10 +32,11 @@ export interface InterlaceSecondaryPickerProps {
     value: string;
     onChange: (v: string) => void;
     label: string;
+    disabled?: boolean;
 }
 
 export const InterlaceSecondaryPicker: React.FC<InterlaceSecondaryPickerProps> = ({
-    value, onChange, label,
+    value, onChange, label, disabled = false,
 }) => {
     const [open, setOpen] = useState(false);
     const [rect, setRect] = useState<DOMRect | null>(null);
@@ -74,7 +76,7 @@ export const InterlaceSecondaryPicker: React.FC<InterlaceSecondaryPickerProps> =
 
     return (
         <>
-            <div className="flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 w-full mb-px">
+            <div className={`flex items-stretch bg-white/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-white/5 w-full mb-px ${disabled ? 'opacity-30 pointer-events-none' : ''}`}>
                 <div className="flex items-center gap-2 px-2 min-w-0 shrink-0">
                     <label className="text-[10px] font-medium tracking-tight select-none truncate text-gray-400">
                         {label}
@@ -99,7 +101,7 @@ export const InterlaceSecondaryPicker: React.FC<InterlaceSecondaryPickerProps> =
                     variant="popover"
                     anchorRect={rect}
                     value={value}
-                    specialEntries={[]}
+                    specialEntries={NO_SPECIAL_ENTRIES}
                     disabledIds={disabledIds}
                     disabledReason={disabledReason}
                     onCommit={(c) => {

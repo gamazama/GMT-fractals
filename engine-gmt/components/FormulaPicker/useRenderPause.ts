@@ -16,7 +16,12 @@ export function useRenderPause(active: boolean = true): void {
         const wasPaused = useEngineStore.getState().isPaused;
         useEngineStore.getState().setIsPaused(true);
         return () => {
-            useEngineStore.getState().setIsPaused(wasPaused);
+            // Only restore if our pause is still in effect — if the user
+            // (or another consumer) flipped pause while the picker was
+            // open, respect their choice rather than overriding it.
+            if (useEngineStore.getState().isPaused) {
+                useEngineStore.getState().setIsPaused(wasPaused);
+            }
         };
     }, [active]);
 }

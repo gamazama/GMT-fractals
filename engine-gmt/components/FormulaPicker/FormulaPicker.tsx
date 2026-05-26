@@ -34,7 +34,8 @@ import { CheckIcon, CloseIcon, CubeIcon, NetworkIcon, CodeIcon } from '../../../
 import { LazyThumbnail } from './LazyThumbnail';
 import { useRenderPause } from './useRenderPause';
 import {
-    NATIVE_CATEGORIES, FORMULA_TO_CATEGORY, type SpecialEntry,
+    NATIVE_CATEGORIES, FORMULA_TO_CATEGORY, DEFAULT_SPECIAL_ENTRIES,
+    type SpecialEntry,
 } from './pickerCategories';
 import type { SceneGroup, SceneItem } from './sceneGroups';
 
@@ -75,8 +76,7 @@ export interface FormulaPickerProps {
     /** Caller-driven extra groups (Scenes — curated gallery / my submissions).
      *  Each group appears in the sidebar's "Scenes" section. Clicking an
      *  item fires its `onSelect`; the picker closes itself afterwards.
-     *  When omitted, the picker shows "coming soon" placeholders so the
-     *  sidebar slot is still visible. */
+     *  When omitted, the Scenes section is hidden entirely. */
     extraGroups?: SceneGroup[];
 
     headerSlot?: React.ReactNode;
@@ -97,19 +97,13 @@ const VIEW_MODE_LS_KEY = 'gmt.formulaPicker.viewMode';
 interface NativeCat { kind: 'native';  id: string; name: string; items: string[]; }
 interface SpecialCat { kind: 'special'; id: string; /* 'modular' | 'workshop' */ }
 interface CustomCat { kind: 'custom'; id: 'custom'; name: string; items: string[]; }
-interface PlaceholderCat {
-    kind: 'placeholder';
-    id: string;
-    name: string;
-    description: string;
-}
 interface SceneGroupCat {
     kind: 'scene-group';
     id: string;
     name: string;
     group: SceneGroup;
 }
-type Cat = NativeCat | SpecialCat | CustomCat | PlaceholderCat | SceneGroupCat;
+type Cat = NativeCat | SpecialCat | CustomCat | SceneGroupCat;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
@@ -123,7 +117,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             value,
             onCommit,
             onClose,
-            specialEntries = ['modular', 'workshop'],
+            specialEntries = DEFAULT_SPECIAL_ENTRIES,
             disabledIds,
             disabledReason,
             autoFocusSearch = false,
@@ -181,27 +175,12 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             // Special launchers.
             for (const s of specialEntries) result.push({ kind: 'special', id: s });
 
-            // Scenes — caller-driven via `extraGroups`. When the caller
-            // supplies groups (e.g. via useSceneGroups()), each group gets
-            // a sidebar entry under the "Scenes" section. Falls back to
-            // placeholder entries when no groups are provided so the
-            // sidebar layout is still visible.
-            if (specialEntries.length > 0) {
-                if (extraGroups && extraGroups.length > 0) {
-                    for (const g of extraGroups) {
-                        result.push({ kind: 'scene-group', id: g.id, name: g.name, group: g });
-                    }
-                } else {
-                    result.push({
-                        kind: 'placeholder', id: 'scenes-gallery',
-                        name: 'Curated Gallery',
-                        description: 'Pass `extraGroups` to populate this — see useSceneGroups().',
-                    });
-                    result.push({
-                        kind: 'placeholder', id: 'scenes-submissions',
-                        name: 'My Submissions',
-                        description: 'Pass `extraGroups` to populate this — see useSceneGroups().',
-                    });
+            // Scenes — caller-driven via `extraGroups`. Each group gets a
+            // sidebar entry under the "Scenes" section. Section is hidden
+            // when the caller didn't pass any.
+            if (extraGroups) {
+                for (const g of extraGroups) {
+                    result.push({ kind: 'scene-group', id: g.id, name: g.name, group: g });
                 }
             }
 
@@ -221,7 +200,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                 });
             }
             return result;
-        }, [specialEntries]);
+        }, [specialEntries, extraGroups]);
 
         const firstBrowsable = useMemo(() => {
             const c = cats.find(c => c.kind === 'native' || c.kind === 'custom');
@@ -271,7 +250,6 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             [cats, activeCat],
         );
         const isSpecialActive = !searching && activeCatObj?.kind === 'special';
-        const isPlaceholderActive = !searching && activeCatObj?.kind === 'placeholder';
         const isSceneGroupActive = !searching && activeCatObj?.kind === 'scene-group';
 
         // ── Focus / hover ────────────────────────────────────────────────────
@@ -315,6 +293,25 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             const id = window.setTimeout(() => bodyRef.current?.focus(), 0);
             return () => window.clearTimeout(id);
         }, []);
+
+        // Grid column count — sized once per resize via ResizeObserver
+        // instead of querying computed style on every arrow keypress
+        // (forced reflow + Tailwind class coupling).
+        const gridColsRef = useRef(1);
+        useLayoutEffect(() => {
+            const el = gridContainerRef.current;
+            if (!el) { gridColsRef.current = 1; return; }
+            const measure = () => {
+                const grid = el.querySelector('.grid') as HTMLElement | null;
+                if (!grid) { gridColsRef.current = 1; return; }
+                const tmpl = window.getComputedStyle(grid).gridTemplateColumns;
+                gridColsRef.current = Math.max(1, tmpl.split(' ').filter(Boolean).length);
+            };
+            measure();
+            const ro = new ResizeObserver(measure);
+            ro.observe(el);
+            return () => ro.disconnect();
+        }, [viewMode, searching, activeCat]);
 
         // ── Focused-index reset — content-keyed only ─────────────────────────
         // Recompute when the visible items CONTENT changes (id list, not just
@@ -458,7 +455,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             }
 
             const isList = viewMode === 'list' || searching;
-            const cols = isList ? 1 : gridColCount(gridContainerRef.current);
+            const cols = isList ? 1 : gridColsRef.current;
 
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -555,7 +552,6 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                 }}
                 paneItems={paneItems}
                 isSpecialActive={!!isSpecialActive}
-                isPlaceholderActive={!!isPlaceholderActive}
                 isSceneGroupActive={!!isSceneGroupActive}
                 activeCatObj={activeCatObj ?? null}
                 viewMode={viewMode}
@@ -782,7 +778,6 @@ interface PickerBodyProps {
     onCommitSceneItem: (item: SceneItem) => void;
     paneItems: string[];
     isSpecialActive: boolean;
-    isPlaceholderActive: boolean;
     isSceneGroupActive: boolean;
     viewMode: 'grid' | 'list';
     onViewMode: (v: 'grid' | 'list') => void;
@@ -883,8 +878,6 @@ function PickerBody(p: PickerBodyProps) {
                 <div className="flex-1 min-w-0 overflow-y-auto custom-scroll bg-[#0e0e0e]" ref={p.gridContainerRef}>
                     {p.isSpecialActive && p.activeCatObj?.kind === 'special' ? (
                         <SpecialPane id={p.activeCatObj.id} onCommit={p.onCommitSpecial} />
-                    ) : p.isPlaceholderActive && p.activeCatObj?.kind === 'placeholder' ? (
-                        <PlaceholderPane name={p.activeCatObj.name} description={p.activeCatObj.description} />
                     ) : p.isSceneGroupActive && p.activeCatObj?.kind === 'scene-group' ? (
                         <ScenePane
                             group={p.activeCatObj.group}
@@ -950,9 +943,8 @@ function Sidebar({
             {cats.map((c, i) => {
                 const prev = cats[i - 1];
                 const showSpecialSeparator = c.kind === 'special' && (!prev || prev.kind !== 'special');
-                const isScenesEntry = c.kind === 'placeholder' || c.kind === 'scene-group';
-                const prevIsScenesEntry = prev?.kind === 'placeholder' || prev?.kind === 'scene-group';
-                const showScenesSeparator = isScenesEntry && !prevIsScenesEntry;
+                const showScenesSeparator =
+                    c.kind === 'scene-group' && prev?.kind !== 'scene-group';
                 const showCustomSeparator = c.kind === 'custom';
                 const keyboardFocused = focusArea === 'sidebar' && focusedCatIndex === i;
                 return (
@@ -998,9 +990,6 @@ function SidebarRow({
     } else if (cat.kind === 'custom') {
         label = cat.name;
         extraClass = 'text-purple-300';
-    } else if (cat.kind === 'placeholder') {
-        label = cat.name;
-        extraClass = 'text-gray-500';
     } else if (cat.kind === 'scene-group') {
         label = <span className="flex items-center gap-2">
             <span className="truncate">{cat.name}</span>
@@ -1069,23 +1058,6 @@ function SpecialPane({ id, onCommit }: { id: string; onCommit: (id: string) => v
         </div>
     );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Placeholder pane — Scenes (coming soon)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PlaceholderPane({ name, description }: { name: string; description: string }) {
-    return (
-        <div className="p-6 flex flex-col items-center justify-center h-full text-center gap-3">
-            <div className="text-[13px] font-bold text-gray-400">{name}</div>
-            <p className="text-[10px] text-gray-500 max-w-xs leading-relaxed">{description}</p>
-        </div>
-    );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Scene pane — caller-driven group (curated gallery / my submissions)
-// ─────────────────────────────────────────────────────────────────────────────
 
 function ScenePane({
     group, viewMode, onCommit,
@@ -1444,15 +1416,3 @@ function ViewToggle({
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Count visible columns in the grid container. Sizes arrow-key row jumps. */
-function gridColCount(container: HTMLElement | null): number {
-    if (!container) return 1;
-    const grid = container.querySelector('.grid') as HTMLElement | null;
-    if (!grid) return 1;
-    const cols = window.getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean);
-    return Math.max(1, cols.length);
-}

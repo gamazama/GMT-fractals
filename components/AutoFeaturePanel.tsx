@@ -347,13 +347,12 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                     const Widget = componentRegistry.get('interlace-secondary-picker');
                     if (Widget) {
                         return (
-                            <div className={isParamDisabled ? 'opacity-30 pointer-events-none' : ''}>
-                                <Widget
-                                    label={config.label}
-                                    value={val}
-                                    onChange={(v: string) => handleUpdate(key, v)}
-                                />
-                            </div>
+                            <Widget
+                                label={config.label}
+                                value={val}
+                                onChange={(v: string) => handleUpdate(key, v)}
+                                disabled={isParamDisabled}
+                            />
                         );
                     }
                 }

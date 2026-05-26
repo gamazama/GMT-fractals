@@ -78,7 +78,7 @@ export const FORMULA_TO_CATEGORY: Map<string, string> = new Map(
 /** Special launcher ids. Sidebar gets these as their own buttons. */
 export type SpecialEntry = 'modular' | 'workshop';
 
-export const SPECIAL_ENTRY_LABELS: Record<SpecialEntry, string> = {
-    modular: 'Modular',
-    workshop: 'Workshop',
-};
+/** Stable references — passing array literals as props would defeat the
+ *  picker's category-list memoization on every parent render. */
+export const DEFAULT_SPECIAL_ENTRIES: SpecialEntry[] = ['modular', 'workshop'];
+export const NO_SPECIAL_ENTRIES: SpecialEntry[] = [];
