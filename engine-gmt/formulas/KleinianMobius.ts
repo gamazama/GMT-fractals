@@ -150,12 +150,17 @@ void formula_KleinianMobius(inout vec4 z, inout float dr, inout float trap, vec4
     de *= uParamC;  // rescale from Kleinian space back to world space
 
     // Smoothiter via Y-reflection crossing count. Non-escaping Kleinian limit
-    // sets have no escape radius, so log(DF) alone is near-flat for visible
-    // pixels. The conditional Y-reflection (z.y >= threshold) is the formula's
-    // primary symbolic bifurcation — adjacent pixels cross it at different
-    // iterations, producing a real per-pixel kneading count. A small log(DF)
-    // fractional adds smooth sub-bucket variation for modes 1 and 9.
-    float frac = clamp(-log2(max(ks_DF, 1e-30)) * 0.05, 0.0, 0.99);
+    // sets have no escape radius, so log(DF) is near-flat for visible pixels.
+    // The conditional Y-reflection (z.y >= threshold) is the formula's primary
+    // symbolic bifurcation — adjacent pixels cross it at different iterations,
+    // producing a real per-pixel kneading count.
+    //
+    // Fractional sub-bucket smoothing via sigmoid on log(r) (length of final z).
+    // log(DF) is near-flat for visible pixels, but log(r) varies smoothly. The
+    // sigmoid auto-saturates at both ends so we don't need a hard clamp — the
+    // knee is smooth instead of clipped. Constants tuned empirically: 5.2 is
+    // the sharpness (S-curve steepness), 0.64 is the center in log2(r) units.
+    float frac = 1.0 / (1.0 + exp(-5.2 * (log2(max(r, 1e-6)) - 0.64)));
     float smoothIter = clamp(ks_xings + frac, 0.0, float(uIterations) - 2.0);
     return vec2(abs(de), smoothIter);
 `,

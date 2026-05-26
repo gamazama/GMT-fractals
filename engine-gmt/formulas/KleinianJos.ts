@@ -100,6 +100,7 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
     float threshold = kr + coeff * sign(kk) * (1.0 - exp(exponent));
     if (z.y >= threshold) {
         z.xyz = vec3(-b, a, rotZ) - z.xyz;
+        kj_xings += 1.0;  // count Y-reflection crossings for smoothIter signal
     }
 
     // Box offset fold (vec3C): shifts domain before the Möbius step
@@ -123,15 +124,6 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
     kj_de_prev = kj_de_curr;
     kj_de_curr = min(min(z.y, uParamA - z.y), uParamE) / max(kj_DF, 2.0);
 
-    // Convergence-iter capture: first iteration where DE drops below threshold.
-    // -log2(kj_DF) acts as an iter-like proxy because each Möbius inversion near
-    // the limit set contributes ~constant log-factor. Adjacent pixels reach the
-    // threshold at different iterations → real per-pixel banding for iter modes.
-    if (kj_iConv < 0.0 && kj_de_curr < uParamE * 0.5) {
-        kj_iConv    = clamp(-log2(max(kj_DF, 1e-30)), 0.0, float(uIterations));
-        kj_deAtConv = kj_de_curr;
-    }
-
     // Orbit trap: min distance to origin (positive, works with logTrap coloring)
     trap = min(trap, length(z.xyz));
 }`,
@@ -148,19 +140,19 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
 
     de *= uParamC;  // rescale from Kleinian space back to world space
 
-    // Smoothiter via convergence iteration. Non-escaping Kleinian limit sets
-    // have no escape radius — log(DF) alone is near-flat for visible pixels
-    // (all converge near unity). Instead, capture the iteration at which the
-    // DE first drops sub-threshold; this varies per pixel and gives modes 1/7/9
-    // genuine banding. Fractional part from log(uParamE / deAtConv) smooths it.
-    // Background / never-converged rays fall back to scaled -log2(DF).
-    float smoothIter;
-    if (kj_iConv > 0.0) {
-        float frac = clamp(log2(uParamE / max(kj_deAtConv, 1e-30)) * 0.25, 0.0, 1.0);
-        smoothIter = clamp(kj_iConv + frac, 0.0, float(uIterations) - 2.0);
-    } else {
-        smoothIter = clamp(-log2(max(kj_DF, 1e-30)) * 0.1, 0.0, float(uIterations) - 2.0);
-    }
+    // Smoothiter via Y-reflection crossing count. Non-escaping Kleinian limit
+    // sets have no escape radius, so log(DF) is near-flat for visible pixels.
+    // The conditional Y-reflection (z.y >= threshold) is the formula's primary
+    // symbolic bifurcation — adjacent pixels cross it at different iterations,
+    // producing a real per-pixel kneading count.
+    //
+    // Fractional sub-bucket smoothing via sigmoid on log(r) (length of final z).
+    // log(DF) is near-flat for visible pixels, but log(r) varies smoothly. The
+    // sigmoid auto-saturates at both ends so we don't need a hard clamp — the
+    // knee is smooth instead of clipped. Constants tuned empirically: 3.7 is
+    // the sharpness (S-curve steepness), 0.71 is the center in log2(r) units.
+    float frac = 1.0 / (1.0 + exp(-3.7 * (log2(max(r, 1e-6)) - 0.71)));
+    float smoothIter = clamp(kj_xings + frac, 0.0, float(uIterations) - 2.0);
     return vec2(abs(de), smoothIter);
 `,
         capabilities: new Set(['shape:per-iteration', 'iter:c-constant', 'render:writes-trap', 'render:writes-iter'] satisfies Capability[]),
@@ -223,10 +215,10 @@ void formula_KleinianJos(inout vec4 z, inout float dr, inout float trap, vec4 c)
             },
             lighting: { shadows: true, shadowSoftness: 12.0, shadowIntensity: 1, shadowBias: 0.002 },
             quality: {
-                detail: 2, fudgeFactor: 0.4, pixelThreshold: 0.5,
+                detail: 2, fudgeFactor: 0.9, pixelThreshold: 0.5,
                 maxSteps: 220, estimator: 1, distanceMetric: 0,
             },
-            geometry: { juliaMode: false },
+            geometry: { juliaMode: true },
             materials: {
                 diffuse: 1.2, reflection: 0.05, specular: 0.8, roughness: 0.55,
                 rim: 0.1, rimExponent: 3, envStrength: 0, envBackgroundStrength: 1,
