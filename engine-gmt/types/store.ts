@@ -213,6 +213,9 @@ export interface EngineStoreState extends FeatureStateMap {
   workshopOpen: boolean;
   workshopEditFormula: string | undefined;
 
+  // New Scene wizard
+  newSceneOpen: boolean;
+
   // Viewport Quality System
   scalability: ScalabilityState;
   hardwareProfile: HardwareProfile | null;
@@ -375,6 +378,8 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
 
     openWorkshop: (editFormula?: string) => void;
     closeWorkshop: () => void;
+    openNewScene: () => void;
+    closeNewScene: () => void;
 
     // Composition overlay
     setCompositionOverlay: (type: CompositionOverlayType) => void;

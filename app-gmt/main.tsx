@@ -219,6 +219,16 @@ installSceneIO({
     serializeScene: (preset: Preset) => saveGMFScene(preset as any),
 });
 
+// New Scene wizard. `order: -10` puts it at the top of the File menu
+// (above Load + Save, defaulting to order 0+counter).
+menu.registerItem('file', {
+    id: 'new-scene',
+    type: 'button',
+    label: 'New Scene…',
+    order: -10,
+    onSelect: () => { useEngineStore.getState().openNewScene(); },
+});
+
 // Mobile users get Share Link only via this menu entry; desktop also
 // has the topbar icon (registered separately in registerGmtTopbar).
 menu.registerItem('file', { id: 'share-sep', type: 'separator' });

@@ -116,6 +116,7 @@ export type UISlice = Pick<EngineStoreState,
     'panels' | 'leftDockSize' | 'rightDockSize' | 'isLeftDockCollapsed' | 'isRightDockCollapsed' |
     'activeLeftTab' | 'activeRightTab' | 'draggingPanelId' | 'dragSnapshot' |
     'workshopOpen' | 'workshopEditFormula' |
+    'newSceneOpen' |
     // Tutorial
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
 > & Pick<EngineActions,
@@ -138,6 +139,7 @@ export type UISlice = Pick<EngineStoreState,
     'setActiveTab' | 'floatTab' | 'dockTab' |
     // Workshop
     'openWorkshop' | 'closeWorkshop' |
+    'openNewScene' | 'closeNewScene' |
     // Tutorial
     'startTutorial' | 'advanceTutorialStep' | 'skipTutorial' | 'completeTutorial'
 >;
@@ -231,6 +233,7 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
 
     // Workshop
     workshopOpen: false,
+    newSceneOpen: false,
     workshopEditFormula: undefined,
 
     // Tutorial System
@@ -298,6 +301,9 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
 
     openWorkshop: (editFormula) => set({ workshopOpen: true, workshopEditFormula: editFormula }),
     closeWorkshop: () => set({ workshopOpen: false, workshopEditFormula: undefined }),
+
+    openNewScene: () => set({ newSceneOpen: true }),
+    closeNewScene: () => set({ newSceneOpen: false }),
 
     // --- NEW LAYOUT ACTIONS IMPLEMENTATION ---
 
