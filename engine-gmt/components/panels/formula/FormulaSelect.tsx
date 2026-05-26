@@ -5,10 +5,10 @@ import { FormulaType } from '../../../../types';
 import { useEngineStore } from '../../../../store/engineStore';
 import { ContextMenuItem } from '../../../../types/help';
 import { generateGMF, loadGMFScene } from '../../../utils/FormulaFormat';
-import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon } from '../../../../components/Icons';
+import { DownloadIcon, ChevronDown, CodeIcon, MenuIcon, UploadIcon } from '../../../../components/Icons';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../../engine/FractalEvents';
 import { buildFormulaContextMenu } from './FormulaContextMenu';
-import { PortalDropdown } from './FormulaGallery';
+import { FormulaPicker, useSceneGroups } from '../../FormulaPicker';
 import { useTutorAnchor, mergeRefs } from '../../../../engine/plugins/Tutorial';
 
 export { buildFormulaContextMenu } from './FormulaContextMenu';
@@ -16,6 +16,8 @@ export { buildFormulaContextMenu } from './FormulaContextMenu';
 export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChange: (f: FormulaType) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
     const openWorkshop = useEngineStore(s => s.openWorkshop);
+    const togglePanel = useEngineStore(s => s.togglePanel);
+    const sceneGroups = useSceneGroups();
     const btnRef = useRef<HTMLButtonElement>(null);
     const menuBtnRef = useRef<HTMLButtonElement>(null);
     const hamburgerAnchorRef = useTutorAnchor('formula-hamburger');
@@ -207,14 +209,33 @@ export const FormulaSelect = ({ value, onChange }: { value: FormulaType, onChang
             )}
 
             {isOpen && rect && (
-                <PortalDropdown
-                    rect={rect}
-                    currentValue={value}
+                <FormulaPicker
+                    variant="popover"
+                    anchorRect={rect}
+                    value={value}
                     onClose={() => setIsOpen(false)}
-                    onSelect={(f) => { onChange(f); setIsOpen(false); }}
-                    onImport={() => fileRef.current?.click()}
-                    showImport={advancedMode}
-                    onImportFragmentarium={() => openWorkshop(undefined)}
+                    onCommit={(c) => {
+                        if (c.action === 'launch' && c.id === 'workshop') {
+                            openWorkshop(undefined);
+                        } else if (c.action === 'select') {
+                            onChange(c.id as FormulaType);
+                            // Picking Modular: surface the Graph panel on
+                            // the left dock (same pattern as the system
+                            // menu's Engine-config reveal in topbar.tsx).
+                            if (c.id === 'Modular') togglePanel('Graph', true);
+                        }
+                        setIsOpen(false);
+                    }}
+                    extraGroups={sceneGroups}
+                    footerSlot={advancedMode ? (
+                        <button
+                            onClick={() => { fileRef.current?.click(); setIsOpen(false); }}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-cyan-900/20 hover:bg-cyan-900/40 text-cyan-400 text-[10px] font-bold rounded border border-cyan-500/20 hover:border-cyan-500/50 transition-colors"
+                        >
+                            <UploadIcon />
+                            Import Formula (.GMF)
+                        </button>
+                    ) : undefined}
                 />
             )}
 

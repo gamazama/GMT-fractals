@@ -29,12 +29,13 @@ import { registry } from './engine/FractalRegistry';
  *   user-visible string. The two diverge intentionally.
  */
 export const GmtPanels: PanelManifest = [
-    // Graph (Modular-only) sits at order 1 so it slots between Formula
-    // and Scene when visible. `component` path — FlowEditor owns its
-    // layout, no feature stacking.
+    // Graph (Modular-only) lives on the left dock — same pattern as the
+    // Engine Config panel (revealed via system menu's togglePanel call).
+    // The picker surfaces this dock + focuses Graph when Modular is picked.
+    // `component` path — FlowEditor owns its layout, no feature stacking.
     {
         id: 'Graph',
-        dock: 'right',
+        dock: 'left',
         order: 1,
         component: 'panel-graph',
         showIf: (s) => (s as { formula?: string }).formula === 'Modular',

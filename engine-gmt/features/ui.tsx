@@ -65,6 +65,7 @@ import {
 import { EnginePanel } from '../components/panels/EnginePanel';
 import { CameraManagerPanel } from './camera_manager/CameraManagerPanel';
 import React_FlowEditor from '../components/panels/flow/FlowEditor';
+import { InterlaceSecondaryPicker } from '../components/FormulaPicker';
 
 // ── Connectors: widgets that need to subscribe to store-managed
 // histogram probe registration (coloring + scene color grading).
@@ -150,6 +151,7 @@ export const registerGmtUi = () => {
     componentRegistry.register('quality-render-controls', QualityRenderControls);
     componentRegistry.register('light-panel-controls', LightPanelControls);
     componentRegistry.register('formula-params', FormulaParamsWidget);
+    componentRegistry.register('interlace-secondary-picker', InterlaceSecondaryPicker);
 
     // LfoList no longer needs a store-wrapping shim — the lifted
     // version reads the engine store itself via useEngineStore.

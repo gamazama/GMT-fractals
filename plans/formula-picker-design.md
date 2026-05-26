@@ -1,8 +1,22 @@
 # Unified Formula Picker — Locked Design
 
-**Status**: Design locked 2026-05-25 (post-iteration). Not implemented.
+**Status**: Implemented 2026-05-26. Main picker + interlace secondary swapped; New Scene wizard integration still pending. Lives at [engine-gmt/components/FormulaPicker/](../engine-gmt/components/FormulaPicker/).
 **Effort**: M (~3-5 days, per the original consolidation research).
 **Replaces**: 11 disjoint formula-selection affordances surveyed in [plans/capability-protocol.md] picker recon (PortalDropdown, GenericDropdown × 3 sites, Workshop browser, randomize ops, etc.).
+
+## Implementation notes (delta from the design below)
+
+- **Scenes** are wired as a caller-driven `extraGroups?: SceneGroup[]` prop rather than baked into the picker. `useSceneGroups()` produces:
+  - **Curated Gallery** — paginated `listGallery({ limit: 24, offset })` from Supabase, with a "Load more" button.
+  - **My Submissions** — `listMySubmissions(profile.id)` with pending/private/rejected badges. Uses the new `getMySubmissionData(id, userId)` helper to fetch `gmf_data` for non-approved rows (the public `getGalleryItem` filters to `status='approved'`).
+  - `./gmf/gallery.json` (bundled Fragmentarium scenes) is **not** surfaced — kept as a separate future entry-point.
+- **Search** starts collapsed (per smoke iteration). A 🔍 toggle button next to the view toggle reveals it; typing any printable key while it's hidden opens it and inserts the char.
+- **Keyboard nav** has two focus areas: `'grid'` (default) and `'sidebar'`. ArrowLeft from the grid's leftmost column escapes to the sidebar; arrows in the sidebar auto-activate categories. Enter/ArrowRight on a special launcher commits it; on a native/scene group returns focus to the grid.
+- **Hover preview** for the popover variant renders in the same portal as a sibling of the picker box (right side preferred; left if no room; hidden on narrow viewports) so the floater doesn't obscure the grid.
+- **List mode** shrinks the popover width from 640px → 380px.
+- **Render pause** uses the existing `isPaused` / `setIsPaused` store contract; restores the prior pause state on unmount.
+- **Modular graph panel** moved from the right dock to the left (`panels.ts` `dock: 'right'` → `dock: 'left'`). Picking Modular from the picker calls `togglePanel('Graph', true)` so the left dock surfaces + Graph activates.
+- **Interlace secondary picker** uses a small wrapper widget ([InterlaceSecondaryPicker.tsx](../engine-gmt/components/FormulaPicker/InterlaceSecondaryPicker.tsx)) registered with `componentRegistry` as `'interlace-secondary-picker'`. `AutoFeaturePanel` special-cases `key === 'interlaceFormula'` and dispatches to it instead of the flat dropdown. `disabledIds` come from the interlace feature's reject set (`shape:self-contained`, `shape:modular`).
 
 ## Goals
 

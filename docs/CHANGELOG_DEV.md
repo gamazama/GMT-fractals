@@ -4,6 +4,28 @@ Chronological log of significant changes during the v0.9.5 development cycle (en
 
 ## 2026-05-26
 
+### Unified formula picker
+
+**User-facing**
+- New formula picker replaces the long flat dropdown. Sidebar lists six categories — **Power Fractals**, **Box & Folds**, **Menger & IFS**, **Polyhedra**, **Kleinian / Apollonian**, **Hybrids & Experimental** — plus separate launchers for **Modular** (graph editor) and **Workshop** (Fragmentarium import). Right pane shows thumbnails (64×64 cards by default; bigger preview floats alongside on hover).
+- **Start typing to search.** The search bar is hidden by default — any printable key opens it and feeds in the character. Fuzzy match across name, id, category. There's also a 🔍 button next to the view toggle if you'd rather click.
+- **Grid / List view toggle** in the header. List mode shrinks the popover by ~40% and drops thumbnails — useful on low-perf devices or when you know the name. Preference persists across sessions (`gmt.formulaPicker.viewMode` in localStorage).
+- **Keyboard navigation.** Arrow keys move through the grid (left/right step columns; up/down step rows; grid-aware row jumps). ArrowLeft from the leftmost column escapes into the category sidebar; up/down there auto-activates categories. Enter commits, Escape closes. Disabled cards are skipped during arrow nav.
+- **Rendering pauses while the picker is open** so the GPU isn't competing with thumbnail decode. Your prior pause state is restored on close (manual pause stays paused).
+- **Online gallery surfaced in the picker.** Two new sidebar entries under "Scenes":
+  - **Curated Gallery** — the public gallery, paginated 24 at a time via a "Load more" button.
+  - **My Submissions** — your own submissions when signed in, across all statuses (pending / approved / rejected) with badges; pending and rejected scenes load correctly even though they're hidden from the public browse.
+  Click a scene and it loads directly into the engine.
+- **Modular's graph panel moved to the left dock.** Picking Modular now reveals the left dock and focuses the Graph tab automatically (same pattern as the Engine Config panel).
+
+**Capability protocol consumer**
+- Interlace's secondary-formula picker now uses the same component. Formulas that can't be a secondary (self-contained SDEs, Modular) are grayed with a tooltip explaining why — first UI to consume `evaluateCompat`'s reject-set output via the unified picker.
+
+**Where**
+- Component: [`engine-gmt/components/FormulaPicker/`](../engine-gmt/components/FormulaPicker/).
+- Design doc: [`plans/formula-picker-design.md`](../plans/formula-picker-design.md) — updated with implementation notes.
+- Call sites swapped: [`engine-gmt/components/panels/formula/FormulaSelect.tsx`](../engine-gmt/components/panels/formula/FormulaSelect.tsx) (main picker), `interlaceFormula` param via [`components/AutoFeaturePanel.tsx`](../components/AutoFeaturePanel.tsx) dispatch into `componentRegistry`'s `'interlace-secondary-picker'`.
+
 ### New formula: Sine Julia 3D
 
 **User-facing**

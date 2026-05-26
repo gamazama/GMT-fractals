@@ -139,6 +139,25 @@ export async function updateMyVisibility(id: string, userId: string, visibility:
   }
 }
 
+/**
+ * Fetch a single submission's `gmf_data` payload by id, restricted to rows
+ * owned by `userId`. Required to load a user's own submission into the
+ * scene — `getGalleryItem` filters to status=approved and so won't return
+ * pending/rejected rows the owner still has access to via RLS.
+ *
+ * Used by the FormulaPicker's My Submissions scene group.
+ */
+export async function getMySubmissionData(id: string, userId: string): Promise<string | null> {
+  const { data, error } = await client()
+    .from('gallery_items')
+    .select('gmf_data')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.gmf_data ?? null) as string | null;
+}
+
 export async function getGalleryItem(slug: string): Promise<GalleryItem | null> {
   const { data, error } = await client()
     .from('gallery_items')
