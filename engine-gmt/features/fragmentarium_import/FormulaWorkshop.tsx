@@ -22,6 +22,7 @@ import type { WorkshopDetection, WorkshopParam, TransformedFormulaV2 } from './t
 import { detectVariables, promoteVariable } from './workshop/variable-detector';
 import type { DetectedVariable } from './workshop/variable-detector';
 import { detectFormulaV3, transformFormulaV3 } from './v3/compat';
+import { deriveImportCapabilities } from './import-capabilities';
 import { buildFractalParams, filterDeadParams, slotLabel, componentSlotBase, groupedSlotOptions, buildOccupancyMap, isSlotConflict, getSlotOccupancy } from './workshop/param-builder';
 import { processFormula as v4ProcessFormula } from './v4';
 
@@ -835,6 +836,14 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
     }, []);
 
     // ── Build & register a formula definition ──
+    // V3 emit path. `result.mode` ('per-iteration' | 'full-de') drives both
+    // shader.capabilities (via deriveImportCapabilities) AND the legacy
+    // selfContainedSDE flag for full-de imports. Setting selfContainedSDE
+    // for full-de imports closes the silent-corruption hole flagged in
+    // docs/research/v4-rethink-prompt.md (engine features previously
+    // injected against full-de fallback formulas with no flag, producing
+    // black renders or "dust" geometry). See plans/capability-protocol.md
+    // (Phase 6).
     const buildAndRegister = useCallback((
         id: string,
         name: string,
@@ -843,15 +852,24 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula 
         importSource?: FractalDefinition['importSource'],
     ) => {
         const { uiParams, defaultPreset } = buildFractalParams(liveMappings, id);
+        const shaderGlsl = {
+            function: (result.uniforms ? result.uniforms + '\n\n' : '') + result.function,
+            loopBody: result.loopBody,
+            getDist: result.getDist,
+            loopInit: result.loopInit,
+        };
+        const isFullDe = result.mode === 'full-de';
         const def: FractalDefinition = {
             id: id as any,
             name,
             description: importSource ? 'Imported formula' : undefined,
             shader: {
-                function: (result.uniforms ? result.uniforms + '\n\n' : '') + result.function,
-                loopBody: result.loopBody,
-                getDist: result.getDist,
-                loopInit: result.loopInit,
+                ...shaderGlsl,
+                selfContainedSDE: isFullDe || undefined,
+                capabilities: deriveImportCapabilities(
+                    shaderGlsl,
+                    isFullDe ? 'self-contained' : 'per-iteration',
+                ),
             },
             parameters: uiParams,
             defaultPreset,

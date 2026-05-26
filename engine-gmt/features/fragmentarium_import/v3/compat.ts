@@ -214,6 +214,7 @@ function generatedToTransformed(gen: GeneratedFormula): TransformedFormulaV2 {
         getDist: gen.getDist,
         loopInit: gen.loopInit,
         warnings: gen.warnings,
+        mode: gen.mode,
     };
 }
 

@@ -109,6 +109,12 @@ export interface TransformedFormulaV2 {
     getDist?: string;
     loopInit?: string;
     warnings: string[];
+    /** Emit shape — drives shader.capabilities and selfContainedSDE
+     *  decisions at registration time. Propagated from V3's GeneratedFormula
+     *  via the compat layer. 'full-de' = formula owns its full iteration
+     *  loop (engine features should bail); 'per-iteration' = engine drives
+     *  the outer loop. */
+    mode?: 'per-iteration' | 'full-de';
 }
 
 export interface FunctionCandidate {

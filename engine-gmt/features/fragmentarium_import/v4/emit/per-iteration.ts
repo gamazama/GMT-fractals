@@ -44,7 +44,7 @@
 
 import type { FractalDefinition } from '../../../../types/fractal';
 import type { FormulaAnalysis, GeneratedFormula, Result, DeFunction } from '../types';
-import { deriveImportCapabilities } from './capabilities';
+import { deriveImportCapabilities } from '../../import-capabilities';
 import { assignSlots } from './slots';
 import { buildRenameMap, applyRenames } from './rename';
 import { sanitizeId } from './wrapper';

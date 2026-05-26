@@ -28,7 +28,7 @@
 
 import { parse } from '@shaderfrog/glsl-parser';
 import type { FractalDefinition } from '../../../../types/fractal';
-import { deriveImportCapabilities } from './capabilities';
+import { deriveImportCapabilities } from '../../import-capabilities';
 import type { FormulaAnalysis, GeneratedFormula, Result } from '../types';
 import { assignSlots } from './slots';
 import { buildRenameMap, applyRenames } from './rename';

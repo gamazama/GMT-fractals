@@ -1,10 +1,12 @@
 /**
- * V4-emit capability derivation — produces the `shader.capabilities` set
- * for Workshop-imported formulas (both self-contained and per-iteration
- * paths). Used by emit/index.ts (self-contained) and emit/per-iteration.ts.
+ * Workshop-import capability derivation — produces the `shader.capabilities`
+ * set for Workshop-imported formulas, used by BOTH pipelines:
+ * - V4: emit/index.ts (self-contained) and emit/per-iteration.ts (P5)
+ * - V3: FormulaWorkshop.tsx's buildAndRegister via the per-iteration vs
+ *   full-de mode propagated through TransformedFormulaV2 (P6)
  *
  * Detection is regex-based against the assembled GLSL: cheaper than parsing
- * and good enough for the well-shaped output the V4 emitter produces. False
+ * and good enough for the well-shaped output both emitters produce. False
  * negatives (imports that have a capability the regex doesn't catch) result
  * in features showing as disabled when they could work — recoverable via
  * manual edit after import. False positives (claiming a capability the
@@ -14,10 +16,10 @@
  *
  * See:
  * - dev/docs/gmt/35_Capability_Protocol.md
- * - dev/plans/capability-protocol.md (Phase 5)
+ * - dev/plans/capability-protocol.md (Phases 5 + 6)
  */
 
-import type { Capability } from '../../../../types/capabilities';
+import type { Capability } from '../../types/capabilities';
 
 export interface DerivableGlsl {
   preamble?: string;
