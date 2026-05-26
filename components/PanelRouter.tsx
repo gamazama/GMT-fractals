@@ -179,6 +179,7 @@ const renderItem = (
                     runtimeExcludeParams={item.runtimeExcludeParams}
                     label={dynamic || item.label}
                     compileMessage={item.compileMessage}
+                    requires={item.requires}
                 />
             );
             break;

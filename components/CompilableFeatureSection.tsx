@@ -4,6 +4,20 @@ import { featureRegistry, CompilablePanelConfig } from '../engine/FeatureSystem'
 import { useEngineStore } from '../store/engineStore';
 import { FractalEvents } from '../engine/FractalEvents';
 import { AutoFeaturePanel } from './AutoFeaturePanel';
+import { registry as formulaRegistry } from '../engine-gmt/engine/FractalRegistry';
+import { evaluateCompat } from '../engine-gmt/engine/compat';
+
+/** Translate a raw reason string from evaluateCompat into a short user-facing
+ *  fragment. Keep the original token for debugging via tooltip text after the
+ *  human prefix. */
+function humanizeReason(raw: string): string {
+    if (raw.includes('shape:self-contained')) return 'This formula owns its full iteration loop.';
+    if (raw.includes('shape:modular')) return 'Modular graph formulas use the node editor instead.';
+    if (raw.startsWith('rejected by primary capability')) return 'Not compatible with the current primary formula.';
+    if (raw.startsWith('rejected by secondary capability')) return 'Not compatible with the current interlace secondary.';
+    if (raw.startsWith('requires')) return raw.replace('requires', 'Needs');
+    return raw;
+}
 // Note: `is_compiling` is emitted by the CompileScheduler at the actual
 // rebuild boundary — not by UI components. UI handlers here apply param
 // changes via the feature setter; the scheduler picks up the config delta
@@ -233,6 +247,43 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
         </>
     );
 
+    // Capability protocol: gray + disable this section when the current formula
+    // pairing makes the section incompatible. Section-level `requires` from the
+    // resolved config wins over the feature's own; falls back to feature-level
+    // if absent. Same schema either way. Preserves underlying state (not
+    // mutated) so switching back to a compatible formula re-enables exactly
+    // as it was. See dev/docs/gmt/35_Capability_Protocol.md.
+    const primaryFormulaId = useEngineStore((s: any) => s.formula);
+    const interlaceCompiled = useEngineStore((s: any) => s.interlace?.interlaceCompiled);
+    const interlaceFormulaId = useEngineStore((s: any) => s.interlace?.interlaceFormula);
+    const sectionRequires = src.requires;
+    const compatReport = useMemo(() => {
+        if (!primaryFormulaId) return undefined;
+        const primary = formulaRegistry.get(primaryFormulaId);
+        if (!primary) return undefined;
+        const secondary = interlaceCompiled && interlaceFormulaId
+            ? formulaRegistry.get(interlaceFormulaId)
+            : undefined;
+        // Section-level requires (from CompilablePanelConfig) wins over the
+        // feature's. Temporarily patch the registered feature def so the pure
+        // reducer reads our section's rules instead. Cleanest is a single-
+        // feature reducer; for now this localised mutation+restore is OK
+        // because evaluateCompat is sync (no await in between).
+        if (sectionRequires && feature) {
+            const original = (feature as any).requires;
+            (feature as any).requires = sectionRequires;
+            const report = evaluateCompat({ primary, secondary }).find(r => r.featureId === featureId);
+            (feature as any).requires = original;
+            return report;
+        }
+        return evaluateCompat({ primary, secondary }).find(r => r.featureId === featureId);
+    }, [primaryFormulaId, interlaceCompiled, interlaceFormulaId, featureId, sectionRequires, feature]);
+    const isProtocolDisabled = compatReport?.status === 'disabled';
+    const primaryName = primaryFormulaId
+        ? (formulaRegistry.get(primaryFormulaId)?.name ?? primaryFormulaId)
+        : 'current formula';
+    const disabledReason = `Not available with ${primaryName}. ${compatReport?.reasons.length ? humanizeReason(compatReport.reasons[0]) : ''}`.trim();
+
     // Build exclude list for runtime params: hide compile param + runtime
     // toggle + any explicit excludes + the compile-settings params (which
     // are rendered separately in the Compile Settings sub-section).
@@ -245,6 +296,38 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     }, [compileParam, runtimeToggleParam, runtimeExcludeParams, compileSettingsParams]);
 
     const hasCompileSettings = !!(compileSettingsParams && compileSettingsParams.length > 0);
+
+    // Protocol-disabled variant: grayed header + tooltip, body collapsed,
+    // toggle is a no-op. Unload button stays FUNCTIONAL when the feature is
+    // currently compiled — without this escape hatch, users who compiled a
+    // bad pairing (e.g. interlace + MandelTerrain) have no way to disable it.
+    // State is preserved (not mutated) so restoring a compatible formula
+    // brings the feature back exactly as it was.
+    if (isProtocolDisabled) {
+        return (
+            <div
+                data-help-id={helpId}
+                title={disabledReason}
+                aria-disabled="true"
+                className="opacity-50"
+            >
+                <FeatureSection
+                    label={label}
+                    featureId={featureId}
+                    enabled={false}
+                    onToggle={() => {}}
+                    forceBodyOpen={false}
+                    statusContent={null}
+                    headerClassName="bg-transparent"
+                    onUnload={isCompiled ? handleUnload : undefined}
+                >
+                    {/* body intentionally empty — feature is not available */}
+                    <></>
+                </FeatureSection>
+                <SectionDivider />
+            </div>
+        );
+    }
 
     return (
         <div data-help-id={helpId}>

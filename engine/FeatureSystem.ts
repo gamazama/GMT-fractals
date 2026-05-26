@@ -313,6 +313,18 @@ export interface CompilablePanelConfig {
      *  otherwise "Compiling Shader...". */
     compileMessage?: string;
     helpId?: string;
+    /** Section-level capability requirements, overrides feature-level `requires`.
+     *  Use when one feature exposes multiple sections with independent compat —
+     *  e.g. Geometry has Hybrid Box (rejects self-contained) AND Local Rotation
+     *  (compatible everywhere). Feature-level requires would gray everything;
+     *  section-level lets each compilable surface declare its own reject set.
+     *  Same schema as FeatureDefinition.requires. */
+    requires?: {
+        primary?: string[];
+        secondary?: string[];
+        pair?: string[];
+        rejects?: { primary?: string[]; secondary?: string[] };
+    };
 }
 
 /** Configuration for rendering a feature as a <CompileDropdownSection>.

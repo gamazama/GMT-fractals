@@ -57,9 +57,10 @@ export const GmtPanels: PanelManifest = [
 
             // Julia / Offset — pure runtime (no compile gate). Visible only
             // when the active formula (or interlace partner) declares a
-            // julia type. Label resolves dynamically from the formula's
-            // juliaType so the section reads "Julia" or "Offset" depending
-            // on which behavior the current formula implements.
+            // julia type. Self-contained julia formulas honor c internally
+            // (per-formula decision via juliaType), so this section shows
+            // for all formulas where juliaType !== 'none'. Label resolves
+            // dynamically from the formula's juliaType.
             {
                 type: 'runtime-section',
                 id: 'geometry',
@@ -87,9 +88,13 @@ export const GmtPanels: PanelManifest = [
                 },
             },
 
-            // Local Rotation — compile gate (preRotMaster compiles the
-            // rotation matrix logic), runtime toggle (preRotEnabled hides
-            // the runtime sliders without recompiling).
+            // Local Rotation — pre/post-iteration rotation matrices, compile-
+            // gated (preRotMaster compiles the rotation logic), runtime toggle
+            // (preRotEnabled hides the sliders without recompile).
+            // Section-level reject: self-contained formulas own the full loop
+            // and re-derive z each iteration, so pre/post rotation outside
+            // their loop has no compounding effect. (World rotation handled
+            // elsewhere remains applicable.)
             {
                 type: 'compilable',
                 id: 'geometry',
@@ -97,6 +102,7 @@ export const GmtPanels: PanelManifest = [
                 runtimeToggleParam: 'preRotEnabled',
                 runtimeGroup: 'transform',
                 label: 'Local Rotation',
+                requires: { rejects: { primary: ['shape:self-contained'] } },
             },
 
             // Burning Mode — compile-gated abs() line, with a runtime
@@ -104,6 +110,10 @@ export const GmtPanels: PanelManifest = [
             // recompiling once it's been compiled in. Section toggle is
             // instant runtime on/off via `burningRuntime`; unload icon
             // removes burning from the shader entirely.
+            // No reject: user-confirmed to work on self-contained
+            // formulas (MandelTerrain composes the burning mix into its
+            // pre-loop z), and engine injects unconditionally for non-
+            // self-contained primaries including Modular.
             {
                 type: 'compilable',
                 id: 'geometry',
@@ -118,7 +128,15 @@ export const GmtPanels: PanelManifest = [
             // settings, hybrid group runtime params). Explicit label so the
             // section reads "Hybrid Box" rather than falling back to the
             // feature's name ("Geometry").
-            { type: 'compilable', id: 'geometry', label: 'Hybrid Box', helpId: 'hybrid.mode' },
+            // Section-level reject: self-contained formulas skip hybrid
+            // wiring (geometry/index.ts:474). Modular composes fine.
+            {
+                type: 'compilable',
+                id: 'geometry',
+                label: 'Hybrid Box',
+                helpId: 'hybrid.mode',
+                requires: { rejects: { primary: ['shape:self-contained'] } },
+            },
 
             // Formula Interlace — uses interlace's feature panelConfig.
             { type: 'compilable', id: 'interlace' },

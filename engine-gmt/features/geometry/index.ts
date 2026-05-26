@@ -1,6 +1,5 @@
 
 import { FeatureDefinition } from '../../engine/FeatureSystem';
-import type { Capability } from '../../types/capabilities';
 import * as THREE from 'three';
 import { FOLD_LIST, FOLD_OPTIONS, getFold } from './folds';
 import { SHARED_TRANSFORMS_GLSL } from './transforms';
@@ -171,16 +170,12 @@ export const GeometryFeature: FeatureDefinition = {
     shortId: 'g',
     name: 'Geometry',
     category: 'Formulas',
-    // Hybrid Box + Burning Ship sections mutate z mid-iteration; they
-    // can't compose with self-contained DEs (formula owns the full loop)
-    // or Modular (graph-compiled, no engine-side hooks). Mirror of the
-    // inject() early-returns at lines 457-463; protocol now drives UI
-    // gating once consumers adopt evaluateCompat (P3).
-    requires: {
-        rejects: {
-            primary: ['shape:self-contained', 'shape:modular'] satisfies Capability[],
-        },
-    },
+    // NOTE: no feature-level `requires` — geometry exposes multiple panel
+    // sections (Hybrid Box, Burning Mode, Local Rotation, Julia/Offset) with
+    // independent compat. Section-level rejects are declared in panels.ts
+    // where each compilable surface is registered. Hybrid Box + Burning Mode
+    // gate on `shape:self-contained` (the engine's inject() at lines 470,474
+    // skips wiring for those formulas); Local Rotation is formula-agnostic.
     customUI: [
         {
             componentId: 'interaction-picker',

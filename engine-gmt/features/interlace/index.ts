@@ -42,9 +42,15 @@ export interface InterlaceState {
     interlaceVec4C: { x: number; y: number; z: number; w: number };
 }
 
+/** Capability tokens that disqualify a formula from either side of an interlace
+ *  pair. Modular has no GLSL to rewrite; self-contained formulas own their
+ *  full iteration loop with no per-iter insertion point. */
+const INTERLACE_REJECTS = ['shape:self-contained', 'shape:modular'] satisfies Capability[];
+
 /**
  * Build the list of formula options for the dropdown.
- * Excludes Modular (not compatible with interlacing).
+ * Excludes Modular (not compatible with interlacing). Protocol-aware filtering
+ * of all rejected secondaries is deferred to the unified formula picker.
  */
 function getFormulaOptions() {
     return registry.getAll()
@@ -125,12 +131,12 @@ export const InterlaceFeature: FeatureDefinition = {
     // primary's loop body. Neither side can be Modular (no GLSL to rewrite)
     // or self-contained (formula owns its full loop, no insertion point).
     // Mirror of the inject() early-returns at lines 322-333; protocol now
-    // drives UI gating once consumers adopt evaluateCompat (P3) and the
-    // secondary picker (P4).
+    // drives UI gating via evaluateCompat (P3 wraps the section, P4's
+    // getFormulaOptions grays the secondary picker entries).
     requires: {
         rejects: {
-            primary: ['shape:self-contained', 'shape:modular'] satisfies Capability[],
-            secondary: ['shape:self-contained', 'shape:modular'] satisfies Capability[],
+            primary: INTERLACE_REJECTS,
+            secondary: INTERLACE_REJECTS,
         },
     },
 
