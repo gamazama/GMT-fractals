@@ -231,6 +231,16 @@ export function rewriteLoopBody(loopBody: string, formulaId: string, preambleVar
         new RegExp(`\\bformula_${formulaId}\\b`, 'g'),
         'formula_Interlace'
     );
+    // Swap the 4th positional argument `c` -> `cInterlace` so the secondary
+    // sees its own c.w (uInterlaceParamA). All native loopBodies are shaped
+    // `formula_X(z, dr, trap, c[, extras...])`. Phoenix and Bristorbrot pass
+    // extra trailing args; the regex captures the first three commas verbatim
+    // so the trailing args (which may be preamble vars renamed below) are
+    // untouched.
+    result = result.replace(
+        /(\bformula_Interlace\s*\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*)c\b/,
+        '$1cInterlace',
+    );
     if (preambleVars && preambleVars.length > 0) {
         result = applyPreambleVarRenames(result, preambleVars);
     }
@@ -288,7 +298,14 @@ export function buildInterlaceLoopGLSL(
     interlaceInit: string,
     needsRotSwap: boolean,
 ): { preLoop: string; inLoop: string } {
-    let preLoop = '';
+    // Always emit a secondary-specific c. The primary's c is built at the top of
+    // map() using uParamA for c.w; 4D formulas (Tetrabrot, Quaternion, Mandelbar3D,
+    // Bristorbrot, MakinBrot, BoxBulb, MandelMap, MandelBolic) put their Julia /
+    // slice parameter in c.w, so reusing the primary's c silently feeds them the
+    // wrong scalar. cInterlace fixes c.w; c.xyz (uJulia / position) is still
+    // shared with the primary on purpose (the UI exposes a single julia c).
+    let preLoop = `
+    vec4 cInterlace = vec4(c.xyz, uInterlaceParamA);`;
     if (interlaceInit) {
         // Emit interlaceInit at function scope (no enclosing if-block). Any
         // variables it declares need to be visible inside the iteration loop
@@ -296,7 +313,7 @@ export function buildInterlaceLoopGLSL(
         // tionally is safe: the declarations are cheap, and the rot-swap
         // bookkeeping below still captures the post-init state only when
         // uInterlaceEnabled is true at runtime.
-        preLoop = `
+        preLoop += `
     vec3 _il_savedAxis = gmt_rotAxis;
     float _il_savedCos = gmt_rotCos;
     float _il_savedSin = gmt_rotSin;
