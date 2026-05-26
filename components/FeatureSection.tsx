@@ -35,6 +35,10 @@ interface FeatureSectionProps {
      *  feature drops out of the shader entirely on the next compile —
      *  distinct from the runtime toggle, which only flips a uniform. */
     onUnload?: () => void;
+    /** Optional "reset to defaults" action shown as a small ↻ icon next to
+     *  Unload. Wired by callers to applyPartialPreset; restores the feature's
+     *  params to their DDFS-declared defaults. No confirm — undo covers it. */
+    onReset?: () => void;
 }
 
 /** Small eject-arrow icon for the unload-from-shader action. */
@@ -45,9 +49,17 @@ const UnloadIcon: React.FC = () => (
     </svg>
 );
 
+/** Small circular-arrow icon for the reset-to-defaults action. */
+const ResetIcon: React.FC = () => (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="1 4 1 10 7 10" />
+        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+);
+
 export const FeatureSection: React.FC<FeatureSectionProps> = ({
     label, featureId, toggleParam, children, description,
-    statusContent, headerClassName = '', enabled, onToggle, hideToggle = false, forceBodyOpen = false, onUnload,
+    statusContent, headerClassName = '', enabled, onToggle, hideToggle = false, forceBodyOpen = false, onUnload, onReset,
 }) => {
     // Granular per-feature subscription. `useEngineStore()` no-selector
     // would re-render every FeatureSection on every store update —
@@ -93,6 +105,15 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                    {onReset && (
+                        <button
+                            onClick={onReset}
+                            className="p-1 text-gray-500 hover:text-cyan-400 transition-colors"
+                            title="Reset this feature's parameters to defaults"
+                        >
+                            <ResetIcon />
+                        </button>
+                    )}
                     {onUnload && (
                         <button
                             onClick={onUnload}

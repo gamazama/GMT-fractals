@@ -6,6 +6,7 @@ import { FractalEvents } from '../engine/FractalEvents';
 import { AutoFeaturePanel } from './AutoFeaturePanel';
 import { registry as formulaRegistry } from '../engine-gmt/engine/FractalRegistry';
 import { evaluateCompat } from '../engine-gmt/engine/compat';
+import { applyPartialPreset } from '../engine-gmt/utils/applyPartialPreset';
 
 /** Translate a raw reason string from evaluateCompat into a short user-facing
  *  fragment. Keep the original token for debugging via tooltip text after the
@@ -247,6 +248,15 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
         </>
     );
 
+    // Reset this feature's params to DDFS-declared defaults. Single-step undo
+    // covers any mistake; no confirm dialog. Surfaced in Advanced mode only
+    // for now — broader rollout once UX is settled.
+    // See plans/per-feature-reset-feasibility.md.
+    const advancedMode = useEngineStore(s => (s as any).advancedMode);
+    const handleReset = useCallback(() => {
+        applyPartialPreset({ source: {}, featureIds: [featureId] });
+    }, [featureId]);
+
     // Capability protocol: gray + disable this section when the current formula
     // pairing makes the section incompatible. Section-level `requires` from the
     // resolved config wins over the feature's own; falls back to feature-level
@@ -340,6 +350,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
                 statusContent={statusDots}
                 headerClassName={isCompiled ? '' : 'bg-transparent'}
                 onUnload={isCompiled ? handleUnload : undefined}
+                onReset={advancedMode ? handleReset : undefined}
             >
                 <div className="bg-white/[0.02]">
                     {/* CompileBar — the "compile question". Shown at the top of

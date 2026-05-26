@@ -17,7 +17,7 @@
 
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { useEngineStore } from '../../store/engineStore';
-import type { Preset } from '../types/preset';
+import type { Preset } from '../types/fractal';
 
 export interface ApplyPartialPresetOptions {
   /** Source preset to read feature state from. Missing keys fall back to
