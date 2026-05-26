@@ -85,20 +85,30 @@ export interface FractalDefinition {
         getDist?: string;
         preamble?: string;           // Global code before functions (for pre-calculation)
         preambleVars?: string[];     // Names of mutable globals declared in preamble (for interlace renaming)
-        usesSharedRotation?: boolean; // True if formula reads/writes gmt_rotAxis/rotCos/rotSin (needs swap during interlace)
-        /** Formula owns its full SDE: loopBody calls the function once then breaks.
-         *  Engine guards: SKIP_PRE_BAILOUT, no hybrid fold injection, no interlacing. */
+        /** @deprecated Since P8 of the capability protocol. Use the
+         *  `iter:shared-rotation` token in `capabilities` instead. Retained
+         *  only as an input to GMF backward-compat parsing and as runtime
+         *  metadata read by some engine paths during the transition. */
+        usesSharedRotation?: boolean;
+        /** @deprecated Since P8 of the capability protocol. Use the
+         *  `shape:self-contained` token in `capabilities` instead. Engine
+         *  guards (SKIP_PRE_BAILOUT, no hybrid fold injection, no interlacing)
+         *  continue to read this flag during the transition; will migrate
+         *  to capability checks in a follow-up. */
         selfContainedSDE?: boolean;
-        /** Formula writes to engine-provided cutting-plane accumulators (cp_dmin, cp_scale, cp_trap).
-         *  When true, engine declares those globals + initializes them in loopInit. When estimator
-         *  is set to "Cutting Plane" (5), engine's getDist returns vec2(abs(cp_dmin), cp_trap). */
+        /** @deprecated Since P8 of the capability protocol. Use the
+         *  `estimator:cutting-plane` token in `capabilities` instead. cp_*
+         *  global emission is still gated on this flag at the engine boundary
+         *  during the transition. */
         supportsCuttingPlane?: boolean;
-        /** Capability tokens declared by this formula. Read by evaluateCompat() for
-         *  feature gating. Populated by FractalRegistry.register() via deriveLegacy()
-         *  when not declared explicitly — P1 migrates the natives to explicit
-         *  declarations using the classification at dev/plans/capability-protocol-p1-classification.md.
+        /** Capability tokens declared by this formula. Read by evaluateCompat()
+         *  for feature gating. REQUIRED since P8 — FractalRegistry.register()
+         *  throws if missing. The deriveLegacy shim is gone; native formulas
+         *  declare via `new Set([...] satisfies Capability[])`, V3/V4 Workshop
+         *  imports derive via fragmentarium_import/import-capabilities.ts at
+         *  emit time, and GMF round-trip preserves the set via shaderMeta.
          *  @see dev/docs/gmt/35_Capability_Protocol.md */
-        capabilities?: CapabilitySet;
+        capabilities: CapabilitySet;
     };
     parameters: (FractalParameter | null)[];
     description?: string;

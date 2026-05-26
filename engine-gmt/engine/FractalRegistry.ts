@@ -13,7 +13,6 @@
  */
 
 import { FractalDefinition, FormulaType } from '../types';
-import { deriveLegacy } from './compat/deriveLegacy';
 
 class FractalRegistry {
     private definitions: Map<string, FractalDefinition> = new Map();
@@ -23,17 +22,23 @@ class FractalRegistry {
      *
      * @invariant No membership check — replacement is silent. Re-registering
      * the same id silently overwrites the prior definition.
-     * @invariant `def.shader.capabilities` is populated via `deriveLegacy()`
-     * when not explicitly declared, and frozen to prevent downstream mutation.
-     * P1 migrates native formulas to explicit declarations; P8 removes the
-     * shim (see dev/plans/capability-protocol.md).
+     * @invariant `def.shader.capabilities` MUST be declared by the producer.
+     * P8 of the capability protocol removed the `deriveLegacy` shim that
+     * previously auto-populated this from legacy `shader.*` flags. Producers:
+     * - Native formulas: declare explicitly (see engine-gmt/formulas/*.ts).
+     * - V3/V4 Workshop imports: emit via deriveImportCapabilities (see
+     *   engine-gmt/features/fragmentarium_import/import-capabilities.ts).
+     * - GMF round-trip: parseGMF restores from shaderMeta or derives inline
+     *   for legacy files (see engine-gmt/utils/FormulaFormat.ts).
      */
     public register(def: FractalDefinition) {
         if (!def.shader.capabilities) {
-            // Mutate in place — the def object is the canonical one consumers
-            // hold references to via .get(). Wrapping in a new object would
-            // break identity-equality used elsewhere (e.g. featureRegistry HMR).
-            (def.shader as { capabilities?: ReadonlySet<string> }).capabilities = deriveLegacy(def);
+            throw new Error(
+                `FractalRegistry.register: formula '${def.id}' is missing ` +
+                `shader.capabilities. Declare via ` +
+                `new Set([...] satisfies Capability[]). See ` +
+                `dev/docs/gmt/35_Capability_Protocol.md.`,
+            );
         }
         this.definitions.set(def.id, def);
     }

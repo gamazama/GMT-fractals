@@ -12,9 +12,9 @@
  * Structural checks (per formula, plus snapshot of disabled compat rows):
  *   - shader.function and shader.loopBody are present + non-empty
  *     (or Modular, which intentionally has empty shader blocks)
- *   - shader.capabilities exists (set by FractalRegistry via deriveLegacy
- *     if formula didn't declare explicitly) and contains exactly one
- *     of shape:per-iteration / shape:self-contained / shape:modular
+ *   - shader.capabilities exists (REQUIRED since P8; FractalRegistry throws
+ *     at register if missing) and contains exactly one of
+ *     shape:per-iteration / shape:self-contained / shape:modular
  *   - parameters is an array
  *
  * Cheap regression net — does NOT compile shaders. Real shader-compile
@@ -117,7 +117,7 @@ function structuralCheck(): StructuralIssue[] {
 
     const caps = def.shader.capabilities;
     if (!caps) {
-      issues.push({ formulaId: def.id, kind: 'missing-capabilities', message: 'shader.capabilities not set (deriveLegacy should populate)' });
+      issues.push({ formulaId: def.id, kind: 'missing-capabilities', message: 'shader.capabilities not set (producer must declare explicitly since P8)' });
     } else {
       const shapeCount = SHAPE_TOKENS.filter(t => caps.has(t)).length;
       if (shapeCount !== 1) {

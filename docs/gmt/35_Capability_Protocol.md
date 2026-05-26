@@ -168,19 +168,15 @@ for (const feat of featureRegistry.getAll()) {
 }
 ```
 
-## Migration: legacy → explicit
+## Migration: legacy → explicit (HISTORICAL — shim removed in P8)
 
-The shim ([`engine-gmt/engine/compat/deriveLegacy.ts`](../../engine-gmt/engine/compat/deriveLegacy.ts)) populates `capabilities` from the four legacy `shader.*` flags + Modular id:
+**Status:** The `deriveLegacy` shim is DELETED as of P8. `shader.capabilities` is REQUIRED. `FractalRegistry.register()` throws if missing. The four legacy `shader.*` flags (`selfContainedSDE`, `usesSharedRotation`, `supportsCuttingPlane`) are marked `@deprecated` and retained only as inputs to GMF backward-compat parsing for pre-P0 files.
 
-| Legacy flag | Derived token |
-|-------------|---------------|
-| `def.id === 'Modular'` | `shape:modular` (skips others) |
-| `shader.selfContainedSDE: true` | `shape:self-contained` |
-| (default — no flag) | `shape:per-iteration` |
-| `shader.usesSharedRotation: true` | `iter:shared-rotation` |
-| `shader.supportsCuttingPlane: true` | `estimator:cutting-plane` |
+**For new code:** declare `capabilities` directly via `new Set([...] satisfies Capability[])`. See any of the 44 native formulas in `engine-gmt/formulas/*.ts` for the pattern. V3/V4 Workshop imports derive automatically via `fragmentarium_import/import-capabilities.ts`.
 
-Three tokens have NO legacy mapping — they require explicit declaration in P1: `iter:c-constant`, `render:writes-trap`, `render:writes-iter`. The classification was done in [dev/plans/capability-protocol-p1-classification.md](../../plans/capability-protocol-p1-classification.md).
+**GMF round-trip:** post-P8 saves stash `capabilities` directly in `shaderMeta`. Pre-P0 files (without capabilities in `shaderMeta`) fall through to inline derivation in `parseGMF` that mirrors the deleted shim's logic. Both paths produce a populated `Set` before the formula reaches `register()`.
+
+**Three tokens still require explicit declaration** (no legacy mapping, no auto-derivation): `iter:c-constant`, `render:writes-trap`, `render:writes-iter`. Native classifications live in [dev/plans/capability-protocol-p1-classification.md](../../plans/capability-protocol-p1-classification.md); V3/V4 emitters detect via regex against the assembled GLSL.
 
 ## Testing
 

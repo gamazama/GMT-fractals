@@ -5,7 +5,6 @@
  * @see dev/docs/adr/0059-feature-capability-protocol.md
  */
 
-export { deriveLegacy } from './deriveLegacy';
 export { evaluateCompat } from './evaluateCompat';
 export type { CompatScene } from './evaluateCompat';
 export { pairHasCapability } from './pairHasCapability';

@@ -107,6 +107,11 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
     if (shader.usesSharedRotation) shaderMeta.usesSharedRotation = true;
     if (shader.supportsCuttingPlane) shaderMeta.supportsCuttingPlane = true;
     if (shader.selfContainedSDE) shaderMeta.selfContainedSDE = true;
+    // P8: stash capabilities as a sorted array (Sets aren't JSON-serializable).
+    // Sorted for stable diffs across round-trips. Restored as a Set in parseGMF.
+    if (shader.capabilities && shader.capabilities.size > 0) {
+        shaderMeta.capabilities = [...shader.capabilities].sort();
+    }
 
     const metadata = {
         ...meta,
@@ -217,6 +222,12 @@ export const parseGMF = (content: string): FractalDefinition => {
         if (metadata.shaderMeta.usesSharedRotation) shader.usesSharedRotation = true;
         if (metadata.shaderMeta.supportsCuttingPlane) shader.supportsCuttingPlane = true;
         if (metadata.shaderMeta.selfContainedSDE) shader.selfContainedSDE = true;
+        // P8: restore capabilities Set from stashed array. Modern GMFs (saved
+        // post-P8) include this directly; older files fall through to the
+        // inline derivation below.
+        if (Array.isArray(metadata.shaderMeta.capabilities)) {
+            shader.capabilities = new Set<string>(metadata.shaderMeta.capabilities);
+        }
         delete metadata.shaderMeta;
     }
 
@@ -227,6 +238,24 @@ export const parseGMF = (content: string): FractalDefinition => {
     if (!shader.supportsCuttingPlane) {
         const body = `${shader.function} ${shader.loopBody} ${shader.preamble || ''} ${shader.loopInit || ''}`;
         if (/\bcp_(dmin|scale|trap)\b/.test(body)) shader.supportsCuttingPlane = true;
+    }
+
+    // P8 backward-compat: GMF files saved BEFORE P0 don't have capabilities
+    // in shaderMeta. Derive inline from the legacy flags + Modular id check.
+    // Mirrors the old deriveLegacy shim (now deleted) — kept here as a
+    // parse-time fallback so old saves continue to load. New imports always
+    // populate capabilities at their producer (declared natively, or via
+    // fragmentarium_import/import-capabilities.ts for V3/V4 imports).
+    if (!shader.capabilities) {
+        const caps = new Set<string>();
+        if (metadata.id === 'Modular') {
+            caps.add('shape:modular');
+        } else {
+            caps.add(shader.selfContainedSDE ? 'shape:self-contained' : 'shape:per-iteration');
+            if (shader.usesSharedRotation) caps.add('iter:shared-rotation');
+            if (shader.supportsCuttingPlane) caps.add('estimator:cutting-plane');
+        }
+        shader.capabilities = caps;
     }
 
     return {

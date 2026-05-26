@@ -96,7 +96,7 @@ Phases per [dev/plans/capability-protocol.md](../../plans/capability-protocol.md
 - **P4**: interlace dropdown filters via protocol (closes the bug where self-contained formulas appear).
 - **P5/P6**: V4/V3 Workshop emitters declare capabilities.
 - **P7**: CP mirror collapse via `pairHasCapability` (collapses the inline two-file MIRROR comment in `SDFShaderBuilder.ts` ↔ `core_math.ts`).
-- **P8**: remove shim, deprecate the four legacy `shader.*` flags.
+- **P8** (COMPLETE): `deriveLegacy` shim deleted; `shader.capabilities` is REQUIRED; `FractalRegistry.register()` throws if missing; legacy `shader.*` flags marked `@deprecated`; GMF round-trip stashes capabilities directly with backward-compat inline fallback for pre-P0 files.
 
 ## See also
 
