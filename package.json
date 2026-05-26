@@ -18,6 +18,7 @@
     "test:frag:integration": "tsx debug/test-frag-integration.mts --discover",
     "test:compat": "tsx debug/test-compat.mts",
     "test:compat:write": "tsx debug/test-compat.mts --write",
+    "test:partial-apply": "tsx debug/test-partial-apply.mts",
     "smoke:boot": "tsx debug/smoke-boot.mts",
     "smoke:interact": "tsx debug/smoke-interact.mts",
     "smoke:screenshot": "tsx debug/smoke-screenshot.mts",
