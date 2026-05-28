@@ -661,6 +661,8 @@ Distance is read from the **alpha channel of the main render target** (MRT locat
 
 ### 4.2 Sky Threshold
 
+> **Update 2026-05-28 — sky reset popup + `centerIsSky`.** The "Sky hit behavior" below was the source of a bug: in **worker mode** the probe consumes `engine.lastMeasuredDistance`, which is only written on a *valid hit* (the worker retains the last valid distance so navigation keeps working over sky). That means a sky frame never reads as a sky value on the main thread, so the **Reset Camera popup** — which the sky branch is supposed to surface — never appeared (direct mode worked because it feeds `Infinity` to `processDepthData`). Fixed by adding a `centerIsSky: boolean` to `WorkerShadowState` (set in `WorkerDepthReadback`, read by the worker-mode branch of `usePhysicsProbe`, which then routes through `processDepthData(Infinity)`). Two other current-state notes: the surface-hit predicate is now the shared `isSurfaceHit(d)` helper in `data/constants.ts` (replaces the inline `d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d)` copies); and the files in the §4 Key Files table moved during the engine-fork split — `usePhysicsProbe.ts` and `Navigation.tsx` now live under `engine-gmt/navigation/`, not `hooks/` / `components/`.
+
 `MAX_SKY_DISTANCE = 50.0` (in `data/constants.ts`) — any depth value ≥ 50 is treated as a sky hit (open space, no surface). This prevents navigation speed from exploding when the camera looks at empty space. Shared by `usePhysicsProbe`, `WorkerDepthReadback`, and `WorkerExporter`.
 
 **Sky hit behavior:**
