@@ -9,6 +9,10 @@ import 'reactflow/dist/style.css';
 // Module-level: survives tab switches (component unmount/remount).
 // useRef would reset to null every time the Graph tab is re-entered.
 let persistedViewport: { x: number; y: number; zoom: number } | null = null;
+// Input/Output node positions persist module-level too, so a graph re-sync or
+// tab switch doesn't snap them back to the default centre column after the user
+// drags them out of the way.
+let persistedRootPositions: { start?: { x: number; y: number }; end?: { x: number; y: number } } = {};
 import ReactFlow, {
     Background, Controls, MiniMap, 
     addEdge, ReactFlowProvider, useReactFlow,
@@ -32,6 +36,21 @@ const nodeTypes: NodeTypes = {
     start: StartNode,
     end: EndNode
 };
+
+const EDGE_STYLE = { stroke: '#555', strokeWidth: 2 };
+
+type EdgeEnds = { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null };
+// Bridge a removed node's parent → child so the chain isn't severed. Shared by
+// both delete paths (keyboard onNodesDelete and the × button handleRemoveNode).
+const makeBridgeEdge = (inEdge: EdgeEnds, outEdge: EdgeEnds): Edge => ({
+    id: `e-${inEdge.source}-${outEdge.target}`,
+    source: inEdge.source,
+    target: outEdge.target,
+    sourceHandle: inEdge.sourceHandle,
+    targetHandle: outEdge.targetHandle,
+    animated: true,
+    style: EDGE_STYLE,
+});
 
 interface FlowEditorProps {
     state: FractalState;
@@ -70,7 +89,7 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
         const flowNodes: Node[] = [];
         const flowEdges: Edge[] = [];
         
-        flowNodes.push({ id: 'root-start', type: 'start', position: { x: 250, y: 50 }, data: {}, selectable: false, draggable: false });
+        flowNodes.push({ id: 'root-start', type: 'start', position: persistedRootPositions.start ?? { x: 250, y: 50 }, data: {}, selectable: false, draggable: true });
 
         graph.nodes.forEach(n => {
             flowNodes.push({
@@ -88,7 +107,7 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
         let maxY = 50;
         graph.nodes.forEach(n => { if (n.position?.y > maxY) maxY = n.position.y; });
         
-        flowNodes.push({ id: 'root-end', type: 'end', position: { x: 250, y: maxY + 200 }, data: {}, selectable: false, draggable: false });
+        flowNodes.push({ id: 'root-end', type: 'end', position: persistedRootPositions.end ?? { x: 250, y: maxY + 200 }, data: {}, selectable: false, draggable: true });
         
         graph.edges.forEach(e => {
             flowEdges.push({
@@ -98,7 +117,7 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                 sourceHandle: e.sourceHandle,
                 targetHandle: e.targetHandle,
                 animated: true,
-                style: { stroke: '#555', strokeWidth: 2 },
+                style: EDGE_STYLE,
             });
         });
         return { nodes: flowNodes, edges: flowEdges };
@@ -182,7 +201,7 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                 const tempEdges = [...eds, { ...params, id: 'temp' }] as any;
                 const tempGraphNodes = nds.map(n => n.data.node).filter(n => !!n);
                 if (hasCycle(tempGraphNodes, tempEdges)) { console.warn("Cycle detected!"); return eds; }
-                const newEdges = addEdge({ ...params, animated: true, style: { stroke: '#555', strokeWidth: 2 } }, eds);
+                const newEdges = addEdge({ ...params, animated: true, style: EDGE_STYLE }, eds);
                 syncToStore(nds, newEdges);
                 return newEdges;
             });
@@ -191,11 +210,41 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
         setTimeout(() => actions.handleInteractionEnd(), 0);
     }, [setNodes, setEdges, syncToStore, actions]);
 
-    const onNodesDelete = useCallback(() => {
+    const onNodesDelete = useCallback((deleted: Node[]) => {
         if (skipNextOnNodesDelete.current) { skipNextOnNodesDelete.current = false; return; }
         actions.handleInteractionStart('param');
-        setTimeout(() => { syncToStore(getNodes(), getEdges()); actions.handleInteractionEnd(); }, 0);
-    }, [syncToStore, getNodes, getEdges, actions]);
+        // Reconnect each deleted non-CSG node's parent → child so the chain
+        // isn't severed (matches the × button's handleRemoveNode). RF has already
+        // pruned the connected edges from its own state by the time this fires,
+        // so read the pre-deletion edges from the store — the sync below is still
+        // deferred. Skip a bridge if either endpoint was also part of the deletion.
+        const prevEdges = useEngineStore.getState().graph.edges;
+        const remaining = new Set(getNodes().map(n => n.id));
+        const bridges: Edge[] = [];
+        for (const dn of deleted) {
+            if (dn.type !== 'shaderNode') continue;
+            const def = dn.data?.node ? nodeRegistry.get(dn.data.node.type as NodeType) : undefined;
+            if (def?.category === 'Combiners (CSG)') continue;
+            const inEdge = prevEdges.find(e => e.target === dn.id && (!e.targetHandle || e.targetHandle === 'a'));
+            const outEdge = prevEdges.find(e => e.source === dn.id);
+            if (inEdge && outEdge && remaining.has(inEdge.source) && remaining.has(outEdge.target)) {
+                bridges.push(makeBridgeEdge(inEdge, outEdge));
+            }
+        }
+        setTimeout(() => {
+            if (bridges.length) {
+                setEdges(eds => {
+                    const existing = new Set(eds.map(e => e.id));
+                    const merged = [...eds, ...bridges.filter(b => !existing.has(b.id))];
+                    syncToStore(getNodes(), merged);
+                    return merged;
+                });
+            } else {
+                syncToStore(getNodes(), getEdges());
+            }
+            actions.handleInteractionEnd();
+        }, 0);
+    }, [syncToStore, getNodes, getEdges, setEdges, actions]);
     const onEdgesDelete = useCallback(() => { actions.handleInteractionStart('param'); setTimeout(() => { syncToStore(getNodes(), getEdges()); actions.handleInteractionEnd(); }, 0); }, [syncToStore, getNodes, getEdges, actions]);
 
     const handleUpdateParams = useCallback((id: string, params: any) => {
@@ -244,15 +293,7 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                 const newEdges = eds.filter(e => e.source !== id && e.target !== id);
                 // Auto-reconnect parent→child for non-CSG nodes
                 if (!isCSG && inEdge && outEdge) {
-                    newEdges.push({
-                        id: `e-${inEdge.source}-${outEdge.target}`,
-                        source: inEdge.source,
-                        target: outEdge.target,
-                        sourceHandle: inEdge.sourceHandle,
-                        targetHandle: outEdge.targetHandle,
-                        animated: true,
-                        style: { stroke: '#555', strokeWidth: 2 },
-                    });
+                    newEdges.push(makeBridgeEdge(inEdge, outEdge));
                 }
                 syncToStore(newNodes, newEdges);
                 return newEdges;
@@ -273,7 +314,18 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
     }, [syncToStore, getNodes, setEdges, actions]);
 
     const onNodeDragStart = useCallback(() => { actions.handleInteractionStart('param'); }, [actions]);
-    const onNodeDragStop = useCallback(() => { syncToStore(getNodes(), getEdges()); actions.handleInteractionEnd(); }, [syncToStore, getNodes, getEdges, actions]);
+    const onNodeDragStop = useCallback(() => {
+        const all = getNodes();
+        // Root positions aren't part of the persisted graph (syncToStore filters
+        // to shaderNodes), so remember them module-level — otherwise the next
+        // storeToFlow re-sync would reset a dragged Input/Output to the default.
+        const s = all.find(n => n.id === 'root-start');
+        const e = all.find(n => n.id === 'root-end');
+        if (s) persistedRootPositions.start = { ...s.position };
+        if (e) persistedRootPositions.end = { ...e.position };
+        syncToStore(all, getEdges());
+        actions.handleInteractionEnd();
+    }, [syncToStore, getNodes, getEdges, actions]);
 
     const addNode = (type: NodeType, position?: { x: number, y: number }) => {
         const id = nanoid();
@@ -369,8 +421,8 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                 const filtered = eds.filter(ed => ed.id !== edge.id);
                 const newEdges = [
                     ...filtered,
-                    { id: `e-${edge.source}-${id}`, source: edge.source, target: id, sourceHandle: edge.sourceHandle, targetHandle: 'a', animated: true, style: { stroke: '#555', strokeWidth: 2 } },
-                    { id: `e-${id}-${edge.target}`, source: id, target: edge.target, sourceHandle: undefined, targetHandle: edge.targetHandle, animated: true, style: { stroke: '#555', strokeWidth: 2 } },
+                    { id: `e-${edge.source}-${id}`, source: edge.source, target: id, sourceHandle: edge.sourceHandle, targetHandle: 'a', animated: true, style: EDGE_STYLE },
+                    { id: `e-${id}-${edge.target}`, source: id, target: edge.target, sourceHandle: undefined, targetHandle: edge.targetHandle, animated: true, style: EDGE_STYLE },
                 ];
                 syncToStore(newNodes, newEdges);
                 return newEdges;
