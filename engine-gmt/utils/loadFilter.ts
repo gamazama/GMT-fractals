@@ -29,7 +29,8 @@ import { flushCameraToStore } from '../store/cameraSlice';
 import type { Preset } from '../types/fractal';
 
 export interface LoadFilter {
-    /** formula id + params (coreMath) + geometry/interlace + graph/pipeline */
+    /** formula id + params (coreMath) + geometry/interlace + graph/pipeline,
+     *  plus the DE characterisation (quality.estimator/distanceMetric/deBailout) */
     formula: boolean;
     /** features.lighting + top-level lights[] */
     lighting: boolean;
@@ -78,6 +79,7 @@ const GROUP_FEATURES: Record<'formula' | 'lighting' | 'materials' | 'atmosphere'
 const LOOK_GROUPS = ['lighting', 'materials', 'atmosphere', 'gradients', 'color'] as const;
 
 const STORAGE_KEY = 'gmt.loadFilter';
+const KEEP_KEY = 'gmt.loadFilter.keep';
 
 // ── Module state + pub/sub ────────────────────────────────────────────────
 
@@ -95,12 +97,20 @@ function readPersisted(): LoadFilter {
 }
 
 let _filter: LoadFilter = readPersisted();
+// Whether the filter applies to the normal Load menu row (sticky). Off by
+// default: the row does a plain full load and the chosen group toggles are
+// merely remembered in the panel until the user opts in. The panel's own
+// Load button always honours the toggles regardless.
+let _keepOptions: boolean = (() => {
+    try { return localStorage.getItem(KEEP_KEY) === '1'; } catch { return false; }
+})();
 let _panelOpen = false;
-let _snapshot: { filter: LoadFilter; panelOpen: boolean } = { filter: _filter, panelOpen: _panelOpen };
+let _snapshot: { filter: LoadFilter; panelOpen: boolean; keepOptions: boolean } =
+    { filter: _filter, panelOpen: _panelOpen, keepOptions: _keepOptions };
 
 const _subs = new Set<() => void>();
 function rebuildAndNotify() {
-    _snapshot = { filter: _filter, panelOpen: _panelOpen };
+    _snapshot = { filter: _filter, panelOpen: _panelOpen, keepOptions: _keepOptions };
     _subs.forEach(fn => fn());
 }
 
@@ -124,9 +134,26 @@ export function resetLoadFilter(): void {
     rebuildAndNotify();
 }
 
-/** True when at least one group is excluded — drives the italic + `*` label. */
+export function getKeepOptions(): boolean { return _keepOptions; }
+
+export function setKeepOptions(value: boolean): void {
+    if (_keepOptions === value) return;
+    _keepOptions = value;
+    try { localStorage.setItem(KEEP_KEY, value ? '1' : '0'); } catch { /* non-fatal */ }
+    rebuildAndNotify();
+}
+
+/** True when at least one group is excluded — used to decide whether a
+ *  filtered load differs from a full load. */
 export function isLoadFilterActive(): boolean {
     return (Object.keys(_filter) as LoadFilterGroup[]).some(k => !_filter[k]);
+}
+
+/** Whether the Load menu row should load through the filter — only when the
+ *  user has opted to keep options AND at least one group is excluded. Drives
+ *  the row's italic + `*` indicator. */
+export function isLoadFilterStuck(): boolean {
+    return _keepOptions && isLoadFilterActive();
 }
 
 export function openLoadFilterPanel(): void {
@@ -171,6 +198,27 @@ function copyFeature(merged: any, file: Preset, featId: string): void {
     }
 }
 
+/** Copy only the named params of a feature slice from `file` onto `merged`,
+ *  leaving the rest of that feature at the current scene's values. Used for the
+ *  formula's DE characterisation (estimator/metric/bailout) which lives in the
+ *  shared `quality` feature alongside perf knobs we must NOT drag along. */
+function copyFeatureParams(merged: any, file: Preset, featId: string, params: string[]): void {
+    const src = (file.features ?? {})[featId];
+    if (!src) return;
+    merged.features = merged.features ?? {};
+    const target = { ...(merged.features[featId] ?? {}) };
+    for (const key of params) {
+        if (src[key] !== undefined) target[key] = src[key];
+    }
+    merged.features[featId] = target;
+}
+
+/** The formula's distance-estimator characterisation — these define HOW the
+ *  fractal renders, so they must travel with the formula on load. They live in
+ *  the shared `quality` feature, so they're copied param-wise (not the whole
+ *  slice, which also holds AA / accumulation / step caps). */
+const FORMULA_QUALITY_PARAMS = ['estimator', 'distanceMetric', 'deBailout'];
+
 /**
  * Build the preset to load: a clone of `current` with the selected groups
  * overlaid from `file`. Groups left unchecked keep the current scene's values.
@@ -186,6 +234,9 @@ export function buildFilteredPreset(current: Preset, file: Preset, filter: LoadF
         merged.graph = file.graph;
         merged.pipeline = file.pipeline;
         for (const featId of GROUP_FEATURES.formula) copyFeature(merged, file, featId);
+        // DE estimator / distance metric / bailout characterise how this
+        // formula renders — bring them along, but not the rest of `quality`.
+        copyFeatureParams(merged, file, 'quality', FORMULA_QUALITY_PARAMS);
     }
 
     for (const group of LOOK_GROUPS) {
@@ -219,11 +270,15 @@ export function buildFilteredPreset(current: Preset, file: Preset, filter: LoadF
 // ── Entry point ─────────────────────────────────────────────────────────────
 
 /**
- * Open a file picker and load the chosen scene through the active filter.
- * Shared by both the Load menu row and the panel's Load button.
+ * Open a file picker and load the chosen scene. Shared by the Load menu row
+ * and the panel's Load button.
  *
- * Three regimes:
- *  - All groups on → plain full load (`loadScene` of the file).
+ * @param useFilter When false (or no group is excluded) the file loads in
+ *   full, ignoring the panel toggles. The menu row passes `getKeepOptions()`
+ *   so a full load is the default unless the user opted to keep options; the
+ *   panel's Load button passes `true` to always honour the toggles.
+ *
+ * Filtered regimes:
  *  - Look-only (formula/camera/animation all OFF) → surgical: push just the
  *    selected feature slices onto the live store via applyPartialPreset. No
  *    scene reload, so the formula, distance estimator, render settings and
@@ -234,7 +289,7 @@ export function buildFilteredPreset(current: Preset, file: Preset, filter: LoadF
  *    it. Camera is flushed first so the teleport lands on the live pose when
  *    Camera is left unticked.
  */
-export function loadSceneWithFilter(): void {
+export function loadSceneWithFilter(useFilter: boolean): void {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json,.json,.gmf,image/png';
@@ -258,7 +313,7 @@ export function loadSceneWithFilter(): void {
         const store = useEngineStore.getState() as any;
         const filter = getLoadFilter();
 
-        if (!isLoadFilterActive()) {
+        if (!useFilter || !isLoadFilterActive()) {
             store.loadScene({ preset: filePreset });
             return;
         }

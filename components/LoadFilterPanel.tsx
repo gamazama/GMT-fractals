@@ -10,7 +10,7 @@
  * @see dev/engine-gmt/utils/loadFilter.ts
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
     useLoadFilterState,
     setLoadFilterGroup,
@@ -19,6 +19,9 @@ import {
     closeLoadFilterPanel,
     loadSceneWithFilter,
     isLoadFilterActive,
+    isLoadFilterStuck,
+    getKeepOptions,
+    setKeepOptions,
     type LoadFilterGroup,
 } from '../engine-gmt/utils/loadFilter';
 
@@ -31,29 +34,30 @@ const GearIcon: React.FC = () => (
 );
 
 /**
- * Custom File-menu Load row: clicking the label loads a file through the
- * active filter; the gear opens the filter panel. Replaces engine-core's
- * generic `LoadSceneMenuItem` (registered with the same `'load'` id after
- * installSceneIO, which overwrites it). Label goes italic + `*` when a
- * filter is in effect, signalling that the next load won't be a full load.
+ * Custom File-menu Load row: clicking the label loads a file; the gear opens
+ * the filter panel. Replaces engine-core's generic `LoadSceneMenuItem`
+ * (registered with the same `'load'` id after installSceneIO, which overwrites
+ * it). The row only loads through the filter when the user has ticked "keep
+ * options" in the panel — otherwise it's a plain full load. The label goes
+ * italic + `*` to signal when the sticky filter is in effect.
  */
 export const LoadSceneFilterMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
     useLoadFilterState(); // subscribe so the label re-renders live
-    const active = isLoadFilterActive();
+    const stuck = isLoadFilterStuck();
     return (
         <div className="w-full flex items-center gap-1 px-2 py-1.5 rounded text-xs text-gray-300 hover:bg-white/10 transition-colors">
             <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); loadSceneWithFilter(); close(); }}
-                className={`flex-1 flex items-center min-w-0 text-left hover:text-white transition-colors ${active ? 'italic' : ''}`}
-                title={active ? 'Loads only the selected parts — click the gear to change' : 'Load a scene file (PNG / GMF)'}
+                onClick={(e) => { e.stopPropagation(); loadSceneWithFilter(getKeepOptions()); close(); }}
+                className={`flex-1 flex items-center min-w-0 text-left hover:text-white transition-colors ${stuck ? 'italic' : ''}`}
+                title={stuck ? 'Loads only the kept parts — click the gear to change' : 'Load a scene file (PNG / GMF)'}
             >
-                <span className="truncate">Load Scene (PNG/GMF){active ? ' *' : ''}</span>
+                <span className="truncate">Load Scene (PNG/GMF){stuck ? ' *' : ''}</span>
             </button>
             <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); openLoadFilterPanel(); close(); }}
-                className={`shrink-0 p-1 rounded transition-colors ${active ? 'text-cyan-300' : 'text-gray-500'} hover:text-cyan-300 hover:bg-white/10`}
+                className={`shrink-0 p-1 rounded transition-colors ${stuck ? 'text-cyan-300' : 'text-gray-500'} hover:text-cyan-300 hover:bg-white/10`}
                 title="Choose which parts of the file to load"
                 aria-label="Load options"
             >
@@ -64,7 +68,7 @@ export const LoadSceneFilterMenuItem: React.FC<{ close: () => void }> = ({ close
 };
 
 const GROUPS: { id: LoadFilterGroup; label: string }[] = [
-    { id: 'formula', label: 'Formula (+ geometry, interlace)' },
+    { id: 'formula', label: 'Formula (+ geometry, interlace, DE)' },
     { id: 'lighting', label: 'Lighting + lights' },
     { id: 'materials', label: 'Materials, AO, reflections' },
     { id: 'atmosphere', label: 'Atmosphere, volumetric' },
@@ -75,13 +79,33 @@ const GROUPS: { id: LoadFilterGroup; label: string }[] = [
 ];
 
 export const LoadFilterPanel: React.FC = () => {
-    const { filter, panelOpen } = useLoadFilterState();
+    const { filter, panelOpen, keepOptions } = useLoadFilterState();
+    const rootRef = useRef<HTMLDivElement>(null);
+
+    // Auto-dismiss on outside-click or Escape. The mousedown listener is
+    // attached on a deferred tick so the same click that opened the panel
+    // (the menu's gear button) doesn't immediately close it.
+    useEffect(() => {
+        if (!panelOpen) return;
+        const onDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) closeLoadFilterPanel();
+        };
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeLoadFilterPanel(); };
+        const id = setTimeout(() => document.addEventListener('mousedown', onDown), 0);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            clearTimeout(id);
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [panelOpen]);
+
     if (!panelOpen) return null;
 
     const active = isLoadFilterActive();
 
     return (
-        <div className="fixed top-12 right-4 z-[1100] w-64 bg-neutral-900 border border-white/10 rounded-md shadow-2xl flex flex-col overflow-hidden">
+        <div ref={rootRef} className="fixed top-12 right-4 z-[1100] w-64 bg-neutral-900 border border-white/10 rounded-md shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-300">
                     Load — which parts?
@@ -117,6 +141,21 @@ export const LoadFilterPanel: React.FC = () => {
                 </p>
             </div>
 
+            <div className="px-3 py-2 border-t border-white/10">
+                <label
+                    className="flex items-center gap-2 cursor-pointer"
+                    title="When on, the Load menu uses these toggles. When off, the menu does a full load and the toggles apply only to the button below."
+                >
+                    <input
+                        type="checkbox"
+                        checked={keepOptions}
+                        onChange={e => setKeepOptions(e.target.checked)}
+                        className="w-3 h-3 accent-cyan-500"
+                    />
+                    <span className="text-[11px] text-gray-300">Always filter</span>
+                </label>
+            </div>
+
             <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-white/10 bg-neutral-950">
                 <button
                     onClick={resetLoadFilter}
@@ -125,7 +164,7 @@ export const LoadFilterPanel: React.FC = () => {
                     Reset
                 </button>
                 <button
-                    onClick={() => { loadSceneWithFilter(); closeLoadFilterPanel(); }}
+                    onClick={() => { loadSceneWithFilter(true); closeLoadFilterPanel(); }}
                     className="px-3 py-1 text-[10px] font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded transition-colors"
                 >
                     Load…

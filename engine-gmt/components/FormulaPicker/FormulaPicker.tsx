@@ -780,9 +780,53 @@ function ModalShell({ onClose, children }: { onClose?: () => void; children: Rea
     );
 }
 
+/** True when `el` is a vertical scroll container with content to scroll. */
+function isScrollableY(el: HTMLElement): boolean {
+    const oy = getComputedStyle(el).overflowY;
+    return (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+}
+
+/** Inline shell — the fixed-height picker embedded inside other scrollable
+ *  surfaces (currently only the New Scene wizard's scrolling modal body).
+ *
+ *  The grid + sidebar scroll internally at 400px. Chrome "latches" a wheel
+ *  gesture to whichever scroller it started on, so once you scroll the formula
+ *  list it keeps eating wheel deltas even at the list's end instead of handing
+ *  off to the modal. This native (non-passive) wheel listener forwards the
+ *  residual delta to the nearest scrollable ancestor once the inner scroller
+ *  is at its boundary, so scrolling "passes through" to the modal as expected.
+ *  Native listener (not React onWheel) because React 18 registers wheel
+ *  passively at the root, which would no-op preventDefault. */
 function InlineShell({ children }: { children: React.ReactNode }) {
+    const rootRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const root = rootRef.current;
+        if (!root) return;
+        const onWheel = (e: WheelEvent) => {
+            const dy = e.deltaY;
+            if (!dy) return;
+            // Walk from the event target up to the inner scroller (if any).
+            let inner: HTMLElement | null = e.target as HTMLElement;
+            while (inner && inner !== root && !isScrollableY(inner)) inner = inner.parentElement;
+            if (inner && inner !== root && isScrollableY(inner)) {
+                const atTop = inner.scrollTop <= 0;
+                const atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 1;
+                if ((dy > 0 && !atBottom) || (dy < 0 && !atTop)) return; // inner can still scroll
+            }
+            // At a boundary (or no inner scroller) → forward to the surrounding
+            // scrollable surface instead of letting the gesture latch here.
+            let outer = root.parentElement;
+            while (outer && !isScrollableY(outer)) outer = outer.parentElement;
+            if (outer) {
+                outer.scrollTop += dy;
+                e.preventDefault();
+            }
+        };
+        root.addEventListener('wheel', onWheel, { passive: false });
+        return () => root.removeEventListener('wheel', onWheel);
+    }, []);
     return (
-        <div className="formula-picker-shell bg-[#121212] border border-white/10 rounded-lg overflow-hidden flex flex-col h-[400px] w-full">
+        <div ref={rootRef} className="formula-picker-shell bg-[#121212] border border-white/10 rounded-lg overflow-hidden flex flex-col h-[400px] w-full">
             {children}
         </div>
     );
