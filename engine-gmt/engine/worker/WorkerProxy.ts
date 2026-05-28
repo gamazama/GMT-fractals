@@ -33,7 +33,7 @@ export class WorkerProxy implements AccumulationController {
     private _shadow: WorkerShadowState = {
         isBooted: false, isCompiling: false, hasCompiledShader: false,
         isPaused: false, dirty: false, lastCompileDuration: 0,
-        lastMeasuredDistance: 1, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
+        lastMeasuredDistance: 1, centerIsSky: false, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
         sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
     };
 
@@ -166,7 +166,7 @@ export class WorkerProxy implements AccumulationController {
         this._shadow = {
             isBooted: false, isCompiling: false, hasCompiledShader: false,
             isPaused: false, dirty: false, lastCompileDuration: 0,
-            lastMeasuredDistance: 1, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
+            lastMeasuredDistance: 1, centerIsSky: false, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
             sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
         };
 
@@ -473,6 +473,8 @@ export class WorkerProxy implements AccumulationController {
     get lastCompileDuration() { return this._shadow.lastCompileDuration; }
     get lastMeasuredDistance() { return this._shadow.lastMeasuredDistance; }
     set lastMeasuredDistance(v: number) { this._shadow.lastMeasuredDistance = v; }
+    get centerIsSky() { return this._shadow.centerIsSky; }
+    set centerIsSky(v: boolean) { this._shadow.centerIsSky = v; }
     get hasCompiledShader() { return this._shadow.hasCompiledShader; }
     get dirty() { return this._shadow.dirty; }
     set dirty(v: boolean) { if (v) this.post({ type: 'SET_DIRTY' }); }

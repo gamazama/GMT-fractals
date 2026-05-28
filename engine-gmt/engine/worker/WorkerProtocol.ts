@@ -34,6 +34,7 @@ export interface WorkerShadowState {
     dirty: boolean;
     lastCompileDuration: number;
     lastMeasuredDistance: number;
+    centerIsSky: boolean;
     accumulationCount: number;
     convergenceValue: number;
     frameCount: number;

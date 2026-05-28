@@ -25,6 +25,10 @@ export const DEFAULT_PIPELINE_REVISION = 1;
 /** Maximum valid depth — anything ≥ this is treated as a sky hit (no surface). */
 export const MAX_SKY_DISTANCE = 50.0;
 
+/** A center-depth sample represents a real surface hit (not sky / not garbage). */
+export const isSurfaceHit = (d: number): boolean =>
+    d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d);
+
 // MP4 Export Configuration
 export const VIDEO_CONFIG = {
     BITRATE_MULTIPLIER: 1_000_000, // Mbps to bps

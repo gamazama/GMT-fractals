@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import type { FractalEngine } from '../FractalEngine';
 import type { VideoExportConfig, ExportPass } from '../../../engine/codec/VideoExportTypes';
 import type { EngineRenderState } from '../FractalEngine';
-import { VIDEO_CONFIG, VIDEO_FORMATS, MAX_SKY_DISTANCE } from '../../../data/constants';
+import { VIDEO_CONFIG, VIDEO_FORMATS, isSurfaceHit } from '../../../data/constants';
 import * as Mediabunny from 'mediabunny';
 import { halton } from '../../../engine/codec/halton';
 import { BloomPass } from '../BloomPass';
@@ -457,7 +457,7 @@ export class WorkerExporter {
             const cy = Math.floor(sess.renderHeight / 2);
             this.renderer.readRenderTargetPixels(lastWrite, cx, cy, 1, 1, sess.depthBuf);
             const measuredDist = sess.depthBuf[3];
-            if (measuredDist > 0 && measuredDist < MAX_SKY_DISTANCE && Number.isFinite(measuredDist)) {
+            if (isSurfaceHit(measuredDist)) {
                 this.engine.lastMeasuredDistance = measuredDist;
             }
         }
@@ -513,7 +513,7 @@ export class WorkerExporter {
                 const cy = Math.floor(sess.renderHeight / 2);
                 this.renderer.readRenderTargetPixels(lastWrite, cx, cy, 1, 1, sess.depthBuf);
                 const measuredDist = sess.depthBuf[3];
-                if (measuredDist > 0 && measuredDist < MAX_SKY_DISTANCE && Number.isFinite(measuredDist)) {
+                if (isSurfaceHit(measuredDist)) {
                     this.engine.lastMeasuredDistance = measuredDist;
                 }
             }

@@ -48,7 +48,7 @@ function getShadowState(): WorkerShadowState {
         return {
             isBooted: false, isCompiling: false, hasCompiledShader: false,
             isPaused: false, dirty: false, lastCompileDuration: 0,
-            lastMeasuredDistance: 1, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
+            lastMeasuredDistance: 1, centerIsSky: false, accumulationCount: 0, convergenceValue: 1.0, frameCount: 0,
             sceneOffset: { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 }
         };
     }
@@ -61,6 +61,7 @@ function getShadowState(): WorkerShadowState {
         dirty: engine.dirty,
         lastCompileDuration: engine.lastCompileDuration,
         lastMeasuredDistance: engine.lastMeasuredDistance,
+        centerIsSky: engine.centerIsSky,
         accumulationCount: engine.pipeline?.accumulationCount ?? 0,
         convergenceValue: engine.pipeline?.getLastConvergenceResult() ?? 1.0,
         frameCount: 0,

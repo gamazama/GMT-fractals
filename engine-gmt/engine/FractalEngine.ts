@@ -163,6 +163,10 @@ export class FractalEngine {
 
     public shouldSnapCamera: boolean = false;
     public lastMeasuredDistance: number = 10.0;
+    // True when the crosshair-center pixel is sky (no surface hit). Distinct
+    // from lastMeasuredDistance, which retains the last valid distance so
+    // navigation keeps working over sky — this carries the live hit/miss state.
+    public centerIsSky: boolean = false;
     public dirty: boolean = true;
     
     public isBooted: boolean = false;

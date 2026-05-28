@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
 import { useEngineStore as useFractalStore } from '../../store/engineStore';
-import { MAX_SKY_DISTANCE } from '../../data/constants';
+import { MAX_SKY_DISTANCE, isSurfaceHit } from '../../data/constants';
 
 /** Format a distance value for the HUD */
 const formatDist = (d: number) => d < 0.001 ? d.toExponential(2) : d.toFixed(4);
@@ -23,6 +23,7 @@ export const usePhysicsProbe = (
     const hasValidMeasurement = useRef(false);
     const frameCount = useRef(0);
     const readBuffer = useRef(new Float32Array(4));
+    const resetShownRef = useRef<boolean | null>(null);
 
     const updateSpeedHud = () => {
         if (hudRefs.speed.current && frameCount.current % 10 === 0) {
@@ -37,10 +38,14 @@ export const usePhysicsProbe = (
         }
     };
 
+    // Runs every frame (incl. continuously while pointing at sky), so only
+    // touch the DOM on an actual show/hide transition.
     const updateResetButton = (dist: number) => {
-        if (hudRefs.reset.current) {
-            hudRefs.reset.current.style.display = (dist > MAX_SKY_DISTANCE || dist < 0.001) ? 'block' : 'none';
-        }
+        if (!hudRefs.reset.current) return;
+        const show = dist > MAX_SKY_DISTANCE || dist < 0.001;
+        if (resetShownRef.current === show) return;
+        resetShownRef.current = show;
+        hudRefs.reset.current.style.display = show ? 'block' : 'none';
     };
 
     const processDepthData = (depthValue: number) => {
@@ -55,7 +60,7 @@ export const usePhysicsProbe = (
                 engine.lastMeasuredDistance = distAverageRef.current;
             }
             updateDistHud(distAverageRef.current, '(sky)', '#888');
-            if (hudRefs.reset.current) hudRefs.reset.current.style.display = 'block';
+            updateResetButton(Infinity);
             return;
         }
 
@@ -108,13 +113,21 @@ export const usePhysicsProbe = (
 
         // Worker mode: depth readback happens in worker, shadow state carries lastMeasuredDistance
         if (!renderer) {
+            // lastMeasuredDistance retains the last valid hit and never reads as
+            // sky, so centerIsSky carries the live miss. Must run every frame
+            // while sky — lastMeasuredDistance stops changing once off-surface.
+            if (engine.centerIsSky) {
+                processDepthData(Infinity);
+                updateSpeedHud();
+                return;
+            }
             const shadowDist = engine.lastMeasuredDistance;
             if (shadowDist !== distAverageRef.current) {
                 processDepthData(shadowDist);
                 // Focus Lock: sync dofFocus when distance changes meaningfully (>1%)
                 const smoothedDist = distAverageRef.current;
                 const store = useFractalStore.getState();
-                if (store.focusLock && smoothedDist > 0 && smoothedDist < MAX_SKY_DISTANCE) {
+                if (store.focusLock && isSurfaceHit(smoothedDist)) {
                     const currentFocus = (store as any).optics?.dofFocus ?? 0;
                     const relChange = Math.abs(smoothedDist - currentFocus) / Math.max(currentFocus, 0.0001);
                     if (relChange > 0.01) {
@@ -153,7 +166,7 @@ export const usePhysicsProbe = (
                     const success = engine.pipeline?.readPixels?.(renderer, sx, sy, 1, 1, readBuffer.current);
                     if (success) {
                         const depth = readBuffer.current[3];
-                        if (depth > 0 && depth < MAX_SKY_DISTANCE && Number.isFinite(depth)) {
+                        if (isSurfaceHit(depth)) {
                             validDepthSum += depth;
                             validCount++;
                         }

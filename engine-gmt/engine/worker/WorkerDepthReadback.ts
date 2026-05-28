@@ -13,7 +13,7 @@ import type * as THREE from 'three';
 import type { FractalEngine } from '../FractalEngine';
 import type { WorkerToMainMessage } from './WorkerProtocol';
 
-import { MAX_SKY_DISTANCE } from '../../../data/constants';
+import { isSurfaceHit } from '../../../data/constants';
 
 type PostMsgFn = (msg: WorkerToMainMessage, transfer?: Transferable[]) => void;
 
@@ -84,12 +84,16 @@ export class WorkerDepthReadback {
             if      (exp === 0)  d = (sign ? -1 : 1) * mant * Math.pow(2, -24);
             else if (exp === 31) d = NaN;
             else                 d = (sign ? -1 : 1) * Math.pow(2, exp - 15) * (1 + mant / 1024);
-            if (d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
+            const hit = isSurfaceHit(d);
+            if (hit) engine.lastMeasuredDistance = d;
+            engine.centerIsSky = !hit;
         } else {
             const floatBuf = new Float32Array(4);
             gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, floatBuf);
             const d = floatBuf[3];
-            if (d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
+            const hit = isSurfaceHit(d);
+            if (hit) engine.lastMeasuredDistance = d;
+            engine.centerIsSky = !hit;
         }
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
         gl.deleteSync(this._depthFence);
@@ -135,7 +139,9 @@ export class WorkerDepthReadback {
             const ok = engine.pipeline.readPixels?.(renderer, cx, cy, 1, 1, buf);
             if (ok) {
                 const d = buf[3];
-                if (d > 0 && d < MAX_SKY_DISTANCE && Number.isFinite(d)) engine.lastMeasuredDistance = d;
+                const hit = isSurfaceHit(d);
+                if (hit) engine.lastMeasuredDistance = d;
+                engine.centerIsSky = !hit;
             }
         }
     }
@@ -160,7 +166,7 @@ export class WorkerDepthReadback {
             const px = Math.min(Math.max(Math.floor((x + 1) * 0.5 * w), 0), w - 1);
             const py = Math.min(Math.max(Math.floor((y + 1) * 0.5 * h), 0), h - 1);
             const dist = depthData[(py * w + px) * 4 + 3];
-            postMsg({ type: 'FOCUS_RESULT', id, distance: (dist > 0 && dist < MAX_SKY_DISTANCE) ? dist : -1 });
+            postMsg({ type: 'FOCUS_RESULT', id, distance: isSurfaceHit(dist) ? dist : -1 });
             this._focusPickState = { phase: 'ready', width: w, height: h, depthData };
         }
     }
@@ -185,7 +191,7 @@ export class WorkerDepthReadback {
         const px = Math.min(Math.max(Math.floor((x + 1) * 0.5 * sw), 0), sw - 1);
         const py = Math.min(Math.max(Math.floor((y + 1) * 0.5 * sh), 0), sh - 1);
         const dist = depthData[(py * sw + px) * 4 + 3];
-        postMsg({ type: 'FOCUS_RESULT', id, distance: (dist > 0 && dist < MAX_SKY_DISTANCE) ? dist : -1 });
+        postMsg({ type: 'FOCUS_RESULT', id, distance: isSurfaceHit(dist) ? dist : -1 });
     }
 
     endFocusPick(): void {
