@@ -64,6 +64,7 @@ import {
 // --- Bespoke panel components ---
 import { EnginePanel } from '../components/panels/EnginePanel';
 import { CameraManagerPanel } from './camera_manager/CameraManagerPanel';
+import { FeedbackPanel } from '../feedback/FeedbackPanel';
 import React_FlowEditor from '../components/panels/flow/FlowEditor';
 import { InterlaceSecondaryPicker } from '../components/FormulaPicker';
 
@@ -189,5 +190,6 @@ export const registerGmtUi = () => {
     // Bespoke panels — manifest references these by `component:`.
     componentRegistry.register('panel-engine', EnginePanel);
     componentRegistry.register('panel-cameramanager', CameraManagerPanel);
+    componentRegistry.register('panel-feedback', FeedbackPanel);
     componentRegistry.register('panel-graph', React_FlowEditor);
 };

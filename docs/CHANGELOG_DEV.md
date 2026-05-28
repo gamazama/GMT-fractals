@@ -2,6 +2,21 @@
 
 Chronological log of significant changes during the v0.9.5 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-05-28
+
+### Floating panel consolidation
+
+**User-facing**
+- **Send Feedback is now a draggable, dockable panel** (was a fixed modal). Open it from the Help menu; drag it by its title bar, drop it into a dock, or close it — it behaves like the other panels now.
+- **Escape reliably closes dialogs** — sign-in, account, submit-to-gallery, render-result, the gradient and node context menus — including when a text field inside them has focus.
+- **New Scene no longer closes if you click outside it.** A stray backdrop click won't discard an in-progress composition; close it with Escape, the ✕, or Cancel.
+- Context menus (right-click on a node, on a gradient stop, on the canvas) now close on Escape and on a click anywhere outside — previously some couldn't be dismissed by clicking a node.
+
+**Where**
+- New shared primitives: [`components/ui/`](../components/ui/) — `Modal`, `FloatingPanel`, `AnchoredMenu`, plus `useDismiss` ([`hooks/useDismiss.ts`](../hooks/useDismiss.ts)), the `Z` stacking scale, `clampToViewport`, and `stopNavKeys`. Usage contract is the top-of-file JSDoc on each.
+- Shortcut registry now installs in capture phase ([`app-gmt/main.tsx`](../app-gmt/main.tsx)) so Escape-dismissal beats key-propagation stops.
+- Rationale + deliberate bespoke exceptions (CenterHUD, GlobalContextMenu submenu layout): [`docs/adr/0060-floating-panel-primitives.md`](adr/0060-floating-panel-primitives.md).
+
 ## 2026-05-26
 
 ### Audio + Drawing panels moved to the left dock

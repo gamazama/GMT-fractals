@@ -487,6 +487,18 @@ export const GmtPanels: PanelManifest = [
         helpId: 'panel.engine',
     },
 
+    // Feedback — opened on demand from the Help menu (openFeedback). Defaults
+    // to floating so it doesn't occupy a dock tab until the user drags it into
+    // a dock; isCore:false gives it a close button. No showIf — visibility is
+    // driven by isOpen (floating) / explicit docking.
+    {
+        id: 'Feedback',
+        dock: 'float',
+        order: 100,
+        component: 'panel-feedback',
+        isCore: false,
+    },
+
     // View Manager — saved-view library + cardinal/preset toolbar +
     // composition guides. Lives in the (hidden-by-default) left dock
     // so the right dock stays focused on authoring tabs. Opens via

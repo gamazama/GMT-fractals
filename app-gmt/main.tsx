@@ -277,7 +277,11 @@ setLfoListConfig({ defaultTarget: 'coreMath.paramA' });
 // (it does the same registry calls as installModulationUI); this call
 // is harmless (idempotent) and documents intent for the GMT app.
 installModulationUI();
-installShortcuts();
+// Capture phase: the dispatcher runs before content handlers, so Escape-based
+// dismissal (useDismiss → shortcut registry) fires even when a surface stops
+// key propagation in bubble phase (e.g. panels that block nav keys). The
+// input-focus guard still protects typing in fields.
+installShortcuts({ capture: true });
 installUndo();
 // hideShortcuts: GMT's camera state lives in the savedCameras state-library
 // (installed by installGmtCameraSlice → installStateLibrary), which already

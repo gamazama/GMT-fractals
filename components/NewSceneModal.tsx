@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Modal, Z } from './ui';
 import { useEngineStore } from '../store/engineStore';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { FormulaPicker } from '../engine-gmt/components/FormulaPicker/FormulaPicker';
@@ -299,19 +300,6 @@ export const NewSceneModal: React.FC = () => {
         return set;
     }, []);
 
-    // Esc to cancel — same affordance as the [Cancel] button.
-    useEffect(() => {
-        if (!newSceneOpen) return;
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.stopPropagation();
-                closeNewScene();
-            }
-        };
-        window.addEventListener('keydown', onKey, true);
-        return () => window.removeEventListener('keydown', onKey, true);
-    }, [newSceneOpen, closeNewScene]);
-
     const handleCreate = useCallback(() => {
         if (!pickedFormula) return;
         const def = registry.get(pickedFormula);
@@ -569,10 +557,7 @@ export const NewSceneModal: React.FC = () => {
     if (!newSceneOpen) return null;
 
     return (
-        <div
-            className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-6"
-            onClick={(e) => { if (e.target === e.currentTarget) closeNewScene(); }}
-        >
+        <Modal onClose={closeNewScene} z={Z.modal} dismissOnBackdrop={false}>
             <div className="bg-neutral-900 border border-white/10 rounded-md shadow-2xl w-[720px] max-w-full max-h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
@@ -703,10 +688,7 @@ export const NewSceneModal: React.FC = () => {
              *  proceed. We don't offer a Save-from-here button — keeps the
              *  flow shallow and avoids re-implementing the existing save UI. */}
             {confirmDiscard && (
-                <div
-                    className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-6"
-                    onClick={(e) => { if (e.target === e.currentTarget) setConfirmDiscard(false); }}
-                >
+                <Modal onClose={() => setConfirmDiscard(false)} z={Z.modalNested}>
                     <div className="bg-neutral-900 border border-amber-500/30 rounded-md shadow-2xl w-[420px] p-4 space-y-3">
                         <h3 className="text-[12px] font-bold text-amber-400">
                             Discard current scene?
@@ -735,9 +717,9 @@ export const NewSceneModal: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                </div>
+                </Modal>
             )}
-        </div>
+        </Modal>
     );
 };
 

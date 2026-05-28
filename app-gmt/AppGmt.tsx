@@ -37,7 +37,6 @@ import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubm
 import { NewSceneModal } from '../components/NewSceneModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
-import { FeedbackOverlay } from '../engine-gmt/feedback';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
@@ -385,7 +384,6 @@ export const AppGmt: React.FC = () => {
                 <BucketRenderResultOverlay />
                 <AuthOverlayHost />
                 <AccountPanelHost />
-                <FeedbackOverlay />
                 <NewSceneModal />
                 <LoadFilterPanel />
 

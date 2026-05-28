@@ -11,9 +11,9 @@
  * proceed in the app without picking a username.
  */
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { getSupabase } from '../supabase';
 import { useAuthStore } from './authStore';
+import { Modal, Z, stopNavKeys } from '../../components/ui';
 
 const USERNAME_RE = /^[a-z0-9](?:[a-z0-9_-]{1,22}[a-z0-9])?$/;
 const RESERVED_USERNAMES = new Set([
@@ -110,15 +110,6 @@ export const AccountPanel: React.FC = () => {
         }, 350);
         return () => clearTimeout(handle);
     }, [username, setupMode]);
-
-    useEffect(() => {
-        if (!visible || setupMode) return;
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') { e.stopPropagation(); closeAccountPanel(); }
-        };
-        window.addEventListener('keydown', onKey, true);
-        return () => window.removeEventListener('keydown', onKey, true);
-    }, [visible, setupMode, closeAccountPanel]);
 
     if (!visible) return null;
 
@@ -225,14 +216,19 @@ export const AccountPanel: React.FC = () => {
         }
     };
 
-    return createPortal(
-        <div
-            className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-            onKeyDown={(e) => e.stopPropagation()}
-            onKeyUp={(e) => e.stopPropagation()}
-            onKeyPress={(e) => e.stopPropagation()}
+    return (
+        <Modal
+            onClose={closeAccountPanel}
+            z={Z.overlayTop}
+            dismissOnBackdrop={false}
+            dismissOnEscape={!setupMode}
+            backdropClassName="bg-black/70 backdrop-blur-sm"
+            className=""
         >
-            <div className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto">
+            <div
+                className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto"
+                {...stopNavKeys({ allowEscape: true })}
+            >
                 <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                     <h2 className="text-sm font-bold text-white">
                         {setupMode ? 'Pick a username' : 'Account'}
@@ -447,8 +443,7 @@ export const AccountPanel: React.FC = () => {
                     </div>
                 )}
             </div>
-        </div>,
-        document.body,
+        </Modal>
     );
 };
 

@@ -16,10 +16,10 @@
  * by re-rendering after sign-in).
  */
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { useGalleryStore } from './galleryStore';
 import { useAuthStore } from '../auth/authStore';
+import { Modal, Z, stopNavKeys } from '../../components/ui';
 
 interface PendingResult {
     blob: Blob;
@@ -54,16 +54,6 @@ export const BucketRenderResultModal: React.FC = () => {
         return () => { FractalEvents.off(FRACTAL_EVENTS.BUCKET_RENDER_COMPLETE, handler); };
     }, []);
 
-    useEffect(() => {
-        if (!pending) return;
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') { e.stopPropagation(); dismiss(); }
-        };
-        window.addEventListener('keydown', onKey, true);
-        return () => window.removeEventListener('keydown', onKey, true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pending]);
-
     if (!pending) return null;
 
     const dismiss = () => {
@@ -82,14 +72,12 @@ export const BucketRenderResultModal: React.FC = () => {
         setPending(null);
     };
 
-    return createPortal(
-        <div
-            className="fixed inset-0 z-[2200] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-            onKeyDown={(e) => e.stopPropagation()}
-            onKeyUp={(e) => e.stopPropagation()}
-            onKeyPress={(e) => e.stopPropagation()}
-        >
-            <div className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto">
+    return (
+        <Modal onClose={dismiss} z={Z.overlayResult} dismissOnBackdrop={false} backdropClassName="bg-black/70 backdrop-blur-sm" className="">
+            <div
+                className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[420px] max-h-[90vh] overflow-y-auto"
+                {...stopNavKeys({ allowEscape: true })}
+            >
                 <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                     <h2 className="text-sm font-bold text-white">Render complete</h2>
                     <button onClick={dismiss} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
@@ -125,7 +113,6 @@ export const BucketRenderResultModal: React.FC = () => {
                     </div>
                 </div>
             </div>
-        </div>,
-        document.body,
+        </Modal>
     );
 };

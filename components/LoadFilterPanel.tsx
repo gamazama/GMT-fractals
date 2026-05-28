@@ -10,7 +10,8 @@
  * @see dev/engine-gmt/utils/loadFilter.ts
  */
 
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
+import { FloatingPanel, Z } from './ui';
 import {
     useLoadFilterState,
     setLoadFilterGroup,
@@ -80,32 +81,24 @@ const GROUPS: { id: LoadFilterGroup; label: string }[] = [
 
 export const LoadFilterPanel: React.FC = () => {
     const { filter, panelOpen, keepOptions } = useLoadFilterState();
-    const rootRef = useRef<HTMLDivElement>(null);
-
-    // Auto-dismiss on outside-click or Escape. The mousedown listener is
-    // attached on a deferred tick so the same click that opened the panel
-    // (the menu's gear button) doesn't immediately close it.
-    useEffect(() => {
-        if (!panelOpen) return;
-        const onDown = (e: MouseEvent) => {
-            if (rootRef.current && !rootRef.current.contains(e.target as Node)) closeLoadFilterPanel();
-        };
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeLoadFilterPanel(); };
-        const id = setTimeout(() => document.addEventListener('mousedown', onDown), 0);
-        document.addEventListener('keydown', onKey);
-        return () => {
-            clearTimeout(id);
-            document.removeEventListener('mousedown', onDown);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [panelOpen]);
 
     if (!panelOpen) return null;
 
     const active = isLoadFilterActive();
 
+    // Non-blocking, corner-anchored panel. Dismissal (outside-click + Escape)
+    // is handled by FloatingPanel; we keep our own header so showClose is off.
+    // Sits above the dock/topbar (same rung as a stacked modal).
     return (
-        <div ref={rootRef} className="fixed top-12 right-4 z-[1100] w-64 bg-neutral-900 border border-white/10 rounded-md shadow-2xl flex flex-col overflow-hidden">
+        <FloatingPanel
+            z={Z.modalNested}
+            dismissOnOutside
+            dismissOnEscape
+            showClose={false}
+            onClose={closeLoadFilterPanel}
+            className="top-12 right-4 w-64 bg-neutral-900 border border-white/10 rounded-md shadow-2xl flex flex-col overflow-hidden"
+            bodyClassName=""
+        >
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-300">
                     Load — which parts?
@@ -170,6 +163,6 @@ export const LoadFilterPanel: React.FC = () => {
                     Load…
                 </button>
             </div>
-        </div>
+        </FloatingPanel>
     );
 };

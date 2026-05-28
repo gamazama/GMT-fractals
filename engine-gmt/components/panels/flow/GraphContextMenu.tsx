@@ -1,8 +1,8 @@
 
-import React, { useRef, useEffect, useState, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useRef, useEffect, useState } from 'react';
 import { NodeType } from '../../../types';
 import { nodeRegistry } from '../../../engine/NodeRegistry';
+import { AnchoredMenu, stopNavKeys } from '../../../../components/ui';
 
 export interface GraphMenuState {
     type: 'pane';
@@ -21,66 +21,31 @@ interface GraphContextMenuProps {
     onDeleteEdge?: (id: string) => void;
 }
 
-export const GraphContextMenu: React.FC<GraphContextMenuProps> = ({ 
-    menu, onClose, onAdd 
+export const GraphContextMenu: React.FC<GraphContextMenuProps> = ({
+    menu, onClose, onAdd
 }) => {
-    const menuRef = useRef<HTMLDivElement>(null);
     const [filter, setFilter] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
-    const [layout, setLayout] = useState({ x: 0, y: 0, visible: false });
-
-    useLayoutEffect(() => {
-        if (menuRef.current) {
-            const rect = menuRef.current.getBoundingClientRect();
-            const winW = window.innerWidth;
-            const winH = window.innerHeight;
-            const padding = 10;
-            let newX = menu.x;
-            let newY = menu.y;
-            if (newX + rect.width > winW - padding) newX = winW - rect.width - padding;
-            if (newY + rect.height > winH - padding) newY = winH - rect.height - padding;
-            newX = Math.max(padding, newX);
-            newY = Math.max(padding, newY);
-            setLayout({ x: newX, y: newY, visible: true });
-            if (inputRef.current) requestAnimationFrame(() => inputRef.current?.focus());
-        }
-    }, [menu.x, menu.y]);
 
     useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
-        };
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
-        };
-        document.addEventListener('mousedown', handleClickOutside, true);
-        document.addEventListener('keydown', handleKeyDown, true);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside, true);
-            document.removeEventListener('keydown', handleKeyDown, true);
-        };
-    }, [onClose]);
+        const id = requestAnimationFrame(() => inputRef.current?.focus());
+        return () => cancelAnimationFrame(id);
+    }, []);
 
     // Use Registry to build dynamic groups
     const groups = nodeRegistry.getGrouped();
     const allDefs = nodeRegistry.getAll();
-    
+
     // Filter logic
-    const filteredDefs = filter 
+    const filteredDefs = filter
         ? allDefs.filter(d => d.id.toLowerCase().includes(filter.toLowerCase()) || d.label.toLowerCase().includes(filter.toLowerCase()))
         : null;
 
-    return createPortal(
-        <div 
-            ref={menuRef}
-            className="fixed w-48 bg-[#1a1a1a] border border-gray-600 rounded-lg shadow-2xl flex flex-col text-xs overflow-hidden animate-pop-in"
-            style={{ 
-                left: layout.x, top: layout.y, 
-                opacity: layout.visible ? 1 : 0, 
-                visibility: layout.visible ? 'visible' : 'hidden', 
-                zIndex: 9999 
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
+    return (
+        <AnchoredMenu anchor={{ x: menu.x, y: menu.y }} onClose={onClose} padding={10}>
+        <div
+            className="w-48 bg-[#1a1a1a] border border-gray-600 rounded-lg shadow-2xl flex flex-col text-xs overflow-hidden animate-pop-in"
+            {...stopNavKeys({ allowEscape: true })}
         >
             <div className="p-2 border-b border-white/10 bg-gray-800/50">
                 <input 
@@ -134,8 +99,8 @@ export const GraphContextMenu: React.FC<GraphContextMenuProps> = ({
                 )}
                 {filteredDefs && filteredDefs.length === 0 && <div className="p-3 text-gray-500 text-center italic">No matches</div>}
             </div>
-        </div>,
-        document.body
+        </div>
+        </AnchoredMenu>
     );
 };
 

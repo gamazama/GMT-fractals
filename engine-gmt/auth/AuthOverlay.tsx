@@ -11,10 +11,10 @@
  * verified session automatically when they click the link.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { getSupabase } from '../supabase';
 import { useAuthStore } from './authStore';
 import { stashSceneForOAuth } from './oauthSceneStash';
+import { Modal, Z, stopNavKeys } from '../../components/ui';
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'check-email' | 'reset-sent';
 
@@ -54,16 +54,6 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
         setBusy(false);
         setUsernameStatus('idle');
     }, [open]);
-
-    // ESC closes — capture-phase so global shortcuts don't fire while modal is open
-    useEffect(() => {
-        if (!open) return;
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') { e.stopPropagation(); onClose(); }
-        };
-        window.addEventListener('keydown', onKey, true);
-        return () => window.removeEventListener('keydown', onKey, true);
-    }, [open, onClose]);
 
     // Debounced username availability check
     useEffect(() => {
@@ -188,14 +178,12 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
         }
     };
 
-    return createPortal(
-        <div
-            className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-            onKeyDown={(e) => e.stopPropagation()}
-            onKeyUp={(e) => e.stopPropagation()}
-            onKeyPress={(e) => e.stopPropagation()}
-        >
-            <div className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[400px] max-h-[90vh] overflow-y-auto">
+    return (
+        <Modal onClose={onClose} z={Z.overlayTop} dismissOnBackdrop={false} backdropClassName="bg-black/70 backdrop-blur-sm" className="">
+            <div
+                className="bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-[400px] max-h-[90vh] overflow-y-auto"
+                {...stopNavKeys({ allowEscape: true })}
+            >
                 <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                     <h2 className="text-sm font-bold text-white">
                         {mode === 'signin' && 'Sign in to GMT'}
@@ -338,8 +326,7 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
                     </form>
                 )}
             </div>
-        </div>,
-        document.body,
+        </Modal>
     );
 };
 

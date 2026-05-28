@@ -74,3 +74,37 @@ duplicated chrome — not a visual redesign.
 2. Agree the primitive's API with the user.
 3. Build the primitive + tests.
 4. Migrate panels one at a time, smoke-testing each.
+
+---
+
+## Outcome (2026-05-28) — DONE
+
+Shipped (all staged, `tsc` + `npm run smoke:ui-primitives` clean). Rationale:
+[`docs/adr/0060-floating-panel-primitives.md`](../docs/adr/0060-floating-panel-primitives.md);
+usage contract is the top-of-file JSDoc on each `components/ui/` primitive.
+
+**Decision: three primitives, not one.** The audit found three genuinely
+distinct families, so `Modal` (blocking) / `FloatingPanel` (positioned,
+non-blocking) / `AnchoredMenu` (trigger-anchored) — over `components/ui/` —
+plus `useDismiss`, the `Z` scale, `clampToViewport`, and `stopNavKeys`.
+
+**Key choices made along the way:**
+- Floating panels are **opt-in draggable** (not draggable-by-default).
+- Escape routes through the shortcut registry; to make that robust the registry
+  was switched to **capture phase** (`app-gmt/main.tsx`). Topmost open surface wins.
+- z-values fold onto the `Z` scale (value-preserving) — added `overlayResult`/`overlayTop` tiers for the auth/gallery ladder.
+
+**Migrated:** DraggableWindow; NewSceneModal, FeedbackPanel (promoted to a
+dockable manifest panel), AuthOverlay, AccountPanel, SubmitGalleryModal,
+BucketRenderResultModal; GradientContextMenu, GraphContextMenu; GlobalContextMenu
+(dismissal-only); LoadFilterPanel.
+
+**Deferred / left bespoke (deliberate):**
+- **CenterHUD light popups** — hover-driven, anchored to a moving HUD element, anti-flicker bridge logic. Doesn't fit the click/Escape + portalled model.
+- **GlobalContextMenu** clamp + recursive submenu layout — `AnchoredMenu` is a flat single-anchor; only its dismissal was swapped. A future richer `AnchoredMenu` with submenu support could finish this.
+- **SubmitGalleryModal zoom overlay** — click-anywhere lightbox, not a centred card.
+
+**Also surfaced + fixed:** floating panels now honour the panel manifest's
+`showIf` (they used to persist when their feature was disabled, unlike the dock);
+modals' Escape-from-a-focused-field regression (key-stops now let Escape through).
+

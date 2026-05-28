@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Modal, Z, stopNavKeys } from '../../components/ui';
 import { useEngineStore } from '../../store/engineStore';
 import {
     submitGalleryItem, SubmitError, SubmitResult,
@@ -137,18 +138,6 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
         if (!slugTouchedRef.current) setSlug(slugify(title));
     }, [title]);
 
-    useEffect(() => {
-        if (!open) return;
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.stopPropagation();
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', onKey, true);
-        return () => window.removeEventListener('keydown', onKey, true);
-    }, [open, onClose]);
-
     if (!open) return null;
 
     const signedIn   = authStatus === 'authed' && !!profile;
@@ -212,15 +201,13 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
 
     const modalWidth = bodyMode === 'forming' ? 'w-[720px]' : 'w-[440px]';
 
-    return createPortal(
+    return (
         <>
-            <div
-                className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
-                onKeyDown={(e) => e.stopPropagation()}
-                onKeyUp={(e) => e.stopPropagation()}
-                onKeyPress={(e) => e.stopPropagation()}
-            >
-                <div className={`bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] ${modalWidth} max-w-[95vw] max-h-[92vh] flex flex-col`}>
+            <Modal onClose={onClose} z={Z.overlayNested} dismissOnBackdrop={false} backdropClassName="bg-black/70 backdrop-blur-sm" className="">
+                <div
+                    className={`bg-gray-900 border border-white/10 rounded-lg shadow-[0_10px_40px_rgba(0,0,0,0.8)] ${modalWidth} max-w-[95vw] max-h-[92vh] flex flex-col`}
+                    {...stopNavKeys({ allowEscape: true })}
+                >
                     <header className="flex items-center justify-between px-4 py-3 border-b border-white/10 flex-shrink-0">
                         <h2 className="text-sm font-bold text-white">
                             {bodyMode === 'submitted' ? 'Submitted' : 'Submit to Gallery'}
@@ -475,11 +462,11 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                         </form>
                     )}
                 </div>
-            </div>
+            </Modal>
 
             {/* Click-to-zoom preview overlay — separate portal so it sits above
                 everything else and lets the modal stay open behind it. */}
-            {previewExpanded && previewUrl && (
+            {previewExpanded && previewUrl && createPortal(
                 <div
                     className="fixed inset-0 z-[2200] bg-black/95 backdrop-blur flex items-center justify-center cursor-zoom-out"
                     onClick={() => setPreviewExpanded(false)}
@@ -493,9 +480,9 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] text-gray-500">
                         Click or press Esc to close
                     </div>
-                </div>
+                </div>,
+                document.body,
             )}
-        </>,
-        document.body,
+        </>
     );
 };

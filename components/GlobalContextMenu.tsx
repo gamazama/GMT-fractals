@@ -1,10 +1,11 @@
 
-import React, { useEffect, useRef, useLayoutEffect, useState } from 'react';
+import React, { useRef, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ContextMenuItem } from '../types/help';
 import { useHelpTopics } from '../data/help/useHelpTopics';
 import { HelpIcon, CheckIcon, ArrowIcon, ChevronRight } from './Icons';
 import Slider from './Slider';
+import { useDismiss } from '../hooks/useDismiss';
 
 interface GlobalContextMenuProps {
     x: number;
@@ -25,61 +26,49 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
 
     useLayoutEffect(() => {
         if (!menuRef.current) return;
-        
-        // Use standard measurement
+
         const rect = menuRef.current.getBoundingClientRect();
         const winW = window.innerWidth;
         const winH = window.innerHeight;
         const padding = 8;
-        
+
         let newX = x;
         let newY = y;
 
-        // Submenu positioning logic: Prefer right, flip to left if OOB
         if (isSubmenu) {
-            // x is currently parent rect.right.
+            // x is the parent item's right edge; if it would overflow, pin to
+            // the viewport's right gutter rather than overlap the parent.
             if (newX + rect.width > winW - padding) {
-                // Flip left: Parent Left - My Width
-                newX = x - rect.width - 200; // Hard coded width offset approx?
-                // Better: The passed 'x' for submenu is strictly left or right edge.
-                // We need more context to flip accurately relative to parent.
-                // For simplicity, we just clamp.
                 newX = winW - rect.width - padding;
             }
-        } else {
-            // Root menu logic
-            if (newX + rect.width > winW - padding) {
-                newX = x - rect.width;
-            }
+        } else if (newX + rect.width > winW - padding) {
+            // Root: flip to the left of the cursor.
+            newX = x - rect.width;
         }
 
-        // Vertical Flip
         if (newY + rect.height > winH - padding) {
             newY = Math.max(padding, winH - rect.height - padding);
         }
-        
-        // Hard Clamp
+
+        // Hard clamp into the viewport gutter.
         newX = Math.max(padding, Math.min(newX, winW - rect.width - padding));
         newY = Math.max(padding, Math.min(newY, winH - rect.height - padding));
 
         setLayout({ x: newX, y: newY, opacity: 1 });
     }, [x, y, items, targetHelpIds, isSubmenu]);
 
-    useEffect(() => {
-        if (isSubmenu) return; // Submenus are managed by parent
-
-        const handleDown = (e: MouseEvent) => {
-            // Submenus are recursive children (not portals), so a single class check suffices
-            const target = e.target as HTMLElement;
-            if (target.closest('.fractal-context-menu')) return;
-            onClose();
-        };
-        const timer = setTimeout(() => window.addEventListener('mousedown', handleDown), 50);
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('mousedown', handleDown);
-        };
-    }, [onClose, isSubmenu]);
+    // Dismiss via the shared hook: capture-phase outside pointer-down (beats
+    // descendants like ReactFlow nodes that stopPropagation on mousedown, which
+    // used to swallow the old bubble-phase listener) + Escape via the registry.
+    // Submenus are recursive DOM descendants of the root menu, so the root's
+    // ref-based inside-check covers them; only the root arms dismissal.
+    useDismiss(menuRef, {
+        onClose,
+        enabled: !isSubmenu,
+        outside: true,
+        escape: true,
+        capture: true,
+    });
 
     // Resolve valid help topics
     const helpTopics = targetHelpIds

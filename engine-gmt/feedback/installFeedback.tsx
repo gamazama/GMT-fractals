@@ -1,30 +1,31 @@
-import React, { useSyncExternalStore } from 'react';
-import { FeedbackModal } from './FeedbackModal';
+import React from 'react';
 import type { MenuItem } from '../../engine/plugins/Menu';
+import { useEngineStore } from '../../store/engineStore';
 
-// ── Singleton open/close state ────────────────────────────────────────
-//
-// The Help menu popover unmounts when an item is clicked. If the modal
-// lived inside the menu item, its useState would unmount too and the
-// modal would never appear. So we lift "is the modal open" to a module
-// singleton, drive opens from the menu item via openFeedback(), and
-// render the modal from <FeedbackOverlay /> mounted at the app root.
+// Feedback is a dockable panel ('Feedback' in the panel manifest), opened on
+// demand from the Help menu. No singleton/overlay — the panel renders through
+// the dock/float system like any other panel.
 
-let _open = false;
-const _subs = new Set<() => void>();
-const _subscribe = (fn: () => void) => { _subs.add(fn); return () => { _subs.delete(fn); }; };
-const _snapshot  = () => _open;
-const _set       = (v: boolean) => { _open = v; _subs.forEach((fn) => fn()); };
-
-export const openFeedback  = () => _set(true);
-export const closeFeedback = () => _set(false);
-
-// ── Overlay ───────────────────────────────────────────────────────────
-
-export const FeedbackOverlay: React.FC = () => {
-    const open = useSyncExternalStore(_subscribe, _snapshot, _snapshot);
-    return <FeedbackModal open={open} onClose={closeFeedback} />;
+/** Open the Feedback panel, seeding a sensible floating size/position the first
+ *  time (the panel manifest can't carry float geometry). Subsequent opens keep
+ *  whatever size/position the user left it at. */
+export const openFeedback = () => {
+    const s = useEngineStore.getState();
+    const panel = s.panels['Feedback'];
+    if (panel) {
+        if (!panel.floatPos) {
+            s.setFloatPosition(
+                'Feedback',
+                Math.max(20, Math.round(window.innerWidth / 2 - 220)),
+                Math.max(20, Math.round(window.innerHeight / 2 - 290)),
+            );
+        }
+        if (!panel.floatSize) s.setFloatSize('Feedback', 440, 580);
+    }
+    s.togglePanel('Feedback', true);
 };
+
+export const closeFeedback = () => useEngineStore.getState().togglePanel('Feedback', false);
 
 // ── Menu icon + item ──────────────────────────────────────────────────
 
