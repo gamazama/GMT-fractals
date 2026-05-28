@@ -21,7 +21,7 @@ export interface Profile {
     username: string;
     display_name: string;
     bio: string | null;
-    tier: 'free' | 'creator' | 'pro' | 'studio';
+    tier: 'free' | 'creator' | 'pro' | 'studio' | 'promo';
     watermark_enabled: boolean;
     /** Custom text for the signature bake. NULL = use the default
      *  `gmt-fractals.com/u/@<username>` pattern. */
