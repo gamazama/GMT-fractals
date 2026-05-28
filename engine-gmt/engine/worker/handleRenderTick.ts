@@ -161,6 +161,11 @@ export const handleRenderTick = (
                 // NxN box average in displayMaterial when the source tile is
                 // larger than its on-canvas footprint. Bilinear-only would only
                 // sample 4 of every (ratio^2) source texels and look pixelated.
+                // The kernel spaces taps by 1/uResolution, so uResolution MUST be
+                // the tile texture size — UniformManager skips its uResolution sync
+                // while bucket rendering, so set it here or the taps smear across
+                // (tileRes/viewportRes)× too many texels and the preview blurs.
+                engine.materials.displayMaterial.uniforms.uResolution.value.set(tileW, tileH);
                 if (boxTapsUniform) {
                     const ratio = Math.max(tileW / Math.max(1, vw), tileH / Math.max(1, vh));
                     boxTapsUniform.value = Math.min(8, Math.max(1, Math.ceil(ratio)));
