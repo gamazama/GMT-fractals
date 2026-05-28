@@ -61,6 +61,11 @@ presetFieldRegistry.register({
 // JULIA_REPEATER pipeline and the loaded scene renders blank (or the
 // wrong shape) until the user touches the graph editor.
 //
+// Both pipeline and graph only travel for the Modular formula; native
+// formulas leave the node-graph at its default and must not carry a stale
+// graph into the saved file (it would override the next Modular session
+// on a native→Modular load via loadFilter's buildFilteredPreset).
+//
 // Emitting CONFIG explicitly (mirroring modularSlice.setPipeline) is what
 // guarantees the worker receives the loaded pipeline before the compile
 // fires. Relying on loadScene's later getShaderConfigFromState flush
@@ -70,7 +75,7 @@ presetFieldRegistry.register({
 // until they hit recompile.
 presetFieldRegistry.register({
     key: 'pipeline',
-    serialize: () => undefined,
+    serialize: (s: any) => (s.formula === 'Modular' ? s.pipeline : undefined),
     deserialize: (p: any, set: any, getStore: any) => {
         if (!Array.isArray(p.pipeline)) return;
         const store = getStore();
@@ -84,4 +89,15 @@ presetFieldRegistry.register({
             pipelineRevision: nextRev,
         } as any);
     },
+});
+
+// Visual graph (node positions + edges) for the Modular formula. The
+// restore is driven by the `pipeline` field above (which reads p.graph),
+// so this field's only job is serialization — without it, getPreset never
+// writes p.graph and the loaded scene rebuilds a default vertical-stack
+// layout from the pipeline, losing the user's hand-placed node positions.
+presetFieldRegistry.register({
+    key: 'graph',
+    serialize: (s: any) => (s.formula === 'Modular' ? s.graph : undefined),
+    deserialize: () => { /* handled by the `pipeline` field above */ },
 });

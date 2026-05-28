@@ -103,6 +103,13 @@ const getParamSnapshot = (s: EngineStoreState): Partial<EngineStoreState> => {
             (snap as any)[feat.id] = JSON.parse(JSON.stringify(featureState));
         }
     }
+    // Modular node-graph (a patched slice, not a feature, so it's skipped by the
+    // loop above). Capture only `graph` — restore routes through setGraph, which
+    // recomputes `pipeline` + bumps `pipelineRevision` + emits CONFIG. Guarded so
+    // apps without the modular slice installed (fluid/fractal toys) stay no-ops.
+    if ((s as any).graph) {
+        (snap as any).graph = JSON.parse(JSON.stringify((s as any).graph));
+    }
     return snap;
 };
 
