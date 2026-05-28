@@ -155,13 +155,14 @@ export const MandelTerrain: FractalDefinition = {
             // Decay influence for deeper iterations
             runAtten *= attenDecay;
             
-            // Use global Escape Threshold (usually squared radius)
-            // Default escape is 4.0 (radius 2.0), but allowing it to grow helps decomposition
-            if (m2 > uEscapeThresh) {
+            // Geometry bail uses the DE bailout (uDeBailout); the escape radius
+            // (uEscapeThresh) is kept only for the smooth-iteration/decomposition
+            // coloring normalization below — same split as the per-iteration DE.
+            if (m2 > uDeBailout) {
                 escaped = true;
                 iEsc = float(i);
                 // Smooth Iteration Count
-                // Renormalize based on log of threshold to keep bands consistent
+                // Renormalize based on log of escape radius to keep bands consistent
                 float threshLog = log2(uEscapeThresh); // usually 2.0 for 4.0
                 smoothVal = float(i) + 1.0 - log2(log2(m2) / threshLog);
                 
@@ -486,6 +487,7 @@ export const MandelTerrain: FractalDefinition = {
             },
             "quality": {
                 "engineQuality": true,
+                "deBailout": 20,
                 "compilerHardCap": 500,
                 "precisionMode": 0,
                 "bufferPrecision": 0,

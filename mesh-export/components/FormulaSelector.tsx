@@ -84,6 +84,13 @@ export function loadGMFIntoStore(text: string, filename?: string): void {
     });
     if (quality.distanceMetric !== undefined) {
       params.distanceMetric = quality.distanceMetric;
+    }
+    // DE bailout drives self-contained formulas' geometry (e.g. MandelTerrain),
+    // so the mesh must use the scene value rather than the shader default.
+    if (quality.deBailout !== undefined) {
+      params.deBailout = quality.deBailout;
+    }
+    if (quality.distanceMetric !== undefined || quality.deBailout !== undefined) {
       store.setFormulaParams(params);
     }
   } else {

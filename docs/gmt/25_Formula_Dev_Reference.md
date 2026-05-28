@@ -520,7 +520,8 @@ uniform vec4  uVec4A, uVec4B, uVec4C;
 uniform float uIterations;      // Max iteration count
 uniform float uJuliaMode;       // 0.0 = Mandelbrot, 1.0 = Julia
 uniform vec3  uJulia;           // Julia C constant (xyz)
-uniform float uEscapeThresh;    // Bailout threshold
+uniform float uEscapeThresh;    // Escape Radius — coloring threshold only (Potential/Decomposition/Flow + smooth-iter). Owned by the coloring feature. Default 4.0. NOT the geometry bailout — that's uDeBailout.
+uniform float uDeBailout;       // DE Bailout — absolute |z|² where the raymarch DE stops iterating (geometry). Owned by quality. Default 100.0.
 uniform float uTime;            // Time in seconds
 uniform float uFrameCount;      // Frame counter
 uniform vec2  uResolution;      // Viewport resolution

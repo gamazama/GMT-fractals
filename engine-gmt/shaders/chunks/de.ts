@@ -55,9 +55,13 @@ vec4 map(vec3 p) {
     ${hybridPreLoop}
 
     bool escaped = false;
-    // Bailout must exceed escape threshold so coloring captures the last pre-escape state.
-    // +100 buffer prevents premature bailout on slowly-escaping orbits.
-    float bailout = max(100.0, uEscapeThresh + 100.0);
+    // Absolute raymarch bailout (uDeBailout, default 100), decoupled from the
+    // escape/coloring threshold. High = accurate analytic DE, sharp surfaces;
+    // low = early bail that slices the fractal into shells (overstep artifacts
+    // by design). When bailout < uEscapeThresh the decomp/potential capture
+    // below never fires — accepted tradeoff for the slicing effect. Floored at
+    // 1.0 so |z|² stays ≥ 1 (keeps log-based DEs well-defined).
+    float bailout = max(uDeBailout, 1.0);
 
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {
         if (i >= int(uIterations)) break;
@@ -215,7 +219,8 @@ float mapDist(vec3 p) {
     ${loopInit}
     ${hybridPreLoop}
 
-    float bailout = max(100.0, uEscapeThresh + 100.0);
+    // Geometry-only twin of map()'s bailout — see that comment for the rationale.
+    float bailout = max(uDeBailout, 1.0);
 
     // Geometry Loop
     for (int i = 0; i < MAX_HARD_ITERATIONS; i++) {

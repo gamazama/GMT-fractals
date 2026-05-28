@@ -368,7 +368,6 @@ export const Appell: FractalDefinition = {
       "phase": 0,
       "bias": 1,
       "twist": 0,
-      "escape": 4,
       "gradient2": [
         {
           "id": "1",

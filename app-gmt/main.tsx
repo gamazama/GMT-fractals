@@ -16,6 +16,11 @@
 // side-effect import, not a plain function call below.
 import './registerFeatures';
 
+// Slice migrations — translate pre-restructure presets at load time.
+// Registered before any preset load; order vs registerFeatures is irrelevant
+// (migrations run in engineStore.loadPreset, well after boot).
+import './migrations';
+
 // Plugin preset fields (cameraRot, etc.) register into presetFieldRegistry.
 import '../engine/plugins/camera/presetField';
 // GMT-specific preset fields (lights top-level array) — must precede store init.

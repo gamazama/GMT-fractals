@@ -158,14 +158,14 @@ export const ColoringFeature: FeatureDefinition = {
             min: 1, max: 1000, step: 0.1,
             scale: 'log',
             group: 'layer1_bottom',
-            description: 'Threshold past which the orbit is considered escaped (used by Potential, Decomposition, Flow).',
+            description: 'Orbit magnitude² at which a point is treated as escaped, used by the Potential, Decomposition and Green\'s-Flow coloring modes (and the smooth-iteration normalization). Purely a coloring control — the geometry bailout is the separate Quality → DE Bailout.',
             helpId: 'grad.escape',
             condition: {
                 or: [
                     { param: 'mode', eq: 6.0 }, // Decomposition
                     { param: 'mode', eq: 8.0 }, // Potential
                     { param: 'mode', eq: 9.0 }, // Green's Flow
-                    { param: 'mode2', eq: 6.0 }, 
+                    { param: 'mode2', eq: 6.0 },
                     { param: 'mode2', eq: 8.0 },
                     { param: 'mode2', eq: 9.0 },
                     // Check Texture Mapping Modes ONLY if Texture is Active

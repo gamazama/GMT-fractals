@@ -19,6 +19,7 @@
     "test:compat": "tsx debug/test-compat.mts",
     "test:compat:write": "tsx debug/test-compat.mts --write",
     "test:partial-apply": "tsx debug/test-partial-apply.mts",
+    "test:migrations": "tsx debug/test-escape-migration.mts",
     "test:baseline": "tsx debug/native-config-sweep.mts --mode=baseline --fresh",
     "test:hybrid": "tsx debug/native-config-sweep.mts --mode=hybrid --fresh",
     "test:hybrid-adv": "tsx debug/native-config-sweep.mts --mode=hybrid-adv --fresh",

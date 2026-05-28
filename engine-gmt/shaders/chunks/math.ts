@@ -92,6 +92,7 @@ uniform vec4  uVec4A, uVec4B, uVec4C;
 uniform vec3  uJulia;
 uniform float uJuliaMode;
 uniform float uEscapeThresh;
+uniform float uDeBailout;
 uniform float uDistanceMetric;
 #define uIterations float(uIters)
 `;

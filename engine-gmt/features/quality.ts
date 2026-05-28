@@ -20,6 +20,7 @@ export interface QualityState {
     interactionDownsample: number;
     adaptiveTarget: number; // Smart adaptive target FPS (0=off, >0=auto-adjust)
     estimator: number; // 0=Log, 1=Linear, 2=Pseudo, 3=Dampened, 4=Linear2
+    deBailout: number; // Absolute raymarch DE bailout radius² (uDeBailout)
     overstepTolerance: number; // Candidate Recovery Threshold
     physicsProbeMode: number; // 0=GPU Probe, 1=CPU Calculation, 2=Manual
     manualDistance: number; // Manual distance override when probe is disabled
@@ -83,7 +84,7 @@ export const QualityFeature: FeatureDefinition = {
         },
         distanceMetric: {
             type: 'float', default: 0.0, label: 'Distance Metric', shortId: 'dm', uniform: 'uDistanceMetric',
-            group: 'kernel',
+            group: 'metric',
             options: [
                 { label: 'Euclidean (Sphere)', value: 0.0 },
                 { label: 'Chebyshev (Box)', value: 1.0 },
@@ -95,7 +96,7 @@ export const QualityFeature: FeatureDefinition = {
         },
         estimator: {
             type: 'float', default: 0.0, label: 'Estimator', shortId: 'es',
-            group: 'kernel',
+            group: 'metric',
             options: [
                 { label: 'Analytic (Log)', value: 0.0 },
                 { label: 'Linear (Unit 1.0)', value: 1.0 },
@@ -124,6 +125,12 @@ export const QualityFeature: FeatureDefinition = {
             helpId: 'quality.estimator',
             onUpdate: 'compile',
             noReset: true,
+        },
+        deBailout: {
+            type: 'float', default: 100.0, label: 'DE Bailout', shortId: 'eb', uniform: 'uDeBailout',
+            min: 1, max: 1000, step: 0.01, scale: 'log', group: 'metric',
+            description: 'Radius² at which the raymarch DE stops iterating. High (default) keeps surfaces sharp and true to the boundary; low bails early, slicing the fractal into rounded shells (a stylistic effect). Fast-escaping formulas only respond near their structure scale.',
+            helpId: 'quality.metric',
         },
         fudgeFactor: {
             type: 'float', default: 1.0, label: 'Slice Optimization', shortId: 'ff', uniform: 'uFudgeFactor',

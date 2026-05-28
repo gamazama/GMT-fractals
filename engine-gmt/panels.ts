@@ -142,13 +142,15 @@ export const GmtPanels: PanelManifest = [
             // Formula Interlace — uses interlace's feature panelConfig.
             { type: 'compilable', id: 'interlace' },
 
-            // Distance Estimator + Metric — compile-only dropdown section.
-            // Estimator is compile-flagged; metric is runtime. The section
-            // routes each param according to its own onUpdate flag.
+            // Distance Estimator + Metric + Escape Radius — one block. Estimator
+            // (compile-flagged) + Metric render as the dropdown row; runtimeGroup
+            // 'metric' renders the remaining runtime metric params (Escape today,
+            // plus any added later) inline directly below — no per-param entry.
             {
                 type: 'compile-dropdown',
                 id: 'quality',
                 compileSettingsParams: ['estimator', 'distanceMetric'],
+                runtimeGroup: 'metric',
                 label: 'Distance Estimator',
                 helpId: 'quality.estimator',
             },
@@ -157,6 +159,10 @@ export const GmtPanels: PanelManifest = [
             // a built-in SectionDivider, so an explicit separator here would
             // double-divider.
             { type: 'widget', id: 'lfo-list' },
+
+            // Footer reminder of the global 'H' hints toggle (shown only while
+            // hints are on). Mirrors the pre-extraction FormulaPanel footer.
+            { type: 'widget', id: 'hints-footer' },
         ],
     },
 

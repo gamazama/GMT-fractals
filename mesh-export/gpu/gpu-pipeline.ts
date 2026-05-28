@@ -146,8 +146,9 @@ function setFormulaUniforms(
   }
   if (loc.uJuliaMode) gl.uniform1f(loc.uJuliaMode, p.juliaMode ? 1.0 : 0.0);
 
-  // Escape threshold & distance metric
+  // Escape threshold (coloring), DE bailout (geometry) & distance metric
   if (loc.uEscapeThresh) gl.uniform1f(loc.uEscapeThresh, p.escapeThresh ?? 10.0);
+  if (loc.uDeBailout) gl.uniform1f(loc.uDeBailout, p.deBailout ?? 100.0);
   if (loc.uDistanceMetric) gl.uniform1f(loc.uDistanceMetric, p.distanceMetric ?? 0);
 }
 

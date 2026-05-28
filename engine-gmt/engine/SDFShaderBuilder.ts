@@ -709,7 +709,7 @@ export const MESH_FORMULA_UNIFORMS = [
   'uVec2A', 'uVec2B', 'uVec2C',
   'uVec3A', 'uVec3B', 'uVec3C',
   'uVec4A', 'uVec4B', 'uVec4C',
-  'uJulia', 'uJuliaMode', 'uEscapeThresh', 'uDistanceMetric',
+  'uJulia', 'uJuliaMode', 'uEscapeThresh', 'uDeBailout', 'uDistanceMetric',
   // Interlace uniforms
   ...INTERLACE_UNIFORM_NAMES.scalars,
   ...INTERLACE_UNIFORM_NAMES.vec2s,

@@ -4,7 +4,6 @@ import { featureRegistry, CompileDropdownPanelConfig } from '../engine/FeatureSy
 import { useEngineStore } from '../store/engineStore';
 import { AutoFeaturePanel } from './AutoFeaturePanel';
 import { FeatureSection } from './FeatureSection';
-import { CollapsibleSection } from './CollapsibleSection';
 import { StatusDot } from './StatusDot';
 import { SectionLabel, SectionDivider } from './SectionLabel';
 import { AlertIcon } from './Icons';
@@ -91,6 +90,8 @@ export const CompileDropdownSection: React.FC<CompileDropdownSectionProps> = (pr
                 enabled={true}
                 onToggle={() => {}}
                 hideToggle={true}
+                collapsible={true}
+                defaultOpen={false}
                 statusContent={hasPendingChanges ? <StatusDot status="pending" /> : <StatusDot status="active" />}
             >
                 <div className="bg-white/[0.02]">
@@ -108,13 +109,14 @@ export const CompileDropdownSection: React.FC<CompileDropdownSectionProps> = (pr
                         </div>
                     )}
                     {hasRuntime && (
-                        <CollapsibleSection label="Parameters" defaultOpen={true} variant="panel">
-                            <AutoFeaturePanel
-                                featureId={featureId}
-                                groupFilter={runtimeGroup}
-                                excludeParams={fullExclude}
-                            />
-                        </CollapsibleSection>
+                        // Inline, not a nested "Parameters" disclosure — runtime
+                        // metric params (e.g. Escape Radius) read as part of the
+                        // same block as the estimator/metric dropdowns above.
+                        <AutoFeaturePanel
+                            featureId={featureId}
+                            groupFilter={runtimeGroup}
+                            excludeParams={fullExclude}
+                        />
                     )}
                 </div>
             </FeatureSection>

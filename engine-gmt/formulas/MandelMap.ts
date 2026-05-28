@@ -411,7 +411,6 @@ export const MandelMap: FractalDefinition = {
       "phase": 0,
       "bias": 0.5963552876944301,
       "twist": 0,
-      "escape": 4,
       "gradient2": [
         {
           "id": "1",

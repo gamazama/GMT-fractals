@@ -74,6 +74,7 @@ function setFormulaUniforms(
   if (loc.uJulia) gl.uniform3f(loc.uJulia, p.julia?.x ?? 0, p.julia?.y ?? 0, p.julia?.z ?? 0);
   if (loc.uJuliaMode) gl.uniform1f(loc.uJuliaMode, p.juliaMode ?? 0);
   if (loc.uEscapeThresh) gl.uniform1f(loc.uEscapeThresh, p.escapeThresh ?? 4.0);
+  if (loc.uDeBailout) gl.uniform1f(loc.uDeBailout, p.deBailout ?? 100.0);
   if (loc.uDistanceMetric) gl.uniform1f(loc.uDistanceMetric, p.distanceMetric ?? 0);
 }
 

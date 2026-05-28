@@ -135,6 +135,19 @@ const ConnectedFormulaSelect: React.FC = () => {
     );
 };
 
+// Formula-panel footer reminding users of the global 'H' hints toggle
+// (Help plugin binds H -> store.showHints). Only shown while hints are on,
+// so it reads as one of the hints it describes.
+const HintsFooter: React.FC = () => {
+    const showHints = useEngineStore((s) => s.showHints);
+    if (!showHints) return null;
+    return (
+        <div className="text-[9px] text-gray-500 text-center mt-6 pb-2 opacity-50 font-mono">
+            PRESS 'H' TO TOGGLE HINTS
+        </div>
+    );
+};
+
 // ── Entry point ────────────────────────────────────────────────────
 
 export const registerGmtUi = () => {
@@ -149,6 +162,7 @@ export const registerGmtUi = () => {
     componentRegistry.register('interaction-picker', InteractionPicker);
     componentRegistry.register('formula-select', ConnectedFormulaSelect);
     componentRegistry.register('quality-render-controls', QualityRenderControls);
+    componentRegistry.register('hints-footer', HintsFooter);
     componentRegistry.register('light-panel-controls', LightPanelControls);
     componentRegistry.register('formula-params', FormulaParamsWidget);
     componentRegistry.register('interlace-secondary-picker', InterlaceSecondaryPicker);

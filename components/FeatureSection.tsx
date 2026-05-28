@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { featureRegistry } from '../engine/FeatureSystem';
 import ToggleSwitch from './ToggleSwitch';
@@ -39,6 +39,12 @@ interface FeatureSectionProps {
      *  Unload. Wired by callers to applyPartialPreset; restores the feature's
      *  params to their DDFS-declared defaults. No confirm — undo covers it. */
     onReset?: () => void;
+    /** Make the header click toggle a local open/closed state (chevron shown).
+     *  Independent of the on/off toggle — for always-present sections (e.g.
+     *  the Distance Estimator compile-dropdown) that should start collapsed. */
+    collapsible?: boolean;
+    /** Initial open state when `collapsible`. Defaults to open. */
+    defaultOpen?: boolean;
 }
 
 /** Small eject-arrow icon for the unload-from-shader action. */
@@ -60,7 +66,9 @@ const ResetIcon: React.FC = () => (
 export const FeatureSection: React.FC<FeatureSectionProps> = ({
     label, featureId, toggleParam, children, description,
     statusContent, headerClassName = '', enabled, onToggle, hideToggle = false, forceBodyOpen = false, onUnload, onReset,
+    collapsible = false, defaultOpen = true,
 }) => {
+    const [open, setOpen] = useState(defaultOpen);
     // Granular per-feature subscription. `useEngineStore()` no-selector
     // would re-render every FeatureSection on every store update —
     // with N features in N panels, that's a major contributor to the
@@ -91,12 +99,15 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
 
     return (
         <div className="flex flex-col border-t border-white/5">
-            {/* Header — clicking when disabled enables the feature */}
+            {/* Header — clicking toggles collapse (collapsible) or enables the feature (when off) */}
             <div
-                className={`flex items-center justify-between px-3 py-1 ${isEnabled ? 'bg-neutral-800' : 'bg-neutral-800/50 cursor-pointer hover:bg-white/5'} ${headerClassName}`}
-                onClick={!isEnabled ? () => handleToggle(true) : undefined}
+                className={`flex items-center justify-between px-3 py-1 ${isEnabled ? 'bg-neutral-800' : 'bg-neutral-800/50 cursor-pointer hover:bg-white/5'} ${collapsible ? 'cursor-pointer hover:bg-white/5' : ''} ${headerClassName}`}
+                onClick={collapsible ? () => setOpen(o => !o) : (!isEnabled ? () => handleToggle(true) : undefined)}
             >
                 <div className="flex items-center gap-1.5">
+                    {collapsible && (
+                        <span className="text-[8px] text-gray-500 w-2">{open ? '▾' : '▸'}</span>
+                    )}
                     <span className={`text-[10px] font-bold ${isEnabled ? 'text-gray-300' : 'text-gray-600'}`}>
                         {label}
                     </span>
@@ -135,8 +146,9 @@ export const FeatureSection: React.FC<FeatureSectionProps> = ({
             </div>
 
             {/* Content. Renders when the toggle is on OR the caller has
-                forced the body open (compile-pending case). */}
-            {(isEnabled || forceBodyOpen) && (
+                forced the body open (compile-pending case); collapsible
+                sections additionally gate on their local open state. */}
+            {(isEnabled || forceBodyOpen) && (!collapsible || open) && (
                 <div>
                     {description && (
                         <p className="px-3 py-1.5 text-[9px] text-gray-600 leading-tight bg-white/[0.06] hover:text-gray-300 transition-colors cursor-default">{description}</p>
