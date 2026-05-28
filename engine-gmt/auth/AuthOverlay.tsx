@@ -14,6 +14,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getSupabase } from '../supabase';
 import { useAuthStore } from './authStore';
+import { stashSceneForOAuth } from './oauthSceneStash';
 
 type Mode = 'signin' | 'signup' | 'forgot' | 'check-email' | 'reset-sent';
 
@@ -144,6 +145,9 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
         setBusy(true);
         setError(null);
         try {
+            // OAuth redirects away and reloads the SPA — stash the scene so
+            // the boot path can restore it on return.
+            stashSceneForOAuth();
             const { error } = await getSupabase().auth.signInWithOAuth({
                 provider: 'google',
                 options: { redirectTo: `${window.location.origin}${window.location.pathname}` },
@@ -186,7 +190,7 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/70 backdrop-blur-sm"
             onKeyDown={(e) => e.stopPropagation()}
             onKeyUp={(e) => e.stopPropagation()}
             onKeyPress={(e) => e.stopPropagation()}

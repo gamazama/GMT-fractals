@@ -76,6 +76,7 @@ import { GmtPanels } from '../engine-gmt/panels';
 import { loadGMFScene, saveGMFScene } from '../engine-gmt/utils/FormulaFormat';
 import { registry as gmtRegistry } from '../engine-gmt/engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
+import { consumeStashedScene } from '../engine-gmt/auth/oauthSceneStash';
 import type { Preset } from '../types';
 
 import {
@@ -484,6 +485,26 @@ if (hash.startsWith('#s=')) {
         if (bootPreset) console.info('[app-gmt] Loaded scene from share URL');
     } catch (err) {
         console.error('[app-gmt] Share URL parse failed:', err);
+    }
+}
+if (!bootPreset) {
+    // OAuth round-trips reload the page and lose the in-progress scene.
+    // signInWithGoogle stashes it just before redirecting; restore it here.
+    // consumeStashedScene self-expires + clears, so a normal reload won't
+    // resurrect a stale scene.
+    const stashedGmf = consumeStashedScene();
+    if (stashedGmf) {
+        try {
+            const { def, preset } = loadGMFScene(stashedGmf);
+            if (def && !gmtRegistry.get(def.id)) {
+                gmtRegistry.register(def);
+                FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+            }
+            bootPreset = preset;
+            console.info('[app-gmt] Restored scene stashed before OAuth redirect');
+        } catch (err) {
+            console.error('[app-gmt] Failed to restore OAuth scene stash:', err);
+        }
     }
 }
 if (!bootPreset) {

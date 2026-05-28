@@ -227,7 +227,7 @@ export const AccountPanel: React.FC = () => {
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/70 backdrop-blur-sm"
             onKeyDown={(e) => e.stopPropagation()}
             onKeyUp={(e) => e.stopPropagation()}
             onKeyPress={(e) => e.stopPropagation()}
