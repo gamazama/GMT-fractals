@@ -69,7 +69,9 @@ interface ShadingGroups {
     materials: boolean;
     /** features.atmosphere + volumetric */
     atmosphere: boolean;
-    /** features.coloring + colorGrading + postEffects */
+    /** features.coloring + texturing — gradient / image surface colour */
+    gradients: boolean;
+    /** features.colorGrading + postEffects + droste (post-process effects) */
     color: boolean;
 }
 
@@ -82,6 +84,7 @@ const SHADING_GROUPS_ALL: ShadingGroups = {
     lighting: true,
     materials: true,
     atmosphere: true,
+    gradients: true,
     color: true,
 };
 
@@ -97,7 +100,8 @@ const SHADING_GROUP_FEATURES: Record<keyof ShadingGroups, string[]> = {
     lighting: ['lighting'],
     materials: ['materials', 'ao', 'reflections'],
     atmosphere: ['atmosphere', 'volumetric'],
-    color: ['coloring', 'colorGrading', 'postEffects'],
+    gradients: ['coloring', 'texturing'],
+    color: ['colorGrading', 'postEffects', 'droste'],
 };
 
 /** Flat list of every shading feature id — used by the dice path which copies
@@ -1015,7 +1019,12 @@ const ShadingGroupsControl: React.FC<{
                 onChange={(v) => onChange({ ...groups, atmosphere: v })}
             />
             <Toggle
-                label="Color, grading, bloom"
+                label="Gradients"
+                checked={groups.gradients}
+                onChange={(v) => onChange({ ...groups, gradients: v })}
+            />
+            <Toggle
+                label="Grading, bloom"
                 checked={groups.color}
                 onChange={(v) => onChange({ ...groups, color: v })}
             />

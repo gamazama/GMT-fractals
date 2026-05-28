@@ -1,0 +1,136 @@
+/**
+ * Partial-load filter panel — a small non-blocking floating panel that lets
+ * the user pick which parts of a scene file get applied on Load. Opened by
+ * the gear icon on the File menu's Load row.
+ *
+ * Non-modal by design: no backdrop, the viewport stays interactive while it's
+ * open. Dismissed via its × button or by clicking "Load…". Filter choices
+ * persist (localStorage) and stay in effect for subsequent loads.
+ *
+ * @see dev/engine-gmt/utils/loadFilter.ts
+ */
+
+import React from 'react';
+import {
+    useLoadFilterState,
+    setLoadFilterGroup,
+    resetLoadFilter,
+    openLoadFilterPanel,
+    closeLoadFilterPanel,
+    loadSceneWithFilter,
+    isLoadFilterActive,
+    type LoadFilterGroup,
+} from '../engine-gmt/utils/loadFilter';
+
+/** Gear glyph for the Load row's "which parts?" affordance. */
+const GearIcon: React.FC = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+);
+
+/**
+ * Custom File-menu Load row: clicking the label loads a file through the
+ * active filter; the gear opens the filter panel. Replaces engine-core's
+ * generic `LoadSceneMenuItem` (registered with the same `'load'` id after
+ * installSceneIO, which overwrites it). Label goes italic + `*` when a
+ * filter is in effect, signalling that the next load won't be a full load.
+ */
+export const LoadSceneFilterMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
+    useLoadFilterState(); // subscribe so the label re-renders live
+    const active = isLoadFilterActive();
+    return (
+        <div className="w-full flex items-center gap-1 px-2 py-1.5 rounded text-xs text-gray-300 hover:bg-white/10 transition-colors">
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); loadSceneWithFilter(); close(); }}
+                className={`flex-1 flex items-center min-w-0 text-left hover:text-white transition-colors ${active ? 'italic' : ''}`}
+                title={active ? 'Loads only the selected parts — click the gear to change' : 'Load a scene file (PNG / GMF)'}
+            >
+                <span className="truncate">Load Scene (PNG/GMF){active ? ' *' : ''}</span>
+            </button>
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); openLoadFilterPanel(); close(); }}
+                className={`shrink-0 p-1 rounded transition-colors ${active ? 'text-cyan-300' : 'text-gray-500'} hover:text-cyan-300 hover:bg-white/10`}
+                title="Choose which parts of the file to load"
+                aria-label="Load options"
+            >
+                <GearIcon />
+            </button>
+        </div>
+    );
+};
+
+const GROUPS: { id: LoadFilterGroup; label: string }[] = [
+    { id: 'formula', label: 'Formula (+ geometry, interlace)' },
+    { id: 'lighting', label: 'Lighting + lights' },
+    { id: 'materials', label: 'Materials, AO, reflections' },
+    { id: 'atmosphere', label: 'Atmosphere, volumetric' },
+    { id: 'gradients', label: 'Gradients' },
+    { id: 'color', label: 'Grading, bloom' },
+    { id: 'camera', label: 'Camera (pose + saved)' },
+    { id: 'animation', label: 'Animation (timeline)' },
+];
+
+export const LoadFilterPanel: React.FC = () => {
+    const { filter, panelOpen } = useLoadFilterState();
+    if (!panelOpen) return null;
+
+    const active = isLoadFilterActive();
+
+    return (
+        <div className="fixed top-12 right-4 z-[1100] w-64 bg-neutral-900 border border-white/10 rounded-md shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-gray-300">
+                    Load — which parts?
+                </h3>
+                <button
+                    onClick={closeLoadFilterPanel}
+                    className="text-gray-500 hover:text-gray-300 transition-colors text-[10px] leading-none"
+                    aria-label="Close"
+                >
+                    ✕
+                </button>
+            </div>
+
+            <div className="px-3 py-2 space-y-1.5">
+                {GROUPS.map(g => (
+                    <label
+                        key={g.id}
+                        className="flex items-center gap-2 cursor-pointer"
+                    >
+                        <input
+                            type="checkbox"
+                            checked={filter[g.id]}
+                            onChange={e => setLoadFilterGroup(g.id, e.target.checked)}
+                            className="w-3 h-3 accent-cyan-500"
+                        />
+                        <span className="text-[11px] text-gray-300">{g.label}</span>
+                    </label>
+                ))}
+                <p className="text-[9px] text-gray-500 leading-snug pt-1">
+                    {active
+                        ? 'Unchecked parts keep their current values.'
+                        : 'All parts on — a normal full load.'}
+                </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-white/10 bg-neutral-950">
+                <button
+                    onClick={resetLoadFilter}
+                    className="px-2 py-1 text-[10px] font-medium text-gray-400 hover:text-gray-200 hover:bg-white/5 rounded transition-colors"
+                >
+                    Reset
+                </button>
+                <button
+                    onClick={() => { loadSceneWithFilter(); closeLoadFilterPanel(); }}
+                    className="px-3 py-1 text-[10px] font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded transition-colors"
+                >
+                    Load…
+                </button>
+            </div>
+        </div>
+    );
+};

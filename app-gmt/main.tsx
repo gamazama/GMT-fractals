@@ -84,6 +84,7 @@ import { useEngineStore, getShaderConfigFromState, setFormulaPresetResolver, set
 import { estimateCompileTime } from '../engine-gmt/features/engine/profiles';
 import { parseShareString } from '../utils/Sharing';
 import { setFormulaParamResolver } from '../components/ParameterSelector';
+import { LoadSceneFilterMenuItem } from '../components/LoadFilterPanel';
 
 // Dev-mode: unregister any stale service workers left by `npm run preview`.
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -217,6 +218,16 @@ installSceneIO({
     // shapes are identical — saveGMFScene only reads `formula` to look
     // up the registry, which accepts any string.
     serializeScene: (preset: Preset) => saveGMFScene(preset as any),
+});
+
+// Override engine-core's generic Load row with GMT's partial-load variant
+// (gear → "which parts?" panel, italic + `*` label when a filter is active).
+// Same `'load'` id → menu.registerItem overwrites the engine-core entry.
+// The LoadFilterPanel overlay itself is mounted in AppGmt.tsx.
+menu.registerItem('file', {
+    id: 'load',
+    type: 'custom',
+    component: LoadSceneFilterMenuItem,
 });
 
 // New Scene wizard. `order: -10` puts it at the top of the File menu
