@@ -20,19 +20,23 @@ vec3 GetNormal(vec3 p_ray, float eps) {
 }
 
 vec3 GetFastNormal(vec3 p, float eps) {
-    // Low Quality: Forward Difference (3 taps)
-    // Optimization: Uses DE_Dist
-    // We assume distance at p is ~0.0 (Surface)
+    // Forward Difference (4 taps). The center tap d0 is load-bearing: the ray
+    // stops at DE < threshold, so DE(p) is a small POSITIVE residual, not 0.
+    // Dropping it (n = vec3(dx,dy,dz)) leaves n = trueGradient + DE(p)*(1,1,1),
+    // skewing every normal toward the +X+Y+Z diagonal. On fractals with a loose
+    // DE estimator that residual is large enough to collapse NdotL to one side,
+    // which read as single-light "only lights one quadrant" in Direct mode.
     vec2 e = vec2(eps, 0.0);
-    
+
+    float d0 = DE_Dist(p);
     float dx = DE_Dist(p + e.xyy);
     float dy = DE_Dist(p + e.yxy);
     float dz = DE_Dist(p + e.yyx);
-    
-    vec3 n = vec3(dx, dy, dz);
-    
+
+    vec3 n = vec3(dx - d0, dy - d0, dz - d0);
+
     if (dot(n, n) < 1.0e-20) return vec3(0.0, 1.0, 0.0);
-    
+
     return normalize(n);
 }
 
