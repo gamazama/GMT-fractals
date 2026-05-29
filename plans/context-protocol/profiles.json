@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "description": "Task profiles: canned (target, budget) bundles for common dev tasks. Use `npm run context:cost -- --profile <name>`. Budgets are advisory caps for --pack.",
+  "profiles": {
+    "ddfs-feature": {
+      "target": "e01-feature-system",
+      "budget": 60000,
+      "note": "Add or modify a DDFS feature (state, params, shader injection)."
+    },
+    "animation": {
+      "target": "e03-animation",
+      "budget": 80000,
+      "note": "Work on keyframes, binders, interpolators, the timeline."
+    },
+    "app-boot": {
+      "target": "a01-boot-shell",
+      "budget": 50000,
+      "note": "App entry, boot sequence, feature registration order."
+    },
+    "shaders": {
+      "target": "engine/Shader",
+      "budget": 70000,
+      "note": "Shader composition / GLSL generation (ShaderBuilder, ShaderFactory)."
+    },
+    "fluid-app": {
+      "target": "app:fluid-toy",
+      "budget": 120000,
+      "note": "Whole fluid-toy app — reachable source from its entrypoint."
+    },
+    "mesh-export": {
+      "target": "app:mesh-export",
+      "budget": 100000,
+      "note": "Mesh export tool — reachable source from its entrypoint."
+    }
+  }
+}
