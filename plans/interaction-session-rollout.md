@@ -16,8 +16,16 @@ Operational tracking for implementing **ADR-0061** (a single `InteractionSession
 
 ## Edge investigations — close before/with P2 (may revise the ADR)
 
-### E1 — Touch / multi-pointer / pinch  · Status: TODO
+### E1 — Touch / multi-pointer / pinch  · Status: DONE (2026-05-30)
 Do touch drags already flow through the same pointer handlers (→ free session wiring), or are **pinch-zoom / two-finger pan** separate gestures needing their own begin/end? Read `engine-gmt/navigation/*` (pointer vs touch/gesture handling), `hooks/useMobileLayout.ts`, any pinch/gesture handler. **Output:** which mobile gestures need explicit session wiring → fold into ADR producers + P3.
+
+**Notes (resolved → ADR "Touch / multi-pointer / pinch" subsection):**
+- **No new source token, no separate touch producer.** Touch is covered by the producers P3a/P3b already wire.
+- **Camera touch (1-finger rotate, 2-finger pinch-zoom, 2-finger pan)** all flow through drei `<OrbitControls>` (`Navigation.tsx:1353`, `touches` at `:1372`), which fires ONE `onStart`/`onEnd` pair (`:1373`/`:1395`) for the whole gesture. Wiring `begin/endInteraction('camera')` there — a P3a site already in scope — covers all of touch. The 1→2→1-finger transition does **not** re-fire onStart, so there's no multi-pointer double-begin. Already the de-facto signal today via `isOrbitDragging` → `isCurrentlyActive` (`Navigation.tsx:1096`).
+- **Pinch ≠ wheel:** mouse wheel = discrete `poke` (`useInputController.ts:183`); touch pinch = part of the continuous `camera` session. Don't model pinch as a poke.
+- **Pickers / drawing / gizmo / sliders / scrub** all ride shared PointerEvents (`onPointerDown/Move/Up`) → touch is free once those are wired. Mouse-only: custom wheel zoom (poke) + Fly-mode mouse-look (blocked on touch, `useInputController.ts:237`).
+- **Safety delta → ADR mitigation #1 widened:** touch interruption fires `pointercancel` (not `pointerup`); custom drag handlers (`Navigation` custom orbit/middle-drag, `useInteractionManager`, `DrawingOverlay`) listen for `pointerup` only and would strand a session — `useInteractionDrag` must supply `onPointerCancel` + `onLostPointerCapture`. drei-driven `camera` is exempt (drei fires `onEnd` on its own pointercancel).
+- **`hooks/useMobileLayout.ts` is layout-only** (no input handling) — not a producer.
 
 ### E2 — Export / bucket / video-export suppression  · Status: TODO
 What should a session do during a bucket render / video export? Confirm `adaptiveSuppressed` already neutralizes adaptive; ensure sessions don't perturb deterministic export frames. Read `engine-gmt/engine/GmtBucketHost.ts`, `worker/WorkerExporter.ts`, the `adaptiveSuppressed` path. **Output:** a suppression rule (ignore sessions while `isExporting`/`isBucketRendering`) → add to ADR.
@@ -65,4 +73,5 @@ Remove dead signals + the dual gizmo state; finalize watchdog + dev warnings; re
 - (append anything the edge investigations surface)
 
 ## Status log
-- **2026-05-30:** ADR-0061 finalized (5 review angles); RC A + interim adaptive fixes committed (`f8fa698`); ADR hardening (`9c6c301`, `7efd0c9`); this plan created. **Next session: start E1** (then E2–E5, then P2).
+- **2026-05-30:** ADR-0061 finalized (5 review angles); RC A + interim adaptive fixes committed (`f8fa698`); ADR hardening (`9c6c301`, `7efd0c9`); this plan created.
+- **2026-05-30:** **E1 done** — touch/multi-pointer/pinch investigated; no new token, touch rides drei OrbitControls (camera) + shared PointerEvents (everything else); `pointercancel` added to stranded-session mitigations. ADR "Touch / multi-pointer / pinch" subsection + mitigation #1 + open-Q #7 updated. **Next session: E2** (export/bucket suppression), then E3–E5, then P2.
