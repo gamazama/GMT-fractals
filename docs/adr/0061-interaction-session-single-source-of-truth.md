@@ -1,7 +1,7 @@
-# ADR-0061: A single `InteractionSession` primitive as the source of truth for "is the user interacting?"
+# ADR-0061: A single `InteractionSession` primitive as the source of truth for gesture activity ("is the user mid-gesture?")
 
-**Date:** 2026-05-30 _(revised same day to fold in a 5-angle review: architecture fit / correctness & failure-modes / migration risk / simpler-alternatives / performance)_
-**Status:** Proposed _(direction chosen: full primitive, hardened — implementation not started)_
+**Date:** 2026-05-30 _(revised same day: a 5-angle review — architecture fit / correctness & failure-modes / migration risk / simpler-alternatives / performance — then edge investigations E1–E5, then a scope-boundary + additive-cutover hardening pass)_
+**Status:** Proposed _(direction chosen: full primitive, hardened; edges E1–E5 closed; ready to implement P2)_
 **Scope:** new `store/slices/createInteractionSlice.ts` (engine-core, generic) + a `useInteractionDrag` hook; consumers in `engine/AdaptiveResolution.ts`, `engine-gmt/engine/managers/UniformManager.ts`, `engine-gmt/engine/FractalEngine.ts` (hold), `engine-gmt/renderer/GmtRendererTickDriver.tsx`; producers across `engine-gmt/navigation/*`, `components/inputs/hooks/useDragValue.ts`, light gizmo, pickers, drawing, timeline scrub. **GMT only** for now — sibling apps (fluid-toy/fractal-toy via `store/slices/viewportSlice.ts`) keep their current adaptive inputs and opt in later.
 **Related:** ADR-0024 (pure adaptive module — still holds), ADR-0025/0026 (viewport hooks / pluggable render-scale), ADR-0034/0041-0042 (worker contract / drift), ADR-0059 (capability protocol — the open-token pattern this borrows).
 
@@ -27,6 +27,15 @@ Symptoms this directly produces: **sliders never reach target FPS** (adaptive le
 ## Decision
 
 Introduce a single engine-core **`InteractionSession`** primitive that every input source *declares into* and adaptive + accumulation-hold *subscribe to*, replacing the proxy inference.
+
+### Scope boundary — gesture activity ONLY (not a render-intent god-object)
+The session is the single source of truth for **one** question: *is a continuous user gesture in flight?* It is deliberately **not** the answer to "should the engine be doing work right now" — that is a composition of orthogonal axes the session must not absorb:
+- **Gesture activity** — the session's job (this primitive).
+- **Render invalidation / dirtiness** — "did something change the image?" (camera moved, param/preset changed, texture swap). This already lives in the accumulation-reset / `dirty` system and **stays there**. It overlaps gesture activity but is *not* the same: a discrete preset-load invalidates with no gesture; a held-but-motionless drag is a gesture that doesn't invalidate.
+- **Camera-blocking / permission** — `selectMovementLock` (orthogonal; E3 keeps it outside).
+- **Scene animation** — `isSceneAnimating` (orthogonal; playback is not a gesture).
+
+The recurring-bug trap — the one that produced the five-iteration patch cycle — is letting "is the user interacting?" silently widen into "should we work?". Consumers that need the broader question **compose** session-activity with the other axes (see the idle-pause migration in E3) rather than reading the session alone. Keep the session narrow; that narrowness is what makes it correct *and* testable.
 
 ### API (engine-core store slice, `createInteractionSlice`)
 ```ts
@@ -56,6 +65,8 @@ A thin reactive hook `useIsInteracting(filter?)` subscribes to the coarse edge b
 ### Producer ergonomics — a hook, so sources can't be silently forgotten
 Export `useInteractionDrag(source)` returning `{ onPointerDown, onPointerUp, onLostPointerCapture, onPointerCancel }` (and a `useEffect` cleanup). `onPointerCancel` is not optional — touch interruption fires `pointercancel`, not `pointerup` (see Touch / multi-pointer below). Drag components spread these instead of hand-calling store actions. The hook is **dispatch-only** — it reads nothing from the store, so mounting it in ~90 components costs zero renders (see Performance). Dev-mode warns if `beginInteraction` is called for a source never seen before. (Review #1/#2 + #3 silent-miss risk.)
 
+**Reuse the proven lifecycle for param/slider drags.** The highest-volume producer — `useDragValue` param drags — already has a *balanced* begin/end with cleanup: `beginParamTransaction`/`endParamTransaction` (historySlice). Anchor the `slider` session begin/end to those existing boundaries rather than a parallel hand-rolled lifecycle, so it inherits a battle-tested end + cleanup instead of adding new stranding surface. The session *adds* the sources the transaction system doesn't cover (camera/gizmo/picker/drawing) + source-tagging; the watchdog (#5) stays a backstop, not load-bearing.
+
 ### Stranded-session safety — BLOCKING (this is the regression class we already hit)
 A missing `endInteraction` leaves `interacting=true` forever → never converges. Mitigations are **requirements**, not footnotes (Reviews #2 + #3):
 1. **`lostpointercapture` *and* `pointercancel` release** on every custom drag source (the `useInteractionDrag` hook supplies both handlers; the component must wire them). `pointercancel` is the touch-specific stranding path — an OS gesture / incoming call / app-switch fires it instead of `pointerup`. E1 found the custom drag handlers (`Navigation` custom orbit + middle-drag, `useInteractionManager` pickers, `DrawingOverlay`) listen for `pointerup` only, so a touch-cancel would strand them. The drei-`<OrbitControls>`-driven `camera` session is exempt — drei dispatches `onEnd` on its own internal pointercancel.
@@ -78,7 +89,7 @@ Grounded in `engine-gmt/navigation/*` + `components/inputs/hooks/useDragValue.ts
 - Phase 2 **measures** the real input→downscale latency before claiming victory. If a residual lag remains, it's main-thread `useFrame` starvation (a separate perf issue), and we say so rather than overclaiming. (Review #2.)
 
 ### What it replaces in the adaptive controller (GMT)
-- DELETE the accumulation-drop activity inference + `selfResized` plumbing; the unused `mouseOverCanvas`; the `gateOnAccumOnly` branch *for GMT* (sibling apps keep it until they opt in).
+- In **P5** (only after the P4 parallel run confirms the session — see phases), DELETE the accumulation-drop activity inference for GMT + the unused `mouseOverCanvas`; the `gateOnAccumOnly` branch stays for sibling apps. (`selfResized` stays — it's adaptive-internal, per E3.)
 - KEEP the scale-normalized full-res cost estimator (`fullResFrameMs`) and the FPS-scaled `grace`.
 - KEEP the deep-accumulation quality protection **unchanged** — it is orthogonal (protect once N full-res samples earned); `isInteracting` is just one input to the decision. (Review #1 #7.)
 
@@ -96,7 +107,7 @@ This primitive sits on the **hottest path in the app** (wheel 10–50/s on track
 
 ## Consequences
 
-**Benefits:** sliders/pickers/drawing become visible to adaptive + hold; adaptive becomes immune to reset noise (engages on the session, not on accumulation); one timing model replaces the 200ms buffer + grace + dual gizmo state + transaction-based `isUserInteracting`; generic (a new input type adds one token).
+**Benefits:** sliders/pickers/drawing become visible to adaptive + hold; adaptive becomes immune to reset noise (engages on the session, not on accumulation); one timing model (the session debounce) replaces the lagged 200ms camera buffer + the dual gizmo state — the adaptive `grace` and the undo transaction flag stay (separate jobs, per E3); generic (a new input type adds one token).
 
 **Risks / costs:** broad blast radius (~100 producer call sites, many via `useDragValue` passthrough components that could be missed — the hook + dev-warn mitigate); the stranded-session class above (mitigations are blocking); behavioral change to a tuned system needs visual verification (user owns it); `isUserInteracting` has **other** consumers (HUD fade, undo coalescing, `selectIsGlobalInteraction`) that must be audited and migrated before removal, or kept (undo-coalescing is arguably a separate transaction concept). (Review #3.)
 
@@ -114,7 +125,7 @@ Sessions are **export-safe by construction** — no new mechanism needed:
 ### E3 — Consumer audit (migrate / keep / remove)
 This is the expanded "phase 2.5". Full cited reader table lives in `plans/interaction-session-rollout.md` (E3 notes); decisions:
 - **MIGRATE → `session.isInteracting()`** (P4): the adaptive input (`UniformManager.ts:118`, today `isGizmoInteracting || cameraInUse`); the GMT `cameraInUse` / `isGizmoInteracting` derivation (`GmtRendererTickDriver.tsx:256-257` — unify the dual gizmo state here); `selectIsGlobalInteraction` (`engineStore.ts:444`) → `session.isInteracting() || interactionMode !== 'none'`; PauseControls (downstream of that selector).
-- **MIGRATE → `session.isIdle(1000)`** (P4): the render idle-pause early-return (`FractalEngine.ts:557`, `isPaused && now - lastInteractionTime > 1000`). `markInteraction`/`lastInteractionTime` become session-derived.
+- **MIGRATE by COMPOSITION, not replacement** (P4): the render idle-pause early-return (`FractalEngine.ts:557`, `isPaused && now - lastInteractionTime > 1000`) wakes on `!session.isIdle(1000) || recentlyDirty` — session-activity **OR** a recent accumulation-reset. `markInteraction`/`lastInteractionTime` is a *wake/invalidation* signal, **not** a gesture signal: it fires on discrete param/preset/config changes (`resetAccumulation`, `updateConfigInternal`) that produce no gesture. Reading `session.isIdle` *alone* would stop a paused/idle render from waking on a non-drag change (click a preset, type a value) — re-introducing a convergence/visibility bug. Keep the discrete invalidations on the existing dirty/accum-reset path; the idle-pause reads the composition. (See Scope boundary.)
 - **MIGRATE w/ source-filter** (P4): HUD auto-fade (`HudOverlay.tsx:63`, today keys on camera-only `isCameraInteracting`) → `session.isInteracting({ only: ['camera','scrub'] })`. This is the concrete justification for the API's `filter` (Review #1) — it reproduces today's camera-only fade with no behavior change.
 - **KEEP SEPARATE — undo coalescing (resolves open-Q #6):** `isUserInteracting` in `historySlice` (`beginParamTransaction`/`endParamTransaction`/`pushCameraTransaction`, `:161`/`:166`/`:206`) is a **transaction-boundary** marker (snapshot params at start, diff+push at end, restore DPR, 1500ms camera-undo debounce) — *not* activity inference. It stays. The session is wired at the **same producer sites** (a slider/camera gesture fires both `beginInteraction` and `beginParamTransaction`), but does **not** replace the flag. After P4, `isUserInteracting` is read only by undo.
 - **KEEP OUTSIDE — camera-blocking is an orthogonal axis:** `selectMovementLock` / `interactionConfig.blockCamera` (`engineStore.ts:463`; the drawing feature sets `blockCamera`) is a *permission* gate — a source can be active AND block camera. The session reports activity; the caller composes activity + lock. **Caveat:** `selectMovementLock` reads `isGizmoDragging` / `interactionMode`; when P5 removes the dual gizmo state, repoint that check at the unified source — don't drop it.
@@ -143,13 +154,14 @@ This drives the API additions above: **`isIdle(ms?)`** (centralizes the idle che
 
 ## Implementation phases (each independently shippable + revertible)
 1. **A-fix** — delta-based modulation reset. **DONE (f8fa698).**
-2. **Primitive + bridge (inert).** Add the pure `InteractionSessionMachine` (`now`-injected, per E5) + its `createInteractionSlice` wrapper + `useInteractionDrag`; derive `interacting` + `isSceneAnimating`; send `interacting` in `renderState` **unused**. Add the `debug/test-interaction-session.mts` state-machine tests + a test for the worker read-path (a typo → silent `false`). Build the E5 dev overlay. Add a kill-switch flag. Measure input→downscale latency.
+2. **Primitive + bridge (inert).** Add the pure `InteractionSessionMachine` (`now`-injected, per E5) + its `createInteractionSlice` wrapper + `useInteractionDrag`; derive `interacting` + `isSceneAnimating`; send `interacting` in `renderState` **unused**. Add the `debug/test-interaction-session.mts` state-machine tests + a test for the worker read-path (a typo → silent `false`). Build the E5 dev overlay. Add **per-consumer kill-switch flags** (adaptive / hold / HUD-fade / idle-pause flip independently, so a P4 regression bisects to one consumer instead of reverting wholesale). Measure input→downscale latency — **this baseline is a gate: P4 must beat it.**
    - **2.5 — consumer audit.** Grep all readers of `isUserInteracting`, `isGizmoInteracting`, `cameraInUse`, `mouseOverCanvas`, the accum-drop; mark HUD-fade / undo-coalescing / `selectMovementLock` migration points with TODOs.
 3. **Producers, split by blast radius.**
    - **3a (~10 sites):** camera/nav, light gizmo, pickers — clear begin/end, includes the safety wiring. Camera begin/end at OrbitControls `onStart`/`onEnd` covers touch rotate/pinch/pan for free (E1); custom drag sources here also wire `pointercancel`.
-   - **3b (~90 sites):** sliders/knobs/vectors via `useInteractionDrag` (wire `useDragValue.onDragStart/End` + capture-loss + unmount cleanup), drawing, timeline scrub.
-4. **Switch consumers (GMT)** — adaptive input + `FractalEngine` hold read `renderState.interacting`; **simultaneously** migrate HUD-fade + undo-coalescing readers; remove the GMT proxies (accum-drop, `mouseOverCanvas`, `gateOnAccumOnly`).
-5. **Cleanup + safety hardening** — delete dead signals + dual gizmo state; finalize watchdog + dev warnings. Sibling-app migration is a **separate** follow-up.
+   - **3b (~90 sites):** sliders/knobs/vectors via `useInteractionDrag` (wire `useDragValue.onDragStart/End` + capture-loss + unmount cleanup), drawing, timeline scrub. Anchor the `slider` begin/end to the existing `beginParamTransaction`/`endParamTransaction` boundaries (already balanced + cleaned up) rather than a parallel lifecycle. A **mechanical coverage check** (grep/lint that every `useDragValue` consumer is wired) catches missed sites — don't rely on eyeballing 90 of them.
+   - **Go/no-go checkpoint (after 3a + the start of 3b's parallel run):** does the overlay show correct sessions, and does the latency baseline justify the remaining blast radius? This is the deliberate decision gate before committing the expensive 90-site phase — the "build the primitive" bet is *contingent* on this passing.
+4. **Switch consumers (GMT) — ADDITIVE, not rip-and-replace.** Point adaptive input + `FractalEngine` hold + HUD-fade + the idle-pause at the session (each behind its per-consumer flag from P2), **but leave the accum-drop proxy running in parallel.** The dev overlay shows session vs. accum-drop side by side; confirm they agree across real use (sliders reach target, idle converges, no mid-gesture pops) before trusting the session. Undo-coalescing readers stay (kept, per E3). **Behavior-changing — visual verification + a latency re-measure that must beat the P2 baseline; if it doesn't, the root cause was elsewhere (likely main-thread `useFrame` starvation) — stop and reassess, don't ship.**
+5. **Cleanup + safety hardening** — once the parallel run confirms the session: remove the GMT proxies (accum-drop activity inference, `mouseOverCanvas`, `gateOnAccumOnly` for GMT), delete the dual gizmo state (repoint `selectMovementLock`'s gizmo check at the unified source — don't drop it), finalize the watchdog + dev warnings, remove the per-consumer flags. Sibling-app migration is a **separate** follow-up.
 
 ## Considered alternatives (and why the full primitive)
 - **Minimal slider wiring** — route `useDragValue.onDragStart/End` into the existing `isUserInteracting`. ~8 sites, low risk; fixes sliders only.
