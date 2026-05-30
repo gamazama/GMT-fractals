@@ -7,11 +7,14 @@
  * instead of subscribing. The only reactive subscription is the `open` toggle
  * (debugTools.interactionSessionOpen) and the coarse `interacting` edge boolean.
  *
- * Shows, live: the hard-active interaction sources, the polled `isInteracting()`
- * (which includes the debounce tail — may read true briefly after the coarse
- * boolean flips off), the current adaptive scale (1 / qualityFraction), and the
- * P4 session-vs-accum-drop divergence counter (a STUB in P2 — never incremented
- * yet; shown so the display path exists before the parallel run).
+ * Shows, live: the hard-active interaction sources (+ any source still within
+ * the debounce tail, e.g. a wheel poke, marked `(tail)`), and the polled
+ * `isInteracting()` (which includes the debounce tail — may read true briefly
+ * after the coarse boolean flips off). The adaptive-scale and divergence rows
+ * were removed for P3a: the session is INERT (no consumer reads it), so adaptive
+ * scale is driven by the legacy proxy independent of the session, and divergence
+ * is meaningless until the P4 parallel run increments it. Both return in P4 as a
+ * real session-vs-accum-drop comparison.
  *
  * Self-gating: returns null unless the debug_tools `interactionSessionOpen`
  * toggle is on (advanced-menu gated). Mounted via the debug_tools overlay slot.
@@ -59,9 +62,6 @@ export const InteractionSessionBadge: React.FC<InteractionSessionBadgeProps> = (
     const recent = Array.from(st.getRecentInteractionSources?.() ?? []);
     const tailOnly = recent.filter((s) => !sources.includes(s));
     const polledInteracting = st.isInteracting();
-    const qf = st.qualityFraction || 1;
-    const scale = qf > 0 ? 1 / qf : 1;
-    const divergence = st.interactionDivergenceCount ?? 0;
 
     const dot = (on: boolean) => (
         <span className={`inline-block w-2 h-2 rounded-full ${on ? 'bg-cyan-400' : 'bg-gray-600'}`} />
@@ -91,17 +91,8 @@ export const InteractionSessionBadge: React.FC<InteractionSessionBadgeProps> = (
                     <span className="text-gray-500"> +{tailOnly.join(', ')} (tail)</span>
                 )}
             </div>
-            <div>
-                <span className="text-gray-400">adaptive scale:</span>{' '}
-                <span className={scale > 1.001 ? 'text-amber-300' : 'text-gray-300'}>
-                    {scale.toFixed(2)}×
-                </span>
-                <span className="text-gray-600"> (qf {qf.toFixed(2)})</span>
-            </div>
-            <div>
-                <span className="text-gray-400">divergence:</span>{' '}
-                <span className="text-gray-300">{divergence}</span>
-                <span className="text-gray-600"> (P4)</span>
+            <div className="text-gray-600 mt-0.5">
+                inert · consumers + divergence wire in P4
             </div>
         </div>
     );
