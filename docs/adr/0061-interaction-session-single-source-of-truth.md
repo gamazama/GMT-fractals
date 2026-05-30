@@ -1,6 +1,6 @@
 # ADR-0061: A single `InteractionSession` primitive as the source of truth for "is the user interacting?"
 
-**Date:** 2026-05-30 _(revised same day to fold in a 4-angle review: architecture fit / correctness & failure-modes / migration risk / simpler-alternatives)_
+**Date:** 2026-05-30 _(revised same day to fold in a 5-angle review: architecture fit / correctness & failure-modes / migration risk / simpler-alternatives / performance)_
 **Status:** Proposed _(direction chosen: full primitive, hardened — implementation not started)_
 **Scope:** new `store/slices/createInteractionSlice.ts` (engine-core, generic) + a `useInteractionDrag` hook; consumers in `engine/AdaptiveResolution.ts`, `engine-gmt/engine/managers/UniformManager.ts`, `engine-gmt/engine/FractalEngine.ts` (hold), `engine-gmt/renderer/GmtRendererTickDriver.tsx`; producers across `engine-gmt/navigation/*`, `components/inputs/hooks/useDragValue.ts`, light gizmo, pickers, drawing, timeline scrub. **GMT only** for now — sibling apps (fluid-toy/fractal-toy via `store/slices/viewportSlice.ts`) keep their current adaptive inputs and opt in later.
 **Related:** ADR-0024 (pure adaptive module — still holds), ADR-0025/0026 (viewport hooks / pluggable render-scale), ADR-0034/0041-0042 (worker contract / drift), ADR-0059 (capability protocol — the open-token pattern this borrows).
@@ -50,7 +50,7 @@ lastActivityTime: number;
 - **`isInteracting` includes only a short fixed debounce** (`DEBOUNCE_MS`, candidate 150–200ms — TBD, aligned toward the existing 200ms input buffer to avoid a third constant) to bridge micro-gaps within a drag. The downscale→upscale *settle* stays the adaptive module's FPS-scaled `grace` (ADR-0024). Two windows, two jobs.
 
 ### Producer ergonomics — a hook, so sources can't be silently forgotten
-Export `useInteractionDrag(source)` returning `{ onPointerDown, onPointerUp, onLostPointerCapture }` (and a `useEffect` cleanup). Drag components spread these instead of hand-calling store actions. Dev-mode warns if `beginInteraction` is called for a source never seen before. (Review #1/#2 + #3 silent-miss risk.)
+Export `useInteractionDrag(source)` returning `{ onPointerDown, onPointerUp, onLostPointerCapture }` (and a `useEffect` cleanup). Drag components spread these instead of hand-calling store actions. The hook is **dispatch-only** — it reads nothing from the store, so mounting it in ~90 components costs zero renders (see Performance). Dev-mode warns if `beginInteraction` is called for a source never seen before. (Review #1/#2 + #3 silent-miss risk.)
 
 ### Stranded-session safety — BLOCKING (this is the regression class we already hit)
 A missing `endInteraction` leaves `interacting=true` forever → never converges. Mitigations are **requirements**, not footnotes (Reviews #2 + #3):
@@ -69,6 +69,18 @@ A missing `endInteraction` leaves `interacting=true` forever → never converges
 - DELETE the accumulation-drop activity inference + `selfResized` plumbing; the unused `mouseOverCanvas`; the `gateOnAccumOnly` branch *for GMT* (sibling apps keep it until they opt in).
 - KEEP the scale-normalized full-res cost estimator (`fullResFrameMs`) and the FPS-scaled `grace`.
 - KEEP the deep-accumulation quality protection **unchanged** — it is orthogonal (protect once N full-res samples earned); `isInteracting` is just one input to the decision. (Review #1 #7.)
+
+## Performance
+
+This primitive sits on the **hottest path in the app** (wheel 10–50/s on trackpads; pointer-move and slider `onChange` at 60–120Hz). The codebase has already tripped React's "Maximum update depth" from interaction-driven re-render storms — see the `liveModulations` delta-write guard (`engine/animation/AnimationSystem.tsx:587-610`). So interaction state is **transient-reactive**, not a plain reactive slice:
+
+- **Non-reactive hot state.** `activeSources` + `lastActivityTime` live in module-level refs (the pattern `viewportSlice` already uses for `_adaptive`/`_holdUntilMs`/`_lastStateUpdateMs`). `pokeInteraction` (wheel/keys) updates only the timestamp ref — **no store write** — and is throttled (~50ms) to coalesce bursts.
+- **Reactive only on edges.** `beginInteraction`/`endInteraction` write a coarse reactive `isInteracting` boolean **only on idle↔active transitions** (once per gesture), never per source-add. Matches the delta-before-write discipline the `liveModulations` and `viewportSlice` throttles established.
+- **`useInteractionDrag` is dispatch-only** — handlers call `useEngineStore.getState().beginInteraction(...)`; the hook subscribes to nothing, so mounting it in ~90 components has zero render cost. **No per-pointermove writes** — slider `onChange` stays local; the session is signalled at drag start/end only (and wheel via throttled poke).
+- **Render-loop reads `isInteracting()` via `getState()`** in `useFrame` (the pattern `GmtRendererTickDriver` already uses); it polls the computed value (so it sees the debounce tail) without a subscription. The boolean crosses to the worker in `renderState`, not through React. Low-frequency reactive UI (HUD fade) may subscribe to the coarse boolean via `subscribeWithSelector` — today only ONE such subscription exists (`Viewport.tsx`).
+- Worker-bridge / seed-on-start / watchdog / debounce costs are negligible (one boolean per `RENDER_TICK`; constant-time checks).
+
+**Net hot-path cost:** one reactive write per gesture edge + throttled ref updates → **zero per-frame re-renders.** Hard constraints for the implementation: hook is dispatch-only; no per-pointermove store writes; `pokeInteraction` throttled; gizmo single-source (no parallel `engine.isGizmoInteracting` write); render-loop reads via `getState()`. Phase 2 instruments input→downscale latency to confirm rather than assume.
 
 ## Consequences
 
