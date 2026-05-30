@@ -40,9 +40,13 @@ pokeInteraction(source: InteractionSource): void;    // discrete event (wheel/ke
 
 isInteracting(filter?: { only?: InteractionSource[]; except?: InteractionSource[] }): boolean;
 //   = activeSources(filtered).size > 0 || (now - lastActivity(filtered) < DEBOUNCE_MS)
+isIdle(ms?: number): boolean;   // !isInteracting && (now - lastActivityTime) >= (ms ?? DEBOUNCE_MS).
+//   Convenience for the render idle-pause + defer-expensive-work consumers (E4) so they
+//   don't each re-derive `now - lastActivityTime`.
 interactionSources: ReadonlySet<InteractionSource>;
 lastActivityTime: number;
 ```
+A thin reactive hook `useIsInteracting(filter?)` subscribes to the coarse edge boolean (via `subscribeWithSelector`) for the few low-frequency UI consumers (HUD-fade, defer-work UI) — see Downstream consumers (E4). Hot-path consumers never subscribe; they read via `getState()` (Performance).
 - **Open `string` token** in core; GMT defines its canonical set (`camera|gizmo|slider|picker|drawing|scrub`) in `engine-gmt`. A new input type (touch, MIDI) adds a token, never edits core. (Review #1.)
 - **`isInteracting` accepts a source filter** so a consumer can ignore sources it doesn't care about (e.g. a future sibling-app adaptive that ignores `slider`). (Review #1/#7 — sibling-app safety.)
 - **Ref-counted per source**; an unbalanced `end` can't strand the set (dev-warns).
@@ -107,6 +111,31 @@ Sessions are **export-safe by construction** — no new mechanism needed:
 - **Hold is already gated:** `FractalEngine.compute()` / `update()` early-return on `isExporting` (`:553` / `:493`); bucket never holds (`:563`); camera is locked via `selectMovementLock` (`engineStore.ts:464`, which already includes both flags).
 - **Rule P4 must preserve:** any consumer of `isInteracting()` that affects frame determinism stays gated by `!isExporting && !isBucketRendering`, kept at the **GMT consumer / derivation site** (`GmtRendererTickDriver.tsx:256`, beside `adaptiveSuppressed`) — **do not** bake export-awareness into the generic core slice. When P4 swaps the proxy for `session.isInteracting()`, the existing UniformManager:97 + compute() guards already cover adaptive + hold; the gate only needs re-adding if a NEW determinism-affecting consumer is wired.
 
+### E3 — Consumer audit (migrate / keep / remove)
+This is the expanded "phase 2.5". Full cited reader table lives in `plans/interaction-session-rollout.md` (E3 notes); decisions:
+- **MIGRATE → `session.isInteracting()`** (P4): the adaptive input (`UniformManager.ts:118`, today `isGizmoInteracting || cameraInUse`); the GMT `cameraInUse` / `isGizmoInteracting` derivation (`GmtRendererTickDriver.tsx:256-257` — unify the dual gizmo state here); `selectIsGlobalInteraction` (`engineStore.ts:444`) → `session.isInteracting() || interactionMode !== 'none'`; PauseControls (downstream of that selector).
+- **MIGRATE → `session.isIdle(1000)`** (P4): the render idle-pause early-return (`FractalEngine.ts:557`, `isPaused && now - lastInteractionTime > 1000`). `markInteraction`/`lastInteractionTime` become session-derived.
+- **MIGRATE w/ source-filter** (P4): HUD auto-fade (`HudOverlay.tsx:63`, today keys on camera-only `isCameraInteracting`) → `session.isInteracting({ only: ['camera','scrub'] })`. This is the concrete justification for the API's `filter` (Review #1) — it reproduces today's camera-only fade with no behavior change.
+- **KEEP SEPARATE — undo coalescing (resolves open-Q #6):** `isUserInteracting` in `historySlice` (`beginParamTransaction`/`endParamTransaction`/`pushCameraTransaction`, `:161`/`:166`/`:206`) is a **transaction-boundary** marker (snapshot params at start, diff+push at end, restore DPR, 1500ms camera-undo debounce) — *not* activity inference. It stays. The session is wired at the **same producer sites** (a slider/camera gesture fires both `beginInteraction` and `beginParamTransaction`), but does **not** replace the flag. After P4, `isUserInteracting` is read only by undo.
+- **KEEP OUTSIDE — camera-blocking is an orthogonal axis:** `selectMovementLock` / `interactionConfig.blockCamera` (`engineStore.ts:463`; the drawing feature sets `blockCamera`) is a *permission* gate — a source can be active AND block camera. The session reports activity; the caller composes activity + lock. **Caveat:** `selectMovementLock` reads `isGizmoDragging` / `interactionMode`; when P5 removes the dual gizmo state, repoint that check at the unified source — don't drop it.
+- **REMOVE (P4/P5):** `mouseOverCanvas` — dead in the decision path (`AdaptiveResolution.ts:275-281`), still computed at `GmtRendererTickDriver.tsx:258` as a no-op; the GMT accum-drop activity branch (`AdaptiveResolution.ts:240`) — the session replaces it for GMT.
+- **KEEP (not session consumers):** `gateOnAccumOnly` (sibling-app config), `selfResized` (adaptive internal), deep-accum protection (orthogonal, unchanged).
+
+### E4 — Downstream consumers + final API
+The API serves more than adaptive + hold, so it's built once. Each consumer → one call:
+
+| Consumer | API call |
+|---|---|
+| Adaptive input | `isInteracting()` |
+| Accumulation hold / render idle-pause | `isIdle(1000)` |
+| HUD auto-fade | `isInteracting({ only: ['camera','scrub'] })` |
+| Defer expensive work during a gesture — shader compiles (`CompileScheduler.ts` coalesces CONFIG bursts but does **not** yet defer on interaction), autosave, gallery sync, heavy panel re-renders | `isInteracting()` / `isIdle(ms)` |
+| Tutorial / first-interaction detection | `lastActivityTime` / `interactionSources` |
+| Interaction telemetry | `interactionSources` + edge subscription |
+| Future "performance mode" | `isInteracting()` |
+
+This drives the API additions above: **`isIdle(ms?)`** (centralizes the idle check) and the **`useIsInteracting(filter?)`** reactive hook (generalizes the single existing interaction-ish subscription in `Viewport.tsx` for the few low-frequency UI consumers). The source-`filter` is now load-bearing (HUD-fade) — keep it.
+
 ## Implementation phases (each independently shippable + revertible)
 1. **A-fix** — delta-based modulation reset. **DONE (f8fa698).**
 2. **Primitive + bridge (inert).** Add `createInteractionSlice` + `useInteractionDrag`; derive `interacting` + `isSceneAnimating`; send `interacting` in `renderState` **unused**. Add a test for the worker read-path (a typo → silent `false`). Measure input→downscale latency.
@@ -130,5 +159,8 @@ These get ~80–90% of the value at ~20% of the risk and were a serious option (
 3. **`DEBOUNCE_MS`** → 150–200ms, lean to 200 to match the existing input buffer. **Tune in phase 2 against measured drag-commit / wheel-burst spacing.**
 4. **Deep-accum protection** → orthogonal, unchanged. **Resolved.**
 5. **First PR** → phase 2 (+2.5 audit), fully inert. **Resolved.**
-6. **NEW — undo coalescing:** does `isUserInteracting` stay as a transaction concept, or fold into the session? Decide during 2.5.
+6. **Undo coalescing** → **KEEP SEPARATE** — `isUserInteracting` is a transaction-boundary marker, not activity; wired at the same producer sites but not replaced by the session. **Resolved (E3).**
 7. **Touch / multi-pointer / pinch** → no new token; touch camera rides drei OrbitControls' single `onStart`/`onEnd` (one session per gesture, no double-begin), everything else rides shared PointerEvents; `pointercancel` added to the stranded-session mitigations. **Resolved (E1).**
+8. **Export / bucket** → sessions are export-safe by construction; keep the `!isExporting && !isBucketRendering` gate at the GMT consumer site, not in core. **Resolved (E2).**
+9. **Camera-blocking axis** → `selectMovementLock` / `blockCamera` stays OUTSIDE the session (orthogonal permission axis); caller composes activity + lock. **Resolved (E3).**
+10. **Downstream API scope** → `isInteracting(filter)` + `isIdle(ms)` + `useIsInteracting` hook serve adaptive, hold/idle-pause, HUD-fade, defer-work, tutorial, telemetry. **Resolved (E4).**

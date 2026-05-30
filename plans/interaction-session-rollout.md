@@ -36,18 +36,35 @@ What should a session do during a bucket render / video export? Confirm `adaptiv
 - **Hold already gated:** `compute()`/`update()` early-return on `isExporting` (`FractalEngine.ts:553`/`:493`); bucket never holds (`:563`); `selectMovementLock` locks camera (`engineStore.ts:464`).
 - **Rule:** keep the `!isExporting && !isBucketRendering` gate at the GMT derivation site (`GmtRendererTickDriver.tsx:256`), NOT in the core slice (stays domain-agnostic). P4 must preserve it if wiring a new determinism-affecting consumer; existing adaptive+hold guards already cover it.
 
-### E3 — Interaction-state consumer audit (the expanded phase 2.5)  · Status: TODO
-Map ALL readers of interaction-ish state and decide migrate-vs-keep for each:
-- `isUserInteracting` (historySlice → undo coalescing + `selectIsGlobalInteraction`)
-- HUD auto-fade
-- `FractalEngine.markInteraction` / `lastInteractionTime` / `isPaused` (the "stop rendering after 1s idle" early-return)
-- `selectMovementLock` / `interactionConfig.blockCamera` (note: camera-blocking is an **orthogonal axis** to activity — a source can be active AND block camera)
-- `cameraInUse` / `isGizmoInteracting`
+### E3 — Interaction-state consumer audit (the expanded phase 2.5)  · Status: DONE (2026-05-30)
+Map ALL readers of interaction-ish state and decide migrate-vs-keep for each. **Output:** per-consumer decision → drives P4; resolves ADR open-Q #6.
 
-**Output:** per-consumer decision → drives P4. Resolves ADR open-Q #6 (does undo coalescing fold in or stay separate).
+**Full cited reader table** (decisions summarized in ADR "E3"):
+
+| Reader | file:line | Does | Decision |
+|---|---|---|---|
+| Adaptive input | `UniformManager.ts:118` | passes `isGizmoInteracting\|\|cameraInUse` → `tickAdaptiveResolution` | **MIGRATE** → `session.isInteracting()` |
+| GMT cameraInUse derivation | `GmtRendererTickDriver.tsx:256` | ORs `isCameraInteracting\|\|isPlaying\|\|isScrubbing` into renderState | **MIGRATE** (+ keep `isSceneAnimating` for playback) |
+| Gizmo (dual state) | engine `isGizmoInteracting` (`GmtRendererTickDriver.tsx:257`) + `uiSlice` `isGizmoDragging` | unsynchronized dual flag | **MIGRATE** → unify under `gizmo` source |
+| Render idle-pause | `FractalEngine.ts:557` | `isPaused && now-lastInteractionTime>1000` → early-return | **MIGRATE** → `session.isIdle(1000)` |
+| `selectIsGlobalInteraction` | `engineStore.ts:444` | `isUserInteracting \|\| interactionMode!=='none'` | **MIGRATE** → `session.isInteracting() \|\| mode!=='none'` |
+| PauseControls | `engine/plugins/topbar/PauseControls.tsx` | reads the selector for button tone | **MIGRATE** (follows selector) |
+| HUD auto-fade | `HudOverlay.tsx:63` | fades crosshair/pill on `isCameraInteracting` | **MIGRATE w/ filter** → `isInteracting({only:['camera','scrub']})` |
+| Undo coalescing | `historySlice.ts:161/166/206` | transaction snapshot/diff/DPR-restore/1500ms camera debounce | **KEEP SEPARATE** (transaction concept; wired at same producer sites) |
+| Camera-block | `selectMovementLock` `engineStore.ts:463` (+ drawing `blockCamera`) | permission gate (incl. `isExporting`/`isBucketRendering`/`isGizmoDragging`/`interactionMode`) | **KEEP OUTSIDE** (orthogonal axis; repoint gizmo check in P5, don't drop) |
+| `mouseOverCanvas` | `AdaptiveResolution.ts:275-281`, computed `GmtRendererTickDriver.tsx:258` | dead in decision path | **REMOVE** (P4/P5) |
+| accum-drop activity | `AdaptiveResolution.ts:240` | `accumCount<prev` infers activity | **REMOVE for GMT** (keep for sibling via `gateOnAccumOnly`) |
+| `gateOnAccumOnly` | `AdaptiveResolution.ts:284`, `viewportSlice.ts:180` | sibling-app config | **KEEP** |
+| `selfResized` | `AdaptiveResolution.ts:244` | adaptive-internal | **KEEP** |
+
+**Open-Q #6 RESOLVED — undo coalescing stays separate.** It's a transaction-boundary marker (verified: `endParamTransaction` snapshots+diffs params, restores DPR, pushes one undo entry), not "is active". The session is wired at the same begin/end producer sites but doesn't replace `isUserInteracting`; after P4, only undo reads it.
+
+### E4 — Downstream consumers / final API scope  · Status: DONE (2026-05-30)
 
 ### E4 — Downstream consumers / final API scope  · Status: TODO
 Decide the consumer set the API must serve **beyond adaptive + hold**, so we build it once: HUD auto-fade, **defer-expensive-work-during-interaction** (shader compiles, autosave, gallery sync, heavy panel re-renders), tutorial detection, interaction telemetry, a "performance mode." Shape `isInteracting()` (+ source filter, + `isSceneAnimating`) to be a general capability. **Output:** finalized API + a "downstream consumers" section in the ADR.
+
+**Notes (resolved → ADR "E4" + API block):** Final API = `beginInteraction`/`endInteraction`/`pokeInteraction`, `isInteracting(filter?)`, **`isIdle(ms?)`** (new — centralizes the idle check for render-pause + defer-work), `interactionSources`, `lastActivityTime`, plus a reactive **`useIsInteracting(filter?)`** hook (coarse edge boolean, for the few low-freq UI consumers — generalizes the lone existing subscription in `Viewport.tsx`). `isSceneAnimating` stays separate (playback ≠ gesture). Consumer→call map: adaptive=`isInteracting()`; hold/idle-pause=`isIdle(1000)`; HUD-fade=`isInteracting({only:['camera','scrub']})`; defer-work (`CompileScheduler.ts` coalesces bursts but doesn't yet defer on interaction; autosave; gallery sync)=`isInteracting()`/`isIdle`; tutorial/telemetry=`interactionSources`+`lastActivityTime`. Source-filter is load-bearing (HUD-fade) → keep it. Hot-path consumers read via `getState()`, never subscribe.
 
 ### E5 — Testing + observability design  · Status: TODO
 Design (a) a **unit-testable session state machine** — ref-count / debounce / watchdog, pure, no render — with cases incl. stranded-session / unmount-mid-drag / lostpointercapture; and (b) a **dev overlay** showing live active sources + `isInteracting` + adaptive scale (extend `AdaptiveResolutionBadge` or a HUD). **Output:** test-file plan + overlay spec → both built in P2.
