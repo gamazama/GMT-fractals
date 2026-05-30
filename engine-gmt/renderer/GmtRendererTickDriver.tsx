@@ -196,6 +196,13 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
     useFrame((_state, delta) => {
         if (!isReady) return;
 
+        // ADR-0061 (P3a) — drive the InteractionSession watchdog on the frame
+        // cadence now that producers can create sessions. Constant-time check;
+        // force-clears a stranded begin (a producer that missed its end) past
+        // MAX_SESSION_MS. INERT: no consumer reads `interacting` yet (that is
+        // P4); the only effect is the dev overlay collapsing a stuck session.
+        useEngineStore.getState().tickInteractionWatchdog();
+
         // Clamp delta — prevents tab-switch / debugger-pause from feeding a
         // huge delta into VirtualSpace smoothing (would trigger a spurious
         // accumulation reset).

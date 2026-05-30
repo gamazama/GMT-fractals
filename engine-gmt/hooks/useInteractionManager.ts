@@ -6,6 +6,7 @@ const engine = getProxy();
 import { getDisplayCamera } from '../engine/worker/ViewportRefs';
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 
 /** Record keyframe(s) if the animation system is in recording mode. */
@@ -34,11 +35,50 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     // Shared Loop Refs
     const rafRef = useRef<number | null>(null);
     const mousePosRef = useRef({ x: 0, y: 0 });
+
+    // ADR-0061 'picker' session — one token for both focus + julia pick-drags
+    // (mutually exclusive via interactionMode). Ref keeps begin/end balanced
+    // across pointerup / pointercancel / the RAF guards / unmount.
+    const pickerSessionActive = useRef(false);
     
     // Access Animation Store
     const animStore = useAnimationStore;
 
     useEffect(() => {
+        const beginPickerSession = () => {
+            if (pickerSessionActive.current) return;
+            pickerSessionActive.current = true;
+            useEngineStore.getState().beginInteraction(INTERACTION_SOURCES.picker);
+        };
+        const endPickerSession = () => {
+            if (!pickerSessionActive.current) return;
+            pickerSessionActive.current = false;
+            useEngineStore.getState().endInteraction(INTERACTION_SOURCES.picker);
+        };
+
+        // Idempotent teardown for each pick kind — shared by pointerup, the RAF
+        // guards (canvas-gone / pick-rejected, ADR mitigation #3), pointercancel,
+        // and unmount cleanup, so the 'picker' session always releases with them.
+        const endFocusDrag = () => {
+            if (!isDraggingFocusRef.current) return;
+            isDraggingFocusRef.current = false;
+            if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+            engine.endFocusPick();
+            const s = useEngineStore.getState();
+            s.setInteractionMode('none');
+            s.handleInteractionEnd();
+            endPickerSession();
+        };
+        const endJuliaDrag = () => {
+            if (!isDraggingJuliaRef.current) return;
+            isDraggingJuliaRef.current = false;
+            if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+            const s = useEngineStore.getState();
+            s.setInteractionMode('none');
+            s.handleInteractionEnd();
+            endPickerSession();
+        };
+
         const handlePointerDown = (e: PointerEvent) => {
             const state = useEngineStore.getState();
             const mode = state.interactionMode;
@@ -70,6 +110,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 if (mode === 'picking_focus') {
                     state.handleInteractionStart('param');
                     isDraggingFocusRef.current = true;
+                    beginPickerSession();
                     let snapshotReady = false;
                     let pendingSample = false;
                     let lastFocusDist = -1;
@@ -86,9 +127,11 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                             lastFocusDist = dist;
                             useEngineStore.getState().setOptics({ dofFocus: dist });
                         }
-                    });
+                    }).catch(() => endFocusDrag()); // mitigation #3: pick rejected → end + exit
 
                     const loop = () => {
+                        // mitigation #3: canvas unmounted out from under the pick → release.
+                        if (!canvasRef.current) { endFocusDrag(); return; }
                         if (!isDraggingFocusRef.current) return;
 
                         if (snapshotReady && !pendingSample) {
@@ -109,7 +152,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                                         { id: 'optics.dofFocus', label: 'Focus Distance', value: dist }
                                     ]);
                                 }
-                            });
+                            }).catch(() => endFocusDrag()); // mitigation #3
                         }
                         rafRef.current = requestAnimationFrame(loop);
                     };
@@ -120,6 +163,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 if (mode === 'picking_julia') {
                     state.handleInteractionStart('param');
                     isDraggingJuliaRef.current = true;
+                    beginPickerSession();
 
                     // Sync start position from store to prevent jumping
                     const geom = state.geometry;
@@ -148,11 +192,13 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                         if (pick && isDraggingJuliaRef.current) {
                             applyPick(pick, state.formula, state);
                         }
-                    });
+                    }).catch(() => endJuliaDrag()); // mitigation #3: pick rejected → end + exit
 
                     // Start Picking Loop
                     let pendingPick = false;
                     const loop = () => {
+                        // mitigation #3: canvas unmounted out from under the pick → release.
+                        if (!canvasRef.current) { endJuliaDrag(); return; }
                         if (!isDraggingJuliaRef.current) return;
 
                         // 1. Pick (async, throttled — skip if previous pick still pending)
@@ -165,7 +211,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                                     const freshState = useEngineStore.getState();
                                     applyPick(pickPos, freshState.formula, freshState);
                                 }
-                            });
+                            }).catch(() => endJuliaDrag()); // mitigation #3
                         }
 
                         // 2. Smooth Interpolation (Lerp) — runs every frame regardless of pick
@@ -204,6 +250,9 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 // Update ref for the Picking Loop
                 if (isDraggingJuliaRef.current || isDraggingFocusRef.current) {
                     mousePosRef.current = { x, y };
+                    // Watchdog liveness (ADR open-Q) — keep a long pick-drag's
+                    // session alive past MAX_SESSION_MS. Throttled, no store write.
+                    useEngineStore.getState().pokeInteraction(INTERACTION_SOURCES.picker);
                 }
 
                 // Light drag-from-panel: place light at ray intersection with depth plane
@@ -253,29 +302,14 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
         const handlePointerUp = () => {
             const state = useEngineStore.getState();
             if (state.draggedLightIndex !== null) state.setDraggedLight(null);
-            
-            // End Julia Drag
-            if (isDraggingJuliaRef.current) {
-                isDraggingJuliaRef.current = false;
-                if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-                // Exit picking mode on release
-                state.setInteractionMode('none');
-                state.handleInteractionEnd();
-                if (navigator.vibrate) navigator.vibrate(20);
-            }
-
-            // End Focus Drag
-            if (isDraggingFocusRef.current) {
-                isDraggingFocusRef.current = false;
-                if (rafRef.current) cancelAnimationFrame(rafRef.current);
-                engine.endFocusPick();
-
-                // Exit picking mode on release
-                state.setInteractionMode('none');
-                state.handleInteractionEnd();
-                if (navigator.vibrate) navigator.vibrate(20);
-            }
+            // End the active pick via the shared helpers (which also release the
+            // 'picker' session). Vibrate once on release if a pick was active —
+            // preserves the prior haptic without double-firing for both kinds.
+            const wasPicking = isDraggingJuliaRef.current || isDraggingFocusRef.current;
+            endJuliaDrag();
+            endFocusDrag();
+            if (wasPicking && navigator.vibrate) navigator.vibrate(20);
         };
 
         // capture:true so we run in the capture phase, BEFORE the
@@ -285,11 +319,20 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
         window.addEventListener('pointerdown', handlePointerDown, { capture: true });
         window.addEventListener('pointermove', handlePointerMove);
         window.addEventListener('pointerup', handlePointerUp);
+        // ADR-0061 mitigation #1 — a touch/OS interruption fires `pointercancel`,
+        // not `pointerup`; route it through the same teardown so the 'picker'
+        // session can't strand. These pickers don't setPointerCapture (they use a
+        // capture-phase window pointerdown), so there's no lostpointercapture.
+        window.addEventListener('pointercancel', handlePointerUp);
         return () => {
             window.removeEventListener('pointerdown', handlePointerDown, { capture: true } as any);
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('pointercancel', handlePointerUp);
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            // Unmount mid-pick → release the session (idempotent via the refs).
+            endJuliaDrag();
+            endFocusDrag();
         };
     }, [canvasRef]);
 };

@@ -113,6 +113,7 @@ import { getCameraModifier, getCameraModifierFromEvent } from './modifiers';
 import { useAnimationStore } from '../../store/animationStore';
 import { captureCameraKeyFrame } from '../../engine/animation/cameraKeyRegistry';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { CameraController } from '../engine/controllers/CameraController';
 import { VirtualSpace } from '../engine/PrecisionMath';
@@ -588,6 +589,14 @@ const Navigation: React.FC<NavigationProps> = ({
           if (isCameraLockedRef.current) return;
           e.preventDefault();
 
+          // ADR-0061: mouse-wheel zoom is a DISCRETE poke, not a continuous
+          // session (touch pinch-zoom is the continuous one — it rides drei's
+          // OrbitControls onStart/onEnd above, E1). The slice throttles pokes
+          // (~50ms), so calling it per-event coalesces the burst. (In
+          // cursor-anchor-OFF mode this handler bails above and drei owns the
+          // wheel, firing its own onStart/onEnd.)
+          useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
+
           // Burst-start: snapshot pivot, mark scrolling, suppress drei.
           // "First event in burst" = no active gesture pivot.
           if (!gestureActivePivotRef.current) {
@@ -696,6 +705,11 @@ const Navigation: React.FC<NavigationProps> = ({
           cancelScrollEndTimer();
 
           dragging = true;
+          // ADR-0061 camera session (custom left-drag orbit). Ref-counted under
+          // the SAME 'camera' token as OrbitControls + middle-drag, so overlaps
+          // are safe. `dragging` keeps begin/end balanced across onUp / cancel /
+          // unmount.
+          useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
           lastX = e.clientX;
           lastY = e.clientY;
 
@@ -750,6 +764,11 @@ const Navigation: React.FC<NavigationProps> = ({
           lastX = e.clientX;
           lastY = e.clientY;
           if (dx === 0 && dy === 0) return;
+          // Watchdog liveness (ADR open-Q): refresh the session on real movement
+          // so a long ACTIVE orbit isn't force-cleared at MAX_SESSION_MS. Poke is
+          // throttled (~50ms) + timestamp-only (no store write). A held-MOTIONLESS
+          // drag intentionally doesn't poke (it legitimately settles).
+          useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
 
           // Apply rotation SYNCHRONOUSLY here. drei's OrbitControls
           // calls scope.update() from inside its pointermove handler
@@ -805,10 +824,13 @@ const Navigation: React.FC<NavigationProps> = ({
           engine.dirty = true;
       };
 
-      const onUp = (e: PointerEvent) => {
-          if (e.button !== 0) return;
+      // Shared teardown for a left-drag orbit — used by both the normal
+      // pointerup and the pointercancel safety path so the camera session and
+      // gesture refs always release together.
+      const finishOrbit = () => {
           if (!dragging) return;
           dragging = false;
+          useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
           gestureActivePivotRef.current = null;
           isCustomOrbitRef.current = false;
           // Match the original OrbitControls.onEnd: capture final orbit
@@ -819,13 +841,30 @@ const Navigation: React.FC<NavigationProps> = ({
           absorbOrbitPosition(true);
       };
 
+      const onUp = (e: PointerEvent) => {
+          if (e.button !== 0) return;
+          finishOrbit();
+      };
+
+      // ADR-0061 mitigation #1 — a touch/OS interruption fires `pointercancel`,
+      // not `pointerup`; without this the 'camera' session would strand
+      // (never converges). This custom path doesn't setPointerCapture, so there
+      // is no lostpointercapture to handle. (Touch one-finger rotate is ceded to
+      // drei above via the pointerType==='touch' early-return, but a mouse can
+      // still emit pointercancel — handle it unconditionally.)
+      const onCancel = () => finishOrbit();
+
       el.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onCancel);
       return () => {
           el.removeEventListener('pointerdown', onDown);
           window.removeEventListener('pointermove', onMove);
           window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onCancel);
+          // Unmount mid-drag (mode switch away from Orbit) → release the session.
+          finishOrbit();
       };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, gl, camera, fitScale]);
@@ -848,6 +887,9 @@ const Navigation: React.FC<NavigationProps> = ({
           if (isCameraLockedRef.current) return;
           cancelScrollEndTimer();
           active = true;
+          // ADR-0061 camera session (custom middle-drag dolly) — same 'camera'
+          // token, ref-counted. `active` keeps begin/end balanced.
+          useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
           lastY = e.clientY;
           gestureActivePivotRef.current = snapshotHoverPivotLocal();
           isScrollingRef.current = true;
@@ -861,6 +903,8 @@ const Navigation: React.FC<NavigationProps> = ({
           const dy = e.clientY - lastY;
           lastY = e.clientY;
           if (dy === 0) return;
+          // Watchdog liveness — refresh on real movement (throttled, no store write).
+          useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
           const dollySpeed = (currentZoomSensitivity.current || 1.0) * getCameraModifierFromEvent(e);
           // Drag up (negative dy) → zoom in (factor < 1), matching scroll-wheel up.
           const f = Math.exp(dy * 0.005 * dollySpeed);
@@ -892,22 +936,37 @@ const Navigation: React.FC<NavigationProps> = ({
           // Reset accumulation — see same note in wheel handler.
           engine.dirty = true;
       };
-      const onUp = (e: PointerEvent) => {
-          if (e.button !== 1) return;
+      // Shared teardown — guards the session end on `active` so a stray
+      // middle-up (when the gesture never started: cursor-anchor off / locked)
+      // can't fire an unbalanced endInteraction.
+      const finishMiddle = () => {
+          const wasActive = active;
           active = false;
           gestureActivePivotRef.current = null;
           isScrollingRef.current = false;
           // Absorb to keep main / worker / store in sync after the
           // gesture (same reason as the wheel scrollEndTimeout above).
           absorbOrbitPosition(true);
+          if (wasActive) useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
       };
+      const onUp = (e: PointerEvent) => {
+          if (e.button !== 1) return;
+          finishMiddle();
+      };
+      // ADR-0061 mitigation #1 — pointercancel (no setPointerCapture here, so no
+      // lostpointercapture). Idempotent via the `active` guard in finishMiddle.
+      const onCancel = () => finishMiddle();
       el.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onCancel);
       return () => {
           el.removeEventListener('pointerdown', onDown);
           window.removeEventListener('pointermove', onMove);
           window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onCancel);
+          // Unmount mid-drag → release the session.
+          if (active) finishMiddle();
       };
   }, [mode, gl, camera]);
 
@@ -1380,6 +1439,11 @@ const Navigation: React.FC<NavigationProps> = ({
                 // forward × tiny), PAN's distance is ~0 and pan
                 // becomes a no-op.
                 isOrbitDragging.current = true;
+                // ADR-0061 camera session — drei fires ONE onStart/onEnd pair
+                // per gesture (covers touch rotate/pinch/pan too, E1) and
+                // self-heals on its own pointercancel, so this path needs no
+                // extra cancel/capture-loss wiring (mitigation #1 exemption).
+                useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
                 cancelScrollEndTimer();
                 if (orbitRef.current) {
                     const dist = distAverageRef.current > 0
@@ -1394,6 +1458,7 @@ const Navigation: React.FC<NavigationProps> = ({
             }}
             onEnd={() => {
                 isOrbitDragging.current = false;
+                useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
                 const r = camera.position.length();
                 if (r > 1e-4) orbitRadiusRef.current = r;
                 absorbOrbitPosition(true);

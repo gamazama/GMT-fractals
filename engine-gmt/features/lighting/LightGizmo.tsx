@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { SingleLightGizmo } from './components/SingleLightGizmo';
 import { getViewportCamera, getViewportCanvas, getDisplayCamera } from '../../engine/worker/ViewportRefs';
 import { normalizeLights } from './index';
+import { INTERACTION_SOURCES } from '../../interaction/interactionSources';
 
 // Global ref to store gizmo refs for orchestrated updates
 const globalGizmoRefs = { current: {} as {[key: string]: { update: () => void; hide?: () => void }} };
@@ -76,6 +77,33 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
     // Gizmo refs for updating all in one loop
     const gizmoRefs = globalGizmoRefs;
 
+    // ── ADR-0061 mitigation #4: gizmo is a SINGLE source ───────────────────
+    // The legacy dual flags (`engine.isGizmoInteracting` + the uiSlice
+    // `isGizmoDragging`) and the new `gizmo` session are flipped together,
+    // here and nowhere else, so they cannot drift. (Collapsing the dual state
+    // and repointing selectMovementLock's gizmo check is P5 — NOT now.)
+    // `gizmoSessionActive` keeps the ref-counted begin/end balanced across the
+    // pointerup / pointercancel / lostpointercapture / unmount release paths.
+    const gizmoSessionActive = useRef(false);
+    const applyGizmoInteracting = (active: boolean) => {
+        engine.isGizmoInteracting = active;
+        setGizmoDragging(active);
+        if (active) {
+            if (!gizmoSessionActive.current) {
+                gizmoSessionActive.current = true;
+                useEngineStore.getState().beginInteraction(INTERACTION_SOURCES.gizmo);
+            }
+        } else if (gizmoSessionActive.current) {
+            gizmoSessionActive.current = false;
+            useEngineStore.getState().endInteraction(INTERACTION_SOURCES.gizmo);
+        }
+    };
+
+    // Unmount mid-drag (e.g. the gizmo is toggled off while held) → release the
+    // session so it can't strand. The window listeners added in handlePointerDown
+    // self-clean on the next pointerup via the dragRef guard.
+    useEffect(() => () => { if (gizmoSessionActive.current) applyGizmoInteracting(false); }, []);
+
     const handlePointerDown = (e: React.PointerEvent, index: number, part: string, origin: THREE.Vector3) => {
         e.preventDefault();
         e.stopPropagation();
@@ -84,8 +112,7 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
         if (!light) return;
 
         handleInteractionStart('param');
-        setGizmoDragging(true);
-        engine.isGizmoInteracting = true;
+        applyGizmoInteracting(true);
         setDraggedLight(light.id ?? null);
 
         (e.target as Element).setPointerCapture(e.pointerId);
@@ -177,6 +204,12 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
 
         window.addEventListener('pointermove', handlePointerMove as any);
         window.addEventListener('pointerup', handlePointerUp as any);
+        // ADR-0061 mitigation #1 — this drag DOES setPointerCapture, so a
+        // capture loss (`lostpointercapture`) or touch/OS interruption
+        // (`pointercancel`) can end the gesture without a `pointerup`. Both
+        // route to handlePointerUp, which is idempotent (dragRef guard).
+        window.addEventListener('pointercancel', handlePointerUp as any);
+        window.addEventListener('lostpointercapture', handlePointerUp as any);
     };
 
     const handlePointerMove = (e: PointerEvent) => {
@@ -185,6 +218,11 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
 
         e.preventDefault();
         e.stopPropagation();
+
+        // Watchdog liveness (ADR open-Q) — a long gizmo drag refreshes the
+        // session so it isn't force-cleared at MAX_SESSION_MS. Throttled
+        // (~50ms), timestamp-only (no store write).
+        useEngineStore.getState().pokeInteraction(INTERACTION_SOURCES.gizmo);
 
         // Use display camera — matches what SingleLightGizmo.update() uses for positioning
         const camera = getDisplayCamera();
@@ -266,15 +304,16 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
 
     const handlePointerUp = (e: PointerEvent) => {
         if (!dragRef.current) return;
-        setGizmoDragging(false);
+        applyGizmoInteracting(false); // single-source: dual flags + session end together
         setDraggedLight(null);
-        engine.isGizmoInteracting = false;
         handleInteractionEnd();
 
         dragRef.current = null;
 
         window.removeEventListener('pointermove', handlePointerMove as any);
         window.removeEventListener('pointerup', handlePointerUp as any);
+        window.removeEventListener('pointercancel', handlePointerUp as any);
+        window.removeEventListener('lostpointercapture', handlePointerUp as any);
     };
 
     if (!showGizmo) return null;
