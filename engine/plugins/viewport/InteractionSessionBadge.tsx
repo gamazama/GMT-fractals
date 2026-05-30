@@ -54,6 +54,10 @@ export const InteractionSessionBadge: React.FC<InteractionSessionBadgeProps> = (
 
     const st = useEngineStore.getState();
     const sources = Array.from(st.getInteractionSources());
+    // Sources active OR within the debounce tail — names a discrete poke (wheel)
+    // that adds no hard-active source, so it reads as `camera` not an anon tail.
+    const recent = Array.from(st.getRecentInteractionSources?.() ?? []);
+    const tailOnly = recent.filter((s) => !sources.includes(s));
     const polledInteracting = st.isInteracting();
     const qf = st.qualityFraction || 1;
     const scale = qf > 0 ? 1 / qf : 1;
@@ -65,7 +69,7 @@ export const InteractionSessionBadge: React.FC<InteractionSessionBadgeProps> = (
 
     return (
         <div
-            className={`fixed bottom-2 left-2 z-50 pointer-events-none select-none font-mono text-[10px] leading-tight px-2 py-1.5 rounded bg-black/70 border border-cyan-500/30 text-cyan-200 ${className}`}
+            className={`fixed left-[50px] top-1/2 -translate-y-1/2 z-50 pointer-events-none select-none font-mono text-[10px] leading-tight px-2 py-1.5 rounded bg-black/70 border border-cyan-500/30 text-cyan-200 ${className}`}
             title="ADR-0061 InteractionSession (dev overlay)"
         >
             <div className="flex items-center gap-1.5 text-cyan-400 font-semibold mb-0.5">
@@ -83,6 +87,9 @@ export const InteractionSessionBadge: React.FC<InteractionSessionBadgeProps> = (
                 <span className={sources.length ? 'text-cyan-300' : 'text-gray-500'}>
                     {sources.length ? sources.join(', ') : '—'}
                 </span>
+                {tailOnly.length > 0 && (
+                    <span className="text-gray-500"> +{tailOnly.join(', ')} (tail)</span>
+                )}
             </div>
             <div>
                 <span className="text-gray-400">adaptive scale:</span>{' '}

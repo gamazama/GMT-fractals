@@ -507,6 +507,21 @@ const Navigation: React.FC<NavigationProps> = ({
   const isCameraLockedRef = useRef(false);
   const allowOrbitInteraction = useRef(false);
 
+  // ADR-0061 — drei's OrbitControls 'camera' session, tracked separately so it
+  // can be force-closed when a custom cursor-anchor handler disables drei
+  // mid-gesture. drei only fires onEnd while enabled; once a custom handler sets
+  // orbitRef.enabled=false (left/middle/wheel taking over), drei never ends its
+  // gesture → its begin('camera') would strand until the watchdog. This is the
+  // multi-button overlap (e.g. right-pan held, then left-orbit grabbed) the
+  // per-path ref-count alone can't balance. The custom paths' own begin/end are
+  // reliable (window pointerup), so only drei's needs this backstop.
+  const dreiCamSession = useRef(false);
+  const closeDreiCamSession = () => {
+      if (!dreiCamSession.current) return;
+      dreiCamSession.current = false;
+      useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
+  };
+
   // ── Cursor-anchored orbit/zoom: hover pre-pick ──────────────────────
   // Pick the world-space point under the cursor on pointermove so a
   // recent pivot is cached when the user clicks. Picks are async
@@ -611,6 +626,7 @@ const Navigation: React.FC<NavigationProps> = ({
               }
               isScrollingRef.current = true;
               if (orbitRef.current) orbitRef.current.enabled = false;
+              closeDreiCamSession(); // disabling drei here suppresses its onEnd — end its session now
           }
           const pivot = gestureActivePivotRef.current!;
 
@@ -738,6 +754,7 @@ const Navigation: React.FC<NavigationProps> = ({
           // useFrame, so flipping the ref alone would let one frame
           // of lookAt(target) slip through. Touch enabled directly.
           if (orbitRef.current) orbitRef.current.enabled = false;
+          closeDreiCamSession(); // disabling drei here suppresses its onEnd — end its session now
 
           // Re-calibrate zoom sensitivity from new pivot distance —
           // matches the OrbitControls onStart calibration so wheel /
@@ -894,6 +911,7 @@ const Navigation: React.FC<NavigationProps> = ({
           gestureActivePivotRef.current = snapshotHoverPivotLocal();
           isScrollingRef.current = true;
           if (orbitRef.current) orbitRef.current.enabled = false;
+          closeDreiCamSession(); // disabling drei here suppresses its onEnd — end its session now
           e.preventDefault();
       };
       const mFwd    = new THREE.Vector3();
@@ -1443,7 +1461,12 @@ const Navigation: React.FC<NavigationProps> = ({
                 // per gesture (covers touch rotate/pinch/pan too, E1) and
                 // self-heals on its own pointercancel, so this path needs no
                 // extra cancel/capture-loss wiring (mitigation #1 exemption).
-                useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
+                // Tracked via dreiCamSession so a custom handler that disables
+                // drei mid-gesture can force-close it (see closeDreiCamSession).
+                if (!dreiCamSession.current) {
+                    dreiCamSession.current = true;
+                    useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
+                }
                 cancelScrollEndTimer();
                 if (orbitRef.current) {
                     const dist = distAverageRef.current > 0
@@ -1458,7 +1481,7 @@ const Navigation: React.FC<NavigationProps> = ({
             }}
             onEnd={() => {
                 isOrbitDragging.current = false;
-                useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
+                closeDreiCamSession();
                 const r = camera.position.length();
                 if (r > 1e-4) orbitRadiusRef.current = r;
                 absorbOrbitPosition(true);

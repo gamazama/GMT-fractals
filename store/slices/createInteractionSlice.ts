@@ -52,8 +52,8 @@ export type InteractionSlice = Pick<EngineStoreState,
     'interacting' | 'interactionConsumerFlags' | 'interactionDivergenceCount'
 > & Pick<EngineActions,
     'beginInteraction' | 'endInteraction' | 'pokeInteraction' |
-    'isInteracting' | 'isIdle' | 'getInteractionSources' | 'getLastActivityTime' |
-    'tickInteractionWatchdog' | 'setInteractionConsumerFlag'
+    'isInteracting' | 'isIdle' | 'getInteractionSources' | 'getRecentInteractionSources' |
+    'getLastActivityTime' | 'tickInteractionWatchdog' | 'setInteractionConsumerFlag'
 >;
 
 // ── Machine instance + poke throttle (module-level refs; NOT reactive) ──────
@@ -111,6 +111,8 @@ export const createInteractionSlice: StateCreator<
     isIdle: (ms?: number) => machine.isIdle(_session, now(), ms),
 
     getInteractionSources: () => machine.interactionSources(_session),
+
+    getRecentInteractionSources: () => machine.recentInteractionSources(_session, now()),
 
     getLastActivityTime: () => _session.lastActivityTime,
 

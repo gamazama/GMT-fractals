@@ -204,3 +204,20 @@ export function tickWatchdog(
 export function interactionSources(state: InteractionSessionState): ReadonlySet<InteractionSource> {
     return new Set(state.activeCounts.keys());
 }
+
+/** Sources active OR within the debounce tail. For observability only (the dev
+ *  overlay): a discrete `poke` (wheel/key) adds NO hard-active source, so
+ *  `interactionSources` reads empty while `isInteracting()` is true via the
+ *  tail — this surfaces *which* source poked (e.g. wheel → `camera`) so that
+ *  state is legible rather than an anonymous "(tail)". Not a hot-path API. */
+export function recentInteractionSources(
+    state: InteractionSessionState,
+    now: number,
+    debounceMs: number = DEFAULT_DEBOUNCE_MS,
+): ReadonlySet<InteractionSource> {
+    const out = new Set<InteractionSource>(state.activeCounts.keys());
+    for (const [src, ts] of state.lastActivityBySource) {
+        if (now - ts < debounceMs) out.add(src);
+    }
+    return out;
+}

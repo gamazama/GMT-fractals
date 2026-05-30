@@ -403,6 +403,9 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     isIdle: (ms?: number) => boolean;
     /** Live hard-active sources — for the dev overlay / telemetry (getState()). */
     getInteractionSources: () => ReadonlySet<InteractionSource>;
+    /** Sources active OR within the debounce tail — dev overlay observability,
+     *  so a discrete poke (wheel) is legible as its source, not an anonymous tail. */
+    getRecentInteractionSources: () => ReadonlySet<InteractionSource>;
     /** Global last-activity timestamp (ms) — tutorial / telemetry. */
     getLastActivityTime: () => number;
     /** Watchdog backstop: force-clears a stranded session (a producer that

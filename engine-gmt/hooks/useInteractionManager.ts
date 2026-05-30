@@ -40,6 +40,12 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     // (mutually exclusive via interactionMode). Ref keeps begin/end balanced
     // across pointerup / pointercancel / the RAF guards / unmount.
     const pickerSessionActive = useRef(false);
+
+    // ADR-0061 'gizmo' session for the drag-a-light-in-from-the-HUD gesture
+    // (CenterHUD sets draggedLightIndex; placement happens here on pointermove).
+    // It positions a light, so it shares the 'gizmo' token with the gizmo-handle
+    // drag (the two never overlap — this path self-gates on !isGizmoInteracting).
+    const lightDragSessionActive = useRef(false);
     
     // Access Animation Store
     const animStore = useAnimationStore;
@@ -54,6 +60,11 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
             if (!pickerSessionActive.current) return;
             pickerSessionActive.current = false;
             useEngineStore.getState().endInteraction(INTERACTION_SOURCES.picker);
+        };
+        const endLightDragSession = () => {
+            if (!lightDragSessionActive.current) return;
+            lightDragSessionActive.current = false;
+            useEngineStore.getState().endInteraction(INTERACTION_SOURCES.gizmo);
         };
 
         // Idempotent teardown for each pick kind — shared by pointerup, the RAF
@@ -258,6 +269,15 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 // Light drag-from-panel: place light at ray intersection with depth plane
                 const state = useEngineStore.getState();
                 if (state.draggedLightIndex !== null && !engine.isGizmoInteracting) {
+                    // ADR-0061 — open the 'gizmo' session on the first placement
+                    // move, then poke to keep it alive (watchdog liveness). Ends
+                    // in handlePointerUp / pointercancel / unmount.
+                    if (!lightDragSessionActive.current) {
+                        lightDragSessionActive.current = true;
+                        state.beginInteraction(INTERACTION_SOURCES.gizmo);
+                    } else {
+                        state.pokeInteraction(INTERACTION_SOURCES.gizmo);
+                    }
                     // Use display camera — matches gizmo rendering
                     const cam = getDisplayCamera() as THREE.PerspectiveCamera;
                     const dragIdx = state.lighting?.lights?.findIndex(l => l.id === state.draggedLightIndex) ?? -1;
@@ -302,6 +322,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
         const handlePointerUp = () => {
             const state = useEngineStore.getState();
             if (state.draggedLightIndex !== null) state.setDraggedLight(null);
+            endLightDragSession(); // release the HUD light-drag 'gizmo' session if it was active
 
             // End the active pick via the shared helpers (which also release the
             // 'picker' session). Vibrate once on release if a pick was active —
@@ -330,9 +351,10 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
             window.removeEventListener('pointerup', handlePointerUp);
             window.removeEventListener('pointercancel', handlePointerUp);
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
-            // Unmount mid-pick → release the session (idempotent via the refs).
+            // Unmount mid-pick / mid-light-drag → release the sessions (idempotent).
             endJuliaDrag();
             endFocusDrag();
+            endLightDragSession();
         };
     }, [canvasRef]);
 };
