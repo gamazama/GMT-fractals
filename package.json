@@ -21,6 +21,7 @@
     "test:frag:scan": "tsx debug/scan-frag-parse.mts",
     "test:frag:integration": "tsx debug/test-frag-integration.mts --discover",
     "test:compat": "tsx debug/test-compat.mts",
+    "test:interaction": "tsx debug/test-interaction-session.mts",
     "test:compat:write": "tsx debug/test-compat.mts --write",
     "test:partial-apply": "tsx debug/test-partial-apply.mts",
     "test:migrations": "tsx debug/test-escape-migration.mts",
