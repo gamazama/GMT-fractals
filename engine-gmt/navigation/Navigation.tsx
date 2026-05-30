@@ -527,12 +527,6 @@ const Navigation: React.FC<NavigationProps> = ({
       useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
   };
 
-  // Tap-vs-drag: a camera session opens only once the pointer/camera moves past
-  // this many pixels (px² compared). A click (no real movement) opens nothing —
-  // it doesn't change the view, so it needs no session (and won't pop adaptive in
-  // P4). The render-invalidation/accumulation axis is separate and unaffected.
-  const CAMERA_DRAG_THRESHOLD_PX = 4;
-
   // Suppress the native browser context menu on the 3D canvas. Right-drag is a
   // camera gesture (drei PAN / cursor-anchor), so the OS menu just interrupts it
   // (and was blocking gesture testing). The listener is bound directly to the
@@ -723,10 +717,9 @@ const Navigation: React.FC<NavigationProps> = ({
       const el = gl.domElement;
       let dragging = false;
       let lastX = 0, lastY = 0;
-      // Tap-vs-drag: the camera session opens only after the pointer moves past
-      // the threshold from the press point — a click opens nothing.
+      // Tap-vs-drag: the camera session opens on the first real move (any
+      // non-zero delta moves the view) — a pure click (no movement) opens nothing.
       let orbitOpened = false;
-      let orbitStartX = 0, orbitStartY = 0;
       const orbitPivot = new THREE.Vector3();
 
       const onDown = (e: PointerEvent) => {
@@ -749,13 +742,11 @@ const Navigation: React.FC<NavigationProps> = ({
 
           dragging = true;
           // ADR-0061 camera session (custom left-drag orbit) — DEFERRED to the
-          // first move past the threshold (tap-vs-drag, see onMove); a pure left
-          // click opens no session. Ref-counted under the same 'camera' token as
-          // OrbitControls + middle-drag; `orbitOpened` keeps begin/end balanced
-          // across onUp / cancel / unmount.
+          // first real move (tap-vs-drag, see onMove); a pure left click opens no
+          // session. Ref-counted under the same 'camera' token as OrbitControls +
+          // middle-drag; `orbitOpened` keeps begin/end balanced across onUp /
+          // cancel / unmount.
           orbitOpened = false;
-          orbitStartX = e.clientX;
-          orbitStartY = e.clientY;
           lastX = e.clientX;
           lastY = e.clientY;
 
@@ -811,16 +802,15 @@ const Navigation: React.FC<NavigationProps> = ({
           lastX = e.clientX;
           lastY = e.clientY;
           if (dx === 0 && dy === 0) return;
-          // Tap-vs-drag: open the 'camera' session on the first move past the
-          // threshold (a click opens nothing); then poke on each subsequent move
-          // for watchdog liveness (throttled ~50ms, timestamp-only, no store
-          // write). A held-MOTIONLESS drag stops poking and legitimately settles.
+          // The camera moves on ANY non-zero delta (the view changed → accumulation
+          // already reset here), so open the 'camera' session on the FIRST real
+          // move; a pure click (no movement) never reaches this line and opens
+          // nothing. Then poke on each subsequent move for watchdog liveness
+          // (throttled ~50ms, timestamp-only, no store write). A held-MOTIONLESS
+          // drag stops poking and legitimately settles.
           if (!orbitOpened) {
-              const tdx = e.clientX - orbitStartX, tdy = e.clientY - orbitStartY;
-              if (tdx * tdx + tdy * tdy >= CAMERA_DRAG_THRESHOLD_PX * CAMERA_DRAG_THRESHOLD_PX) {
-                  orbitOpened = true;
-                  useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
-              }
+              orbitOpened = true;
+              useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
           } else {
               useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
           }
@@ -936,10 +926,9 @@ const Navigation: React.FC<NavigationProps> = ({
       const el = gl.domElement;
       let active = false;
       let lastY = 0;
-      // Tap-vs-drag: open the session only after the pointer moves past the
-      // threshold — a middle click opens nothing.
+      // Tap-vs-drag: open the session on the first real move — a middle click
+      // opens nothing.
       let midOpened = false;
-      let midStartX = 0, midStartY = 0;
       const onDown = (e: PointerEvent) => {
           if (e.button !== 1) return; // middle only
           if ((e.target as HTMLElement).closest('.pointer-events-auto')) return;
@@ -950,11 +939,9 @@ const Navigation: React.FC<NavigationProps> = ({
           cancelScrollEndTimer();
           active = true;
           // ADR-0061 camera session (custom middle-drag dolly) — DEFERRED to the
-          // first move past the threshold (tap-vs-drag); a middle click opens no
-          // session. `midOpened` keeps begin/end balanced.
+          // first real move (tap-vs-drag); a middle click opens no session.
+          // `midOpened` keeps begin/end balanced.
           midOpened = false;
-          midStartX = e.clientX;
-          midStartY = e.clientY;
           lastY = e.clientY;
           gestureActivePivotRef.current = snapshotHoverPivotLocal();
           isScrollingRef.current = true;
@@ -969,14 +956,11 @@ const Navigation: React.FC<NavigationProps> = ({
           const dy = e.clientY - lastY;
           lastY = e.clientY;
           if (dy === 0) return;
-          // Tap-vs-drag: open on the first move past the threshold, then poke on
+          // Open on the first real move (a middle click opens nothing); poke on
           // each subsequent move for watchdog liveness (throttled, no store write).
           if (!midOpened) {
-              const tdx = e.clientX - midStartX, tdy = e.clientY - midStartY;
-              if (tdx * tdx + tdy * tdy >= CAMERA_DRAG_THRESHOLD_PX * CAMERA_DRAG_THRESHOLD_PX) {
-                  midOpened = true;
-                  useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
-              }
+              midOpened = true;
+              useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
           } else {
               useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
           }
