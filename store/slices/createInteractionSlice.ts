@@ -38,18 +38,14 @@
 
 import { StateCreator } from 'zustand';
 import { EngineStoreState, EngineActions, InteractionConsumerFlags } from '../../types';
-import {
-    createInteractionSessionState,
-    beginInteraction as machineBegin,
-    endInteraction as machineEnd,
-    pokeInteraction as machinePoke,
-    isInteracting as machineIsInteracting,
-    isIdle as machineIsIdle,
-    tickWatchdog as machineTickWatchdog,
-    interactionSources as machineInteractionSources,
-    type InteractionSessionState,
-    type InteractionSource,
-    type SourceFilter,
+// Namespace import so each call reads as the wrapper delegating to the machine
+// (`machine.beginInteraction(_session, …)`) and there's no name collision with
+// this slice's own begin/end/poke actions.
+import * as machine from '../../engine/InteractionSessionMachine';
+import type {
+    InteractionSessionState,
+    InteractionSource,
+    SourceFilter,
 } from '../../engine/InteractionSessionMachine';
 
 export type InteractionSlice = Pick<EngineStoreState,
@@ -64,7 +60,7 @@ export type InteractionSlice = Pick<EngineStoreState,
 // Mirrors viewportSlice's `_adaptive` ref: hot state never triggers a rerender.
 // One machine per app store; sibling apps that compose this slice each get
 // their own copy and none of them activate it in P2.
-const _session: InteractionSessionState = createInteractionSessionState();
+const _session: InteractionSessionState = machine.createInteractionSessionState();
 let _lastPokeMs = -Infinity;     // ~50ms poke throttle (coalesce wheel/key bursts)
 const POKE_THROTTLE_MS = 50;
 
@@ -87,13 +83,13 @@ export const createInteractionSlice: StateCreator<
     interactionDivergenceCount: 0,
 
     beginInteraction: (source: InteractionSource) => {
-        const { edge } = machineBegin(_session, source, now());
+        const { edge } = machine.beginInteraction(_session, source, now());
         // Reactive write ONLY on the idle→active edge (once per gesture).
         if (edge) set({ interacting: true });
     },
 
     endInteraction: (source: InteractionSource) => {
-        const { edge, unbalanced } = machineEnd(_session, source, now());
+        const { edge, unbalanced } = machine.endInteraction(_session, source, now());
         if (unbalanced) {
             devWarn(`[InteractionSession] endInteraction('${source}') with no matching begin — ignored (ref-count stayed consistent).`);
         }
@@ -107,19 +103,19 @@ export const createInteractionSlice: StateCreator<
         const t = now();
         if (t - _lastPokeMs < POKE_THROTTLE_MS) return; // coalesce bursts — no ref/store write
         _lastPokeMs = t;
-        machinePoke(_session, source, t); // timestamp-only refresh; never edges, never writes the store
+        machine.pokeInteraction(_session, source, t); // timestamp-only refresh; never edges, never writes the store
     },
 
-    isInteracting: (filter?: SourceFilter) => machineIsInteracting(_session, now(), filter),
+    isInteracting: (filter?: SourceFilter) => machine.isInteracting(_session, now(), filter),
 
-    isIdle: (ms?: number) => machineIsIdle(_session, now(), ms),
+    isIdle: (ms?: number) => machine.isIdle(_session, now(), ms),
 
-    getInteractionSources: () => machineInteractionSources(_session),
+    getInteractionSources: () => machine.interactionSources(_session),
 
     getLastActivityTime: () => _session.lastActivityTime,
 
     tickInteractionWatchdog: () => {
-        const { cleared } = machineTickWatchdog(_session, now());
+        const { cleared } = machine.tickWatchdog(_session, now());
         if (cleared) {
             devWarn('[InteractionSession] watchdog force-cleared a stranded session (a producer missed an endInteraction).');
             // A force-clear is an active→idle edge; mirror it onto the boolean so
