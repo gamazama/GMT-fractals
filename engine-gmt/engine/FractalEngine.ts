@@ -105,6 +105,19 @@ export interface EngineRenderState {
      *  set this so the user judges quality at full res. Plumbed from the store
      *  via RENDER_TICK so UniformManager's adaptive loop can honour it. */
     adaptiveSuppressed: boolean;
+    /** ADR-0061 worker bridge. Gesture-activity boolean from the
+     *  InteractionSession (session.isInteracting()), declared at the input
+     *  event rather than inferred from a buffered useFrame. SENT BUT UNUSED in
+     *  P2 — P4 points the adaptive input + hold at it (behind per-consumer
+     *  flags, in parallel with the legacy accum-drop proxy). Keep the
+     *  `!isExporting && !isBucketRendering` gate at the GMT consumer site, not
+     *  here (E2). */
+    interacting: boolean;
+    /** ADR-0061. Autonomous scene animation (playback / active LFO) — the
+     *  SEPARATE axis adaptive composes with gesture activity (`interacting ||
+     *  isSceneAnimating`). Playback is NOT a gesture, so it is not an
+     *  interaction source. SENT BUT UNUSED in P2. */
+    isSceneAnimating: boolean;
 }
 
 // Precompute 2048 jitter values using Halton sequence for faster access.
@@ -150,6 +163,8 @@ export class FractalEngine {
         geometry: null,
         bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 },
         adaptiveSuppressed: false,
+        interacting: false,        // ADR-0061: SENT BUT UNUSED in P2
+        isSceneAnimating: false,   // ADR-0061: SENT BUT UNUSED in P2
     };
 
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }

@@ -6,6 +6,18 @@ import { ContextMenuItem } from './help';
 import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../engine/features/types';
 import { LightParams } from './graphics';
 import type { ScalabilityState, HardwareProfile, ViewportAdaptiveConfig } from './viewport';
+import type { InteractionSource, SourceFilter } from '../engine/InteractionSessionMachine';
+
+/** Per-consumer kill-switch flags for the ADR-0061 InteractionSession rollout.
+ *  Each lets a P4 consumer flip from the legacy proxy to the session
+ *  independently, so a behavioural regression bisects to one consumer instead
+ *  of forcing a wholesale revert. Declared + defaulted OFF in P2; UNUSED until P4. */
+export interface InteractionConsumerFlags {
+    adaptive: boolean;
+    hold: boolean;
+    hudFade: boolean;
+    idlePause: boolean;
+}
 
 // Optics was a fractal-leaning feature. Apps that need typed optics on
 // saved cameras can declaration-merge to widen this opaque record.
@@ -205,6 +217,25 @@ export interface EngineStoreState extends FeatureStateMap {
   // Consolidated Interaction State
   interactionMode: InteractionMode;
   focusLock: boolean;
+
+  // ── InteractionSession (ADR-0061) — single source of truth for "is a
+  //    continuous user gesture in flight?". The machine's HOT state (active
+  //    sources + timestamps) lives in a module-level ref inside
+  //    createInteractionSlice (the viewportSlice `_adaptive` pattern), NOT
+  //    here — interaction sits on the hottest path in the app. The ONLY
+  //    reactive field is this coarse edge boolean, written once per gesture
+  //    edge (idle↔active), never per pointermove. P2 is INERT: no producer
+  //    calls beginInteraction yet (P3a/P3b), so it stays false in GMT *and*
+  //    sibling apps. Read activity via isInteracting()/isIdle() through
+  //    getState() on hot paths — do not subscribe.
+  interacting: boolean;
+  /** Per-consumer kill-switch flags. Declared + defaulted OFF in P2; P4 flips
+   *  each independently so a regression bisects to one consumer. UNUSED until P4. */
+  interactionConsumerFlags: InteractionConsumerFlags;
+  /** P4 instrument stub: frames where the session disagreed with the legacy
+   *  accum-drop proxy. Never incremented in P2 — the dev overlay shows it as a
+   *  placeholder so the display path exists before the parallel run. */
+  interactionDivergenceCount: number;
   
   cameraMode: CameraMode; 
   sceneOffset: PreciseVector3;
@@ -349,6 +380,37 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
 
     setInteractionMode: (mode: InteractionMode) => void;
     setFocusLock: (v: boolean) => void;
+
+    // ── InteractionSession (ADR-0061) — gesture-activity API. Producers
+    //    declare into it (begin/end/poke); consumers poll isInteracting()/
+    //    isIdle() via getState() on hot paths. See createInteractionSlice.ts.
+    /** Continuous gesture start, ref-counted per source. Writes the reactive
+     *  `interacting` boolean only on the idle→active edge. */
+    beginInteraction: (source: InteractionSource) => void;
+    /** Gesture end, ref-counted; an unbalanced end dev-warns and never strands.
+     *  Writes the reactive boolean only on the active→idle edge. */
+    endInteraction: (source: InteractionSource) => void;
+    /** Discrete event (wheel / key) — throttled (~50ms) timestamp refresh on the
+     *  module ref. No store write, never an edge. */
+    pokeInteraction: (source: InteractionSource) => void;
+    /** Poll "is a gesture active (incl. the debounce tail)?". Read via getState()
+     *  on hot paths — never subscribe. Optional source filter (e.g. HUD-fade
+     *  passes `{ only: ['camera','scrub'] }`). */
+    isInteracting: (filter?: SourceFilter) => boolean;
+    /** Idle for >= ms with no active source (distinct window from the debounce
+     *  tail). Consumers COMPOSE this with render-dirtiness — it alone is not
+     *  "should we render". */
+    isIdle: (ms?: number) => boolean;
+    /** Live hard-active sources — for the dev overlay / telemetry (getState()). */
+    getInteractionSources: () => ReadonlySet<InteractionSource>;
+    /** Global last-activity timestamp (ms) — tutorial / telemetry. */
+    getLastActivityTime: () => number;
+    /** Watchdog backstop: force-clears a stranded session (a producer that
+     *  missed an end) and mirrors the resulting idle edge onto the reactive
+     *  boolean. Inert in P2 (no producers ⇒ never active). */
+    tickInteractionWatchdog: () => void;
+    /** Flip a per-consumer kill-switch flag (P4 rollout). */
+    setInteractionConsumerFlag: (key: keyof InteractionConsumerFlags, value: boolean) => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;

@@ -37,6 +37,7 @@ import {
 import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 import { viewport } from '../../engine/plugins/Viewport';
 import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
+import { buildRenderInteractionState } from './renderInteractionState';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
 // Capture the display camera for overlay components (light gizmos, drawing
@@ -251,6 +252,22 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         // path-tracer accumulation from thrashing on every per-frame
         // CAMERA_TELEPORT during heavy playback.
         const animState = useAnimationStore.getState();
+
+        // ADR-0061 worker bridge — derive the InteractionSession booleans and
+        // send them in renderState. SENT BUT UNUSED in P2: no consumer reads
+        // renderState.interacting / .isSceneAnimating yet (that is P4). The
+        // pure buildRenderInteractionState() pins the key names to
+        // EngineRenderState so a producer/consumer typo can't silently read
+        // false (debug/test-interaction-wiring.mts guards the round-trip).
+        const interactionBlock = buildRenderInteractionState({
+            sessionInteracting: storeState.isInteracting(),
+            isPlaying: animState.isPlaying,
+            // Active LFO ≈ LFOs enabled with at least one animation bound. This
+            // is the autonomous-animation axis (NOT a gesture) adaptive will
+            // compose with `interacting` in P4.
+            hasActiveModulation: !!storeState.lfosEnabled && (storeState.animations?.length ?? 0) > 0,
+        });
+
         const renderState = {
             cameraMode: storeState.cameraMode,
             cameraInUse: animState.isCameraInteracting || animState.isPlaying || animState.isScrubbing,
@@ -261,6 +278,7 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             quality:  storeState.quality  ?? null,
             geometry: storeState.geometry ?? null,
             adaptiveSuppressed: !!storeState.adaptiveSuppressed,
+            ...interactionBlock, // interacting + isSceneAnimating — ADR-0061, UNUSED in P2
         };
 
         proxy.sendRenderTick(serializedCamera, serializedOffset, clampedDelta, renderState);

@@ -21,6 +21,7 @@ import { EngineStoreState, EngineActions, Preset } from '../types';
 import { createUISlice } from './slices/uiSlice';
 import { createRenderControlSlice } from './slices/renderControlSlice';
 import { createViewportSlice } from './slices/viewportSlice';
+import { createInteractionSlice } from './slices/createInteractionSlice';
 import { createScalabilitySlice } from './slices/scalabilitySlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createFeatureSlice } from './createFeatureSlice';
@@ -91,6 +92,7 @@ const storeFactory: StateCreator<
     ...createUISlice(set, get, api),
     ...createRenderControlSlice(set, get, api),
     ...createViewportSlice(set, get, api),
+    ...createInteractionSlice(set, get, api),
     ...createScalabilitySlice(set, get),
     ...createHistorySlice(set, get, api),
     ...createFeatureSlice(set, get, api),
