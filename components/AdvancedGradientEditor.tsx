@@ -8,6 +8,8 @@ import EmbeddedColorPicker from './EmbeddedColorPicker';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import Dropdown from './Dropdown';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
+import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 import { collectHelpIds } from '../utils/helpUtils';
 import { ContextMenuItem } from '../types/help';
 import { ContextMenu as PresetMenu } from './gradient/GradientContextMenu';
@@ -110,6 +112,12 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const justEmittedRef = useRef(false);
 
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
+    // Session 'slider' for the continuous knot / bracket / bias drags (window
+    // mouse-listener gesture), anchored to the same param-transaction boundary
+    // (ADR-0061 P3b). The marquee select + the discrete menu/keyboard/cycle
+    // handlers deliberately open no session. The <Slider> bias/position controls
+    // are the already-wired connected component.
+    const knotSession = useInteractionGesture(INTERACTION_SOURCES.slider);
 
     useEffect(() => {
         if (justEmittedRef.current) {
@@ -378,10 +386,12 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
              }
              isDragRemovingRef.current = false;
              setIsDragRemoving(false);
+             knotSession.end();
              handleInteractionEnd();
 
         } else if (payload.type !== 'marquee') {
             emitChange(knotsRef.current);
+            knotSession.end();
             handleInteractionEnd();
         }
 
@@ -396,6 +406,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
         
         if (type !== 'marquee' && !skipSnapshot) {
             handleInteractionStart('param');
+            knotSession.begin();
         }
 
         dragPayloadRef.current = {
@@ -409,8 +420,9 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     const handleTrackMouseDown = (e: React.MouseEvent) => {
         if (e.button !== 0) return;
         if ((e.target as HTMLElement).closest('.gradient-interactive-element') || !knotTrackRef.current) return;
-        
+
         handleInteractionStart('param');
+        knotSession.begin();
 
         const rect = knotTrackRef.current.getBoundingClientRect();
         const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));

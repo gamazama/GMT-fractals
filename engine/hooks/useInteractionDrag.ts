@@ -26,7 +26,9 @@
  * with a drag still active ends it (covers modal-open / Strict-Mode
  * double-unmount mid-drag).
  *
- * P2: dispatch-only + inert — no producer mounts this yet (that is P3a/P3b).
+ * P3b: the ~90 slider/knob/vector + drawing + scrub producers wire through
+ * this hook (raw-pointer owners) or its useInteractionGesture core (semantic
+ * onDragStart/onDragEnd sites). Still INERT — no consumer reads the session.
  *
  * @see store/slices/createInteractionSlice.ts
  * @see docs/adr/0061-interaction-session-single-source-of-truth.md
@@ -43,7 +45,35 @@ export interface InteractionDragHandlers {
     onPointerCancel: () => void;
 }
 
-export function useInteractionDrag(source: InteractionSource): InteractionDragHandlers {
+/** Imperative balanced begin/end for the session, for producers that fire on
+ *  SEMANTIC callbacks (`onDragStart`/`onDragEnd`, `setIsScrubbing(true|false)`)
+ *  rather than raw PointerEvents. */
+export interface InteractionGesture {
+    begin: () => void;
+    end: () => void;
+}
+
+/**
+ * useInteractionGesture — the balanced begin/end core shared with
+ * useInteractionDrag, exposed for the P3b slider/knob/vector + scrub producers
+ * whose drag lifecycle surfaces as SEMANTIC callbacks, not raw PointerEvents.
+ *
+ * Co-locate `begin`/`end` with the producer's existing balanced boundary —
+ * `beginParamTransaction`/`endParamTransaction` (sliders) or
+ * `setIsScrubbing(true|false)` (timeline scrub) — so the session inherits a
+ * battle-tested end + cleanup instead of a parallel hand-rolled lifecycle
+ * (ADR-0061). Each such producer is a SINGLE balanced path, so the ref-counting
+ * is safe (the camera multi-path strand class does not apply here).
+ *
+ * Holds ONE outstanding begin per mount (the `activeRef`), so a redundant
+ * release is a silent no-op and an unmount mid-drag still releases. For
+ * elements that OWN their PointerEvents, prefer useInteractionDrag — it
+ * additionally wires `pointercancel`/`lostpointercapture` onto the element
+ * (touch-interruption / capture-loss release, ADR mitigation #1).
+ *
+ * DISPATCH-ONLY: subscribes to nothing; mounting it costs zero renders.
+ */
+export function useInteractionGesture(source: InteractionSource): InteractionGesture {
     // True while THIS mount holds an outstanding begin. Keeps begin/end balanced
     // across the multiple release events one gesture can fire, and lets the
     // unmount cleanup release a still-active drag.
@@ -69,6 +99,12 @@ export function useInteractionDrag(source: InteractionSource): InteractionDragHa
             useEngineStore.getState().endInteraction(source);
         }
     }, [source]);
+
+    return { begin, end };
+}
+
+export function useInteractionDrag(source: InteractionSource): InteractionDragHandlers {
+    const { begin, end } = useInteractionGesture(source);
 
     return {
         onPointerDown: begin,

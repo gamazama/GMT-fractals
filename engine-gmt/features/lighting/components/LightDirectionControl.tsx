@@ -8,6 +8,8 @@ import * as THREE from 'three';
 import { CameraUtils } from '../../../utils/CameraUtils';
 import { evaluateTrackValue } from '../../../../utils/timelineUtils';
 import { DraggableNumber } from '../../../../components/Slider';
+import { useInteractionDrag } from '../../../../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../../../interaction/interactionSources';
 
 interface LightDirectionControlProps {
     index: number;
@@ -47,6 +49,11 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
     
     // Stores
     const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
+    // Session 'slider' for the direction pad (raw-pointer owner). The hook
+    // supplies pointercancel/lostpointercapture release (ADR-0061 mitigation #1);
+    // begin/end are co-located with the param-transaction boundary below. The
+    // <DraggableNumber> fields are the already-wired connected component.
+    const padSession = useInteractionDrag(INTERACTION_SOURCES.slider);
     // Read live camera rotation — store values lag behind teleports/transitions
     const getCameraQuat = () => {
         const rot = CameraUtils.getRotationFromEngine();
@@ -151,6 +158,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
         e.preventDefault();
         e.stopPropagation();
         handleInteractionStart('param');
+        padSession.onPointerDown();
         setIsDragging(true);
         (e.target as Element).setPointerCapture(e.pointerId);
         
@@ -181,6 +189,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                 addKeyframe(idY, currentFrame, safeValue.y);
                 addKeyframe(idZ, currentFrame, safeValue.z);
             }
+            padSession.onPointerUp();
             handleInteractionEnd();
         }
     };
@@ -246,6 +255,8 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
+                onPointerCancel={padSession.onPointerCancel}
+                onLostPointerCapture={padSession.onLostPointerCapture}
                 title={isFixed 
                     ? "Headlamp Mode: Light is attached to Camera. Center = Camera Forward." 
                     : "World Mode: Light is fixed in space. Center = Direction you are looking."
