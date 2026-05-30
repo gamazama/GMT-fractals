@@ -67,28 +67,25 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
             useEngineStore.getState().endInteraction(INTERACTION_SOURCES.gizmo);
         };
 
-        // Idempotent teardown for each pick kind — shared by pointerup, the RAF
+        // Idempotent teardown for a pick kind — shared by pointerup, the RAF
         // guards (canvas-gone / pick-rejected, ADR mitigation #3), pointercancel,
         // and unmount cleanup, so the 'picker' session always releases with them.
-        const endFocusDrag = () => {
-            if (!isDraggingFocusRef.current) return;
-            isDraggingFocusRef.current = false;
+        // Focus picking additionally tears down the worker focus snapshot.
+        const endPickDrag = (
+            dragRef: { current: boolean },
+            cleanup?: () => void,
+        ) => {
+            if (!dragRef.current) return;
+            dragRef.current = false;
             if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-            engine.endFocusPick();
+            cleanup?.();
             const s = useEngineStore.getState();
             s.setInteractionMode('none');
             s.handleInteractionEnd();
             endPickerSession();
         };
-        const endJuliaDrag = () => {
-            if (!isDraggingJuliaRef.current) return;
-            isDraggingJuliaRef.current = false;
-            if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-            const s = useEngineStore.getState();
-            s.setInteractionMode('none');
-            s.handleInteractionEnd();
-            endPickerSession();
-        };
+        const endFocusDrag = () => endPickDrag(isDraggingFocusRef, () => engine.endFocusPick());
+        const endJuliaDrag = () => endPickDrag(isDraggingJuliaRef);
 
         const handlePointerDown = (e: PointerEvent) => {
             const state = useEngineStore.getState();
