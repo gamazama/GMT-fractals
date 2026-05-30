@@ -249,10 +249,12 @@ export class FractalEngine {
         this.markInteraction();
 
         if (event.type === 'wheel') {
+            if (!event.delta) return; // zero-delta wheel — no camera move, no reset
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.activeCamera.quaternion);
             this.activeCamera.position.addScaledVector(forward, event.delta * this.inputState.zoomSpeed * this.lastMeasuredDistance);
             this.resetAccumulation();
         } else if (event.type === 'drag') {
+            if (!event.dx && !event.dy) return; // zero-delta drag — no rotation, no reset
             const up = new THREE.Vector3(0, 1, 0);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.activeCamera.quaternion);
             const qPitch = new THREE.Quaternion().setFromAxisAngle(right, event.dy * this.inputState.rotateSpeed);
@@ -465,9 +467,12 @@ export class FractalEngine {
 
 
     public setUniform(key: string, value: any, noReset: boolean = false) {
-        this.materials.setUniform(key, value);
+        const changed = this.materials.setUniform(key, value);
         this.configManager.syncUniform(key, value);
-        if (!noReset) this.resetAccumulation(); 
+        // Only reset accumulation when the uniform's value actually changed.
+        // Re-emitting an unchanged value (display-only uniforms, redundant
+        // param writes, probe-driven no-ops) must not disturb the buffer.
+        if (!noReset && changed) this.resetAccumulation();
     }
     
     public setRenderState(partial: Partial<EngineRenderState>) {

@@ -260,7 +260,10 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     setHistogramLayer: (v) => {
         if (get().histogramLayer === v) return;
         set({ histogramLayer: v });
-        FractalEvents.emit('uniform', { key: Uniforms.HistogramLayer, value: v });
+        // uHistogramLayer only selects which colour layer the histogram READBACK
+        // samples (ShaderBuilder histogram variant) — it does not affect the main
+        // render, so it must not reset accumulation.
+        FractalEvents.emit('uniform', { key: Uniforms.HistogramLayer, value: v, noReset: true });
         set((state) => ({ histogramTrigger: state.histogramTrigger + 1 }));
     },
     

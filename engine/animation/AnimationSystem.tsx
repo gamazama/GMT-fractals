@@ -50,6 +50,11 @@ import { evaluateTrackValue } from '../../utils/timelineUtils';
 
 // Global refs for animation system state
 const activeTargetsRef = { current: new Set<string>() };
+// Previous frame's modulation offsets — compared each tick so accumulation
+// resets only when the modulated OUTPUT actually changed, not whenever an
+// offset is merely non-zero (a constant or slow LFO otherwise reset every
+// frame, so the path tracer never converged).
+const prevOffsets = { current: {} as Record<string, number> };
 const juliaScratch = new THREE.Vector3();
 const lastFrameRecorded = { current: -1 };
 const initialStaticValues = { current: {} as Record<string, number> };
@@ -224,10 +229,10 @@ export const tick = (delta: number) => {
     allTargetsToProcess.forEach(targetKey => {
         const isRemoved = !currentTargets.has(targetKey);
         const offset = isRemoved ? 0 : (combinedOffsets[targetKey] ?? 0);
-        
-        // Only consider it a "change" if the value is non-zero
-        if (Math.abs(offset) > 0.0001) hasVisualChange = true;
-        
+        // NOTE: hasVisualChange is computed once after the loop by diffing this
+        // frame's offsets against the previous frame's (delta-based), not here
+        // per-target against zero.
+
         // F. Standard Feature Params & DDFS Lookup (Moved Up for Base Value Logic)
         let resolvedBase = 0;
         let uniformName = '';
@@ -419,7 +424,6 @@ export const tick = (delta: number) => {
         if ((targetKey.startsWith('geometry.preRot') || targetKey.startsWith('geometry.postRot') || targetKey.startsWith('geometry.worldRot')) && (storeState as any).geometry) {
             engine.modulations[targetKey] = offset;
             if (!isRemoved) liveModulations[targetKey] = resolvedBase + offset;
-            if (Math.abs(offset) > 0.0001) hasVisualChange = true;
             return;
         }
 
@@ -501,7 +505,6 @@ export const tick = (delta: number) => {
                 }
 
                 if (!isRemoved) liveModulations[targetKey] = liveVal;
-                if (Math.abs(offset) > 0.0001) hasVisualChange = true;
 
                 // Uniform write only when the feature declares one.
                 if (uniformName && uniformName.endsWith(`_${axis}`)) {
@@ -527,7 +530,6 @@ export const tick = (delta: number) => {
             if (uniformName) {
                 emitUniform(uniformName, finalScalar, isNoReset);
             }
-            if (Math.abs(offset) > 0.0001) hasVisualChange = true;
         }
     });
 
@@ -558,6 +560,24 @@ export const tick = (delta: number) => {
          juliaScratch.set(juliaX, juliaY, juliaZ);
          emitUniform('uJulia', juliaScratch);
     }
+
+    // Reset accumulation only when the modulation OUTPUT actually changed
+    // since the previous frame — not merely because some offset is non-zero.
+    // (A constant or slow LFO used to set hasVisualChange every frame, so the
+    // path tracer reset every frame and never converged.) Compare this frame's
+    // offsets to last frame's: an offset appearing, vanishing, or moving past
+    // epsilon counts as a real change; a moving LFO still resets (correct), a
+    // static one no longer does.
+    const prevOff = prevOffsets.current;
+    for (const k of currentTargets) {
+        if (Math.abs((combinedOffsets[k] ?? 0) - (prevOff[k] ?? 0)) > 0.0001) { hasVisualChange = true; break; }
+    }
+    if (!hasVisualChange) {
+        for (const k in prevOff) {
+            if (!currentTargets.has(k) && Math.abs(prevOff[k]) > 0.0001) { hasVisualChange = true; break; }
+        }
+    }
+    prevOffsets.current = { ...combinedOffsets };
 
     // --- CRITICAL: Reset Accumulation if Visuals Changed ---
     if (hasVisualChange) {
