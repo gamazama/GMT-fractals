@@ -1,7 +1,7 @@
 # ADR-0061: A single `InteractionSession` primitive as the source of truth for gesture activity ("is the user mid-gesture?")
 
 **Date:** 2026-05-30 _(revised same day: a 5-angle review — architecture fit / correctness & failure-modes / migration risk / simpler-alternatives / performance — then edge investigations E1–E5, then a scope-boundary + additive-cutover hardening pass)_
-**Status:** Proposed _(direction chosen: full primitive, hardened; edges E1–E5 closed; ready to implement P2)_
+**Status:** Accepted _(2026-05-30; edges E1–E5 closed + scope-boundary / composition / additive-cutover hardening folded in; implementation begins at P2 on branch `feat/interaction-session`)_
 **Scope:** new `store/slices/createInteractionSlice.ts` (engine-core, generic) + a `useInteractionDrag` hook; consumers in `engine/AdaptiveResolution.ts`, `engine-gmt/engine/managers/UniformManager.ts`, `engine-gmt/engine/FractalEngine.ts` (hold), `engine-gmt/renderer/GmtRendererTickDriver.tsx`; producers across `engine-gmt/navigation/*`, `components/inputs/hooks/useDragValue.ts`, light gizmo, pickers, drawing, timeline scrub. **GMT only** for now — sibling apps (fluid-toy/fractal-toy via `store/slices/viewportSlice.ts`) keep their current adaptive inputs and opt in later.
 **Related:** ADR-0024 (pure adaptive module — still holds), ADR-0025/0026 (viewport hooks / pluggable render-scale), ADR-0034/0041-0042 (worker contract / drift), ADR-0059 (capability protocol — the open-token pattern this borrows).
 
