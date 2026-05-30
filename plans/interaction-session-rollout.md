@@ -27,8 +27,14 @@ Do touch drags already flow through the same pointer handlers (→ free session 
 - **Safety delta → ADR mitigation #1 widened:** touch interruption fires `pointercancel` (not `pointerup`); custom drag handlers (`Navigation` custom orbit/middle-drag, `useInteractionManager`, `DrawingOverlay`) listen for `pointerup` only and would strand a session — `useInteractionDrag` must supply `onPointerCancel` + `onLostPointerCapture`. drei-driven `camera` is exempt (drei fires `onEnd` on its own pointercancel).
 - **`hooks/useMobileLayout.ts` is layout-only** (no input handling) — not a producer.
 
-### E2 — Export / bucket / video-export suppression  · Status: TODO
+### E2 — Export / bucket / video-export suppression  · Status: DONE (2026-05-30)
 What should a session do during a bucket render / video export? Confirm `adaptiveSuppressed` already neutralizes adaptive; ensure sessions don't perturb deterministic export frames. Read `engine-gmt/engine/GmtBucketHost.ts`, `worker/WorkerExporter.ts`, the `adaptiveSuppressed` path. **Output:** a suppression rule (ignore sessions while `isExporting`/`isBucketRendering`) → add to ADR.
+
+**Notes (resolved → ADR "E2 — Export / bucket suppression"):** Sessions are export-safe by construction.
+- **Write-side invisible to export:** begin/end/poke = refs + one edge boolean, nothing new crosses to the worker; export frames consume no interaction signal.
+- **Adaptive already doubly gated:** resize block skipped while `isExporting||isBucketRendering` (`UniformManager.ts:97`) AND `adaptiveSuppressed`→scale 1.0 (`:127`→`AdaptiveResolution.ts:221-228`). `adaptiveSuppressed` set by BucketRenderPanel + render-dialog while mounted.
+- **Hold already gated:** `compute()`/`update()` early-return on `isExporting` (`FractalEngine.ts:553`/`:493`); bucket never holds (`:563`); `selectMovementLock` locks camera (`engineStore.ts:464`).
+- **Rule:** keep the `!isExporting && !isBucketRendering` gate at the GMT derivation site (`GmtRendererTickDriver.tsx:256`), NOT in the core slice (stays domain-agnostic). P4 must preserve it if wiring a new determinism-affecting consumer; existing adaptive+hold guards already cover it.
 
 ### E3 — Interaction-state consumer audit (the expanded phase 2.5)  · Status: TODO
 Map ALL readers of interaction-ish state and decide migrate-vs-keep for each:

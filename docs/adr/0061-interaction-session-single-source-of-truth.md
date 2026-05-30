@@ -96,6 +96,17 @@ This primitive sits on the **hottest path in the app** (wheel 10–50/s on track
 
 **Risks / costs:** broad blast radius (~100 producer call sites, many via `useDragValue` passthrough components that could be missed — the hook + dev-warn mitigate); the stranded-session class above (mitigations are blocking); behavioral change to a tuned system needs visual verification (user owns it); `isUserInteracting` has **other** consumers (HUD fade, undo coalescing, `selectIsGlobalInteraction`) that must be audited and migrated before removal, or kept (undo-coalescing is arguably a separate transaction concept). (Review #3.)
 
+## Edge investigation outcomes (E1–E5)
+
+The five edge investigations close before/with phase 2 (each may revise this ADR). **E1 (touch)** is folded into the producer + safety sections above. E2–E5 below.
+
+### E2 — Export / bucket suppression (resolved)
+Sessions are **export-safe by construction** — no new mechanism needed:
+- **Write-side is invisible to export.** begin/end/poke write only module refs + one coarse boolean on idle↔active edges (see Performance); nothing new crosses to the worker, and deterministic export frames never consume an interaction signal.
+- **Adaptive is already doubly gated:** the whole resize block is skipped while `isExporting || isBucketRendering` (`UniformManager.ts:97`), and independently `adaptiveSuppressed` hard-forces scale 1.0 (`UniformManager.ts:127` → `AdaptiveResolution.ts:221-228`).
+- **Hold is already gated:** `FractalEngine.compute()` / `update()` early-return on `isExporting` (`:553` / `:493`); bucket never holds (`:563`); camera is locked via `selectMovementLock` (`engineStore.ts:464`, which already includes both flags).
+- **Rule P4 must preserve:** any consumer of `isInteracting()` that affects frame determinism stays gated by `!isExporting && !isBucketRendering`, kept at the **GMT consumer / derivation site** (`GmtRendererTickDriver.tsx:256`, beside `adaptiveSuppressed`) — **do not** bake export-awareness into the generic core slice. When P4 swaps the proxy for `session.isInteracting()`, the existing UniformManager:97 + compute() guards already cover adaptive + hold; the gate only needs re-adding if a NEW determinism-affecting consumer is wired.
+
 ## Implementation phases (each independently shippable + revertible)
 1. **A-fix** — delta-based modulation reset. **DONE (f8fa698).**
 2. **Primitive + bridge (inert).** Add `createInteractionSlice` + `useInteractionDrag`; derive `interacting` + `isSceneAnimating`; send `interacting` in `renderState` **unused**. Add a test for the worker read-path (a typo → silent `false`). Measure input→downscale latency.
