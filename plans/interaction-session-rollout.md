@@ -66,8 +66,13 @@ Decide the consumer set the API must serve **beyond adaptive + hold**, so we bui
 
 **Notes (resolved → ADR "E4" + API block):** Final API = `beginInteraction`/`endInteraction`/`pokeInteraction`, `isInteracting(filter?)`, **`isIdle(ms?)`** (new — centralizes the idle check for render-pause + defer-work), `interactionSources`, `lastActivityTime`, plus a reactive **`useIsInteracting(filter?)`** hook (coarse edge boolean, for the few low-freq UI consumers — generalizes the lone existing subscription in `Viewport.tsx`). `isSceneAnimating` stays separate (playback ≠ gesture). Consumer→call map: adaptive=`isInteracting()`; hold/idle-pause=`isIdle(1000)`; HUD-fade=`isInteracting({only:['camera','scrub']})`; defer-work (`CompileScheduler.ts` coalesces bursts but doesn't yet defer on interaction; autosave; gallery sync)=`isInteracting()`/`isIdle`; tutorial/telemetry=`interactionSources`+`lastActivityTime`. Source-filter is load-bearing (HUD-fade) → keep it. Hot-path consumers read via `getState()`, never subscribe.
 
-### E5 — Testing + observability design  · Status: TODO
+### E5 — Testing + observability design  · Status: DONE (2026-05-30)
 Design (a) a **unit-testable session state machine** — ref-count / debounce / watchdog, pure, no render — with cases incl. stranded-session / unmount-mid-drag / lostpointercapture; and (b) a **dev overlay** showing live active sources + `isInteracting` + adaptive scale (extend `AdaptiveResolutionBadge` or a HUD). **Output:** test-file plan + overlay spec → both built in P2.
+
+**Notes (resolved → ADR "E5"):**
+- **Pure machine, `now` injected.** Extract `InteractionSessionMachine` mirroring `engine/AdaptiveResolution.ts` (`createState()` + `tick`-style reducer, no DOM/React/Three). MUST take `now` as a param (never call `performance.now()` internally) or debounce/watchdog aren't deterministically testable. `createInteractionSlice` = thin wrapper owning refs + gating the edge boolean (`viewportSlice._adaptive` pattern).
+- **No vitest/jest in repo** — tests are `tsx` scripts in `debug/*.mts` with inline asserts + snapshot diffing. Test file: `debug/test-interaction-session.mts` (mirror `debug/test-compat.mts`); add to `package.json`. Cases: ref-count balance, unbalanced-end dev-warn, debounce tail, watchdog force-clear at `MAX_SESSION_MS`, unmount-mid-drag cleanup, `lostpointercapture`+`pointercancel` release, poke throttle (~50ms, no store write).
+- **Overlay:** add `interactionSessionOpen` toggle to the existing `debug_tools` feature (`engine/features/debug_tools/`); badge mirrors `engine/plugins/viewport/AdaptiveResolutionBadge.tsx`; reads `interactionSources` via `getState()`, `isInteracting`, `1/qualityFraction`; advanced-menu gated; mounts via ComponentRegistry overlay slot. No new framework.
 
 ---
 
@@ -97,4 +102,5 @@ Remove dead signals + the dual gizmo state; finalize watchdog + dev warnings; re
 
 ## Status log
 - **2026-05-30:** ADR-0061 finalized (5 review angles); RC A + interim adaptive fixes committed (`f8fa698`); ADR hardening (`9c6c301`, `7efd0c9`); this plan created.
-- **2026-05-30:** **E1 done** — touch/multi-pointer/pinch investigated; no new token, touch rides drei OrbitControls (camera) + shared PointerEvents (everything else); `pointercancel` added to stranded-session mitigations. ADR "Touch / multi-pointer / pinch" subsection + mitigation #1 + open-Q #7 updated. **Next session: E2** (export/bucket suppression), then E3–E5, then P2.
+- **2026-05-30:** **E1 done** — touch/multi-pointer/pinch investigated; no new token, touch rides drei OrbitControls (camera) + shared PointerEvents (everything else); `pointercancel` added to stranded-session mitigations. ADR "Touch / multi-pointer / pinch" subsection + mitigation #1 + open-Q #7 updated.
+- **2026-05-30:** **E2–E5 done** (all edges closed). E2 export-safe by construction; E3 consumer audit (migrate/keep/remove table) + open-Q #6 resolved (undo stays separate) + camera-block orthogonal; E4 final API (`isIdle` + `useIsInteracting` + source-filter); E5 pure `now`-injected machine + tsx test plan + `debug_tools` overlay. ADR gained an "Edge investigation outcomes (E1–E5)" section + API additions; open-Qs #6–#10 resolved. Commits `3d13d73` (E2), `ee455cf` (E3+E4), + this (E5). **Next session: P2** (inert primitive + bridge — first behavior-touching code, lands behind the kill-switch).
