@@ -8,17 +8,6 @@ import { LightParams } from './graphics';
 import type { ScalabilityState, HardwareProfile, ViewportAdaptiveConfig } from './viewport';
 import type { InteractionSource, SourceFilter } from '../engine/InteractionSessionMachine';
 
-/** Per-consumer kill-switch flags for the ADR-0061 InteractionSession rollout.
- *  Each lets a P4 consumer flip from the legacy proxy to the session
- *  independently, so a behavioural regression bisects to one consumer instead
- *  of forcing a wholesale revert. Declared + defaulted OFF in P2; UNUSED until P4. */
-export interface InteractionConsumerFlags {
-    adaptive: boolean;
-    hold: boolean;
-    hudFade: boolean;
-    idlePause: boolean;
-}
-
 // Optics was a fractal-leaning feature. Apps that need typed optics on
 // saved cameras can declaration-merge to widen this opaque record.
 type OpticsState = Record<string, unknown>;
@@ -208,7 +197,6 @@ export interface EngineStoreState extends FeatureStateMap {
   exportIncludeScene: boolean;
   
   showLightGizmo: boolean;
-  isGizmoDragging: boolean;
   draggedLightIndex: string | null;
   openLightPopupIndex: number;  // -1 = no popup open
   shadowPanelOpen: boolean;
@@ -224,25 +212,13 @@ export interface EngineStoreState extends FeatureStateMap {
   //    createInteractionSlice (the viewportSlice `_adaptive` pattern), NOT
   //    here — interaction sits on the hottest path in the app. The ONLY
   //    reactive field is this coarse edge boolean, written once per gesture
-  //    edge (idle↔active), never per pointermove. P2 is INERT: no producer
-  //    calls beginInteraction yet (P3a/P3b), so it stays false in GMT *and*
-  //    sibling apps. Read activity via isInteracting()/isIdle() through
-  //    getState() on hot paths — do not subscribe.
+  //    edge (idle↔active), never per pointermove. Read activity via
+  //    isInteracting()/isIdle() through getState() on hot paths — do not
+  //    subscribe. (P5: this is the SOLE interaction signal; the per-consumer
+  //    kill-switch flags and the parallel-run divergence instrument are gone.)
   interacting: boolean;
-  /** Per-consumer kill-switch flags. Declared + defaulted OFF in P2; P4 flips
-   *  each independently so a regression bisects to one consumer. UNUSED until P4. */
-  interactionConsumerFlags: InteractionConsumerFlags;
-  /** P4 parallel-run instrument: frames where the session's gesture-activity
-   *  view disagreed with the legacy adaptive activity (proxy + accum-drop).
-   *  Computed by the GMT tick driver ONLY while the dev overlay is open; reset
-   *  on each overlay open. 0 in P2 (overlay closed / no producers). */
-  interactionDivergenceCount: number;
-  /** Human-readable context of the LAST divergence (which side was active +
-   *  recent session sources), e.g. `session=1 legacy=0 src=slider`. null until
-   *  the first divergence of the current overlay session. */
-  interactionDivergenceLast: string | null;
-  
-  cameraMode: CameraMode; 
+
+  cameraMode: CameraMode;
   sceneOffset: PreciseVector3;
   animations: AnimationParams[];
   lfosEnabled: boolean;
@@ -377,7 +353,6 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setExportIncludeScene: (v: boolean) => void;
     
     setShowLightGizmo: (v: boolean) => void;
-    setGizmoDragging: (v: boolean) => void;
     setDraggedLight: (id: string | null) => void;
     setOpenLightPopupIndex: (index: number) => void;
     setShadowPanelOpen: (v: boolean) => void;
@@ -415,18 +390,9 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     getLastActivityTime: () => number;
     /** Watchdog backstop: force-clears a stranded session (a producer that
      *  missed an end) and mirrors the resulting idle edge onto the reactive
-     *  boolean. Inert in P2 (no producers ⇒ never active). */
+     *  boolean. Last line of defence against the never-converges regression
+     *  class; a live drag refreshes via throttled pointermove pokes. */
     tickInteractionWatchdog: () => void;
-    /** Flip a per-consumer kill-switch flag (P4 rollout). */
-    setInteractionConsumerFlag: (key: keyof InteractionConsumerFlags, value: boolean) => void;
-    /** P4 parallel-run instrument (GMT tick driver → engine-core store → dev
-     *  overlay). Record one divergence frame: bumps interactionDivergenceCount
-     *  and stores `last` as the context string. Called only while the overlay
-     *  is open, only on a divergent frame — NOT a per-frame hot-path write. */
-    noteInteractionDivergence: (last: string) => void;
-    /** Zero the divergence counter + context — called on each overlay open so
-     *  every parallel-run pass starts clean. */
-    resetInteractionDivergence: () => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;

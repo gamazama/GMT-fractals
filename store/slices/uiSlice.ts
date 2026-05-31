@@ -99,7 +99,7 @@ export function setTutorialStorageKey(key: string, applyToStore: (completed: num
 }
 
 export type UISlice = Pick<EngineStoreState,
-    'showLightGizmo' | 'isGizmoDragging' |
+    'showLightGizmo' |
     'histogramData' | 'histogramAutoUpdate' | 'histogramTrigger' | 'histogramLayer' | 'histogramActiveCount' | 'histogramLoading' |
     'sceneHistogramData' | 'sceneHistogramTrigger' | 'sceneHistogramActiveCount' |
     'draggedLightIndex' | 'openLightPopupIndex' | 'shadowPanelOpen' | 'vpQualityOpen' | 'advancedMode' | 'showHints' | 'uiModePreference' | 'isDeviceMobile' | 'isPortrait' | 'mobileActiveMenu' | 'invertY' |
@@ -120,7 +120,7 @@ export type UISlice = Pick<EngineStoreState,
     // Tutorial
     'tutorialActive' | 'tutorialLessonId' | 'tutorialStepIndex' | 'tutorialCompleted'
 > & Pick<EngineActions,
-    'setShowLightGizmo' | 'setGizmoDragging' | 
+    'setShowLightGizmo' |
     'setHistogramData' | 'setHistogramAutoUpdate' | 'setHistogramLoading' | 'refreshHistogram' | 'setHistogramLayer' | 'registerHistogram' | 'unregisterHistogram' |
     'setSceneHistogramData' | 'refreshSceneHistogram' | 'registerSceneHistogram' | 'unregisterSceneHistogram' |
     'setDraggedLight' | 'setOpenLightPopupIndex' | 'setShadowPanelOpen' | 'setVpQualityOpen' | 'setAdvancedMode' | 'setShowHints' | 'setUiModePreference' | 'setMobileActiveMenu' | 'setInvertY' |
@@ -160,8 +160,7 @@ const getUrlParam = (key: string) => {
 const DEFAULT_PANELS: Record<string, PanelState> = {};
 
 export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zustand/subscribeWithSelector", never]], [], UISlice> = (set, get) => ({
-    showLightGizmo: true, 
-    isGizmoDragging: false, 
+    showLightGizmo: true,
     interactionMode: 'none',
     focusLock: false,
 
@@ -245,7 +244,6 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
     // --- ACTIONS ---
 
     setShowLightGizmo: (v) => set({ showLightGizmo: v }),
-    setGizmoDragging: (v) => set({ isGizmoDragging: v }),
     setInteractionMode: (mode) => set({ interactionMode: mode }),
     setFocusLock: (v) => set({ focusLock: v }),
 

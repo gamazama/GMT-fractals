@@ -26,8 +26,10 @@ export const INTERACTION_SOURCES = {
      *  touch) + the custom cursor-anchored orbit/middle-drag/wheel paths.
      *  Ref-counted under this one token so overlapping paths are safe. */
     camera: 'camera',
-    /** Light-gizmo drag (move/axis/plane). Single-source with the legacy dual
-     *  `engine.isGizmoInteracting` + `isGizmoDragging` flags (ADR mitigation #4). */
+    /** Light-gizmo drag (move/axis/plane). The SOLE representation of a gizmo
+     *  drag since P5 (the old dual `engine.isGizmoInteracting` + `isGizmoDragging`
+     *  flags were collapsed into this source). Read by the accumulation hold
+     *  (filtered) and selectMovementLock (`getInteractionSources().has('gizmo')`). */
     gizmo: 'gizmo',
     /** Focus / Julia pick-drags (useInteractionManager). */
     picker: 'picker',

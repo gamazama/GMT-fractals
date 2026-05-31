@@ -27,17 +27,19 @@
  *     getLastActivityTime) is read via getState() on hot paths; nothing here
  *     subscribes.
  *
- * P2 is INERT: no producer calls beginInteraction yet (that is P3a/P3b), so in
- * GMT *and* in sibling apps (fluid-toy / fractal-toy, which compose this same
- * store) the machine is never activated, the edge boolean stays false, and the
- * watchdog is a no-op. Proven in debug/test-interaction-wiring.mts.
+ * As of ADR-0061 P5 the session is the PERMANENT, sole interaction signal for
+ * GMT (the per-consumer kill-switch flags + the parallel-run divergence
+ * instrument are gone). Sibling apps (fluid-toy / fractal-toy) compose this same
+ * store but wire no producers yet, so the machine is never activated there, the
+ * edge boolean stays false, and the watchdog is a no-op — proven inert in
+ * debug/test-interaction-wiring.mts (they keep `gateOnAccumOnly` until they opt in).
  *
  * @see engine/InteractionSessionMachine.ts
  * @see docs/adr/0061-interaction-session-single-source-of-truth.md
  */
 
 import { StateCreator } from 'zustand';
-import { EngineStoreState, EngineActions, InteractionConsumerFlags } from '../../types';
+import { EngineStoreState, EngineActions } from '../../types';
 // Namespace import so each call reads as the wrapper delegating to the machine
 // (`machine.beginInteraction(_session, …)`) and there's no name collision with
 // this slice's own begin/end/poke actions.
@@ -49,12 +51,11 @@ import type {
 } from '../../engine/InteractionSessionMachine';
 
 export type InteractionSlice = Pick<EngineStoreState,
-    'interacting' | 'interactionConsumerFlags' | 'interactionDivergenceCount' | 'interactionDivergenceLast'
+    'interacting'
 > & Pick<EngineActions,
     'beginInteraction' | 'endInteraction' | 'pokeInteraction' |
     'isInteracting' | 'isIdle' | 'getInteractionSources' | 'getRecentInteractionSources' |
-    'getLastActivityTime' | 'tickInteractionWatchdog' | 'setInteractionConsumerFlag' |
-    'noteInteractionDivergence' | 'resetInteractionDivergence'
+    'getLastActivityTime' | 'tickInteractionWatchdog'
 >;
 
 // ── Machine instance + poke throttle (module-level refs; NOT reactive) ──────
@@ -80,9 +81,6 @@ export const createInteractionSlice: StateCreator<
     InteractionSlice
 > = (set, get) => ({
     interacting: false,
-    interactionConsumerFlags: { adaptive: false, hold: false, hudFade: false, idlePause: false },
-    interactionDivergenceCount: 0,
-    interactionDivergenceLast: null,
 
     beginInteraction: (source: InteractionSource) => {
         const { edge } = machine.beginInteraction(_session, source, now());
@@ -128,18 +126,4 @@ export const createInteractionSlice: StateCreator<
             if (get().interacting) set({ interacting: false });
         }
     },
-
-    setInteractionConsumerFlag: (key, value) =>
-        set((s) => ({ interactionConsumerFlags: { ...s.interactionConsumerFlags, [key]: value } })),
-
-    // ── P4 divergence instrument ────────────────────────────────────────────
-    // The GMT tick driver computes session-vs-legacy disagreement per frame and
-    // calls these (engine-core → store is the layering channel; the overlay,
-    // also engine-core, reads the fields). Gated upstream on the overlay being
-    // open + only on a divergent frame, so these are NOT per-frame hot-path
-    // writes. The overlay reads the count/last via getState() in its RAF poll.
-    noteInteractionDivergence: (last: string) =>
-        set((s) => ({ interactionDivergenceCount: s.interactionDivergenceCount + 1, interactionDivergenceLast: last })),
-
-    resetInteractionDivergence: () => set({ interactionDivergenceCount: 0, interactionDivergenceLast: null }),
 });

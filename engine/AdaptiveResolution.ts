@@ -91,11 +91,12 @@ export interface AdaptiveResolutionInput {
     accumCount: number;
     /** True during gizmo / camera / slider interaction. */
     isInteracting: boolean;
-    /** True when the pointer is over the render canvas. Currently unused by
-     *  the decision logic (engagement is activity-driven, not pointer-
-     *  position-driven); kept on the input for callers and as a hook for a
-     *  future pointer-down-gated variant. */
-    mouseOverCanvas: boolean;
+    /** True when the pointer is over the render canvas. Unused by the decision
+     *  logic (engagement is activity-driven, not pointer-position-driven); kept
+     *  on the input as an optional hook for a future pointer-down-gated variant.
+     *  Optional since ADR-0061 P5: GMT no longer computes/passes it (it was a
+     *  no-op in the decision path); sibling callers may still supply it. */
+    mouseOverCanvas?: boolean;
     /** User toggle: master enable for dynamic scaling. */
     dynamicScaling: boolean;
     /** Target FPS for smart adaptive (0 = manual mode using interactionDownsample). */
@@ -127,6 +128,15 @@ export interface AdaptiveResolutionInput {
      *  unrelated UI sliders never invalidates the fractal accumulator,
      *  so it shouldn't drop quality either). */
     gateOnAccumOnly?: boolean;
+    /** When true, an accumulation DROP no longer counts as activity — only the
+     *  explicit `isInteracting` signal engages adaptive. The accum-drop's other
+     *  roles (deep-accum protection, full-res cost sampling) are unaffected.
+     *  ADR-0061 P5: GMT passes this because its InteractionSession is now the
+     *  SOLE activity signal — every continuous gesture declares in, so the racy
+     *  accum-drop inference (which also fired on one-shot preset/param changes)
+     *  is no longer wanted. Distinct from `gateOnAccumOnly`, which does the
+     *  OPPOSITE (accum-drop only, ignore isInteracting) for sibling apps. */
+    ignoreAccumDrop?: boolean;
 }
 
 export interface AdaptiveResolutionResult {
@@ -171,7 +181,11 @@ export function getAdaptiveGrace(stillFps: number): number {
  *   activity write AND the `isInteracting` clause of `activitySignal`,
  *   leaving only the accumulation-drop signal (`timeSinceActivity <
  *   grace`). Used by fluid-toy whose accumulator is not invalidated by
- *   unrelated UI drags.
+ *   unrelated UI drags. `ignoreAccumDrop` is its mirror image — it
+ *   disables the accumulation-drop activity write, leaving only the
+ *   explicit `isInteracting` signal (GMT, whose InteractionSession
+ *   declares every gesture). The two are mutually exclusive in practice;
+ *   neither affects deep-accum protection or full-res cost sampling.
  * @invariant `holdUntilMs` only blocks downscale — comparison is
  *   strict `nextScale > state.scale`; upscale is always permitted
  *   during hold.
@@ -190,6 +204,7 @@ export function tickAdaptiveResolution(
     const holdUntilMs = input.holdUntilMs ?? 0;
     const suppressed = input.suppressed ?? false;
     const gateOnAccumOnly = input.gateOnAccumOnly ?? false;
+    const ignoreAccumDrop = input.ignoreAccumDrop ?? false;
 
     // ── Full-resolution cost tracking ────────────────────────────────
     // Estimate the time to render ONE FULL-RES frame, derived from the
@@ -234,10 +249,14 @@ export function tickAdaptiveResolution(
     // EXCEPT when caused by our own resize (selfResized flag).
     // gateOnAccumOnly mode skips the isInteracting branch — UI slider
     // drags that don't actually invalidate the renderer should not
-    // count as activity for those apps.
+    // count as activity for those apps. ignoreAccumDrop is the mirror:
+    // it skips the accum-drop branch so only the explicit isInteracting
+    // signal engages adaptive (GMT's InteractionSession declares every
+    // gesture, so the racy accum-drop — which also fired on one-shot
+    // preset/param changes — is no longer wanted).
     if (isInteracting && !gateOnAccumOnly) {
         state.lastActivityTime = now;
-    } else if (accumCount < state.prevAccumCount && !state.selfResized) {
+    } else if (accumCount < state.prevAccumCount && !state.selfResized && !ignoreAccumDrop) {
         state.lastActivityTime = now;
     }
     state.prevAccumCount = accumCount;
@@ -277,8 +296,11 @@ export function tickAdaptiveResolution(
     // the canvas (i.e. over UI) — but that only mattered while idle (recent
     // activity already trips the `grace` clause), so it just stopped heavy
     // scenes from ever converging while the mouse rested over a panel.
-    // Slider drags that change the image still engage adaptive: the param
-    // change drops accumCount, which registers as activity above.
+    // For accum-drop callers, slider drags that change the image engage
+    // adaptive via the accumCount drop registered as activity above. For
+    // ignoreAccumDrop callers (GMT), the explicit isInteracting signal (a
+    // declared gesture) is what engages — every continuous gesture declares
+    // into the InteractionSession, so the accum-drop is no longer the path.
     // gateOnAccumOnly also drops the isInteracting clause (fluid-toy: its
     // accumulator isn't invalidated by unrelated UI drags).
     const activitySignal = gateOnAccumOnly

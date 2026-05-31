@@ -46,7 +46,6 @@ export const tick = () => {
 export const LightGizmo: React.FC<FeatureComponentProps> = () => {
     const showGizmo = useEngineStore(s => s.showLightGizmo);
     const lights = useEngineStore(s => s.lighting?.lights || []);
-    const setGizmoDragging = useEngineStore(s => s.setGizmoDragging);
     const updateLight = useEngineStore(s => s.updateLight);
     const setDraggedLight = useEngineStore(s => s.setDraggedLight);
     const { handleInteractionStart, handleInteractionEnd } = useEngineStore();
@@ -77,17 +76,17 @@ export const LightGizmo: React.FC<FeatureComponentProps> = () => {
     // Gizmo refs for updating all in one loop
     const gizmoRefs = globalGizmoRefs;
 
-    // ── ADR-0061 mitigation #4: gizmo is a SINGLE source ───────────────────
-    // The legacy dual flags (`engine.isGizmoInteracting` + the uiSlice
-    // `isGizmoDragging`) and the new `gizmo` session are flipped together,
-    // here and nowhere else, so they cannot drift. (Collapsing the dual state
-    // and repointing selectMovementLock's gizmo check is P5 — NOT now.)
-    // `gizmoSessionActive` keeps the ref-counted begin/end balanced across the
-    // pointerup / pointercancel / lostpointercapture / unmount release paths.
+    // ── ADR-0061 P5: gizmo is the InteractionSession's `gizmo` source ──────
+    // The dual flags (`engine.isGizmoInteracting` + the uiSlice
+    // `isGizmoDragging`) are gone — the gizmo drag is now represented ONLY by
+    // the `gizmo` session, the single source of truth. Consumers that needed
+    // the old flags read the session instead: the accumulation hold via the
+    // filtered `sessionHoldActive` (camera/gizmo/scrub), and selectMovementLock
+    // via `getInteractionSources().has('gizmo')`. `gizmoSessionActive` keeps the
+    // begin/end balanced across the pointerup / pointercancel /
+    // lostpointercapture / unmount release paths.
     const gizmoSessionActive = useRef(false);
     const applyGizmoInteracting = (active: boolean) => {
-        engine.isGizmoInteracting = active;
-        setGizmoDragging(active);
         if (active) {
             if (!gizmoSessionActive.current) {
                 gizmoSessionActive.current = true;

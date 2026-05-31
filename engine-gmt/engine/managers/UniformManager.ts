@@ -121,14 +121,15 @@ export class UniformManager {
             // pixel dimensions and gate on a 5% delta guard in smart
             // mode (EMA jitter would otherwise cause constant resizes).
             const adaptiveTarget = runtimeState.quality?.adaptiveTarget ?? 0;
-            // ADR-0061 P4 — adaptive engages on the InteractionSession when the
-            // `adaptive` flag is on, else the legacy proxy (both run in parallel
-            // until P5). The session reaches adaptive INSTANTLY at gesture-start
-            // (vs the lagged buffered useFrame) and — the bug it fixes — makes
-            // SLIDERS visible (they previously only reached adaptive via the
-            // ~10-frame accum-drop). UNFILTERED (every gesture downscales for
-            // responsiveness), composed with isSceneAnimating so playback /
-            // active-LFO still engage (the legacy cameraInUse ORed in isPlaying).
+            // ADR-0061 P5 — adaptive engages on the InteractionSession, the SOLE
+            // activity signal (the per-consumer flag + the legacy
+            // `isGizmoInteracting || cameraInUse` proxy are gone). The session
+            // reaches adaptive INSTANTLY at gesture-start (vs the lagged buffered
+            // useFrame) and — the bug it fixes — makes SLIDERS visible (they
+            // previously only reached adaptive via the ~10-frame accum-drop).
+            // UNFILTERED (every gesture downscales for responsiveness), composed
+            // with isSceneAnimating so playback / active-LFO still engage (what
+            // the legacy cameraInUse ORed in via isPlaying).
             //
             // SEED-ON-START (the latency lever): tickAdaptiveResolution already
             // seeds the downscale from fullResFrameMs on the idle→active edge
@@ -137,18 +138,20 @@ export class UniformManager {
             // ~10 frames for the accum-drop, so the first heavy frame is already
             // downscaled. No extra seeding code — the wiring IS the seed trigger.
             //
+            // ignoreAccumDrop: the accum-drop activity inference is retired FOR
+            // GMT (the session covers every continuous gesture; one-shot preset/
+            // param changes converge under deep-accum protection). The shared
+            // module keeps the accum-drop for sibling apps via gateOnAccumOnly.
+            //
             // E2 export-safety: this whole block is already gated by
             // `!isExporting && !isBucketRendering` (above), so the gate is
             // preserved at the GMT consumer site, not baked into the core slice.
-            const consumerFlags = runtimeState.interactionConsumerFlags;
-            const adaptiveInteracting = consumerFlags?.adaptive
-                ? (runtimeState.interacting || runtimeState.isSceneAnimating)
-                : (runtimeState.isGizmoInteracting || runtimeState.cameraInUse);
+            const adaptiveInteracting = runtimeState.interacting || runtimeState.isSceneAnimating;
             const adaptive = tickAdaptiveResolution(this._adaptive, {
                 now: performance.now(),
                 accumCount: this.pipeline.accumulationCount,
                 isInteracting: adaptiveInteracting,
-                mouseOverCanvas: runtimeState.mouseOverCanvas,
+                ignoreAccumDrop: true,
                 dynamicScaling: !!runtimeState.quality?.dynamicScaling,
                 adaptiveTarget,
                 interactionDownsample: runtimeState.quality?.interactionDownsample ?? 2.0,

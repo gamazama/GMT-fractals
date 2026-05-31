@@ -263,9 +263,15 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                     useEngineStore.getState().pokeInteraction(INTERACTION_SOURCES.picker);
                 }
 
-                // Light drag-from-panel: place light at ray intersection with depth plane
+                // Light drag-from-panel: place light at ray intersection with depth plane.
+                // ADR-0061 P5 — the old `!engine.isGizmoInteracting` self-gate (don't place
+                // a light while a gizmo HANDLE is being dragged) reads the unified `gizmo`
+                // source now that the dual flag is gone. The handle drag and this light-drag
+                // share the `gizmo` token, so "a gizmo HANDLE drag is active" = a hard-active
+                // gizmo source that is NOT our own light-drag (tracked by lightDragSessionActive).
                 const state = useEngineStore.getState();
-                if (state.draggedLightIndex !== null && !engine.isGizmoInteracting) {
+                const gizmoHandleDragging = state.getInteractionSources().has(INTERACTION_SOURCES.gizmo) && !lightDragSessionActive.current;
+                if (state.draggedLightIndex !== null && !gizmoHandleDragging) {
                     // ADR-0061 — open the 'gizmo' session on the first placement
                     // move, then poke to keep it alive (watchdog liveness). Ends
                     // in handlePointerUp / pointercancel / unmount.

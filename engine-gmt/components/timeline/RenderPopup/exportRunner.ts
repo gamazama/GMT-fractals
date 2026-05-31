@@ -152,7 +152,10 @@ const runFramePump = async (
 
         const renderState: Partial<EngineRenderState> = {
             cameraMode:          storeState.cameraMode,
-            cameraInUse:         false,
+            // Force the accumulation-hold input off for deterministic export
+            // frames (ADR-0061 P5: this is the InteractionSession's filtered
+            // hold signal, successor to the removed `cameraInUse` hold gate).
+            sessionHoldActive:   false,
             optics:              (storeState as any).optics ?? null,
             lighting:            (storeState as any).lighting ?? null,
             quality:             (storeState as any).quality ?? null,

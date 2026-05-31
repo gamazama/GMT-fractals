@@ -101,12 +101,13 @@ function makeSliceHarness() {
     return { state, setCalls };
 }
 
-test('inertness: fresh slice is idle and defaults are off', () => {
+test('inertness: fresh slice is idle (P5: session is the sole signal, no flags)', () => {
     const { state } = makeSliceHarness();
     check(state.interacting === false, 'reactive boolean defaults false');
-    const f = state.interactionConsumerFlags;
-    check(!f.adaptive && !f.hold && !f.hudFade && !f.idlePause, 'all per-consumer flags default OFF');
-    check(state.interactionDivergenceCount === 0, 'divergence counter stub defaults 0');
+    // P5 removed the per-consumer kill-switch flags + the divergence instrument
+    // (the session is now permanent); they should no longer exist on the slice.
+    check(state.interactionConsumerFlags === undefined, 'per-consumer flags removed in P5');
+    check(state.interactionDivergenceCount === undefined, 'divergence instrument removed in P5');
 });
 
 test('inertness: read-only API + watchdog make ZERO reactive writes without a producer', () => {

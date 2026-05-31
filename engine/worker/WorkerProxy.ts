@@ -66,7 +66,6 @@ export class WorkerProxy implements AccumulationController {
     private _lastGeneratedFrag = '';
     private _isBucketRendering = false;
     private _isExporting = false;
-    private _isGizmoInteracting = false;
     private _bootSent = false;
 
     // Callback slots
@@ -168,8 +167,8 @@ export class WorkerProxy implements AccumulationController {
      */
     get shouldSnapCamera() { return false; }
     set shouldSnapCamera(_v: boolean) {}
-    get isGizmoInteracting() { return this._isGizmoInteracting; }
-    set isGizmoInteracting(v: boolean) { this._isGizmoInteracting = v; }
+    // ADR-0061 P5 — gizmo drag is the InteractionSession's `gizmo` source now;
+    // the `isGizmoInteracting` parity stub was removed with the dual flag.
     get cameraInUse() { return false; }
     set cameraInUse(_v: boolean) {}
     get bootSent() { return this._bootSent; }

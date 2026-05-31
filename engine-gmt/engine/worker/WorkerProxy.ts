@@ -510,9 +510,12 @@ export class WorkerProxy implements AccumulationController {
      */
     pendingTeleport: CameraState | null = null;
 
-    private _isGizmoInteracting = false;
-    get isGizmoInteracting() { return this._isGizmoInteracting; }
-    set isGizmoInteracting(v: boolean) { this._isGizmoInteracting = v; }
+    // ADR-0061 P5 — the gizmo drag is the InteractionSession's `gizmo` source
+    // now (the `isGizmoInteracting` shadow was removed with the dual flag).
+    // `cameraInUse` here is NOT the removed hold-gate field — it's a write-only
+    // MARK_INTERACTION wake pulse Navigation fires on camera interaction (feeds
+    // the idle-pause `lastInteractionTime` wake term the ADR keeps). Getter is a
+    // stub; the persistent activity signal crosses via the renderState session.
     get cameraInUse() { return false; }
     set cameraInUse(v: boolean) { if (v) this.post({ type: 'MARK_INTERACTION' }); }
 
