@@ -83,10 +83,18 @@ Grounded in `engine-gmt/navigation/*` + `components/inputs/hooks/useDragValue.ts
 - **Mouse-only (no touch concern):** custom cursor-anchored wheel zoom (a poke) and Fly-mode mouse-look (explicitly blocked on touch — `useInputController.ts:237`).
 - **Safety delta:** touch adds the `pointercancel` stranding path → mitigation #1 above is widened accordingly.
 
-### Worker bridge — and an honest take on the ~1s lag
-`GmtRendererTickDriver` sends one derived `interacting` boolean in `renderState` each `RENDER_TICK`, and adaptive reads `isInteracting: renderState.interacting`. Declaring at the input event (not a buffered `useFrame`) removes the inference delay. **But** the boolean still crosses on the same transport, so this does not *prove* the 1s vanishes — we never definitively pinned the 1s. Therefore:
-- Add **seed-the-downscale on session-start** (engagement frame) so the first downscaled frame doesn't wait on a measurement window.
-- Phase 2 **measures** the real input→downscale latency before claiming victory. If a residual lag remains, it's main-thread `useFrame` starvation (a separate perf issue), and we say so rather than overclaiming. (Review #2.)
+### Worker bridge — and the now-PINNED ~1s lag
+`GmtRendererTickDriver` sends one derived `interacting` boolean in `renderState` each `RENDER_TICK`, and adaptive reads `isInteracting: renderState.interacting`. Declaring at the input event (not a buffered `useFrame`) removes the inference delay.
+
+**Root cause PINNED (2026-05-31, P3b session — supersedes the earlier "never pinned" caveat).** On a heavy scene (~15fps) a slider takes ~0.75s to respond. A 78MB Performance trace shows the lag is **GPU/present-bound, not JS / main-thread**: renderer main 88% idle, worker 98% idle, React ~1%; the long tasks (589/346/324ms) are all `CrGpuMain` in `DXGISwapChainImageBacking::Present` / `SwapBuffers` / `ScheduleOverlays`. **Chrome gates input dispatch + rAF on frame production**, so input is *delivered* ~0.75s late (dispatch itself is 1ms) with a worst rAF gap ~300ms (822ms spike). No load → no lag. (This also corrects a mid-investigation guess that the residual was main-thread `useFrame` starvation — it is not.)
+
+**This VALIDATES P4 as the fix.** The lever for a GPU-bound frame is *render fewer pixels during interaction* = adaptive resolution. P4's prompt session-driven engagement + **seed-the-downscale-on-session-start** (engagement frame, no wait on a measurement window) is exactly that, and the now-instant `isInteracting()` at gesture-start (vs the old ~10-frame accum-drop guess) is the enabler. With adaptive OFF the lag is permanent (frames never get cheaper) — which is why it appeared even with adaptive disabled.
+
+**Don't overclaim — the P4 gate is "finite + beats baseline", NOT "instant":**
+- **Irreducible floor** — the first event that triggers engagement still waits ~1 heavy frame (input can't outrun frame production); expect ~1 slow frame then responsive at 15fps, not zero.
+- **Converged full-res cost is a separate workstream** — adaptive only masks heaviness *during* interaction; the static full-res frame stays GPU-expensive (scene/shader/quality work, not the session).
+- **Possible Windows DXGI/overlay present-path cost** in the `Present`/`ScheduleOverlays` profile — lower-priority, a separate look.
+- P2 captured the legacy baseline (camera p50 66ms / p95 330ms; slider ∞ — never engages); P4 re-runs `bench:interaction-latency --mode=session --check`. Gate = **slider latency goes finite + beats baseline without camera regressing**. (Review #2.)
 
 ### What it replaces in the adaptive controller (GMT)
 - In **P5** (only after the P4 parallel run confirms the session — see phases), DELETE the accumulation-drop activity inference for GMT + the unused `mouseOverCanvas`; the `gateOnAccumOnly` branch stays for sibling apps. (`selfResized` stays — it's adaptive-internal, per E3.)
