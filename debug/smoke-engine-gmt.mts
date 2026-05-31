@@ -1,7 +1,7 @@
 /**
  * Boot smoke test for the engine-gmt port.
  *
- * Goal: navigate to engine-gmt-smoke.html, wait for the worker to boot,
+ * Goal: navigate to app-gmt.html, wait for the worker to boot,
  * confirm no console errors, and assert a non-black centre pixel (the
  * Mandelbulb rendered into OffscreenCanvas via the worker).
  *
@@ -12,7 +12,7 @@
 
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/engine-gmt-smoke.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
 
 const browser = await chromium.launch({
     args: ['--disable-gpu-sandbox', '--disable-blink-features=AutomationControlled'],

@@ -12,6 +12,7 @@ import { FractalEngine } from '../FractalEngine';
 import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 import { registry } from '../FractalRegistry';
 import type { MainToWorkerMessage, WorkerToMainMessage, WorkerShadowState } from './WorkerProtocol';
+import type { Capability } from '../../types/capabilities';
 import { WorkerExporter } from './WorkerExporter';
 import { bucketRenderer } from '../BucketRenderer';
 import { handleHistogramReadback } from './WorkerHistogram';
@@ -117,7 +118,7 @@ function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
         powerPreference: 'high-performance',
         preserveDrawingBuffer: false,
         desynchronized: initMsg.desynchronized === true,
-    });
+    } as THREE.WebGLRendererParameters & { desynchronized?: boolean });
     // We manage sRGB encoding ourselves via uEncodeOutput in the post-process shader.
     // Set LinearSRGBColorSpace so Three.js compiles identical shader programs for canvas
     // and render-target rendering (avoids program hash divergence from outputColorSpace).
@@ -367,7 +368,7 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
                 registry.register({
                     id: msg.id as any,
                     name: msg.id,
-                    shader: msg.shader,
+                    shader: { ...msg.shader, capabilities: new Set<Capability>() }, // worker registry is injection-only; capability gating is main-thread (message carries none)
                     parameters: [],
                     defaultPreset: {},
                 });

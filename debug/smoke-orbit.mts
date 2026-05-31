@@ -8,7 +8,7 @@
 
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/engine-gmt-smoke.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
 
 const browser = await chromium.launch({
     args: ['--disable-gpu-sandbox', '--disable-blink-features=AutomationControlled'],
