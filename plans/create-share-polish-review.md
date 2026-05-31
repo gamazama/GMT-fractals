@@ -39,7 +39,11 @@
 > gallery-link vs editor-share-link clarification ([Lightbox.tsx](../engine-gmt/gallery/Lightbox.tsx));
 > P7 — responsive NewScene / Submit modal widths + the Submit form stacks on narrow screens, and the
 > mobile side-menu now dismisses on outside-tap ([Menu.tsx](../engine/plugins/Menu.tsx)).
-> **REMAINING:** only H2's animation tutorials (owner-written). The review queue is otherwise complete. **Toolchain (FIXED & stable):** dev's node_modules was under-installed (missing `.bin` + ~113
+> **REMAINING:** only H2's animation tutorials (owner-written). The review queue is otherwise complete.
+> **DONE (round 3 — consistency tail):** unified Menu.tsx's two dismiss effects (desktop popover + mobile
+> side-panel) onto the shared `useDismiss` hook (+ new `ignore` selector option, [useDismiss.ts](../hooks/useDismiss.ts));
+> standardized modal close buttons to `<CloseIcon>` + `aria-label` (NewScene / Submit / Bucket-result);
+> fixed "Submit to gallery" → "Submit to Gallery" case drift. **Toolchain (FIXED & stable):** dev's node_modules was under-installed (missing `.bin` + ~113
 > deps incl. `@codemirror/*`) → `npm install` reconciled it; `npm run typecheck` passes clean (0 errors)
 > on local 5.9.3; global tsc bumped to 6.0.3.
 

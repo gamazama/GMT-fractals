@@ -15,6 +15,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Modal, Z } from './ui';
+import { CloseIcon } from './Icons';
 import { useEngineStore } from '../store/engineStore';
 import { registry } from '../engine-gmt/engine/FractalRegistry';
 import { FormulaPicker } from '../engine-gmt/components/FormulaPicker/FormulaPicker';
@@ -564,10 +565,10 @@ export const NewSceneModal: React.FC = () => {
                     <h2 className="text-sm font-bold text-gray-200 tracking-tight">New Scene</h2>
                     <button
                         onClick={closeNewScene}
-                        className="text-gray-500 hover:text-gray-300 transition-colors text-[10px]"
+                        className="text-gray-500 hover:text-gray-300 transition-colors"
                         aria-label="Close"
                     >
-                        ✕
+                        <CloseIcon />
                     </button>
                 </div>
 

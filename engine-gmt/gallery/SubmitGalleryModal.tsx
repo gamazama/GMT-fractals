@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Modal, Z, stopNavKeys } from '../../components/ui';
+import { CloseIcon } from '../../components/Icons';
 import { useEngineStore } from '../../store/engineStore';
 import {
     submitGalleryItem, SubmitError, SubmitResult,
@@ -212,7 +213,7 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                         <h2 className="text-sm font-bold text-white">
                             {bodyMode === 'submitted' ? 'Submitted' : 'Submit to Gallery'}
                         </h2>
-                        <button onClick={onClose} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+                        <button onClick={onClose} aria-label="Close" className="text-gray-500 hover:text-white"><CloseIcon /></button>
                     </header>
 
                     {/* ── Signed-out CTA ──────────────────────────────────────── */}

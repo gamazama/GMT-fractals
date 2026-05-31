@@ -22,6 +22,7 @@ import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { useGalleryStore } from './galleryStore';
 import { useAuthStore } from '../auth/authStore';
 import { Modal, Z, stopNavKeys } from '../../components/ui';
+import { CloseIcon } from '../../components/Icons';
 
 interface PendingResult {
     blob: Blob;
@@ -103,7 +104,7 @@ export const BucketRenderResultModal: React.FC = () => {
             >
                 <header className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                     <h2 className="text-sm font-bold text-white">Render complete</h2>
-                    <button onClick={dismiss} className="text-gray-500 hover:text-white text-lg leading-none">&times;</button>
+                    <button onClick={dismiss} aria-label="Close" className="text-gray-500 hover:text-white"><CloseIcon /></button>
                 </header>
 
                 <div className="p-4 space-y-3">
@@ -137,7 +138,7 @@ export const BucketRenderResultModal: React.FC = () => {
                             onClick={onSubmit}
                             className="flex-1 py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-100 border border-cyan-500/50"
                         >
-                            Submit to gallery
+                            Submit to Gallery
                         </button>
                     </div>
                 </div>
