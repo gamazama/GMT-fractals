@@ -38,6 +38,7 @@ import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 import { viewport } from '../../engine/plugins/Viewport';
 import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
 import { buildRenderInteractionState } from './renderInteractionState';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
 // Capture the display camera for overlay components (light gizmos, drawing
@@ -193,6 +194,12 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
     // render UI (keeps the app responsive during heavy compile/bucket-render).
     const throttleRef = React.useRef({ lastYield: 0, fps: 60, frames: 0, lastSample: 0 });
 
+    // ADR-0061 P4 — divergence instrument state (dev overlay only). Tracks the
+    // accumulation count across frames to derive the legacy accum-drop signal,
+    // and the overlay-open edge so each parallel-run pass starts from a zeroed
+    // counter. See the divergence block in the dispatch useFrame.
+    const divProbe = React.useRef({ prevOpen: false, prevAccum: 0, lastDropMs: -Infinity });
+
     useFrame((_state, delta) => {
         if (!isReady) return;
 
@@ -268,10 +275,16 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         // false (debug/test-interaction-wiring.mts guards the round-trip).
         const interactionBlock = buildRenderInteractionState({
             sessionInteracting: storeState.isInteracting(),
+            // Filtered subset for the accumulation HOLD consumer (P4): camera /
+            // gizmo / scrub gestures only — the set where freezing the frame is
+            // correct. Sliders/picker/drawing are excluded (they must re-render
+            // fresh), exactly as the legacy `cameraInUse || isGizmoInteracting`
+            // set behaved, just without the buffered-useFrame lag.
+            sessionHoldActive: storeState.isInteracting({ only: [INTERACTION_SOURCES.camera, INTERACTION_SOURCES.gizmo, INTERACTION_SOURCES.scrub] }),
             isPlaying: animState.isPlaying,
             // Active LFO ≈ LFOs enabled with at least one animation bound. This
-            // is the autonomous-animation axis (NOT a gesture) adaptive will
-            // compose with `interacting` in P4.
+            // is the autonomous-animation axis (NOT a gesture) adaptive composes
+            // with `interacting` in P4.
             hasActiveModulation: !!storeState.lfosEnabled && (storeState.animations?.length ?? 0) > 0,
         });
 
@@ -285,10 +298,50 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             quality:  storeState.quality  ?? null,
             geometry: storeState.geometry ?? null,
             adaptiveSuppressed: !!storeState.adaptiveSuppressed,
-            ...interactionBlock, // interacting + isSceneAnimating — ADR-0061, UNUSED in P2
+            ...interactionBlock, // interacting + isSceneAnimating + sessionHoldActive (ADR-0061)
+            // ADR-0061 P4 — per-consumer flags cross to the worker so adaptive
+            // (UniformManager) + hold/idle-pause (FractalEngine) pick session-vs-
+            // legacy independently. Defaulted OFF → behaves as the legacy proxy.
+            interactionConsumerFlags: storeState.interactionConsumerFlags,
         };
 
         proxy.sendRenderTick(serializedCamera, serializedOffset, clampedDelta, renderState);
+
+        // ── ADR-0061 P4 — parallel-run divergence instrument (dev overlay only) ──
+        // Compares the session's adaptive-activity view (what the consumers now
+        // use) against the legacy adaptive activity it replaces (proxy +
+        // accum-drop), so the user's visual pass is OBJECTIVE rather than vibes:
+        // near-zero divergence = agreement; a spike named `slider`/`picker`/
+        // `drawing` is the expected "session leads the laggy accum-drop" win; a
+        // spike during obvious camera/gizmo use would flag a missed producer (a
+        // real regression). Gated on the overlay being open → zero overhead in
+        // normal use. The counter zeroes on each overlay open.
+        const overlayOpen = !!(storeState as any).debugTools?.interactionSessionOpen;
+        if (overlayOpen) {
+            if (!divProbe.current.prevOpen) {
+                storeState.resetInteractionDivergence();
+                divProbe.current.prevAccum = proxy.accumulationCount;
+                divProbe.current.lastDropMs = -Infinity;
+            }
+            // Legacy accum-drop: an external accumulation reset (param / camera /
+            // preset change) within a short recency window. ~250ms ≈ the session
+            // debounce tail; the FPS-scaled adaptive grace is worker-internal, so
+            // this is an instrument approximation — enough to spot gross
+            // disagreement, not micro-timing at the edges.
+            const ac = proxy.accumulationCount;
+            if (ac < divProbe.current.prevAccum) divProbe.current.lastDropMs = now;
+            divProbe.current.prevAccum = ac;
+            const accumDropRecent = now - divProbe.current.lastDropMs < 250;
+
+            const legacyActive = (renderState.cameraInUse || renderState.isGizmoInteracting) || accumDropRecent;
+            const sessionActive = interactionBlock.interacting || interactionBlock.isSceneAnimating;
+            if (sessionActive !== legacyActive) {
+                const recent = Array.from(storeState.getRecentInteractionSources?.() ?? []) as string[];
+                const src = recent.length ? recent.join('+') : (accumDropRecent ? 'accum-drop' : '—');
+                storeState.noteInteractionDivergence(`session=${sessionActive ? 1 : 0} legacy=${legacyActive ? 1 : 0} src=${src}`);
+            }
+        }
+        divProbe.current.prevOpen = overlayOpen;
     }, 1);
 
     return null;

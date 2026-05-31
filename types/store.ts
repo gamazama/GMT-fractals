@@ -232,10 +232,15 @@ export interface EngineStoreState extends FeatureStateMap {
   /** Per-consumer kill-switch flags. Declared + defaulted OFF in P2; P4 flips
    *  each independently so a regression bisects to one consumer. UNUSED until P4. */
   interactionConsumerFlags: InteractionConsumerFlags;
-  /** P4 instrument stub: frames where the session disagreed with the legacy
-   *  accum-drop proxy. Never incremented in P2 — the dev overlay shows it as a
-   *  placeholder so the display path exists before the parallel run. */
+  /** P4 parallel-run instrument: frames where the session's gesture-activity
+   *  view disagreed with the legacy adaptive activity (proxy + accum-drop).
+   *  Computed by the GMT tick driver ONLY while the dev overlay is open; reset
+   *  on each overlay open. 0 in P2 (overlay closed / no producers). */
   interactionDivergenceCount: number;
+  /** Human-readable context of the LAST divergence (which side was active +
+   *  recent session sources), e.g. `session=1 legacy=0 src=slider`. null until
+   *  the first divergence of the current overlay session. */
+  interactionDivergenceLast: string | null;
   
   cameraMode: CameraMode; 
   sceneOffset: PreciseVector3;
@@ -414,6 +419,14 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     tickInteractionWatchdog: () => void;
     /** Flip a per-consumer kill-switch flag (P4 rollout). */
     setInteractionConsumerFlag: (key: keyof InteractionConsumerFlags, value: boolean) => void;
+    /** P4 parallel-run instrument (GMT tick driver → engine-core store → dev
+     *  overlay). Record one divergence frame: bumps interactionDivergenceCount
+     *  and stores `last` as the context string. Called only while the overlay
+     *  is open, only on a divergent frame — NOT a per-frame hot-path write. */
+    noteInteractionDivergence: (last: string) => void;
+    /** Zero the divergence counter + context — called on each overlay open so
+     *  every parallel-run pass starts clean. */
+    resetInteractionDivergence: () => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;

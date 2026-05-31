@@ -51,28 +51,39 @@ function test(name: string, fn: () => void): void {
 
 // ── (1) Worker read-path: keys exist + carry the value (silent-false guard) ──
 test('read-path: interacting key round-trips true', () => {
-    const block = buildRenderInteractionState({ sessionInteracting: true, isPlaying: false, hasActiveModulation: false });
+    const block = buildRenderInteractionState({ sessionInteracting: true, sessionHoldActive: false, isPlaying: false, hasActiveModulation: false });
     check('interacting' in block, 'block has an `interacting` key (not a typo → undefined)');
     check(block.interacting === true, 'interacting carries the true value');
     check((block as Record<string, unknown>).interactng === undefined, 'a typo key reads undefined — exactly the silent-false the SSOT prevents');
 });
 
 test('read-path: isSceneAnimating key + playback/LFO derivation', () => {
-    const block = buildRenderInteractionState({ sessionInteracting: false, isPlaying: false, hasActiveModulation: false });
+    const block = buildRenderInteractionState({ sessionInteracting: false, sessionHoldActive: false, isPlaying: false, hasActiveModulation: false });
     check('isSceneAnimating' in block, 'block has an `isSceneAnimating` key');
     check(block.isSceneAnimating === false, 'idle → not scene-animating');
-    check(deriveIsSceneAnimating({ sessionInteracting: false, isPlaying: true, hasActiveModulation: false }) === true, 'playback → scene-animating');
-    check(deriveIsSceneAnimating({ sessionInteracting: false, isPlaying: false, hasActiveModulation: true }) === true, 'active LFO → scene-animating');
-    check(deriveInteracting({ sessionInteracting: false, isPlaying: true, hasActiveModulation: true }) === false, 'playback is NOT gesture activity (scope boundary)');
+    check(deriveIsSceneAnimating({ sessionInteracting: false, sessionHoldActive: false, isPlaying: true, hasActiveModulation: false }) === true, 'playback → scene-animating');
+    check(deriveIsSceneAnimating({ sessionInteracting: false, sessionHoldActive: false, isPlaying: false, hasActiveModulation: true }) === true, 'active LFO → scene-animating');
+    check(deriveInteracting({ sessionInteracting: false, sessionHoldActive: false, isPlaying: true, hasActiveModulation: true }) === false, 'playback is NOT gesture activity (scope boundary)');
+});
+
+test('read-path: sessionHoldActive key round-trips (P4 hold consumer)', () => {
+    const held = buildRenderInteractionState({ sessionInteracting: true, sessionHoldActive: true, isPlaying: false, hasActiveModulation: false });
+    check('sessionHoldActive' in held, 'block has a `sessionHoldActive` key');
+    check(held.sessionHoldActive === true, 'sessionHoldActive carries the filtered hold value');
+    // A slider-only gesture: unfiltered interacting is true, but the hold subset
+    // (camera/gizmo/scrub) is false — the hold must NOT freeze the frame.
+    const sliderOnly = buildRenderInteractionState({ sessionInteracting: true, sessionHoldActive: false, isPlaying: false, hasActiveModulation: false });
+    check(sliderOnly.interacting === true && sliderOnly.sessionHoldActive === false, 'slider-only: adaptive sees it (interacting) but hold does not (sessionHoldActive false)');
 });
 
 test('read-path: Object.assign mirrors FractalEngine.setRenderState', () => {
     // Mirror setRenderState's `Object.assign(this.state, partial)` — the actual
     // worker consumer read path. A key mismatch here would leave the default.
-    const engineState: { interacting: boolean; isSceneAnimating: boolean } = { interacting: false, isSceneAnimating: false };
-    Object.assign(engineState, buildRenderInteractionState({ sessionInteracting: true, isPlaying: true, hasActiveModulation: false }));
+    const engineState: { interacting: boolean; isSceneAnimating: boolean; sessionHoldActive: boolean } = { interacting: false, isSceneAnimating: false, sessionHoldActive: false };
+    Object.assign(engineState, buildRenderInteractionState({ sessionInteracting: true, sessionHoldActive: true, isPlaying: true, hasActiveModulation: false }));
     check(engineState.interacting === true, 'setRenderState path lands interacting=true (not silently false)');
     check(engineState.isSceneAnimating === true, 'setRenderState path lands isSceneAnimating=true');
+    check(engineState.sessionHoldActive === true, 'setRenderState path lands sessionHoldActive=true');
 });
 
 // ── (2) Sibling-app inertness: no producer ⇒ no reactive write, watchdog no-op ─

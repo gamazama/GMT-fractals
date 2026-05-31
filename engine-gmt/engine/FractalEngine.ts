@@ -22,6 +22,7 @@ import { halton } from '../../engine/codec/halton';
 import { detectHardwareProfileMainThread } from './HardwareDetection';
 import { createFullscreenPass } from './utils/FullscreenQuad';
 import { createDefaultShaderConfig } from './ConfigDefaults';
+import type { InteractionConsumerFlags } from '../../types/store';
 
 // ──────────────────────────────────────────────────────────────────────
 // Radiance HDR (RGBE) encoder — used by captureEnvMapAsHDR.
@@ -118,6 +119,19 @@ export interface EngineRenderState {
      *  isSceneAnimating`). Playback is NOT a gesture, so it is not an
      *  interaction source. SENT BUT UNUSED in P2. */
     isSceneAnimating: boolean;
+    /** ADR-0061 P4. Filtered session activity for the accumulation HOLD —
+     *  `session.isInteracting({ only: ['camera','gizmo','scrub'] })`. Hold wants
+     *  the camera/gizmo/scrub gestures (where freezing the frame is correct),
+     *  NOT slider/picker/drawing (which must re-render fresh each frame). Derived
+     *  main-thread (where the session lives) and composed with `isSceneAnimating`
+     *  by the hold consumer. Reproduces the legacy `cameraInUse || isGizmoInteracting`
+     *  set, just without the buffered-useFrame lag. */
+    sessionHoldActive: boolean;
+    /** ADR-0061 P4 per-consumer kill-switch flags, mirrored from the store so the
+     *  worker-side consumers (adaptive in UniformManager, hold + idle-pause here)
+     *  can pick session-vs-legacy independently. Defaulted OFF → app behaves
+     *  exactly as the legacy proxy until a flag is flipped (additive cutover). */
+    interactionConsumerFlags: InteractionConsumerFlags;
 }
 
 // Precompute 2048 jitter values using Halton sequence for faster access.
@@ -163,8 +177,10 @@ export class FractalEngine {
         geometry: null,
         bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 },
         adaptiveSuppressed: false,
-        interacting: false,        // ADR-0061: SENT BUT UNUSED in P2
-        isSceneAnimating: false,   // ADR-0061: SENT BUT UNUSED in P2
+        interacting: false,        // ADR-0061: session gesture activity (P4 adaptive/idle-pause)
+        isSceneAnimating: false,   // ADR-0061: autonomous-animation axis (composed in P4)
+        sessionHoldActive: false,  // ADR-0061 P4: filtered camera/gizmo/scrub session activity (hold)
+        interactionConsumerFlags: { adaptive: false, hold: false, hudFade: false, idlePause: false },
     };
 
     public get isGizmoInteracting() { return this.state.isGizmoInteracting; }
@@ -569,8 +585,21 @@ export class FractalEngine {
         
         const now = performance.now();
 
+        // Idle-pause early-return. ADR-0061 P4 migrates this by COMPOSITION, not
+        // replacement: the existing `lastInteractionTime` window is a WAKE /
+        // invalidation signal (markInteraction fires on discrete preset/param/
+        // config changes that produce no gesture) and MUST stay — reading the
+        // session alone would stop a paused render from waking on a non-drag
+        // change (click a preset, type a value). With the `idlePause` flag on we
+        // ADD the session-activity term: stay awake if the session is active OR
+        // we recently woke. (`this.state.interacting` is the session poll incl.
+        // its 200ms tail; the 1s wake window dominates either way.)
         if (this.isPaused && !this.state.isBucketRendering) {
-             if (now - this.lastInteractionTime > 1000) return;
+            const recentlyWoke = now - this.lastInteractionTime <= 1000;
+            const keepAwake = this.state.interactionConsumerFlags?.idlePause
+                ? (this.state.interacting || recentlyWoke)   // COMPOSITION (!isIdle || recentlyDirty)
+                : recentlyWoke;                               // legacy: recently dirty only
+            if (!keepAwake) return;
         }
 
         // Hold accumulation during camera interaction ONLY if DOF is disabled
@@ -579,7 +608,18 @@ export class FractalEngine {
         const dofEnabled = (this.state.optics?.dofStrength ?? 0) > 0.0001;
         const wasHolding = this.pipeline.isHolding;
 
-        const cameraInUse = this.state.cameraInUse || this.state.isGizmoInteracting;
+        // Accumulation hold. ADR-0061 P4: behind the `hold` flag, drive it from
+        // the InteractionSession's FILTERED activity (camera/gizmo/scrub —
+        // `sessionHoldActive`, derived main-thread) composed with the autonomous
+        // isSceneAnimating axis. This reproduces the legacy `cameraInUse ||
+        // isGizmoInteracting` SET (camera + playback + scrub + gizmo) without the
+        // buffered-useFrame lag. Deliberately NOT the unfiltered session: slider/
+        // picker/drawing gestures must re-render fresh each frame (holding would
+        // freeze a stale frame — `pipeline.render()` is a no-op while holding),
+        // so they stay out of the hold set just as they were under the legacy proxy.
+        const cameraInUse = this.state.interactionConsumerFlags?.hold
+            ? (this.state.sessionHoldActive || this.state.isSceneAnimating)
+            : (this.state.cameraInUse || this.state.isGizmoInteracting);
         if (cameraInUse) this._lastCameraInUseTime = now;
 
         // Extend hold until adaptive resolution has settled at full res.

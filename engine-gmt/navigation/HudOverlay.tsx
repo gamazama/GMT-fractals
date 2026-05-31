@@ -4,6 +4,7 @@ import { FractalState, FractalActions } from '../types';
 import { useAnimationStore } from '../../store/animationStore';
 import { useEngineStore as useFractalStore } from '../../store/engineStore';
 import { useTutorAnchor, mergeRefs, actionBus } from '../../engine/plugins/Tutorial';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 // Tutorial hint system isn't ported — the HUD renders without the
 // <HintDisplay> overlay. Keep the optional `activeHint` / `onDismissHint`
 // props in the type so apps that later bring their own hint widget can
@@ -56,42 +57,72 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
     const bottomClusterRef = useRef<HTMLDivElement>(null);
 
 
+    // ADR-0061 P4 — HUD-fade consumer flag (read reactively so the effect
+    // re-subscribes when toggled).
+    const hudFadeFlag = useFractalStore((s) => (s as any).interactionConsumerFlags?.hudFade);
+
     // --- VISIBILITY LOGIC ---
     // Crosshair fades quickly (2s), bottom pill cluster stays longer (10s).
     useEffect(() => {
-        const unsub = useAnimationStore.subscribe(
-            (s) => s.isCameraInteracting,
-            (isInteracting) => {
-                const container = hudRefs.container.current;
-                const bottom = bottomClusterRef.current;
+        const showNow = () => {
+            const container = hudRefs.container.current;
+            const bottom = bottomClusterRef.current;
+            if (container) container.style.opacity = '1';
+            if (bottom) bottom.style.opacity = '1';
+            if (crosshairFadeTimeout.current) { clearTimeout(crosshairFadeTimeout.current); crosshairFadeTimeout.current = null; }
+            if (bottomFadeTimeout.current) { clearTimeout(bottomFadeTimeout.current); bottomFadeTimeout.current = null; }
+        };
+        const scheduleFade = () => {
+            const container = hudRefs.container.current;
+            const bottom = bottomClusterRef.current;
+            // Crosshair: fade after 2s
+            if (crosshairFadeTimeout.current) clearTimeout(crosshairFadeTimeout.current);
+            crosshairFadeTimeout.current = window.setTimeout(() => {
+                if (container) container.style.opacity = '0.3';
+            }, 2000);
+            // Bottom cluster: fade after 10s
+            if (bottomFadeTimeout.current) clearTimeout(bottomFadeTimeout.current);
+            bottomFadeTimeout.current = window.setTimeout(() => {
+                if (bottom) bottom.style.opacity = '0.3';
+            }, 10000);
+        };
 
-                if (isInteracting) {
-                    // Show both immediately
-                    if (container) container.style.opacity = '1';
-                    if (bottom) bottom.style.opacity = '1';
-                    if (crosshairFadeTimeout.current) { clearTimeout(crosshairFadeTimeout.current); crosshairFadeTimeout.current = null; }
-                    if (bottomFadeTimeout.current) { clearTimeout(bottomFadeTimeout.current); bottomFadeTimeout.current = null; }
-                } else {
-                    // Crosshair: fade after 2s
-                    if (crosshairFadeTimeout.current) clearTimeout(crosshairFadeTimeout.current);
-                    crosshairFadeTimeout.current = window.setTimeout(() => {
-                        if (container) container.style.opacity = '0.3';
-                    }, 2000);
-
-                    // Bottom cluster: fade after 10s
-                    if (bottomFadeTimeout.current) clearTimeout(bottomFadeTimeout.current);
-                    bottomFadeTimeout.current = window.setTimeout(() => {
-                        if (bottom) bottom.style.opacity = '0.3';
-                    }, 10000);
+        let unsub: () => void;
+        if (hudFadeFlag) {
+            // ADR-0061 P4 — fade on the InteractionSession (camera + scrub via the
+            // source filter, reproducing today's camera-only fade + adding scrub)
+            // instead of the camera-only animationStore flag. Subscribe to the
+            // coarse edge boolean; on a rising edge show ONLY if a camera/scrub
+            // gesture is the cause (filtered poll); on the falling edge (all hard
+            // sources released) start the fade countdown unconditionally — the
+            // 200ms session tail is negligible vs the 2s/10s fade, and polling the
+            // filtered value at the falling edge would read tail-true and wrongly
+            // cancel the fade. (Trade-off: a camera gesture that begins while a
+            // non-camera gesture already holds the coarse boolean true won't
+            // re-show — rare; cosmetic. The legacy proxy stays live in parallel.)
+            unsub = useFractalStore.subscribe(
+                (s) => s.interacting,
+                (interacting) => {
+                    if (interacting) {
+                        if (useFractalStore.getState().isInteracting({ only: [INTERACTION_SOURCES.camera, INTERACTION_SOURCES.scrub] })) showNow();
+                    } else {
+                        scheduleFade();
+                    }
                 }
-            }
-        );
+            );
+        } else {
+            // Legacy: camera-only fade via the animationStore flag (kept in parallel).
+            unsub = useAnimationStore.subscribe(
+                (s) => s.isCameraInteracting,
+                (isInteracting) => { if (isInteracting) showNow(); else scheduleFade(); }
+            );
+        }
         return () => {
             unsub();
             if (crosshairFadeTimeout.current) clearTimeout(crosshairFadeTimeout.current);
             if (bottomFadeTimeout.current) clearTimeout(bottomFadeTimeout.current);
         };
-    }, []);
+    }, [hudFadeFlag]);
     
     // --- TAB HINT LOGIC ---
     useEffect(() => {

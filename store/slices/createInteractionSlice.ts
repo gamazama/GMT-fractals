@@ -49,11 +49,12 @@ import type {
 } from '../../engine/InteractionSessionMachine';
 
 export type InteractionSlice = Pick<EngineStoreState,
-    'interacting' | 'interactionConsumerFlags' | 'interactionDivergenceCount'
+    'interacting' | 'interactionConsumerFlags' | 'interactionDivergenceCount' | 'interactionDivergenceLast'
 > & Pick<EngineActions,
     'beginInteraction' | 'endInteraction' | 'pokeInteraction' |
     'isInteracting' | 'isIdle' | 'getInteractionSources' | 'getRecentInteractionSources' |
-    'getLastActivityTime' | 'tickInteractionWatchdog' | 'setInteractionConsumerFlag'
+    'getLastActivityTime' | 'tickInteractionWatchdog' | 'setInteractionConsumerFlag' |
+    'noteInteractionDivergence' | 'resetInteractionDivergence'
 >;
 
 // ── Machine instance + poke throttle (module-level refs; NOT reactive) ──────
@@ -81,6 +82,7 @@ export const createInteractionSlice: StateCreator<
     interacting: false,
     interactionConsumerFlags: { adaptive: false, hold: false, hudFade: false, idlePause: false },
     interactionDivergenceCount: 0,
+    interactionDivergenceLast: null,
 
     beginInteraction: (source: InteractionSource) => {
         const { edge } = machine.beginInteraction(_session, source, now());
@@ -129,4 +131,15 @@ export const createInteractionSlice: StateCreator<
 
     setInteractionConsumerFlag: (key, value) =>
         set((s) => ({ interactionConsumerFlags: { ...s.interactionConsumerFlags, [key]: value } })),
+
+    // ── P4 divergence instrument ────────────────────────────────────────────
+    // The GMT tick driver computes session-vs-legacy disagreement per frame and
+    // calls these (engine-core → store is the layering channel; the overlay,
+    // also engine-core, reads the fields). Gated upstream on the overlay being
+    // open + only on a divergent frame, so these are NOT per-frame hot-path
+    // writes. The overlay reads the count/last via getState() in its RAF poll.
+    noteInteractionDivergence: (last: string) =>
+        set((s) => ({ interactionDivergenceCount: s.interactionDivergenceCount + 1, interactionDivergenceLast: last })),
+
+    resetInteractionDivergence: () => set({ interactionDivergenceCount: 0, interactionDivergenceLast: null }),
 });

@@ -30,6 +30,10 @@ import type { EngineRenderState } from '../engine/FractalEngine';
 export interface RenderInteractionInputs {
     /** session.isInteracting() — gesture activity incl. the debounce tail. */
     sessionInteracting: boolean;
+    /** session.isInteracting({ only: ['camera','gizmo','scrub'] }) — the subset
+     *  the accumulation HOLD consumer wants (P4). Filtered so slider/picker/
+     *  drawing gestures (which need fresh frames) don't freeze the buffer. */
+    sessionHoldActive: boolean;
     /** Animation playback running (animationStore.isPlaying). */
     isPlaying: boolean;
     /** A live LFO / modulation is driving the scene this frame. */
@@ -52,9 +56,10 @@ export function deriveIsSceneAnimating(i: RenderInteractionInputs): boolean {
  *  real `EngineRenderState` keys, so a rename on either side fails typecheck. */
 export function buildRenderInteractionState(
     i: RenderInteractionInputs,
-): Pick<EngineRenderState, 'interacting' | 'isSceneAnimating'> {
+): Pick<EngineRenderState, 'interacting' | 'isSceneAnimating' | 'sessionHoldActive'> {
     return {
         interacting: deriveInteracting(i),
         isSceneAnimating: deriveIsSceneAnimating(i),
+        sessionHoldActive: i.sessionHoldActive,
     };
 }

@@ -240,15 +240,44 @@ function main() {
             process.exit(1);
         }
         const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
-        // P2 only writes the baseline; P4 will add tolerance-based gating here.
-        // For now --check just reports whether the captured baseline still
-        // reproduces byte-for-byte in the same mode (a determinism guard).
+        // Same-mode: determinism guard (byte-identical re-run of the captured baseline).
         if (baseline.mode === mode) {
             const same = JSON.stringify(baseline) === JSON.stringify(report);
             console.log(`[interaction-latency] --check vs baseline (mode ${mode}): ${same ? 'IDENTICAL (deterministic ✓)' : 'DIFFERS'}`);
             process.exit(same ? 0 : 1);
         }
-        console.log(`[interaction-latency] --check: baseline mode=${baseline.mode} differs from run mode=${mode} (expected for P4 session diff)`);
+
+        // ── P4 GATE — session run vs the captured legacy baseline ───────────────
+        // The hard gate ADR-0061 P4 must pass: the slider engage-latency goes from
+        // ∞ (invisible — the bug) to FINITE, AND camera does NOT regress. Models
+        // the P4 wiring (every declared gesture reaches adaptive); the live
+        // behaviour is the user's visual pass (verification tier c). If this FAILS
+        // the root cause is elsewhere → STOP, don't ship (ADR "don't overclaim").
+        if (mode === 'session' && baseline.mode === 'legacy') {
+            const TOL = 1.25; // 25% camera-latency regression tolerance
+            const baseCam = baseline.summary.camera.engageLatencyMs;
+            const sessCam = report.summary.camera.engageLatencyMs;
+            const sessSld = report.summary.slider;
+
+            const baseSliderInvisible = baseline.summary.slider.qualityDroppedRate === 0;
+            const sliderFinite = sessSld.engageLatencyMs.p50 !== null && sessSld.qualityDroppedRate > 0 && sessSld.fpsReachedTargetRate > 0;
+            const camStillEngages = report.summary.camera.qualityDroppedRate > 0 && report.summary.camera.fpsReachedTargetRate > 0;
+            const camNotRegressed =
+                sessCam.p50 !== null && baseCam.p50 !== null && sessCam.p50 <= baseCam.p50 * TOL &&
+                sessCam.p95 !== null && baseCam.p95 !== null && sessCam.p95 <= baseCam.p95 * TOL;
+
+            console.log('[interaction-latency] P4 gate (session vs legacy baseline):');
+            console.log(`  baseline slider invisible: ${baseSliderInvisible ? '✓' : '—'} (the bug ADR-0061 fixes)`);
+            console.log(`  slider now finite+engages: ${sliderFinite ? '✓' : '✗'} (p50=${sessSld.engageLatencyMs.p50}ms dropped=${sessSld.qualityDroppedRate} fps→target=${sessSld.fpsReachedTargetRate})`);
+            console.log(`  camera not regressed:      ${camNotRegressed ? '✓' : '✗'} (p50 ${sessCam.p50}≤${round(baseCam.p50 * TOL)} / p95 ${sessCam.p95}≤${round(baseCam.p95 * TOL)})`);
+            console.log(`  camera still engages:      ${camStillEngages ? '✓' : '✗'}`);
+
+            const pass = sliderFinite && camNotRegressed && camStillEngages;
+            console.log(`[interaction-latency] P4 GATE: ${pass ? 'PASS ✓ — slider finite + beats baseline, camera not regressing' : 'FAIL ✗ — do not ship (root cause elsewhere)'}`);
+            process.exit(pass ? 0 : 1);
+        }
+
+        console.log(`[interaction-latency] --check: baseline mode=${baseline.mode} vs run mode=${mode} — no gate defined`);
         process.exit(0);
     }
 
