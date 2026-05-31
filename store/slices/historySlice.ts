@@ -77,6 +77,7 @@ export interface HistorySliceActions {
     beginParamTransaction: () => void;
     endParamTransaction: () => void;
     pushCameraTransaction: (state: CameraState) => void;
+    beginCameraTransaction: () => void;
 
     // Backward-compat shims.
     handleInteractionStart: (mode?: 'camera' | 'param' | CameraState) => void;
@@ -109,6 +110,15 @@ const getParamSnapshot = (s: EngineStoreState): Partial<EngineStoreState> => {
     // apps without the modular slice installed (fluid/fractal toys) stay no-ops.
     if ((s as any).graph) {
         (snap as any).graph = JSON.parse(JSON.stringify((s as any).graph));
+    }
+    // LFO modulators live in a top-level `animations` array, not a feature
+    // slice, so the loop above skips it. Capture it so edits to LFO sliders
+    // (period / min / max / phase / smoothing) are undoable. Restore routes
+    // through setAnimations. Always present on the engine store (defaults to
+    // []), absent on apps that never registered it — the existence check
+    // keeps those a no-op.
+    if ((s as any).animations !== undefined) {
+        (snap as any).animations = JSON.parse(JSON.stringify((s as any).animations));
     }
     return snap;
 };
@@ -233,6 +243,23 @@ export const createHistorySlice: StateCreator<
         lastCameraUndoPush = now;
     },
 
+    beginCameraTransaction: () => {
+        // Record the CURRENT camera pose into the camera-scope undo stack.
+        // Call at the START of a camera edit (the advanced-panel position /
+        // rotation vector inputs) — before the first onChange — so undo
+        // restores the pre-edit pose. Mirrors how orbit / fly gestures call
+        // pushCameraTransaction at gesture start. pushCameraTransaction drops
+        // undefined sceneOffset / targetDistance, so passing the raw store
+        // values is safe even on apps that don't track them.
+        const s = get() as any;
+        get().pushCameraTransaction({
+            position: { x: 0, y: 0, z: 0 },
+            rotation: s.cameraRot,
+            sceneOffset: s.sceneOffset,
+            targetDistance: s.targetDistance,
+        } as CameraState);
+    },
+
     // ── Scoped undo / redo ─────────────────────────────────────────────
 
     undo: (scope) => {
@@ -299,6 +326,16 @@ export const createHistorySlice: StateCreator<
         // camera state object keeps working until callers migrate.
         if (mode && typeof mode === 'object' && (mode as any).position) {
             get().pushCameraTransaction(mode as CameraState);
+            return;
+        }
+        // The advanced-panel camera vector inputs pass the string 'camera'.
+        // These edit sceneOffset / cameraRot, which the PARAM snapshot does
+        // not capture, and whose restore needs the teleport that
+        // undoCamera/redoCamera fire. Route them to the CAMERA scope instead
+        // of the param stack, matching orbit / fly gestures. Without this,
+        // the edit produced an empty param diff → no undo entry at all.
+        if (mode === 'camera') {
+            get().beginCameraTransaction();
             return;
         }
         get().beginParamTransaction();

@@ -354,6 +354,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     beginParamTransaction: () => void;
     endParamTransaction: () => void;
     pushCameraTransaction: (state: CameraState) => void;
+    beginCameraTransaction: () => void;
 
     undo: (scope: 'param' | 'camera') => boolean;
     redo: (scope: 'param' | 'camera') => boolean;

@@ -459,6 +459,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     beginParamTransaction: () => void;
     endParamTransaction: () => void;
     pushCameraTransaction: (state: any) => void;
+    beginCameraTransaction: () => void;
 
     // Scoped undo / redo. `scope` is required — there is no unscoped
     // fallback (the previous unscoped form conflated camera and param).

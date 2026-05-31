@@ -143,6 +143,14 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         let clickedValue = mapping ? mapping.fromDisplay(clickedDisplayValue) : clickedDisplayValue;
         if (hardMin !== undefined) clickedValue = Math.max(hardMin, clickedValue);
         if (hardMax !== undefined) clickedValue = Math.min(hardMax, clickedValue);
+
+        // Begin the interaction (undo snapshot / session / auto-keyframe) BEFORE the
+        // first value change. A track click jumps the value on pointer-down; if the
+        // snapshot were taken after, the transaction would record the just-clicked
+        // value as its undo baseline, so undo would "restore" the post-click value
+        // instead of the pre-interaction one. The number-drag path (useDragValue)
+        // already fires onDragStart before any onChange — keep this consistent.
+        onDragStart?.();
         onChange(clickedValue);
         handleImmediateChange(clickedValue);
 
@@ -153,8 +161,6 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         drag.startValue = clickedDisplayValue;
         drag.lastShift = e.shiftKey;
         drag.lastAlt = e.altKey;
-
-        onDragStart?.();
     }, [disabled, hasBounds, min, max, mapping, hardMin, hardMax, onChange, onDragStart, handleImmediateChange, quantize]);
 
     const handleTrackPointerMove = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
