@@ -20,6 +20,19 @@ import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 import type { AccumulationController } from '../../../engine/AccumulationController';
 import { useCompileProgress } from '../../../store/CompileProgressStore';
 
+/** Present-path engagement-floor experiment (NOT ADR-0061; see plan "Present-path
+ *  engagement floor"). Opt in to the worker's low-latency `desynchronized` WebGL
+ *  context via the page URL `?lowlatency=1`. Read once on the main thread (the
+ *  worker's own `self.location` reflects the worker script URL, not the page) and
+ *  passed through INIT. Default OFF → no behaviour change ships until the A/B
+ *  validates it on a real GPU. */
+const LOW_LATENCY_PRESENT: boolean = (() => {
+    try {
+        return typeof window !== 'undefined'
+            && new URLSearchParams(window.location.search).get('lowlatency') === '1';
+    } catch { return false; }
+})();
+
 export class WorkerProxy implements AccumulationController {
     // ─── Stub properties ─────────────────────────────────────────────
     // These exist on FractalEngine but not on WorkerProxy.  UI code guards
@@ -140,7 +153,8 @@ export class WorkerProxy implements AccumulationController {
             canvas: offscreen,
             width, height, dpr, isMobile,
             initialConfig: config,
-            initialCamera
+            initialCamera,
+            desynchronized: LOW_LATENCY_PRESENT,
         };
         this._worker.postMessage(initMsg, [offscreen]);
     }
@@ -203,7 +217,8 @@ export class WorkerProxy implements AccumulationController {
             canvas: offscreen,
             width, height, dpr, isMobile,
             initialConfig: newConfig,
-            initialCamera
+            initialCamera,
+            desynchronized: LOW_LATENCY_PRESENT,
         };
         this._worker.postMessage(initMsg, [offscreen]);
     }

@@ -44,7 +44,14 @@ export interface WorkerShadowState {
 // ─── Main Thread → Worker ───────────────────────────────────────────────
 
 export type MainToWorkerMessage =
-    | { type: 'INIT'; canvas: OffscreenCanvas; width: number; height: number; dpr: number; isMobile: boolean; initialConfig: ShaderConfig; initialCamera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number } }
+    | { type: 'INIT'; canvas: OffscreenCanvas; width: number; height: number; dpr: number; isMobile: boolean; initialConfig: ShaderConfig; initialCamera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number };
+        /** Present-path engagement-floor experiment (NOT ADR-0061; see plan
+         *  "Present-path engagement floor"). When true, create the offscreen
+         *  WebGL context with `desynchronized: true` (low-latency present —
+         *  bypasses the compositor double/triple-buffer + DWM sync the rAF gap
+         *  waits on). Default OFF; opt in via the page URL `?lowlatency=1` so it's
+         *  a no-rebuild A/B that ships no behaviour change until validated. */
+        desynchronized?: boolean }
     | { type: 'RESIZE'; width: number; height: number; dpr: number }
     | { type: 'CONFIG'; config: Partial<ShaderConfig> }
     | { type: 'BOOT'; config: ShaderConfig; camera?: { position: [number, number, number]; quaternion: [number, number, number, number]; fov: number } }
