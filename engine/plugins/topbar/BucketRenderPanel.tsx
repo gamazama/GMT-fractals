@@ -92,6 +92,14 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
 
     const supportsPreview = !!controller.setPreviewRegion && !!controller.clearPreviewRegion;
 
+    // Preview-engaged collapse (#4): while picking or holding a preview region,
+    // collapse the setup controls to a small centred chevron so the canvas
+    // stays clear. The chevron (and a header chevron) toggle this; it resets
+    // when the preview is no longer engaged so it re-collapses next time.
+    const [previewExpanded, setPreviewExpanded] = useState(false);
+    const previewEngaged = state.interactionMode === 'selecting_preview' || !!state.previewRegion;
+    useEffect(() => { if (!previewEngaged) setPreviewExpanded(false); }, [previewEngaged]);
+
     useEffect(() => {
         return FractalEvents.on(FRACTAL_EVENTS.BUCKET_STATUS, (data) => {
             // BUCKET_STATUS fires per render frame; skip setState when nothing
@@ -483,6 +491,33 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
         );
     }
 
+    // ─── Preview-engaged collapsed view (#4) ────────────────────────────
+    // While picking / holding a preview region, collapse to a small centred
+    // chevron (slightly different size per state) so the canvas stays clear.
+    if (previewEngaged && !previewExpanded) {
+        const picking = state.interactionMode === 'selecting_preview';
+        return (
+            <Popover width={picking ? 'w-40' : 'w-44'} align={align}>
+                <div className="flex flex-col items-center gap-1 py-0.5" data-help-id="bucket.render">
+                    <span className="text-[9px] uppercase tracking-wider text-gray-500">
+                        {picking ? 'Picking preview…' : 'Preview region'}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setPreviewExpanded(true)}
+                        title="Show render settings"
+                        aria-label="Show render settings"
+                        className="flex items-center justify-center w-7 h-5 rounded border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                </div>
+            </Popover>
+        );
+    }
+
     // ─── Setup view ────────────────────────────────────────────────────
     return (
         <Popover width="w-72" align={align}>
@@ -490,6 +525,19 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                 <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High-Res Render</span>
                     <div className="flex items-center gap-2">
+                        {previewEngaged && (
+                            <button
+                                type="button"
+                                onClick={() => setPreviewExpanded(false)}
+                                title="Collapse"
+                                aria-label="Collapse render settings"
+                                className="flex items-center justify-center w-5 h-5 rounded text-gray-500 hover:text-white hover:bg-white/5 transition-colors"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="18 15 12 9 6 15" />
+                                </svg>
+                            </button>
+                        )}
                         {state.previewRegion && supportsPreview && (
                             <button
                                 type="button"

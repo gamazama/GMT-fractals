@@ -354,6 +354,10 @@ installRenderDialog<AppGmtExtra>({
     startLabel:          appGmtStartLabel,
     isStartDisabled:     appGmtIsStartDisabled,
     defaults:            { samplesPerFrame: 16, extra: APP_GMT_DEFAULT_EXTRA },
+    // Taller setup window than the 320×460 default — GMT adds passes, depth
+    // range, internal-scale and the sample estimator, which the short default
+    // obscured. (expandedSize is the compact rendering view.)
+    baseSize:            { width: 340, height: 624 },
     expandedSize:        { width: 400, height: 450 },
 });
 
