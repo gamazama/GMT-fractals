@@ -90,11 +90,12 @@ Grounded in `engine-gmt/navigation/*` + `components/inputs/hooks/useDragValue.ts
 
 **This VALIDATES P4 as the fix.** The lever for a GPU-bound frame is *render fewer pixels during interaction* = adaptive resolution. P4's prompt session-driven engagement + **seed-the-downscale-on-session-start** (engagement frame, no wait on a measurement window) is exactly that, and the now-instant `isInteracting()` at gesture-start (vs the old ~10-frame accum-drop guess) is the enabler. With adaptive OFF the lag is permanent (frames never get cheaper) — which is why it appeared even with adaptive disabled.
 
-**Don't overclaim — the P4 gate is "finite + beats baseline", NOT "instant":**
-- **Irreducible floor** — the first event that triggers engagement still waits ~1 heavy frame (input can't outrun frame production); expect ~1 slow frame then responsive at 15fps, not zero.
+**UPDATE — present-path session (2026-05-31, headed Playwright on the real D3D11 GPU; headless can't reproduce the present path). Floor investigation CLOSED:**
+- **The engagement floor is a ONE-TIME first-interaction allocation, NOT an irreducible per-frame floor** (corrects the earlier "~1 heavy frame" framing). The first adaptive downscale of a session allocates new-size render targets — a one-time GPU cost, paid once + retained. Proven: a throwaway gesture at load drops it 284ms→83ms; cold-idle / GPU-downclock refuted. A boot pre-warm fixes it (available; user declined it as not worth a once-per-session cost).
+- **Sustained interaction is CONFIRMED responsive** — camera AND slider engage adaptive at 17–33ms (30–60fps) during a drag; the original "sliders never reach target FPS" bug is genuinely fixed by P4. (The earlier "slider floor" numbers were test artifacts — heavier `paramA≠0` geometry + per-step CDP overhead; controlled, slider == camera.)
+- **`desynchronized` (low-latency) present shipped DEFAULT-ON** (`?lowlatency`; `?lowlatency=0` disables, no rebuild): +59% throughput under load (6.8→10.8fps), marginal on the floor (consistent — the floor is allocation, not present-latency). Behavior change with documented revert criteria; user feel-testing → promote to its own ADR if kept. See the plan's "Present-path engagement floor" section.
 - **Converged full-res cost is a separate workstream** — adaptive only masks heaviness *during* interaction; the static full-res frame stays GPU-expensive (scene/shader/quality work, not the session).
-- **Possible Windows DXGI/overlay present-path cost** in the `Present`/`ScheduleOverlays` profile — lower-priority, a separate look.
-- P2 captured the legacy baseline (camera p50 66ms / p95 330ms; slider ∞ — never engages); P4 re-runs `bench:interaction-latency --mode=session --check`. Gate = **slider latency goes finite + beats baseline without camera regressing**. (Review #2.)
+- P2 captured the legacy baseline (camera p50 66ms/p95 330ms; slider ∞); the P4 gate (**slider finite + beats baseline, camera not regressing**) PASSED → **P4 ACCEPTED**. (Review #2.)
 
 ### What it replaces in the adaptive controller (GMT)
 - In **P5** (only after the P4 parallel run confirms the session — see phases), DELETE the accumulation-drop activity inference for GMT + the unused `mouseOverCanvas`; the `gateOnAccumOnly` branch stays for sibling apps. (`selfResized` stays — it's adaptive-internal, per E3.)
