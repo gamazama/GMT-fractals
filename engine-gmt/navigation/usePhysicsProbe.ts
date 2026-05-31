@@ -46,6 +46,12 @@ export const usePhysicsProbe = (
         if (resetShownRef.current === show) return;
         resetShownRef.current = show;
         hudRefs.reset.current.style.display = show ? 'block' : 'none';
+        // The "Undo Camera" recovery button is rendered as a sibling of the
+        // reset button and shares its visibility — it's only useful while the
+        // reset prompt is showing. Toggle it via a stable data-attribute so we
+        // stay off React's render path (this runs on every show/hide transition).
+        const undoBtn = hudRefs.reset.current.parentElement?.querySelector<HTMLElement>('[data-hud-undo-camera]');
+        if (undoBtn) undoBtn.style.display = show ? 'block' : 'none';
     };
 
     const processDepthData = (depthValue: number) => {

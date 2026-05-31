@@ -46,6 +46,8 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
     const incrementTabSwitchCount = useFractalStore((s) => (s as any).incrementTabSwitchCount);
     const setNavigation = useFractalStore((s) => (s as any).setNavigation);
     const resetCamera = useFractalStore((s) => (s as any).resetCamera);
+    const undoCamera = useFractalStore((s) => (s as any).undoCamera);
+    const canUndoCamera = useFractalStore((s) => (s as any).canUndo?.('camera') ?? false);
     const state = { tabSwitchCount, cameraMode, navigation, showHints } as unknown as FractalState;
     const actions = { incrementTabSwitchCount, setNavigation, resetCamera } as unknown as FractalActions;
     const hudSpeedSliderRef = useRef<HTMLDivElement>(null);
@@ -201,14 +203,31 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                         className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none transition-all duration-300 ease-out"
                         style={{ bottom: (state.showHints && !isMobile) ? '4rem' : '3.5rem' }}
                     >
-                        {/* Reset Button (Appears based on distance threshold set by physics hook) */}
-                        <button
-                            ref={mergeRefs(hudRefs.reset, resetCameraAnchorRef)}
-                            onClick={() => { actions.resetCamera(); actionBus.fire('camera.reset'); if (navigator.vibrate) navigator.vibrate(30); }}
-                            className="pointer-events-auto px-4 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-t-lg border-x border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl mb-[-1px]"
-                        >
-                            Reset Camera
-                        </button>
+                        {/* Recovery tabs (appear based on distance threshold set by the
+                            physics hook). The Undo button is the reset button's sibling and
+                            shares its show/hide — see usePhysicsProbe.updateResetButton.
+                            Inset by ~the pill's corner radius so the square bottom corners
+                            land on the pill's flat top edge, not over its rounded-full
+                            corners; the 1px overlap merges the borders. */}
+                        <div className="flex items-end gap-px mb-[-1px] self-stretch mx-5">
+                            <button
+                                ref={mergeRefs(hudRefs.reset, resetCameraAnchorRef)}
+                                onClick={() => { actions.resetCamera(); actionBus.fire('camera.reset'); if (navigator.vibrate) navigator.vibrate(30); }}
+                                title="Reset camera to default view"
+                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-tl-lg border-l border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap"
+                            >
+                                Reset
+                            </button>
+                            <button
+                                data-hud-undo-camera
+                                onClick={() => { undoCamera?.(); actionBus.fire('camera.undo'); if (navigator.vibrate) navigator.vibrate(30); }}
+                                disabled={!canUndoCamera}
+                                title="Revert the last camera movement (Ctrl+Shift+Z)"
+                                className="flex-1 pointer-events-auto px-2 py-1.5 bg-black/60 hover:bg-cyan-900/80 text-cyan-400 hover:text-white text-[9px] font-bold rounded-tr-lg border-r border-t border-white/10 backdrop-blur-md hidden animate-fade-in shadow-xl whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-black/60 disabled:hover:text-cyan-400"
+                            >
+                                Undo Cam
+                            </button>
+                        </div>
 
                         <div className="flex items-stretch gap-px bg-black/40 rounded-full border border-white/10 backdrop-blur-md overflow-hidden pointer-events-auto shadow-2xl">
                             {/* Interactive Speed Component - Hidden in Orbit Mode */}
