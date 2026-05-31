@@ -117,7 +117,10 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     return (
         <div
             className="fixed inset-0 z-[2050] bg-black/95 backdrop-blur-md flex flex-col"
-            onClick={onClose}
+            // Only a click on the backdrop itself closes — guard against clicks
+            // bubbling up from the sidebar / content inside, which would
+            // otherwise dismiss the lightbox on a stray mis-click.
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40 flex-shrink-0">
                 <button

@@ -290,9 +290,21 @@ const HudOverlay: React.FC<HudOverlayProps> = ({ isMobile, activeHint: _activeHi
                             </div>
                         </div>
 
-                        {/* Tutorial Hints — NOT PORTED yet. Original JSX:
-                            <HintDisplay activeHint={activeHint ?? null} cameraMode={state.cameraMode} onDismiss={onDismissHint} />
-                            Re-enable when the tutorial feature lands. */}
+                        {/* Static navigation hint — ported from stable's <HintDisplay>
+                            fallback (the no-active-contextual-hint branch). Restores the
+                            essential "how to move the camera" guidance for new users that
+                            was lost when the HUD was ported. The full contextual hint-
+                            rotation system (useTutorialHints, ~30 hints) is still NOT
+                            ported — re-enable <HintDisplay> here when it lands. Gated on
+                            showHints + desktop; fades with the bottom cluster (10s). */}
+                        {state.showHints && !isMobile && (
+                            <div className="mt-2 text-[9px] font-medium text-white/60 text-center whitespace-nowrap" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                                <span className="text-cyan-400/60 font-bold mr-2">[{state.cameraMode}]</span>
+                                {state.cameraMode === 'Fly'
+                                    ? 'WASD Move · Space/C Vert · Shift Boost'
+                                    : 'L-Drag Rotate · R-Drag Pan · Scroll Zoom'}
+                            </div>
+                        )}
 
                         {/* Persistent Mode Switch Hint */}
                         {tabSwitchCount < 2 && !isMobile && state.showHints && (

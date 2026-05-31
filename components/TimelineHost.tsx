@@ -26,6 +26,10 @@ export interface TimelineHostProps {
 export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) => {
     const [showTimeline, setShowTimeline] = useState(false);
     const openContextMenu = useEngineStore((s) => s.openContextMenu);
+    // When hints are enabled, the toggle shows an "Animate" label so the
+    // timeline (the create→share differentiator) is discoverable — icon-only
+    // otherwise. Mirrors the showHints gating used by the HUD nav hints.
+    const showHints = useEngineStore((s) => (s as any).showHints);
 
     // T toggles timeline visibility — matches GMT's KeyT binding. The
     // state lives in this component, so the shortcut is registered
@@ -87,10 +91,11 @@ export const TimelineHost: React.FC<TimelineHostProps> = ({ hidden = false }) =>
                         type="button"
                         onClick={() => setShowTimeline(true)}
                         onContextMenu={handleContextMenu}
-                        className="p-2 rounded-full border shadow-lg transition-all bg-gray-800 border-gray-600 text-gray-400 hover:text-white"
-                        title="Open Timeline"
+                        className={`flex items-center gap-1.5 rounded-full border shadow-lg transition-all bg-gray-800 border-gray-600 text-gray-400 hover:text-white ${showHints ? 'pl-2 pr-3 py-2' : 'p-2'}`}
+                        title="Open Timeline (T) — animate with keyframes"
                     >
                         <TimelineOpenIcon />
+                        {showHints && <span className="text-[11px] font-semibold whitespace-nowrap">Animate</span>}
                     </button>
                 </div>
             )}

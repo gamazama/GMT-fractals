@@ -252,6 +252,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
                             <span className="text-cyan-600/80">LOADING</span>
                             <button
                                 onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                title="Click to explore other fractals or load a file"
                                 className="flex items-center gap-1 text-cyan-400 hover:text-white transition-colors border-b border-dashed border-cyan-500/30 hover:border-cyan-400 pb-0.5 outline-none"
                             >
                                 <span className="font-bold">[{activeFormula}]</span>

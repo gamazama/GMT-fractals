@@ -239,6 +239,11 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     // Checks if state has changed since last save. Increments version if dirty. Returns active version.
     prepareExport: () => number;
 
+    // Unsaved-work tracking (H4). isSceneDirty: current state differs from the
+    // saved baseline (lastSavedHash). markSceneSaved: set the baseline to now.
+    isSceneDirty: () => boolean;
+    markSceneSaved: () => void;
+
     setDpr: (v: number) => void; 
     setAALevel: (v: number) => void;
     setMSAASamples: (v: number) => void;

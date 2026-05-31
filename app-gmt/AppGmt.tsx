@@ -33,6 +33,9 @@ import { TimelineHost } from '../components/TimelineHost';
 import { EngineBridge } from '../components/EngineBridge';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { HelpOverlay } from '../engine/plugins/Help';
+import { ToastHost } from '../engine/components/ToastHost';
+import { SceneFileDropZone } from '../engine/components/SceneFileDropZone';
+import { UnsavedWorkGuard } from '../engine/components/UnsavedWorkGuard';
 import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { NewSceneModal } from '../components/NewSceneModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
@@ -391,6 +394,9 @@ export const AppGmt: React.FC = () => {
                 <TutorialOverlay />
 
                 <CompilingIndicator />
+                <ToastHost />
+                <SceneFileDropZone />
+                <UnsavedWorkGuard />
 
 
                 <HardwarePrefsHost />

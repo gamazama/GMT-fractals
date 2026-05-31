@@ -26,6 +26,16 @@ export const GmtLogo: React.FC = () => {
     const [tempAuthor, setTempAuthor] = useState(author);
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Unsaved-changes marker. isSceneDirty() is a method, not reactive state,
+    // so poll it on a light interval rather than re-hashing every render.
+    const [dirty, setDirty] = useState(false);
+    useEffect(() => {
+        const check = () => setDirty(useEngineStore.getState().isSceneDirty());
+        check();
+        const id = window.setInterval(check, 1500);
+        return () => window.clearInterval(id);
+    }, []);
+
     useEffect(() => {
         if (isRenaming) {
             setTempName(name);
@@ -54,9 +64,9 @@ export const GmtLogo: React.FC = () => {
             <button
                 onClick={() => setIsRenaming(true)}
                 className="text-[8px] font-mono text-gray-400 underline decoration-white/20 hover:text-cyan-300 hover:decoration-cyan-300/50 transition-colors text-left truncate max-w-[120px] mt-1.5"
-                title="Click to rename project"
+                title={dirty ? 'Unsaved changes — click to rename project' : 'Click to rename project'}
             >
-                {name}
+                {dirty && <span className="text-amber-400" title="Unsaved changes">*</span>}{name}
             </button>
 
             {isRenaming && (
