@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>GMT V4 Validator Harness</title>
+  <style>
+    body { margin: 0; background: #0d1117; color: #c9d1d9;
+           font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; padding: 8px; }
+    #status { white-space: pre-wrap; }
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+<canvas id="gl" width="64" height="64"></canvas>
+<div id="status">initialising…</div>
+<script>
+/**
+ * GMT V4 Validator Harness (single-context, FBO-based)
+ *
+ * Exposes `window.runValidation({name, compileShader, sampleShader})` returning
+ * a Promise<ValidationResult>.
+ *
+ * Architecture:
+ *   - ONE WebGL2 context on a 64x64 canvas
+ *   - Thumbnail rendering: draw to default FB (canvas) → canvas.toDataURL
+ *   - Sample rendering: draw to 4x4 RGBA32F FBO → gl.readPixels → floats
+ *
+ * Two-context approach caused CONTEXT_LOST_WEBGL; this version uses one.
+ *
+ * Gates 2–6 from docs/26_Formula_Workshop_V4_Plan.md §9 A.1.
+ * Gate 1 (parse) is run Node-side and passed through.
+ */
+
+(() => {
+  const statusEl = document.getElementById('status');
+  const log = (msg) => { statusEl.textContent = msg; };
+
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl2', {
+    antialias: false, preserveDrawingBuffer: true, alpha: false,
+  });
+  if (!gl) { log('FATAL: WebGL2 unavailable'); window.validatorError = 'no WebGL2'; return; }
+
+  const cbfExt = gl.getExtension('EXT_color_buffer_float');
+  if (!cbfExt) { log('FATAL: EXT_color_buffer_float unavailable'); window.validatorError = 'no EXT_color_buffer_float'; return; }
+
+  console.log('WebGL2 version:', gl.getParameter(gl.VERSION));
+  console.log('GLSL version:', gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+  console.log('Renderer:', gl.getParameter(gl.RENDERER));
+
+  // ── Fixed passthrough vertex shader ────────────────────────────────────────
+
+  // Vertex shader provides a vUv varying — the engine's real fragment shaders
+  // expect it (set by the app's vertex shader). Without vUv the program
+  // link-fails with "FRAGMENT varying vUv does not match any VERTEX varying".
+  const VERT_SRC = `#version 300 es
+layout(location = 0) in vec2 aPos;
+out vec2 vUv;
+void main() {
+    vUv = aPos * 0.5 + 0.5;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+
+  function compileShader(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      const raw = gl.getShaderInfoLog(sh);
+      const typeName = type === gl.VERTEX_SHADER ? 'vs' : 'fs';
+      console.log(`[${typeName} compile fail]`, JSON.stringify(raw), '| raw type:', typeof raw);
+      const errlog = (raw && raw.length > 0) ? raw : `${typeName} compile returned empty info log (driver reported failure with no details)`;
+      gl.deleteShader(sh);
+      return { ok: false, error: errlog };
+    }
+    return { ok: true, shader: sh };
+  }
+
+  function buildProgram(fragSrc) {
+    const vs = compileShader(gl.VERTEX_SHADER, VERT_SRC);
+    if (!vs.ok) return { ok: false, stage: 'vertex', error: vs.error };
+    const fs = compileShader(gl.FRAGMENT_SHADER, fragSrc);
+    if (!fs.ok) { gl.deleteShader(vs.shader); return { ok: false, stage: 'fragment', error: fs.error }; }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs.shader);
+    gl.attachShader(prog, fs.shader);
+    gl.linkProgram(prog);
+    gl.deleteShader(vs.shader);
+    gl.deleteShader(fs.shader);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      const errlog = gl.getProgramInfoLog(prog) || 'link failed (empty info log)';
+      gl.deleteProgram(prog);
+      return { ok: false, stage: 'link', error: errlog };
+    }
+    return { ok: true, program: prog };
+  }
+
+  // Fullscreen-triangle VAO (shared across all renders)
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const vbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,  3,-1,  -1,3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+
+  // ── Sample FBO (8×8 RGBA32F → 64 samples) ──────────────────────────────────
+
+  const SAMPLE_SIZE = 8;
+  const SAMPLE_COUNT = SAMPLE_SIZE * SAMPLE_SIZE; // 64
+  const sampleTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, sampleTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, SAMPLE_SIZE, SAMPLE_SIZE, 0, gl.RGBA, gl.FLOAT, null);
+  const sampleFb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, sampleFb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sampleTex, 0);
+  const sampleFbStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (sampleFbStatus !== gl.FRAMEBUFFER_COMPLETE) {
+    log('FATAL: sample RGBA32F framebuffer not complete: 0x' + sampleFbStatus.toString(16));
+    window.validatorError = 'sample fb incomplete';
+    return;
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  // ── Gate runners ───────────────────────────────────────────────────────────
+
+  function trimErr(e) { return (e || '').split('\n').slice(0, 4).join('\n').slice(0, 400); }
+
+  function setUniforms(program, uniforms) {
+    for (const [name, value] of Object.entries(uniforms || {})) {
+      const loc = gl.getUniformLocation(program, name);
+      if (loc === null) continue;
+      if (typeof value === 'number') {
+        gl.uniform1f(loc, value);
+      } else if (Array.isArray(value)) {
+        if (value.length === 2) gl.uniform2fv(loc, value);
+        else if (value.length === 3) gl.uniform3fv(loc, value);
+        else if (value.length === 4) gl.uniform4fv(loc, value);
+      } else if (typeof value === 'boolean') {
+        gl.uniform1f(loc, value ? 1 : 0);
+      }
+    }
+  }
+
+  function runThumbnail(fragSrc, uniforms) {
+    const build = buildProgram(fragSrc);
+    if (!build.ok) return { webglCompile: { ok: false, stage: build.stage, error: trimErr(build.error) } };
+
+    gl.useProgram(build.program);
+    setUniforms(build.program, uniforms);
+    gl.bindVertexArray(vao);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);   // draw to default FB (canvas)
+    gl.viewport(0, 0, 64, 64);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    const pixels = new Uint8Array(64 * 64 * 4);
+    gl.readPixels(0, 0, 64, 64, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    const n = 64 * 64;
+    let sumR=0, sumG=0, sumB=0;
+    let nanCount = 0;  // preview shader paints NaN pixels orange (255,128,0)
+    for (let i = 0; i < n; i++) {
+      const r = pixels[i*4], g = pixels[i*4+1], b = pixels[i*4+2];
+      sumR += r; sumG += g; sumB += b;
+      // Orange hue: R >~200, G in 100..170, B <~40
+      if (r > 200 && g > 100 && g < 170 && b < 40) nanCount++;
+    }
+    const meanR = sumR/n, meanG = sumG/n, meanB = sumB/n;
+    let varR=0, varG=0, varB=0;
+    for (let i = 0; i < n; i++) {
+      varR += (pixels[i*4]   - meanR) ** 2;
+      varG += (pixels[i*4+1] - meanG) ** 2;
+      varB += (pixels[i*4+2] - meanB) ** 2;
+    }
+    const sigmaR = Math.sqrt(varR/n), sigmaG = Math.sqrt(varG/n), sigmaB = Math.sqrt(varB/n);
+    const nanFraction = nanCount / n;
+    const sigmaOk = (sigmaR >= 4.0) || (sigmaG >= 4.0) || (sigmaB >= 4.0);
+    const nanOk = nanFraction <= 0.30;  // allow up to 30% NaN pixels
+    const renderOk = sigmaOk && nanOk;
+    const thumbnailPNG = canvas.toDataURL('image/png');
+
+    let reason;
+    if (!nanOk) reason = `${(nanFraction*100).toFixed(0)}% of thumbnail is NaN (DE unstable in large regions)`;
+    else if (!sigmaOk) reason = 'per-channel σ all < 4.0 (near-uniform output)';
+
+    gl.deleteProgram(build.program);
+    return {
+      webglCompile: { ok: true },
+      renderNonDegenerate: {
+        ok: renderOk,
+        sigma: [+sigmaR.toFixed(2), +sigmaG.toFixed(2), +sigmaB.toFixed(2)],
+        nanFraction: +nanFraction.toFixed(3),
+        ...(reason ? { reason } : {}),
+      },
+      thumbnailPNG,
+    };
+  }
+
+  function runSample(fragSrc, uniforms) {
+    const build = buildProgram(fragSrc);
+    if (!build.ok) return { sampleShaderCompile: { ok: false, stage: build.stage, error: trimErr(build.error) } };
+
+    gl.useProgram(build.program);
+    setUniforms(build.program, uniforms);
+    gl.bindVertexArray(vao);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sampleFb);
+    gl.viewport(0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    const floats = new Float32Array(SAMPLE_COUNT * 4);
+    gl.readPixels(0, 0, SAMPLE_SIZE, SAMPLE_SIZE, gl.RGBA, gl.FLOAT, floats);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteProgram(build.program);
+
+    const distances = [], gradients = [];
+    let finiteCount = 0;
+    const nanIdxs = [];
+    for (let i = 0; i < SAMPLE_COUNT; i++) {
+      const d = floats[i*4], gm = floats[i*4+1];
+      distances.push(d); gradients.push(gm);
+      if (isFinite(d) && !isNaN(d)) finiteCount++;
+      else nanIdxs.push(i);
+    }
+
+    // Tolerance: some sample positions may be pathological for a given fractal
+    // (sky far-field, interior, discontinuity). Require 56/64 finite.
+    const FINITE_MIN = Math.round(SAMPLE_COUNT * 0.875);  // 56/64
+    const sampleFinite = finiteCount >= FINITE_MIN
+      ? { ok: true, finiteCount }
+      : { ok: false, finiteCount, reason: `${finiteCount}/${SAMPLE_COUNT} samples finite (NaN/Inf at idx ${nanIdxs.slice(0, 3).join(',')}${nanIdxs.length > 3 ? '…' : ''})` };
+
+    const finite = distances.filter(d => isFinite(d) && !isNaN(d));
+    const range = finite.length > 0 ? Math.max(...finite) - Math.min(...finite) : 0;
+    const sampleNonConstant = range > 1e-3
+      ? { ok: true, range: +range.toExponential(2) }
+      : { ok: false, reason: `range = ${range.toExponential(2)} (≤ 1e-3)` };
+
+    let passedCount = 0;
+    for (const gm of gradients) {
+      if (isFinite(gm) && !isNaN(gm) && gm >= 1e-3 && gm <= 1e4) passedCount++;
+    }
+    const GRAD_MIN = Math.round(SAMPLE_COUNT * 0.75);  // 48/64 — gradients are noisier near discontinuities
+    const gradientFinite = passedCount >= GRAD_MIN
+      ? { ok: true, passedCount }
+      : { ok: false, passedCount, reason: `only ${passedCount}/${SAMPLE_COUNT} samples had 1e-3 ≤ |grad| ≤ 1e4` };
+
+    return { sampleFinite, sampleNonConstant, gradientFinite };
+  }
+
+  async function runValidation(spec) {
+    const t0 = performance.now();
+    const { name, compileShader: cs, sampleShader: ss, uniforms } = spec;
+    const result = {
+      name,
+      webglCompile: null, renderNonDegenerate: null,
+      sampleShaderCompile: null, sampleFinite: null, sampleNonConstant: null, gradientFinite: null,
+      thumbnailPNG: null, overall: 'unknown', failFirstGate: null, timeMs: 0,
+    };
+
+    const thumbResult = runThumbnail(cs, uniforms);
+    Object.assign(result, thumbResult);
+    if (!result.webglCompile?.ok) {
+      result.overall = 'fail'; result.failFirstGate = 'webglCompile';
+      result.timeMs = Math.round(performance.now() - t0);
+      return result;
+    }
+
+    const sampleResult = runSample(ss, uniforms);
+    Object.assign(result, sampleResult);
+    if (result.sampleShaderCompile && !result.sampleShaderCompile.ok) {
+      result.overall = 'fail'; result.failFirstGate = 'sampleShaderCompile';
+      result.timeMs = Math.round(performance.now() - t0);
+      return result;
+    }
+
+    const gates = ['sampleFinite', 'sampleNonConstant', 'gradientFinite', 'renderNonDegenerate'];
+    for (const g of gates) {
+      if (result[g] && result[g].ok === false) {
+        result.overall = 'fail'; result.failFirstGate = g; break;
+      }
+    }
+    if (result.overall !== 'fail') result.overall = 'pass';
+
+    result.timeMs = Math.round(performance.now() - t0);
+    return result;
+  }
+
+  window.runValidation = runValidation;
+  window.validatorReady = true;
+  log('ready — window.runValidation(spec) exposed');
+})();
+</script>
+</body>
+</html>

@@ -70,7 +70,9 @@ debug/native-interlace-matrix.html
 debug/v3-v4-catalog.json
 debug/v4-honest-coremath.jsonl
 debug/thumbnails/
-debug/validator.html
+# debug/validator.html is TRACKED — static WebGL2 sweep harness used by
+# test:shader / test:baseline / test:hybrid* / test:interlace. Do NOT ignore it,
+# or those sweeps break in fresh checkouts / CI (ERR_FILE_NOT_FOUND).
 
 # Deep zoom perturbation experiment
 prototype/deep-zoom/

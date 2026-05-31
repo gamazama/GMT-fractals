@@ -244,6 +244,22 @@ The current harness uses the real `ShaderFactory` path. Any new test scenario yo
 - Full corpus: ~5–10 min depending on CPU
 - Per-formula timeout: 10s default, configurable
 
+## Running from a clean checkout / CI
+
+The sweeps navigate to **`debug/validator.html`**, a static WebGL2 harness. It is
+**committed (tracked)** — do not `.gitignore` it. (It was ignored until 2026-05-31,
+which silently broke every sweep in a fresh checkout / CI with
+`page.goto … net::ERR_FILE_NOT_FOUND`. The harness *does* exit non-zero on that
+— `main().catch(… process.exit(1))` — so the failure is loud per-run; it just
+reads as "validator missing" rather than "file not in the checkout".) With it
+tracked, `npm run test:shader` (and `test:baseline` / `test:hybrid` /
+`test:hybrid-adv` / `test:interlace`) run from any clean clone.
+
+> **Background-run gotcha:** when launching a sweep in the background, do *not*
+> append `echo "$?"` to the command — the shell then reports the echo's exit
+> (always 0), masking npm's real exit code. Read the printed `… N pass M fail`
+> summary line, or capture `$?` before any trailing command.
+
 ## Dependencies
 
 - `playwright` (dev) — headless Chromium for WebGL2
