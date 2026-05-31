@@ -558,7 +558,7 @@ export const NewSceneModal: React.FC = () => {
 
     return (
         <Modal onClose={closeNewScene} z={Z.modal} dismissOnBackdrop={false}>
-            <div className="bg-neutral-900 border border-white/10 rounded-md shadow-2xl w-[720px] max-w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="bg-neutral-900 border border-white/10 rounded-md shadow-2xl w-[min(720px,95vw)] max-h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                     <h2 className="text-sm font-bold text-gray-200 tracking-tight">New Scene</h2>

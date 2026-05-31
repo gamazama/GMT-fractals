@@ -357,7 +357,7 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
     };
 
     return (
-        <div className="relative" ref={rootRef}>
+        <div className="relative" ref={rootRef} data-menu-anchor>
             <button
                 type="button"
                 onClick={handleClick}
@@ -516,6 +516,23 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
         return () => _bumpHostMount(-1);
     }, []);
 
+    // Outside-tap dismissal for the mobile side panel (previously X-only):
+    // close when a pointerdown lands outside the panel AND outside any menu
+    // trigger (whose own toggle should handle it, else it'd close-then-reopen).
+    // Deferred one tick so the tap that opened the menu doesn't close it.
+    const asideRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (!activeId) return;
+        const onPointerDown = (e: PointerEvent) => {
+            const target = e.target as Node;
+            if (asideRef.current?.contains(target)) return;
+            if (target instanceof Element && target.closest('[data-menu-anchor]')) return;
+            mobileMenu.close();
+        };
+        const t = window.setTimeout(() => document.addEventListener('pointerdown', onPointerDown), 0);
+        return () => { window.clearTimeout(t); document.removeEventListener('pointerdown', onPointerDown); };
+    }, [activeId]);
+
     if (!activeId) return null;
     const def = _menus.get(activeId);
     if (!def) return null;
@@ -524,6 +541,7 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
 
     return (
         <aside
+            ref={asideRef}
             className={`${width} h-full flex flex-col bg-black/95 border-l border-white/10 ${className}`}
             // Touch panning inside the scroll region; prevents the page
             // from absorbing vertical-scroll gestures meant for the menu.

@@ -266,7 +266,9 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                                 )}
                                 {result.status === 'pending' && (
                                     <div className="text-green-400/70 leading-relaxed pt-1">
-                                        Queued for review. Appears in browse once an admin approves it.
+                                        Queued for review — usually approved within a day or two. It appears
+                                        in the gallery once a moderator approves it; check back under
+                                        “My Submissions”.
                                     </div>
                                 )}
                                 {result.status === 'approved' && result.visibility === 'public' && (
@@ -295,7 +297,7 @@ export const SubmitGalleryModal: React.FC<Props> = ({ open, onClose }) => {
                     {/* ── Main forming view (two columns) ─────────────────────── */}
                     {bodyMode === 'forming' && (
                         <form className="flex-1 min-h-0 flex flex-col" onSubmit={handleSubmit}>
-                            <div className="flex-1 min-h-0 grid grid-cols-[300px_1fr] gap-4 p-4 overflow-y-auto">
+                            <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-[300px_1fr] gap-4 p-4 overflow-y-auto">
                                 {/* Left: preview + watermark toggle */}
                                 <div className="flex flex-col gap-2">
                                     <label className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Preview</label>

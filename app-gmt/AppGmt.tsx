@@ -36,6 +36,7 @@ import { HelpOverlay } from '../engine/plugins/Help';
 import { ToastHost } from '../engine/components/ToastHost';
 import { SceneFileDropZone } from '../engine/components/SceneFileDropZone';
 import { UnsavedWorkGuard } from '../engine/components/UnsavedWorkGuard';
+import { FirstRunHint } from '../engine-gmt/components/FirstRunHint';
 import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { NewSceneModal } from '../components/NewSceneModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
@@ -397,6 +398,7 @@ export const AppGmt: React.FC = () => {
                 <ToastHost />
                 <SceneFileDropZone />
                 <UnsavedWorkGuard />
+                {!isMobile && <FirstRunHint />}
 
 
                 <HardwarePrefsHost />

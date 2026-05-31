@@ -209,6 +209,12 @@ export const MySubmissionsOverlay: React.FC = () => {
                                 {item.description && (
                                     <div className="text-[10px] text-gray-500 line-clamp-2">{item.description}</div>
                                 )}
+
+                                {item.status === 'rejected' && (
+                                    <div className="text-[10px] text-gray-400 leading-relaxed mt-0.5">
+                                        Not accepted into the gallery — you can adjust the scene and resubmit.
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex flex-col gap-1.5 flex-shrink-0 self-center">

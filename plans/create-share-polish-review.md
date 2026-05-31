@@ -31,8 +31,15 @@
 > boot-time recovery snapshot + notification that protects the prior session from live autosave bursts,
 > File ▸ "Restore Last Session" (amber-highlighted when a recovery exists), and an unsaved `*` marker
 > ([Logo.tsx](../engine-gmt/topbar/Logo.tsx)).
-> **REMAINING:** H1 (minimal hint bar), H7 (gallery sign-in + moderation), H8 (Open & Remix + link
-> legend), P7 (responsive modals + mobile menu). H2's animation tutorials are owner-written. **Toolchain (FIXED & stable):** dev's node_modules was under-installed (missing `.bin` + ~113
+> **DONE (round 2):** H1 — first-run hint bar ([FirstRunHint.tsx](../engine-gmt/components/FirstRunHint.tsx),
+> desktop, dismissible, persists); H7 — "Submit to Gallery" now ALWAYS visible (was hidden until
+> signed-in) routing unauthed users to the modal's sign-in CTA ([installGallery.tsx](../engine-gmt/gallery/installGallery.tsx)),
+> + moderation ETA copy and a rejected-item hint ([SubmitGalleryModal](../engine-gmt/gallery/SubmitGalleryModal.tsx),
+> [MySubmissionsOverlay](../engine-gmt/gallery/MySubmissionsOverlay.tsx)); H8 — "▶ Open & Remix" rename +
+> gallery-link vs editor-share-link clarification ([Lightbox.tsx](../engine-gmt/gallery/Lightbox.tsx));
+> P7 — responsive NewScene / Submit modal widths + the Submit form stacks on narrow screens, and the
+> mobile side-menu now dismisses on outside-tap ([Menu.tsx](../engine/plugins/Menu.tsx)).
+> **REMAINING:** only H2's animation tutorials (owner-written). The review queue is otherwise complete. **Toolchain (FIXED & stable):** dev's node_modules was under-installed (missing `.bin` + ~113
 > deps incl. `@codemirror/*`) → `npm install` reconciled it; `npm run typecheck` passes clean (0 errors)
 > on local 5.9.3; global tsc bumped to 6.0.3.
 
