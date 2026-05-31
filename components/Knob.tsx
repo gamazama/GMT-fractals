@@ -1,6 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useEngineStore } from '../store/engineStore';
+import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 import { RawDraggableNumber } from './Slider';
 
 interface KnobProps {
@@ -174,15 +176,20 @@ export const Knob: React.FC<KnobProps> = (props) => {
     // selectors return the same value every time and never re-render.
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
+    // Session 'slider' anchored to the same transaction boundary (ADR-0061 P3b).
+    // Dispatch-only, so it adds no subscription to this granular-selector Knob.
+    const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
 
     return (
         <RawKnob
             {...props}
             onDragStart={() => {
                 handleInteractionStart('param');
+                slider.begin();
                 if (props.onDragStart) props.onDragStart();
             }}
             onDragEnd={() => {
+                slider.end();
                 handleInteractionEnd();
                 if (props.onDragEnd) props.onDragEnd();
             }}

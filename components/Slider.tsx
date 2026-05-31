@@ -1,5 +1,7 @@
 import React from 'react';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
+import { useInteractionGesture } from '../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 import { ContextMenuItem } from '../types/help';
 import { collectHelpIds } from '../utils/helpUtils';
 import { useTrackAnimation } from '../hooks/useTrackAnimation';
@@ -177,14 +179,18 @@ export const BaseSlider: React.FC<BaseSliderProps> = ({
 
 export const DraggableNumber: React.FC<DraggableNumberProps> = (props) => {
     const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
-    
-    return <RawDraggableNumber 
-        {...props} 
+    // Session 'slider' anchored to the same transaction boundary (ADR-0061 P3b).
+    const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
+
+    return <RawDraggableNumber
+        {...props}
         onDragStart={() => {
             handleInteractionStart('param');
+            slider.begin();
             if (props.onDragStart) props.onDragStart();
         }}
         onDragEnd={() => {
+            slider.end();
             handleInteractionEnd();
             if (props.onDragEnd) props.onDragEnd();
         }}
@@ -216,6 +222,7 @@ const Slider: React.FC<SliderProps> = ({
     ...props 
 }) => {
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
+    const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
     const { status, toggleKey, autoKeyOnChange, autoKeyOnDragStart } = useTrackAnimation(trackId, props.value ?? 0, props.label);
 
     const helpIds = [];
@@ -251,11 +258,13 @@ const Slider: React.FC<SliderProps> = ({
 
     const handleDragStart = () => {
         handleInteractionStart('param');
+        slider.begin();
         autoKeyOnDragStart();
         if (props.onDragStart) props.onDragStart();
     };
 
     const handleDragEnd = () => {
+        slider.end();
         handleInteractionEnd();
         if (props.onDragEnd) props.onDragEnd();
     };

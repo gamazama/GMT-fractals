@@ -20,6 +20,23 @@ import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 import type { AccumulationController } from '../../../engine/AccumulationController';
 import { useCompileProgress } from '../../../store/CompileProgressStore';
 
+/** Low-latency present: create the worker's offscreen WebGL context with
+ *  `desynchronized: true` (bypasses the compositor double/triple-buffer + DWM
+ *  sync). Measured +59% sustained throughput under load on an RTX 2070 (6.8 →
+ *  10.8 fps), clean in initial testing. Read on the main thread (the worker's
+ *  `self.location` is the worker-script URL, not the page) and passed via INIT.
+ *
+ *  DEFAULT ON. Escape hatch: `?lowlatency=0` disables it without a rebuild.
+ *  REVERT (flip the default back to off) if any of these surface with extended
+ *  use: visible tearing on the viewport, blank/torn PNG snapshots or video-export
+ *  frames, present flicker/stutter, or WORSE latency on some GPU/driver combos. */
+const LOW_LATENCY_PRESENT: boolean = (() => {
+    try {
+        if (typeof window === 'undefined') return false;
+        return new URLSearchParams(window.location.search).get('lowlatency') !== '0';
+    } catch { return true; }
+})();
+
 export class WorkerProxy implements AccumulationController {
     // ─── Stub properties ─────────────────────────────────────────────
     // These exist on FractalEngine but not on WorkerProxy.  UI code guards
@@ -140,7 +157,8 @@ export class WorkerProxy implements AccumulationController {
             canvas: offscreen,
             width, height, dpr, isMobile,
             initialConfig: config,
-            initialCamera
+            initialCamera,
+            desynchronized: LOW_LATENCY_PRESENT,
         };
         this._worker.postMessage(initMsg, [offscreen]);
     }
@@ -203,7 +221,8 @@ export class WorkerProxy implements AccumulationController {
             canvas: offscreen,
             width, height, dpr, isMobile,
             initialConfig: newConfig,
-            initialCamera
+            initialCamera,
+            desynchronized: LOW_LATENCY_PRESENT,
         };
         this._worker.postMessage(initMsg, [offscreen]);
     }
@@ -468,6 +487,8 @@ export class WorkerProxy implements AccumulationController {
     get sceneOffset() { return this._localOffset; }
     get lastGeneratedFrag() { return this._lastGeneratedFrag; }
     get accumulationCount() { return this._shadow.accumulationCount; }
+    /** Read-only diagnostic (present-path workstream): cumulative adaptive FBO resizes. */
+    get fboResizes() { return this._shadow.fboResizes ?? 0; }
     get convergenceValue() { return this._shadow.convergenceValue; }
     get frameCount() { return this._shadow.frameCount; }
     get lastCompileDuration() { return this._shadow.lastCompileDuration; }
@@ -489,9 +510,12 @@ export class WorkerProxy implements AccumulationController {
      */
     pendingTeleport: CameraState | null = null;
 
-    private _isGizmoInteracting = false;
-    get isGizmoInteracting() { return this._isGizmoInteracting; }
-    set isGizmoInteracting(v: boolean) { this._isGizmoInteracting = v; }
+    // ADR-0061 P5 — the gizmo drag is the InteractionSession's `gizmo` source
+    // now (the `isGizmoInteracting` shadow was removed with the dual flag).
+    // `cameraInUse` here is NOT the removed hold-gate field — it's a write-only
+    // MARK_INTERACTION wake pulse Navigation fires on camera interaction (feeds
+    // the idle-pause `lastInteractionTime` wake term the ADR keeps). Getter is a
+    // stub; the persistent activity signal crosses via the renderState session.
     get cameraInUse() { return false; }
     set cameraInUse(v: boolean) { if (v) this.post({ type: 'MARK_INTERACTION' }); }
 

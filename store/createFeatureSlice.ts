@@ -139,7 +139,22 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                     }
 
                     if (config) {
-                        if (!config.noReset) shouldReset = true;
+                        // Only treat this param as a reason to reset accumulation
+                        // if its value actually changed. Re-applying the value it
+                        // already holds (redundant setter calls, preset/undo
+                        // re-applies, sliders that re-fire the same value) must
+                        // not disturb the accumulated buffer. Conservative for
+                        // object-typed params (vec/color/gradient/array): treat
+                        // as changed so a needed reset is never skipped.
+                        const oldVal = current[paramKey];
+                        const newVal = next[paramKey];
+                        const paramChanged =
+                            oldVal === newVal ? false
+                            : (typeof newVal === 'number' && typeof oldVal === 'number') ? Math.abs(newVal - oldVal) > 1e-9
+                            : (typeof newVal !== 'object' && typeof oldVal !== 'object') ? newVal !== oldVal
+                            : true;
+
+                        if (paramChanged && !config.noReset) shouldReset = true;
 
                         // Sync ALL changed params to ConfigManager via CONFIG event.
                         // ConfigManager.update() only triggers recompile for onUpdate:'compile'
@@ -202,7 +217,7 @@ export const createFeatureSlice: StateCreator<any> = (set, get) => {
                                 if (config.type === 'boolean') finalVal = val ? 1.0 : 0.0;
                                 if (config.type === 'color' && !(finalVal instanceof THREE.Color)) finalVal = new THREE.Color(finalVal);
                                 
-                                FractalEvents.emit('uniform', { key: config.uniform, value: finalVal, noReset: !!config.noReset });
+                                FractalEvents.emit('uniform', { key: config.uniform, value: finalVal, noReset: !!config.noReset || !paramChanged });
                             }
                         }
                     }

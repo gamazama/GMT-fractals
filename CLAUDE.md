@@ -160,6 +160,7 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 - `npm run smoke:boot` — headless Chromium boot, fails on pageerrors.
 - `npm run smoke:interact` — state-flow + preset round-trip (demo feature).
 - `npm run smoke:screenshot` — visual baseline → `debug/scratch/engine-boot.png`.
+- `npm run context:cost -- <subsystem|tier|path|app:name>` — **scope your source reading before you start.** Prints which files matter for an area, ordered cheapest-first, with token costs and heavy-file (read-in-sections) flags. Aligns with the navigation policy above: it tells you *which* source to grep/read, not docs to read instead. `npm run context:map` rebuilds the cost map; `npm run context:check` gates staleness. See [docs/policy/context-loading-protocol.md](docs/policy/context-loading-protocol.md).
 
 ## Build & Run
 ```bash

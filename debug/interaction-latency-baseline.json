@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "debug/interaction-latency-harness.mts",
+  "mode": "legacy",
+  "params": {
+    "targetFps": 30,
+    "minQuality": 0.25,
+    "fullResMs": 66,
+    "qfDeltaThreshold": 0.05,
+    "script": [
+      "camera",
+      "camera",
+      "camera",
+      "camera",
+      "camera",
+      "slider",
+      "slider",
+      "slider",
+      "slider",
+      "slider"
+    ]
+  },
+  "perGesture": [
+    {
+      "gesture": "camera",
+      "index": 0,
+      "firstReducedMs": 330,
+      "qualityDropped": true,
+      "finalScale": 1.356,
+      "finalQf": 0.749,
+      "finalFpsSmoothed": 27.8,
+      "fpsReachedTarget": true
+    },
+    {
+      "gesture": "camera",
+      "index": 1,
+      "firstReducedMs": 66,
+      "qualityDropped": true,
+      "finalScale": 1.407,
+      "finalQf": 0.711,
+      "finalFpsSmoothed": 29.5,
+      "fpsReachedTarget": true
+    },
+    {
+      "gesture": "camera",
+      "index": 2,
+      "firstReducedMs": 66,
+      "qualityDropped": true,
+      "finalScale": 1.407,
+      "finalQf": 0.711,
+      "finalFpsSmoothed": 29.5,
+      "fpsReachedTarget": true
+    },
+    {
+      "gesture": "camera",
+      "index": 3,
+      "firstReducedMs": 66,
+      "qualityDropped": true,
+      "finalScale": 1.407,
+      "finalQf": 0.711,
+      "finalFpsSmoothed": 29.5,
+      "fpsReachedTarget": true
+    },
+    {
+      "gesture": "camera",
+      "index": 4,
+      "firstReducedMs": 66,
+      "qualityDropped": true,
+      "finalScale": 1.407,
+      "finalQf": 0.711,
+      "finalFpsSmoothed": 29.5,
+      "fpsReachedTarget": true
+    },
+    {
+      "gesture": "slider",
+      "index": 5,
+      "firstReducedMs": null,
+      "qualityDropped": false,
+      "finalScale": 1,
+      "finalQf": 1,
+      "finalFpsSmoothed": 15.2,
+      "fpsReachedTarget": false
+    },
+    {
+      "gesture": "slider",
+      "index": 6,
+      "firstReducedMs": null,
+      "qualityDropped": false,
+      "finalScale": 1,
+      "finalQf": 1,
+      "finalFpsSmoothed": 15.2,
+      "fpsReachedTarget": false
+    },
+    {
+      "gesture": "slider",
+      "index": 7,
+      "firstReducedMs": null,
+      "qualityDropped": false,
+      "finalScale": 1,
+      "finalQf": 1,
+      "finalFpsSmoothed": 15.2,
+      "fpsReachedTarget": false
+    },
+    {
+      "gesture": "slider",
+      "index": 8,
+      "firstReducedMs": null,
+      "qualityDropped": false,
+      "finalScale": 1,
+      "finalQf": 1,
+      "finalFpsSmoothed": 15.2,
+      "fpsReachedTarget": false
+    },
+    {
+      "gesture": "slider",
+      "index": 9,
+      "firstReducedMs": null,
+      "qualityDropped": false,
+      "finalScale": 1,
+      "finalQf": 1,
+      "finalFpsSmoothed": 15.2,
+      "fpsReachedTarget": false
+    }
+  ],
+  "summary": {
+    "camera": {
+      "gestures": 5,
+      "engageLatencyMs": {
+        "p50": 66,
+        "p95": 330,
+        "min": 66,
+        "max": 330,
+        "mean": 118.8,
+        "samples": 5
+      },
+      "qualityDroppedRate": 1,
+      "fpsReachedTargetRate": 1
+    },
+    "slider": {
+      "gestures": 5,
+      "engageLatencyMs": {
+        "p50": null,
+        "p95": null,
+        "min": null,
+        "max": null,
+        "mean": null,
+        "samples": 0
+      },
+      "qualityDroppedRate": 0,
+      "fpsReachedTargetRate": 0
+    }
+  },
+  "notes": "BASELINE (legacy proxy). camera engages adaptive; slider is INVISIBLE (qualityFraction never drops, fps never reaches target) — the bug ADR-0061 fixes. P4 runs --mode=session and slider latency must become finite while camera does not regress."
+}

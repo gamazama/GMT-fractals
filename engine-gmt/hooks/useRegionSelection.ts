@@ -1,12 +1,19 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 type DragMode = 'draw' | 'move' | 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null;
 
 export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) => {
     const { interactionMode, setInteractionMode, setRenderRegion, renderRegion } = useEngineStore();
     const isSelectingRegion = interactionMode === 'selecting_region';
+    // Region select / draw / move-resize is drawing-ish (NOT a focus/julia
+    // picker) → session 'drawing' (ADR-0061 P3b). Destructure the stable
+    // begin/end so the window-listener effect below doesn't re-run on identity
+    // churn; the hook's own unmount cleanup backstops a mid-drag unmount.
+    const { begin: beginRegion, end: endRegion } = useInteractionGesture(INTERACTION_SOURCES.drawing);
 
     const [startPos, setStartPos] = useState<{x: number, y: number} | null>(null);
     const [currentPos, setCurrentPos] = useState<{x: number, y: number} | null>(null);
@@ -56,6 +63,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
                 if (handle || target.closest('.region-box')) {
                     e.stopPropagation();
                     dragMode.current = (handle as DragMode) || 'move';
+                    beginRegion();
                     setStartPos({ x: norm.x, y: norm.y });
                     initialRegion.current = { ...renderRegion };
                     setVisualRegion({ ...renderRegion });
@@ -68,6 +76,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
             if (isSelectingRegion) {
                 e.stopPropagation();
                 dragMode.current = 'draw';
+                beginRegion();
                 const pxX = e.clientX - rect.left;
                 const pxY = e.clientY - rect.top;
                 setStartPos({ x: pxX, y: pxY });
@@ -137,6 +146,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
             }
 
             dragMode.current = null;
+            endRegion();
             setStartPos(null);
             setCurrentPos(null);
             initialRegion.current = null;
@@ -152,7 +162,7 @@ export const useRegionSelection = (containerRef: React.RefObject<HTMLElement>) =
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
         };
-    }, [isSelectingRegion, renderRegion, startPos, currentPos, setInteractionMode, setRenderRegion, containerRef]);
+    }, [isSelectingRegion, renderRegion, startPos, currentPos, setInteractionMode, setRenderRegion, containerRef, beginRegion, endRegion]);
 
     return {
         visualRegion,

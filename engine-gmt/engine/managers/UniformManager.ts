@@ -15,6 +15,15 @@ import {
     tickAdaptiveResolution,
 } from '../../../engine/AdaptiveResolution';
 
+// Read-only diagnostic: how many times the adaptive loop has actually resized
+// the render target (each resize = a pipeline.resize + resetAccumulation, which
+// momentarily clears the buffer). Surfaced to the main thread via the worker
+// shadow state so the present-path workstream can classify the middle-drag
+// hitch — (b) resize thrash shows this counter climbing during a dolly while
+// orbit/pan leave it flat. NOT part of the render decision; pure observability.
+let _adaptiveResizeCount = 0;
+export function getAdaptiveResizeCount(): number { return _adaptiveResizeCount; }
+
 export class UniformManager {
     private uniforms: { [key: string]: THREE.IUniform };
     private virtualSpace: VirtualSpace;
@@ -112,11 +121,37 @@ export class UniformManager {
             // pixel dimensions and gate on a 5% delta guard in smart
             // mode (EMA jitter would otherwise cause constant resizes).
             const adaptiveTarget = runtimeState.quality?.adaptiveTarget ?? 0;
+            // ADR-0061 P5 — adaptive engages on the InteractionSession, the SOLE
+            // activity signal (the per-consumer flag + the legacy
+            // `isGizmoInteracting || cameraInUse` proxy are gone). The session
+            // reaches adaptive INSTANTLY at gesture-start (vs the lagged buffered
+            // useFrame) and — the bug it fixes — makes SLIDERS visible (they
+            // previously only reached adaptive via the ~10-frame accum-drop).
+            // UNFILTERED (every gesture downscales for responsiveness), composed
+            // with isSceneAnimating so playback / active-LFO still engage (what
+            // the legacy cameraInUse ORed in via isPlaying).
+            //
+            // SEED-ON-START (the latency lever): tickAdaptiveResolution already
+            // seeds the downscale from fullResFrameMs on the idle→active edge
+            // (`state.activeLast === 0`); feeding the instant session signal here
+            // fires that seed on the FIRST engagement frame instead of waiting
+            // ~10 frames for the accum-drop, so the first heavy frame is already
+            // downscaled. No extra seeding code — the wiring IS the seed trigger.
+            //
+            // ignoreAccumDrop: the accum-drop activity inference is retired FOR
+            // GMT (the session covers every continuous gesture; one-shot preset/
+            // param changes converge under deep-accum protection). The shared
+            // module keeps the accum-drop for sibling apps via gateOnAccumOnly.
+            //
+            // E2 export-safety: this whole block is already gated by
+            // `!isExporting && !isBucketRendering` (above), so the gate is
+            // preserved at the GMT consumer site, not baked into the core slice.
+            const adaptiveInteracting = runtimeState.interacting || runtimeState.isSceneAnimating;
             const adaptive = tickAdaptiveResolution(this._adaptive, {
                 now: performance.now(),
                 accumCount: this.pipeline.accumulationCount,
-                isInteracting: runtimeState.isGizmoInteracting || runtimeState.cameraInUse,
-                mouseOverCanvas: runtimeState.mouseOverCanvas,
+                isInteracting: adaptiveInteracting,
+                ignoreAccumDrop: true,
                 dynamicScaling: !!runtimeState.quality?.dynamicScaling,
                 adaptiveTarget,
                 interactionDownsample: runtimeState.quality?.interactionDownsample ?? 2.0,
@@ -157,6 +192,7 @@ export class UniformManager {
                 this.uniforms[Uniforms.Resolution].value.set(targetW, targetH);
                 this.pipeline.resize(targetW, targetH);
                 this.pipeline.resetAccumulation();
+                _adaptiveResizeCount++; // diagnostic (present-path workstream) — see getAdaptiveResizeCount
                 
                 if (materials) {
                     materials.displayMaterial.uniforms.uResolution.value.set(targetW, targetH);

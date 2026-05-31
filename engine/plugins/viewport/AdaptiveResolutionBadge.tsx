@@ -8,10 +8,10 @@
  * State display (four visual states, same colour palette as GMT):
  *   - Off (gray)    : adaptive disabled — click to enable
  *   - Locked (green): enabled but suppressed (e.g. during an export flow)
- *   - Auto (cyan)   : enabled, GMT-style — active when mouse-on-canvas or
- *                     during activity grace. Idle mouse on canvas → full-res.
- *   - Always (amber): enabled, alwaysActive (fluid-toy-style live sims) OR
- *                     mouse off canvas (idle grace not kicking in)
+ *   - Auto (cyan)   : enabled, GMT-style — engages on activity (interaction
+ *                     or accumulation reset) and settles to full-res on idle.
+ *   - Always (amber): enabled, alwaysActive (fluid-toy-style live sims) — no
+ *                     idle state, so adaptive never backs off.
  *
  * Click behaviour: toggles adaptiveConfig.enabled. If enabling and
  * targetFps was 0 (manual mode), seed it to 30 for the typical
@@ -24,7 +24,6 @@
 
 import React from 'react';
 import { useEngineStore } from '../../../store/engineStore';
-import { isMouseOverCanvas } from '../../worker/ViewportRefs';
 
 const AdaptiveIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -45,7 +44,6 @@ export const AdaptiveResolutionBadge: React.FC<AdaptiveResolutionBadgeProps> = (
 
     const isEnabled = cfg.enabled;
     const isActive = isEnabled && !suppressed;
-    const onCanvas = isMouseOverCanvas();
 
     const handleToggle = () => {
         if (isActive) {
@@ -70,9 +68,9 @@ export const AdaptiveResolutionBadge: React.FC<AdaptiveResolutionBadgeProps> = (
         // Something externally forced adaptive off (e.g. export flow).
         colorClass = 'text-green-400 bg-green-900/30 border border-green-500/30';
         stateLabel = 'Locked';
-    } else if (cfg.alwaysActive || !onCanvas) {
-        // Always-active mode (live sims) or mouse off canvas — adaptive is
-        // running without the idle-grace recovery.
+    } else if (cfg.alwaysActive) {
+        // Always-active mode (live sims) — adaptive runs without idle-grace
+        // recovery (there's no idle state to recover to).
         colorClass = 'text-amber-400 bg-amber-900/30 border border-amber-500/30';
         stateLabel = 'Always';
     } else {

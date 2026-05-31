@@ -113,6 +113,7 @@ import { getCameraModifier, getCameraModifierFromEvent } from './modifiers';
 import { useAnimationStore } from '../../store/animationStore';
 import { captureCameraKeyFrame } from '../../engine/animation/cameraKeyRegistry';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { CameraController } from '../engine/controllers/CameraController';
 import { VirtualSpace } from '../engine/PrecisionMath';
@@ -506,6 +507,62 @@ const Navigation: React.FC<NavigationProps> = ({
   const isCameraLockedRef = useRef(false);
   const allowOrbitInteraction = useRef(false);
 
+  // ── ADR-0061 camera session — ONE session for the whole camera gesture ──────
+  // All camera paths (drei OrbitControls right-PAN, custom left-drag orbit,
+  // middle-drag dolly) feed this single boolean rather than each ref-counting the
+  // 'camera' token. It opens on the first real MOVE (tap-vs-drag: a click that
+  // doesn't move the view opens nothing) and closes when the pointer is fully
+  // released. The close is RELEASE-driven (a window pointerup with no buttons
+  // still down, or pointercancel/unmount) — NOT each path's own end and NOT
+  // drei's onEnd, which drei suppresses when a custom handler disables it
+  // mid-gesture (the multi-button overlap that used to strand). `e.buttons === 0`
+  // is the one reliable "no buttons down" signal (touch/pen report 0, so a
+  // touch-end closes too). With a single boolean the machine ref-count is only
+  // ever 0 or 1, so it cannot drift.
+  const camSessionOpen = useRef(false);
+  const openOrPokeCamSession = () => {
+      if (camSessionOpen.current) {
+          // already open → keep the watchdog alive (throttled, no store write)
+          useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
+      } else {
+          camSessionOpen.current = true;
+          useFractalStore.getState().beginInteraction(INTERACTION_SOURCES.camera);
+      }
+  };
+  const closeCamSession = () => {
+      if (!camSessionOpen.current) return;
+      camSessionOpen.current = false;
+      useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
+  };
+
+  // Release backstop — the single close path for the camera session. Fires on the
+  // last button release / touch-end (buttons===0) or an interruption
+  // (pointercancel); the gesture handlers themselves only OPEN it on movement.
+  useEffect(() => {
+      const onUp = (e: PointerEvent) => { if (e.buttons === 0) closeCamSession(); };
+      const onCancel = () => closeCamSession();
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onCancel);
+      return () => {
+          window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onCancel);
+          closeCamSession(); // unmount mid-gesture (e.g. mode switch)
+      };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Suppress the native browser context menu on the 3D canvas. Right-drag is a
+  // camera gesture (drei PAN / cursor-anchor), so the OS menu just interrupts it
+  // (and was blocking gesture testing). The listener is bound directly to the
+  // WebGL canvas, so it only fires for right-clicks on the viewport itself — UI
+  // overlays are separate elements that keep their own context menus.
+  useEffect(() => {
+      const el = gl.domElement;
+      const onContextMenu = (e: MouseEvent) => e.preventDefault();
+      el.addEventListener('contextmenu', onContextMenu);
+      return () => el.removeEventListener('contextmenu', onContextMenu);
+  }, [gl]);
+
   // ── Cursor-anchored orbit/zoom: hover pre-pick ──────────────────────
   // Pick the world-space point under the cursor on pointermove so a
   // recent pivot is cached when the user clicks. Picks are async
@@ -587,6 +644,14 @@ const Navigation: React.FC<NavigationProps> = ({
           if (selectMovementLock(useFractalStore.getState())) return;
           if (isCameraLockedRef.current) return;
           e.preventDefault();
+
+          // ADR-0061: mouse-wheel zoom is a DISCRETE poke, not a continuous
+          // session (touch pinch-zoom is the continuous one — it rides drei's
+          // OrbitControls onStart/onEnd above, E1). The slice throttles pokes
+          // (~50ms), so calling it per-event coalesces the burst. (In
+          // cursor-anchor-OFF mode this handler bails above and drei owns the
+          // wheel, firing its own onStart/onEnd.)
+          useFractalStore.getState().pokeInteraction(INTERACTION_SOURCES.camera);
 
           // Burst-start: snapshot pivot, mark scrolling, suppress drei.
           // "First event in burst" = no active gesture pivot.
@@ -696,6 +761,8 @@ const Navigation: React.FC<NavigationProps> = ({
           cancelScrollEndTimer();
 
           dragging = true;
+          // ADR-0061 camera session opens on the first real move (see onMove) and
+          // closes on pointer release (backstop) — nothing to do here.
           lastX = e.clientX;
           lastY = e.clientY;
 
@@ -750,6 +817,11 @@ const Navigation: React.FC<NavigationProps> = ({
           lastX = e.clientX;
           lastY = e.clientY;
           if (dx === 0 && dy === 0) return;
+          // The camera moves on ANY non-zero delta (the view changed → accumulation
+          // already reset here), so open the 'camera' session on the FIRST real
+          // move; a pure click never reaches this line and opens nothing. Subsequent
+          // moves poke for watchdog liveness. Closes on pointer release (backstop).
+          openOrPokeCamSession();
 
           // Apply rotation SYNCHRONOUSLY here. drei's OrbitControls
           // calls scope.update() from inside its pointermove handler
@@ -805,8 +877,10 @@ const Navigation: React.FC<NavigationProps> = ({
           engine.dirty = true;
       };
 
-      const onUp = (e: PointerEvent) => {
-          if (e.button !== 0) return;
+      // Shared teardown for a left-drag orbit (normal pointerup + the
+      // pointercancel safety path). Camera-math cleanup only — the 'camera'
+      // session is closed by the release backstop, not here.
+      const finishOrbit = () => {
           if (!dragging) return;
           dragging = false;
           gestureActivePivotRef.current = null;
@@ -819,13 +893,30 @@ const Navigation: React.FC<NavigationProps> = ({
           absorbOrbitPosition(true);
       };
 
+      const onUp = (e: PointerEvent) => {
+          if (e.button !== 0) return;
+          finishOrbit();
+      };
+
+      // ADR-0061 mitigation #1 — a touch/OS interruption fires `pointercancel`,
+      // not `pointerup`; without this the 'camera' session would strand
+      // (never converges). This custom path doesn't setPointerCapture, so there
+      // is no lostpointercapture to handle. (Touch one-finger rotate is ceded to
+      // drei above via the pointerType==='touch' early-return, but a mouse can
+      // still emit pointercancel — handle it unconditionally.)
+      const onCancel = () => finishOrbit();
+
       el.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onCancel);
       return () => {
           el.removeEventListener('pointerdown', onDown);
           window.removeEventListener('pointermove', onMove);
           window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onCancel);
+          // Unmount mid-drag (mode switch away from Orbit) → release the session.
+          finishOrbit();
       };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, gl, camera, fitScale]);
@@ -848,6 +939,8 @@ const Navigation: React.FC<NavigationProps> = ({
           if (isCameraLockedRef.current) return;
           cancelScrollEndTimer();
           active = true;
+          // ADR-0061 camera session opens on the first real move (see onMove) and
+          // closes on pointer release (backstop) — nothing to do here.
           lastY = e.clientY;
           gestureActivePivotRef.current = snapshotHoverPivotLocal();
           isScrollingRef.current = true;
@@ -861,6 +954,9 @@ const Navigation: React.FC<NavigationProps> = ({
           const dy = e.clientY - lastY;
           lastY = e.clientY;
           if (dy === 0) return;
+          // Open on the first real move (a middle click opens nothing); poke after
+          // for watchdog liveness. Closes on pointer release (backstop).
+          openOrPokeCamSession();
           const dollySpeed = (currentZoomSensitivity.current || 1.0) * getCameraModifierFromEvent(e);
           // Drag up (negative dy) → zoom in (factor < 1), matching scroll-wheel up.
           const f = Math.exp(dy * 0.005 * dollySpeed);
@@ -892,8 +988,9 @@ const Navigation: React.FC<NavigationProps> = ({
           // Reset accumulation — see same note in wheel handler.
           engine.dirty = true;
       };
-      const onUp = (e: PointerEvent) => {
-          if (e.button !== 1) return;
+      // Shared teardown — camera-math cleanup only; the 'camera' session is
+      // closed by the release backstop, not here.
+      const finishMiddle = () => {
           active = false;
           gestureActivePivotRef.current = null;
           isScrollingRef.current = false;
@@ -901,13 +998,24 @@ const Navigation: React.FC<NavigationProps> = ({
           // gesture (same reason as the wheel scrollEndTimeout above).
           absorbOrbitPosition(true);
       };
+      const onUp = (e: PointerEvent) => {
+          if (e.button !== 1) return;
+          finishMiddle();
+      };
+      // ADR-0061 mitigation #1 — pointercancel (no setPointerCapture here, so no
+      // lostpointercapture). Idempotent via the `active` guard in finishMiddle.
+      const onCancel = () => finishMiddle();
       el.addEventListener('pointerdown', onDown);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onCancel);
       return () => {
           el.removeEventListener('pointerdown', onDown);
           window.removeEventListener('pointermove', onMove);
           window.removeEventListener('pointerup', onUp);
+          window.removeEventListener('pointercancel', onCancel);
+          // Unmount mid-drag → release the session.
+          if (active) finishMiddle();
       };
   }, [mode, gl, camera]);
 
@@ -1329,6 +1437,11 @@ const Navigation: React.FC<NavigationProps> = ({
           // keepTarget=true preserves target's WORLD position (only
           // its local-space coords shift to match the new sceneOffset).
           if (isOrbitDragging.current && camera.position.lengthSq() > 1e-8) {
+              // ADR-0061 — drei moved the camera this frame (a real drag, not a
+              // click): open the 'camera' session on the first such frame
+              // (tap-vs-drag), or poke it for watchdog liveness while it keeps
+              // moving. Runs before the absorb below, which zeroes camera.position.
+              openOrPokeCamSession();
               absorbOrbitPosition(true, true);
               // Reset accumulation: per-frame absorb zeroes
               // camera.position so the useFrame posChanged check
@@ -1380,6 +1493,10 @@ const Navigation: React.FC<NavigationProps> = ({
                 // forward × tiny), PAN's distance is ~0 and pan
                 // becomes a no-op.
                 isOrbitDragging.current = true;
+                // ADR-0061 camera session — no begin here: the session opens in the
+                // orbit useFrame on the first frame drei actually moves the camera
+                // (tap-vs-drag), and closes on pointer release (see the release
+                // backstop). drei's own onStart/onEnd isn't load-bearing for it.
                 cancelScrollEndTimer();
                 if (orbitRef.current) {
                     const dist = distAverageRef.current > 0

@@ -5,6 +5,8 @@ import { animationEngine } from '../../engine/AnimationEngine';
 import { getTimeGridSteps } from '../../utils/GraphUtils';
 import { TIMELINE_RULER_HEIGHT } from '../../data/constants';
 import { useSidebarResize } from '../../hooks/useSidebarResize';
+import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
 
 interface TimelineRulerProps {
     FRAME_WIDTH: number;
@@ -23,6 +25,10 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
     const setIsScrubbing = useAnimationStore((s) => s.setIsScrubbing);
     const sidebarWidth   = useAnimationStore((s) => s.timelineSidebarWidth);
     const handleSidebarResizeStart = useSidebarResize();
+    // Session 'scrub' for the playhead drag, anchored to the setIsScrubbing
+    // boundary (ADR-0061 P3b). Window mouse-listener gesture — unmount cleanup +
+    // watchdog back the release.
+    const scrub = useInteractionGesture(INTERACTION_SOURCES.scrub);
 
     const canvasWidth = Math.max(1, visibleWidth - sidebarWidth);
 
@@ -129,8 +135,9 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
         e.stopPropagation();
         
         const isMiddleClick = e.button === 1;
-        setIsScrubbing(true); 
-        
+        setIsScrubbing(true);
+        scrub.begin();
+
         const rect = e.currentTarget.getBoundingClientRect();
         
         const update = (clientX: number) => {
@@ -149,6 +156,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ FRAME_WIDTH, durat
 
         const move = (ev: MouseEvent) => update(ev.clientX);
         const up = () => {
+            scrub.end();
             setIsScrubbing(false);
             window.removeEventListener('mousemove', move);
             window.removeEventListener('mouseup', up);

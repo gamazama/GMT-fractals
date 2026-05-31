@@ -1,0 +1,15 @@
+#!/bin/sh
+# Pre-push gate (version-controlled). Activate once per clone with:
+#   git config core.hooksPath .githooks
+#
+# Runs the cheapest verification tier — the deterministic logic gates — so a
+# broken InteractionSession (ADR-0061) or its wiring can't be pushed. These are
+# Node-only tsx scripts (no WebGL / no Chromium), a few seconds total.
+#
+# Skip in an emergency with `git push --no-verify` (use sparingly).
+set -e
+
+echo "[pre-push] interaction-session gate (ADR-0061)…"
+npm run --silent test:gate
+
+# Add other fast logic gates here as they land (e.g. test:compat).

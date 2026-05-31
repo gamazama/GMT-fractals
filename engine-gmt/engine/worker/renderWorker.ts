@@ -19,6 +19,7 @@ import { WorkerDepthReadback } from './WorkerDepthReadback';
 import { BloomPass } from '../BloomPass';
 import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
 import { handleRenderTick as runRenderTick } from './handleRenderTick';
+import { getAdaptiveResizeCount } from '../managers/UniformManager';
 
 let engine: FractalEngine | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -65,6 +66,7 @@ function getShadowState(): WorkerShadowState {
         accumulationCount: engine.pipeline?.accumulationCount ?? 0,
         convergenceValue: engine.pipeline?.getLastConvergenceResult() ?? 1.0,
         frameCount: 0,
+        fboResizes: getAdaptiveResizeCount(),
         sceneOffset: {
             x: offset.x, y: offset.y, z: offset.z,
             xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
@@ -101,14 +103,20 @@ function handleInit(msg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
 function setupEngine(initMsg: Extract<MainToWorkerMessage, { type: 'INIT' }>) {
     canvas = initMsg.canvas;
 
-    // Create WebGL renderer on the OffscreenCanvas
+    // Create WebGL renderer on the OffscreenCanvas.
+    // `desynchronized` (present-path engagement-floor experiment, NOT ADR-0061):
+    // opt-in via the page URL `?lowlatency=1` (default OFF → no behaviour change).
+    // Low-latency present bypasses the compositor's double/triple-buffer + DWM
+    // sync that the rAF gap waits on — the cheapest lever against the 300–800ms
+    // engagement floor. See plan "Present-path engagement floor".
     renderer = new THREE.WebGLRenderer({
         canvas: canvas as any,
         alpha: false,
         depth: false,
         antialias: false,
         powerPreference: 'high-performance',
-        preserveDrawingBuffer: false
+        preserveDrawingBuffer: false,
+        desynchronized: initMsg.desynchronized === true,
     });
     // We manage sRGB encoding ourselves via uEncodeOutput in the post-process shader.
     // Set LinearSRGBColorSpace so Three.js compiles identical shader programs for canvas

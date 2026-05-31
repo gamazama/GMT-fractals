@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { hexToRgb, rgbToHsv, hsvToRgb, rgbToHex } from '../utils/colorUtils';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
+import { useInteractionDrag } from '../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
 import { collectHelpIds } from '../utils/helpUtils';
 import { ContextMenuItem } from '../types/help';
 
@@ -25,6 +27,12 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({ color, onColo
     
     const lastOutputHex = useRef(color.toUpperCase());
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
+    // Session 'slider' for the H/S/V range drags, anchored to the same
+    // param-transaction boundary (ADR-0061 P3b). One shared gesture — the three
+    // ranges are mutually exclusive under a single pointer; the hook supplies
+    // pointercancel/lostpointercapture release. The discrete strip-menu actions
+    // (paste / quick-picks / history) deliberately open no session.
+    const colorSession = useInteractionDrag(INTERACTION_SOURCES.slider);
 
     useEffect(() => {
         if (color.toUpperCase() !== lastOutputHex.current) {
@@ -162,8 +170,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({ color, onColo
         }
     };
 
-    const handleSliderStart = () => handleInteractionStart('param');
-    const handleSliderEnd = () => handleInteractionEnd();
+    const handleSliderStart = () => { handleInteractionStart('param'); colorSession.onPointerDown(); };
+    const handleSliderEnd = () => { colorSession.onPointerUp(); handleInteractionEnd(); };
 
     return (
         <div 
@@ -191,6 +199,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({ color, onColo
                         onChange={(e) => updateHsv({ h: Number(e.target.value) })}
                         onPointerDown={handleSliderStart}
                         onPointerUp={handleSliderEnd}
+                        onPointerCancel={colorSession.onPointerCancel}
+                        onLostPointerCapture={colorSession.onLostPointerCapture}
                         className="precision-slider absolute inset-0 w-full h-full cursor-crosshair"
                     />
                 </div>
@@ -200,6 +210,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({ color, onColo
                         onChange={(e) => updateHsv({ s: Number(e.target.value) })}
                         onPointerDown={handleSliderStart}
                         onPointerUp={handleSliderEnd}
+                        onPointerCancel={colorSession.onPointerCancel}
+                        onLostPointerCapture={colorSession.onLostPointerCapture}
                         className="precision-slider absolute inset-0 w-full h-full cursor-crosshair"
                     />
                 </div>
@@ -209,6 +221,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({ color, onColo
                         onChange={(e) => updateHsv({ v: Number(e.target.value) })}
                         onPointerDown={handleSliderStart}
                         onPointerUp={handleSliderEnd}
+                        onPointerCancel={colorSession.onPointerCancel}
+                        onLostPointerCapture={colorSession.onLostPointerCapture}
                         className="precision-slider absolute inset-0 w-full h-full cursor-crosshair"
                     />
                 </div>

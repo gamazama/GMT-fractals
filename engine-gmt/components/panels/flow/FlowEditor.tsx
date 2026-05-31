@@ -218,7 +218,14 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
         // pruned the connected edges from its own state by the time this fires,
         // so read the pre-deletion edges from the store — the sync below is still
         // deferred. Skip a bridge if either endpoint was also part of the deletion.
-        const prevEdges = useEngineStore.getState().graph.edges;
+        // `graph` is GMT Modular state installed onto the shared store as a
+        // patched slice via setState (engine-gmt/store/modularSlice.ts), so it
+        // isn't on the engine-core EngineStoreState the shared handle is typed
+        // with. Read through the GMT FractalState view — via `unknown` because
+        // the two store interfaces are independent declarations that don't
+        // structurally overlap (core carries actions GMT's view omits). This
+        // also types `e` below as GraphEdge, fixing the downstream implicit-any.
+        const prevEdges = (useEngineStore.getState() as unknown as FractalState).graph.edges;
         const remaining = new Set(getNodes().map(n => n.id));
         const bridges: Edge[] = [];
         for (const dn of deleted) {

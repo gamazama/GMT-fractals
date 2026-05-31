@@ -9,6 +9,8 @@ import { BaseVectorInput } from './BaseVectorInput';
 import { ConnectedVectorInputProps } from './types';
 import { evaluateTrackValue } from '../../utils/timelineUtils';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
+import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
 import type { Track, Keyframe } from '../../types/animation';
 
 // --- CONNECTED VECTOR2 INPUT ---
@@ -26,6 +28,8 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
+    // Session 'slider' anchored to the same param-transaction boundary (ADR-0061 P3b).
+    const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
     // Narrow per-field subs (no-op `set()` calls on animationStore happen at
     // RAF rate — destructuring useAnimationStore() makes every vector input
     // re-render every frame. See useTrackAnimation.ts for the same pattern.
@@ -42,6 +46,7 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
 
     const onDragStart = () => {
         handleInteractionStart(interactionMode);
+        slider.begin();
 
         if (isRecording && trackKeys) {
             snapshot();
@@ -64,6 +69,7 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
                 }
             });
         }
+        slider.end();
         handleInteractionEnd();
     };
 
@@ -171,6 +177,8 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
+    // Session 'slider' anchored to the same param-transaction boundary (ADR-0061 P3b).
+    const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
     // Narrow per-field subs (no-op `set()` calls on animationStore happen at
     // RAF rate — destructuring useAnimationStore() makes every vector input
     // re-render every frame. See useTrackAnimation.ts for the same pattern.
@@ -187,6 +195,7 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
 
     const onDragStart = () => {
         handleInteractionStart(interactionMode);
+        slider.begin();
 
         if (isRecording && trackKeys) {
             snapshot();
@@ -209,6 +218,7 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
                 }
             });
         }
+        slider.end();
         handleInteractionEnd();
     };
 
@@ -315,6 +325,8 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
 }) => {
     const handleInteractionStart = useEngineStore((s) => s.handleInteractionStart);
     const handleInteractionEnd = useEngineStore((s) => s.handleInteractionEnd);
+    // Session 'slider' anchored to the same param-transaction boundary (ADR-0061 P3b).
+    const slider = useInteractionGesture(INTERACTION_SOURCES.slider);
     // Narrow per-field subs (no-op `set()` calls on animationStore happen at
     // RAF rate — destructuring useAnimationStore() makes every vector input
     // re-render every frame. See useTrackAnimation.ts for the same pattern.
@@ -331,6 +343,7 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
 
     const onDragStart = () => {
         handleInteractionStart(interactionMode);
+        slider.begin();
 
         if (isRecording && trackKeys) {
             snapshot();
@@ -353,6 +366,7 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
                 }
             });
         }
+        slider.end();
         handleInteractionEnd();
     };
 

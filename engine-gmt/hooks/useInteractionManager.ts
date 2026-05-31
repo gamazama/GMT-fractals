@@ -6,6 +6,7 @@ const engine = getProxy();
 import { getDisplayCamera } from '../engine/worker/ViewportRefs';
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 
 /** Record keyframe(s) if the animation system is in recording mode. */
@@ -34,11 +35,58 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
     // Shared Loop Refs
     const rafRef = useRef<number | null>(null);
     const mousePosRef = useRef({ x: 0, y: 0 });
+
+    // ADR-0061 'picker' session — one token for both focus + julia pick-drags
+    // (mutually exclusive via interactionMode). Ref keeps begin/end balanced
+    // across pointerup / pointercancel / the RAF guards / unmount.
+    const pickerSessionActive = useRef(false);
+
+    // ADR-0061 'gizmo' session for the drag-a-light-in-from-the-HUD gesture
+    // (CenterHUD sets draggedLightIndex; placement happens here on pointermove).
+    // It positions a light, so it shares the 'gizmo' token with the gizmo-handle
+    // drag (the two never overlap — this path self-gates on !isGizmoInteracting).
+    const lightDragSessionActive = useRef(false);
     
     // Access Animation Store
     const animStore = useAnimationStore;
 
     useEffect(() => {
+        const beginPickerSession = () => {
+            if (pickerSessionActive.current) return;
+            pickerSessionActive.current = true;
+            useEngineStore.getState().beginInteraction(INTERACTION_SOURCES.picker);
+        };
+        const endPickerSession = () => {
+            if (!pickerSessionActive.current) return;
+            pickerSessionActive.current = false;
+            useEngineStore.getState().endInteraction(INTERACTION_SOURCES.picker);
+        };
+        const endLightDragSession = () => {
+            if (!lightDragSessionActive.current) return;
+            lightDragSessionActive.current = false;
+            useEngineStore.getState().endInteraction(INTERACTION_SOURCES.gizmo);
+        };
+
+        // Idempotent teardown for a pick kind — shared by pointerup, the RAF
+        // guards (canvas-gone / pick-rejected, ADR mitigation #3), pointercancel,
+        // and unmount cleanup, so the 'picker' session always releases with them.
+        // Focus picking additionally tears down the worker focus snapshot.
+        const endPickDrag = (
+            dragRef: { current: boolean },
+            cleanup?: () => void,
+        ) => {
+            if (!dragRef.current) return;
+            dragRef.current = false;
+            if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+            cleanup?.();
+            const s = useEngineStore.getState();
+            s.setInteractionMode('none');
+            s.handleInteractionEnd();
+            endPickerSession();
+        };
+        const endFocusDrag = () => endPickDrag(isDraggingFocusRef, () => engine.endFocusPick());
+        const endJuliaDrag = () => endPickDrag(isDraggingJuliaRef);
+
         const handlePointerDown = (e: PointerEvent) => {
             const state = useEngineStore.getState();
             const mode = state.interactionMode;
@@ -70,6 +118,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 if (mode === 'picking_focus') {
                     state.handleInteractionStart('param');
                     isDraggingFocusRef.current = true;
+                    beginPickerSession();
                     let snapshotReady = false;
                     let pendingSample = false;
                     let lastFocusDist = -1;
@@ -86,9 +135,11 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                             lastFocusDist = dist;
                             useEngineStore.getState().setOptics({ dofFocus: dist });
                         }
-                    });
+                    }).catch(() => endFocusDrag()); // mitigation #3: pick rejected → end + exit
 
                     const loop = () => {
+                        // mitigation #3: canvas unmounted out from under the pick → release.
+                        if (!canvasRef.current) { endFocusDrag(); return; }
                         if (!isDraggingFocusRef.current) return;
 
                         if (snapshotReady && !pendingSample) {
@@ -109,7 +160,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                                         { id: 'optics.dofFocus', label: 'Focus Distance', value: dist }
                                     ]);
                                 }
-                            });
+                            }).catch(() => endFocusDrag()); // mitigation #3
                         }
                         rafRef.current = requestAnimationFrame(loop);
                     };
@@ -120,6 +171,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 if (mode === 'picking_julia') {
                     state.handleInteractionStart('param');
                     isDraggingJuliaRef.current = true;
+                    beginPickerSession();
 
                     // Sync start position from store to prevent jumping
                     const geom = state.geometry;
@@ -148,11 +200,13 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                         if (pick && isDraggingJuliaRef.current) {
                             applyPick(pick, state.formula, state);
                         }
-                    });
+                    }).catch(() => endJuliaDrag()); // mitigation #3: pick rejected → end + exit
 
                     // Start Picking Loop
                     let pendingPick = false;
                     const loop = () => {
+                        // mitigation #3: canvas unmounted out from under the pick → release.
+                        if (!canvasRef.current) { endJuliaDrag(); return; }
                         if (!isDraggingJuliaRef.current) return;
 
                         // 1. Pick (async, throttled — skip if previous pick still pending)
@@ -165,7 +219,7 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                                     const freshState = useEngineStore.getState();
                                     applyPick(pickPos, freshState.formula, freshState);
                                 }
-                            });
+                            }).catch(() => endJuliaDrag()); // mitigation #3
                         }
 
                         // 2. Smooth Interpolation (Lerp) — runs every frame regardless of pick
@@ -204,11 +258,29 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
                 // Update ref for the Picking Loop
                 if (isDraggingJuliaRef.current || isDraggingFocusRef.current) {
                     mousePosRef.current = { x, y };
+                    // Watchdog liveness (ADR open-Q) — keep a long pick-drag's
+                    // session alive past MAX_SESSION_MS. Throttled, no store write.
+                    useEngineStore.getState().pokeInteraction(INTERACTION_SOURCES.picker);
                 }
 
-                // Light drag-from-panel: place light at ray intersection with depth plane
+                // Light drag-from-panel: place light at ray intersection with depth plane.
+                // ADR-0061 P5 — the old `!engine.isGizmoInteracting` self-gate (don't place
+                // a light while a gizmo HANDLE is being dragged) reads the unified `gizmo`
+                // source now that the dual flag is gone. The handle drag and this light-drag
+                // share the `gizmo` token, so "a gizmo HANDLE drag is active" = a hard-active
+                // gizmo source that is NOT our own light-drag (tracked by lightDragSessionActive).
                 const state = useEngineStore.getState();
-                if (state.draggedLightIndex !== null && !engine.isGizmoInteracting) {
+                const gizmoHandleDragging = state.getInteractionSources().has(INTERACTION_SOURCES.gizmo) && !lightDragSessionActive.current;
+                if (state.draggedLightIndex !== null && !gizmoHandleDragging) {
+                    // ADR-0061 — open the 'gizmo' session on the first placement
+                    // move, then poke to keep it alive (watchdog liveness). Ends
+                    // in handlePointerUp / pointercancel / unmount.
+                    if (!lightDragSessionActive.current) {
+                        lightDragSessionActive.current = true;
+                        state.beginInteraction(INTERACTION_SOURCES.gizmo);
+                    } else {
+                        state.pokeInteraction(INTERACTION_SOURCES.gizmo);
+                    }
                     // Use display camera — matches gizmo rendering
                     const cam = getDisplayCamera() as THREE.PerspectiveCamera;
                     const dragIdx = state.lighting?.lights?.findIndex(l => l.id === state.draggedLightIndex) ?? -1;
@@ -253,29 +325,15 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
         const handlePointerUp = () => {
             const state = useEngineStore.getState();
             if (state.draggedLightIndex !== null) state.setDraggedLight(null);
-            
-            // End Julia Drag
-            if (isDraggingJuliaRef.current) {
-                isDraggingJuliaRef.current = false;
-                if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            endLightDragSession(); // release the HUD light-drag 'gizmo' session if it was active
 
-                // Exit picking mode on release
-                state.setInteractionMode('none');
-                state.handleInteractionEnd();
-                if (navigator.vibrate) navigator.vibrate(20);
-            }
-
-            // End Focus Drag
-            if (isDraggingFocusRef.current) {
-                isDraggingFocusRef.current = false;
-                if (rafRef.current) cancelAnimationFrame(rafRef.current);
-                engine.endFocusPick();
-
-                // Exit picking mode on release
-                state.setInteractionMode('none');
-                state.handleInteractionEnd();
-                if (navigator.vibrate) navigator.vibrate(20);
-            }
+            // End the active pick via the shared helpers (which also release the
+            // 'picker' session). Vibrate once on release if a pick was active —
+            // preserves the prior haptic without double-firing for both kinds.
+            const wasPicking = isDraggingJuliaRef.current || isDraggingFocusRef.current;
+            endJuliaDrag();
+            endFocusDrag();
+            if (wasPicking && navigator.vibrate) navigator.vibrate(20);
         };
 
         // capture:true so we run in the capture phase, BEFORE the
@@ -285,11 +343,21 @@ export const useInteractionManager = (canvasRef: RefObject<HTMLDivElement>) => {
         window.addEventListener('pointerdown', handlePointerDown, { capture: true });
         window.addEventListener('pointermove', handlePointerMove);
         window.addEventListener('pointerup', handlePointerUp);
+        // ADR-0061 mitigation #1 — a touch/OS interruption fires `pointercancel`,
+        // not `pointerup`; route it through the same teardown so the 'picker'
+        // session can't strand. These pickers don't setPointerCapture (they use a
+        // capture-phase window pointerdown), so there's no lostpointercapture.
+        window.addEventListener('pointercancel', handlePointerUp);
         return () => {
             window.removeEventListener('pointerdown', handlePointerDown, { capture: true } as any);
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('pointercancel', handlePointerUp);
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            // Unmount mid-pick / mid-light-drag → release the sessions (idempotent).
+            endJuliaDrag();
+            endFocusDrag();
+            endLightDragSession();
         };
     }, [canvasRef]);
 };

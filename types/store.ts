@@ -6,6 +6,7 @@ import { ContextMenuItem } from './help';
 import type { FeatureStateMap, FeatureCustomActions, DrawnShape, ModulationRule } from '../engine/features/types';
 import { LightParams } from './graphics';
 import type { ScalabilityState, HardwareProfile, ViewportAdaptiveConfig } from './viewport';
+import type { InteractionSource, SourceFilter } from '../engine/InteractionSessionMachine';
 
 // Optics was a fractal-leaning feature. Apps that need typed optics on
 // saved cameras can declaration-merge to widen this opaque record.
@@ -196,7 +197,6 @@ export interface EngineStoreState extends FeatureStateMap {
   exportIncludeScene: boolean;
   
   showLightGizmo: boolean;
-  isGizmoDragging: boolean;
   draggedLightIndex: string | null;
   openLightPopupIndex: number;  // -1 = no popup open
   shadowPanelOpen: boolean;
@@ -205,8 +205,20 @@ export interface EngineStoreState extends FeatureStateMap {
   // Consolidated Interaction State
   interactionMode: InteractionMode;
   focusLock: boolean;
-  
-  cameraMode: CameraMode; 
+
+  // ── InteractionSession (ADR-0061) — single source of truth for "is a
+  //    continuous user gesture in flight?". The machine's HOT state (active
+  //    sources + timestamps) lives in a module-level ref inside
+  //    createInteractionSlice (the viewportSlice `_adaptive` pattern), NOT
+  //    here — interaction sits on the hottest path in the app. The ONLY
+  //    reactive field is this coarse edge boolean, written once per gesture
+  //    edge (idle↔active), never per pointermove. Read activity via
+  //    isInteracting()/isIdle() through getState() on hot paths — do not
+  //    subscribe. (P5: this is the SOLE interaction signal; the per-consumer
+  //    kill-switch flags and the parallel-run divergence instrument are gone.)
+  interacting: boolean;
+
+  cameraMode: CameraMode;
   sceneOffset: PreciseVector3;
   animations: AnimationParams[];
   lfosEnabled: boolean;
@@ -341,7 +353,6 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setExportIncludeScene: (v: boolean) => void;
     
     setShowLightGizmo: (v: boolean) => void;
-    setGizmoDragging: (v: boolean) => void;
     setDraggedLight: (id: string | null) => void;
     setOpenLightPopupIndex: (index: number) => void;
     setShadowPanelOpen: (v: boolean) => void;
@@ -349,6 +360,39 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
 
     setInteractionMode: (mode: InteractionMode) => void;
     setFocusLock: (v: boolean) => void;
+
+    // ── InteractionSession (ADR-0061) — gesture-activity API. Producers
+    //    declare into it (begin/end/poke); consumers poll isInteracting()/
+    //    isIdle() via getState() on hot paths. See createInteractionSlice.ts.
+    /** Continuous gesture start, ref-counted per source. Writes the reactive
+     *  `interacting` boolean only on the idle→active edge. */
+    beginInteraction: (source: InteractionSource) => void;
+    /** Gesture end, ref-counted; an unbalanced end dev-warns and never strands.
+     *  Writes the reactive boolean only on the active→idle edge. */
+    endInteraction: (source: InteractionSource) => void;
+    /** Discrete event (wheel / key) — throttled (~50ms) timestamp refresh on the
+     *  module ref. No store write, never an edge. */
+    pokeInteraction: (source: InteractionSource) => void;
+    /** Poll "is a gesture active (incl. the debounce tail)?". Read via getState()
+     *  on hot paths — never subscribe. Optional source filter (e.g. HUD-fade
+     *  passes `{ only: ['camera','scrub'] }`). */
+    isInteracting: (filter?: SourceFilter) => boolean;
+    /** Idle for >= ms with no active source (distinct window from the debounce
+     *  tail). Consumers COMPOSE this with render-dirtiness — it alone is not
+     *  "should we render". */
+    isIdle: (ms?: number) => boolean;
+    /** Live hard-active sources — for the dev overlay / telemetry (getState()). */
+    getInteractionSources: () => ReadonlySet<InteractionSource>;
+    /** Sources active OR within the debounce tail — dev overlay observability,
+     *  so a discrete poke (wheel) is legible as its source, not an anonymous tail. */
+    getRecentInteractionSources: () => ReadonlySet<InteractionSource>;
+    /** Global last-activity timestamp (ms) — tutorial / telemetry. */
+    getLastActivityTime: () => number;
+    /** Watchdog backstop: force-clears a stranded session (a producer that
+     *  missed an end) and mirrors the resulting idle edge onto the reactive
+     *  boolean. Last line of defence against the never-converges regression
+     *  class; a live drag refreshes via throttled pointermove pokes. */
+    tickInteractionWatchdog: () => void;
     
     setCameraMode: (v: CameraMode) => void;
     setSceneOffset: (v: any) => void;

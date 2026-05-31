@@ -3,6 +3,8 @@ import { useAnimationStore } from '../../store/animationStore';
 import { animationEngine } from '../../engine/AnimationEngine';
 import { AnimationSequence, Keyframe, BezierHandle } from '../../types';
 import { GraphViewTransform } from '../../utils/GraphUtils';
+import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
 
 interface GraphSelectionBBoxProps {
     sequence: AnimationSequence;
@@ -52,6 +54,9 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
     const updateKeyframes = useAnimationStore(s => s.updateKeyframes);
     const snapshot        = useAnimationStore(s => s.snapshot);
     const setIsScrubbing  = useAnimationStore(s => s.setIsScrubbing);
+    // Session 'scrub' for the keyframe bbox-scale drag, anchored to the
+    // setIsScrubbing boundary (ADR-0061 P3b). Window mouse-listener gesture.
+    const scrub = useInteractionGesture(INTERACTION_SOURCES.scrub);
 
     const dragRef = useRef<DragState | null>(null);
 
@@ -109,6 +114,7 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
         e.stopPropagation();
         snapshot();
         setIsScrubbing(true);
+        scrub.begin();
         dragRef.current = {
             type,
             startClientX: e.clientX,
@@ -174,7 +180,7 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
         };
 
         const onUp = () => {
-            if (dragRef.current) setIsScrubbing(false);
+            if (dragRef.current) { scrub.end(); setIsScrubbing(false); }
             dragRef.current = null;
         };
 
@@ -184,7 +190,7 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
         };
-    }, [updateKeyframes, setIsScrubbing]);
+    }, [updateKeyframes, setIsScrubbing, scrub]);
 
     if (!bounds) return null;
 

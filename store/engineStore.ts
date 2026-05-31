@@ -21,6 +21,7 @@ import { EngineStoreState, EngineActions, Preset } from '../types';
 import { createUISlice } from './slices/uiSlice';
 import { createRenderControlSlice } from './slices/renderControlSlice';
 import { createViewportSlice } from './slices/viewportSlice';
+import { createInteractionSlice } from './slices/createInteractionSlice';
 import { createScalabilitySlice } from './slices/scalabilitySlice';
 import { createHistorySlice } from './slices/historySlice';
 import { createFeatureSlice } from './createFeatureSlice';
@@ -91,6 +92,7 @@ const storeFactory: StateCreator<
     ...createUISlice(set, get, api),
     ...createRenderControlSlice(set, get, api),
     ...createViewportSlice(set, get, api),
+    ...createInteractionSlice(set, get, api),
     ...createScalabilitySlice(set, get),
     ...createHistorySlice(set, get, api),
     ...createFeatureSlice(set, get, api),
@@ -460,8 +462,19 @@ export const getCanvasPhysicalPixelSize = (state: EngineStoreState): [number, nu
     return state.canvasPixelSize;
 };
 
-export const selectMovementLock = (state: EngineStoreState) => {
-    if (state.isGizmoDragging || state.interactionMode !== 'none' || state.isExporting || state.isBucketRendering) return true;
+export const selectMovementLock = (state: EngineStoreState & EngineActions) => {
+    // ADR-0061 P5 — the gizmo-drag check is an orthogonal PERMISSION axis (a
+    // gizmo handle drag must lock camera movement so dragging a light doesn't
+    // also orbit). Its INPUT moved from the removed `isGizmoDragging` flag to the
+    // unified InteractionSession `gizmo` source. `getInteractionSources()` reads
+    // the HARD-active set (no debounce tail) — matching the old flag's immediate
+    // on/off — from the module ref; the coarse reactive `interacting` boolean
+    // flips on the same gizmo edges (single pointer → no other source masks it),
+    // so a `useStore(selectMovementLock)` subscriber re-evaluates at drag start
+    // and end. (`'gizmo'` is a literal here, not the engine-gmt token import, to
+    // keep this engine-core selector free of an app-layer dependency; the session
+    // token type is an open string by design — ADR-0059.)
+    if (state.getInteractionSources().has('gizmo') || state.interactionMode !== 'none' || state.isExporting || state.isBucketRendering) return true;
     const features = featureRegistry.getAll();
     for (const feat of features) {
         if (feat.interactionConfig?.blockCamera && feat.interactionConfig.activeParam) {

@@ -15,20 +15,29 @@
  * Algorithm (verbatim port of GMT's UniformManager.syncFrame, with the
  * viewport-slice enhancements layered in as opt-in features):
  *
- *   - Still-FPS measurement during idle frames seeds the next scale
- *     when interaction starts (`scale = sqrt(targetFps / stillFps)`).
+ *   - On (re)engagement the scale is seeded from the estimated FULL-RES
+ *     frame cost (`fullResFrameMs`, a scale-normalized EMA of `frameMs *
+ *     scale²`) — `scale = sqrt(targetFps / fullResFps)` — so a heavy scene
+ *     downscales to the right level on the FIRST interaction frame instead of
+ *     ramping over several slow frames. Scale-normalization is the key: it
+ *     stays valid while downscaled, whereas a raw FPS reading reads high right
+ *     after a downscaled run and under-seeds. (`stillFps` still sizes grace.)
  *   - First sample window after seed: 200ms + jump-to-ideal (no EMA).
  *     Gives instant response on interaction start.
  *   - Subsequent windows: 500ms + 0.7/0.3 EMA toward target FPS via
  *     `sqrt(ratio)`. Smooth, no churn.
  *   - Grace period scales inversely with FPS: 1fps → 2s, 30fps+ → 100ms
  *     minimum. Slow scenes get more settle time.
- *   - Mouse-over-canvas + grace expiry → adaptive OFF.
- *   - Mouse-over-UI + shallow accumulation → adaptive STAYS ON
- *     (slider drags need responsive feedback).
+ *   - Engagement is driven by ACTIVITY, not pointer location: explicit
+ *     interaction or an accumulation-drop refreshes `lastActivityTime`;
+ *     while `timeSinceActivity < grace` adaptive stays on, and once the
+ *     scene goes idle it settles to full res and converges — wherever the
+ *     mouse happens to rest. (Previously `!mouseOverCanvas` kept it on
+ *     while the cursor sat over UI, which stopped heavy scenes from ever
+ *     converging; removed — slider drags still engage via the
+ *     accumulation-drop signal.)
  *   - "Deep" full-res accumulation (threshold scales with FPS, 8 to
- *     50 samples) protects quality from being kicked back to adaptive
- *     when the user moves the mouse to UI.
+ *     50 samples) protects quality from being kicked back to adaptive.
  *   - alwaysActive (live sims): bypass mouseOverCanvas/grace check —
  *     adaptive always on except during suppression / deep accum.
  *   - holdUntilMs: while now < holdUntilMs, don't downscale further.
@@ -65,6 +74,13 @@ export interface AdaptiveResolutionState {
     selfResized: boolean;
     /** Accumulation count at full resolution only — protects deep accumulation. */
     fullResAccum: number;
+    /** EMA of the estimated FULL-RES frame cost in ms (`frameMs * scale²`,
+     *  sampled only on real trace frames). Scale-normalized so it stays valid
+     *  while downscaled — used to seed the engagement downscale accurately,
+     *  where a raw FPS reading would under-seed right after a downscaled run. */
+    fullResFrameMs: number;
+    /** `performance.now()` of the previous tick — for instantaneous frame timing. */
+    lastTickNow: number;
 }
 
 export interface AdaptiveResolutionInput {
@@ -75,8 +91,12 @@ export interface AdaptiveResolutionInput {
     accumCount: number;
     /** True during gizmo / camera / slider interaction. */
     isInteracting: boolean;
-    /** True when the pointer is over the render canvas. */
-    mouseOverCanvas: boolean;
+    /** True when the pointer is over the render canvas. Unused by the decision
+     *  logic (engagement is activity-driven, not pointer-position-driven); kept
+     *  on the input as an optional hook for a future pointer-down-gated variant.
+     *  Optional since ADR-0061 P5: GMT no longer computes/passes it (it was a
+     *  no-op in the decision path); sibling callers may still supply it. */
+    mouseOverCanvas?: boolean;
     /** User toggle: master enable for dynamic scaling. */
     dynamicScaling: boolean;
     /** Target FPS for smart adaptive (0 = manual mode using interactionDownsample). */
@@ -108,6 +128,15 @@ export interface AdaptiveResolutionInput {
      *  unrelated UI sliders never invalidates the fractal accumulator,
      *  so it shouldn't drop quality either). */
     gateOnAccumOnly?: boolean;
+    /** When true, an accumulation DROP no longer counts as activity — only the
+     *  explicit `isInteracting` signal engages adaptive. The accum-drop's other
+     *  roles (deep-accum protection, full-res cost sampling) are unaffected.
+     *  ADR-0061 P5: GMT passes this because its InteractionSession is now the
+     *  SOLE activity signal — every continuous gesture declares in, so the racy
+     *  accum-drop inference (which also fired on one-shot preset/param changes)
+     *  is no longer wanted. Distinct from `gateOnAccumOnly`, which does the
+     *  OPPOSITE (accum-drop only, ignore isInteracting) for sibling apps. */
+    ignoreAccumDrop?: boolean;
 }
 
 export interface AdaptiveResolutionResult {
@@ -134,6 +163,8 @@ export function createAdaptiveResolutionState(): AdaptiveResolutionState {
         prevAccumCount: 0,
         selfResized: false,
         fullResAccum: 0,
+        fullResFrameMs: 0,
+        lastTickNow: 0,
     };
 }
 
@@ -147,9 +178,14 @@ export function getAdaptiveGrace(stillFps: number): number {
  * @invariant `state.scale` is bounded `[1.0, 1 / max(0.01, minQuality)]`
  *   on every smart-mode assignment.
  * @invariant `gateOnAccumOnly` disables BOTH the `isInteracting`
- *   activity write AND the `(isInteracting || !mouseOverCanvas)`
- *   clauses of `activitySignal`. Used by fluid-toy whose accumulator
- *   is not invalidated by unrelated UI drags.
+ *   activity write AND the `isInteracting` clause of `activitySignal`,
+ *   leaving only the accumulation-drop signal (`timeSinceActivity <
+ *   grace`). Used by fluid-toy whose accumulator is not invalidated by
+ *   unrelated UI drags. `ignoreAccumDrop` is its mirror image — it
+ *   disables the accumulation-drop activity write, leaving only the
+ *   explicit `isInteracting` signal (GMT, whose InteractionSession
+ *   declares every gesture). The two are mutually exclusive in practice;
+ *   neither affects deep-accum protection or full-res cost sampling.
  * @invariant `holdUntilMs` only blocks downscale — comparison is
  *   strict `nextScale > state.scale`; upscale is always permitted
  *   during hold.
@@ -161,13 +197,40 @@ export function tickAdaptiveResolution(
     state: AdaptiveResolutionState,
     input: AdaptiveResolutionInput,
 ): AdaptiveResolutionResult {
-    const { now, accumCount, isInteracting, mouseOverCanvas, dynamicScaling } = input;
+    const { now, accumCount, isInteracting, dynamicScaling } = input;
     const minQuality = input.minQuality ?? 0.25;
     const maxScale = Math.max(1.0, 1 / Math.max(0.01, minQuality));
     const alwaysActive = input.alwaysActive ?? false;
     const holdUntilMs = input.holdUntilMs ?? 0;
     const suppressed = input.suppressed ?? false;
     const gateOnAccumOnly = input.gateOnAccumOnly ?? false;
+    const ignoreAccumDrop = input.ignoreAccumDrop ?? false;
+
+    // ── Full-resolution cost tracking ────────────────────────────────
+    // Estimate the time to render ONE FULL-RES frame, derived from the
+    // current frame regardless of its downscale: trace cost ∝ pixel count
+    // ∝ 1/scale², so `frameMs * scale²` normalizes any frame back to its
+    // full-res equivalent. Crucially this stays valid WHILE downscaled —
+    // unlike a raw FPS reading, which after a downscaled run reads high
+    // (fast frames) and would under-seed the next engagement, leaving the
+    // scene below target while the feedback loop slowly crawls up. The
+    // normalized cost stays ~constant at the true full-res cost, so the
+    // seed below is accurate on the FIRST interaction frame. Sampled only on
+    // frames that did real trace work (interacting, or a new sample was
+    // accumulated) so cheap display frames after convergence / while paused
+    // don't poison it. Pauses / tab-switches (≥2s) are ignored.
+    const tracedThisFrame = isInteracting || accumCount > state.prevAccumCount;
+    if (state.lastTickNow > 0 && tracedThisFrame) {
+        const frameMs = now - state.lastTickNow;
+        if (frameMs > 0 && frameMs < 2000) {
+            const sc = state.scale > 0 ? state.scale : 1;
+            const fullResSample = frameMs * sc * sc;
+            state.fullResFrameMs = state.fullResFrameMs > 0
+                ? state.fullResFrameMs * 0.7 + fullResSample * 0.3
+                : fullResSample;
+        }
+    }
+    state.lastTickNow = now;
 
     // ── Suppression: hard force to full res. ──────────────────────────
     if (suppressed) {
@@ -186,10 +249,14 @@ export function tickAdaptiveResolution(
     // EXCEPT when caused by our own resize (selfResized flag).
     // gateOnAccumOnly mode skips the isInteracting branch — UI slider
     // drags that don't actually invalidate the renderer should not
-    // count as activity for those apps.
+    // count as activity for those apps. ignoreAccumDrop is the mirror:
+    // it skips the accum-drop branch so only the explicit isInteracting
+    // signal engages adaptive (GMT's InteractionSession declares every
+    // gesture, so the racy accum-drop — which also fired on one-shot
+    // preset/param changes — is no longer wanted).
     if (isInteracting && !gateOnAccumOnly) {
         state.lastActivityTime = now;
-    } else if (accumCount < state.prevAccumCount && !state.selfResized) {
+    } else if (accumCount < state.prevAccumCount && !state.selfResized && !ignoreAccumDrop) {
         state.lastActivityTime = now;
     }
     state.prevAccumCount = accumCount;
@@ -221,15 +288,24 @@ export function tickAdaptiveResolution(
     // ── Adaptive decision ─────────────────────────────────────────────
     // Deep accum    → OFF (protects quality results)
     // alwaysActive  → ON (live sims have no idle state)
-    // Mouse on UI   → ON (slider drags need responsive feedback)
-    // Mouse on canvas + grace expired → OFF (FPS-based settle window)
-    // gateOnAccumOnly: drop the isInteracting / mouseOverCanvas
-    // clauses. Adaptive engages only while the renderer's accumulator
-    // is being actively reset (timeSinceActivity < grace). Unrelated
-    // UI activity has no effect.
+    // Recent activity (interaction OR accumulation-drop within `grace`) → ON
+    // Idle (grace expired) → OFF → settle to full res and converge.
+    //
+    // Engagement is ACTIVITY-driven, not pointer-position-driven. The old
+    // `!mouseOverCanvas` clause kept adaptive on whenever the cursor sat off
+    // the canvas (i.e. over UI) — but that only mattered while idle (recent
+    // activity already trips the `grace` clause), so it just stopped heavy
+    // scenes from ever converging while the mouse rested over a panel.
+    // For accum-drop callers, slider drags that change the image engage
+    // adaptive via the accumCount drop registered as activity above. For
+    // ignoreAccumDrop callers (GMT), the explicit isInteracting signal (a
+    // declared gesture) is what engages — every continuous gesture declares
+    // into the InteractionSession, so the accum-drop is no longer the path.
+    // gateOnAccumOnly also drops the isInteracting clause (fluid-toy: its
+    // accumulator isn't invalidated by unrelated UI drags).
     const activitySignal = gateOnAccumOnly
         ? timeSinceActivity < grace
-        : (isInteracting || !mouseOverCanvas || timeSinceActivity < grace);
+        : (isInteracting || timeSinceActivity < grace);
     const needsAdaptive = dynamicScaling && !isDeepAccumulation && (alwaysActive || activitySignal);
 
     if (needsAdaptive) {
@@ -239,10 +315,15 @@ export function tickAdaptiveResolution(
             // First window after seed uses 200ms + jump-to-ideal (instant
             // response). Subsequent windows: 500ms + 0.7/0.3 EMA (smooth).
             if (state.activeLast === 0) {
-                const seedFps = Math.max(1, state.stillFps);
-                if (seedFps < adaptiveTarget) {
+                // Seed the downscale from the estimated FULL-RES frame cost
+                // (scale-normalized above) so a heavy scene lands at the right
+                // scale on the first interaction frame instead of ramping over
+                // several slow measurement windows. A raw current-frame FPS
+                // would read high right after a downscaled run and under-seed.
+                const fullResFps = state.fullResFrameMs > 0 ? 1000 / state.fullResFrameMs : adaptiveTarget;
+                if (fullResFps < adaptiveTarget) {
                     state.scale = Math.max(1.0, Math.min(maxScale,
-                        Math.sqrt(adaptiveTarget / seedFps)
+                        Math.sqrt(adaptiveTarget / fullResFps)
                     ));
                 } else {
                     state.scale = 1.0;

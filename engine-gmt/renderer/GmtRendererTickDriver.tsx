@@ -32,11 +32,12 @@ import {
     setViewportCanvas,
     snapshotDisplayCamera,
     getViewportCamera,
-    isMouseOverCanvas,
 } from '../engine/worker/ViewportRefs';
 import { registerTick, runTicks, TICK_PHASE } from '../engine/TickRegistry';
 import { viewport } from '../../engine/plugins/Viewport';
 import { reportAccumulationToStore } from '../../store/slices/installAccumulationBindings';
+import { buildRenderInteractionState } from './renderInteractionState';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
 // Capture the display camera for overlay components (light gizmos, drawing
@@ -195,6 +196,13 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
     useFrame((_state, delta) => {
         if (!isReady) return;
 
+        // ADR-0061 — drive the InteractionSession watchdog on the frame cadence.
+        // Constant-time check; force-clears a stranded begin (a producer that
+        // missed its end) past MAX_SESSION_MS so a missed end can't leave the
+        // session active forever (the never-converges regression class). A live
+        // drag refreshes via throttled pointermove pokes; last line of defence.
+        useEngineStore.getState().tickInteractionWatchdog();
+
         // Clamp delta — prevents tab-switch / debugger-pause from feeding a
         // huge delta into VirtualSpace smoothing (would trigger a spurious
         // accumulation reset).
@@ -244,23 +252,41 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0,
         };
 
-        // `cameraInUse` (engine-side hold gate) ORs the animationStore's
-        // user-driven flag with `isPlaying` and `isScrubbing` so the engine
-        // suppresses accumulation reset during animation playback and timeline
-        // scrubbing — same path that already worked for orbit drag. Keeps
-        // path-tracer accumulation from thrashing on every per-frame
-        // CAMERA_TELEPORT during heavy playback.
         const animState = useAnimationStore.getState();
+
+        // ADR-0061 worker bridge — derive the InteractionSession booleans and
+        // send them in renderState. These are the SOLE interaction signals the
+        // worker consumers read (the legacy cameraInUse / isGizmoInteracting /
+        // mouseOverCanvas derivations are gone). The pure
+        // buildRenderInteractionState() pins the key names to EngineRenderState
+        // so a producer/consumer typo can't silently read false
+        // (debug/test-interaction-wiring.mts guards the round-trip).
+        const interactionBlock = buildRenderInteractionState({
+            sessionInteracting: storeState.isInteracting(),
+            // Filtered subset for the accumulation HOLD consumer: camera / gizmo /
+            // scrub gestures only — the set where freezing the frame is correct.
+            // Sliders/picker/drawing are excluded (they must re-render fresh),
+            // which is the camera+playback+scrub+gizmo hold set the old
+            // `cameraInUse || isGizmoInteracting` proxy produced, without the
+            // buffered-useFrame lag. Playback/scrub also engage the hold via
+            // isSceneAnimating (derived below) — so removing the legacy
+            // cameraInUse (which ORed isPlaying/isScrubbing) loses nothing.
+            sessionHoldActive: storeState.isInteracting({ only: [INTERACTION_SOURCES.camera, INTERACTION_SOURCES.gizmo, INTERACTION_SOURCES.scrub] }),
+            isPlaying: animState.isPlaying,
+            // Active LFO ≈ LFOs enabled with at least one animation bound. This is
+            // the autonomous-animation axis (NOT a gesture) adaptive + hold
+            // compose with `interacting`.
+            hasActiveModulation: !!storeState.lfosEnabled && (storeState.animations?.length ?? 0) > 0,
+        });
+
         const renderState = {
             cameraMode: storeState.cameraMode,
-            cameraInUse: animState.isCameraInteracting || animState.isPlaying || animState.isScrubbing,
-            isGizmoInteracting: proxy.isGizmoInteracting,
-            mouseOverCanvas: isMouseOverCanvas(),
             optics:   storeState.optics   ?? null,
             lighting: storeState.lighting ?? null,
             quality:  storeState.quality  ?? null,
             geometry: storeState.geometry ?? null,
             adaptiveSuppressed: !!storeState.adaptiveSuppressed,
+            ...interactionBlock, // interacting + isSceneAnimating + sessionHoldActive (ADR-0061)
         };
 
         proxy.sendRenderTick(serializedCamera, serializedOffset, clampedDelta, renderState);

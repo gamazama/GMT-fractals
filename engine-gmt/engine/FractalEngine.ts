@@ -86,16 +86,7 @@ export interface EngineRenderState {
     cameraMode: 'Orbit' | 'Fly';
     isExporting: boolean;
     isBucketRendering: boolean;
-    isGizmoInteracting: boolean;
-    /** Engine-internal hold gate: true when the camera is being driven from
-     *  *any* source (user mouse/orbit OR animation playback OR timeline
-     *  scrubbing). When true, accumulation is held — no per-frame reset
-     *  thrash. The animationStore-side `isCameraInteracting` flag stays
-     *  user-input-only (consumed by HUD fade logic etc); the bridge in
-     *  GmtRendererTickDriver ORs in isPlaying/isScrubbing for the engine. */
-    cameraInUse: boolean;
     isMobile: boolean;
-    mouseOverCanvas: boolean;
     optics: OpticsState | null;
     lighting: LightingState | null;
     quality: QualityState | null;
@@ -105,6 +96,28 @@ export interface EngineRenderState {
      *  set this so the user judges quality at full res. Plumbed from the store
      *  via RENDER_TICK so UniformManager's adaptive loop can honour it. */
     adaptiveSuppressed: boolean;
+    /** ADR-0061 worker bridge. Gesture-activity boolean from the
+     *  InteractionSession (session.isInteracting()), declared at the input
+     *  event rather than inferred from a buffered useFrame. Since P5 this is the
+     *  SOLE activity signal the adaptive input reads (the legacy proxy is gone).
+     *  The `!isExporting && !isBucketRendering` gate stays at the GMT consumer
+     *  site, not here (E2). */
+    interacting: boolean;
+    /** ADR-0061. Autonomous scene animation (playback / active LFO) — the
+     *  SEPARATE axis adaptive + hold compose with gesture activity (`interacting
+     *  || isSceneAnimating`). Playback is NOT a gesture, so it is not an
+     *  interaction source. */
+    isSceneAnimating: boolean;
+    /** ADR-0061. Filtered session activity for the accumulation HOLD —
+     *  `session.isInteracting({ only: ['camera','gizmo','scrub'] })`. Hold wants
+     *  the camera/gizmo/scrub gestures (where freezing the frame is correct),
+     *  NOT slider/picker/drawing (which must re-render fresh each frame). Derived
+     *  main-thread (where the session lives) and composed with `isSceneAnimating`
+     *  by the hold consumer — this is the camera+playback+scrub+gizmo hold set
+     *  the old `cameraInUse || isGizmoInteracting` proxy produced, without the
+     *  buffered-useFrame lag. The worker only gets this serialized boolean; the
+     *  filtering happens main-thread (the worker can't call session.isInteracting). */
+    sessionHoldActive: boolean;
 }
 
 // Precompute 2048 jitter values using Halton sequence for faster access.
@@ -140,23 +153,18 @@ export class FractalEngine {
         cameraMode: 'Orbit',
         isExporting: false,
         isBucketRendering: false,
-        isGizmoInteracting: false,
-        cameraInUse: false,
         isMobile: false,
-        mouseOverCanvas: true,
         optics: null,
         lighting: null,
         quality: null,
         geometry: null,
         bucketConfig: { bucketSize: 512, outputWidth: 1920, outputHeight: 1080, tileCols: 1, tileRows: 1, convergenceThreshold: 0.25, accumulation: true, samplesPerBucket: 64 },
         adaptiveSuppressed: false,
+        interacting: false,        // ADR-0061: session gesture activity (adaptive + idle-pause)
+        isSceneAnimating: false,   // ADR-0061: autonomous-animation axis (composed with interacting)
+        sessionHoldActive: false,  // ADR-0061: filtered camera/gizmo/scrub session activity (hold)
     };
 
-    public get isGizmoInteracting() { return this.state.isGizmoInteracting; }
-    public set isGizmoInteracting(v: boolean) { this.state.isGizmoInteracting = v; }
-
-    public get cameraInUse() { return this.state.cameraInUse; }
-    public set cameraInUse(v: boolean) { this.state.cameraInUse = v; }
     public isPaused: boolean = false;
     private lastInteractionTime: number = 0;
     private _lastCameraInUseTime: number = 0;
@@ -249,10 +257,12 @@ export class FractalEngine {
         this.markInteraction();
 
         if (event.type === 'wheel') {
+            if (!event.delta) return; // zero-delta wheel — no camera move, no reset
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.activeCamera.quaternion);
             this.activeCamera.position.addScaledVector(forward, event.delta * this.inputState.zoomSpeed * this.lastMeasuredDistance);
             this.resetAccumulation();
         } else if (event.type === 'drag') {
+            if (!event.dx && !event.dy) return; // zero-delta drag — no rotation, no reset
             const up = new THREE.Vector3(0, 1, 0);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.activeCamera.quaternion);
             const qPitch = new THREE.Quaternion().setFromAxisAngle(right, event.dy * this.inputState.rotateSpeed);
@@ -465,9 +475,12 @@ export class FractalEngine {
 
 
     public setUniform(key: string, value: any, noReset: boolean = false) {
-        this.materials.setUniform(key, value);
+        const changed = this.materials.setUniform(key, value);
         this.configManager.syncUniform(key, value);
-        if (!noReset) this.resetAccumulation(); 
+        // Only reset accumulation when the uniform's value actually changed.
+        // Re-emitting an unchanged value (display-only uniforms, redundant
+        // param writes, probe-driven no-ops) must not disturb the buffer.
+        if (!noReset && changed) this.resetAccumulation();
     }
     
     public setRenderState(partial: Partial<EngineRenderState>) {
@@ -549,8 +562,20 @@ export class FractalEngine {
         
         const now = performance.now();
 
+        // Idle-pause early-return. ADR-0061 migrates this by COMPOSITION, not
+        // replacement: keepAwake is `session-active OR recently-woke`, where
+        // recentlyWoke (`lastInteractionTime` within 1s) is the EXISTING WAKE /
+        // invalidation signal (markInteraction fires on discrete preset/param/
+        // config changes that produce no gesture) and MUST stay — reading the
+        // session alone would stop a paused render from waking on a non-drag
+        // change (click a preset, type a value). The session term covers live
+        // gestures. (`this.state.interacting` is the serialized session boolean
+        // incl. its 200ms tail; the 1s wake window dominates either way — the
+        // worker can't call session.isIdle(), so it reads the boolean.)
         if (this.isPaused && !this.state.isBucketRendering) {
-             if (now - this.lastInteractionTime > 1000) return;
+            const recentlyWoke = now - this.lastInteractionTime <= 1000;
+            const keepAwake = this.state.interacting || recentlyWoke;
+            if (!keepAwake) return;
         }
 
         // Hold accumulation during camera interaction ONLY if DOF is disabled
@@ -559,8 +584,18 @@ export class FractalEngine {
         const dofEnabled = (this.state.optics?.dofStrength ?? 0) > 0.0001;
         const wasHolding = this.pipeline.isHolding;
 
-        const cameraInUse = this.state.cameraInUse || this.state.isGizmoInteracting;
-        if (cameraInUse) this._lastCameraInUseTime = now;
+        // Accumulation hold. ADR-0061: driven by the InteractionSession's
+        // FILTERED activity (camera/gizmo/scrub — `sessionHoldActive`, derived
+        // main-thread) composed with the autonomous isSceneAnimating axis. This
+        // is the camera+playback+scrub+gizmo hold set the old `cameraInUse ||
+        // isGizmoInteracting` proxy produced, without the buffered-useFrame lag.
+        // Deliberately NOT the unfiltered session: slider/picker/drawing gestures
+        // must re-render fresh each frame (holding would freeze a stale frame —
+        // `pipeline.render()` is a no-op while holding), so they stay OUT of the
+        // hold set. (The worker only gets the serialized boolean; the filtering
+        // happens main-thread since the worker can't call session.isInteracting.)
+        const holdActive = this.state.sessionHoldActive || this.state.isSceneAnimating;
+        if (holdActive) this._lastCameraInUseTime = now;
 
         // Extend hold until adaptive resolution has settled at full res.
         // Without this, accumulation starts at reduced res, then the adaptive grace period
@@ -571,7 +606,7 @@ export class FractalEngine {
         const timeSinceCam = now - this._lastCameraInUseTime;
         const holdForAdaptive = adaptiveEnabled && timeSinceCam < this.uniformManager.getAdaptiveGrace() + 50;
 
-        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (cameraInUse || holdForAdaptive);
+        const shouldHold = !this.state.isBucketRendering && !dofEnabled && (holdActive || holdForAdaptive);
         this.pipeline.setHold(shouldHold);
 
         // If we just started holding, reset accumulation for clean frame

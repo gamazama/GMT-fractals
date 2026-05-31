@@ -403,7 +403,12 @@ export class MaterialController {
      *   adding a new uniform to `mainUniforms` does not automatically
      *   reach display/export materials unless they share refs.
      */
-    public setUniform(key: string, value: any) {
+    public setUniform(key: string, value: any): boolean {
+        // Probe value-equality against the current MAIN uniform BEFORE we
+        // overwrite it, so FractalEngine.setUniform can skip an accumulation
+        // reset when a uniform is re-written with the value it already holds.
+        const changed = this.uniformValueChanged(key, value);
+
         let valToAssign = value;
 
         // Handle boolean values - convert to float for GLSL
@@ -492,8 +497,52 @@ export class MaterialController {
                 s[key].value = valToAssign;
             }
         });
+
+        return changed;
     }
-    
+
+    /**
+     * Cheap value-equality probe against the current MAIN-render uniform.
+     * Lets FractalEngine.setUniform skip an accumulation reset when a uniform
+     * is re-written with the value it already holds (a common source of
+     * spurious resets — display-only re-emits, redundant param writes,
+     * probe-driven no-ops).
+     *
+     * Conservative by design: anything it can't cheaply compare (textures,
+     * gradient buffers, arrays, matrices, or a key absent from mainUniforms)
+     * reports `true` (changed), so a genuinely-needed reset is never
+     * suppressed. Only scalars / Vector2-4 / Color short-circuit.
+     */
+    private uniformValueChanged(key: string, value: any): boolean {
+        const u = this.mainUniforms[key];
+        if (!u) return true;
+        const cur = u.value;
+        let v: any = value;
+        if (typeof v === 'boolean') v = v ? 1.0 : 0.0;
+        if (v === null || v === undefined) return cur !== v;
+        // Types we can't cheaply diff → treat as changed.
+        if (v.isGradientBuffer || v instanceof THREE.Texture || Array.isArray(v)) return true;
+        if (typeof v === 'number') {
+            return typeof cur === 'number' ? Math.abs(cur - v) > 1e-9 : true;
+        }
+        if (cur instanceof THREE.Vector2) {
+            return typeof v.x !== 'number' || Math.abs(cur.x - v.x) > 1e-9 || Math.abs(cur.y - v.y) > 1e-9;
+        }
+        if (cur instanceof THREE.Vector3) {
+            return typeof v.x !== 'number' || Math.abs(cur.x - v.x) > 1e-9 || Math.abs(cur.y - v.y) > 1e-9 || Math.abs(cur.z - v.z) > 1e-9;
+        }
+        if (cur instanceof THREE.Vector4) {
+            return typeof v.x !== 'number' || Math.abs(cur.x - v.x) > 1e-9 || Math.abs(cur.y - v.y) > 1e-9 || Math.abs(cur.z - v.z) > 1e-9 || Math.abs(cur.w - v.w) > 1e-9;
+        }
+        if (cur instanceof THREE.Color) {
+            if (v instanceof THREE.Color || typeof v.r === 'number') {
+                return Math.abs(cur.r - v.r) > 1e-9 || Math.abs(cur.g - v.g) > 1e-9 || Math.abs(cur.b - v.b) > 1e-9;
+            }
+            return true;
+        }
+        return true;
+    }
+
     public loadTexture(type: 'color' | 'env', dataUrl: string | null) {
         if (!dataUrl) {
             if (type === 'color') this.setUniform('uUseTexture', 0.0);

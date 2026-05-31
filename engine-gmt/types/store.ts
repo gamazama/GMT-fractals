@@ -148,7 +148,6 @@ export interface EngineStoreState extends FeatureStateMap {
   exportIncludeScene: boolean;
   
   showLightGizmo: boolean;
-  isGizmoDragging: boolean;
   draggedLightIndex: string | null;
   openLightPopupIndex: number;  // -1 = no popup open
   shadowPanelOpen: boolean;
@@ -282,7 +281,6 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setExportIncludeScene: (v: boolean) => void;
     
     setShowLightGizmo: (v: boolean) => void;
-    setGizmoDragging: (v: boolean) => void;
     setDraggedLight: (id: string | null) => void;
     setOpenLightPopupIndex: (index: number) => void;
     setShadowPanelOpen: (v: boolean) => void;

@@ -5,6 +5,7 @@ import { CameraMode } from '../types';
 import { useEngineStore as useFractalStore, selectMovementLock } from '../../store/engineStore';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { getCameraModifierFromEvent } from './modifiers';
+import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 const emptyMoveState = () => ({
     forward: false, backward: false, left: false, right: false,
@@ -71,11 +72,58 @@ export const useInputController = (
         // Scale roll by current speed (minimum 0.1 for usability at low speeds)
         const speedScale = Math.max(0.1, speedRef.current);
         rollVelocity.current += (targetRoll * speedScale - rollVelocity.current) * f;
-        
+
         if (targetRoll === 0 && Math.abs(rollVelocity.current) < 0.001) {
             rollVelocity.current = 0;
         }
     });
+
+    // ── ADR-0061 P4.0 — Fly-mode look + WASD/joystick → `camera` session ────────
+    // These are the camera producers P3a deferred (they entangle the lagged
+    // markActivity / isCameraInteracting proxy E3 migrates). Wire them now as an
+    // INDEPENDENT, balanced path under the `camera` token: Navigation's pointer-
+    // drag paths own their own open/close (camSessionOpen, release-driven), this
+    // owns the keyboard/joystick/fly-look path. Per the ADR, ref-counting under
+    // one token is safe ACROSS paths only when each path balances on its own —
+    // here the close is frame-edge driven (keyup/mouseup/joystick-zero all flip
+    // the refs deterministically) + unmount cleanup + the 8s watchdog backstop,
+    // so it cannot strand. Gated on !movementLock to MATCH the legacy proxy,
+    // which Navigation force-clears while locked (export/bucket/playback/gizmo) —
+    // keeping the session in agreement (near-zero divergence) and export-safe.
+    const moveSessionOpen = useRef(false);
+    useFrame(() => {
+        const ms = moveState.current;
+        const hasKeys = ms.forward || ms.backward || ms.left || ms.right || ms.up || ms.down || ms.rollLeft || ms.rollRight;
+        const jm = joystickMove.current, jl = joystickLook.current;
+        const hasJoy = Math.abs(jm.x) > 0.01 || Math.abs(jm.y) > 0.01 || Math.abs(jl.x) > 0.01 || Math.abs(jl.y) > 0.01;
+        const flyLook = mode === 'Fly' && isDraggingRef.current;
+        const locked = selectMovementLock(useFractalStore.getState());
+        const active = !locked && (flyLook || hasKeys || hasJoy);
+
+        const store = useFractalStore.getState();
+        if (active) {
+            if (!moveSessionOpen.current) {
+                moveSessionOpen.current = true;
+                store.beginInteraction(INTERACTION_SOURCES.camera);
+            } else {
+                // Keep the watchdog alive on long continuous flights (throttled,
+                // ref-only — no store write; the ADR-sanctioned poke exception).
+                store.pokeInteraction(INTERACTION_SOURCES.camera);
+            }
+        } else if (moveSessionOpen.current) {
+            moveSessionOpen.current = false;
+            store.endInteraction(INTERACTION_SOURCES.camera);
+        }
+    });
+
+    // Unmount cleanup — end an open movement session if the controller unmounts
+    // mid-flight (mode/route change). Balances any outstanding begin.
+    useEffect(() => () => {
+        if (moveSessionOpen.current) {
+            moveSessionOpen.current = false;
+            useFractalStore.getState().endInteraction(INTERACTION_SOURCES.camera);
+        }
+    }, []);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {

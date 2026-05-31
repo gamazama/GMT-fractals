@@ -127,8 +127,12 @@ export const usePhysicsProbe = (
                 // Focus Lock: sync dofFocus when distance changes meaningfully (>1%)
                 const smoothedDist = distAverageRef.current;
                 const store = useFractalStore.getState();
-                if (store.focusLock && isSurfaceHit(smoothedDist)) {
-                    const currentFocus = (store as any).optics?.dofFocus ?? 0;
+                // Only auto-track focus when DOF blur is actually on — otherwise
+                // dofFocus has no visual effect and nudging it from probe noise
+                // resets accumulation while the picture is unchanged.
+                const optics = (store as any).optics;
+                if (store.focusLock && (optics?.dofStrength ?? 0) > 0 && isSurfaceHit(smoothedDist)) {
+                    const currentFocus = optics?.dofFocus ?? 0;
                     const relChange = Math.abs(smoothedDist - currentFocus) / Math.max(currentFocus, 0.0001);
                     if (relChange > 0.01) {
                         (store as any).setOptics({ dofFocus: smoothedDist });

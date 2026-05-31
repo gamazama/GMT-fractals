@@ -8,6 +8,8 @@ const engine = getProxy();
 import { DrawnShape } from './index';
 import { FeatureComponentProps } from '../../../components/registry/ComponentRegistry';
 import { getViewportCamera, getViewportCanvas } from '../../engine/worker/ViewportRefs';
+import { useInteractionGesture } from '../../../engine/hooks/useInteractionDrag';
+import { INTERACTION_SOURCES } from '../../interaction/interactionSources';
 import {
     getOverlayViewport,
     projectWorldToXY,
@@ -452,6 +454,12 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
     const addDrawnShape = (useEngineStore.getState() as any).addDrawnShape;
     const { active, activeTool, originMode } = drawing;
 
+    // Session 'drawing' for the freehand shape drag (imperative canvas listener,
+    // single balanced path → the hook's begin/end + unmount cleanup fit; ADR-0061
+    // P3b). pointercancel/lostpointercapture are added to the canvas below so a
+    // touch interruption / capture loss releases the session (mitigation #1).
+    const { begin: beginDrawing, end: endDrawing } = useInteractionGesture(INTERACTION_SOURCES.drawing);
+
     const svgRef = useRef<SVGSVGElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const labelsRef = useRef<HTMLDivElement>(null);
@@ -618,6 +626,7 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
             const hit = raycastToPlane(e.clientX, e.clientY, rect);
             if (hit) {
                 isDragging.current = true;
+                beginDrawing();
                 anchor3D.current.copy(hit);
 
                 tempShapeRef.current = {
@@ -697,6 +706,7 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
         const handlePointerUp = (e: PointerEvent) => {
             if (!isDragging.current) return;
             isDragging.current = false;
+            endDrawing();
             canvas.releasePointerCapture(e.pointerId);
 
             const finalShape = tempShapeRef.current;
@@ -716,15 +726,28 @@ export const DrawingOverlay: React.FC<FeatureComponentProps> = () => {
             tempShapeRef.current = null;
         };
 
+        // Touch interruption / capture loss won't fire pointerup — release the
+        // session (and the drag flag) so it can't strand (ADR-0061 mitigation #1).
+        const handlePointerCancel = () => {
+            if (!isDragging.current) return;
+            isDragging.current = false;
+            endDrawing();
+            tempShapeRef.current = null;
+        };
+
         canvas.addEventListener('pointerdown', handlePointerDown);
         canvas.addEventListener('pointermove', handlePointerMove);
         canvas.addEventListener('pointerup', handlePointerUp);
+        canvas.addEventListener('pointercancel', handlePointerCancel);
+        canvas.addEventListener('lostpointercapture', handlePointerCancel);
         return () => {
             canvas.removeEventListener('pointerdown', handlePointerDown);
             canvas.removeEventListener('pointermove', handlePointerMove);
             canvas.removeEventListener('pointerup', handlePointerUp);
+            canvas.removeEventListener('pointercancel', handlePointerCancel);
+            canvas.removeEventListener('lostpointercapture', handlePointerCancel);
         };
-    }, [active, activeTool, originMode, getCamera, getCanvas, setDrawing, updatePlaneAndBasis, raycastToPlane, addDrawnShape]);
+    }, [active, activeTool, originMode, getCamera, getCanvas, setDrawing, updatePlaneAndBasis, raycastToPlane, addDrawnShape, beginDrawing, endDrawing]);
 
     // ── Render: minimal DOM structure — tick handles all positional updates ──
 
