@@ -29,34 +29,22 @@ const performanceState = {
 // Export tick function for orchestrated updates
 export const tick = () => {
     const now = performance.now();
-    
-    // Add current frame timestamp
-    performanceState.frameTimestamps.push(now);
-    
-    // Keep only last 2 seconds of timestamps
-    const twoSecondsAgo = now - 2000;
-    performanceState.frameTimestamps = performanceState.frameTimestamps.filter(t => t > twoSecondsAgo);
-    
     const delta = now - performanceState.lastTime;
-    
+
     // Poll every 500ms
     if (delta >= 500) {
-        // Calculate FPS using individual frame timings for more accuracy
-        let fps = 0;
-        if (performanceState.frameTimestamps.length > 1) {
-            const firstFrame = performanceState.frameTimestamps[0];
-            const lastFrame = performanceState.frameTimestamps[performanceState.frameTimestamps.length - 1];
-            const totalTime = lastFrame - firstFrame;
-            const framesRendered = performanceState.frameTimestamps.length - 1;
-            fps = (framesRendered / totalTime) * 1000;
-        }
-        
-        // Update Refs
         performanceState.lastTime = now;
-        performanceState.lastFrameCount = engine.frameCount;
 
         // --- Logic Gate ---
         const state = useEngineStore.getState();
+
+        // Use the engine's canonical smoothed FPS — the same value the FPS
+        // counter shows and adaptive resolution acts on. (Timing our own tick
+        // calls measured the main-thread loop, ~60fps, and never saw a heavy
+        // render.) Adaptive res holds raw FPS near target by downscaling, so
+        // fpsSmoothed only falls below the warning threshold when it genuinely
+        // can't keep up — i.e. adaptive is pinned at its quality floor or off.
+        const fps = state.fpsSmoothed;
 
         // Check if Accumulation is finished (Engine stops rendering intentionally)
         const isAccumulationComplete = state.sampleCap > 0 && engine.accumulationCount >= state.sampleCap;
