@@ -94,7 +94,7 @@ export const installBucketRender = (options: InstallBucketRenderOptions): void =
                     ref={mergeRefs(buttonRef, tutAnchor)}
                     type="button"
                     onClick={(e) => { e.stopPropagation(); handleToggle(); }}
-                    title="Render!"
+                    title="High-res render"
                     className={`flex items-center justify-center p-1 rounded border transition-colors ${
                         isBucketRendering
                             ? 'text-cyan-300 bg-cyan-900/30 border-cyan-500/40 animate-pulse'

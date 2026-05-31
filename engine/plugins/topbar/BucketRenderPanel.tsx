@@ -488,7 +488,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
         <Popover width="w-72" align={align}>
             <div className="relative space-y-2.5" data-help-id="bucket.render">
                 <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High Quality Render</span>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High-Res Render</span>
                     <div className="flex items-center gap-2">
                         {state.previewRegion && supportsPreview && (
                             <button

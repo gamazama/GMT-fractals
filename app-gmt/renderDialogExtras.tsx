@@ -124,7 +124,10 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
     // reflects the cost of the chosen quality.
     useEffect(() => {
         engineProxy.setPreviewSampleCap(cfg.samplesPerFrame);
-        return () => { engineProxy.setPreviewSampleCap(0); };
+        // Restore the VIEWPORT's sample cap on close — not 0 (unlimited). The
+        // store value is the user's selected cap; resetting the worker to 0
+        // left accumulation running forever past the displayed cap.
+        return () => { engineProxy.setPreviewSampleCap(useEngineStore.getState().sampleCap); };
     }, [cfg.samplesPerFrame]);
 
     // Adaptive resolution would otherwise drop quality during the
