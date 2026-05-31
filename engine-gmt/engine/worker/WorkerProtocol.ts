@@ -39,6 +39,9 @@ export interface WorkerShadowState {
     convergenceValue: number;
     frameCount: number;
     sceneOffset: SerializedOffset;
+    /** Read-only diagnostic (present-path workstream): cumulative adaptive
+     *  render-target resizes. Optional — only the engine-backed shadow sets it. */
+    fboResizes?: number;
 }
 
 // ─── Main Thread → Worker ───────────────────────────────────────────────

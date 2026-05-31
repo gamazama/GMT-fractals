@@ -483,6 +483,8 @@ export class WorkerProxy implements AccumulationController {
     get sceneOffset() { return this._localOffset; }
     get lastGeneratedFrag() { return this._lastGeneratedFrag; }
     get accumulationCount() { return this._shadow.accumulationCount; }
+    /** Read-only diagnostic (present-path workstream): cumulative adaptive FBO resizes. */
+    get fboResizes() { return this._shadow.fboResizes ?? 0; }
     get convergenceValue() { return this._shadow.convergenceValue; }
     get frameCount() { return this._shadow.frameCount; }
     get lastCompileDuration() { return this._shadow.lastCompileDuration; }

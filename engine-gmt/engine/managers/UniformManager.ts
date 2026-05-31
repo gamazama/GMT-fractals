@@ -15,6 +15,15 @@ import {
     tickAdaptiveResolution,
 } from '../../../engine/AdaptiveResolution';
 
+// Read-only diagnostic: how many times the adaptive loop has actually resized
+// the render target (each resize = a pipeline.resize + resetAccumulation, which
+// momentarily clears the buffer). Surfaced to the main thread via the worker
+// shadow state so the present-path workstream can classify the middle-drag
+// hitch — (b) resize thrash shows this counter climbing during a dolly while
+// orbit/pan leave it flat. NOT part of the render decision; pure observability.
+let _adaptiveResizeCount = 0;
+export function getAdaptiveResizeCount(): number { return _adaptiveResizeCount; }
+
 export class UniformManager {
     private uniforms: { [key: string]: THREE.IUniform };
     private virtualSpace: VirtualSpace;
@@ -180,6 +189,7 @@ export class UniformManager {
                 this.uniforms[Uniforms.Resolution].value.set(targetW, targetH);
                 this.pipeline.resize(targetW, targetH);
                 this.pipeline.resetAccumulation();
+                _adaptiveResizeCount++; // diagnostic (present-path workstream) — see getAdaptiveResizeCount
                 
                 if (materials) {
                     materials.displayMaterial.uniforms.uResolution.value.set(targetW, targetH);

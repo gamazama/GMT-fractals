@@ -19,6 +19,7 @@ import { WorkerDepthReadback } from './WorkerDepthReadback';
 import { BloomPass } from '../BloomPass';
 import { createFullscreenPass, type FullscreenPass } from '../utils/FullscreenQuad';
 import { handleRenderTick as runRenderTick } from './handleRenderTick';
+import { getAdaptiveResizeCount } from '../managers/UniformManager';
 
 let engine: FractalEngine | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
@@ -65,6 +66,7 @@ function getShadowState(): WorkerShadowState {
         accumulationCount: engine.pipeline?.accumulationCount ?? 0,
         convergenceValue: engine.pipeline?.getLastConvergenceResult() ?? 1.0,
         frameCount: 0,
+        fboResizes: getAdaptiveResizeCount(),
         sceneOffset: {
             x: offset.x, y: offset.y, z: offset.z,
             xL: offset.xL ?? 0, yL: offset.yL ?? 0, zL: offset.zL ?? 0
