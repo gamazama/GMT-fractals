@@ -1,6 +1,6 @@
-# GMT Development Changelog (v0.9.5 dev)
+# GMT Development Changelog (v0.9.6 dev)
 
-Chronological log of significant changes during the v0.9.5 development cycle (engine-extraction trunk; merges to `main` once stable).
+Chronological log of significant changes during the v0.9.6 development cycle (engine-extraction trunk; merges to `main` once stable).
 
 ## 2026-06-01
 
