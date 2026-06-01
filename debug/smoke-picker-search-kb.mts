@@ -80,7 +80,13 @@ async function main() {
     });
     await page.waitForTimeout(300);
     await page.fill('.formula-picker-shell input[type="text"]', 'bulb');
-    await page.waitForTimeout(1200);
+    // Thumbnails load async — poll until they render instead of a fixed delay
+    // (the fixed 1200ms was flaky in-chain under load). On timeout we fall
+    // through to the assertion below, so a genuine miss still fails loudly.
+    await page.waitForFunction(() => {
+        const shell = document.querySelector('.formula-picker-shell');
+        return !!shell && shell.querySelectorAll('img').length >= 1;
+    }, null, { timeout: 10000 }).catch(() => {});
     const searchProbe = await page.evaluate(() => {
         const shell = document.querySelector('.formula-picker-shell');
         if (!shell) return { catalogLabel: false, imgs: 0 };
