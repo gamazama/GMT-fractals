@@ -46,7 +46,9 @@ async function main() {
                 interiorDamp: 0.7,
                 edgeMargin: 0.05,
             },
-            // Orbit + sceneCamera are standalone; their fields should merge into coupling / julia.
+            // sceneCamera is standalone; its fields merge into julia. The
+            // standalone `orbit` slice is dropped (auto-orbit retired — it's
+            // now expressed as LFOs in `animations`, not a migrated param).
             orbit: { enabled: true, radius: 0.123, speed: 0.5 },
             sceneCamera: { center: { x: 0.25, y: -0.1 }, zoom: 3.2 },
         },
@@ -102,9 +104,6 @@ async function main() {
         coupling_forceGain: -900,
         coupling_interiorDamp: 0.7,
         coupling_edgeMargin: 0.05,
-        coupling_orbitEnabled: true,
-        coupling_orbitRadius: 0.123,
-        coupling_orbitSpeed: 0.5,
     };
 
     for (const [k, v] of Object.entries(expected)) {
@@ -115,6 +114,21 @@ async function main() {
                 ? JSON.stringify(got) === JSON.stringify(v)
                 : got === v;
         if (!ok) throw new Error(`after migration: ${k} expected ${JSON.stringify(v)}, got ${JSON.stringify(got)}`);
+    }
+
+    // Auto-orbit was retired: the migration drops the standalone `orbit`
+    // slice entirely and does NOT move its fields onto coupling.
+    if (state.coupling_orbitEnabled !== undefined ||
+        state.coupling_orbitRadius !== undefined ||
+        state.coupling_orbitSpeed !== undefined) {
+        throw new Error(`orbit should be dropped, not migrated onto coupling: ${JSON.stringify({
+            orbitEnabled: state.coupling_orbitEnabled,
+            orbitRadius: state.coupling_orbitRadius,
+            orbitSpeed: state.coupling_orbitSpeed,
+        })}`);
+    }
+    if (state.stale_orbit !== undefined) {
+        throw new Error(`stale orbit slice should be removed after migration, got ${JSON.stringify(state.stale_orbit)}`);
     }
 
     assertNoFatalErrors();

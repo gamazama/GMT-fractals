@@ -8,8 +8,8 @@
  * save→mutate→load cycle via SceneFormat + the store's preset round-trip.
  *
  * SceneCameraFeature + OrbitFeature were retired during the tab-parity
- * restructure — zoom/center merged onto julia, orbit enabled/radius/
- * speed merged onto coupling.
+ * restructure — zoom/center merged onto julia; auto-orbit is now two
+ * 90°-phase LFOs in `animations`, not a coupling param.
  */
 import { chromium } from 'playwright';
 
@@ -46,7 +46,7 @@ async function main() {
     await page.evaluate(() => {
         const s = (window as any).__store?.getState?.();
         s.setJulia({ juliaC: { x: 0.3, y: -0.45 }, maxIter: 128, power: 3.5, zoom: 3.2, center: { x: 0.25, y: -0.1 } });
-        s.setCoupling({ forceMode: 2, forceGain: -800, orbitRadius: 0.12 });
+        s.setCoupling({ forceMode: 2, forceGain: -800, interiorDamp: 0.7 });
         s.setPalette({ gradientRepeat: 2.5, colorIter: 120 });
         s.setComposite({ dyeMix: 1.5 });
         s.setFluidSim({ vorticity: 40, pressureIters: 55, dyeInject: 2.2, dyeDissipation: 2.1 });
@@ -60,7 +60,7 @@ async function main() {
             ju_iter: s.julia.maxIter,
             ju_zoom: s.julia.zoom,
             cp_mode: s.coupling.forceMode,
-            cp_rad:  s.coupling.orbitRadius,
+            cp_damp: s.coupling.interiorDamp,
             pa_rep:  s.palette.gradientRepeat,
             pa_ci:   s.palette.colorIter,
             co_mix:  s.composite.dyeMix,
@@ -87,7 +87,7 @@ async function main() {
     await page.evaluate(() => {
         const s = (window as any).__store?.getState?.();
         s.setJulia({ power: 2, zoom: 1 });
-        s.setCoupling({ forceMode: 0, orbitRadius: 0 });
+        s.setCoupling({ forceMode: 0, interiorDamp: 0 });
         s.setPalette({ colorIter: 50 });
         s.setComposite({ dyeMix: 0 });
         s.setFluidSim({ vorticity: 0, dyeInject: 0 });
@@ -107,7 +107,7 @@ async function main() {
             ju_iter: s.julia.maxIter,
             ju_zoom: s.julia.zoom,
             cp_mode: s.coupling.forceMode,
-            cp_rad:  s.coupling.orbitRadius,
+            cp_damp: s.coupling.interiorDamp,
             pa_rep:  s.palette.gradientRepeat,
             pa_ci:   s.palette.colorIter,
             co_mix:  s.composite.dyeMix,

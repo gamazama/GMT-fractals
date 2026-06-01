@@ -17,7 +17,8 @@
  *       - dye.dyeDecayMode → fluidSim.dyeDecayMode
  *       - dye.dyeChromaDecayHz → fluidSim.dyeChromaDecayHz
  *       - dye.dyeSaturationBoost → fluidSim.dyeSaturationBoost
- *       - orbit.* → coupling.orbit*       (merged + prefixed)
+ *       - orbit.*                          (dropped — auto-orbit retired;
+ *                                          now two 90°-phase LFOs in `animations`)
  *       - fluidSim.force*, interiorDamp, forceCap, edgeMargin → coupling.*
  *       - sceneCamera.center/zoom → julia.center/julia.zoom
  */
@@ -59,13 +60,11 @@ registerMigration({
         moveField(p, 'fluidSim.forceCap',      'coupling.forceCap');
         moveField(p, 'fluidSim.edgeMargin',    'coupling.edgeMargin');
 
-        // Orbit merged into coupling with a prefix.
-        moveField(p, 'orbit.enabled', 'coupling.orbitEnabled');
-        moveField(p, 'orbit.radius',  'coupling.orbitRadius');
-        moveField(p, 'orbit.speed',   'coupling.orbitSpeed');
-        if (p.features.orbit && Object.keys(p.features.orbit).length === 0) {
-            delete p.features.orbit;
-        }
+        // Auto-orbit was retired: the bespoke orbitTick driver is gone and
+        // presets now express the orbit as two 90°-phase LFOs in
+        // `animations`. Drop the dead `orbit` slice from pre-restructure
+        // presets — none of its fields are consumed by any feature anymore.
+        delete p.features.orbit;
 
         // Scene-camera merged into julia (reference puts pan/zoom on the
         // Fractal tab).

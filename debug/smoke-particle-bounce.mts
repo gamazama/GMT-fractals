@@ -103,7 +103,9 @@ async function main() {
         // tunnel through narrow walls in one step. Real particles ride
         // at ~0.3 UV/sec with drag, so this is the conservative edge.
         const speed = 0.15;
-        for (let i = 0; i < 8; i++) {
+        // 16 particles (not 8) so at least one clears the 75%-slowdown bar
+        // even when the chain-load RAF steps fewer frames in the window.
+        for (let i = 0; i < 16; i++) {
             rt.particles.push({
                 x: free[0] + (Math.random() - 0.5) * 0.01,
                 y: free[1] + (Math.random() - 0.5) * 0.01,
@@ -123,8 +125,10 @@ async function main() {
     });
 
     // Let the sim run — the RAF loop in FluidToyApp steps particles every
-    // frame and calls stepBrush → stepParticles → bounce.
-    await page.waitForTimeout(800);
+    // frame and calls stepBrush → stepParticles → bounce. 1200ms gives the
+    // particles enough frames to reach + reflect off the wall even under
+    // chain load (where RAF cadence drops).
+    await page.waitForTimeout(1200);
 
     // Check outcome.
     const final = await page.evaluate(() => {

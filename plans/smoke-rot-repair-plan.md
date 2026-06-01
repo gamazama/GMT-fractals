@@ -120,3 +120,24 @@ Owner decisions locked: **keep+fix everything (no cuts); fluid-toy IS a v1 prior
 7. **Finalize** — re-add every repaired smoke to `smoke:all`; green end-to-end run.
 
 **Process note:** the screenshots some smokes write live as *tracked* `debug/*.png`; running a smoke dirties them. Revert with `git checkout -- "debug/*.png"` (NEVER `git checkout -- debug/` — that also reverts source `.mts` edits in debug/).
+
+## DONE — session 3 (2026-06-01): all 10 + orbit repaired, suite is 39/39
+
+**Phase 0 (re-run + verify):** `smoke:all` (the 28) re-ran green end-to-end in-chain (exit 0) — the picker fix held, `workshop-state` passed. In-app probe nailed every cluster:
+- **Cluster 1 is a real (but minor) bug, not stale-rot.** Auto-orbit was deliberately retired on 04-29 (`coupling.ts` is the newest file; `orbitTick` gone, replaced by manual Modulation-panel LFOs). But the `O` hotkey + right-click "Auto Orbit" menu item + the migration were left behind, toggling `coupling.orbitEnabled` — an **undeclared param that drives nothing** (probe: enabling it left `animations=0` and juliaC unmoved). The asymmetry that `getPreset` dumps the live field but `loadPreset` only re-applies declared params is exactly the `cp_rad: 0.12→0` failure.
+- **Cluster 4 wheel:** NOT an app bug — `julia.zoom` changes correctly via a synthetic `WheelEvent` (1.5→1.379, wheel-up = zoom in); Playwright's `page.mouse.wheel` just doesn't reach the `{passive:false}` canvas listener in headless. **particle-bounce:** passes (was a thin-margin flake). **demo smokes:** `demo` slice + `Demo`/`Animation` panels intact; root `/` is now a static landing page → repoint to `demo.html`.
+
+**Owner decision: FINISH THE REMOVAL** (don't resurrect auto-orbit).
+
+**App cleanup (fluid-toy):** removed the dead `O` hotkey + the context-menu "Start/Stop Auto Orbit" item + the vestigial `orbit.*→coupling.orbit*` migration (now drops the dead `orbit` slice); updated the now-stale comments in `hotkeys.ts` / `contextMenu.ts` / `migrations.ts` / `registerFeatures.ts`.
+
+**Smokes repaired (11):**
+- C1 — `anim-orbit` rewritten to drive the orbit via two 90°-phase LFOs on `julia.juliaC_x/_y` (the real mechanism `presets/apply.ts` ships) and assert relative-add `liveModulations`; `fluid-presets` dropped the `orbitEnabled` probe **and** fixed a second masked staleness (`dyeBlend` moved palette→fluidSim); `migrations` now asserts the `orbit` slice is dropped (not migrated onto coupling).
+- C2 — `camera`: `setSceneCamera`/`sceneCamera` → `setJulia`/`julia` (slot API unchanged).
+- C3 — `interact` / `engine-demo` / `engine-demo-modulation`: URL → `demo.html`; **+2 missing package.json scripts**; the modulation smoke's vacuous DOM-`style.left` wiggle check (the square is canvas-painted now → was NaN-passing) replaced with a real canvas-centroid render proof (408px sweep).
+- C4 — `canvas-pan-zoom`: `sceneCamera`→`julia`, synthetic `WheelEvent` + `waitForFunction`, and pan assertion moved to the post-pointerup committed value (pan bypasses the store mid-gesture); `fluid-toy`: `cp_rad`/`orbitRadius` → real `interiorDamp` round-trip; `particle-bounce`: 8→16 particles + 800→1200ms settle (margin 2/8 → 3-4/16).
+- C5 — `orbit`: rewritten from a non-asserting logger to assert `__gmtProxy.sceneOffset` changed (Δ≈6.9) + accumulation resumes (polled, 8s), dead `__r3fCamera`/`__getOrbitTarget` reads removed; no more tracked-PNG churn.
+
+**`smoke:all` now runs all 39** (28 + the 11 repaired). Each verified green individually; full-chain re-run was the finalize gate.
+
+**Follow-up (not done — out of scope / read-only-docs guardrail):** `docs/FEATURE_STATUS.md:80,87` still claim the auto-orbit *toggle* "registers two LFOs ✅" and "O — Toggle Julia-c auto-orbit ✅" — both now false (toggle removed). Worth correcting when docs are next touched.

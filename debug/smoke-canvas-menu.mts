@@ -4,7 +4,8 @@
  * Right-clicks on the fluid-toy canvas; asserts:
  *   - native browser menu did NOT appear (preventDefault fired)
  *   - store.contextMenu.visible is true
- *   - items include labeled actions for Copy C, Pause, Orbit, Recenter, Reset
+ *   - items include labeled actions for Copy C, Pause, Recenter, Reset
+ *     (the "Auto Orbit" item was removed when auto-orbit was retired)
  */
 import { chromium } from 'playwright';
 
@@ -42,7 +43,7 @@ async function main() {
     console.log('menu:', JSON.stringify(menu));
 
     if (!menu.visible) throw new Error('context menu did not open');
-    const needed = ['Copy Julia c', 'Pause', 'Orbit', 'Recenter', 'Reset'];
+    const needed = ['Copy Julia c', 'Pause', 'Recenter', 'Reset'];
     for (const n of needed) {
         const hit = menu.itemLabels.find((l: string) => l.includes(n));
         if (!hit) throw new Error(`menu missing "${n}" (got: ${JSON.stringify(menu.itemLabels)})`);

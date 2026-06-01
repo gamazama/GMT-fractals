@@ -6,7 +6,7 @@
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/demo.html';
 
 async function main() {
     const browser = await chromium.launch();

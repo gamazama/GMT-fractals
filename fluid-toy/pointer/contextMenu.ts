@@ -33,7 +33,6 @@ export const useCanvasContextMenu = (
             }
             const s = useEngineStore.getState();
             const juliaC = s.julia?.juliaC;
-            const orbitOn = !!s.coupling?.orbitEnabled;
             const paused = !!s.fluidSim?.paused;
 
             const items: ContextMenuItem[] = [
@@ -48,10 +47,6 @@ export const useCanvasContextMenu = (
                 {
                     label: paused ? 'Resume Sim' : 'Pause Sim',
                     action: () => { s.setFluidSim({ paused: !paused }); },
-                },
-                {
-                    label: orbitOn ? 'Stop Auto Orbit' : 'Start Auto Orbit',
-                    action: () => { s.setCoupling({ orbitEnabled: !orbitOn }); },
                 },
                 {
                     label: 'Recenter View',

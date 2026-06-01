@@ -1,5 +1,5 @@
 /**
- * Smoke test for the engine demo entry (`/`).
+ * Smoke test for the engine demo entry (`demo.html`).
  *
  * Verifies that the bare-metal demo with all installed plugins boots
  * cleanly, the demo square renders, the param panel mounts, the
@@ -13,7 +13,7 @@
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/demo.html';
 
 async function main() {
     const browser = await chromium.launch();

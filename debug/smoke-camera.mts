@@ -27,16 +27,18 @@ async function main() {
         window.__cameraPlugin = null;
     `);
 
-    // Step 1: set an initial camera state and save to slot 3.
+    // Step 1: set an initial camera state and save to slot 3. The 2D
+    // scene camera lives on the julia slice now (center + zoom); the
+    // camera plugin's adapter captures/applies exactly those fields.
     await page.evaluate(() => {
         const s = (window as any).__store.getState();
-        s.setSceneCamera({ center: { x: 0.5, y: -0.25 }, zoom: 2 });
+        s.setJulia({ center: { x: 0.5, y: -0.25 }, zoom: 2 });
     });
     await page.waitForTimeout(100);
 
     const initialCam = await page.evaluate(() => {
         const s = (window as any).__store.getState();
-        return { ...s.sceneCamera };
+        return { center: { ...s.julia.center }, zoom: s.julia.zoom };
     });
     console.log('initial camera:', JSON.stringify(initialCam));
 
@@ -56,7 +58,7 @@ async function main() {
     // Step 2: mutate the camera to something different.
     await page.evaluate(() => {
         const s = (window as any).__store.getState();
-        s.setSceneCamera({ center: { x: -1, y: 1 }, zoom: 0.5 });
+        s.setJulia({ center: { x: -1, y: 1 }, zoom: 0.5 });
     });
     await page.waitForTimeout(100);
 
@@ -66,7 +68,10 @@ async function main() {
     });
     await page.waitForTimeout(100);
 
-    const afterRecall = await page.evaluate(() => ({ ...(window as any).__store.getState().sceneCamera }));
+    const afterRecall = await page.evaluate(() => {
+        const j = (window as any).__store.getState().julia;
+        return { center: { ...j.center }, zoom: j.zoom };
+    });
     console.log('after recall:', JSON.stringify(afterRecall));
     if (Math.abs(afterRecall.center.x - initialCam.center.x) > 1e-6) {
         throw new Error(`recall failed for center.x: expected ${initialCam.center.x}, got ${afterRecall.center.x}`);

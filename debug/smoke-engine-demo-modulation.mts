@@ -15,10 +15,7 @@
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/';
-
-const BASELINE_LEFT = 50;     // % — demo.position.x default is 0 → 50% left
-const MIN_DELTA_PCT = 1.0;    // % — LFO amplitude 0.5 → ±20% sweep, easy to detect
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/demo.html';
 
 async function main() {
     const browser = await chromium.launch();
@@ -61,15 +58,12 @@ async function main() {
     console.log('LFO Modulators heading visible:', lfoListVisible);
     if (!lfoListVisible) throw new Error('lfo-list widget did not render inside Animation panel');
 
-    // 2) baseline square position
-    const overlaySel = 'div[class*="pointer-events-none"][class*="z-["] > div';
-    const baseline = await page.evaluate((sel) => {
-        const el = document.querySelector(sel) as HTMLElement | null;
-        if (!el) return null;
-        return { left: el.style.left, top: el.style.top, width: el.style.width };
-    }, overlaySel);
-    console.log('baseline overlay style:', baseline);
-    if (!baseline) throw new Error('Demo overlay not found');
+    // 2) The demo square is canvas-painted (no positioned DOM element),
+    //    so confirm the overlay canvas exists for the render proof below.
+    // NB: the demo app also mounts the engine's WebGL canvas (no class);
+    // the DemoOverlay 2D canvas is the one with the pointer-events-none class.
+    const haveCanvas = await page.evaluate(() => !!document.querySelector('canvas.pointer-events-none'));
+    if (!haveCanvas) throw new Error('Demo overlay canvas not found');
 
     // 3) push an LFO programmatically (faster than clicking through the
     //    widget UI — and the widget is already smoke-covered by being
@@ -108,23 +102,40 @@ async function main() {
         );
     }
 
-    // 6) overlay actually moved
-    const sampledLefts: number[] = [];
-    for (let i = 0; i < 6; i++) {
+    // 6) overlay actually re-renders from the LFO. The square is painted
+    //    to a <canvas> at cx ∝ (0.5 + posX·0.4), so as the position_x LFO
+    //    sweeps, the painted square's horizontal centroid must move.
+    //    Sample the centroid of bright (non-background) pixels on the
+    //    canvas's middle row across several frames.
+    const sampleCentroid = () => {
+        const c = document.querySelector('canvas.pointer-events-none') as HTMLCanvasElement | null;
+        if (!c || !c.width || !c.height) return NaN;
+        const ctx = c.getContext('2d');
+        if (!ctx) return NaN;
+        const row = Math.floor(c.height / 2);
+        const data = ctx.getImageData(0, row, c.width, 1).data;
+        let sum = 0, n = 0;
+        for (let x = 0; x < c.width; x++) {
+            const i = x * 4;
+            // background is #111111 (sum 51); painted square is brighter.
+            if (data[i] + data[i + 1] + data[i + 2] > 90) { sum += x; n++; }
+        }
+        return n > 0 ? sum / n : NaN;
+    };
+    const centroids: number[] = [];
+    for (let i = 0; i < 8; i++) {
         await page.waitForTimeout(60);
-        const left = await page.evaluate((sel) => {
-            const el = document.querySelector(sel) as HTMLElement | null;
-            return el ? parseFloat(el.style.left) : NaN;
-        }, overlaySel);
-        sampledLefts.push(left);
+        const cxt = await page.evaluate(sampleCentroid);
+        if (Number.isFinite(cxt)) centroids.push(cxt as number);
     }
-    const minL = Math.min(...sampledLefts);
-    const maxL = Math.max(...sampledLefts);
-    const sweep = maxL - minL;
-    console.log('overlay left samples:', sampledLefts.map(v => v.toFixed(1)).join(' '));
-    console.log(`overlay sweep: ${sweep.toFixed(2)}% (min ${minL.toFixed(1)}, max ${maxL.toFixed(1)}, baseline ${BASELINE_LEFT}%)`);
-    if (sweep < MIN_DELTA_PCT) {
-        throw new Error(`Overlay did not wiggle — sweep ${sweep.toFixed(2)}% < ${MIN_DELTA_PCT}%. DemoOverlay may not be reading liveModulations correctly.`);
+    console.log('square x-centroids:', centroids.map((v) => v.toFixed(0)).join(' '));
+    if (centroids.length < 4) {
+        throw new Error(`could not sample the painted square (${centroids.length} finite centroids) — DemoOverlay canvas not rendering?`);
+    }
+    const sweepPx = Math.max(...centroids) - Math.min(...centroids);
+    console.log(`square centroid sweep: ${sweepPx.toFixed(1)}px`);
+    if (sweepPx < 5) {
+        throw new Error(`square did not move — centroid sweep ${sweepPx.toFixed(1)}px < 5px. DemoOverlay may not be reading liveModulations.`);
     }
 
     // 7) min/max path — RELATIVE strengths (offset added to baseValue).

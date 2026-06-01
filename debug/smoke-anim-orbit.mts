@@ -1,16 +1,24 @@
 /**
- * Smoke test for F13 — orbit LFO drives juliaC via liveModulations.
+ * Smoke test for Julia-c auto-orbit via LFO modulation.
  *
- * Turns on auto-orbit. OrbitTick installs two sine LFOs targeting
- * `julia.juliaC_x` and `julia.juliaC_y`. After a few RAF frames, the
- * store's `liveModulations` map should contain non-zero values for
- * those keys — proving that AnimationSystem.tsx's no-uniform DDFS
- * vec path populates liveModulations (not silently hijacked by the
- * old `julia.*` branch which required GMT's `geometry` slice).
+ * Auto-orbit is no longer a bespoke toggle/orbitTick — it's expressed as
+ * two normal Sine LFOs at 90° phase on `julia.juliaC_x` / `_y` (authored
+ * via the Modulation panel; presets ship the same two LFOs through
+ * presets/apply.ts). AnimationSystem's generic vec-component handler does
+ * a *relative add* — liveModulations[target] = authored juliaC + offset —
+ * so the orbit circles the current c base rather than snapping to a bare
+ * offset.
+ *
+ * This smoke pushes those two LFOs directly (faster than clicking through
+ * the lfo-list widget) and asserts the store's `liveModulations` map gains
+ * finite values for both juliaC components, each within the orbit radius
+ * of the base — proving the no-uniform DDFS vec path populates
+ * liveModulations (not silently hijacked by GMT's `geometry`-gated branch).
  */
 import { chromium } from 'playwright';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/fluid-toy.html';
+const RADIUS = 0.2;
 
 async function main() {
     const browser = await chromium.launch();
@@ -29,19 +37,21 @@ async function main() {
         return {
             juliaC_x: s.julia.juliaC.x,
             juliaC_y: s.julia.juliaC.y,
-            orbitEnabled: s.orbit?.enabled ?? false,
             animationsCount: (s.animations ?? []).length,
         };
     });
     console.log('baseline:', JSON.stringify(baseline));
 
-    // Enable orbit — orbitTick.installOrbitSync() subscribes to this and
-    // pushes two sine LFOs into state.animations.
-    await page.evaluate(() => {
+    // Install the two-LFO orbit (Sine on juliaC_x/_y, 90° apart). This is
+    // exactly what presets/apply.ts ships for "legacy auto-orbit" presets.
+    await page.evaluate((r) => {
         const s = (window as any).__store.getState();
-        s.setOrbit({ enabled: true, radius: 0.2, speed: 2 });
-    });
-    // Give RAF + modulationEngine a few frames to compute the first LFO offsets.
+        s.setAnimations([
+            { id: 'orbit-x', enabled: true, target: 'julia.juliaC_x', shape: 'Sine', period: 0.5, amplitude: r, baseValue: 0, phase: 0,    smoothing: 0 },
+            { id: 'orbit-y', enabled: true, target: 'julia.juliaC_y', shape: 'Sine', period: 0.5, amplitude: r, baseValue: 0, phase: 0.25, smoothing: 0 },
+        ]);
+    }, RADIUS);
+    // Give RAF + modulationTick a few frames to compute the first offsets.
     await page.waitForTimeout(500);
 
     const running = await page.evaluate(() => {
@@ -56,7 +66,7 @@ async function main() {
     console.log('running: ', JSON.stringify(running));
 
     if (running.animationsCount < 2) {
-        throw new Error(`orbit did not register LFOs (count=${running.animationsCount})`);
+        throw new Error(`orbit LFOs not registered (count=${running.animationsCount})`);
     }
     if (!running.animationsTargets.includes('julia.juliaC_x') || !running.animationsTargets.includes('julia.juliaC_y')) {
         throw new Error(`orbit LFO targets wrong: ${JSON.stringify(running.animationsTargets)}`);
@@ -69,21 +79,21 @@ async function main() {
     // store's juliaC.x/y. Confirm it's within radius of the base.
     const dx = Math.abs(running.liveMod_juliaC_x - baseline.juliaC_x);
     const dy = Math.abs(running.liveMod_juliaC_y - baseline.juliaC_y);
-    if (dx > 0.25 || dy > 0.25) {
-        throw new Error(`liveMod orbit too far from base (dx=${dx}, dy=${dy}); expected within radius=0.2`);
+    if (dx > RADIUS + 0.05 || dy > RADIUS + 0.05) {
+        throw new Error(`liveMod orbit too far from base (dx=${dx}, dy=${dy}); expected within radius=${RADIUS}`);
     }
 
-    // Verify the orbit is NOT just writing the bare offset (base=0).
-    // The liveMod value should be near the base, not near 0.
+    // Verify the orbit is a RELATIVE add (base + offset), not the bare
+    // offset (base=0). The liveMod value should sit near the base, not 0.
     if (Math.abs(running.liveMod_juliaC_x) < 0.05 && Math.abs(baseline.juliaC_x) > 0.1) {
-        throw new Error(`liveMod looks like bare offset (juliaC_x=${running.liveMod_juliaC_x}) when base was ${baseline.juliaC_x}; julia.* hijack may still be firing`);
+        throw new Error(`liveMod looks like bare offset (juliaC_x=${running.liveMod_juliaC_x}) when base was ${baseline.juliaC_x}; the relative-add vec path may be broken`);
     }
 
     if (errors.length > 0) {
         throw new Error('page errors during smoke:\n  ' + errors.join('\n  '));
     }
 
-    console.log(`\n✓ orbit LFO writes liveModulations for julia.juliaC_x/_y`);
+    console.log(`\n✓ two-LFO orbit writes liveModulations for julia.juliaC_x/_y (relative add)`);
     console.log(`  base juliaC: (${baseline.juliaC_x.toFixed(3)}, ${baseline.juliaC_y.toFixed(3)})`);
     console.log(`  live juliaC: (${running.liveMod_juliaC_x.toFixed(3)}, ${running.liveMod_juliaC_y.toFixed(3)})`);
     await browser.close();

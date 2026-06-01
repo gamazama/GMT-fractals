@@ -50,8 +50,8 @@ featureRegistry.register(JuliaFeature);
 // phase 1; engine wires later. See plans/fluid-toy-deep-zoom.md.
 featureRegistry.register(DeepZoomFeature);
 
-// Coupling tab — force mode + intensity knobs + auto-orbit subsection.
-// Absorbs the pre-refactor split across FluidSim (force*) and Orbit.
+// Coupling tab — force mode + intensity knobs. Absorbs the force* params
+// from the pre-refactor FluidSim tab.
 featureRegistry.register(CouplingFeature);
 
 // Palette tab — gradient, colour mapping, trap geometry, colour iter,
@@ -70,7 +70,8 @@ featureRegistry.register(CollisionFeature);
 featureRegistry.register(FluidSimFeature);
 
 // (SceneCameraFeature retired — zoom + center moved onto JuliaFeature.)
-// (OrbitFeature retired — orbitEnabled/Radius/Speed moved onto CouplingFeature.)
+// (OrbitFeature retired — auto-orbit is now two 90°-phase LFOs on
+//  julia.juliaC_x/_y, authored via the Modulation panel; see coupling.ts.)
 
 // PostFX — tone mapping, exposure, vibrance, bloom, aberration,
 // refraction, caustics, fluid style presets. Pure display-stage knobs.

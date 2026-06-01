@@ -44,10 +44,9 @@ async function main() {
             maxIter:       s.julia.maxIter,
             forceMode:     s.coupling.forceMode,
             forceGain:     s.coupling.forceGain,
-            orbitEnabled:  s.coupling.orbitEnabled,
             colorMapping:  s.palette.colorMapping,
             colorIter:     s.palette.colorIter,
-            dyeBlend:      s.palette.dyeBlend,
+            dyeBlend:      s.fluidSim.dyeBlend,  // moved palette → fluidSim in the tab-parity restructure
             show:          s.composite.show,
             toneMapping:   s.postFx.toneMapping,
             bloom:         s.postFx.bloomAmount,
@@ -61,7 +60,7 @@ async function main() {
     // maxIter: 182
     // forceMode: 'curl' → 1
     // forceGain: -760
-    // orbit: omitted → disabled
+    // (orbit omitted — auto-orbit is now LFOs in `animations`, not a coupling param)
     // colorMapping: 'orbit-point' → 5
     // colorIter: 96
     // dyeBlend: 'add' → 0
@@ -71,7 +70,7 @@ async function main() {
     // collisionEnabled: true
     const expected = {
         kind: 0, juliaCx: -0.8173594132029339, maxIter: 182,
-        forceMode: 1, forceGain: -760, orbitEnabled: false,
+        forceMode: 1, forceGain: -760,
         colorMapping: 5, colorIter: 96, dyeBlend: 0,
         show: 0, toneMapping: 3, bloom: 1.35, collisionOn: true,
     };

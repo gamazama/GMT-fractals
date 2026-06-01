@@ -30,12 +30,13 @@ async function main() {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
 
+    // The 2D scene camera lives on the julia slice now (center + zoom).
     const read = () => page.evaluate(() => {
         const s = (window as any).__store.getState();
         return {
-            centerX: s.sceneCamera?.center?.x,
-            centerY: s.sceneCamera?.center?.y,
-            zoom: s.sceneCamera?.zoom,
+            centerX: s.julia?.center?.x,
+            centerY: s.julia?.center?.y,
+            zoom: s.julia?.zoom,
             menuVisible: s.contextMenu?.visible,
         };
     });
@@ -44,9 +45,22 @@ async function main() {
     console.log('baseline:     ', JSON.stringify(baseline));
 
     // ── 1. Wheel zoom ────────────────────────────────────────────────
-    await page.mouse.move(cx, cy);
-    await page.mouse.wheel(0, -200);  // scroll up → zoom in
-    await page.waitForTimeout(100);
+    // Playwright's page.mouse.wheel does NOT trigger the canvas's
+    // {passive:false} wheel listener in headless Chromium, so dispatch a
+    // real WheelEvent on the canvas instead. The handler debounces a
+    // commit to the store on a 100ms idle timer, so wait for julia.zoom
+    // to actually change rather than racing a fixed timeout.
+    await page.evaluate(({ x, y }) => {
+        const c = document.querySelector('canvas')!;
+        c.dispatchEvent(new WheelEvent('wheel', {
+            deltaY: -200, clientX: x, clientY: y, bubbles: true, cancelable: true,
+        }));
+    }, { x: cx, y: cy });
+    await page.waitForFunction(
+        (z0) => (window as any).__store.getState().julia.zoom !== z0,
+        baseline.zoom,
+        { timeout: 3000 },
+    ).catch(() => { /* fall through to the assertion below for a clear message */ });
     const afterWheel = await read();
     console.log('after wheel:  ', JSON.stringify(afterWheel));
     if (afterWheel.zoom === baseline.zoom) {
@@ -58,7 +72,7 @@ async function main() {
 
     // Reset so the drag test starts from a known state.
     await page.evaluate(() => {
-        (window as any).__store.getState().setSceneCamera({ center: { x: 0, y: 0 }, zoom: 1.5 });
+        (window as any).__store.getState().setJulia({ center: { x: 0, y: 0 }, zoom: 1.5 });
         (window as any).__store.getState().closeContextMenu();
     });
     await page.waitForTimeout(50);
@@ -70,12 +84,14 @@ async function main() {
     const duringDrag = await read();
     console.log('during drag:  ', JSON.stringify(duringDrag));
     await page.mouse.up({ button: 'right' });
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(150);
     const afterDrag = await read();
     console.log('after drag:   ', JSON.stringify(afterDrag));
 
-    if (duringDrag.centerX === 0) {
-        throw new Error(`pan did not move center during drag (still ${duringDrag.centerX})`);
+    // Pan bypasses the store during the gesture and commits one setJulia on
+    // pointerup (see pointer/handlers.ts), so assert on the committed value.
+    if (!afterDrag.centerX || Math.abs(afterDrag.centerX) < 1e-9) {
+        throw new Error(`pan did not move center (after drag still ${afterDrag.centerX})`);
     }
     if (afterDrag.menuVisible) {
         throw new Error(`context menu opened after pan drag — should be suppressed`);

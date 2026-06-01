@@ -8,7 +8,6 @@
  * Canonical fluid-toy hotkeys (from the original prototype):
  *   Space = pause / unpause the sim (flip fluidSim.paused)
  *   R     = reset fluid fields (dye + velocity → zero; FluidEngine.resetFluid)
- *   O     = toggle auto-orbit
  *   Home  = recenter view (julia.center=[0,0], zoom=1.5)
  *
  * R requires an engine handle, so it takes an engineRef. All others
@@ -40,17 +39,6 @@ export const registerFluidToyHotkeys = (engineRef: React.RefObject<FluidEngine |
         description: 'Reset fluid fields (dye + velocity → zero)',
         category: 'Playback',
         handler: () => { engineRef.current?.resetFluid(); },
-    });
-
-    shortcuts.register({
-        id: 'fluid-toy.orbit-toggle',
-        key: 'O',
-        description: 'Toggle Julia-c auto-orbit',
-        category: 'Simulation',
-        handler: () => {
-            const s = useEngineStore.getState();
-            s.setCoupling({ orbitEnabled: !s.coupling?.orbitEnabled });
-        },
     });
 
     shortcuts.register({
