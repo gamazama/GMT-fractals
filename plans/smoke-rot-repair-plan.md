@@ -96,3 +96,27 @@ passed this run could flake under different load).
 **Path to a reliable `smoke:all`:**
 - **A. Harden + iterate:** fix picker-search-kb’s wait, re-run `smoke:all`, fix the next flake it surfaces, repeat until green end-to-end. Most robust; iterative (~8 min/round).
 - **B. Curate subset:** drop picker-search-kb (+ any further flakies) from `smoke:all` (still runnable individually) for a fast reliable gate now; harden the dropped ones as a follow-up.
+
+## Session handoff — START HERE next session (2026-05-31, round 2)
+
+Owner decisions locked: **keep+fix everything (no cuts); fluid-toy IS a v1 priority; Path A** (harden flaky waits + iterate `smoke:all` to green).
+
+**Done this session (warm, committed):**
+- Cluster 6 — `smoke-picker-search-kb` thumbnail wait hardened (`waitForTimeout`→`waitForFunction`), verified solo (thumbs 15, PASS). Commit `1108e56`.
+
+**IMPORTANT reclassification — Cluster 1 is NOT pure stale-rot; it may be a real incomplete refactor (verify in-app, do NOT blindly repoint):**
+- `smoke-fluid-presets` already reads the *new* `s.coupling.orbitEnabled` and gets `undefined` (expects `false`).
+- `smoke-migrations` migrates `orbit.enabled:true` and expects `coupling.orbitEnabled===true`, gets `undefined` — despite `moveField('orbit.enabled','coupling.orbitEnabled')` existing (`fluid-toy/migrations.ts:63`).
+- ⇒ The OrbitFeature→Coupling refactor likely left `coupling.orbitEnabled` **un-defaulted** and the **migration not producing it**. The smokes are catching a genuine gap. **First verify in-app** whether `coupling.orbitEnabled` should default `false` + whether the migration writes it; fix the APP if it’s a real gap, only then adjust the smoke expectations.
+- `smoke-anim-orbit` (`setOrbit`→`setCoupling({orbitEnabled})`) is a repoint, but confirm the orbit-LFO (`orbitTick.installOrbitSync`) still fires off `coupling.orbitEnabled`.
+
+**Remaining work for a fresh session (cold — needs in-app recon, server `:3400`):**
+1. **Re-run `smoke:all` (Path A)** — confirm the picker fix clears #27 in-chain and surface any further flakes (#28 `workshop-state` was untested-in-chain). Harden each flake (`waitForTimeout`→`waitForFunction`); iterate to green.
+2. **Cluster 1 in-app verify** (above) — orbitEnabled default + migration. Real-bug-vs-stale.
+3. **Cluster 2** — recon fluid-toy’s new 2D-camera API (replaces `setSceneCamera`/`sceneCamera`/`cameraSlots`), repoint `smoke-camera`.
+4. **Cluster 3** — keep+fix the demo smokes: find the demo app’s new store shape (the `demo` slice is gone; `demo.html` still an entry), repoint `smoke-interact` + the two `smoke-engine-demo*` orphans (and add their missing package.json scripts).
+5. **Cluster 4** — verify-in-app: `smoke-fluid-toy` (cp_rad round-trip), `smoke-canvas-pan-zoom` (wheel), `smoke-particle-bounce`. Fix app if real; else repoint.
+6. **Cluster 5** — rewrite `smoke-orbit` to assert via `__gmtProxy` (drop dead `__r3fCamera`/`__getOrbitTarget`).
+7. **Finalize** — re-add every repaired smoke to `smoke:all`; green end-to-end run.
+
+**Process note:** the screenshots some smokes write live as *tracked* `debug/*.png`; running a smoke dirties them. Revert with `git checkout -- "debug/*.png"` (NEVER `git checkout -- debug/` — that also reverts source `.mts` edits in debug/).
