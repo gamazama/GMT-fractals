@@ -7,6 +7,7 @@
  */
 
 import type { ImportedParam, GLSLType, Preset } from '../types';
+import { isDegreesParam } from '../../parsers/angle-detection';
 
 // ============================================================================
 // Uniform extraction (from cleaned source — no comments)
@@ -184,28 +185,13 @@ export function buildImportedParams(
             parsed.min = 0; parsed.max = 1; parsed.step = 1;
         }
 
-        // Detect isDegrees: name-based OR range-based heuristic
-        const lowerName = u.name.toLowerCase();
-        let isDegrees = false;
-        const absMax = Math.abs(parsed.max);
-        const absMin = Math.abs(parsed.min);
-        // Name patterns that indicate an angle parameter (only for float/vecN, not int counts)
-        const DEGREE_NAMES = ['angle', 'theta', 'heading', 'pitch', 'yaw', 'tilt'];
-        // 'rot' only if followed by nothing or common angle suffixes (not 'rotation_count', 'rotations')
-        const hasAngleName = u.type !== 'int' && (
-            DEGREE_NAMES.some(n => lowerName.includes(n)) ||
-            /\brot(?:$|angle|ation|[xyz]?\b)/.test(lowerName)
-        );
-        // Range-based: slider range matches common degree values (±90, ±180, ±360)
-        // Only for float types — integer 90/180/360 could be iteration counts
-        const DEGREE_VALUES = [90, 180, 270, 360];
-        const hasTypicalDegreeRange = u.type !== 'int' &&
-            (DEGREE_VALUES.includes(absMax) || DEGREE_VALUES.includes(absMin));
-        if (hasAngleName && (absMax > 3.5 || absMin > 3.5)) {
-            isDegrees = true;
-        } else if (hasTypicalDegreeRange) {
-            isDegrees = true;
-        }
+        // Degrees display (π notation): only when the NAME looks angular AND the
+        // RANGE looks like degrees. Many uniforms named "angle"/"rot" hold raw
+        // RADIAN constants (e.g. `angle1 = -9.83` feeding sin/cos) or normalized
+        // rotation-vector components (e.g. -1..1) — those stay linear. Shared
+        // with V4 via parsers/angle-detection so both pipelines agree; ints never
+        // qualify (a 90/180/360 there is an iteration count, not degrees).
+        const isDegrees = u.type !== 'int' && isDegreesParam(u.name, parsed.min, parsed.max);
 
         // Resolve default from preset (highest priority)
         let resolvedDefault = parsed.default;
