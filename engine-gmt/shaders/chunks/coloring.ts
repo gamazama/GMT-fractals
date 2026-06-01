@@ -12,6 +12,17 @@ float getMappingValue(float mode, vec3 p, vec4 result, vec3 n, float repeatScale
 // The 'getMappingValue' function is now injected dynamically by ColoringFeature.
 // See features/coloring/MappingModes.ts for logic.
 
+// Log-spiral palette warp — single source of truth for the colour Twist control.
+//   index += arms * azimuth(turns) + twist * log(radius)
+// Integer arms keep the atan(-x) branch cut seamless; log(r) makes the spiral
+// scale-invariant (self-similar under zoom). Returns 0 when both knobs are off.
+// NOTE: MandelTerrain inlines the same maths because it compiles into the mesh
+// SDF library, which does not include this COLORING chunk — keep them in sync.
+float gmt_colorSpiral(vec3 p, float twist, float arms) {
+    if (abs(twist) <= 0.001 && abs(arms) <= 0.001) return 0.0;
+    return arms * (atan(p.y, p.x) * INV_TAU) + twist * log(max(length(p), 1.0e-3));
+}
+
 // Blend modes: 0=Mix, 1=Add, 2=Multiply, 3=Overlay, 4+=Screen
 vec3 blendColors(vec3 c1, vec3 c2, float opacity, float mode) {
     vec3 col = c1;
@@ -75,11 +86,10 @@ vec3 getGlowColor(vec3 p_fractal, vec4 result) {
     if (uGlowMode > 0.5) {
         color = uGlowColor;
     } else {
-        vec3 n = vec3(0.0, 1.0, 0.0); 
+        vec3 n = vec3(0.0, 1.0, 0.0);
         float val1 = getMappingValue(uColorMode, p_fractal, result, n, uColorScale);
-        float twistAngle = (abs(uColorTwist) > 0.001) ? atan(p_fractal.y, p_fractal.x) * INV_TAU : 0.0;
-        
-        float t1Raw = val1 * uColorScale + uColorOffset + (length(p_fractal) + twistAngle) * uColorTwist;
+        float t1Raw = val1 * uColorScale + uColorOffset
+                    + gmt_colorSpiral(p_fractal, uColorTwist, uColorTwistArms);
         float t1Wrapped = fract(t1Raw);
         if (t1Raw < 0.0) t1Wrapped = 1.0 - t1Wrapped;
         

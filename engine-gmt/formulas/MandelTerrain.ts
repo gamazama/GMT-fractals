@@ -223,10 +223,14 @@ export const MandelTerrain: FractalDefinition = {
             // Get Mapping Value from Layer 2 Mode (e.g. Angle, Trap, Iterations)
             float l2Val = getMappingValue(uColorMode2, pProxy, resProxy, vec3(0,1,0), uColorScale2);
 
-            // Apply Twist 2 if active
-            if (abs(uColorTwist2) > 0.001) {
-                float dOrig = length(pProxy);
-                l2Val += dOrig * uColorTwist2;
+            // Apply Twist 2 — inlined copy of gmt_colorSpiral() (coloring.ts). It
+            // can't call the helper because this formula compiles into the mesh
+            // SDF library, which omits the COLORING chunk. Keep in sync with it.
+            // pProxy lives in the XZ plane (y=0), so the azimuth is atan(z, x).
+            if (abs(uColorTwist2) > 0.001 || abs(uColorTwistArms2) > 0.001) {
+                float angT = atan(pProxy.z, pProxy.x) * INV_TAU;
+                float lrT  = log(max(length(pProxy), 1.0e-3));
+                l2Val += uColorTwistArms2 * angT + uColorTwist2 * lrT;
             }
 
             // Calculate Pattern Phase

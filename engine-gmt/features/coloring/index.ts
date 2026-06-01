@@ -13,6 +13,7 @@ export interface ColoringState {
     phase: number;
     bias: number;
     twist: number;
+    twistArms: number;
     escape: number;
     colorIter: number;
     gradient2: GradientStop[] | GradientConfig;
@@ -23,6 +24,7 @@ export interface ColoringState {
     phase2: number;
     bias2: number;
     twist2: number;
+    twistArms2: number;
     blendMode: number;
     blendOpacity: number;
     layer3Color: THREE.Color;
@@ -144,9 +146,20 @@ export const ColoringFeature: FeatureDefinition = {
             label: 'Twist',
             shortId: 'w1',
             uniform: 'uColorTwist',
-            min: -5, max: 5, step: 0.1,
+            min: -5, max: 5, step: 0.05,
             group: 'layer1_bottom',
-            description: 'Rotates hues across the gradient as the lookup value grows.',
+            description: 'Winds the gradient into a logarithmic spiral around the fractal axis. Scale-invariant (looks the same at any zoom). 0 = off. Pair with Arms for multi-armed spirals.',
+            helpId: 'grad.escape',
+        },
+        twistArms: {
+            type: 'float',
+            default: 0.0,
+            label: 'Arms',
+            shortId: 'wa1',
+            uniform: 'uColorTwistArms',
+            min: -8, max: 8, step: 1,
+            group: 'layer1_bottom',
+            description: 'Number of angular colour arms. Integer values are seam-free. 0 = concentric rings; combine with Twist for N-armed spirals.',
             helpId: 'grad.escape',
         },
         escape: {
@@ -217,8 +230,12 @@ export const ColoringFeature: FeatureDefinition = {
         phase2: { type: 'float', default: 0.0, label: 'Phase', shortId: 'p2', min: -1.0, max: 1.0, step: 0.01, group: 'layer2_hist', hidden: true },
         
         bias2: { type: 'float', default: 1.0, label: 'Gamma', shortId: 'b2', uniform: 'uGradientBias2', min: 0.1, max: 10.0, step: 0.01, group: 'layer2_hist', hidden: true },
-        twist2: { type: 'float', default: 0.0, label: 'Twist', shortId: 'w2', uniform: 'uColorTwist2', min: -5, max: 5, step: 0.1, group: 'layer2_bottom',
-            description: 'Rotates hues across Layer 2 as the lookup value grows.',
+        twist2: { type: 'float', default: 0.0, label: 'Twist', shortId: 'w2', uniform: 'uColorTwist2', min: -5, max: 5, step: 0.05, group: 'layer2_bottom',
+            description: 'Winds Layer 2 into a logarithmic spiral around the fractal axis. Scale-invariant. 0 = off. Pair with Arms for multi-armed spirals.',
+            helpId: 'grad.escape',
+        },
+        twistArms2: { type: 'float', default: 0.0, label: 'Arms', shortId: 'wa2', uniform: 'uColorTwistArms2', min: -8, max: 8, step: 1, group: 'layer2_bottom',
+            description: 'Number of angular colour arms for Layer 2. Integer values are seam-free. 0 = concentric rings.',
             helpId: 'grad.escape',
         },
         blendMode: {
