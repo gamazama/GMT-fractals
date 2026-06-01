@@ -4,6 +4,15 @@ Chronological log of significant changes during the v0.9.6 development cycle (en
 
 ## 2026-06-01
 
+### Opening a share link no longer crashes the app
+
+**User-facing**
+- Opening a `#s=` share link (or a PNG/`.gmf` with one) could white-screen the viewport with `Cannot read properties of undefined (reading 'coreMath.…')`. Share links now open cleanly. The scene's formula parameters round-trip as before.
+
+**Where**
+- [`store/animation/sequenceSlice.ts`](../store/animation/sequenceSlice.ts) — `setSequence` now normalizes the incoming sequence so `tracks` is always an object. The URL encoder drops an empty `tracks: {}`, so a round-tripped share payload arrived without one; every `sequence.tracks[…]` reader (`useTrackAnimation`, the timeline, the graph editors) then threw on first render. Fixed at the boundary so no downstream consumer has to guard.
+- [`debug/smoke-share-link.mts`](../debug/smoke-share-link.mts) — new smoke (wired into `smoke:all`): encodes the live scene via the real `getShareString`, opens the `#s=` URL in a fresh page, and asserts the formula panel renders with zero page/console errors plus a value round-trip. Catches this whole class of "share link opens to a crash" regression.
+
 ### Recovery prompt offers "Step Back" when Reset can't help
 
 **User-facing**

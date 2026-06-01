@@ -83,9 +83,15 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     },
 
     // --- BASIC CRUD ---
-    setSequence: (seq) => { 
-        get().snapshot(); 
-        set({ sequence: seq }); 
+    setSequence: (seq) => {
+        get().snapshot();
+        // Normalize at the boundary. A loaded sequence (e.g. decoded from a
+        // share link) can arrive without `tracks` — the URL encoder drops the
+        // empty `tracks: {}`, so the round-tripped sequence has none — which
+        // would make every `sequence.tracks[...]` reader (useTrackAnimation,
+        // the timeline, the graph editors) throw on first render. Guarantee
+        // the shape here so no downstream consumer has to guard.
+        set({ sequence: { ...DEFAULT_SEQUENCE, ...seq, tracks: seq?.tracks ?? {} } });
     },
 
     addTrack: (id, label) => { 
