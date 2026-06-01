@@ -43,6 +43,7 @@ import { LoadFilterPanel } from '../components/LoadFilterPanel';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
 import { TutorialOverlay, TutorialRunner } from '../engine/plugins/Tutorial';
 import { CompilingIndicator } from '../components/CompilingIndicator';
+import { PerformanceMonitor } from '../components/PerformanceMonitor';
 import HistogramProbe from '../engine-gmt/components/HistogramProbe';
 import { HardwarePrefsHost } from '../engine-gmt/components/HardwarePrefsHost';
 import { useInteractionManager } from '../engine-gmt/hooks/useInteractionManager';
@@ -357,6 +358,20 @@ export const AppGmt: React.FC = () => {
                         {previewGhostRect && (
                             <PreviewGhostOverlay region={previewGhostRect} />
                         )}
+
+                        {/* Low-FPS performance warning. The probe tick is always
+                            registered (engine-gmt/features/ui.tsx) but no-ops
+                            until this React consumer mounts to receive
+                            setShowWarning. components/ViewportArea.tsx mounts it
+                            for apps using that shell; AppGmt builds its own
+                            viewport tree, so without this mount the warning could
+                            never appear. Mounted INSIDE the viewport region (not
+                            the app root) so its `top-2 right-4` anchors to the
+                            viewport-area corner — left of the right dock — rather
+                            than the window edge (which overlapped the dock).
+                            Gated like the broadcast-clean siblings
+                            (isBroadcastMode === ViewportArea's isCleanFeed). */}
+                        {!isBroadcastMode && <PerformanceMonitor />}
                         </div>
                     </ViewportFrame>
 

@@ -1,4 +1,23 @@
-# Handoff — Perf Warning (#6, UNRESOLVED) + Bucket Preview Collapse (#4, refinements pending)
+# Handoff — Perf Warning (#6) + Bucket Preview Collapse (#4)
+
+> **RESOLVED 2026-06-01 (session 2). Both fixed; awaiting owner visual check.**
+> **#6 root cause = a MISSING MOUNT, not the fps value.** `<PerformanceMonitor/>`
+> was mounted only in `components/ViewportArea.tsx:185`, which **app-gmt never
+> renders** (its root is `app-gmt/AppGmt.tsx` via `ViewportFrame`). So the
+> correctly-registered tick read the correct low `fpsSmoothed` but had no mounted
+> consumer to receive `setShowWarning` → banner never appeared. Both prior fixes
+> (register tick / read fpsSmoothed) were already correct; they just had no
+> consumer. FIX: mounted `{!isBroadcastMode && <PerformanceMonitor />}` beside
+> `<CompilingIndicator/>` in `AppGmt.tsx` (~L398). #4 fully done. A TEMP `[perfMon]`
+> console diagnostic remains in `PerformanceMonitor.tsx` tick() for the owner's
+> verification run — remove after the banner is confirmed. Details inline + in the
+> SESSION 2 section below (note: that section's A/B fork is now resolved to A(i),
+> the missing mount).
+
+---
+
+## ⚠️ ORIGINAL (SESSION 1) ANALYSIS BELOW — superseded; kept for the file:line map only
+# (was) Handoff — Perf Warning (#6, UNRESOLVED) + Bucket Preview Collapse (#4, refinements pending)
 
 > Created 2026-06-01 at end of a long session. Two items from a testing-issues
 > batch are not finished and are handed to a fresh session. **The rest of that
@@ -122,3 +141,83 @@ while `previewEngaged`; the header, status, and action row stay. State:
 `node_modules/.bin` + a stale global tsc; fixed via `npm install`. Global tsc is now
 6.0.3. If `npm run typecheck` shows mass `import type` parse errors again, run
 `npm install` (see memory `project_dev_toolchain_global_tsc`).
+
+---
+
+## SESSION 2 UPDATE (2026-06-01) — #4 done; #6 re-diagnosed, instrumented
+
+### #4 — bucket preview collapse: COMPLETE (pending owner visual check)
+Both refinements + one bonus bug-fix applied in
+`engine/plugins/topbar/BucketRenderPanel.tsx` (typecheck clean):
+1. **Action row hidden while preview engaged.** The Refine/Preview/Export
+   `<div className="flex gap-1.5">` now renders only when `!previewEngaged`.
+2. **Purple "Picking preview" line during active picking.** New fuchsia status
+   row shown when `interactionMode === 'selecting_preview' && !previewRegion`
+   (mirrors the held-region "Preview" row), with a "drag on canvas to select" hint.
+3. **Exit path preserved (the handoff caveat).** The header pill now shows for
+   the whole `previewEngaged` window: "Exit Preview" with a region, "Cancel Pick"
+   during active picking. **Bonus fix:** the Esc handler was gated on
+   `previewRegion`, so it never fired during active picking — re-gated on
+   `previewEngaged` so Esc now cancels an in-progress pick too (required, since
+   the Preview toggle is now hidden).
+4. **Padding polish.** The collapse chevron gets `-mb-2.5` only when collapsed so
+   it sits flush with the popover's bottom padding; normal spacing when expanded.
+
+### #6 — perf warning: PRIOR DIAGNOSIS WAS WRONG; here's the corrected map
+**The two prior fixes are BOTH correctly in place and wired.** Verified this
+session by reading the real (CRLF/BOM) files directly:
+- `registerGmtUi()` **is** called at boot — `app-gmt/main.tsx:33` (import) + `:111` (call).
+- It **does** register the probe tick — `engine-gmt/features/ui.tsx:185`
+  `registerTick('performanceMonitorTick', TICK_PHASE.UI, performanceMonitorTick)`.
+- `runTicks()` runs **all** registered ticks regardless of phase
+  (`engine/TickRegistry.ts:150-152` — phase only affects sort order, there is NO
+  phase filter). So the UI-phase tick executes every frame.
+- The probe reads `state.fpsSmoothed` (`components/PerformanceMonitor.tsx:47`).
+- The topbar **FpsCounter reads the identical value** — `useViewportFps()`
+  (`engine/plugins/topbar/FpsCounter.tsx:15` → `engine/plugins/Viewport.tsx:166-170`
+  → `s.fpsSmoothed`).
+
+⚠️ **Discard the earlier Explore finding that "registerGmtUi() is never reached."**
+That was a false lead — the agent's grep tool returned empty on the CRLF/BOM-encoded
+files and it wrongly concluded the call was missing. It is present and correct.
+
+**So the value the widget shows and the value the warning reads are the SAME field.**
+That reframes the bug: it is NOT a "wrong fps source" problem — it's downstream of
+the value. Two mutually-exclusive root causes remain, separable by ONE instrumented run:
+
+- **(A) The owner genuinely sees LOW fps in the topbar counter** → then `fpsSmoothed`
+  IS low → the probe reads it low too → the failure is downstream of the value:
+  - (i) `PerformanceMonitor` not actually mounted in app-gmt's viewport layout, so
+    `performanceState.setShowWarning` stays null (tick computes correctly but has no
+    setter to flip). Handoff says it mounts at `components/ViewportArea.tsx:185`, but
+    app-gmt may use its own viewport shell — **verify the mount in the app-gmt tree**
+    (the `feedback_audit_app_gmt_blind_spot` class of miss). Could not confirm
+    statically this session (tooling intermittently blocked on the dev path).
+  - (ii) a suppression gate stuck true (`isIdle`: paused/scrubbing/hidden/compiling/
+    exporting/`isAccumulationComplete`), or the 8s startup gate, or
+  - (iii) the `lowFpsBuffer` threshold math.
+- **(B) The counter actually reads ~60 at a 5fps render** → `fpsSmoothed` measures the
+  main-thread `useFrame` loop, not render load. The ONLY `reportFps` caller in GMT is
+  `engine-gmt/renderer/GmtRendererTickDriver.tsx:219` with `t.fps` = main-thread
+  loop rate (frames / 500ms), dispatched to the worker WITHOUT blocking on render
+  completion. In that case the robust fix is the **already-existing worker-frame
+  signal**: `WorkerProxy` fires `_onWorkerFrame()` per real `FRAME_READY`
+  (`engine-gmt/engine/worker/WorkerProxy.ts:256`), exposed via
+  `registerFrameCounter(cb)` — currently **no live consumer** in dev (single-slot
+  setter, so it's free). `debug/bench-perf.mts` already derives `workerFps` from this
+  exact cadence. Wire a consumer that computes worker fps and have the probe warn on
+  `min(fpsSmoothed, workerFps)` (or just workerFps).
+
+**INSTRUMENTATION ADDED — run the heavy scene and read the console.**
+`components/PerformanceMonitor.tsx` `tick()` now logs `[perfMon]` once per 500ms poll
+while `fps < 30` (quiet at normal framerate). It prints: `fps`, `lowFpsBuffer`,
+`isIdle`, every individual gate, `sampleCap`, `accumCount`, `startupGate`, and
+**`hasSetter`** (= is the warning component mounted/wired). One run of the ~5fps scene
+resolves the fork immediately:
+- `hasSetter:false` → cause **A(i)** (mount the component / fix app-gmt wiring).
+- a gate `true` or `fps ~5` but `buffer` not climbing → cause **A(ii)/(iii)**.
+- `fps ~60` at a visibly slow render → cause **B** (wire `registerFrameCounter`).
+
+It is marked `TEMP(#6 diagnostic — remove once confirmed)`. Remove after the fix.
+A blind fix was deliberately NOT applied: two prior blind attempts already failed,
+and A vs B prescribe opposite fixes — picking wrong = a third failed attempt.
