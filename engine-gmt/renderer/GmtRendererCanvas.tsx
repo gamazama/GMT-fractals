@@ -82,6 +82,9 @@ export const GmtRendererCanvas: React.FC<GmtRendererCanvasProps> = ({ width, hei
         // After transferControlToOffscreen the browser auto-presents
         // worker-rendered frames — no transferToImageBitmap needed.
         const canvas = document.createElement('canvas');
+        // Stable handle so snapshot capture always targets the render canvas,
+        // not a feature panel's <canvas> (e.g. the audio-modulation waveform).
+        canvas.id = 'gmt-render-canvas';
         canvas.width = initW * dpr;
         canvas.height = initH * dpr;
         canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';

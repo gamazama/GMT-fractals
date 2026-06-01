@@ -297,7 +297,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('camera', {
         id: 'camera-undo',
         type: 'button',
-        label: 'Undo Move',
+        label: 'Undo Camera Move',
         shortcut: 'Ctrl+Shift+Z',
         title: 'Revert the last camera movement',
         onSelect: () => { (useEngineStore.getState() as any).undoCamera?.(); },
@@ -307,7 +307,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('camera', {
         id: 'camera-redo',
         type: 'button',
-        label: 'Redo Move',
+        label: 'Redo Camera Move',
         shortcut: 'Ctrl+Shift+Y',
         title: 'Re-apply a reverted camera movement',
         onSelect: () => { (useEngineStore.getState() as any).redoCamera?.(); },
@@ -328,7 +328,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         type: 'button',
         label: () => {
             const dot = (useEngineStore.getState() as any)[dotFieldKey('savedCameras')];
-            return dot ? 'View Manager  ●' : 'View Manager';
+            return dot ? 'View Camera Manager  ●' : 'View Camera Manager';
         },
         onSelect: openCameraManager,
     });

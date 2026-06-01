@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { getProxy } from '../../../engine/worker/WorkerProxy';
 import { useAnimationStore } from '../../../../store/animationStore';
 import { useEngineStore } from '../../../../store/engineStore';
+import { showToast } from '../../../../engine/store/toastStore';
 import { VIDEO_FORMATS } from '../../../../data/constants';
 import { FractalEvents, FRACTAL_EVENTS } from '../../../engine/FractalEvents';
 import { animationEngine } from '../../../../engine/AnimationEngine';
@@ -284,6 +285,7 @@ const runImageSequenceExport = async (
             status.setStatusText('Flushing remaining files…');
             await engine.finishExport();
             status.setStatusText(`Complete — wrote to ${dirHandle.name}`);
+            showToast(`Image sequence saved to ${dirHandle.name}`, 'success', 4500);
         }
     } catch (e) {
         console.error('RenderPopup: Image sequence export failed', e);
@@ -341,6 +343,7 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
 
     flags.cancelledRef.current = false;
     flags.finishEarlyRef.current = false;
+    let ramFileCount = 0; // RAM-mode downloads written, for the completion toast
 
     try {
         for (let p = 0; p < passesToExport.length; p++) {
@@ -386,6 +389,7 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
                         || errMsg.includes('not supported') || errMsg.includes('not a function');
                     if (isSecurityError) {
                         console.warn('RenderPopup: Disk Access blocked. Fallback to RAM.');
+                        showToast('Disk access blocked — saving to RAM instead', 'warning', 4500);
                         fileStream = null;
                         effectiveDiskMode = false;
                     } else {
@@ -463,6 +467,7 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
                 a.download = exportFilename;
                 a.click();
                 URL.revokeObjectURL(url);
+                ramFileCount++;
             }
 
             // "Finish early" stops the current pass cleanly but also ends the
@@ -472,6 +477,14 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
         }
 
         status.setStatusText(flags.cancelledRef.current ? 'Cancelled.' : 'Complete!');
+        if (!flags.cancelledRef.current) {
+            showToast(
+                ramFileCount > 0
+                    ? `Video export complete — ${ramFileCount} file${ramFileCount === 1 ? '' : 's'} downloaded`
+                    : 'Video export complete — saved to disk',
+                'success', 4500,
+            );
+        }
     } catch (e) {
         console.error('RenderPopup: Export failed', e);
         alert(`Export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);

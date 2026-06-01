@@ -176,10 +176,12 @@ installTopBar({ hideDefaults: true });
 installPwaUpdate();
 
 installSceneIO({
-    // The worker-owned canvas is the first <canvas> in the DOM — it's
-    // mounted by GmtRendererCanvas before the R3F Canvas sibling.
+    // Target the render canvas by its stable id (set in GmtRendererCanvas).
+    // A loose querySelector('canvas') returns the FIRST canvas in the DOM,
+    // which can be a feature panel's canvas (e.g. the audio-modulation
+    // waveform) when open — sending the wrong image to snapshots/gallery.
     // SnapshotButton auto-registers in the topbar when getCanvas is set.
-    getCanvas: () => document.querySelector('canvas'),
+    getCanvas: () => document.getElementById('gmt-render-canvas') as HTMLCanvasElement | null,
 
     // GMT's primary save format is GMF (formula shader + scene preset).
     // The "Save Scene" menu item downloads as <project>.gmf — matches
@@ -352,6 +354,10 @@ installRenderDialog<AppGmtExtra>({
     startLabel:          appGmtStartLabel,
     isStartDisabled:     appGmtIsStartDisabled,
     defaults:            { samplesPerFrame: 16, extra: APP_GMT_DEFAULT_EXTRA },
+    // Taller setup window than the 320×460 default — GMT adds passes, depth
+    // range, internal-scale and the sample estimator, which the short default
+    // obscured. (expandedSize is the compact rendering view.)
+    baseSize:            { width: 340, height: 624 },
     expandedSize:        { width: 400, height: 450 },
 });
 

@@ -32,6 +32,8 @@ import {
 import { topbar } from './TopBar';
 import { menu } from './Menu';
 import { shortcuts } from './Shortcuts';
+import { showToast } from '../store/toastStore';
+import { useAutosaveSettings } from '../store/autosaveStore';
 
 // ── Install ─────────────────────────────────────────────────────────────
 
@@ -154,6 +156,23 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
             onSelect: () => { void saveSceneJpg(); },
         });
     }
+    // Recover the previous session from the protected recovery slot. Shown
+    // (with an amber glyph) only when a recovery exists — i.e. the last
+    // session ended with unsaved autosaved work.
+    menu.registerItem('file', {
+        id: 'restore-autosave',
+        type: 'button',
+        label: 'Restore Last Session',
+        icon: <RestoreIcon />,
+        when: () => hasRecoverySession(),
+        onSelect: () => { void restoreAutosave(); },
+    });
+    // Autosave on/off + interval (opt-in; off by default).
+    menu.registerItem('file', {
+        id: 'autosave-settings',
+        type: 'custom',
+        component: AutosaveMenuItem,
+    });
     // Apps that want extra items in the File menu — e.g. GMT's "Copy
     // Share Link" — register them via menu.registerItem('file', …)
     // directly after installSceneIO() returns. No bespoke API here.
@@ -239,6 +258,8 @@ export const saveScene = (filename?: string): void => {
     const text = activeSerializer()(preset);
     const blob = new Blob([text], { type: 'application/json' });
     downloadBlob(blob, filename ?? `${defaultFileStem()}.${_fileExtension}`);
+    noteSceneSavedToFile();
+    showToast(`Scene saved (.${_fileExtension})`, 'success');
 };
 
 /**
@@ -255,6 +276,7 @@ export const saveSceneJpg = async (filename?: string, quality: number = 0.92): P
     const canvas = _getCanvas?.();
     if (!canvas) {
         console.warn('[SceneIO] JPG save requested but no canvas accessor registered');
+        showToast('Image save failed — no canvas available', 'error');
         return;
     }
     const blob: Blob | null = await new Promise((resolve) => {
@@ -262,9 +284,11 @@ export const saveSceneJpg = async (filename?: string, quality: number = 0.92): P
     });
     if (!blob) {
         console.warn('[SceneIO] canvas.toBlob returned null for JPEG');
+        showToast('Image save failed — try again', 'error');
         return;
     }
     downloadBlob(blob, filename ?? `${defaultFileStem()}.jpg`);
+    showToast('Image saved (JPG)', 'success');
 };
 
 /**
@@ -281,12 +305,119 @@ export const saveScenePng = async (filename?: string): Promise<void> => {
     const canvas = _getCanvas?.();
     if (!canvas) {
         console.warn('[SceneIO] PNG save requested but no canvas accessor registered');
+        showToast('Snapshot failed — no canvas available', 'error');
         return;
     }
     _onBeforeSerialize?.();
+    try {
+        const preset = useEngineStore.getState().getPreset({ includeScene: true });
+        const blob = await snapshotSceneToPng(canvas, preset, activeSerializer());
+        downloadBlob(blob, filename ?? `${defaultFileStem()}.png`);
+        noteSceneSavedToFile();
+        // The PNG embeds the full scene as GMF in an iTXt chunk, so the saved
+        // image is itself a re-openable / remixable file. Surfacing that is
+        // the cheapest growth lever — every shared snapshot is a seed — and
+        // most users never discover it. Longer dwell: the message educates.
+        showToast('Snapshot saved — drag the PNG back in to restore this scene', 'success', 4500);
+    } catch (err) {
+        console.error('[SceneIO] PNG snapshot failed', err);
+        showToast('Snapshot failed — see console', 'error');
+    }
+};
+
+// ── Autosave / session restore (H4) ──────────────────────────────────────
+//
+// <UnsavedWorkGuard/> stashes the serialized scene under AUTOSAVE_KEY while the
+// scene is dirty (opt-in, interval configurable). On boot it snapshots any
+// leftover live autosave into AUTOSAVE_RECOVERY_KEY before new bursts can
+// overwrite it; File ▸ Restore Last Session loads from that protected slot.
+export const AUTOSAVE_KEY = 'gmt-autosave';
+export const AUTOSAVE_RECOVERY_KEY = 'gmt-autosave-recovery';
+export const AUTOSAVE_AT_KEY = 'gmt-autosave-at';
+export const AUTOSAVE_RECOVERY_AT_KEY = 'gmt-autosave-recovery-at';
+
+/** Mark the scene saved + drop the autosave backstop (work is now in a file). */
+const noteSceneSavedToFile = (): void => {
+    useEngineStore.getState().markSceneSaved();
+    try { localStorage.removeItem(AUTOSAVE_KEY); } catch { /* work is now in a file */ }
+};
+
+/** Serialize the current scene to the app's text format (GMF for GMT, JSON
+ *  otherwise) via the registered serializer. Used by autosave. */
+export const serializeCurrentScene = (): string => {
+    _onBeforeSerialize?.();
     const preset = useEngineStore.getState().getPreset({ includeScene: true });
-    const blob = await snapshotSceneToPng(canvas, preset, activeSerializer());
-    downloadBlob(blob, filename ?? `${defaultFileStem()}.png`);
+    return activeSerializer()(preset);
+};
+
+/** Parse a scene from a raw text payload (GMF/JSON) through the registered
+ *  parser — the string-input sibling of `loadSceneFile`. */
+export const parseSceneText = async (text: string): Promise<Preset | null> => {
+    const parser: SceneParser = _parseScene ?? parseSceneJson;
+    return parser(text);
+};
+
+const hasRecoverySession = (): boolean => {
+    try { return !!localStorage.getItem(AUTOSAVE_RECOVERY_KEY); } catch { return false; }
+};
+
+/** Restore the previous session from the protected recovery slot (File menu). */
+const restoreAutosave = async (): Promise<void> => {
+    let text: string | null = null;
+    try { text = localStorage.getItem(AUTOSAVE_RECOVERY_KEY); } catch { /* storage blocked */ }
+    if (!text) { showToast('No recoverable session found', 'warning'); return; }
+    try {
+        const preset = await parseSceneText(text);
+        if (!preset) { showToast('Recovery data could not be read', 'error'); return; }
+        useEngineStore.getState().loadScene({ preset });
+        try {
+            localStorage.removeItem(AUTOSAVE_RECOVERY_KEY);
+            localStorage.removeItem(AUTOSAVE_RECOVERY_AT_KEY);
+        } catch { /* */ }
+        showToast('Restored your last session', 'success');
+    } catch (err) {
+        console.error('[SceneIO] restore autosave failed', err);
+        showToast('Failed to restore session — see console', 'error');
+    }
+};
+
+// Amber restore glyph — only shown on the File ▸ Restore item when a recovery
+// session exists, so it stands out from the plain text items.
+const RestoreIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 7v6h6" />
+        <path d="M3.5 13a9 9 0 1 0 2.3-9.4L3 7" />
+    </svg>
+);
+
+/** Compact autosave on/off + interval control rendered inside the File menu. */
+const AutosaveMenuItem: React.FC<{ close: () => void }> = () => {
+    const enabled = useAutosaveSettings((s) => s.enabled);
+    const intervalSec = useAutosaveSettings((s) => s.intervalSec);
+    const setEnabled = useAutosaveSettings((s) => s.setEnabled);
+    const setIntervalSec = useAutosaveSettings((s) => s.setIntervalSec);
+    return (
+        <div className="px-3 py-2 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+            <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-200">
+                <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-cyan-400" />
+                Autosave
+            </label>
+            {enabled && (
+                <select
+                    value={intervalSec}
+                    onChange={(e) => setIntervalSec(Number(e.target.value))}
+                    title="Autosave interval"
+                    className="bg-gray-900 border border-white/10 rounded text-[11px] text-gray-200 px-1 py-0.5 outline-none focus:border-cyan-500"
+                >
+                    <option value={15}>15s</option>
+                    <option value={30}>30s</option>
+                    <option value={60}>1m</option>
+                    <option value={120}>2m</option>
+                    <option value={300}>5m</option>
+                </select>
+            )}
+        </div>
+    );
 };
 
 // ── Icons ───────────────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ import React, { useEffect } from 'react';
 import { componentRegistry, FeatureComponentProps } from '../../components/registry/ComponentRegistry';
 import { registerTick, TICK_PHASE } from '../engine/TickRegistry';
 import { useEngineStore } from '../../store/engineStore';
+import { tick as performanceMonitorTick } from '../../components/PerformanceMonitor';
 
 // --- Widget components ---
 import { ColoringHistogram } from '../components/panels/gradient/ColoringHistogram';
@@ -177,6 +178,11 @@ export const registerGmtUi = () => {
     componentRegistry.register('overlay-drawing', DrawingOverlay);
     registerTick('drawingOverlayTick', TICK_PHASE.OVERLAY, drawingOverlayTick);
     componentRegistry.register('panel-drawing', DrawingPanel);
+
+    // Low-FPS performance-warning probe (PerformanceMonitor). Was exported but
+    // never registered with the TickRegistry → the warning never appeared.
+    // UI phase so it samples the full composited frame.
+    registerTick('performanceMonitorTick', TICK_PHASE.UI, performanceMonitorTick);
 
     componentRegistry.register('overlay-webcam', WebcamOverlay);
     componentRegistry.register('overlay-debug-tools', DebugToolsOverlay);

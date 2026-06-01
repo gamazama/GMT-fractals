@@ -31,6 +31,11 @@ export interface UseDismissOptions {
     escape?: boolean;
     /** Attach the pointer-down listener in the capture phase. Default false. */
     capture?: boolean;
+    /** Pointer-downs whose target matches this CSS selector count as "inside"
+     *  (not a dismiss) — for excluding a trigger rendered OUTSIDE the surface
+     *  ref (e.g. menu triggers that live in separate components). Read when the
+     *  listener attaches; treat as static. */
+    ignore?: string;
 }
 
 type DismissRef = RefObject<HTMLElement | null>;
@@ -42,7 +47,7 @@ type DismissRef = RefObject<HTMLElement | null>;
 type DismissRefs = DismissRef | DismissRef[];
 
 export function useDismiss(refs: DismissRefs, options: UseDismissOptions): void {
-    const { onClose, enabled = true, outside = true, escape = true, capture = false } = options;
+    const { onClose, enabled = true, outside = true, escape = true, capture = false, ignore } = options;
     const instanceId = useId();
 
     // Read `onClose`/`refs` through refs so the listener effect doesn't tear
@@ -60,7 +65,10 @@ export function useDismiss(refs: DismissRefs, options: UseDismissOptions): void 
         const isInside = (target: Node | null) => {
             if (!target) return false;
             const list = Array.isArray(refsRef.current) ? refsRef.current : [refsRef.current];
-            return list.some((r) => r.current?.contains(target));
+            if (list.some((r) => r.current?.contains(target))) return true;
+            // A target matching `ignore` counts as inside (e.g. a trigger button
+            // rendered outside the surface ref) so it doesn't self-dismiss.
+            return !!ignore && target instanceof Element && !!target.closest(ignore);
         };
         const onPointerDown = (e: PointerEvent) => {
             if (!isInside(e.target as Node | null)) onCloseRef.current();

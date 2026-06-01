@@ -51,6 +51,7 @@ import { topbar, TopBarSlot } from './TopBar';
 import { useEngineStore } from '../../store/engineStore';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { CloseIcon } from '../../components/Icons';
+import { useDismiss } from '../../hooks/useDismiss';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -323,17 +324,10 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
     const rootRef = useRef<HTMLDivElement>(null);
     const close = useCallback(() => setOpen(false), []);
 
-    // Outside-click dismissal — popover path only (desktop, or mobile
-    // when no MobileMenuHost is mounted to handle dismissal). The
-    // side-panel path dismisses via its X button.
-    useEffect(() => {
-        if (!open || useSidePanel) return;
-        const handler = (e: MouseEvent) => {
-            if (rootRef.current && !rootRef.current.contains(e.target as Node)) close();
-        };
-        const id = setTimeout(() => document.addEventListener('mousedown', handler), 0);
-        return () => { clearTimeout(id); document.removeEventListener('mousedown', handler); };
-    }, [open, close, useSidePanel]);
+    // Outside-click dismissal — popover path only (desktop, or mobile when no
+    // MobileMenuHost is mounted). The side-panel path dismisses via
+    // <MobileMenuHost> (outside-tap + X button).
+    useDismiss(rootRef, { onClose: close, enabled: open && !useSidePanel, escape: false });
 
     // If a side panel takes over while a popover was open, close the
     // local state so re-toggling back doesn't resurface a stale popover.
@@ -357,7 +351,7 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
     };
 
     return (
-        <div className="relative" ref={rootRef}>
+        <div className="relative" ref={rootRef} data-menu-anchor>
             <button
                 type="button"
                 onClick={handleClick}
@@ -516,6 +510,17 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
         return () => _bumpHostMount(-1);
     }, []);
 
+    // Outside-tap dismissal for the mobile side panel (previously X-only).
+    // Excludes the menu triggers ([data-menu-anchor]) so tapping a trigger
+    // toggles cleanly instead of close-then-reopen.
+    const asideRef = useRef<HTMLElement>(null);
+    useDismiss(asideRef, {
+        onClose: () => mobileMenu.close(),
+        enabled: !!activeId,
+        ignore: '[data-menu-anchor]',
+        escape: false,
+    });
+
     if (!activeId) return null;
     const def = _menus.get(activeId);
     if (!def) return null;
@@ -524,6 +529,7 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
 
     return (
         <aside
+            ref={asideRef}
             className={`${width} h-full flex flex-col bg-black/95 border-l border-white/10 ${className}`}
             // Touch panning inside the scroll region; prevents the page
             // from absorbing vertical-scroll gestures meant for the menu.

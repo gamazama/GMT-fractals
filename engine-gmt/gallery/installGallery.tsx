@@ -16,7 +16,6 @@ import React from 'react';
 import { menu } from '../../engine/plugins/Menu';
 import { useGalleryStore } from './galleryStore';
 import { SubmitGalleryModal } from './SubmitGalleryModal';
-import { useAuthStore } from '../auth/authStore';
 
 export { GalleryPage as GalleryOverlay } from './GalleryPage';
 export { BucketRenderResultModal as BucketRenderResultOverlay } from './BucketRenderResultModal';
@@ -75,17 +74,16 @@ export const installGallery = (options: InstallGalleryOptions = {}) => {
         },
     });
 
-    // "Submit to Gallery" — visible to any signed-in user. Phase 2B: the
-    // server-side gate is the JWT + tier-based slot cap; the UI just shows
-    // the entry once you're signed in. Unauthed users see no entry (they
-    // need the sign-in CTA elsewhere first).
+    // "Submit to Gallery" — ALWAYS visible so newcomers discover that
+    // publishing exists (it used to be hidden until signed in). The submit
+    // modal handles the signed-out state with a sign-in CTA; the real gate
+    // (JWT + tier-based slot cap) is enforced server-side.
     menu.registerItem(options.menuId ?? 'file', {
         id: 'submit-gallery',
         type: 'button',
         label: 'Submit to Gallery',
         icon: <SubmitIcon />,
         order: (options.order ?? 25) + 0.5,
-        when: () => useAuthStore.getState().status === 'authed',
         onSelect: () => {
             useGalleryStore.getState().openSubmit();
         },

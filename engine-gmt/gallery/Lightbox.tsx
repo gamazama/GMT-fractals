@@ -117,7 +117,10 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
     return (
         <div
             className="fixed inset-0 z-[2050] bg-black/95 backdrop-blur-md flex flex-col"
-            onClick={onClose}
+            // Only a click on the backdrop itself closes — guard against clicks
+            // bubbling up from the sidebar / content inside, which would
+            // otherwise dismiss the lightbox on a stray mis-click.
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
             <div className="flex items-center justify-between px-6 py-3 border-b border-white/10 bg-black/40 flex-shrink-0">
                 <button
@@ -241,9 +244,10 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                             <button
                                 onClick={() => onLoadScene(item)}
                                 disabled={loading}
+                                title="Opens this scene in the editor — tweak params, colours, camera, then re-share your own version"
                                 className="w-full py-2 px-3 rounded text-[11px] font-bold bg-cyan-600/30 hover:bg-cyan-600/50 text-white border border-cyan-500/50 disabled:opacity-50"
                             >
-                                {loading ? 'Loading scene…' : '▶ Open in GMT'}
+                                {loading ? 'Loading scene…' : '▶ Open & Remix'}
                             </button>
                             <button
                                 onClick={copyShareLink}
@@ -254,9 +258,9 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
                                             ? 'bg-red-500/15 border-red-500/40 text-red-300'
                                             : 'bg-white/[0.04] hover:bg-white/[0.08] text-gray-200 border-white/10'
                                 }`}
-                                title="Copy a link that opens GMT with this scene in the lightbox"
+                                title="Copy a link to THIS gallery entry (opens the lightbox). To share your own edited scene instead, use Copy Share Link in the editor."
                             >
-                                {shareState === 'copied' ? 'Share link copied!' : shareState === 'failed' ? 'Copy failed' : '↗ Copy share link'}
+                                {shareState === 'copied' ? 'Gallery link copied!' : shareState === 'failed' ? 'Copy failed' : '↗ Copy gallery link'}
                             </button>
                             <div className="grid grid-cols-2 gap-2">
                                 <a
@@ -285,7 +289,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
 
                         <div className="text-[9px] text-gray-600 leading-relaxed pt-1">
                             Keyboard: <kbd className="font-mono">←</kbd> <kbd className="font-mono">→</kbd> previous / next ·
-                            <kbd className="font-mono"> Enter</kbd> open in GMT ·
+                            <kbd className="font-mono"> Enter</kbd> open &amp; remix ·
                             <kbd className="font-mono"> Esc</kbd> close
                         </div>
 

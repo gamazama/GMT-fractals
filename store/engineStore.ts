@@ -27,6 +27,21 @@ import { createHistorySlice } from './slices/historySlice';
 import { createFeatureSlice } from './createFeatureSlice';
 import { getProxy } from '../engine/worker/WorkerProxy';
 const engine = getProxy();
+
+// ── Unsaved-work baseline (H4) ─────────────────────────────────────────────
+// Camera framing (cameraRot / sceneOffset / targetDistance) is "view", not
+// "content" — excluded from the dirty check so just orbiting doesn't mark the
+// scene unsaved. Kept separate from lastSavedHash (versioning, camera included).
+// Set on load + explicit save; null until the first baseline (so a booting
+// app is never reported dirty).
+const CAMERA_DIRTY_KEYS = ['cameraRot', 'sceneOffset', 'targetDistance'];
+let _dirtyBaseline: string | null = null;
+const _contentHashNoCamera = (s: { getPreset: (o?: { includeScene?: boolean }) => unknown }): string => {
+    const clone = { ...(s.getPreset({ includeScene: true }) as Record<string, unknown>) };
+    delete clone.version; delete clone.name;
+    for (const k of CAMERA_DIRTY_KEYS) delete clone[k];
+    return JSON.stringify(clone);
+};
 import { featureRegistry } from '../engine/FeatureSystem';
 import { applyMigrations } from '../engine/migrations';
 import { generateShareStringFromPreset } from '../utils/Sharing';
@@ -231,6 +246,19 @@ const storeFactory: StateCreator<
         return s.projectSettings.version;
     },
 
+    // ── Unsaved-work tracking (H4) ─────────────────────────────────────
+    // Hash mirrors prepareExport's: getPreset minus the volatile {version,
+    // name}. lastSavedHash is the baseline set on load / export / explicit
+    // save; a differing current hash means there are unsaved edits.
+    isSceneDirty: () => {
+        if (_dirtyBaseline === null) return false; // no baseline yet (booting) — don't nag
+        return _contentHashNoCamera(get()) !== _dirtyBaseline;
+    },
+
+    // Mark the current (camera-excluded) state as the saved baseline so an
+    // explicit Save Scene / Load clears the dirty flag.
+    markSceneSaved: () => { _dirtyBaseline = _contentHashNoCamera(get()); },
+
     setAnimations: (v) => {
         const currentArr = get().animations;
         const nextArr = v.map((next) => {
@@ -296,6 +324,7 @@ const storeFactory: StateCreator<
             const loadedState = get().getPreset({ includeScene: true });
             const { version, name, ...content } = loadedState as any;
             set({ lastSavedHash: JSON.stringify(content) });
+            _dirtyBaseline = _contentHashNoCamera(get()); // unsaved-work baseline (camera-excluded)
         }, 50);
     },
 

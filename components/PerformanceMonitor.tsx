@@ -16,6 +16,7 @@ const performanceState = {
     lowFpsBuffer: 0,
     lastTime: performance.now(),
     lastFrameCount: 0,
+    lastAccumCount: 0,
     setShowWarning: null as ((show: boolean) => void) | null,
     setCurrentFps: null as ((fps: number) => void) | null,
     isPaused: false,
@@ -29,45 +30,79 @@ const performanceState = {
 // Export tick function for orchestrated updates
 export const tick = () => {
     const now = performance.now();
-    
-    // Add current frame timestamp
-    performanceState.frameTimestamps.push(now);
-    
-    // Keep only last 2 seconds of timestamps
-    const twoSecondsAgo = now - 2000;
-    performanceState.frameTimestamps = performanceState.frameTimestamps.filter(t => t > twoSecondsAgo);
-    
     const delta = now - performanceState.lastTime;
-    
+
     // Poll every 500ms
     if (delta >= 500) {
-        // Calculate FPS using individual frame timings for more accuracy
-        let fps = 0;
-        if (performanceState.frameTimestamps.length > 1) {
-            const firstFrame = performanceState.frameTimestamps[0];
-            const lastFrame = performanceState.frameTimestamps[performanceState.frameTimestamps.length - 1];
-            const totalTime = lastFrame - firstFrame;
-            const framesRendered = performanceState.frameTimestamps.length - 1;
-            fps = (framesRendered / totalTime) * 1000;
-        }
-        
-        // Update Refs
         performanceState.lastTime = now;
-        performanceState.lastFrameCount = engine.frameCount;
 
         // --- Logic Gate ---
         const state = useEngineStore.getState();
 
-        // Check if Accumulation is finished (Engine stops rendering intentionally)
-        const isAccumulationComplete = state.sampleCap > 0 && engine.accumulationCount >= state.sampleCap;
-        
-        // 1. Ignore if we aren't *trying* to render efficiently
-        // (Exporting, Paused, Scrubbing, Compiling, Tab Hidden, or Finished Accumulating)
-        const isIdle = performanceState.isPaused || performanceState.isScrubbing || document.hidden || engine.isCompiling || performanceState.isExporting || isAccumulationComplete;
+        // Use the engine's canonical smoothed FPS — the same value the FPS
+        // counter shows and adaptive resolution acts on. (Timing our own tick
+        // calls measured the main-thread loop, ~60fps, and never saw a heavy
+        // render.) Adaptive res holds raw FPS near target by downscaling, so
+        // fpsSmoothed only falls below the warning threshold when it genuinely
+        // can't keep up — i.e. adaptive is pinned at its quality floor or off.
+        const fps = state.fpsSmoothed;
+
+        // Engine activity signal. accumulationCount climbs only while the engine
+        // is actually accumulating samples; it resets to 0 on any camera/param
+        // change and stops climbing once a frame is converged or the sample cap
+        // is hit. So a STALLED count on a still view means the engine has stopped
+        // doing real render work — at which point the loop reports a meaningless
+        // ~60fps that must NOT be read as "performance recovered".
+        const accumCount = engine.accumulationCount;
+        const accumStalled = accumCount === performanceState.lastAccumCount;
+        performanceState.lastAccumCount = accumCount;
+
+        // Adaptive state — computed first; the convergence gate depends on it.
+        const cfg = state.adaptiveConfig;
+        const adaptiveActive = cfg.enabled && !state.adaptiveSuppressed;
+
+        // Sample cap reached — engine intentionally stops rendering.
+        const isAccumulationComplete = state.sampleCap > 0 && accumCount >= state.sampleCap;
+
+        // Convergence finished / engine idle: a still view whose sample count is
+        // no longer advancing. Covers BOTH the capped case and the infinite-cap
+        // ("never stop") case where the engine just holds a converged frame —
+        // isAccumulationComplete is always false there. The ~60fps the loop
+        // reports in this state is bogus, so we treat it as idle regardless of
+        // whether adaptive is on, and never feed it into the recovery math.
+        const isConvergedIdle = !state.isUserInteracting && accumCount > 1 && accumStalled;
+
+        // Still-frame convergence IN PROGRESS — only meaningful with adaptive
+        // ENABLED: adaptive deliberately holds full resolution while the view is
+        // still so it can converge a clean frame, so the low FPS during those
+        // accumulation passes is the expected cost of converging, not a
+        // responsiveness problem. With adaptive OFF there is no such full-res
+        // hold, so a genuinely slow still frame should still warn.
+        const isConvergingStill = adaptiveActive && !state.isUserInteracting && accumCount > 4 && !isConvergedIdle;
+
+        // Adaptive headroom: when adaptive is on and still above its quality
+        // floor, it can downscale further on its own to recover FPS — so let it.
+        // Only warn when adaptive is OFF, hard-suppressed, or already pinned at
+        // minQuality and STILL can't keep up (genuine "can't render this fast").
+        const adaptiveHasHeadroom = adaptiveActive && state.qualityFraction > cfg.minQuality * 1.05;
+
+        // 1. Ignore if we aren't *trying* to render efficiently (Exporting,
+        //    Paused, Scrubbing, Compiling, Tab Hidden, cap reached, converged/
+        //    idle, a still frame converging under adaptive, or adaptive still
+        //    adapting).
+        const isIdle = performanceState.isPaused || performanceState.isScrubbing || document.hidden || engine.isCompiling || performanceState.isExporting || isAccumulationComplete || isConvergedIdle || isConvergingStill || adaptiveHasHeadroom;
 
         if (isIdle) {
-            performanceState.lowFpsBuffer = 0; 
-        } 
+            performanceState.lowFpsBuffer = 0;
+            // When the frame has converged / the engine has stopped rendering,
+            // clear any visible warning: the scene finished rendering fine, and
+            // the bogus ~60fps must never reach the recovery branch below as a
+            // false "recovered" signal. (Pause/compile/export deliberately keep
+            // a shown warning so its fix-suggestion buttons stay actionable.)
+            if ((isConvergedIdle || isAccumulationComplete) && performanceState.setShowWarning) {
+                performanceState.setShowWarning(false);
+            }
+        }
         // 2. Ignore Startup (First 8s)
         else if (now < 8000) { 
             performanceState.lowFpsBuffer = 0;

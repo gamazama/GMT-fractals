@@ -506,7 +506,7 @@ export const GmtPanels: PanelManifest = [
     // when activated (see Dock.tsx).
     {
         id: 'Camera Manager',
-        label: 'View Manager',
+        label: 'View Camera Manager',
         dock: 'left',
         order: 20,
         component: 'panel-cameramanager',
