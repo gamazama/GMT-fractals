@@ -137,10 +137,13 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
         return () => clearInterval(id);
     }, [state.previewRegion, controller]);
 
-    // Escape exits preview region. Previously handled by the canvas HUD; that HUD is gone,
-    // so this popover owns the shortcut while a preview is active.
+    // Escape exits preview — both while actively picking a region and while
+    // holding one. Previously handled by the canvas HUD; that HUD is gone, so
+    // this popover owns the shortcut whenever a preview is engaged. (Gating on
+    // previewEngaged rather than previewRegion is what lets Esc cancel an
+    // in-progress pick, now that the action row's Preview toggle is hidden.)
     useEffect(() => {
-        if (!state.previewRegion) return;
+        if (!previewEngaged) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 controller.clearPreviewRegion?.();
@@ -153,7 +156,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [state.previewRegion]);
+    }, [previewEngaged]);
 
     // Suppress adaptive resolution while panel open, and cancel any active preview on close —
     // the preview's on-screen held frame belongs to this popover's lifecycle.
@@ -498,7 +501,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                 <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">High-Res Render</span>
                     <div className="flex items-center gap-2">
-                        {state.previewRegion && supportsPreview && (
+                        {previewEngaged && supportsPreview && (
                             <button
                                 type="button"
                                 onClick={() => {
@@ -509,10 +512,10 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                                     }
                                 }}
                                 className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-fuchsia-400/60 bg-fuchsia-900/40 text-fuchsia-200 hover:bg-fuchsia-800/50 transition-colors flex items-center gap-1"
-                                title="Exit Preview Region (Esc)"
+                                title={state.previewRegion ? 'Exit Preview Region (Esc)' : 'Cancel preview pick (Esc)'}
                             >
                                 <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
-                                Exit Preview
+                                {state.previewRegion ? 'Exit Preview' : 'Cancel Pick'}
                             </button>
                         )}
                         <label
@@ -552,52 +555,75 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                     );
                 })()}
 
-                <div className="flex gap-1.5">
-                    <Button
-                        size="small"
-                        label="Refine"
-                        icon={<CheckIcon />}
-                        onClick={handleStartRefine}
-                        title="Refine viewport (single image, viewport size)"
-                    />
-                    {supportsPreview && (
+                {/* While actively picking (no region yet), surface a purple
+                    status line that mirrors the held-region "Preview" row above,
+                    so canvas-pick mode stays legible even with the action row
+                    hidden. */}
+                {state.interactionMode === 'selecting_preview' && !state.previewRegion && supportsPreview && (
+                    <div className="flex items-center justify-between text-[9px] bg-fuchsia-900/20 border border-fuchsia-400/20 rounded px-2 py-1">
+                        <span className="text-fuchsia-300 font-bold flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse" />
+                            Picking preview
+                        </span>
+                        <span className="text-gray-500">drag on canvas to select</span>
+                    </div>
+                )}
+
+                {/* #4: hide the Refine/Preview/Export actions while a preview is
+                    engaged so the canvas stays clear. Exit via the header pill
+                    or Esc. */}
+                {!previewEngaged && (
+                    <div className="flex gap-1.5">
                         <Button
                             size="small"
-                            active={state.interactionMode === 'selecting_preview' || !!state.previewRegion}
-                            label={state.previewRegion
-                                ? 'Previewing'
-                                : (state.interactionMode === 'selecting_preview' ? 'Pick…' : 'Preview')}
-                            icon={<span className="text-[11px] leading-none">⌖</span>}
-                            onClick={() => {
-                                if (state.previewRegion) {
-                                    controller.clearPreviewRegion?.();
-                                    state.setPreviewRegion(null);
-                                    state.setInteractionMode('none');
-                                } else if (state.interactionMode === 'selecting_preview') {
-                                    state.setInteractionMode('none');
-                                } else {
-                                    state.setInteractionMode('selecting_preview');
-                                }
-                            }}
-                            title="Preview a canvas section at export resolution (click canvas to pick)"
+                            label="Refine"
+                            icon={<CheckIcon />}
+                            onClick={handleStartRefine}
+                            title="Refine viewport (single image, viewport size)"
                         />
-                    )}
-                    <Button
-                        size="small"
-                        variant="primary"
-                        active
-                        label={fileCount > 1 ? `Export ${fileCount}×` : 'Export'}
-                        icon={<DownloadIcon />}
-                        onClick={handleExport}
-                        title={`Render ${fileCount > 1 ? `${fileCount} tile files` : 'and save image'}`}
-                    />
-                </div>
+                        {supportsPreview && (
+                            <Button
+                                size="small"
+                                active={state.interactionMode === 'selecting_preview' || !!state.previewRegion}
+                                label={state.previewRegion
+                                    ? 'Previewing'
+                                    : (state.interactionMode === 'selecting_preview' ? 'Pick…' : 'Preview')}
+                                icon={<span className="text-[11px] leading-none">⌖</span>}
+                                onClick={() => {
+                                    if (state.previewRegion) {
+                                        controller.clearPreviewRegion?.();
+                                        state.setPreviewRegion(null);
+                                        state.setInteractionMode('none');
+                                    } else if (state.interactionMode === 'selecting_preview') {
+                                        state.setInteractionMode('none');
+                                    } else {
+                                        state.setInteractionMode('selecting_preview');
+                                    }
+                                }}
+                                title="Preview a canvas section at export resolution (click canvas to pick)"
+                            />
+                        )}
+                        <Button
+                            size="small"
+                            variant="primary"
+                            active
+                            label={fileCount > 1 ? `Export ${fileCount}×` : 'Export'}
+                            icon={<DownloadIcon />}
+                            onClick={handleExport}
+                            title={`Render ${fileCount > 1 ? `${fileCount} tile files` : 'and save image'}`}
+                        />
+                    </div>
+                )}
 
                 {/* #4: while picking / holding a preview region, collapse just
                     the settings (keeping the picking UI + actions above) behind
                     a small centred chevron so the canvas stays clear. */}
                 {previewEngaged && (
-                    <div className="flex justify-center">
+                    // When collapsed the chevron is the last visible element, so
+                    // pull it down to meet the popover's bottom padding (p-3).
+                    // Only when collapsed — expanded keeps normal spacing above
+                    // the revealed settings.
+                    <div className={`flex justify-center ${!previewExpanded ? '-mb-2.5' : ''}`}>
                         <button
                             type="button"
                             onClick={() => setPreviewExpanded(v => !v)}
