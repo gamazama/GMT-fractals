@@ -52,7 +52,7 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
     // Tutorial anchor — only the right-dock root is targeted by lessons.
     const rightDockAnchorRef = useTutorAnchor(side === 'right' ? 'right-dock' : null);
 
-    const activeTabId = side === 'left' ? activeLeftTab : activeRightTab;
+    const storedActiveTabId = side === 'left' ? activeLeftTab : activeRightTab;
     const isCollapsed = side === 'left' ? isLeftDockCollapsed : isRightDockCollapsed;
     const width = side === 'left' ? leftDockSize : rightDockSize;
 
@@ -79,6 +79,18 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
             return true;
         })
         .sort((a, b) => a.order - b.order);
+
+    // The stored active tab can point at a panel that's currently hidden by
+    // its showIf predicate — e.g. 'Graph' stays the active left tab after you
+    // switch away from the Modular formula, because nothing resets it. The
+    // tab is correctly absent from `dockPanels` above, but the content area
+    // keys off the active id and would otherwise still mount the hidden panel
+    // (the Modular FlowEditor) when the dock is opened. Clamp the active id to
+    // a visible panel: keep the stored id if it's still showing, else fall
+    // back to the first visible tab (or null → "Select a panel").
+    const activeTabId = dockPanels.some((p) => p.id === storedActiveTabId)
+        ? storedActiveTabId
+        : (dockPanels[0]?.id ?? null);
 
     const resizeRef = useRef<{ startX: number, startW: number } | null>(null);
 
