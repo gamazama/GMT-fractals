@@ -73,3 +73,26 @@ migration `moveField('orbit.enabled','coupling.orbitEnabled')` (`fluid-toy/migra
 Start `npm run dev` (`:3400`), run the smoke, confirm it asserts + passes; re-add to
 `smoke:all`; finish with a green end-to-end `npm run smoke:all`. (Don't append `echo "$?"`
 to a backgrounded run — masks the exit; see `feedback_bash_background_windows`.)
+
+## UPDATE — end-to-end `smoke:all` run exposed in-chain flakiness
+
+Running the rebuilt `smoke:all` as a chain FAILED at `smoke-picker-search-kb`
+(27th of 28) — green in isolation, red in-chain. Root cause: a fixed
+`waitForTimeout(1200)` before counting catalog thumbnail `<img>`s; the thumbnails
+load async, and under chain load (26 smokes prior) 1200ms is too short → 0
+thumbnails → FAIL. **The feature works; the smoke checks too early.** Not an app bug.
+
+**Implication:** "28 green individually" ≠ "reliably green in-chain." `smoke:all`
+is NOT yet a trustworthy gate — ≥1 flaky member, and possibly more (the chain
+stopped at #27, so #28 `workshop-state` is untested-in-chain, and others that
+passed this run could flake under different load).
+
+### Cluster 6 — flaky fixed-timeout waits (smoke-quality, not app bugs)
+| Smoke | Issue | Fix |
+|---|---|---|
+| smoke-picker-search-kb | fixed `waitForTimeout(1200)` before counting async-loaded thumbnails | `waitForFunction(() => imgs >= 1, {timeout})` |
+| (audit) others using `waitForTimeout` before async/DOM assertions | potential same class | grep `waitForTimeout` across the 28; convert load-bearing waits to `waitForFunction` |
+
+**Path to a reliable `smoke:all`:**
+- **A. Harden + iterate:** fix picker-search-kb’s wait, re-run `smoke:all`, fix the next flake it surfaces, repeat until green end-to-end. Most robust; iterative (~8 min/round).
+- **B. Curate subset:** drop picker-search-kb (+ any further flakies) from `smoke:all` (still runnable individually) for a fast reliable gate now; harden the dropped ones as a follow-up.
