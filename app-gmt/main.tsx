@@ -116,6 +116,19 @@ registerGmtUi();
 // CameraManagerPanel).
 installGmtCameraSlice();
 
+// Stash pre-boot texture emits on the proxy so GmtRendererTickDriver can
+// replay them once the worker is boot-ready. loadScene() (below) fires the
+// `texture` event during module eval — before React mounts the tick driver
+// that handles it, and image params aren't carried in the BOOT config. So a
+// share-URL / OAuth-stashed scene with an env HDR would otherwise drop the
+// texture and render a black sky. Mirrors the pendingTeleport pattern in
+// installGmtCameraSlice. Registered here (pre-loadScene) so it never misses
+// the boot-time emit; the live post-boot path stays in the tick driver.
+FractalEvents.on(FRACTAL_EVENTS.TEXTURE, ({ textureType, dataUrl }) => {
+    const proxy = getProxy();
+    if (!proxy.isBooted) proxy.pendingTextures.set(textureType, dataUrl);
+});
+
 // GMT modular slice — Modular formula's pipeline + graph state.
 // Without this, switching to the Modular formula crashes FlowEditor
 // on `state.graph.nodes` (undefined).

@@ -190,12 +190,12 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
                 proxy.shouldSnapCamera = true;
             }),
             FractalEvents.on(FRACTAL_EVENTS.TEXTURE, ({ textureType, dataUrl }) => {
+                // Live (post-boot) path. Pre-boot texture emits are caught by an
+                // early listener installed in app-gmt/main.tsx (before loadScene
+                // runs) and stashed on proxy.pendingTextures — this component
+                // mounts too late to catch the boot-time emit. finalize() drains
+                // the stash once the worker is ready.
                 if (proxy.isBooted) proxy.updateTexture(textureType, dataUrl);
-                // Pre-boot (e.g. share-URL scene hydration): stash the latest
-                // payload per channel so finalize() can replay it once the
-                // worker is ready. Image params aren't in the BOOT config, so
-                // this is the only path that survives a pre-boot load.
-                else proxy.pendingTextures.set(textureType, dataUrl);
             }),
             FractalEvents.on(FRACTAL_EVENTS.REGISTER_FORMULA, ({ id, shader }: any) => {
                 proxy.registerFormula(id, shader);
