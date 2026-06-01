@@ -2,6 +2,18 @@
 
 Chronological log of significant changes during the v0.9.5 development cycle (engine-extraction trunk; merges to `main` once stable).
 
+## 2026-06-01
+
+### Recovery prompt offers "Step Back" when Reset can't help
+
+**User-facing**
+- The on-screen recovery prompt (the **Reset** / **Undo Cam** buttons that appear when you fly into empty space or bury the camera in a surface) now adapts: if you're **already at the default view**, pressing Reset would do nothing, so the button switches to **Step Back** — it dollies the camera back one unit so you can escape a stuck spot. Once it switches, it stays "Step Back" until you've recovered and the prompt disappears.
+
+**Where**
+- [`engine-gmt/store/cameraSlice.ts`](../engine-gmt/store/cameraSlice.ts) — new `isCameraAtFormulaDefault()` + `stepBackCamera()` action; `cameraRecoveryMode` (`'reset' | 'stepback'`) on the store. Default-preset math factored into `getFormulaDefaultCamera()`, shared by Reset and the at-default check.
+- [`engine-gmt/navigation/usePhysicsProbe.ts`](../engine-gmt/navigation/usePhysicsProbe.ts) — `updateResetButton` picks the mode when the prompt appears and latches to Step Back once the camera reaches the default; holds it until the prompt hides.
+- [`engine-gmt/navigation/HudOverlay.tsx`](../engine-gmt/navigation/HudOverlay.tsx) — the recovery button morphs its label/action from the store mode (visibility stays imperatively driven by the probe, off React's render path).
+
 ## 2026-05-28
 
 ### Floating panel consolidation
