@@ -114,6 +114,18 @@ async function main() {
     await page.goto(`${URL}?gallery=${SLUG}`, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForFunction(STORE_READY, { timeout: 20000 });
+    await page.waitForTimeout(400); // let the deep-linked overlay mount
+
+    // Skip gracefully when the build has no Supabase keys (e.g. a fresh CI
+    // checkout without .env.local): the gallery is disabled, so this path
+    // can't run — but that's not a regression, so don't fail the suite.
+    const galleryDisabled = await page.getByText('configured for this build')
+        .first().isVisible().catch(() => false);
+    if (galleryDisabled) {
+        console.log('  ⊘ gallery not configured in this build (VITE_SUPABASE_* unset) — skipping.');
+        await browser.close();
+        process.exit(0);
+    }
 
     let lightboxShown = true;
     try {
