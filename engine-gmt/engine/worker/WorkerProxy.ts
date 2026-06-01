@@ -510,6 +510,17 @@ export class WorkerProxy implements AccumulationController {
      */
     pendingTeleport: CameraState | null = null;
 
+    /**
+     * Stashed texture payloads from a pre-boot scene hydration (e.g. a share
+     * URL applied at module-eval time, before the worker boots). The TEXTURE
+     * event is dropped if it fires while `!isBooted`, and image params are NOT
+     * carried in the BOOT config (syncConfigUniforms skips them) — so without
+     * this stash an env HDR / color texture loaded from a shared scene never
+     * reaches the worker and the sky renders black. GmtRendererTickDriver
+     * drains this in finalize(), mirroring pendingTeleport.
+     */
+    pendingTextures: Map<'color' | 'env', string | null> = new Map();
+
     // ADR-0061 P5 — the gizmo drag is the InteractionSession's `gizmo` source
     // now (the `isGizmoInteracting` shadow was removed with the dual flag).
     // `cameraInUse` here is NOT the removed hold-gate field — it's a write-only

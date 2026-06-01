@@ -121,6 +121,17 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
                 FractalEvents.emit(FRACTAL_EVENTS.CAMERA_TELEPORT, stashed);
             }
 
+            // Replay textures emitted during pre-boot scene hydration (share
+            // URLs, OAuth scene stash). Without this an env HDR / color texture
+            // loaded before boot never reaches the worker (the TEXTURE event was
+            // dropped, and image params aren't carried in the BOOT config).
+            if (proxy.pendingTextures.size) {
+                proxy.pendingTextures.forEach((dataUrl, textureType) => {
+                    proxy.updateTexture(textureType, dataUrl);
+                });
+                proxy.pendingTextures.clear();
+            }
+
             setIsReady(true);
             if (onLoaded) onLoaded();
         };
@@ -180,6 +191,11 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
             }),
             FractalEvents.on(FRACTAL_EVENTS.TEXTURE, ({ textureType, dataUrl }) => {
                 if (proxy.isBooted) proxy.updateTexture(textureType, dataUrl);
+                // Pre-boot (e.g. share-URL scene hydration): stash the latest
+                // payload per channel so finalize() can replay it once the
+                // worker is ready. Image params aren't in the BOOT config, so
+                // this is the only path that survives a pre-boot load.
+                else proxy.pendingTextures.set(textureType, dataUrl);
             }),
             FractalEvents.on(FRACTAL_EVENTS.REGISTER_FORMULA, ({ id, shader }: any) => {
                 proxy.registerFormula(id, shader);
