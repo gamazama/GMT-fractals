@@ -11,9 +11,14 @@ import React, { useEffect, useRef, useState } from 'react';
 export const LazyThumbnail = React.memo(function LazyThumbnail({
     id,
     label,
+    src,
 }: {
     id: string;
     label: string;
+    /** Explicit image URL. When omitted, falls back to the native
+     *  `thumbnails/fractal_<id>.jpg` convention. Catalog (frag/DEC) cards pass
+     *  their own `thumbnails/frag/<safeId>.jpg` path here. */
+    src?: string;
 }) {
     const [isVisible, setIsVisible] = useState(false);
     const [hasError, setHasError] = useState(false);
@@ -38,7 +43,7 @@ export const LazyThumbnail = React.memo(function LazyThumbnail({
         <div ref={containerRef} className="w-full h-full">
             {isVisible && (
                 <img
-                    src={`thumbnails/fractal_${id}.jpg`}
+                    src={src ?? `thumbnails/fractal_${id}.jpg`}
                     alt={label}
                     className="w-full h-full object-cover"
                     onError={() => setHasError(true)}

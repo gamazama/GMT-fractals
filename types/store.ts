@@ -275,6 +275,9 @@ export interface EngineStoreState extends FeatureStateMap {
   // Formula Workshop
   workshopOpen: boolean;
   workshopEditFormula: string | undefined;
+  /** When opening the Workshop to load a frag/DEC catalog formula, the
+   *  '<source>:<id>' key (e.g. 'frag:3DickUlus/BuffaloBulb.frag'). */
+  workshopCatalogKey: string | undefined;
 
   // New Scene wizard
   newSceneOpen: boolean;
@@ -490,7 +493,7 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     openContextMenu: (x: number, y: number, items: ContextMenuItem[], targetHelpIds?: string[]) => void;
     closeContextMenu: () => void;
 
-    openWorkshop: (editFormula?: string) => void;
+    openWorkshop: (editFormula?: string, catalogKey?: string) => void;
     closeWorkshop: () => void;
     openNewScene: () => void;
     closeNewScene: () => void;

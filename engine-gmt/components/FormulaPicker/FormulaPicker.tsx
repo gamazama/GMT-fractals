@@ -33,11 +33,13 @@ import type { FormulaType } from '../../types';
 import { CheckIcon, CloseIcon, CubeIcon, DiceIcon, NetworkIcon, CodeIcon } from '../../../components/Icons';
 import { LazyThumbnail } from './LazyThumbnail';
 import { useRenderPause } from './useRenderPause';
+import { setKeyboardCaptured } from '../../../engine/plugins/Shortcuts';
 import {
     NATIVE_CATEGORIES, FORMULA_TO_CATEGORY, DEFAULT_SPECIAL_ENTRIES,
     type SpecialEntry,
 } from './pickerCategories';
 import type { SceneGroup, SceneItem } from './sceneGroups';
+import type { CatalogGroup, CatalogItem } from './catalogGroups';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -45,7 +47,11 @@ import type { SceneGroup, SceneItem } from './sceneGroups';
 
 export type FormulaPickerCommit =
     | { action: 'select'; id: string }
-    | { action: 'launch'; id: 'workshop' };
+    | { action: 'launch'; id: 'workshop' }
+    /** A frag/DEC catalog formula was picked. Not registered yet — the caller
+     *  loads its source into the Workshop editor (it doesn't switch the live
+     *  formula). `id` is the catalog id; `source` selects frag vs DEC loading. */
+    | { action: 'catalog'; id: string; source: 'frag' | 'dec' };
 
 export interface FormulaPickerProps {
     variant: 'popover' | 'inline' | 'modal';
@@ -79,6 +85,25 @@ export interface FormulaPickerProps {
      *  When omitted, the Scenes section is hidden entirely. */
     extraGroups?: SceneGroup[];
 
+    /** Catalog (frag/DEC) groups. Each renders as a sidebar entry; clicking a
+     *  card emits onCommit({action:'catalog', ...}). Main picker passes the two
+     *  flat sections (Fragmentarium, DEC); the Workshop browser passes
+     *  per-category/folder groups. When omitted, no catalog section appears. */
+    catalogGroups?: CatalogGroup[];
+
+    /** Show native formula categories + the Custom group. Default true. Pass
+     *  false for a catalog-only picker (the Workshop browser). */
+    showNativeFormulas?: boolean;
+
+    /** Enable the in-picker fuzzy search (over native formulas). Default true.
+     *  Pass false for the catalog-only Workshop browser, which has its own
+     *  catalog search row (the picker's search only covers registered natives). */
+    enableSearch?: boolean;
+
+    /** External source links shown centered + underlined in the header (e.g. the
+     *  Fragmentarium Examples repo, the Distance Estimator Compendium). */
+    headerLinks?: Array<{ label: string; href: string }>;
+
     headerSlot?: React.ReactNode;
     footerSlot?: React.ReactNode;
 }
@@ -103,7 +128,14 @@ interface SceneGroupCat {
     name: string;
     group: SceneGroup;
 }
-type Cat = NativeCat | SpecialCat | CustomCat | SceneGroupCat;
+interface CatalogCat {
+    kind: 'catalog';
+    id: string;
+    name: string;
+    sectionLabel?: string;
+    items: CatalogItem[];
+}
+type Cat = NativeCat | SpecialCat | CustomCat | SceneGroupCat | CatalogCat;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
@@ -124,6 +156,10 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             defaultView = 'grid',
             showHoverPreview = true,
             extraGroups,
+            catalogGroups,
+            showNativeFormulas = true,
+            enableSearch = true,
+            headerLinks,
             headerSlot,
             footerSlot,
         } = props;
@@ -144,7 +180,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
         }, []);
 
         // ── Search visibility + query ────────────────────────────────────────
-        const [searchVisible, setSearchVisible] = useState(autoFocusSearch);
+        const [searchVisible, setSearchVisible] = useState(autoFocusSearch && enableSearch);
         const [query, setQuery] = useState('');
         const searchRef = useRef<HTMLInputElement>(null);
 
@@ -164,16 +200,27 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             const knownIds = new Set(allDefs.map(d => d.id));
             const result: Cat[] = [];
 
-            // Native (in design order).
-            for (const cat of NATIVE_CATEGORIES) {
-                const items = cat.items.filter(id => knownIds.has(id));
-                if (items.length > 0) {
-                    result.push({ kind: 'native', id: cat.id, name: cat.name, items });
+            // Native (in design order). Suppressed in catalog-only mode.
+            if (showNativeFormulas) {
+                for (const cat of NATIVE_CATEGORIES) {
+                    const items = cat.items.filter(id => knownIds.has(id));
+                    if (items.length > 0) {
+                        result.push({ kind: 'native', id: cat.id, name: cat.name, items });
+                    }
                 }
             }
 
             // Special launchers.
             for (const s of specialEntries) result.push({ kind: 'special', id: s });
+
+            // Catalog (frag/DEC) — caller-driven via `catalogGroups`. Rendered
+            // right under the special launchers (e.g. "Fragmentarium" + "DEC"
+            // beneath Workshop in the main picker).
+            if (catalogGroups) {
+                for (const g of catalogGroups) {
+                    result.push({ kind: 'catalog', id: g.id, name: g.name, sectionLabel: g.sectionLabel, items: g.items });
+                }
+            }
 
             // Scenes — caller-driven via `extraGroups`. Each group gets a
             // sidebar entry under the "Scenes" section. Section is hidden
@@ -185,25 +232,28 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             }
 
             // Custom: registered formulas with importSource OR formulas not
-            // classified in NATIVE_CATEGORIES. Hidden when empty.
-            const customs: string[] = [];
-            for (const def of allDefs) {
-                if (def.id === 'Modular') continue;
-                if (def.importSource) customs.push(def.id);
-                else if (!FORMULA_TO_CATEGORY.has(def.id)) customs.push(def.id);
-            }
-            if (customs.length > 0) {
-                result.push({
-                    kind: 'custom', id: 'custom',
-                    name: `Custom (${customs.length} imported)`,
-                    items: customs,
-                });
+            // classified in NATIVE_CATEGORIES. Hidden when empty or in
+            // catalog-only mode.
+            if (showNativeFormulas) {
+                const customs: string[] = [];
+                for (const def of allDefs) {
+                    if (def.id === 'Modular') continue;
+                    if (def.importSource) customs.push(def.id);
+                    else if (!FORMULA_TO_CATEGORY.has(def.id)) customs.push(def.id);
+                }
+                if (customs.length > 0) {
+                    result.push({
+                        kind: 'custom', id: 'custom',
+                        name: `Custom (${customs.length} imported)`,
+                        items: customs,
+                    });
+                }
             }
             return result;
-        }, [specialEntries, extraGroups]);
+        }, [specialEntries, extraGroups, catalogGroups, showNativeFormulas]);
 
         const firstBrowsable = useMemo(() => {
-            const c = cats.find(c => c.kind === 'native' || c.kind === 'custom');
+            const c = cats.find(c => c.kind === 'native' || c.kind === 'custom' || c.kind === 'catalog');
             return c ? c.id : null;
         }, [cats]);
 
@@ -214,9 +264,22 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
 
         const [activeCat, setActiveCat] = useState<string | null>(initialCat);
 
+        // ── Flattened catalog items (deduped) for search ─────────────────────
+        const catalogItems: CatalogItem[] = useMemo(() => {
+            if (!catalogGroups) return [];
+            const seen = new Set<string>();
+            const out: CatalogItem[] = [];
+            for (const g of catalogGroups) {
+                for (const it of g.items) {
+                    if (!seen.has(it.id)) { seen.add(it.id); out.push(it); }
+                }
+            }
+            return out;
+        }, [catalogGroups]);
+
         // ── Search results ───────────────────────────────────────────────────
         const searchResults: string[] = useMemo(() => {
-            if (!searching) return [];
+            if (!searching || !showNativeFormulas) return [];
             const q = query.trim().toLowerCase();
             const allDefs = registry.getAll();
             const scored: Array<{ id: string; score: number }> = [];
@@ -236,7 +299,31 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             }
             scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
             return scored.map(s => s.id);
-        }, [searching, query]);
+        }, [searching, query, showNativeFormulas]);
+
+        // Catalog (frag/DEC) search hits — scored over the flattened catalog
+        // items so the picker's search finds importable formulas too. Mouse-
+        // driven (rendered as a thumbnail section beneath the native matches).
+        const catalogSearchHits: CatalogItem[] = useMemo(() => {
+            if (!searching || catalogItems.length === 0) return [];
+            const q = query.trim().toLowerCase();
+            const scored: Array<{ it: CatalogItem; score: number }> = [];
+            for (const it of catalogItems) {
+                const name = it.name.toLowerCase();
+                const idLow = it.id.toLowerCase();
+                const cat = (it.category ?? '').toLowerCase();
+                const artist = (it.artist ?? '').toLowerCase();
+                let score = 0;
+                if (name.startsWith(q)) score += 100;
+                else if (name.includes(q)) score += 60;
+                if (idLow.includes(q)) score += 30;
+                if (cat.includes(q)) score += 15;
+                if (artist.includes(q)) score += 10;
+                if (score > 0) scored.push({ it, score });
+            }
+            scored.sort((a, b) => b.score - a.score || a.it.name.localeCompare(b.it.name));
+            return scored.slice(0, 80).map(s => s.it);
+        }, [searching, query, catalogItems]);
 
         // ── Active pane items ────────────────────────────────────────────────
         const paneItems: string[] = useMemo(() => {
@@ -253,6 +340,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
         );
         const isSpecialActive = !searching && activeCatObj?.kind === 'special';
         const isSceneGroupActive = !searching && activeCatObj?.kind === 'scene-group';
+        const isCatalogActive = !searching && activeCatObj?.kind === 'catalog';
 
         // ── Focus / hover ────────────────────────────────────────────────────
         // Two focus areas track which pane the arrow keys drive: 'grid' is
@@ -275,6 +363,15 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             const i = cats.findIndex(c => c.id === activeCat);
             if (i >= 0) setFocusedCatIndex(i);
         }, [activeCat, cats]);
+
+        // Keep a valid category selected. A catalog-only picker (Workshop
+        // browse) can mount before the catalog loads — cats is empty and the
+        // initial activeCat stays null; once the groups arrive, fall back to the
+        // first browsable category instead of showing an empty pane.
+        useEffect(() => {
+            if (activeCat && cats.some(c => c.id === activeCat)) return;
+            if (firstBrowsable) setActiveCat(firstBrowsable);
+        }, [activeCat, cats, firstBrowsable]);
 
         // Searching hides the sidebar entirely — force focus back into grid
         // (the flat search results list) so arrows nav the matches.
@@ -367,13 +464,27 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             onCommit({ action: 'select', id: realId });
         }, [onCommit, disabledIds]);
 
+        // Catalog (frag/DEC) pick — not a registered formula, so it commits as
+        // its own action. The caller loads the source into the Workshop editor.
+        const commitCatalog = useCallback((item: CatalogItem) => {
+            onCommit({ action: 'catalog', id: item.id, source: item.source });
+        }, [onCommit]);
+
         // ── Key handler ──────────────────────────────────────────────────────
         const openSearchWithChar = useCallback((ch: string) => {
             setSearchVisible(true);
             setQuery(prev => prev + ch);
         }, []);
 
-        const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+        // Native (not React) keydown handler — attached directly to the body
+        // element below. The popover/modal variants portal to document.body,
+        // OUTSIDE React's #root delegation container, so a React onKeyDown prop
+        // never fires for them (breaks nav + type-to-search). A native listener
+        // on the body fires for every variant.
+        // NOTE: app shortcuts are suppressed by setKeyboardCaptured (the
+        // controller runs capture-phase per ADR-0060, so content stopPropagation
+        // cannot block it) — see the focus-capture effect below, not here.
+        const onKeyDown = useCallback((e: KeyboardEvent) => {
             const target = e.target as HTMLElement;
             const inSearchInput = target.tagName === 'INPUT';
 
@@ -431,7 +542,8 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
 
                 // Printable key — auto-open search even when in sidebar.
                 if (
-                    !inSearchInput
+                    enableSearch
+                    && !inSearchInput
                     && e.key.length === 1
                     && !e.ctrlKey && !e.metaKey && !e.altKey
                 ) {
@@ -456,7 +568,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                 return;
             }
 
-            const isList = viewMode === 'list' || searching;
+            const isList = viewMode === 'list';
             const cols = isList ? 1 : gridColsRef.current;
 
             if (e.key === 'ArrowDown') {
@@ -502,7 +614,8 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
 
             // Printable key — auto-open search and feed the char in.
             if (
-                !inSearchInput
+                enableSearch
+                && !inSearchInput
                 && e.key.length === 1
                 && !e.ctrlKey && !e.metaKey && !e.altKey
             ) {
@@ -513,7 +626,42 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
             searchVisible, query, onClose, focusArea, cats, focusedCatIndex,
             isSpecialActive, activeCatObj, focusedIndex, paneItems, viewMode,
             searching, activeCat, stepIndex, commitId, openSearchWithChar,
+            enableSearch,
         ]);
+
+        // Attach the key handler natively to the body (see onKeyDown note).
+        useEffect(() => {
+            const el = bodyRef.current;
+            if (!el) return;
+            el.addEventListener('keydown', onKeyDown);
+            return () => el.removeEventListener('keydown', onKeyDown);
+        }, [onKeyDown]);
+
+        // While the picker has focus, tell the global shortcuts controller to
+        // let single keys (letters/numbers) through to the picker rather than
+        // firing app shortcuts. The controller runs in the capture phase, so
+        // content stopPropagation can't intercept it (ADR-0060) — this opt-in
+        // flag is the supported path. Focus-scoped so the inline variant
+        // (embedded in panels) only captures while actually focused.
+        useEffect(() => {
+            const el = bodyRef.current;
+            if (!el) return;
+            let captured = false;
+            const capture = () => { if (!captured) { captured = true; setKeyboardCaptured(true); } };
+            const release = () => { if (captured) { captured = false; setKeyboardCaptured(false); } };
+            const onFocusOut = (e: FocusEvent) => {
+                const next = e.relatedTarget as Node | null;
+                if (!next || !el.contains(next)) release();
+            };
+            el.addEventListener('focusin', capture);
+            el.addEventListener('focusout', onFocusOut);
+            if (el.contains(document.activeElement)) capture();
+            return () => {
+                el.removeEventListener('focusin', capture);
+                el.removeEventListener('focusout', onFocusOut);
+                release();
+            };
+        }, []);
 
         // ── Random pick ──────────────────────────────────────────────────────
         // Pool is every registered formula except the Modular graph-editor
@@ -576,13 +724,17 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                     }
                     onClose?.();
                 }}
+                onCommitCatalogItem={commitCatalog}
+                catalogSearchHits={catalogSearchHits}
                 paneItems={paneItems}
                 isSpecialActive={!!isSpecialActive}
                 isSceneGroupActive={!!isSceneGroupActive}
+                isCatalogActive={!!isCatalogActive}
                 activeCatObj={activeCatObj ?? null}
                 viewMode={viewMode}
                 onViewMode={updateViewMode}
                 onPickRandom={pickRandom}
+                enableSearch={enableSearch}
                 searchVisible={searchVisible}
                 onToggleSearch={() => {
                     setSearchVisible(v => {
@@ -606,7 +758,7 @@ export const FormulaPicker = forwardRef<FormulaPickerRef, FormulaPickerProps>(
                 onCommitItem={commitId}
                 gridContainerRef={gridContainerRef}
                 cardRefs={cardRefs}
-                onKeyDown={onKeyDown}
+                headerLinks={headerLinks}
                 headerSlot={headerSlot}
                 footerSlot={footerSlot}
                 // hover preview rendering is handled by the variant shell
@@ -847,12 +999,16 @@ interface PickerBodyProps {
     onActivateCat: (id: string) => void;
     onCommitSpecial: (id: string) => void;
     onCommitSceneItem: (item: SceneItem) => void;
+    onCommitCatalogItem: (item: CatalogItem) => void;
+    catalogSearchHits: CatalogItem[];
     paneItems: string[];
     isSpecialActive: boolean;
     isSceneGroupActive: boolean;
+    isCatalogActive: boolean;
     viewMode: 'grid' | 'list';
     onViewMode: (v: 'grid' | 'list') => void;
     onPickRandom: () => void;
+    enableSearch: boolean;
     searchVisible: boolean;
     onToggleSearch: () => void;
     searching: boolean;
@@ -870,7 +1026,7 @@ interface PickerBodyProps {
     onCommitItem: (id: string) => void;
     gridContainerRef: React.RefObject<HTMLDivElement>;
     cardRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
-    onKeyDown: (e: React.KeyboardEvent) => void;
+    headerLinks?: Array<{ label: string; href: string }>;
     headerSlot?: React.ReactNode;
     footerSlot?: React.ReactNode;
     showInlineHoverPreview: boolean;
@@ -881,7 +1037,6 @@ function PickerBody(p: PickerBodyProps) {
         <div
             ref={p.bodyRef}
             tabIndex={-1}
-            onKeyDown={p.onKeyDown}
             className="flex flex-col h-full min-h-0 outline-none"
         >
             {/* Header */}
@@ -891,6 +1046,22 @@ function PickerBody(p: PickerBodyProps) {
                         <span className="text-[11px] font-bold text-gray-300 tracking-tight">Pick a formula</span>
                     )}
                 </div>
+                {p.headerLinks && p.headerLinks.length > 0 && (
+                    <div className="flex-1 flex items-center justify-center gap-4 px-2 min-w-0">
+                        {p.headerLinks.map(link => (
+                            <a
+                                key={link.href}
+                                href={link.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={link.href}
+                                className="text-[10px] font-semibold text-cyan-400/90 hover:text-cyan-300 underline decoration-cyan-500/40 hover:decoration-cyan-300 underline-offset-2 truncate transition-colors"
+                            >
+                                {link.label} <span className="text-cyan-500/70">↗</span>
+                            </a>
+                        ))}
+                    </div>
+                )}
                 <div className="flex items-center gap-1">
                     <button
                         onClick={p.onPickRandom}
@@ -900,18 +1071,20 @@ function PickerBody(p: PickerBodyProps) {
                     >
                         <DiceIcon />
                     </button>
-                    <button
-                        onClick={p.onToggleSearch}
-                        aria-label="Toggle search"
-                        title="Search (or just start typing)"
-                        className={`px-2 py-1 rounded border text-[10px] font-bold transition-colors ${
-                            p.searchVisible
-                                ? 'bg-cyan-900/40 text-cyan-300 border-cyan-500/40'
-                                : 'bg-black/40 text-gray-500 hover:text-white border-white/10'
-                        }`}
-                    >
-                        🔍
-                    </button>
+                    {p.enableSearch && (
+                        <button
+                            onClick={p.onToggleSearch}
+                            aria-label="Toggle search"
+                            title="Search (or just start typing)"
+                            className={`px-2 py-1 rounded border text-[10px] font-bold transition-colors ${
+                                p.searchVisible
+                                    ? 'bg-cyan-900/40 text-cyan-300 border-cyan-500/40'
+                                    : 'bg-black/40 text-gray-500 hover:text-white border-white/10'
+                            }`}
+                        >
+                            🔍
+                        </button>
+                    )}
                     <ViewToggle mode={p.viewMode} onChange={p.onViewMode} />
                 </div>
             </div>
@@ -964,6 +1137,44 @@ function PickerBody(p: PickerBodyProps) {
                             viewMode={p.viewMode}
                             onCommit={p.onCommitSceneItem}
                         />
+                    ) : p.isCatalogActive && p.activeCatObj?.kind === 'catalog' ? (
+                        <CatalogPane
+                            group={p.activeCatObj}
+                            viewMode={p.viewMode}
+                            onCommit={p.onCommitCatalogItem}
+                        />
+                    ) : p.searching ? (
+                        (p.paneItems.length === 0 && p.catalogSearchHits.length === 0) ? (
+                            <div className="p-3">
+                                <div className="py-8 text-center text-gray-600 text-[11px] italic">No matches</div>
+                            </div>
+                        ) : (
+                            <>
+                                {p.paneItems.length > 0 && (
+                                    <ItemPane
+                                        items={p.paneItems}
+                                        viewMode={p.viewMode}
+                                        value={p.value}
+                                        isDisabled={(id) => !!p.disabledIds?.has(id)}
+                                        disabledReason={p.disabledReason}
+                                        focusedIndex={p.focusedIndex}
+                                        hoveredId={p.hoveredId}
+                                        onHover={(id, i) => { p.onHover(id); if (i >= 0) p.onHoverIndex(i); }}
+                                        onCommit={p.onCommitItem}
+                                        cardRefs={p.cardRefs}
+                                        searching={p.searching}
+                                        categoryLabel={`Formulas (${p.paneItems.length})`}
+                                    />
+                                )}
+                                {p.catalogSearchHits.length > 0 && (
+                                    <CatalogPane
+                                        group={{ kind: 'catalog', id: '__search__', name: `Catalog — opens in Workshop (${p.catalogSearchHits.length})`, items: p.catalogSearchHits }}
+                                        viewMode={p.viewMode}
+                                        onCommit={p.onCommitCatalogItem}
+                                    />
+                                )}
+                            </>
+                        )
                     ) : (
                         <ItemPane
                             items={p.paneItems}
@@ -978,11 +1189,9 @@ function PickerBody(p: PickerBodyProps) {
                             cardRefs={p.cardRefs}
                             searching={p.searching}
                             categoryLabel={
-                                !p.searching
-                                    ? (p.activeCatObj?.kind === 'native' || p.activeCatObj?.kind === 'custom'
-                                        ? p.activeCatObj.name
-                                        : undefined)
-                                    : `Search results (${p.paneItems.length})`
+                                p.activeCatObj?.kind === 'native' || p.activeCatObj?.kind === 'custom'
+                                    ? p.activeCatObj.name
+                                    : undefined
                             }
                         />
                     )}
@@ -1026,11 +1235,20 @@ function Sidebar({
                 const showScenesSeparator =
                     c.kind === 'scene-group' && prev?.kind !== 'scene-group';
                 const showCustomSeparator = c.kind === 'custom';
+                // Catalog section header — shown at the first labelled catalog
+                // group and whenever the label changes (e.g. Fragmentarium → DEC).
+                const prevCatalogLabel = prev?.kind === 'catalog' ? prev.sectionLabel : undefined;
+                const catalogSectionLabel =
+                    c.kind === 'catalog' && c.sectionLabel && c.sectionLabel !== prevCatalogLabel
+                        ? c.sectionLabel : undefined;
                 const keyboardFocused = focusArea === 'sidebar' && focusedCatIndex === i;
                 return (
                     <React.Fragment key={c.id}>
                         {showSpecialSeparator && (
                             <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-gray-600">Special</div>
+                        )}
+                        {catalogSectionLabel && (
+                            <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-gray-600">{catalogSectionLabel}</div>
                         )}
                         {showScenesSeparator && !showSpecialSeparator && (
                             <div className="px-3 pt-3 pb-1 text-[9px] uppercase tracking-wider text-gray-600">Scenes</div>
@@ -1070,6 +1288,12 @@ function SidebarRow({
     } else if (cat.kind === 'custom') {
         label = cat.name;
         extraClass = 'text-purple-300';
+    } else if (cat.kind === 'catalog') {
+        label = <span className="flex items-center gap-2 min-w-0">
+            <span className="truncate">{cat.name}</span>
+            <span className="text-[9px] text-gray-600 shrink-0">{cat.items.length}</span>
+        </span>;
+        extraClass = 'text-amber-300';
     } else if (cat.kind === 'scene-group') {
         label = <span className="flex items-center gap-2">
             <span className="truncate">{cat.name}</span>
@@ -1264,6 +1488,78 @@ function SceneRow({ item, onCommit }: { item: SceneItem; onCommit: (item: SceneI
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Catalog pane — frag/DEC thumbnails (grid or list). Mouse/scroll-driven like
+// the Scene pane; the native keyboard-grid (paneItems) stays native-only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CatalogPane({
+    group, viewMode, onCommit,
+}: { group: CatalogCat; viewMode: 'grid' | 'list'; onCommit: (item: CatalogItem) => void }) {
+    const isList = viewMode === 'list';
+    return (
+        <div className="p-3">
+            <div className="px-1 pb-2 text-[10px] uppercase tracking-wider text-gray-500 font-bold">
+                {group.name}
+            </div>
+            {group.items.length === 0 ? (
+                <div className="py-8 text-center text-gray-600 text-[11px] italic">No formulas</div>
+            ) : isList ? (
+                <div className="flex flex-col gap-0.5">
+                    {group.items.map(item => <CatalogRow key={item.id} item={item} onCommit={onCommit} />)}
+                </div>
+            ) : (
+                <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))' }}>
+                    {group.items.map(item => <CatalogCard key={item.id} item={item} onCommit={onCommit} />)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+const CatalogCard = React.memo(function CatalogCard({
+    item, onCommit,
+}: { item: CatalogItem; onCommit: (item: CatalogItem) => void }) {
+    return (
+        <button
+            onClick={() => onCommit(item)}
+            title={`${item.name} — ${item.artist}`}
+            className="relative flex flex-col items-stretch text-left rounded border overflow-hidden transition-all group border-white/10 hover:border-amber-500/40 bg-black/30 hover:bg-white/[0.04]"
+        >
+            <div className="aspect-square w-full bg-black relative">
+                <div className="absolute inset-0 flex items-center justify-center text-gray-700"><CubeIcon /></div>
+                <div className="absolute inset-0">
+                    <LazyThumbnail id={item.id} label={item.name} src={item.thumbSrc} />
+                </div>
+                <div className="absolute top-1 left-1 px-1 py-0.5 text-[8px] font-bold rounded bg-black/70 text-amber-300/90 uppercase">
+                    {item.source}
+                </div>
+            </div>
+            <div className="px-1.5 py-1 text-[10px] font-bold text-gray-200 truncate group-hover:text-white">
+                {item.name}
+            </div>
+        </button>
+    );
+});
+
+function CatalogRow({
+    item, onCommit,
+}: { item: CatalogItem; onCommit: (item: CatalogItem) => void }) {
+    return (
+        <button
+            onClick={() => onCommit(item)}
+            title={`${item.name} — ${item.artist}`}
+            className="w-full text-left px-2 py-1.5 rounded flex items-center gap-2 transition-colors text-gray-300 hover:bg-white/5 hover:text-white"
+        >
+            <span className="shrink-0 px-1 py-0.5 text-[8px] font-bold rounded bg-black/40 text-amber-400/80 uppercase">{item.source}</span>
+            <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold truncate">{item.name}</div>
+                <div className="text-[9px] text-gray-500 truncate">{item.artist}</div>
+            </div>
+        </button>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Item pane — grid or list
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1283,7 +1579,9 @@ interface ItemPaneProps {
 }
 
 function ItemPane(p: ItemPaneProps) {
-    const isList = p.viewMode === 'list' || p.searching;
+    // Search honors the Grid/List toggle (same as browse) so native + catalog
+    // results render consistently — thumbnails in Grid, text rows in List.
+    const isList = p.viewMode === 'list';
     return (
         <div className="p-3">
             {p.categoryLabel && (

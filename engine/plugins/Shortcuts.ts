@@ -141,6 +141,19 @@ const _registry = new Map<string, ShortcutDef>();
 const _scopeStack: string[] = ['global'];
 const _scopeSubscribers = new Set<() => void>();
 
+// ── Modal keyboard capture ───────────────────────────────────────────────
+// A focused modal surface (e.g. the formula picker) sets this so plain
+// single-key presses (letters / numbers / symbols) pass through to it for
+// typing instead of firing app shortcuts. Necessary because the dispatcher
+// runs in the CAPTURE phase (ADR-0060), so content-side stopPropagation can't
+// intercept it. Ref-counted so overlapping owners compose; modifier combos
+// (Ctrl/Cmd/Alt) are unaffected.
+let _keyboardCaptureCount = 0;
+export const setKeyboardCaptured = (active: boolean): void => {
+    _keyboardCaptureCount = Math.max(0, _keyboardCaptureCount + (active ? 1 : -1));
+};
+export const isKeyboardCaptured = (): boolean => _keyboardCaptureCount > 0;
+
 const _notifyScope = () => _scopeSubscribers.forEach((fn) => fn());
 
 export const shortcuts = {
@@ -248,6 +261,10 @@ export const installShortcuts = (options: InstallShortcutsOptions = {}) => {
 
         const match = resolve(normalized);
         if (!match) return;
+
+        // A focused modal surface owns single-key typing — let letters/numbers/
+        // symbols through to it instead of firing a single-key shortcut.
+        if (isKeyboardCaptured() && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) return;
 
         if (!match.ignoreInputs && isInputFocused(ignoreSelector)) return;
         if (match.when && !match.when()) return;
