@@ -30,7 +30,57 @@ import { createDefaultShaderConfig } from '../engine-gmt/engine/ConfigDefaults';
 import { registerFeatures } from '../engine-gmt/features';
 import '../engine-gmt/formulas';  // side-effect: registers all native FractalDefinitions
 
+// Frag-import pipeline (mirrors FormulaWorkshop.buildAndRegister exactly).
+import { detectFormulaV3, transformFormulaV3 } from '../engine-gmt/features/fragmentarium_import/v3/compat';
+import { buildFractalParams } from '../engine-gmt/features/fragmentarium_import/workshop/param-builder';
+import { deriveImportCapabilities } from '../engine-gmt/features/fragmentarium_import/import-capabilities';
+import { processFormula as v4ProcessFormula } from '../engine-gmt/features/fragmentarium_import/v4';
+import type { FractalDefinition } from '../engine-gmt/types';
+
 registerFeatures();
+
+/**
+ * Build + register a FractalDefinition from raw .frag source, replicating
+ * FormulaWorkshop's buildAndRegister (V3) / buildAndRegisterV4 (V4) paths.
+ * Returns the registered id, or throws with a stage-tagged error.
+ */
+function buildFragDefinition(fragSource: string, id: string, name: string, pipeline: 'v3' | 'v4'): string {
+    if (pipeline === 'v4') {
+        const r: any = v4ProcessFormula(fragSource, name, id, name);
+        if (!r.ok) throw new Error(`v4: ${r.error?.kind ?? ''}: ${r.error?.message ?? 'processFormula failed'}`);
+        registry.register(r.value.definition);
+        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: r.value.definition.id, shader: r.value.definition.shader });
+        return r.value.definition.id;
+    }
+    // V3 path
+    const detected: any = detectFormulaV3(fragSource, name);
+    if (detected.error) throw new Error(`v3-detect: ${detected.error}`);
+    const { selectedFunction, loopMode, params } = detected;
+    const result: any = transformFormulaV3(detected, selectedFunction, loopMode, name, params);
+    if (!result) throw new Error('v3-transform: returned null');
+    const { uiParams, defaultPreset } = buildFractalParams(params, id);
+    const shaderGlsl = {
+        function: (result.uniforms ? result.uniforms + '\n\n' : '') + result.function,
+        loopBody: result.loopBody,
+        getDist: result.getDist,
+        loopInit: result.loopInit,
+    };
+    const isFullDe = result.mode === 'full-de';
+    const def: FractalDefinition = {
+        id: id as any,
+        name,
+        shader: {
+            ...shaderGlsl,
+            selfContainedSDE: isFullDe || undefined,
+            capabilities: deriveImportCapabilities(shaderGlsl as any, isFullDe ? 'self-contained' : 'per-iteration'),
+        } as any,
+        parameters: uiParams,
+        defaultPreset,
+    };
+    registry.register(def);
+    FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+    return id;
+}
 
 // ─── Types exposed to Playwright ─────────────────────────────────────────────
 
@@ -477,5 +527,31 @@ async function runOne(spec: TestSpec): Promise<TestResult> {
     finally { inflight = null; }
 };
 
+// Build a frag formula from source, register it, then render it like any native.
+// spec adds { fragSource, pipeline } and uses spec.formula as the new id/name.
+(window as any).runFragRenderTest = async (
+    spec: TestSpec & { fragSource: string; pipeline?: 'v3' | 'v4' },
+): Promise<TestResult> => {
+    if (inflight) await inflight;
+    const run = (async (): Promise<TestResult> => {
+        const t0 = performance.now();
+        try {
+            if (!registry.get(spec.formula as any)) {
+                buildFragDefinition(spec.fragSource, spec.formula, spec.formula, spec.pipeline ?? 'v3');
+            }
+        } catch (e: any) {
+            return {
+                id: spec.id, ok: false, error: `[stage=fragBuild] ${e?.message ?? String(e)}`,
+                compile: { totalMs: 0 }, render: { sigma: [0, 0, 0], nanFraction: 0, nonBlackFraction: 0 },
+                timeMs: Math.round(performance.now() - t0),
+            };
+        }
+        return runOne(spec);
+    })();
+    inflight = run;
+    try { return await run; }
+    finally { inflight = null; }
+};
+
 (window as any).harnessReady = true;
-log('ready — window.runRenderTest(spec) exposed.');
+log('ready — window.runRenderTest(spec) + runFragRenderTest(spec) exposed.');
