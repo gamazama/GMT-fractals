@@ -193,7 +193,7 @@ function applyPresetCamera(spec: TestSpec) {
         preset.cameraRot?.w ?? 1,
     ];
     const targetDist = spec.cameraOverrides?.targetDistance ?? preset.targetDistance ?? 3;
-    const sceneOffset = preset.sceneOffset ?? { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+    const sceneOffset = (spec.cameraOverrides as any)?.sceneOffset ?? preset.sceneOffset ?? { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
 
     camera.position.set(pos[0], pos[1], pos[2]);
     camera.quaternion.set(rot[0], rot[1], rot[2], rot[3]);
